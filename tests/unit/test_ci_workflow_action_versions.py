@@ -188,6 +188,29 @@ def test_main_dependency_health_lane_forces_clean_install_and_retains_evidence()
     assert "clean-install-report.json" in makefile_text
 
 
+def test_governed_lanes_retain_exact_sha_dependency_technology_receipts() -> None:
+    for filename, retention_days in (
+        ("feature-lane.yml", 30),
+        ("pr-merge-gate.yml", 30),
+        ("main-releasability.yml", 90),
+    ):
+        workflow = (
+            yaml.safe_load(Path(".github/workflows", filename).read_text(encoding="utf-8")) or {}
+        )
+        steps = workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+        step_by_name = {step.get("name"): step for step in steps}
+
+        assert step_by_name["Generate Dependency Technology Evidence"]["run"] == (
+            "make dependency-technology-inventory"
+        )
+        upload = step_by_name["Upload dependency technology evidence"]
+        assert upload["if"] == "always()"
+        assert upload["uses"] == "actions/upload-artifact@v7"
+        assert upload["with"]["path"] == "output/dependency-technology/*.json"
+        assert upload["with"]["if-no-files-found"] == "error"
+        assert upload["with"]["retention-days"] == retention_days
+
+
 def test_local_main_parity_uses_clean_dependency_health_lane() -> None:
     makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
     target_dependencies = {

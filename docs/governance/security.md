@@ -20,6 +20,13 @@ defaults suitable for private banking workloads.
 evidence remains part of the repo-native security posture through `make security-audit` and CI.
 HTTP app control coverage is now enforced through `make security-control-coverage-guard`.
 
+Dependency license and supportability evidence is lock-owned. Use
+`make dependency-technology-inventory` for the report-only exact-SHA receipt and
+`make dependency-technology-certify` when an allowed verdict is mandatory. The inventory never
+uses ambient packages or popularity as approval evidence. It currently blocks certification for
+explicitly listed missing, compound, or ambiguous license evidence; this is a truthful control
+result, not permission to waive the component.
+
 ## HTTP Security Control Coverage
 
 `lotus-core` now keeps FastAPI app security coverage in:

@@ -1,0 +1,3838 @@
+{
+  "claim_boundary": {
+    "bank_buyable_claim": false,
+    "popularity_based_approval": false,
+    "production_ready_claim": false,
+    "technology_state": "non_certifying"
+  },
+  "components": [
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "alembic",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/alembic/1.18.4/json",
+      "pypi_metadata_sha256": "b3d1e621ba3738dc990face7127594a3c2b66be6e8b3915a818612de8fc5c0d7",
+      "pypi_release_url": "https://pypi.org/project/alembic/1.18.4/",
+      "release_uploaded_at": "2026-02-10T16:00:47.195535Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/sqlalchemy/alembic/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/alembic/1.18.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/alembic/1.18.4/json"
+      },
+      "version": "1.18.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "annotated-doc",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/annotated-doc/0.0.4/json",
+      "pypi_metadata_sha256": "0c5deae4ba3aaf62701be8b66a60d1885fb889c01d80ead8f21c6a9efa167023",
+      "pypi_release_url": "https://pypi.org/project/annotated-doc/0.0.4/",
+      "release_uploaded_at": "2025-11-10T22:07:40.673400Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/fastapi/annotated-doc",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/annotated-doc/0.0.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/annotated-doc/0.0.4/json"
+      },
+      "version": "0.0.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "annotated-types",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/annotated-types/0.7.0/json",
+      "pypi_metadata_sha256": "b631b2b88cebbf1dcd7e22b0f9e61e9674d08ed563cc495c4c656fd9f6916fac",
+      "pypi_release_url": "https://pypi.org/project/annotated-types/0.7.0/",
+      "release_uploaded_at": "2024-05-20T21:33:24.100469Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/annotated-types/annotated-types",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/annotated-types/0.7.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/annotated-types/0.7.0/json"
+      },
+      "version": "0.7.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "anyio",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/anyio/4.12.1/json",
+      "pypi_metadata_sha256": "6c10bc296b8ff16e80364fe1df6751933cc43c08f2a75f591461c2f2be5b12f5",
+      "pypi_release_url": "https://pypi.org/project/anyio/4.12.1/",
+      "release_uploaded_at": "2026-01-06T11:45:19.497480Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/agronholm/anyio",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/anyio/4.12.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/anyio/4.12.1/json"
+      },
+      "version": "4.12.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "ast-serialize",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/ast-serialize/0.8.0/json",
+      "pypi_metadata_sha256": "382c3d5e7b7c43c4a52de32b1a31f30101e4cdf89a2fa1da706c6b8c8a4006c7",
+      "pypi_release_url": "https://pypi.org/project/ast-serialize/0.8.0/",
+      "release_uploaded_at": "2026-08-07T11:27:34.579820Z",
+      "requires_python": ">=3.7",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/ast-serialize/0.8.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/ast-serialize/0.8.0/json"
+      },
+      "version": "0.8.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "asyncpg",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/asyncpg/0.31.0/json",
+      "pypi_metadata_sha256": "0b38295a250753865f1d4d15ecbbb6cb97ddd77d7249bc53947caafef85cee23",
+      "pypi_release_url": "https://pypi.org/project/asyncpg/0.31.0/",
+      "release_uploaded_at": "2025-11-24T23:25:23.527329Z",
+      "requires_python": ">=3.9.0",
+      "source_repository_url": "https://github.com/MagicStack/asyncpg",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/asyncpg/0.31.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/asyncpg/0.31.0/json"
+      },
+      "version": "0.31.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "attrs",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/attrs/26.1.0/json",
+      "pypi_metadata_sha256": "3acecde5c980875d5a5e00837c4f95673b01b9bbaabcfd37a1f3201220545856",
+      "pypi_release_url": "https://pypi.org/project/attrs/26.1.0/",
+      "release_uploaded_at": "2026-03-19T14:22:23.645947Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/python-attrs/attrs",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/attrs/26.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/attrs/26.1.0/json"
+      },
+      "version": "26.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "bandit",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/bandit/1.9.4/json",
+      "pypi_metadata_sha256": "77d75c3d857c3d2eaca1f52d9a7ce2643bee0db4016be8bfbd303f8b0d51c9dc",
+      "pypi_release_url": "https://pypi.org/project/bandit/1.9.4/",
+      "release_uploaded_at": "2026-02-25T06:44:13.694900Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/PyCQA/bandit",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/bandit/1.9.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/bandit/1.9.4/json"
+      },
+      "version": "1.9.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "BSD-2-Clause",
+        "normalized_expression": "BSD-2-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "boolean-py",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/boolean-py/5.0/json",
+      "pypi_metadata_sha256": "dfb472fe313afb9a582e5e6e6615ca4a87df3c25b1f955a2f4264d280d2dd462",
+      "pypi_release_url": "https://pypi.org/project/boolean-py/5.0/",
+      "release_uploaded_at": "2025-04-03T10:39:48.449265Z",
+      "requires_python": null,
+      "source_repository_url": "https://github.com/bastikr/boolean.py",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/boolean-py/5.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/boolean-py/5.0/json"
+      },
+      "version": "5.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "cachecontrol",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/cachecontrol/0.14.4/json",
+      "pypi_metadata_sha256": "ff395783a83c93607c5cb9c9a1f4709bbcbfb370a5e995ed0aac8d4e8c6f2df0",
+      "pypi_release_url": "https://pypi.org/project/cachecontrol/0.14.4/",
+      "release_uploaded_at": "2025-11-14T04:32:11.733599Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/psf/cachecontrol",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/cachecontrol/0.14.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/cachecontrol/0.14.4/json"
+      },
+      "version": "0.14.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MPL-2.0",
+        "normalized_expression": "MPL-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "certifi",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/certifi/2026.2.25/json",
+      "pypi_metadata_sha256": "de6bb5056e83df66d826b8c9acac58b6c9326d3e1dc8c387d8df6ff372090541",
+      "pypi_release_url": "https://pypi.org/project/certifi/2026.2.25/",
+      "release_uploaded_at": "2026-02-25T02:54:15.766522Z",
+      "requires_python": ">=3.7",
+      "source_repository_url": "https://github.com/certifi/python-certifi",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/certifi/2026.2.25/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/certifi/2026.2.25/json"
+      },
+      "version": "2026.2.25",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "charset-normalizer",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/charset-normalizer/3.4.9/json",
+      "pypi_metadata_sha256": "5f331c05d04016e0b02df3c5124eb5c5411d32cfb3be320f3f36937fa0a3abe6",
+      "pypi_release_url": "https://pypi.org/project/charset-normalizer/3.4.9/",
+      "release_uploaded_at": "2026-07-07T14:32:36.236156Z",
+      "requires_python": ">=3.7",
+      "source_repository_url": "https://github.com/jawah/charset_normalizer",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/charset-normalizer/3.4.9/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/charset-normalizer/3.4.9/json"
+      },
+      "version": "3.4.9",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "click",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/click/8.4.2/json",
+      "pypi_metadata_sha256": "eb0ef25d87c3617dfb40bc4c74e862e3afc6de122f7926a41b35f3c961b220e3",
+      "pypi_release_url": "https://pypi.org/project/click/8.4.2/",
+      "release_uploaded_at": "2026-06-24T17:45:13.730054Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pallets/click/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/click/8.4.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/click/8.4.2/json"
+      },
+      "version": "8.4.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": null
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "colorama",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/colorama/0.4.6/json",
+      "pypi_metadata_sha256": "d1f14045ffdb4e411f3e3c5d1686c830cc09a517f1223d31f435412ae94ec66a",
+      "pypi_release_url": "https://pypi.org/project/colorama/0.4.6/",
+      "release_uploaded_at": "2022-10-25T02:36:20.889702Z",
+      "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/colorama/0.4.6/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/colorama/0.4.6/json"
+      },
+      "version": "0.4.6",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "confluent-kafka",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/confluent-kafka/2.14.2/json",
+      "pypi_metadata_sha256": "1025296d1fd508c74fe07dac608b7164c5924c8075db7952c68345e1629f54d9",
+      "pypi_release_url": "https://pypi.org/project/confluent-kafka/2.14.2/",
+      "release_uploaded_at": "2026-06-03T09:50:06.591774Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/confluent-kafka/2.14.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/confluent-kafka/2.14.2/json"
+      },
+      "version": "2.14.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "coverage",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/coverage/7.15.1/json",
+      "pypi_metadata_sha256": "1a0b4d9166358ac1ecc8495ee9f71274131c58a2790b323eebdb904e6f1abe07",
+      "pypi_release_url": "https://pypi.org/project/coverage/7.15.1/",
+      "release_uploaded_at": "2026-07-12T20:55:55.820312Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/coveragepy/coveragepy",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/coverage/7.15.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/coverage/7.15.1/json"
+      },
+      "version": "7.15.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "cyclonedx-python-lib",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/cyclonedx-python-lib/11.11.1/json",
+      "pypi_metadata_sha256": "c886952ee0817c2887abcae205e7960d4372f00726e1029f7ee6a9a8e5f52a02",
+      "pypi_release_url": "https://pypi.org/project/cyclonedx-python-lib/11.11.1/",
+      "release_uploaded_at": "2026-08-10T13:05:24.485480Z",
+      "requires_python": "<4.0,>=3.9",
+      "source_repository_url": "https://github.com/CycloneDX/cyclonedx-python-lib",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/cyclonedx-python-lib/11.11.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/cyclonedx-python-lib/11.11.1/json"
+      },
+      "version": "11.11.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Python Software Foundation License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "PSFL",
+        "normalized_expression": "PSF-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "defusedxml",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/defusedxml/0.7.1/json",
+      "pypi_metadata_sha256": "b6ba1c844d7e8dbdd6eedb9819661ea708c382821e36596e0fec6b7d4e2706a7",
+      "pypi_release_url": "https://pypi.org/project/defusedxml/0.7.1/",
+      "release_uploaded_at": "2021-03-08T10:59:24.450195Z",
+      "requires_python": ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
+      "source_repository_url": "https://github.com/tiran/defusedxml",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/defusedxml/0.7.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/defusedxml/0.7.1/json"
+      },
+      "version": "0.7.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "deptry",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/deptry/0.25.1/json",
+      "pypi_metadata_sha256": "b341387516858a4263e65d34a1004b0be3b1ea2560636cb784f83b20ae3eb1e8",
+      "pypi_release_url": "https://pypi.org/project/deptry/0.25.1/",
+      "release_uploaded_at": "2026-03-18T23:22:11.269240Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/osprey-oss/deptry",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/deptry/0.25.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/deptry/0.25.1/json"
+      },
+      "version": "0.25.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "docker",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/docker/7.2.0/json",
+      "pypi_metadata_sha256": "c3903f76826e7102af305c641625d1ec282260a6f6c1951a9bde2edb98dc20bf",
+      "pypi_release_url": "https://pypi.org/project/docker/7.2.0/",
+      "release_uploaded_at": "2026-07-09T14:53:45.224223Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/docker/docker-py",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/docker/7.2.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/docker/7.2.0/json"
+      },
+      "version": "7.2.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "et-xmlfile",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/et-xmlfile/2.0.0/json",
+      "pypi_metadata_sha256": "4390540bb5a5362de33047d7b2c57ef20fe616fe39c7a3fbffdeebae7255dea8",
+      "pypi_release_url": "https://pypi.org/project/et-xmlfile/2.0.0/",
+      "release_uploaded_at": "2024-10-25T17:25:39.051783Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://foss.heptapod.net/openpyxl/et_xmlfile",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/et-xmlfile/2.0.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/et-xmlfile/2.0.0/json"
+      },
+      "version": "2.0.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "fastapi",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/fastapi/0.136.3/json",
+      "pypi_metadata_sha256": "4db0a391db733c3bbffed787578ec1bddfe445fa372d7c57bf94c188106d9dd0",
+      "pypi_release_url": "https://pypi.org/project/fastapi/0.136.3/",
+      "release_uploaded_at": "2026-05-23T18:53:15.192460Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/fastapi/fastapi",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/fastapi/0.136.3/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/fastapi/0.136.3/json"
+      },
+      "version": "0.136.3",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "filelock",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/filelock/3.32.2/json",
+      "pypi_metadata_sha256": "9a2878a6c834a6f670ba92b470ccb20b6e208c9f641b1767a679a5c57933f756",
+      "pypi_release_url": "https://pypi.org/project/filelock/3.32.2/",
+      "release_uploaded_at": "2026-07-29T22:46:03.520503Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/tox-dev/py-filelock",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/filelock/3.32.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/filelock/3.32.2/json"
+      },
+      "version": "3.32.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "compound_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT AND PSF-2.0",
+        "legacy_value": null,
+        "normalized_expression": "MIT AND PSF-2.0"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "greenlet",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/greenlet/3.3.2/json",
+      "pypi_metadata_sha256": "a11f73787ab6c2de11915d93c95d3a6bfc4fb73cd79a12bda66b9af453bf7e2a",
+      "pypi_release_url": "https://pypi.org/project/greenlet/3.3.2/",
+      "release_uploaded_at": "2026-02-20T20:16:21.325387Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/python-greenlet/greenlet",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/greenlet/3.3.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/greenlet/3.3.2/json"
+      },
+      "version": "3.3.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "BSD 2-Clause License",
+        "normalized_expression": "BSD-2-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "grimp",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/grimp/3.15/json",
+      "pypi_metadata_sha256": "7cc2630d7dbd9ef52e3aad98fc2a3cc1fa204fa622ccdc185317b4a0f955faeb",
+      "pypi_release_url": "https://pypi.org/project/grimp/3.15/",
+      "release_uploaded_at": "2026-07-03T12:07:31.570565Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/grimp/3.15/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/grimp/3.15/json"
+      },
+      "version": "3.15",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "h11",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/h11/0.16.0/json",
+      "pypi_metadata_sha256": "f54772cc82f58cde45f4b9e2bb1ebb86b0cd16a702daecd2850228b99acdc49c",
+      "pypi_release_url": "https://pypi.org/project/h11/0.16.0/",
+      "release_uploaded_at": "2025-04-24T03:35:24.344199Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/python-hyper/h11",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/h11/0.16.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/h11/0.16.0/json"
+      },
+      "version": "0.16.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "httpcore",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httpcore/1.0.9/json",
+      "pypi_metadata_sha256": "be256fc81d57841061e5753826f20e5728995b94519ba4d821e40b35ec05cbd6",
+      "pypi_release_url": "https://pypi.org/project/httpcore/1.0.9/",
+      "release_uploaded_at": "2025-04-24T22:06:20.566605Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/encode/httpcore",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/httpcore/1.0.9/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpcore/1.0.9/json"
+      },
+      "version": "1.0.9",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "httpcore2",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httpcore2/2.4.0/json",
+      "pypi_metadata_sha256": "394d45940f7824ec18c833b0e222daaa686773f75f58fc24ed26ec0aee01eec4",
+      "pypi_release_url": "https://pypi.org/project/httpcore2/2.4.0/",
+      "release_uploaded_at": "2026-06-11T06:35:50.890229Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pydantic/httpx2/blob/main/src/httpcore2",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/httpcore2/2.4.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpcore2/2.4.0/json"
+      },
+      "version": "2.4.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "httptools",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httptools/0.8.0/json",
+      "pypi_metadata_sha256": "369b1c1658fff42de1b70b5d3954a92b4d6f8629b0615dd01d59dd3b665f31be",
+      "pypi_release_url": "https://pypi.org/project/httptools/0.8.0/",
+      "release_uploaded_at": "2026-05-25T22:16:50.434730Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/httptools/0.8.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/httptools/0.8.0/json"
+      },
+      "version": "0.8.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "BSD-3-Clause",
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "httpx",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httpx/0.28.1/json",
+      "pypi_metadata_sha256": "b6220629f278341da24b2454b8fe949743aae5aaaec3c391717f9cf50863e3d6",
+      "pypi_release_url": "https://pypi.org/project/httpx/0.28.1/",
+      "release_uploaded_at": "2024-12-06T15:37:21.509172Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/encode/httpx",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/httpx/0.28.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpx/0.28.1/json"
+      },
+      "version": "0.28.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "httpx2",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httpx2/2.4.0/json",
+      "pypi_metadata_sha256": "9bcc32332dbfc74f700174373d73779f6b1f98a664baaa2bb4aa6a355bdb4945",
+      "pypi_release_url": "https://pypi.org/project/httpx2/2.4.0/",
+      "release_uploaded_at": "2026-06-11T06:35:52.235627Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pydantic/httpx2",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/httpx2/2.4.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpx2/2.4.0/json"
+      },
+      "version": "2.4.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MPL-2.0",
+        "legacy_value": null,
+        "normalized_expression": "MPL-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "hypothesis",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/hypothesis/6.155.7/json",
+      "pypi_metadata_sha256": "a8f47cfb509f85562a861e681cb5479fae75eb11bc244d7c2045f8c545d4d772",
+      "pypi_release_url": "https://pypi.org/project/hypothesis/6.155.7/",
+      "release_uploaded_at": "2026-06-21T05:54:29.506799Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/HypothesisWorks/hypothesis",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/hypothesis/6.155.7/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/hypothesis/6.155.7/json"
+      },
+      "version": "6.155.7",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "idna",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/idna/3.18/json",
+      "pypi_metadata_sha256": "747359fad6837ca5bb6d7521ea61a8ca22c12c1fd23fca15ec200ac7a38b2b96",
+      "pypi_release_url": "https://pypi.org/project/idna/3.18/",
+      "release_uploaded_at": "2026-06-02T14:34:06.319954Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/kjd/idna",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/idna/3.18/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/idna/3.18/json"
+      },
+      "version": "3.18",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "BSD 2-Clause License",
+        "normalized_expression": "BSD-2-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "import-linter",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/import-linter/2.12/json",
+      "pypi_metadata_sha256": "20411223a7af3fbbd3812177660de605339103cc405ef62e0f9b9982e1891d6c",
+      "pypi_release_url": "https://pypi.org/project/import-linter/2.12/",
+      "release_uploaded_at": "2026-06-23T08:58:33.969875Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/import-linter/2.12/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/import-linter/2.12/json"
+      },
+      "version": "2.12",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "iniconfig",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/iniconfig/2.3.0/json",
+      "pypi_metadata_sha256": "3232b4de980af89f8c82f65d8bea0e4b61d0e7aec4f31c35ecc7b69e51f12134",
+      "pypi_release_url": "https://pypi.org/project/iniconfig/2.3.0/",
+      "release_uploaded_at": "2025-10-18T21:55:41.639305Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/iniconfig/2.3.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/iniconfig/2.3.0/json"
+      },
+      "version": "2.3.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "interrogate",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/interrogate/1.7.0/json",
+      "pypi_metadata_sha256": "c9f332b14c4bf375e1e80eeb53192e22d3165053335f88a59a53349629184189",
+      "pypi_release_url": "https://pypi.org/project/interrogate/1.7.0/",
+      "release_uploaded_at": "2024-04-07T22:30:44.277143Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/econchick/interrogate",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/interrogate/1.7.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/interrogate/1.7.0/json"
+      },
+      "version": "1.7.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "librt",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/librt/0.15.0/json",
+      "pypi_metadata_sha256": "9c383a5b03a3fd8829023761fa1ce795d4af5956b56f8589007171f5404b75cc",
+      "pypi_release_url": "https://pypi.org/project/librt/0.15.0/",
+      "release_uploaded_at": "2026-08-07T10:46:22.569307Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/librt/0.15.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/librt/0.15.0/json"
+      },
+      "version": "0.15.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "license-expression",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/license-expression/30.4.4/json",
+      "pypi_metadata_sha256": "0e4f5fbcdc47d1713f1fa9c269858acc7200d70a070f9ee9acc7cf8a903b080f",
+      "pypi_release_url": "https://pypi.org/project/license-expression/30.4.4/",
+      "release_uploaded_at": "2025-07-22T11:13:31.217173Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/aboutcode-org/license-expression",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/license-expression/30.4.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/license-expression/30.4.4/json"
+      },
+      "version": "30.4.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "mako",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/mako/1.3.12/json",
+      "pypi_metadata_sha256": "ba9ba0e31e9c7b2d66772b5cc70f8a3ef4e78e212f0c49ad6e04412ceafa30e7",
+      "pypi_release_url": "https://pypi.org/project/mako/1.3.12/",
+      "release_uploaded_at": "2026-04-28T19:01:08.512582Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://www.makotemplates.org/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/mako/1.3.12/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/mako/1.3.12/json"
+      },
+      "version": "1.3.12",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "mando",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/mando/0.7.1/json",
+      "pypi_metadata_sha256": "774f76dcb2411386a916434af95843527fce19f5a6d653519ad24715fc2deb2f",
+      "pypi_release_url": "https://pypi.org/project/mando/0.7.1/",
+      "release_uploaded_at": "2022-02-24T08:12:25.240897Z",
+      "requires_python": "",
+      "source_repository_url": "https://mando.readthedocs.org/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/mando/0.7.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/mando/0.7.1/json"
+      },
+      "version": "0.7.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "markdown-it-py",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/markdown-it-py/4.2.0/json",
+      "pypi_metadata_sha256": "6e432854a76b3550d90049cdf64da42c2c6bfe8b9d821dbfbc48081f061a6549",
+      "pypi_release_url": "https://pypi.org/project/markdown-it-py/4.2.0/",
+      "release_uploaded_at": "2026-05-07T12:08:27.182789Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/markdown-it-py/4.2.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/markdown-it-py/4.2.0/json"
+      },
+      "version": "4.2.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "markupsafe",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/markupsafe/3.0.3/json",
+      "pypi_metadata_sha256": "10d50f9da4d4c79993e971f73186417b7ad75c31302ff1103382509b3c8d5c35",
+      "pypi_release_url": "https://pypi.org/project/markupsafe/3.0.3/",
+      "release_uploaded_at": "2025-09-27T18:36:05.558229Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pallets/markupsafe/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/markupsafe/3.0.3/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/markupsafe/3.0.3/json"
+      },
+      "version": "3.0.3",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "mdurl",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/mdurl/0.1.2/json",
+      "pypi_metadata_sha256": "e3d585096bc4357a8c6f0a35548bf5a7043bb285a0479af91283ac922bc74949",
+      "pypi_release_url": "https://pypi.org/project/mdurl/0.1.2/",
+      "release_uploaded_at": "2022-08-14T12:40:09.779676Z",
+      "requires_python": ">=3.7",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/mdurl/0.1.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/mdurl/0.1.2/json"
+      },
+      "version": "0.1.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "msgpack",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/msgpack/1.2.1/json",
+      "pypi_metadata_sha256": "89264bec986d97cd0b1e0af2b8a45e2365ee70c7dc497dcb12f0da19c793fdf7",
+      "pypi_release_url": "https://pypi.org/project/msgpack/1.2.1/",
+      "release_uploaded_at": "2026-06-18T16:12:31.531629Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/msgpack/msgpack-python/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/msgpack/1.2.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/msgpack/1.2.1/json"
+      },
+      "version": "1.2.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "mypy",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/mypy/2.1.0/json",
+      "pypi_metadata_sha256": "189159ad8fb9e00a1138026a8154660adcc9722d424b78a54cbc34cb4b3b02e4",
+      "pypi_release_url": "https://pypi.org/project/mypy/2.1.0/",
+      "release_uploaded_at": "2026-05-11T18:31:18.070625Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/python/mypy",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/mypy/2.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/mypy/2.1.0/json"
+      },
+      "version": "2.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "blocked",
+        "classification_reason": "missing_license_metadata",
+        "classification_source": "pypi_metadata",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": null
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "mypy-extensions",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/mypy-extensions/1.1.0/json",
+      "pypi_metadata_sha256": "05f817fdaea618dafdf89aa17aaf3c5d1b148235404fac0ad7066f39cf93ef48",
+      "pypi_release_url": "https://pypi.org/project/mypy-extensions/1.1.0/",
+      "release_uploaded_at": "2025-04-22T14:54:22.983092Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/mypy-extensions/1.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/mypy-extensions/1.1.0/json"
+      },
+      "version": "1.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "openpyxl",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/openpyxl/3.1.5/json",
+      "pypi_metadata_sha256": "e4930ba4ad3f4387d3dc4139b2ba186c78e40fe54fefe87f0c60d14cbc7062dc",
+      "pypi_release_url": "https://pypi.org/project/openpyxl/3.1.5/",
+      "release_uploaded_at": "2024-06-28T14:03:41.161372Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://foss.heptapod.net/openpyxl/openpyxl",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/openpyxl/3.1.5/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/openpyxl/3.1.5/json"
+      },
+      "version": "3.1.5",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "packageurl-python",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/packageurl-python/0.17.6/json",
+      "pypi_metadata_sha256": "4d7b290c163c363be2c68359c6c89d5e00de08db74ece84fc91aeed9b04e29af",
+      "pypi_release_url": "https://pypi.org/project/packageurl-python/0.17.6/",
+      "release_uploaded_at": "2025-11-24T15:20:16.962118Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/package-url/packageurl-python",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/packageurl-python/0.17.6/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/packageurl-python/0.17.6/json"
+      },
+      "version": "0.17.6",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "compound_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0 OR BSD-2-Clause",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0 OR BSD-2-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "packaging",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/packaging/26.3/json",
+      "pypi_metadata_sha256": "782d4db30a16a5660b780d53f4c0954651adc555ef45c2b122fd258a0179fb33",
+      "pypi_release_url": "https://pypi.org/project/packaging/26.3/",
+      "release_uploaded_at": "2026-08-04T18:15:27.159957Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pypa/packaging",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/packaging/26.3/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/packaging/26.3/json"
+      },
+      "version": "26.3",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "MPL-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pathspec",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pathspec/1.1.1/json",
+      "pypi_metadata_sha256": "e24a833a0319275deada868607562b56c9b8b48068dc85955e44b1a445f27e12",
+      "pypi_release_url": "https://pypi.org/project/pathspec/1.1.1/",
+      "release_uploaded_at": "2026-04-27T01:46:07.060850Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/cpburnz/python-pathspec",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pathspec/1.1.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pathspec/1.1.1/json"
+      },
+      "version": "1.1.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pip",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pip/26.1.2/json",
+      "pypi_metadata_sha256": "bf50b12bb772fc9a7676f1f7597eb920536438b0fc5b83162df21df890edce40",
+      "pypi_release_url": "https://pypi.org/project/pip/26.1.2/",
+      "release_uploaded_at": "2026-05-31T17:33:56.772422Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pypa/pip",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pip/26.1.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip/26.1.2/json"
+      },
+      "version": "26.1.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pip-api",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pip-api/0.0.34/json",
+      "pypi_metadata_sha256": "903649d8764d82e0d1397b97eb875e9fab6746c5414cf3b5c4ab3a763aa26fe6",
+      "pypi_release_url": "https://pypi.org/project/pip-api/0.0.34/",
+      "release_uploaded_at": "2024-07-09T20:32:29.099333Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "http://github.com/di/pip-api",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pip-api/0.0.34/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip-api/0.0.34/json"
+      },
+      "version": "0.0.34",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pip-audit",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pip-audit/2.10.1/json",
+      "pypi_metadata_sha256": "340048db51d6c5e42f7554b9d924f29f4e17335a2de48fa3c17b69d6b6ff2062",
+      "pypi_release_url": "https://pypi.org/project/pip-audit/2.10.1/",
+      "release_uploaded_at": "2026-06-10T22:17:00.309492Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pypa/pip-audit",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pip-audit/2.10.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip-audit/2.10.1/json"
+      },
+      "version": "2.10.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pip-requirements-parser",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pip-requirements-parser/32.0.1/json",
+      "pypi_metadata_sha256": "4f35877c591f963e2106947dc887e752bbd9689418cf95895e7c1ae7ff4dcfaf",
+      "pypi_release_url": "https://pypi.org/project/pip-requirements-parser/32.0.1/",
+      "release_uploaded_at": "2022-12-21T15:25:21.046891Z",
+      "requires_python": ">=3.6.0",
+      "source_repository_url": "https://github.com/nexB/pip-requirements-parser",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pip-requirements-parser/32.0.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip-requirements-parser/32.0.1/json"
+      },
+      "version": "32.0.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "platformdirs",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/platformdirs/4.11.2/json",
+      "pypi_metadata_sha256": "3f07c7ec162c7ecfe863eabbb15bf95ad9696aade7675294a7299770206f21c8",
+      "pypi_release_url": "https://pypi.org/project/platformdirs/4.11.2/",
+      "release_uploaded_at": "2026-08-10T15:48:04.855867Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/tox-dev/platformdirs",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/platformdirs/4.11.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/platformdirs/4.11.2/json"
+      },
+      "version": "4.11.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pluggy",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pluggy/1.6.0/json",
+      "pypi_metadata_sha256": "14d352ac100a40cd8925a2c3b779b5be30808683091ce1869ca17b25e2e8abfa",
+      "pypi_release_url": "https://pypi.org/project/pluggy/1.6.0/",
+      "release_uploaded_at": "2025-05-15T12:30:06.134003Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pluggy/1.6.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pluggy/1.6.0/json"
+      },
+      "version": "1.6.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "compound_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0 AND BSD-2-Clause",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0 AND BSD-2-Clause"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "prometheus-client",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/prometheus-client/0.25.0/json",
+      "pypi_metadata_sha256": "122eaf42d4f2c1122b53b952ac65e7563eb327fbcf83ec033ca8b57bc46e8a7c",
+      "pypi_release_url": "https://pypi.org/project/prometheus-client/0.25.0/",
+      "release_uploaded_at": "2026-04-09T19:53:41.324097Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/prometheus-client/0.25.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/prometheus-client/0.25.0/json"
+      },
+      "version": "0.25.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [
+          "License :: OSI Approved"
+        ],
+        "declared_expression": null,
+        "legacy_value": "ISC",
+        "normalized_expression": "ISC"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "prometheus-fastapi-instrumentator",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/prometheus-fastapi-instrumentator/8.0.0/json",
+      "pypi_metadata_sha256": "29cfdda3decf53abbe58cc0d5be10e97340cd742cefd91877fad42a417cdea30",
+      "pypi_release_url": "https://pypi.org/project/prometheus-fastapi-instrumentator/8.0.0/",
+      "release_uploaded_at": "2026-05-29T13:04:43.327629Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/prometheus-fastapi-instrumentator/8.0.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/prometheus-fastapi-instrumentator/8.0.0/json"
+      },
+      "version": "8.0.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
+        "classifiers": [
+          "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)"
+        ],
+        "declared_expression": null,
+        "legacy_value": "LGPL with exceptions",
+        "normalized_expression": null
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "psycopg2-binary",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/psycopg2-binary/2.9.12/json",
+      "pypi_metadata_sha256": "760cd2c136fe93971bc1fa5b527ef5decc2b39ab98d27c5cd96a527f61d62166",
+      "pypi_release_url": "https://pypi.org/project/psycopg2-binary/2.9.12/",
+      "release_uploaded_at": "2026-04-20T23:33:31.363518Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/psycopg/psycopg2",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/psycopg2-binary/2.9.12/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/psycopg2-binary/2.9.12/json"
+      },
+      "version": "2.9.12",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT license",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "py",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/py/1.11.0/json",
+      "pypi_metadata_sha256": "f8a11be18ee6f3e23ae0299a6d4237f4a4ae3d669463dbba411e7561bebdebba",
+      "pypi_release_url": "https://pypi.org/project/py/1.11.0/",
+      "release_uploaded_at": "2021-11-04T17:17:00.152107Z",
+      "requires_python": ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
+      "source_repository_url": "https://py.readthedocs.io/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/py/1.11.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/py/1.11.0/json"
+      },
+      "version": "1.11.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "py-serializable",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/py-serializable/2.1.0/json",
+      "pypi_metadata_sha256": "6701d060fbca9798dbb19f96527e92bd891545d9ccd038d440881fdea25771fd",
+      "pypi_release_url": "https://pypi.org/project/py-serializable/2.1.0/",
+      "release_uploaded_at": "2025-07-21T09:56:46.848289Z",
+      "requires_python": "<4.0,>=3.8",
+      "source_repository_url": "https://github.com/madpah/serializable",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/py-serializable/2.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/py-serializable/2.1.0/json"
+      },
+      "version": "2.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "pydantic",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pydantic/2.13.4/json",
+      "pypi_metadata_sha256": "02a5b556e9cd0cbd48aada87eb042ae4c9d92ca6ff169505a20d74b43a4591a3",
+      "pypi_release_url": "https://pypi.org/project/pydantic/2.13.4/",
+      "release_uploaded_at": "2026-05-06T13:43:02.641507Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pydantic/pydantic",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pydantic/2.13.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pydantic/2.13.4/json"
+      },
+      "version": "2.13.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "pydantic-core",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pydantic-core/2.46.4/json",
+      "pypi_metadata_sha256": "ffba2b000ea983c2ba5f8bf4991548273a5b4e75b275a80a40142579b2496768",
+      "pypi_release_url": "https://pypi.org/project/pydantic-core/2.46.4/",
+      "release_uploaded_at": "2026-05-06T13:36:51.018903Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pydantic/pydantic/tree/main/pydantic-core",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pydantic-core/2.46.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pydantic-core/2.46.4/json"
+      },
+      "version": "2.46.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-2-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-2-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pygments",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pygments/2.20.0/json",
+      "pypi_metadata_sha256": "c109ba51561d74166e404393465ff9fc2297758740fd172dfeac4bf85cddedc7",
+      "pypi_release_url": "https://pypi.org/project/pygments/2.20.0/",
+      "release_uploaded_at": "2026-03-29T13:29:30.038266Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pygments/pygments",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pygments/2.20.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pygments/2.20.0/json"
+      },
+      "version": "2.20.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pyparsing",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pyparsing/3.3.2/json",
+      "pypi_metadata_sha256": "48971eb5bce4e4de1ff8eae6c354d6aeb173242f63a1f942c1ff88b726b0937c",
+      "pypi_release_url": "https://pypi.org/project/pyparsing/3.3.2/",
+      "release_uploaded_at": "2026-01-21T03:57:55.912473Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pyparsing/pyparsing.git",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pyparsing/3.3.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pyparsing/3.3.2/json"
+      },
+      "version": "3.3.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pytest",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pytest/9.1.1/json",
+      "pypi_metadata_sha256": "dc386ccbb28619e0b0d5eb8465f5ba99e32ba996f14224a7f180e2c7fa79c31d",
+      "pypi_release_url": "https://pypi.org/project/pytest/9.1.1/",
+      "release_uploaded_at": "2026-06-19T10:58:31.347074Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pytest-dev/pytest",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pytest/9.1.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest/9.1.1/json"
+      },
+      "version": "9.1.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pytest-asyncio",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pytest-asyncio/1.4.0/json",
+      "pypi_metadata_sha256": "73ea19bbde0c602805325504b1b0f03e233330448e3022847024ec34578d36e9",
+      "pypi_release_url": "https://pypi.org/project/pytest-asyncio/1.4.0/",
+      "release_uploaded_at": "2026-05-26T09:56:02.576082Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pytest-dev/pytest-asyncio",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pytest-asyncio/1.4.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest-asyncio/1.4.0/json"
+      },
+      "version": "1.4.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pytest-cov",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pytest-cov/7.1.0/json",
+      "pypi_metadata_sha256": "010bc11f3ede4e8b94d8b358ac22c6e267d351ce68233389e2ca591eee9383f6",
+      "pypi_release_url": "https://pypi.org/project/pytest-cov/7.1.0/",
+      "release_uploaded_at": "2026-03-21T20:11:14.438324Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pytest-cov/7.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest-cov/7.1.0/json"
+      },
+      "version": "7.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pytest-dependency",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pytest-dependency/0.6.1/json",
+      "pypi_metadata_sha256": "2f18baf3e417ac80ee3ee3290502d6ce90e31bd5d4451dea2470d9f36228f670",
+      "pypi_release_url": "https://pypi.org/project/pytest-dependency/0.6.1/",
+      "release_uploaded_at": "2026-02-15T18:08:43.927349Z",
+      "requires_python": ">=3.4",
+      "source_repository_url": "https://github.com/RKrahl/pytest-dependency",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pytest-dependency/0.6.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest-dependency/0.6.1/json"
+      },
+      "version": "0.6.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License",
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Dual License",
+        "normalized_expression": null
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "python-dateutil",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/python-dateutil/2.9.0.post0/json",
+      "pypi_metadata_sha256": "78da38a3c1e78acd50e883724a09f46df06838383df4e145917619fa2c1ef6b7",
+      "pypi_release_url": "https://pypi.org/project/python-dateutil/2.9.0.post0/",
+      "release_uploaded_at": "2024-03-01T18:36:18.570437Z",
+      "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7",
+      "source_repository_url": "https://github.com/dateutil/dateutil",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/python-dateutil/2.9.0.post0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-dateutil/2.9.0.post0/json"
+      },
+      "version": "2.9.0.post0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "BSD-3-Clause",
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "python-dotenv",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/python-dotenv/1.2.2/json",
+      "pypi_metadata_sha256": "dfe9162a30db7b32fb561c66968fbe328b49053fffa0dd1161a2ffd21e2bbc05",
+      "pypi_release_url": "https://pypi.org/project/python-dotenv/1.2.2/",
+      "release_uploaded_at": "2026-03-01T16:00:25.090725Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/theskumar/python-dotenv",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/python-dotenv/1.2.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-dotenv/1.2.2/json"
+      },
+      "version": "1.2.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-2-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-2-Clause"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "python-json-logger",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/python-json-logger/4.1.0/json",
+      "pypi_metadata_sha256": "a4be0f5d17341872ebe7edc07519a4188e945c38dce2a0b1650e5b1e779896ce",
+      "pypi_release_url": "https://pypi.org/project/python-json-logger/4.1.0/",
+      "release_uploaded_at": "2026-03-29T04:39:55.266869Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/nhairs/python-json-logger",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/python-json-logger/4.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-json-logger/4.1.0/json"
+      },
+      "version": "4.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "python-multipart",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/python-multipart/0.0.32/json",
+      "pypi_metadata_sha256": "e871c9e20d8488c6d8efb5621dfafb341e7930c4dfa6e09ec853c8208ec2e0f8",
+      "pypi_release_url": "https://pypi.org/project/python-multipart/0.0.32/",
+      "release_uploaded_at": "2026-06-04T16:18:57.319904Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/Kludex/python-multipart",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/python-multipart/0.0.32/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-multipart/0.0.32/json"
+      },
+      "version": "0.0.32",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Python Software Foundation License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "PSF",
+        "normalized_expression": "PSF-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "pywin32",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pywin32/312/json",
+      "pypi_metadata_sha256": "e75ee0afc719acc17bcd1af674770cbb61d20e3925f57750aa2081a8088bbdbf",
+      "pypi_release_url": "https://pypi.org/project/pywin32/312/",
+      "release_uploaded_at": "2026-06-04T07:49:04.776060Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pywin32/312/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pywin32/312/json"
+      },
+      "version": "312",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "pyyaml",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/pyyaml/6.0.3/json",
+      "pypi_metadata_sha256": "e220fd8c2609c84da40492e092195748a2fd4046d1b32d8caabfac49a6541cd2",
+      "pypi_release_url": "https://pypi.org/project/pyyaml/6.0.3/",
+      "release_uploaded_at": "2025-09-25T21:31:46.040932Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": "https://github.com/yaml/pyyaml",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/pyyaml/6.0.3/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/pyyaml/6.0.3/json"
+      },
+      "version": "6.0.3",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "radon",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/radon/6.0.1/json",
+      "pypi_metadata_sha256": "f698c8fc4b6608c5d367c8b279278baf14a09294390d17ae531a68d63e495fa0",
+      "pypi_release_url": "https://pypi.org/project/radon/6.0.1/",
+      "release_uploaded_at": "2023-03-26T06:24:33.949321Z",
+      "requires_python": "",
+      "source_repository_url": "https://github.com/rubik/radon",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/radon/6.0.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/radon/6.0.1/json"
+      },
+      "version": "6.0.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "requests",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/requests/2.34.2/json",
+      "pypi_metadata_sha256": "5b41577da712790baf78d7bc9582b7745313f83b1b458c7c0ec2aa9d98121418",
+      "pypi_release_url": "https://pypi.org/project/requests/2.34.2/",
+      "release_uploaded_at": "2026-05-14T19:25:26.443000Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/psf/requests",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/requests/2.34.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/requests/2.34.2/json"
+      },
+      "version": "2.34.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache-2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "requirements-parser",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/requirements-parser/0.13.1/json",
+      "pypi_metadata_sha256": "3e995011642c498e1aea4f606137d19e24998fdd06173a50de444c74b426f7f5",
+      "pypi_release_url": "https://pypi.org/project/requirements-parser/0.13.1/",
+      "release_uploaded_at": "2026-06-18T07:52:24.171510Z",
+      "requires_python": "<4.0,>=3.8",
+      "source_repository_url": "https://github.com/madpah/requirements-parser",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/requirements-parser/0.13.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/requirements-parser/0.13.1/json"
+      },
+      "version": "0.13.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "rich",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/rich/15.0.0/json",
+      "pypi_metadata_sha256": "49a9353e02433544a599a36279e1126bd126d5464e5100507314b65ccf66b93a",
+      "pypi_release_url": "https://pypi.org/project/rich/15.0.0/",
+      "release_uploaded_at": "2026-04-12T08:24:00.750018Z",
+      "requires_python": ">=3.9.0",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/rich/15.0.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/rich/15.0.0/json"
+      },
+      "version": "15.0.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "ruff",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/ruff/0.15.18/json",
+      "pypi_metadata_sha256": "5116e21b5ce200b1d57b5d0fc8f2b2c8b47b38dba29b061b9e9d9a79d85a133b",
+      "pypi_release_url": "https://pypi.org/project/ruff/0.15.18/",
+      "release_uploaded_at": "2026-06-18T18:25:03.062305Z",
+      "requires_python": ">=3.7",
+      "source_repository_url": "https://github.com/astral-sh/ruff",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/ruff/0.15.18/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/ruff/0.15.18/json"
+      },
+      "version": "0.15.18",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "setuptools",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/setuptools/83.0.0/json",
+      "pypi_metadata_sha256": "505e4ef4f995616b7dd9f6542891fec75675ba429029c29389227d24339b6347",
+      "pypi_release_url": "https://pypi.org/project/setuptools/83.0.0/",
+      "release_uploaded_at": "2026-07-04T15:31:20.885481Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pypa/setuptools",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/setuptools/83.0.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/setuptools/83.0.0/json"
+      },
+      "version": "83.0.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "six",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/six/1.17.0/json",
+      "pypi_metadata_sha256": "5da03923f4d5965ba9d640a0f0216cdf99d2f64e4a092b1cbb271dab383054e8",
+      "pypi_release_url": "https://pypi.org/project/six/1.17.0/",
+      "release_uploaded_at": "2024-12-04T17:35:26.475808Z",
+      "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7",
+      "source_repository_url": "https://github.com/benjaminp/six",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/six/1.17.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/six/1.17.0/json"
+      },
+      "version": "1.17.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache 2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "sortedcontainers",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/sortedcontainers/2.4.0/json",
+      "pypi_metadata_sha256": "6484cb6e158e3281af5c9c3c83ae7e5b618e730e4f9ca71843a58fef7d67ad90",
+      "pypi_release_url": "https://pypi.org/project/sortedcontainers/2.4.0/",
+      "release_uploaded_at": "2021-05-16T22:03:41.177807Z",
+      "requires_python": "",
+      "source_repository_url": "http://www.grantjenks.com/docs/sortedcontainers/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/sortedcontainers/2.4.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/sortedcontainers/2.4.0/json"
+      },
+      "version": "2.4.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_legacy_mapping",
+        "classification_source": "pypi_legacy_mapping",
+        "classifiers": [],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "sqlalchemy",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/sqlalchemy/2.0.51/json",
+      "pypi_metadata_sha256": "59a1e090dd7b9e98e9266bedad11afc86070c7dc2f30be33edf957869659bebf",
+      "pypi_release_url": "https://pypi.org/project/sqlalchemy/2.0.51/",
+      "release_uploaded_at": "2026-06-15T15:41:20.012455Z",
+      "requires_python": ">=3.7",
+      "source_repository_url": "https://www.sqlalchemy.org",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/sqlalchemy/2.0.51/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/sqlalchemy/2.0.51/json"
+      },
+      "version": "2.0.51",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "starlette",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/starlette/1.3.1/json",
+      "pypi_metadata_sha256": "c7b4580202ac9b3fdd7bbe5646fe4c10325e1de5cd4b036110c13963932741fd",
+      "pypi_release_url": "https://pypi.org/project/starlette/1.3.1/",
+      "release_uploaded_at": "2026-06-12T09:23:10.017643Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/Kludex/starlette",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/starlette/1.3.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/starlette/1.3.1/json"
+      },
+      "version": "1.3.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "stevedore",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/stevedore/5.9.0/json",
+      "pypi_metadata_sha256": "9288c5741f93e46340017d1c9dd7361560e3580fd7fc73fb7c35c263adaa2fe5",
+      "pypi_release_url": "https://pypi.org/project/stevedore/5.9.0/",
+      "release_uploaded_at": "2026-07-02T11:38:07.430886Z",
+      "requires_python": ">=3.11",
+      "source_repository_url": "https://opendev.org/openstack/stevedore",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/stevedore/5.9.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/stevedore/5.9.0/json"
+      },
+      "version": "5.9.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "compound_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License",
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": "MIT OR Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "MIT OR Apache-2.0"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "structlog",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/structlog/26.1.0/json",
+      "pypi_metadata_sha256": "3c2f6b85cb4ea1ef1f25bb81f717ba7985d96651ceb6e785e5aa92bcfe2e901c",
+      "pypi_release_url": "https://pypi.org/project/structlog/26.1.0/",
+      "release_uploaded_at": "2026-06-06T07:33:38.046641Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/hynek/structlog",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/structlog/26.1.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/structlog/26.1.0/json"
+      },
+      "version": "26.1.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "tabulate",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/tabulate/0.10.0/json",
+      "pypi_metadata_sha256": "1eac1e26a472cbf4b8c7bf746a25da6b49e28de85515d21f453dd2fd4e9892ba",
+      "pypi_release_url": "https://pypi.org/project/tabulate/0.10.0/",
+      "release_uploaded_at": "2026-03-04T18:55:31.284751Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/tabulate/0.10.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/tabulate/0.10.0/json"
+      },
+      "version": "0.10.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "Apache 2.0",
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "tenacity",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/tenacity/9.1.4/json",
+      "pypi_metadata_sha256": "a9f083cd4c4f0e7f9f89bf3e071bf5ea383dd431eac02e2e1eca829ca4d7a52f",
+      "pypi_release_url": "https://pypi.org/project/tenacity/9.1.4/",
+      "release_uploaded_at": "2026-02-07T10:45:32.240169Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/jd/tenacity",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/tenacity/9.1.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/tenacity/9.1.4/json"
+      },
+      "version": "9.1.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "testcontainers",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/testcontainers/4.14.2/json",
+      "pypi_metadata_sha256": "f5fbb6ba561eb438dc5bdcbea50a34101fc1232ef100964bb2ab489f9b2d8dea",
+      "pypi_release_url": "https://pypi.org/project/testcontainers/4.14.2/",
+      "release_uploaded_at": "2026-03-18T05:19:15.290907Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/testcontainers/testcontainers-python",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/testcontainers/4.14.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/testcontainers/4.14.2/json"
+      },
+      "version": "4.14.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "tomli",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/tomli/2.4.1/json",
+      "pypi_metadata_sha256": "59a75f3e51267bac7b015f544508c36f1b4b0135b1f196ae780d8854eba0ba32",
+      "pypi_release_url": "https://pypi.org/project/tomli/2.4.1/",
+      "release_uploaded_at": "2026-03-25T20:21:10.473841Z",
+      "requires_python": ">=3.8",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/tomli/2.4.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/tomli/2.4.1/json"
+      },
+      "version": "2.4.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "tomli-w",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/tomli-w/1.2.0/json",
+      "pypi_metadata_sha256": "7e0cbdfa09794888d2c5ae70bde9185e5d390610b47f9fb8c736af663852f1bc",
+      "pypi_release_url": "https://pypi.org/project/tomli-w/1.2.0/",
+      "release_uploaded_at": "2025-01-15T12:07:22.074224Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/tomli-w/1.2.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/tomli-w/1.2.0/json"
+      },
+      "version": "1.2.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "truststore",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/truststore/0.10.4/json",
+      "pypi_metadata_sha256": "9673b3d881b2092f8e5696436b75c3c7d799bb68e41e9b0d077f6ce4d72a8514",
+      "pypi_release_url": "https://pypi.org/project/truststore/0.10.4/",
+      "release_uploaded_at": "2025-08-12T18:49:01.460601Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/sethmlarson/truststore",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/truststore/0.10.4/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/truststore/0.10.4/json"
+      },
+      "version": "0.10.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "Apache-2.0",
+        "legacy_value": null,
+        "normalized_expression": "Apache-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "types-python-dateutil",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/types-python-dateutil/2.9.0.20260518/json",
+      "pypi_metadata_sha256": "c54db2f4c18944c8957f8a7b5c048bbe031c3d60bb38209a1cc6896f60e492e2",
+      "pypi_release_url": "https://pypi.org/project/types-python-dateutil/2.9.0.20260518/",
+      "release_uploaded_at": "2026-05-18T06:05:23.641132Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/python/typeshed",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/types-python-dateutil/2.9.0.20260518/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/types-python-dateutil/2.9.0.20260518/json"
+      },
+      "version": "2.9.0.20260518",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "PSF-2.0",
+        "legacy_value": null,
+        "normalized_expression": "PSF-2.0"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64",
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "typing-extensions",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/typing-extensions/4.15.0/json",
+      "pypi_metadata_sha256": "55bf88c5d4eb028c49d6c0ed2da2033ca6eb181b5949920eb202b6ae137ff49f",
+      "pypi_release_url": "https://pypi.org/project/typing-extensions/4.15.0/",
+      "release_uploaded_at": "2025-08-25T13:49:24.860024Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/python/typing_extensions",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/typing-extensions/4.15.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/typing-extensions/4.15.0/json"
+      },
+      "version": "4.15.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "typing-inspection",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/typing-inspection/0.4.2/json",
+      "pypi_metadata_sha256": "0ee4341479a597fb83b7689b6781edd46a0517f365b39ae67a17d6592fded6a1",
+      "pypi_release_url": "https://pypi.org/project/typing-inspection/0.4.2/",
+      "release_uploaded_at": "2025-10-01T02:14:40.154613Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/pydantic/typing-inspection",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/typing-inspection/0.4.2/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/typing-inspection/0.4.2/json"
+      },
+      "version": "0.4.2",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "urllib3",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/urllib3/2.7.0/json",
+      "pypi_metadata_sha256": "5fbffb8ce8b4ff2c4f22559fe057c0c4e9e664029858d6b58767beca8083789d",
+      "pypi_release_url": "https://pypi.org/project/urllib3/2.7.0/",
+      "release_uploaded_at": "2026-05-07T16:13:17.151740Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/urllib3/urllib3",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/urllib3/2.7.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/urllib3/2.7.0/json"
+      },
+      "version": "2.7.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "uvicorn",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/uvicorn/0.49.0/json",
+      "pypi_metadata_sha256": "6bc350778927f9489d4cb14c43cfd8bcf16622044cb94f38cdaefc3737b9270d",
+      "pypi_release_url": "https://pypi.org/project/uvicorn/0.49.0/",
+      "release_uploaded_at": "2026-06-03T22:01:29.037537Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/Kludex/uvicorn",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/uvicorn/0.49.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/uvicorn/0.49.0/json"
+      },
+      "version": "0.49.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License",
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT License",
+        "normalized_expression": null
+      },
+      "lock_membership": [
+        "runtime:linux/amd64"
+      ],
+      "name": "uvloop",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/uvloop/0.22.1/json",
+      "pypi_metadata_sha256": "6ccfe55e04e055e9802ba1eb6289ac0aa7c55e3c926a285890f02289acd8f834",
+      "pypi_release_url": "https://pypi.org/project/uvloop/0.22.1/",
+      "release_uploaded_at": "2025-10-16T22:16:11.430849Z",
+      "requires_python": ">=3.8.1",
+      "source_repository_url": "https://github.com/MagicStack/uvloop",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/uvloop/0.22.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/uvloop/0.22.1/json"
+      },
+      "version": "0.22.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "The MIT License (MIT)  Copyright (c) 2012-2020 Jendrik Seipp (jendrikseipp@gmail.com)  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.  THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "vulture",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/vulture/2.16/json",
+      "pypi_metadata_sha256": "12dddb67b5a4f3b2d90fa824fa152977152ae14e6b7bf4ac860e82a5aaa9138c",
+      "pypi_release_url": "https://pypi.org/project/vulture/2.16/",
+      "release_uploaded_at": "2026-03-25T14:41:26.210949Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/jendrikseipp/vulture",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/vulture/2.16/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/vulture/2.16/json"
+      },
+      "version": "2.16",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "watchfiles",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/watchfiles/1.1.1/json",
+      "pypi_metadata_sha256": "48abb0a423ea958726c755256c08df694614d62b5cde8bd30d10bbc79de0430f",
+      "pypi_release_url": "https://pypi.org/project/watchfiles/1.1.1/",
+      "release_uploaded_at": "2025-10-14T15:04:18.753092Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": "https://github.com/samuelcolvin/watchfiles",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/watchfiles/1.1.1/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/watchfiles/1.1.1/json"
+      },
+      "version": "1.1.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "runtime:linux/amd64",
+        "runtime:windows/amd64"
+      ],
+      "name": "websockets",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/websockets/16.0/json",
+      "pypi_metadata_sha256": "7394cbcbc3455b9d796fbbf4d62c1f5276085f9b759703b32147730843e56b01",
+      "pypi_release_url": "https://pypi.org/project/websockets/16.0/",
+      "release_uploaded_at": "2026-01-10T09:22:21.280709Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/websockets/16.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/websockets/16.0/json"
+      },
+      "version": "16.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
+        "declared_expression": "BSD-2-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-2-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "wrapt",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/wrapt/2.3.0/json",
+      "pypi_metadata_sha256": "d80bc93bebc1e7f62e60cd4019b3b6f1276b66331794f183ad74731db4ae47f0",
+      "pypi_release_url": "https://pypi.org/project/wrapt/2.3.0/",
+      "release_uploaded_at": "2026-07-28T06:04:04.858030Z",
+      "requires_python": ">=3.9",
+      "source_repository_url": null,
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/wrapt/2.3.0/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/wrapt/2.3.0/json"
+      },
+      "version": "2.3.0",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_classifier_mapping",
+        "classification_source": "pypi_classifier_mapping",
+        "classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "declared_expression": null,
+        "legacy_value": "MIT",
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "xenon",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/xenon/0.9.3/json",
+      "pypi_metadata_sha256": "3574d155dfda7967488648d6342a06214704f3a3f126ace39ec652b446ab8161",
+      "pypi_release_url": "https://pypi.org/project/xenon/0.9.3/",
+      "release_uploaded_at": "2024-10-21T10:27:51.121328Z",
+      "requires_python": null,
+      "source_repository_url": "https://xenon.readthedocs.org/",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "reviewed",
+        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "next_review_due": "2026-09-11",
+        "release_evidence_url": "https://pypi.org/project/xenon/0.9.3/",
+        "reviewed_on": "2026-08-12",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "vulnerability_advisory_channel": "https://pypi.org/pypi/xenon/0.9.3/json"
+      },
+      "version": "0.9.3",
+      "yanked": false
+    }
+  ],
+  "generated_at_utc": "2026-08-12T00:00:00Z",
+  "generator": {
+    "id": "lotus-core-dependency-technology-inventory",
+    "version": "1.0.0"
+  },
+  "governed_by_issue": "https://github.com/sgajbi/lotus-core/issues/926",
+  "inventory_id": "lotus-core-python-dependency-technology-inventory",
+  "policy": {
+    "path": "contracts/security/dependency-license-policy.v1.json",
+    "sha256": "2d3373f5ee0ed7003e7225f37961df62f3c8444954189ff0e2a686435fe1a125"
+  },
+  "repository": "https://github.com/sgajbi/lotus-core",
+  "schema_version": "lotus-core.dependency-technology-inventory.v1",
+  "source_commit": "66ce34891c48e551d53f195f75e2a2b34dd8ac5f",
+  "source_locks": [
+    {
+      "path": "requirements/shared-runtime.lock.txt",
+      "platform": "linux/amd64",
+      "scope": "runtime",
+      "sha256": "f615c6da23bce344653cc19bfb1349f5aa1afd2d859619e49278ad88559c008a"
+    },
+    {
+      "path": "requirements/shared-runtime-windows.lock.txt",
+      "platform": "windows/amd64",
+      "scope": "runtime",
+      "sha256": "40000b1e89f36fb907d6a36c11e904781e5623aa428a6319b8c7ac776d8b29f9"
+    },
+    {
+      "path": "requirements/ci-tooling.lock.txt",
+      "platform": "linux/amd64",
+      "scope": "ci_build_test",
+      "sha256": "396ad6eaa1559edd8a571515f58b8a0e664326bf1b1fa1903dc677ea85da7434"
+    },
+    {
+      "path": "requirements/ci-tooling-windows.lock.txt",
+      "platform": "windows/amd64",
+      "scope": "ci_build_test",
+      "sha256": "c691b62dab9fe23d7eb47677a06db33641f1c310ccda351b73ff056def425d97"
+    }
+  ],
+  "summary": {
+    "approved_license_count": 95,
+    "blocked_or_review_required_count": 9,
+    "certification_decision": "blocked",
+    "component_count": 104
+  },
+  "support_model": {
+    "owner": "Lotus Technology Risk and Open Source Governance",
+    "posture": "Lotus owns operational support and removal decisions; upstream release metadata is evidence, not an inferred support promise.",
+    "review_cadence_days": 30,
+    "vulnerability_evaluator": "pip-audit==2.10.1 against the installed exact lock closure"
+  }
+}

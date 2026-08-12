@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
+components from the four compiled runtime/CI platform closures, never the ambient interpreter.
+The committed machine contract binds lock and policy digests, exact package/version and lock
+membership, canonical PyPI release metadata digest, release/advisory URLs, generator identity,
+review dates, license evidence/classification, and a non-certifying claim boundary. Ninety-five
+licenses classify from one approved SPDX expression or exact metadata mapping; eight require review
+for compound/ambiguous evidence and `mypy-extensions==1.1.0` is blocked for missing license metadata.
+The structural guard passes while certification remains blocked; `--enforce-allowed` fails closed.
+Feature, PR, and main lanes retain exact-SHA receipts, including a failure receipt when validation
+itself is unavailable. This adds no application dependency or runtime technology and makes no
+popularity-based, production-ready, legal, or bank-buyable claim.
+
 CR-1685 base-image lifecycle authority (2026-08-12): issue #927's pinned Docker Official Python
 image proved immutable identity but not supported lifetime or deployment architecture. Core now
 retains one machine-readable lifecycle inventory for all ten Core-built service Dockerfiles and

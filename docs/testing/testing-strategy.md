@@ -170,6 +170,16 @@ Use `python scripts/development/update_shared_runtime_lock.py --check` and
 | `make verify-dependencies` | Reuse only after marker identity, interpreter path, and `pip check` pass. | `output/dependency-health/report.json` |
 | `make verify-dependencies-clean` | Bypass cache reads and perform a clean installation. | `output/dependency-health/clean-install-report.json` |
 | `make security-audit` | Recheck integrity, then run `pip-audit` against the verified environment. | `output/dependency-health/report.json` |
+| `make dependency-technology-inventory` | Validate exact lock/policy identities and all component classifications; report-only posture retains blocked evidence. | `output/dependency-technology/inventory-receipt.json` |
+| `make dependency-technology-certify` | Apply the same validation and return non-zero unless every component is explicitly allowed. | `output/dependency-technology/inventory-receipt.json` |
+
+The dependency technology inventory covers the union of all four platform locks and does not read
+installed distributions. Its committed contract records exact release metadata digests and review
+dates. PyPI release evidence and pip-audit's advisory channel are inputs; neither package popularity
+nor an upstream URL is treated as an implied support promise. Lotus retains internal lifecycle and
+removal ownership. Compound, ambiguous, missing, stale, yanked, or pre-release evidence blocks
+certification. Ordinary CI remains report-only under the Platform pilot but always uploads the
+exact-SHA receipt; explicit certification uses the fail-closed target.
 
 The key covers the Python implementation/version, platform, invoking pip version, root and service
 `pyproject.toml` files, dependency/test/tooling lock inputs, and both cache implementation modules.

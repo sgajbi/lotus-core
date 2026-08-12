@@ -14,6 +14,8 @@ smallest evidence command for a change, then cite generated artifacts from the r
 | Dependency consistency | `make verify-dependencies` | Reuses only an exact, integrity-checked environment. |
 | Clean dependency proof | `make verify-dependencies-clean` | Always bootstraps without a cache read; required on main. |
 | Vulnerability posture | `make security-audit` | Rechecks the environment and runs `pip-audit`. |
+| Dependency technology inventory | `make dependency-technology-inventory` | Validates exact locked package identities, license classifications, and release/advisory review evidence; emits a non-certifying receipt when review remains. |
+| Dependency technology certification | `make dependency-technology-certify` | Fails closed unless every locked component has current explicitly approved evidence. |
 | Static application boundaries | `make typecheck` | Includes the complete QCP analytics application/domain/ports boundary and its SQL adapters. |
 | Documentation truth | `make docs-evidence-pack` | Captures README, wiki, API, RFC, supported-feature, and runbook checks in one manifest. |
 
@@ -31,6 +33,14 @@ miss is saved immediately after dependency proof rather than after unrelated job
 scheduled releasability always run `make verify-dependencies-clean`. Machine-readable clean and audit
 reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the separate
 mainline clean-install report.
+
+Feature, PR, and main lanes also upload
+`output/dependency-technology/inventory-receipt.json`, bound to the executing Git SHA and committed
+inventory digest. A structurally valid but blocked classification is retained as evidence in the
+report-only pilot lane. Missing or drifted evidence writes an unavailable failure receipt and fails
+the job. The explicit certification target also fails when any component is missing, ambiguous,
+compound, stale, yanked, pre-release, or otherwise not approved. Upstream metadata and popularity
+never create an implied support or legal approval.
 
 ## Runtime Image Evidence
 
