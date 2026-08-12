@@ -10,7 +10,11 @@ also requires Debian package-support evidence to be refreshed on the same observ
 future-dated evidence. Focused policy/lifecycle tests and protected PR evidence govern this change.
 Follow-up review also made Medium secret findings explicitly blocking and requires every reviewed
 dependency support, disclosure, and lifecycle authority to be a credential-free HTTPS reference;
-arbitrary non-empty placeholders cannot create an allowed certification receipt.
+arbitrary non-empty placeholders cannot create an allowed certification receipt. The inventory
+guard now independently requires the four governed runtime and CI lock closures, so deleting a
+lock and its matching components cannot shrink the asserted universe. Supportability deadlines are
+also derived from a non-future `reviewed_on` date and cannot exceed the cadence in the separately
+hash-bound dependency policy.
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.

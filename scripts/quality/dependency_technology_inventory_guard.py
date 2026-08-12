@@ -18,6 +18,14 @@ ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_FILE = ROOT / "contracts" / "security" / "dependency-technology-inventory.v1.json"
 DEFAULT_OUTPUT = ROOT / "output" / "dependency-technology" / "inventory-receipt.json"
 PIN = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^\s;]+)$")
+REQUIRED_SOURCE_LOCKS = frozenset(
+    {
+        ("requirements/shared-runtime.lock.txt", "runtime", "linux/amd64"),
+        ("requirements/shared-runtime-windows.lock.txt", "runtime", "windows/amd64"),
+        ("requirements/ci-tooling.lock.txt", "ci_build_test", "linux/amd64"),
+        ("requirements/ci-tooling-windows.lock.txt", "ci_build_test", "windows/amd64"),
+    }
+)
 
 
 class InventoryValidationError(RuntimeError):
@@ -52,6 +60,14 @@ def _commit() -> str:
 
 
 def _expected_components(source_locks: list[dict[str, Any]]) -> dict[tuple[str, str], set[str]]:
+    identities = [
+        (str(lock["path"]), str(lock["scope"]), str(lock["platform"])) for lock in source_locks
+    ]
+    if len(identities) != len(set(identities)) or set(identities) != REQUIRED_SOURCE_LOCKS:
+        raise InventoryValidationError(
+            "source lock set drift: "
+            f"expected={sorted(REQUIRED_SOURCE_LOCKS)}, actual={sorted(set(identities))}"
+        )
     expected: dict[tuple[str, str], set[str]] = {}
     for lock in source_locks:
         path = ROOT / str(lock["path"])
@@ -72,6 +88,10 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
     policy_path = ROOT / str(policy["path"])
     if not policy_path.is_file() or normalized_text_sha256(policy_path) != policy["sha256"]:
         raise InventoryValidationError("dependency license policy identity has drifted")
+    policy_contract = json.loads(policy_path.read_text(encoding="utf-8"))
+    review_cadence_days = int(policy_contract["review_cadence_days"])
+    if review_cadence_days < 1:
+        raise InventoryValidationError("dependency review cadence must be positive")
     expected = _expected_components(inventory["source_locks"])
     actual: dict[tuple[str, str], dict[str, Any]] = {}
     findings: list[dict[str, str]] = []
@@ -96,7 +116,17 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
             raise InventoryValidationError(
                 f"reviewed supportability lacks authority: {key[0]}=={key[1]}"
             )
-        due = date.fromisoformat(component["supportability"]["next_review_due"])
+        reviewed_on = date.fromisoformat(supportability["reviewed_on"])
+        due = date.fromisoformat(supportability["next_review_due"])
+        review_interval_days = (due - reviewed_on).days
+        if reviewed_on > as_of:
+            raise InventoryValidationError(
+                f"supportability review is future-dated: {key[0]}=={key[1]}"
+            )
+        if review_interval_days < 1 or review_interval_days > review_cadence_days:
+            raise InventoryValidationError(
+                f"supportability review cadence drift: {key[0]}=={key[1]}"
+            )
         if due < as_of:
             findings.append({"component": f"{key[0]}=={key[1]}", "reason": "review_stale"})
         if license_state != "approved":
