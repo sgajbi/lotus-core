@@ -103,6 +103,12 @@ authority. Medium findings require an exact approved remediation/exception recor
 unclassified exploitation are never exceptionable. The default register is empty, and
 `make image-provenance-guard` rejects malformed ownership/approval/evidence, expiry, permanent
 suppression, and wrong digest/advisory/severity matches.
+The same command enforces the authored base-image lifecycle inventory. Core-built service images
+must use the governed immutable Docker Official Python index and the release target must resolve to
+the recorded `linux/amd64` child/config digests. CPython and Debian support authority, exact-image
+Debian package-support status, ownership, and a maximum 30-day evidence age are mandatory. An
+available architecture in an OCI index is not by itself a supported production platform; external
+Compose dependency images remain outside the Core-built release boundary.
 Automatic Image Release publication is limited to `main` and release tags. An authorized manual
 dispatch may exercise an exact feature SHA for pre-merge supply-chain evidence, but it retains the
 same SHA tag and controls and does not replace protected PR or exact-main proof.

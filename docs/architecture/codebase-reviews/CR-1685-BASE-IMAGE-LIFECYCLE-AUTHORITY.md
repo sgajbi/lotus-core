@@ -1,0 +1,51 @@
+# CR-1685 Base-Image Lifecycle Authority
+
+## Objective
+
+Close the source-governance portion of #927 without changing the Core runtime stack: bind every
+Core-built service image to one immutable, mature base-image identity and fail closed when its
+runtime, distribution, target platform, package-support, ownership, or review evidence is absent,
+stale, or unsupported.
+
+## Decision
+
+Core retains the widely deployed Docker Official `python:3.11-slim-bookworm` base already proven by
+the application and runtime suites. The inventory records its immutable OCI index, exact
+`linux/amd64` child manifest and config digests, Docker Official Images source revision, CPython
+security-support phase, Debian Bookworm LTS posture, and exact-image Debian package-support check.
+
+Availability in a multi-platform index is not treated as deployment support. The governed release
+target is `linux/amd64`; historical index entries for other platforms do not authorize production
+deployment. Python's upstream authority describes support through approximately October 2027, so
+Core uses the conservative local fail-closed cutoff `2027-10-01` instead of fabricating a precise
+upstream end date. Evidence is reviewed at most every 30 days and immediately when the base digest,
+permitted platform, official-image membership, or upstream lifecycle changes.
+
+## Enforcement
+
+`make base-image-lifecycle-guard`, also invoked by `make image-provenance-guard`, verifies:
+
+- all ten Core service Dockerfiles use the governed immutable base identity;
+- the `linux/amd64` child/config digest and attached-metadata distinction are explicit;
+- CPython and Debian authorities remain current and the earliest local cutoff owns release posture;
+- the exact image has a clean `debian-security-support` result;
+- ownership, remediation issue, observed date, and bounded next review are present; and
+- third-party Compose images are explicitly outside the Core-built release boundary, not silently
+  presented as production-certified artifacts.
+
+## Compatibility and documentation decision
+
+This is build/release governance only. It adds no dependency, service, sidecar, datastore, API,
+OpenAPI, event, database, migration, calculation, or topology change. Repository context, the
+operator runbook, review ledger, and authored wiki are updated because release truth changed.
+No API/OpenAPI, migration, supported-feature, or platform-context update is required.
+
+## Validation
+
+- focused lifecycle-guard unit tests cover current posture, deterministic replay, Dockerfile digest
+  drift, missing inventory, stale evidence, EOL, experimental posture, unclassified Compose images,
+  unresolved target child digest, and missing package-support proof;
+- scoped Ruff format/check;
+- direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
+- exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited
+  installed-package finding on 2026-08-12.

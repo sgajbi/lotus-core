@@ -1079,6 +1079,16 @@ Most relevant current governance:
     including secret-like Dockerfile/workflow build ARG or ENV additions. Local builds may report
     `LOTUS_IMAGE_DIGEST=unknown` until a release lane or deploy manifest supplies the resolved
     digest.
+    The same gate runs `base_image_lifecycle_guard.py` against
+    `contracts/security/base-image-lifecycle-inventory.v1.json`. Every Core-built service image
+    currently shares the stable Docker Official `python:3.11-slim-bookworm` OCI index, with the
+    governed deployment target bound separately to its exact `linux/amd64` child and config
+    digests. Multi-platform index availability is not production support. The inventory binds
+    CPython and Debian lifecycle authority, a conservative local cutoff, exact-image
+    `debian-security-support` evidence, owner, and a maximum 30-day review cadence. Missing,
+    stale, EOL, experimental, unclassified, wrong-platform, or Dockerfile/boundary drift fails.
+    Third-party Compose infrastructure remains local-validation support and is not certified as a
+    Core-built release artifact by this inventory.
     Architecture documentation metadata is now governed by
     `docs/architecture/architecture-documentation-catalog.v1.json`. The catalog distinguishes
     current-state truth, review evidence, historical context, templates, and catalog metadata, and
