@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from scripts.quality import dependency_technology_inventory_guard as guard
-from scripts.technology_governance_identity import normalized_text_sha256
+from scripts.quality.technology_governance_identity import normalized_text_sha256
 
 
 def _sha(path: Path) -> str:

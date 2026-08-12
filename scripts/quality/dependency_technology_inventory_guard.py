@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.technology_governance_identity import normalized_text_sha256
+from scripts.quality.technology_governance_identity import normalized_text_sha256
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_FILE = ROOT / "contracts" / "security" / "dependency-technology-inventory.v1.json"
