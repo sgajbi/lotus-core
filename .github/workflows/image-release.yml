@@ -152,7 +152,7 @@ jobs:
             "${scanner_image}" image \
             --exit-code 0 \
             --scanners vuln,secret \
-            --severity HIGH,CRITICAL \
+            --severity LOW,MEDIUM,HIGH,CRITICAL \
             --format json \
             --output "/output/${{ matrix.service }}-trivy.json" \
             "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"

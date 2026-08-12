@@ -41,7 +41,7 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     generate = str(steps[generate_index]["run"])
     assert "--exit-code 0" in generate
     assert "--scanners vuln,secret" in generate
-    assert "--severity HIGH,CRITICAL" in generate
+    assert "--severity LOW,MEDIUM,HIGH,CRITICAL" in generate
     assert "image_scan_policy.py evaluate" in generate
     assert "image_scan_policy.py enforce" in str(steps[enforce_index]["run"])
 

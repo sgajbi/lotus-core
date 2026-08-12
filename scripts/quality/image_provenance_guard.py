@@ -44,7 +44,7 @@ REQUIRED_RELEASE_WORKFLOW_SNIPPETS = (
     "aquasec/trivy",
     "--exit-code 0",
     "--scanners vuln,secret",
-    "--severity HIGH,CRITICAL",
+    "--severity LOW,MEDIUM,HIGH,CRITICAL",
     "image_scan_policy.py evaluate",
     "Upload image scan policy receipt",
     "image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}",

@@ -170,8 +170,8 @@ lane:
 4. captures the resolved image digest in a release manifest and runtime metadata,
 5. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
    scanning and uploads it before enforcing the release decision,
-6. fails on high or critical vulnerability or secret findings while retaining that receipt for
-   remediation,
+6. retains normalized Low and Medium finding identities/counts for governance, and fails on High or
+   Critical vulnerability or secret findings while retaining that receipt for remediation,
 7. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
    after scan enforcement passes,
 8. signs the digest reference with Cosign only after scan enforcement passes,
