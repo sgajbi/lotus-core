@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_WORKFLOW = Path(".github/workflows/image-release.yml")
 
@@ -155,6 +157,111 @@ def _release_workflow_findings(root: Path) -> list[ImageProvenanceFinding]:
                 ImageProvenanceFinding(
                     RELEASE_WORKFLOW,
                     f"image release workflow missing {snippet}",
+                )
+            )
+
+    try:
+        workflow = yaml.safe_load(workflow_content)
+        jobs = workflow["jobs"]
+        release_job = jobs["publish-images"]
+        diagnostic_job = jobs["diagnose-images"]
+        prepare_job = jobs["prepare-image-matrix"]
+    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        findings.append(
+            ImageProvenanceFinding(
+                RELEASE_WORKFLOW,
+                f"image release workflow trust boundary is not parseable: {exc}",
+            )
+        )
+    else:
+        if workflow.get("permissions") != {"contents": "read"}:
+            findings.append(
+                ImageProvenanceFinding(
+                    RELEASE_WORKFLOW,
+                    "image release workflow must be read-only by default",
+                )
+            )
+        expected_release_condition = (
+            "${{ github.ref == 'refs/heads/main' || "
+            "startsWith(github.ref, 'refs/tags/v') }}"
+        )
+        if " ".join(str(release_job.get("if", "")).split()) != expected_release_condition:
+            findings.append(
+                ImageProvenanceFinding(
+                    RELEASE_WORKFLOW,
+                    "image publication must be limited to main and version tags",
+                )
+            )
+        if release_job.get("permissions") != {
+            "contents": "read",
+            "id-token": "write",
+            "packages": "write",
+        }:
+            findings.append(
+                ImageProvenanceFinding(
+                    RELEASE_WORKFLOW,
+                    "release write permissions must be scoped to the trusted publish job",
+                )
+            )
+        expected_diagnostic_condition = (
+            "${{ github.event_name == 'workflow_dispatch' && "
+            "github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}"
+        )
+        if (
+            " ".join(str(diagnostic_job.get("if", "")).split())
+            != expected_diagnostic_condition
+        ):
+            findings.append(
+                ImageProvenanceFinding(
+                    RELEASE_WORKFLOW,
+                    "feature dispatch must be isolated in the diagnostic job",
+                )
+            )
+        if diagnostic_job.get("permissions") != {"contents": "read"}:
+            findings.append(
+                ImageProvenanceFinding(
+                    RELEASE_WORKFLOW,
+                    "diagnostic image scans must remain read-only",
+                )
+            )
+        diagnostic_text = str(diagnostic_job)
+        for forbidden in (
+            "docker login",
+            "--push",
+            "cosign",
+            "write_image_release_manifest.py",
+            "render_release_deployment.py",
+            "--promotion-environments",
+            "--format cyclonedx",
+        ):
+            if forbidden in diagnostic_text:
+                findings.append(
+                    ImageProvenanceFinding(
+                        RELEASE_WORKFLOW,
+                        f"diagnostic image job contains release operation {forbidden}",
+                    )
+                )
+        for required in (
+            "--load",
+            "--evidence-posture diagnostic",
+            "--expected-evidence-posture diagnostic",
+        ):
+            if required not in diagnostic_text:
+                findings.append(
+                    ImageProvenanceFinding(
+                        RELEASE_WORKFLOW,
+                        f"diagnostic image job missing {required}",
+                    )
+                )
+        release_matrix = release_job.get("strategy", {}).get("matrix")
+        diagnostic_matrix = diagnostic_job.get("strategy", {}).get("matrix")
+        if release_matrix != diagnostic_matrix or "write_image_build_matrix" not in str(
+            prepare_job
+        ):
+            findings.append(
+                ImageProvenanceFinding(
+                    RELEASE_WORKFLOW,
+                    "release and diagnostic jobs must share one source-owned image matrix",
                 )
             )
 

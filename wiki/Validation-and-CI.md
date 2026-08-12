@@ -39,8 +39,9 @@ Feature, PR, and main lanes also upload
 inventory digest. A structurally valid but blocked classification is retained as evidence in the
 report-only pilot lane. Missing or drifted evidence writes an unavailable failure receipt and fails
 the job. The explicit certification target also fails when any component is missing, ambiguous,
-compound, stale, yanked, pre-release, or otherwise not approved. Upstream metadata and popularity
-never create an implied support or legal approval.
+compound, stale, yanked, pre-release, or otherwise not approved. PyPI release existence is not a
+support policy or vulnerability-disclosure channel. Upstream metadata and popularity never create
+an implied support or legal approval.
 
 ## Runtime Image Evidence
 
@@ -121,9 +122,10 @@ the recorded `linux/amd64` child/config digests. CPython and Debian support auth
 Debian package-support status, ownership, and a maximum 30-day evidence age are mandatory. An
 available architecture in an OCI index is not by itself a supported production platform; external
 Compose dependency images remain outside the Core-built release boundary.
-Automatic Image Release publication is limited to `main` and release tags. An authorized manual
-dispatch may exercise an exact feature SHA for pre-merge supply-chain evidence, but it retains the
-same SHA tag and controls and does not replace protected PR or exact-main proof.
+Image publication, signing, release manifests, deployment rendering, and promotion eligibility are
+limited to `main` and `v*` tags. Manual feature dispatch builds only runner-local images and retains
+normalized `diagnostic` scan receipts under read-only permissions. Diagnostic evidence cannot be
+used by release enforcement and does not replace protected PR or exact-main proof.
 
 ## Repo-Native Lane Mapping
 

@@ -150,7 +150,7 @@ def test_enforcement_rejects_stale_or_future_receipt(tmp_path: Path, enforced_at
         _enforce(receipt_path, enforced_at=enforced_at)
 
 
-@pytest.mark.parametrize("version", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4"])
 def test_current_enforcement_rejects_prior_receipt_versions(tmp_path: Path, version: str) -> None:
     receipt = _receipt(_write_report(tmp_path, results=[]))
     receipt["schema_version"] = f"lotus-core.image-scan-policy-receipt.{version}"
@@ -167,6 +167,11 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
     assert receipt["schema_version"] == SCHEMA_VERSION
     assert receipt["generated_at_utc"] == "2026-08-12T02:03:04Z"
     assert receipt["evidence_state"] == "available"
+    assert receipt["evidence_boundary"] == {
+        "posture": "release",
+        "release_eligible": True,
+        "promotion_eligible": False,
+    }
     assert receipt["source"] == {
         "repository": "sgajbi/lotus-core",
         "git_commit_sha": FULL_SHA,
@@ -542,6 +547,33 @@ def test_report_for_another_digest_fails_closed(tmp_path: Path) -> None:
         _receipt(report)
 
 
+def test_diagnostic_report_binds_exact_local_image_id(tmp_path: Path) -> None:
+    report = _write_report(tmp_path, results=[])
+    value = json.loads(report.read_text(encoding="utf-8"))
+    value["ArtifactName"] = IMAGE_REF
+    value["Metadata"] = {"ImageID": IMAGE_DIGEST}
+    report.write_text(json.dumps(value), encoding="utf-8")
+
+    receipt = _receipt(report, evidence_posture="diagnostic")
+
+    assert receipt["evidence_boundary"] == {
+        "posture": "diagnostic",
+        "release_eligible": False,
+        "promotion_eligible": False,
+    }
+
+
+def test_diagnostic_report_rejects_mismatched_local_image_id(tmp_path: Path) -> None:
+    report = _write_report(tmp_path, results=[])
+    value = json.loads(report.read_text(encoding="utf-8"))
+    value["ArtifactName"] = IMAGE_REF
+    value["Metadata"] = {"ImageID": "sha256:" + "c" * 64}
+    report.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(ScanPolicyError, match="does not match"):
+        _receipt(report, evidence_posture="diagnostic")
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -581,6 +613,23 @@ def test_enforcement_accepts_passed_receipt(tmp_path: Path) -> None:
     )
 
     _enforce(receipt_path)
+
+
+def test_release_enforcement_rejects_diagnostic_receipt(tmp_path: Path) -> None:
+    report = _write_report(tmp_path, results=[])
+    value = json.loads(report.read_text(encoding="utf-8"))
+    value["ArtifactName"] = IMAGE_REF
+    value["Metadata"] = {"ImageID": IMAGE_DIGEST}
+    report.write_text(json.dumps(value), encoding="utf-8")
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(
+        json.dumps(_receipt(report, evidence_posture="diagnostic")), encoding="utf-8"
+    )
+
+    with pytest.raises(ScanPolicyError, match="evidence posture does not match"):
+        _enforce(receipt_path)
+
+    _enforce(receipt_path, expected_evidence_posture="diagnostic")
 
 
 def test_enforcement_rejects_blocked_or_inconsistent_receipt(tmp_path: Path) -> None:

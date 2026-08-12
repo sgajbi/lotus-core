@@ -12,8 +12,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
-  packages: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -24,57 +22,36 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  prepare-image-matrix:
+    name: Image Release / Prepare governed matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve governed image matrix
+        id: matrix
+        run: python -m scripts.release.write_image_build_matrix --github-output "$GITHUB_OUTPUT"
+
   publish-images:
     name: Image Release / Publish ${{ matrix.service }}
+    needs: prepare-image-matrix
     if: >-
-      ${{ github.event_name == 'workflow_dispatch' ||
-          github.ref == 'refs/heads/main' ||
-          startsWith(github.ref, 'refs/tags/') }}
+      ${{ github.ref == 'refs/heads/main' ||
+          startsWith(github.ref, 'refs/tags/v') }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - service: kafka-topic-creator
-            image_name: kafka-topic-creator
-            dockerfile: src/services/persistence_service/Dockerfile
-          - service: migration-runner
-            image_name: migration-runner
-            dockerfile: src/services/persistence_service/Dockerfile
-          - service: ingestion_service
-            image_name: ingestion-service
-            dockerfile: src/services/ingestion_service/Dockerfile
-          - service: query_service
-            image_name: query-service
-            dockerfile: src/services/query_service/Dockerfile
-          - service: query_control_plane_service
-            image_name: query-control-plane-service
-            dockerfile: src/services/query_control_plane_service/Dockerfile
-          - service: event_replay_service
-            image_name: event-replay-service
-            dockerfile: src/services/event_replay_service/Dockerfile
-          - service: financial_reconciliation_service
-            image_name: financial-reconciliation-service
-            dockerfile: src/services/financial_reconciliation_service/Dockerfile
-          - service: persistence_service
-            image_name: persistence-service
-            dockerfile: src/services/persistence_service/Dockerfile
-          - service: portfolio_transaction_processing_service
-            image_name: portfolio-transaction-processing-service
-            dockerfile: src/services/portfolio_transaction_processing_service/Dockerfile
-          - service: valuation_orchestrator_service
-            image_name: valuation-orchestrator-service
-            dockerfile: src/services/valuation_orchestrator_service/Dockerfile
-          - service: position_valuation_calculator
-            image_name: position-valuation-calculator
-            dockerfile: src/services/calculators/position_valuation_calculator/Dockerfile
-          - service: portfolio_derived_state_service
-            image_name: portfolio-derived-state-service
-            dockerfile: src/services/portfolio_derived_state_service/Dockerfile
-          - service: demo_data_loader
-            image_name: demo-data-loader
-            dockerfile: src/services/persistence_service/Dockerfile
+      matrix: ${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6
       - name: Set up Docker Buildx
@@ -291,3 +268,173 @@ jobs:
             output/build-evidence/${{ matrix.service }}-image-release-manifest.json
           if-no-files-found: error
           retention-days: 90
+
+  diagnose-images:
+    name: Image Release / Diagnose ${{ matrix.service }}
+    needs: prepare-image-matrix
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+          github.ref != 'refs/heads/main' &&
+          !startsWith(github.ref, 'refs/tags/v') }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Resolve diagnostic image metadata
+        id: meta
+        shell: bash
+        run: |
+          build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          image_ref="lotus-core-diagnostic/${{ matrix.image_name }}:${GITHUB_SHA}"
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          mkdir -p output/build-evidence
+          {
+            echo "build_timestamp=${build_timestamp}"
+            echo "image_ref=${image_ref}"
+            echo "repo_url=${repo_url}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build diagnostic image locally
+        shell: bash
+        run: |
+          docker buildx build \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "${{ steps.meta.outputs.image_ref }}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.ref.name=${GITHUB_REF_NAME}" \
+            --label "org.opencontainers.image.created=${{ steps.meta.outputs.build_timestamp }}" \
+            --label "org.opencontainers.image.source=${{ steps.meta.outputs.repo_url }}" \
+            --label "org.opencontainers.image.version=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.ci.run_id=${GITHUB_RUN_ID}" \
+            --build-arg "LOTUS_GIT_COMMIT_SHA=${GITHUB_SHA}" \
+            --build-arg "LOTUS_GIT_BRANCH=${GITHUB_REF_NAME}" \
+            --build-arg "LOTUS_BUILD_TIMESTAMP=${{ steps.meta.outputs.build_timestamp }}" \
+            --build-arg "LOTUS_REPO_URL=${{ steps.meta.outputs.repo_url }}" \
+            --build-arg "LOTUS_IMAGE_VERSION=${GITHUB_SHA}" \
+            --build-arg "LOTUS_IMAGE_DIGEST=diagnostic-local-image-id" \
+            --build-arg "LOTUS_CI_RUN_ID=${GITHUB_RUN_ID}" \
+            --provenance=false \
+            --sbom=false \
+            --load \
+            .
+      - name: Resolve exact local image ID
+        id: digest
+        shell: bash
+        run: |
+          image_digest="$(docker image inspect --format '{{.Id}}' '${{ steps.meta.outputs.image_ref }}')"
+          if [[ ! "${image_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Diagnostic build did not produce an exact local image ID" >&2
+            exit 1
+          fi
+          echo "image_digest=${image_digest}" >> "$GITHUB_OUTPUT"
+      - name: Generate diagnostic image scan receipt
+        shell: bash
+        run: |
+          scanner_image="aquasec/trivy:0.56.2"
+          report_path="output/build-evidence/${{ matrix.service }}-diagnostic-trivy.json"
+          receipt_path="output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json"
+          kev_catalog_path="output/build-evidence/${{ matrix.service }}-diagnostic-cisa-kev.json"
+          exception_schema_path="output/build-evidence/vulnerability-exception-register.schema.json"
+          kev_fetched_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          write_unavailable_receipt() {
+            python -m scripts.release.image_scan_policy unavailable \
+              --service "${{ matrix.service }}" \
+              --image-ref "${{ steps.meta.outputs.image_ref }}" \
+              --image-digest "${{ steps.digest.outputs.image_digest }}" \
+              --repository "${GITHUB_REPOSITORY}" \
+              --git-commit-sha "${GITHUB_SHA}" \
+              --ci-run-id "${GITHUB_RUN_ID}" \
+              --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+              --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+              --reason-code "$1" \
+              --evidence-posture diagnostic \
+              --output "${receipt_path}"
+          }
+          if ! curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --max-redirs 3 \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --user-agent "lotus-core-image-diagnostic/${GITHUB_SHA}" \
+            --output "${kev_catalog_path}" \
+            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"; then
+            write_unavailable_receipt cisa_kev_fetch_failed
+            exit 0
+          fi
+          if ! curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --max-redirs 3 \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --user-agent "lotus-core-image-diagnostic/${GITHUB_SHA}" \
+            --output "${exception_schema_path}" \
+            "https://raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742/platform-contracts/vulnerability-exceptions/vulnerability-exception-register.schema.json"; then
+            write_unavailable_receipt exception_schema_fetch_failed
+            exit 0
+          fi
+          if ! docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/output/build-evidence:/output" \
+            "${scanner_image}" image \
+            --image-src docker \
+            --exit-code 0 \
+            --scanners vuln,secret \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --format json \
+            --output "/output/${{ matrix.service }}-diagnostic-trivy.json" \
+            "${{ steps.meta.outputs.image_ref }}"; then
+            write_unavailable_receipt trivy_scan_failed
+            exit 0
+          fi
+          if ! python -m scripts.release.image_scan_policy evaluate \
+            --report "${report_path}" \
+            --service "${{ matrix.service }}" \
+            --image-ref "${{ steps.meta.outputs.image_ref }}" \
+            --image-digest "${{ steps.digest.outputs.image_digest }}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --scanner-name trivy \
+            --scanner-version 0.56.2 \
+            --scanner-image "${scanner_image}" \
+            --scan-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --kev-catalog "${kev_catalog_path}" \
+            --kev-fetched-at "${kev_fetched_at}" \
+            --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
+            --exception-schema "${exception_schema_path}" \
+            --evidence-posture diagnostic \
+            --output "${receipt_path}"; then
+            write_unavailable_receipt evidence_evaluation_failed
+          fi
+      - name: Upload diagnostic image scan receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostic-image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}
+          path: output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Report diagnostic image policy result
+        run: |
+          python -m scripts.release.image_scan_policy enforce \
+            --receipt "output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json" \
+            --report "output/build-evidence/${{ matrix.service }}-diagnostic-trivy.json" \
+            --kev-catalog "output/build-evidence/${{ matrix.service }}-diagnostic-cisa-kev.json" \
+            --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
+            --exception-schema "output/build-evidence/vulnerability-exception-register.schema.json" \
+            --expected-service "${{ matrix.service }}" \
+            --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
+            --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-git-commit-sha "${GITHUB_SHA}" \
+            --expected-ci-run-id "${GITHUB_RUN_ID}" \
+            --expected-ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --expected-evidence-posture diagnostic \
+            --enforced-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"

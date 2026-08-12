@@ -1136,12 +1136,18 @@ Most relevant current governance:
     `python scripts/development/update_shared_runtime_lock.py --check`.
     Dependency technology evidence comes only from those four compiled locks. The generated
     `dependency-technology-inventory.v1.json` binds every exact package/version to lock membership,
-    source metadata digest, license classification, release/advisory evidence, and a 30-day review
+    source metadata digest, license classification, release evidence, and a 30-day review
     cadence. `make dependency-technology-inventory` validates structure and emits an exact-commit
     report-only receipt; `make dependency-technology-certify` additionally fails unless every
-    component is explicitly approved. Missing, compound, conflicting, generic-family, stale,
+    component is explicitly approved. PyPI release existence is not a support policy or
+    vulnerability-disclosure channel; supportability requires governed upstream support,
+    disclosure, and lifecycle authorities. Missing, compound, conflicting, generic-family, stale,
     yanked, or pre-release evidence is never approved from popularity or package name. Refresh only
     through `make refresh-dependency-technology-inventory`, then review the machine diff.
+    Image Release trust is separately bounded: only `main` and `v*` tags may push, sign, export
+    release SBOMs, write release manifests, render deployments, or declare promotion eligibility.
+    Feature-ref `workflow_dispatch` has read-only permissions, builds runner-local images, and emits
+    posture-bound `diagnostic` scan receipts that release enforcement must reject.
 50. Cost-calculator persistence boundaries must strip event-envelope fields before transaction-table
     upserts. `TransactionEvent` carries governed event fields such as `event_type`,
     `schema_version`, and `correlation_id` that are not `transactions` columns. Use the persistence

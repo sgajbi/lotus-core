@@ -23,7 +23,7 @@ from scripts.release.vulnerability_exception_policy import (
     load_vulnerability_exception_register,
 )
 
-SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v4"
+SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v5"
 POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v2"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
@@ -45,6 +45,7 @@ UNAVAILABLE_REASON_CODES = frozenset(
         "evidence_evaluation_failed",
     }
 )
+EVIDENCE_POSTURES = frozenset({"diagnostic", "release"})
 
 
 class ScanPolicyError(ValueError):
@@ -102,6 +103,16 @@ def _subject_identity(*, service: str, image_ref: str, image_digest: str) -> dic
     }
 
 
+def _evidence_boundary(posture: str) -> dict[str, object]:
+    if posture not in EVIDENCE_POSTURES:
+        raise ScanPolicyError("unsupported image scan evidence posture")
+    return {
+        "posture": posture,
+        "release_eligible": posture == "release",
+        "promotion_eligible": False,
+    }
+
+
 def build_unavailable_receipt(
     *,
     service: str,
@@ -113,11 +124,13 @@ def build_unavailable_receipt(
     ci_run_attempt: str,
     generated_at: str,
     reason_code: str,
+    evidence_posture: str = "release",
 ) -> dict[str, object]:
     if reason_code not in UNAVAILABLE_REASON_CODES:
         raise ScanPolicyError("unsupported evidence-unavailable reason code")
     return {
         "schema_version": SCHEMA_VERSION,
+        "evidence_boundary": _evidence_boundary(evidence_posture),
         "generated_at_utc": _utc_timestamp(generated_at),
         "evidence_state": "unavailable",
         "source": _source_identity(
@@ -149,8 +162,20 @@ def _load_json_object(path: Path, *, evidence_name: str) -> dict[str, Any]:
 
 
 def _report_subject_matches(
-    report: dict[str, Any], *, digest_image_ref: str, image_digest: str
+    report: dict[str, Any],
+    *,
+    image_ref: str,
+    digest_image_ref: str,
+    image_digest: str,
+    evidence_posture: str,
 ) -> bool:
+    if evidence_posture == "diagnostic":
+        metadata = report.get("Metadata")
+        return (
+            report.get("ArtifactName") == image_ref
+            and isinstance(metadata, dict)
+            and metadata.get("ImageID") == image_digest
+        )
     if report.get("ArtifactName") == digest_image_ref:
         return True
     metadata = report.get("Metadata")
@@ -303,6 +328,7 @@ def build_policy_receipt(
     kev_fetched_at: str,
     exception_register_path: Path = DEFAULT_REGISTER_PATH,
     exception_schema_path: Path | None = None,
+    evidence_posture: str = "release",
 ) -> dict[str, object]:
     source_identity = _source_identity(
         repository=repository,
@@ -341,7 +367,11 @@ def build_policy_receipt(
         raise ScanPolicyError("Trivy report SchemaVersion must be 2")
     digest_image_ref = subject_identity["digest_image_ref"]
     if not _report_subject_matches(
-        report, digest_image_ref=digest_image_ref, image_digest=image_digest
+        report,
+        image_ref=image_ref,
+        digest_image_ref=digest_image_ref,
+        image_digest=image_digest,
+        evidence_posture=evidence_posture,
     ):
         raise ScanPolicyError("Trivy report does not match the expected image digest")
 
@@ -367,6 +397,7 @@ def build_policy_receipt(
     approved_exception_count = sum(bool(finding["approved_exception_ids"]) for finding in findings)
     return {
         "schema_version": SCHEMA_VERSION,
+        "evidence_boundary": _evidence_boundary(evidence_posture),
         "generated_at_utc": normalized_scan_timestamp,
         "evidence_state": "available",
         "source": source_identity,
@@ -473,10 +504,13 @@ def enforce_policy_receipt(
     expected_ci_run_id: str,
     expected_ci_run_attempt: str,
     enforced_at: str,
+    expected_evidence_posture: str = "release",
 ) -> None:
     receipt = _load_json_object(receipt_path, evidence_name="image scan policy receipt")
     if receipt.get("schema_version") != SCHEMA_VERSION:
         raise ScanPolicyError("image scan policy receipt has an unsupported schema version")
+    if receipt.get("evidence_boundary") != _evidence_boundary(expected_evidence_posture):
+        raise ScanPolicyError("image scan policy receipt evidence posture does not match")
     generated_at = _utc_datetime(
         _required_string(receipt.get("generated_at_utc"), field="receipt generated-at")
     )
@@ -528,6 +562,7 @@ def enforce_policy_receipt(
             ci_run_attempt=expected_ci_run_attempt,
             generated_at=receipt["generated_at_utc"],
             reason_code=str(reason_code or ""),
+            evidence_posture=expected_evidence_posture,
         )
         if receipt != expected_unavailable:
             raise ScanPolicyError("unavailable image scan receipt is not normalized")
@@ -637,6 +672,7 @@ def enforce_policy_receipt(
         kev_fetched_at=_required_string(kev_identity.get("fetched_at_utc"), field="KEV fetched-at"),
         exception_register_path=exception_register_path,
         exception_schema_path=exception_schema_path,
+        evidence_posture=expected_evidence_posture,
     )
     if receipt != expected_receipt:
         raise ScanPolicyError("image scan policy receipt does not match its source evidence")
@@ -670,6 +706,9 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--exception-register", required=True, type=Path)
     evaluate.add_argument("--exception-schema", required=True, type=Path)
     evaluate.add_argument("--output", required=True, type=Path)
+    evaluate.add_argument(
+        "--evidence-posture", choices=sorted(EVIDENCE_POSTURES), default="release"
+    )
     unavailable = subparsers.add_parser("unavailable")
     unavailable.add_argument("--service", required=True)
     unavailable.add_argument("--image-ref", required=True)
@@ -683,6 +722,9 @@ def _parser() -> argparse.ArgumentParser:
         "--reason-code", required=True, choices=sorted(UNAVAILABLE_REASON_CODES)
     )
     unavailable.add_argument("--output", required=True, type=Path)
+    unavailable.add_argument(
+        "--evidence-posture", choices=sorted(EVIDENCE_POSTURES), default="release"
+    )
     enforce = subparsers.add_parser("enforce")
     enforce.add_argument("--receipt", required=True, type=Path)
     enforce.add_argument("--report", required=True, type=Path)
@@ -697,6 +739,9 @@ def _parser() -> argparse.ArgumentParser:
     enforce.add_argument("--expected-ci-run-id", required=True)
     enforce.add_argument("--expected-ci-run-attempt", required=True)
     enforce.add_argument("--enforced-at", required=True)
+    enforce.add_argument(
+        "--expected-evidence-posture", choices=sorted(EVIDENCE_POSTURES), default="release"
+    )
     return parser
 
 
@@ -721,6 +766,7 @@ def main() -> int:
                 kev_fetched_at=args.kev_fetched_at,
                 exception_register_path=args.exception_register,
                 exception_schema_path=args.exception_schema,
+                evidence_posture=args.evidence_posture,
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -736,6 +782,7 @@ def main() -> int:
                 ci_run_attempt=args.ci_run_attempt,
                 generated_at=args.generated_at,
                 reason_code=args.reason_code,
+                evidence_posture=args.evidence_posture,
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -754,6 +801,7 @@ def main() -> int:
             expected_ci_run_id=args.expected_ci_run_id,
             expected_ci_run_attempt=args.expected_ci_run_attempt,
             enforced_at=args.enforced_at,
+            expected_evidence_posture=args.expected_evidence_posture,
         )
         return 0
     except (OSError, CisaKevError, ScanPolicyError, VulnerabilityExceptionError) as exc:
