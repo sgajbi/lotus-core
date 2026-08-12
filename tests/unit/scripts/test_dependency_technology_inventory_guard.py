@@ -218,6 +218,30 @@ def test_approved_license_must_match_recorded_source_evidence(tmp_path: Path, mo
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
+def test_approved_legacy_license_rejects_ambiguous_classifier(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    policy = tmp_path / "contracts" / "security" / "policy.json"
+    policy_data = json.loads(policy.read_text(encoding="utf-8"))
+    policy_data["ambiguous_markers"] = ["License :: OSI Approved"]
+    policy.write_text(json.dumps(policy_data), encoding="utf-8")
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["policy"]["sha256"] = _sha(policy)
+    license_evidence = data["components"][0]["license"]
+    license_evidence.update(
+        {
+            "classification_reason": "approved_legacy_mapping",
+            "classification_source": "pypi_legacy_mapping",
+            "declared_expression": None,
+            "legacy_value": "MIT License",
+            "classifiers": ["License :: OSI Approved"],
+        }
+    )
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="lacks policy evidence"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
 @pytest.mark.parametrize(
     "invalid_authority",
     ["n/a", "http://example.test/support", "https://user@example.test/support", "https:///support"],

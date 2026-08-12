@@ -70,10 +70,20 @@ def _validate_approved_license(
         }
         evidence_matches = reason == "approved_classifier_mapping" and mapped == {normalized}
     elif source == "pypi_legacy_mapping":
+        legacy_mapping = policy["legacy_license_mappings"].get(license_evidence.get("legacy_value"))
+        mapped_classifiers = {
+            policy["classifier_mappings"][classifier]
+            for classifier in license_evidence.get("classifiers", [])
+            if classifier in policy["classifier_mappings"]
+        }
         evidence_matches = (
             reason == "approved_legacy_mapping"
-            and policy["legacy_license_mappings"].get(license_evidence.get("legacy_value"))
-            == normalized
+            and legacy_mapping == normalized
+            and mapped_classifiers in (set(), {normalized})
+            and not any(
+                marker in license_evidence.get("classifiers", [])
+                for marker in policy["ambiguous_markers"]
+            )
         )
     else:
         evidence_matches = False
