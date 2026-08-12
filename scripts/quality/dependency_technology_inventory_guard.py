@@ -10,6 +10,7 @@ import subprocess
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from scripts.quality.technology_governance_identity import normalized_text_sha256
 
@@ -21,6 +22,19 @@ PIN = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^\s;]+)$")
 
 class InventoryValidationError(RuntimeError):
     """Raised when dependency technology evidence is incomplete or has drifted."""
+
+
+def _is_governed_authority_url(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value)
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.fragment
+    )
 
 
 def _canonical_name(value: str) -> str:
@@ -72,7 +86,7 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
         support_state = str(component["supportability"]["classification"])
         supportability = component["supportability"]
         if support_state == "reviewed" and not all(
-            supportability.get(field)
+            _is_governed_authority_url(supportability.get(field))
             for field in (
                 "upstream_support_policy_url",
                 "vulnerability_disclosure_url",

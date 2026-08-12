@@ -130,6 +130,22 @@ def test_reviewed_supportability_without_authority_fails_closed(
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
+@pytest.mark.parametrize(
+    "invalid_authority",
+    ["n/a", "http://example.test/support", "https://user@example.test/support", "https:///support"],
+)
+def test_reviewed_supportability_requires_https_authority_reference(
+    tmp_path: Path, monkeypatch, invalid_authority: str
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["supportability"]["upstream_support_policy_url"] = invalid_authority
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="lacks authority"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
 def test_validation_failure_still_writes_fail_closed_receipt(tmp_path: Path, monkeypatch) -> None:
     output = tmp_path / "receipt.json"
     inventory_file = tmp_path / "inventory.json"

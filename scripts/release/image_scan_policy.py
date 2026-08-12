@@ -302,7 +302,7 @@ def _finding_blocks(finding: dict[str, object]) -> bool:
     if finding["severity"] in UNCLASSIFIED_SEVERITIES:
         return True
     if finding["finding_type"] == "secret":
-        return finding["severity"] in BLOCKING_SEVERITIES
+        return finding["severity"] in BLOCKING_SEVERITIES or finding["severity"] == "MEDIUM"
     if finding["known_exploited"] is True or finding["known_exploited"] is None:
         return True
     # Exception records are retained for ownership and audit, but cannot authorize
