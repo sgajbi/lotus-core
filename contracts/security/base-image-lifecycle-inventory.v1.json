@@ -1,0 +1,94 @@
+{
+  "schema_version": "lotus-core.base-image-lifecycle-inventory.v1",
+  "inventory_id": "lotus-core-base-image-lifecycle",
+  "release_boundary": "Core-built service and calculator images under src/services/**/Dockerfile",
+  "base_images": [
+    {
+      "image": "python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6",
+      "registry": "docker.io",
+      "repository": "library/python",
+      "tag": "3.11-slim-bookworm",
+      "manifest_media_type": "application/vnd.oci.image.index.v1+json",
+      "resolved_runtime_version": "3.11.15",
+      "distribution": "Debian 12 (bookworm-slim)",
+      "source_revision": "c859f2b9e567f72c94e00c969f916d3f92ae52a7",
+      "maturity": "stable",
+      "governance_classification": "approved_default",
+      "deployment_platform": "linux/amd64",
+      "resolved_manifest_digest": "sha256:8404ed8464ae7275b5c13a00c6edd2e027c6560a1f74bd4c7dee39f5d00f9352",
+      "config_digest": "sha256:afcbc49bd73e29b90c28a62348f6962b5164f147eb3ae178979b390cc9f46ebf",
+      "index_runtime_platforms": [
+        "linux/386",
+        "linux/amd64",
+        "linux/arm/v5",
+        "linux/arm/v7",
+        "linux/arm64/v8",
+        "linux/ppc64le",
+        "linux/s390x"
+      ],
+      "metadata_manifest_count": 7,
+      "present_in_current_official_library": true,
+      "observed_on": "2026-08-12",
+      "next_review_on": "2026-09-11",
+      "max_review_interval_days": 30,
+      "supported_through": "2027-10-01",
+      "responsible_owner": "lotus-core-maintainers",
+      "remediation_issue": "https://github.com/sgajbi/lotus-core/issues/927",
+      "support_components": [
+        {
+          "component": "cpython",
+          "version_line": "3.11",
+          "support_phase": "security",
+          "authority_support_end": "approximately October 2027",
+          "local_fail_closed_cutoff": "2027-10-01",
+          "source": "https://peps.python.org/pep-0664/"
+        },
+        {
+          "component": "debian",
+          "version_line": "12-bookworm",
+          "support_phase": "long_term_support",
+          "authority_support_end": "2028-06-30",
+          "local_fail_closed_cutoff": "2028-06-30",
+          "source": "https://wiki.debian.org/LTS/Bookworm"
+        }
+      ],
+      "distribution_package_support": {
+        "status": "clean",
+        "image": "python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6",
+        "deployment_platform": "linux/amd64",
+        "verified_on": "2026-08-12",
+        "verified_command": "docker run --rm --platform linux/amd64 <governed-image> sh -ec 'apt-get update -qq && apt-get install -y -qq --no-install-recommends debian-security-support >/dev/null && check-support-status --type ended --type limited'",
+        "result": "No installed package was reported with ended or limited Debian security support."
+      },
+      "identity_evidence": {
+        "official_image_source": "https://github.com/docker-library/python/tree/c859f2b9e567f72c94e00c969f916d3f92ae52a7/3.11/slim-bookworm",
+        "official_image_registry": "https://hub.docker.com/_/python",
+        "verified_command": "docker buildx imagetools inspect python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6",
+        "verified_on": "2026-08-12"
+      },
+      "covered_dockerfiles": [
+        "src/services/calculators/position_valuation_calculator/Dockerfile",
+        "src/services/event_replay_service/Dockerfile",
+        "src/services/financial_reconciliation_service/Dockerfile",
+        "src/services/ingestion_service/Dockerfile",
+        "src/services/persistence_service/Dockerfile",
+        "src/services/portfolio_derived_state_service/Dockerfile",
+        "src/services/portfolio_transaction_processing_service/Dockerfile",
+        "src/services/query_control_plane_service/Dockerfile",
+        "src/services/query_service/Dockerfile",
+        "src/services/valuation_orchestrator_service/Dockerfile"
+      ]
+    }
+  ],
+  "outside_release_boundary": {
+    "classification": "local_validation_only",
+    "local_compose_dependency_images": [
+      "confluentinc/cp-kafka:7.5.0",
+      "confluentinc/cp-zookeeper:7.5.0",
+      "grafana/grafana:10.1.5",
+      "postgres:16-alpine",
+      "prom/prometheus:v2.47.2"
+    ],
+    "rationale": "These third-party images support the repository-local Compose validation environment; they are not Core-built release artifacts or images promoted through the Core image-release workflow. Their deployment lifecycle requires environment-level governance before production use."
+  }
+}

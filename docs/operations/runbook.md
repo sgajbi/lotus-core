@@ -231,6 +231,17 @@ non-KEV decision. KEV, unknown exploitation, unavailable scans, proposed/expired
 and ambiguous matches fail closed. Remediated history requires removal proof and cannot authorize a
 release. `make image-provenance-guard` validates this lifecycle.
 
+Base-image lifecycle authority is retained separately in
+`contracts/security/base-image-lifecycle-inventory.v1.json`. Run
+`make base-image-lifecycle-guard` before release when the base digest, Dockerfiles, deployment
+platform, or upstream lifecycle changes, and at least every 30 days. The gate binds the OCI index to
+the exact supported `linux/amd64` child manifest and config digest, verifies current CPython and
+Debian support cutoffs, requires exact-image Debian package-support evidence, and checks all Core
+service Dockerfiles. Do not interpret other platforms present in the index, Docker Official Image
+status, or a digest alone as a support SLA. External Compose dependency images are local-validation
+infrastructure outside the Core-built release boundary and require environment-level governance
+before production use.
+
 ## Shared Retry Policies
 
 Kafka admin/startup checks and DB-backed consumers use `portfolio_common.retry_policy` profiles

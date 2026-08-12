@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1685 base-image lifecycle authority (2026-08-12): issue #927's pinned Docker Official Python
+image proved immutable identity but not supported lifetime or deployment architecture. Core now
+retains one machine-readable lifecycle inventory for all ten Core-built service Dockerfiles and
+fails closed on digest drift, stale review, EOL, experimental/unclassified posture, missing owner,
+missing exact-image Debian package-support evidence, unresolved target child manifest, or release-
+boundary drift. The governed production target is explicitly `linux/amd64`; other entries in the
+historical OCI index do not imply production support. CPython 3.11 remains in security support with
+a conservative `2027-10-01` cutoff, Debian 12 remains in LTS through 2028-06-30, and review cadence
+is bounded to 30 days. The mature runtime stack is unchanged. Evidence and compatibility details:
+[CR-1685-BASE-IMAGE-LIFECYCLE-AUTHORITY.md](./codebase-reviews/CR-1685-BASE-IMAGE-LIFECYCLE-AUTHORITY.md).
+
 CR-1684 image-scan failure-evidence addendum (2026-08-12): issue #928's hosted Image Release
 failure correctly blocked all 13 service images on HIGH/CRITICAL findings but retained zero scan
 artifacts because Trivy generation and enforcement were one command and upload followed the
