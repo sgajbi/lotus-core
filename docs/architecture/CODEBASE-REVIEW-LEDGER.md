@@ -17,6 +17,10 @@ evidence mechanics only: no runtime dependency, base image, API/OpenAPI, event, 
 migration, calculation, service topology, or supported-feature contract changed. #928 remains open
 for KEV, all-severity remediation, and canonical exception lifecycle; #926/#927/#720 retain their
 separate license, support/EOL, and immutable release-certification ownership.
+The first exact-head dispatch (`31556058785`) then revealed that the workflow exposed a manual
+trigger but skipped every non-main/non-tag job. Authorized `workflow_dispatch` now permits an exact
+feature SHA while automatic publication stays main/tag-only; immutable SHA tagging and all release
+controls remain mandatory, and feature evidence does not replace protected PR or exact-main proof.
 
 CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
 that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences

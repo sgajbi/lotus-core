@@ -180,6 +180,12 @@ lane:
 10. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
    `make image-provenance-guard`.
 
+Automatic publication remains limited to `main` and release tags. An authorized operator may use
+`workflow_dispatch` on an exact feature SHA for pre-merge supply-chain certification; that path
+still uses the immutable Git-SHA image tag and the same complete policy, signing, and evidence
+controls. A manual feature-branch dispatch does not make the branch releasable and does not replace
+protected PR or exact-main validation.
+
 Each matrix service uploads `image-scan-policy-<service>-attempt-<run-attempt>` even when the
 policy blocks. The receipt
 binds the repository, exact commit, workflow run and attempt, service, immutable image digest,

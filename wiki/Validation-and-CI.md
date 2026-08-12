@@ -90,6 +90,9 @@ immutable image decision. A HIGH/CRITICAL vulnerability or secret finding blocks
 SBOM-export, signing, release-manifest, and deployment-rendering steps but preserves the secret-safe
 receipt for remediation. Missing, malformed, wrong-digest, and inconsistent receipts fail closed;
 a retained blocked receipt is not release certification.
+Automatic Image Release publication is limited to `main` and release tags. An authorized manual
+dispatch may exercise an exact feature SHA for pre-merge supply-chain evidence, but it retains the
+same SHA tag and controls and does not replace protected PR or exact-main proof.
 
 ## Repo-Native Lane Mapping
 

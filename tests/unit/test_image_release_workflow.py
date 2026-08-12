@@ -17,6 +17,17 @@ def _step(name: str) -> dict[str, object]:
     return next(step for step in _steps() if step.get("name") == name)
 
 
+def test_manual_dispatch_can_certify_an_exact_feature_sha() -> None:
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    release_job = workflow["jobs"]["publish-images"]
+
+    assert "workflow_dispatch" in workflow[True]
+    assert " ".join(str(release_job["if"]).split()) == (
+        "${{ github.event_name == 'workflow_dispatch' || "
+        "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}"
+    )
+
+
 def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     steps = _steps()
     names = [step.get("name") for step in steps]
