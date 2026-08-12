@@ -30,7 +30,18 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
         lock.write_text("demo==1.0\n", encoding="utf-8")
         locks.append((lock, scope, platform))
     policy = contracts / "policy.json"
-    policy.write_text('{"review_cadence_days": 30}\n', encoding="utf-8")
+    policy.write_text(
+        json.dumps(
+            {
+                "review_cadence_days": 30,
+                "approved_single_spdx_expressions": ["MIT"],
+                "classifier_mappings": {"License :: OSI Approved :: MIT License": "MIT"},
+                "legacy_license_mappings": {"MIT License": "MIT"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     inventory_file = contracts / "inventory.json"
     inventory_file.write_text(
         json.dumps(
@@ -59,7 +70,15 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                         "pypi_json_url": "https://pypi.org/pypi/demo/1.0/json",
                         "pypi_metadata_sha256": "c" * 64,
                         "release_uploaded_at": "2026-08-01T00:00:00Z",
-                        "license": {"classification": "approved"},
+                        "license": {
+                            "classification": "approved",
+                            "classification_reason": "approved_declared_expression",
+                            "classification_source": "pypi_license_expression",
+                            "declared_expression": "MIT",
+                            "legacy_value": None,
+                            "classifiers": [],
+                            "normalized_expression": "MIT",
+                        },
                         "supportability": {
                             "classification": "reviewed",
                             "classification_reason": "governed_authority_reviewed",
@@ -108,7 +127,7 @@ def test_checkout_newline_conversion_preserves_governed_identity(
     lock, inventory_file = _fixture(tmp_path, monkeypatch)
     lock.write_bytes(b"demo==1.0\r\n")
     policy = tmp_path / "contracts" / "security" / "policy.json"
-    policy.write_bytes(b'{"review_cadence_days": 30}\r\n')
+    policy.write_bytes(policy.read_text(encoding="utf-8").replace("\n", "\r\n").encode())
 
     receipt = guard.validate_inventory(as_of=date(2026, 8, 12))
 
@@ -175,6 +194,27 @@ def test_supportability_deadline_cannot_exceed_policy_cadence(tmp_path: Path, mo
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     with pytest.raises(guard.InventoryValidationError, match="review cadence drift"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_approved_license_must_be_in_policy_allowlist(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["license"]["normalized_expression"] = "GPL-3.0-only"
+    data["components"][0]["license"]["declared_expression"] = "GPL-3.0-only"
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="outside policy"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_approved_license_must_match_recorded_source_evidence(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["license"]["declared_expression"] = None
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="lacks policy evidence"):
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
