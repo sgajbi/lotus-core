@@ -148,6 +148,15 @@ test source file therefore cannot reduce closure blockers.
 
 Dependency consistency and vulnerability audit use one content-addressed environment contract:
 
+- runtime dependencies come from the compiled `requirements/shared-runtime.lock.txt` closure;
+- CI/build/test dependencies come from `requirements/ci-tooling.in`, compiled with pinned
+  `pip==26.1.2`, `pip-tools==7.5.3`, and Python 3.11 into platform-specific Linux/amd64 and
+  Windows/amd64 locks;
+- Linux CI compilation executes inside the exact governed Python base image, while Windows local
+  tooling uses the Windows closure so platform markers remain truthful; and
+- `make compile-ci-tooling-lock` regenerates the closures; committed locks are generated evidence,
+  never hand-edited inputs.
+
 | Command | Cache Posture | Evidence |
 |---|---|---|
 | `make verify-dependencies` | Reuse only after marker identity, interpreter path, and `pip check` pass. | `output/dependency-health/report.json` |
