@@ -16,7 +16,7 @@ SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
 SCANNER_IMAGE = "aquasec/trivy:0.56.2"
 BLOCKING_SEVERITIES = frozenset({"HIGH", "CRITICAL"})
-KNOWN_NONBLOCKING_SEVERITIES = frozenset({"UNKNOWN", "NEGLIGIBLE", "LOW", "MEDIUM"})
+KNOWN_NONBLOCKING_SEVERITIES = frozenset({"LOW", "MEDIUM"})
 KNOWN_SEVERITIES = BLOCKING_SEVERITIES | KNOWN_NONBLOCKING_SEVERITIES
 FULL_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -68,18 +68,14 @@ def _report_subject_matches(
     )
 
 
-def _normalized_vulnerability(
-    raw: object, *, target: str, target_class: str
-) -> dict[str, str] | None:
+def _normalized_vulnerability(raw: object, *, target: str, target_class: str) -> dict[str, str]:
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy vulnerability entries must be objects")
     severity = _required_string(raw.get("Severity"), field="vulnerability severity").upper()
-    if severity not in KNOWN_SEVERITIES:
-        raise ScanPolicyError(f"unsupported vulnerability severity: {severity}")
     if severity == "UNKNOWN":
         raise ScanPolicyError("unknown vulnerability severity cannot support a release decision")
-    if severity not in BLOCKING_SEVERITIES:
-        return None
+    if severity not in KNOWN_SEVERITIES:
+        raise ScanPolicyError(f"unsupported vulnerability severity: {severity}")
     return {
         "finding_type": "vulnerability",
         "finding_id": _required_string(raw.get("VulnerabilityID"), field="vulnerability ID"),
@@ -94,16 +90,14 @@ def _normalized_vulnerability(
     }
 
 
-def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[str, str] | None:
+def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[str, str]:
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy secret entries must be objects")
     severity = _required_string(raw.get("Severity"), field="secret severity").upper()
-    if severity not in KNOWN_SEVERITIES:
-        raise ScanPolicyError(f"unsupported secret severity: {severity}")
     if severity == "UNKNOWN":
         raise ScanPolicyError("unknown secret severity cannot support a release decision")
-    if severity not in BLOCKING_SEVERITIES:
-        return None
+    if severity not in KNOWN_SEVERITIES:
+        raise ScanPolicyError(f"unsupported secret severity: {severity}")
     return {
         "finding_type": "secret",
         "finding_id": _required_string(raw.get("RuleID"), field="secret rule ID"),
@@ -116,7 +110,7 @@ def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[s
     }
 
 
-def _blocking_findings(report: dict[str, Any]) -> list[dict[str, str]]:
+def _normalized_findings(report: dict[str, Any]) -> list[dict[str, str]]:
     if "Results" not in report:
         raise ScanPolicyError("Trivy report must contain Results")
     results = report["Results"]
@@ -131,12 +125,10 @@ def _blocking_findings(report: dict[str, Any]) -> list[dict[str, str]]:
         target_class = str(result.get("Class") or result.get("Type") or "unknown")
         for raw in result.get("Vulnerabilities") or []:
             finding = _normalized_vulnerability(raw, target=target, target_class=target_class)
-            if finding is not None:
-                findings.append(finding)
+            findings.append(finding)
         for raw in result.get("Secrets") or []:
             finding = _normalized_secret(raw, target=target, target_class=target_class)
-            if finding is not None:
-                findings.append(finding)
+            findings.append(finding)
     return sorted(
         findings,
         key=lambda finding: (
@@ -198,7 +190,12 @@ def build_policy_receipt(
     ):
         raise ScanPolicyError("Trivy report does not match the expected image digest")
 
-    findings = _blocking_findings(report)
+    findings = _normalized_findings(report)
+    severity_counts = {
+        severity: sum(finding["severity"] == severity for finding in findings)
+        for severity in sorted(KNOWN_SEVERITIES)
+    }
+    blocking_count = sum(finding["severity"] in BLOCKING_SEVERITIES for finding in findings)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": _utc_timestamp(scan_timestamp),
@@ -224,8 +221,10 @@ def build_policy_receipt(
             "policy_id": POLICY_ID,
             "scanners": ["vulnerability", "secret"],
             "blocking_severities": sorted(BLOCKING_SEVERITIES),
-            "decision": "blocked" if findings else "passed",
-            "blocking_finding_count": len(findings),
+            "decision": "blocked" if blocking_count else "passed",
+            "finding_count": len(findings),
+            "blocking_finding_count": blocking_count,
+            "severity_counts": severity_counts,
         },
         "findings": findings,
     }
@@ -249,8 +248,8 @@ def _validate_finding(raw: object) -> dict[str, str]:
         "installed_version": str(raw.get("installed_version") or ""),
         "fixed_version": str(raw.get("fixed_version") or ""),
     }
-    if finding["severity"] not in BLOCKING_SEVERITIES:
-        raise ScanPolicyError("receipt findings must use a blocking severity")
+    if finding["severity"] not in KNOWN_SEVERITIES:
+        raise ScanPolicyError("receipt findings must use a known severity")
     if finding_type == "vulnerability" and not finding["installed_version"]:
         raise ScanPolicyError("vulnerability finding requires installed version")
     return finding
@@ -322,18 +321,29 @@ def enforce_policy_receipt(
     if policy.get("blocking_severities") != sorted(BLOCKING_SEVERITIES):
         raise ScanPolicyError("image scan policy receipt has an unsupported severity policy")
     decision = policy.get("decision")
+    finding_count = policy.get("finding_count")
     count = policy.get("blocking_finding_count")
+    severity_counts = policy.get("severity_counts")
     findings = receipt.get("findings")
     if not isinstance(findings, list):
         raise ScanPolicyError("image scan policy receipt findings must be an array")
     normalized_findings = [_validate_finding(finding) for finding in findings]
     if normalized_findings != findings:
         raise ScanPolicyError("image scan policy receipt findings are not normalized")
-    if not isinstance(count, int) or count != len(findings):
-        raise ScanPolicyError("image scan policy receipt finding count is inconsistent")
-    if decision == "passed" and count == 0:
+    expected_severity_counts = {
+        severity: sum(finding["severity"] == severity for finding in findings)
+        for severity in sorted(KNOWN_SEVERITIES)
+    }
+    expected_blocking_count = sum(
+        finding["severity"] in BLOCKING_SEVERITIES for finding in findings
+    )
+    if finding_count != len(findings) or severity_counts != expected_severity_counts:
+        raise ScanPolicyError("image scan policy receipt finding totals are inconsistent")
+    if not isinstance(count, int) or count != expected_blocking_count:
+        raise ScanPolicyError("image scan policy receipt blocking count is inconsistent")
+    if decision == "passed" and expected_blocking_count == 0:
         return
-    if decision == "blocked" and count > 0:
+    if decision == "blocked" and expected_blocking_count > 0:
         raise ScanPolicyError(
             f"image release blocked by {count} HIGH/CRITICAL vulnerability or secret finding(s)"
         )

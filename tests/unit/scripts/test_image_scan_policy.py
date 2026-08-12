@@ -89,7 +89,9 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
         "scanners": ["vulnerability", "secret"],
         "blocking_severities": ["CRITICAL", "HIGH"],
         "decision": "passed",
+        "finding_count": 0,
         "blocking_finding_count": 0,
+        "severity_counts": {"CRITICAL": 0, "HIGH": 0, "LOW": 0, "MEDIUM": 0},
     }
     assert receipt["findings"] == []
     assert str(receipt["scanner"]["report_sha256"]).startswith("sha256:")
@@ -119,7 +121,14 @@ def test_high_vulnerability_builds_blocked_normalized_receipt(tmp_path: Path) ->
     receipt = _receipt(report)
 
     assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["finding_count"] == 1
     assert receipt["policy"]["blocking_finding_count"] == 1
+    assert receipt["policy"]["severity_counts"] == {
+        "CRITICAL": 0,
+        "HIGH": 1,
+        "LOW": 0,
+        "MEDIUM": 0,
+    }
     assert receipt["findings"] == [
         {
             "finding_type": "vulnerability",
@@ -183,7 +192,26 @@ def test_medium_findings_do_not_change_current_release_policy(tmp_path: Path) ->
     receipt = _receipt(report)
 
     assert receipt["policy"]["decision"] == "passed"
-    assert receipt["findings"] == []
+    assert receipt["policy"]["finding_count"] == 1
+    assert receipt["policy"]["blocking_finding_count"] == 0
+    assert receipt["policy"]["severity_counts"] == {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 1,
+    }
+    assert receipt["findings"] == [
+        {
+            "finding_type": "vulnerability",
+            "finding_id": "CVE-2026-2000",
+            "severity": "MEDIUM",
+            "target": "os-pkgs",
+            "target_class": "debian",
+            "component_name": "example",
+            "installed_version": "1.0.0",
+            "fixed_version": "",
+        }
+    ]
 
 
 def test_missing_results_fails_closed(tmp_path: Path) -> None:
@@ -289,7 +317,7 @@ def test_enforcement_rejects_blocked_or_inconsistent_receipt(tmp_path: Path) -> 
 
     receipt["policy"]["blocking_finding_count"] = 0
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
-    with pytest.raises(ScanPolicyError, match="finding count is inconsistent"):
+    with pytest.raises(ScanPolicyError, match="blocking count is inconsistent"):
         _enforce(receipt_path)
 
 

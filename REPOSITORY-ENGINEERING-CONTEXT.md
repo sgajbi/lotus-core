@@ -1055,8 +1055,9 @@ Most relevant current governance:
     `.github/workflows/image-release.yml` remains the only image-push path. Before signing or
     promotion evidence, it uses `scripts/release/image_scan_policy.py` to convert Trivy's
     immutable-digest vulnerability and secret scan into a secret-safe policy receipt, uploads one
-    service-specific receipt even when HIGH/CRITICAL enforcement blocks, and fails closed on
-    missing, malformed, wrong-digest, or inconsistent evidence. A blocked receipt must prevent
+    service-specific receipt even when HIGH/CRITICAL enforcement blocks. Receipts retain normalized
+    LOW/MEDIUM/HIGH/CRITICAL identities and counts, while UNKNOWN severity fails closed. The lane
+    also fails closed on missing, malformed, wrong-digest, or inconsistent evidence. A blocked receipt must prevent
     release SBOM export, signing, release-manifest generation, and deployment rendering; retained
     failure evidence is diagnostic and does not certify an image. After enforcement passes,
     `scripts/release/write_image_release_manifest.py` records digest, OCI label parity, SBOM, scan,

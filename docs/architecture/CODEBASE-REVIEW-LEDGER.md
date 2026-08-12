@@ -21,6 +21,10 @@ The first exact-head dispatch (`31556058785`) then revealed that the workflow ex
 trigger but skipped every non-main/non-tag job. Authorized `workflow_dispatch` now permits an exact
 feature SHA while automatic publication stays main/tag-only; immutable SHA tagging and all release
 controls remain mandatory, and feature evidence does not replace protected PR or exact-main proof.
+The receipt subsequently expanded to retain normalized LOW/MEDIUM/HIGH/CRITICAL identities and
+exact severity counts without changing the HIGH/CRITICAL release block. UNKNOWN severity remains
+fail-closed. This supplies source evidence for later Medium remediation ownership and Low review
+cadence without implying that either lifecycle is complete.
 
 CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
 that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences
