@@ -239,8 +239,10 @@ Base-image lifecycle authority is retained separately in
 `contracts/security/base-image-lifecycle-inventory.v1.json`. Run
 `make base-image-lifecycle-guard` before release when the base digest, Dockerfiles, deployment
 platform, or upstream lifecycle changes, and at least every 30 days. The gate binds the OCI index to
-the exact supported `linux/amd64` child manifest and config digest, verifies current CPython and
-Debian support cutoffs, requires exact-image Debian package-support evidence, and checks all Core
+the exact supported `linux/amd64` child manifest and config digest, verifies that local CPython and
+Debian fail-closed cutoffs do not exceed machine-readable upstream authority end dates, requires
+complete credential-free Docker Official Images identity evidence and exact-image Debian package-
+support evidence, and checks all Core
 service Dockerfiles. Do not interpret other platforms present in the index, Docker Official Image
 status, or a digest alone as a support SLA. External Compose dependency images are local-validation
 infrastructure outside the Core-built release boundary and require environment-level governance

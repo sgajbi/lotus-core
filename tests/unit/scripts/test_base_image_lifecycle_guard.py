@@ -3,6 +3,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from scripts.quality.base_image_lifecycle_guard import (
     INVENTORY_PATH,
     REPO_ROOT,
@@ -128,6 +130,44 @@ def test_guard_rejects_future_dated_official_image_identity(tmp_path: Path) -> N
     assert "Official Images identity evidence cannot be future-dated" in _details(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "field",
+    ["official_image_source", "official_image_registry", "verified_command"],
+)
+def test_guard_rejects_incomplete_official_image_identity(tmp_path: Path, field: str) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["identity_evidence"].pop(field)
+    _write_fixture(tmp_path, inventory)
+
+    assert any(f"identity_evidence.{field}" in detail for detail in _details(tmp_path))
+
+
+def test_guard_rejects_credentialed_official_image_authority(tmp_path: Path) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["identity_evidence"]["official_image_source"] = (
+        "https://user:secret@github.com/docker-library/python"
+    )
+    _write_fixture(tmp_path, inventory)
+
+    assert any(
+        "official_image_source must be a credential-free HTTPS authority" in detail
+        for detail in _details(tmp_path)
+    )
+
+
+def test_guard_rejects_identity_command_for_another_image(tmp_path: Path) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["identity_evidence"]["verified_command"] = (
+        "docker buildx imagetools inspect python:3.12-slim-bookworm@sha256:" + "0" * 64
+    )
+    _write_fixture(tmp_path, inventory)
+
+    assert "Official Images identity command must bind the governed image" in _details(tmp_path)
+
+
 def test_guard_rejects_end_of_life_component(tmp_path: Path) -> None:
     inventory = _inventory()
     record = inventory["base_images"][0]  # type: ignore[index]
@@ -138,6 +178,27 @@ def test_guard_rejects_end_of_life_component(tmp_path: Path) -> None:
     details = _details(tmp_path)
     assert "base image runtime or distribution is end-of-life" in details
     assert "support component cpython is end-of-life" in details
+
+
+def test_guard_rejects_local_cutoff_after_upstream_authority(tmp_path: Path) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["supported_through"] = "2027-10-02"
+    record["support_components"][0]["local_fail_closed_cutoff"] = "2027-10-02"
+    _write_fixture(tmp_path, inventory)
+
+    assert "support component cpython local cutoff exceeds upstream authority" in _details(tmp_path)
+
+
+def test_guard_rejects_missing_machine_readable_authority_end(tmp_path: Path) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["support_components"][0].pop("authority_support_end_on")
+    _write_fixture(tmp_path, inventory)
+
+    assert "support_components.cpython.authority_support_end_on must be an ISO date" in _details(
+        tmp_path
+    )
 
 
 def test_guard_rejects_experimental_base_image(tmp_path: Path) -> None:

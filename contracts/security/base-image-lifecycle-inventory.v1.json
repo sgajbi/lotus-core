@@ -40,6 +40,7 @@
           "version_line": "3.11",
           "support_phase": "security",
           "authority_support_end": "approximately October 2027",
+          "authority_support_end_on": "2027-10-01",
           "local_fail_closed_cutoff": "2027-10-01",
           "source": "https://peps.python.org/pep-0664/"
         },
@@ -48,6 +49,7 @@
           "version_line": "12-bookworm",
           "support_phase": "long_term_support",
           "authority_support_end": "2028-06-30",
+          "authority_support_end_on": "2028-06-30",
           "local_fail_closed_cutoff": "2028-06-30",
           "source": "https://wiki.debian.org/LTS/Bookworm"
         }

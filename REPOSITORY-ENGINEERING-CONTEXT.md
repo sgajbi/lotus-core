@@ -1087,8 +1087,9 @@ Most relevant current governance:
     currently shares the stable Docker Official `python:3.11-slim-bookworm` OCI index, with the
     governed deployment target bound separately to its exact `linux/amd64` child and config
     digests. Multi-platform index availability is not production support. The inventory binds
-    CPython and Debian lifecycle authority, a conservative local cutoff, exact-image
-    `debian-security-support` evidence, owner, and a maximum 30-day review cadence. Missing,
+    CPython and Debian lifecycle authority, machine-readable upstream end dates that bound every
+    conservative local cutoff, complete credential-free Docker Official Images identity authority,
+    exact-image `debian-security-support` evidence, owner, and a maximum 30-day review cadence. Missing,
     stale, EOL, experimental, unclassified, wrong-platform, or Dockerfile/boundary drift fails.
     Third-party Compose infrastructure remains local-validation support and is not certified as a
     Core-built release artifact by this inventory.

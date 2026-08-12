@@ -17,8 +17,10 @@ security-support phase, Debian Bookworm LTS posture, and exact-image Debian pack
 Availability in a multi-platform index is not treated as deployment support. The governed release
 target is `linux/amd64`; historical index entries for other platforms do not authorize production
 deployment. Python's upstream authority describes support through approximately October 2027, so
-Core uses the conservative local fail-closed cutoff `2027-10-01` instead of fabricating a precise
-upstream end date. Evidence is reviewed at most every 30 days and immediately when the base digest,
+Core records `2027-10-01` as the conservative machine-readable authority boundary and uses the same
+local fail-closed cutoff instead of fabricating a later precise upstream end date. The gate requires
+every local cutoff to be no later than its authority boundary. Evidence is reviewed at most every
+30 days and immediately when the base digest,
 permitted platform, official-image membership, or upstream lifecycle changes.
 
 ## Enforcement
@@ -27,7 +29,10 @@ permitted platform, official-image membership, or upstream lifecycle changes.
 
 - all ten Core service Dockerfiles use the governed immutable base identity;
 - the `linux/amd64` child/config digest and attached-metadata distinction are explicit;
-- CPython and Debian authorities remain current and the earliest local cutoff owns release posture;
+- CPython and Debian authorities remain current, each local cutoff is bounded by its upstream
+  authority end date, and the earliest local cutoff owns release posture;
+- Docker Official Images source/registry authority is complete, credential-free HTTPS evidence and
+  its non-empty verification command binds the exact governed image;
 - the exact image has a clean `debian-security-support` result;
 - ownership, remediation issue, observed date, and bounded next review are present; and
 - third-party Compose images are explicitly outside the Core-built release boundary, not silently
@@ -44,7 +49,8 @@ No API/OpenAPI, migration, supported-feature, or platform-context update is requ
 
 - focused lifecycle-guard unit tests cover current posture, deterministic replay, Dockerfile digest
   drift, missing inventory, stale evidence, EOL, experimental posture, unclassified Compose images,
-  unresolved target child digest, and missing package-support proof;
+  unresolved target child digest, missing package-support proof, incomplete/credentialed identity
+  authority, wrong-image verification, and local cutoffs beyond upstream authority;
 - scoped Ruff format/check;
 - direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
 - exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited

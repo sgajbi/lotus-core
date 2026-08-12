@@ -16,8 +16,9 @@ lock and its matching components cannot shrink the asserted universe. Supportabi
 also derived from a non-future `reviewed_on` date and cannot exceed the cadence in the separately
 hash-bound dependency policy. All protected delivery lanes now replay both dependency generators
 on Linux and Windows before inventory evidence can run, preventing stale input or platform closure
-certification. Official Images identity evidence must also be non-future and refreshed on the same
-date as the lifecycle observation.
+certification. Official Images identity evidence must be complete, credential-free, bound to the
+governed image, non-future, and refreshed on the same date as the lifecycle observation. Local
+lifecycle cutoffs cannot exceed their machine-readable upstream authority end dates.
 An `approved` dependency license is now recomputed against the hash-bound policy allowlist and its
 declared-expression, classifier-mapping, or legacy-mapping evidence; an authored status label alone
 cannot create release authority. Every approval path rejects ambiguous or conflicting classifiers.
