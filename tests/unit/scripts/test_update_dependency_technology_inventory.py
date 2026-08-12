@@ -62,6 +62,21 @@ def test_locked_components_uses_only_governed_manifests(tmp_path: Path, monkeypa
     }
 
 
+def test_locked_component_identity_is_stable_across_checkout_newlines(
+    tmp_path: Path, monkeypatch
+) -> None:
+    lock = tmp_path / "runtime.lock"
+    lock.write_bytes(b"demo==1.0\r\n")
+    monkeypatch.setattr(inventory, "ROOT", tmp_path)
+    monkeypatch.setattr(inventory, "LOCKS", (("runtime", "linux/amd64", lock),))
+
+    locks, _memberships = inventory._locked_components()
+
+    lock.write_bytes(b"demo==1.0\n")
+    replayed_locks, _memberships = inventory._locked_components()
+    assert locks[0]["sha256"] == replayed_locks[0]["sha256"]
+
+
 def test_build_inventory_is_replay_stable_for_identical_sources(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -108,6 +123,18 @@ def test_build_inventory_is_replay_stable_for_identical_sources(
     assert first["summary"] == {
         "component_count": 1,
         "approved_license_count": 1,
-        "blocked_or_review_required_count": 0,
-        "certification_decision": "allowed",
+        "blocked_or_review_required_count": 1,
+        "certification_decision": "blocked",
+    }
+    assert first["components"][0]["supportability"] == {
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "release_evidence_url": "https://pypi.org/project/demo/1.0/",
+        "upstream_support_policy_url": None,
+        "vulnerability_disclosure_url": None,
+        "reviewed_on": "2026-08-12",
+        "next_review_due": "2026-09-11",
+        "eol_evidence_url": None,
+        "approval_inference": "none",
     }

@@ -30,13 +30,15 @@
       "source_repository_url": "https://github.com/sqlalchemy/alembic/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/alembic/1.18.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/alembic/1.18.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.18.4",
       "yanked": false
@@ -65,13 +67,15 @@
       "source_repository_url": "https://github.com/fastapi/annotated-doc",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/annotated-doc/0.0.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/annotated-doc/0.0.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.0.4",
       "yanked": false
@@ -102,13 +106,15 @@
       "source_repository_url": "https://github.com/annotated-types/annotated-types",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/annotated-types/0.7.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/annotated-types/0.7.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.7.0",
       "yanked": false
@@ -139,13 +145,15 @@
       "source_repository_url": "https://github.com/agronholm/anyio",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/anyio/4.12.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/anyio/4.12.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "4.12.1",
       "yanked": false
@@ -174,13 +182,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/ast-serialize/0.8.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/ast-serialize/0.8.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.8.0",
       "yanked": false
@@ -211,13 +221,15 @@
       "source_repository_url": "https://github.com/MagicStack/asyncpg",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/asyncpg/0.31.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/asyncpg/0.31.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.31.0",
       "yanked": false
@@ -246,13 +258,15 @@
       "source_repository_url": "https://github.com/python-attrs/attrs",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/attrs/26.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/attrs/26.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "26.1.0",
       "yanked": false
@@ -281,13 +295,15 @@
       "source_repository_url": "https://github.com/PyCQA/bandit",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/bandit/1.9.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/bandit/1.9.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.9.4",
       "yanked": false
@@ -316,13 +332,15 @@
       "source_repository_url": "https://github.com/bastikr/boolean.py",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/boolean-py/5.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/boolean-py/5.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "5.0",
       "yanked": false
@@ -351,13 +369,15 @@
       "source_repository_url": "https://github.com/psf/cachecontrol",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/cachecontrol/0.14.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/cachecontrol/0.14.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.14.4",
       "yanked": false
@@ -390,13 +410,15 @@
       "source_repository_url": "https://github.com/certifi/python-certifi",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/certifi/2026.2.25/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/certifi/2026.2.25/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2026.2.25",
       "yanked": false
@@ -425,13 +447,15 @@
       "source_repository_url": "https://github.com/jawah/charset_normalizer",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/charset-normalizer/3.4.9/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/charset-normalizer/3.4.9/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.4.9",
       "yanked": false
@@ -462,13 +486,15 @@
       "source_repository_url": "https://github.com/pallets/click/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/click/8.4.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/click/8.4.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "8.4.2",
       "yanked": false
@@ -500,13 +526,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/colorama/0.4.6/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/colorama/0.4.6/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.4.6",
       "yanked": false
@@ -537,13 +565,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/confluent-kafka/2.14.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/confluent-kafka/2.14.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.14.2",
       "yanked": false
@@ -572,13 +602,15 @@
       "source_repository_url": "https://github.com/coveragepy/coveragepy",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/coverage/7.15.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/coverage/7.15.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "7.15.1",
       "yanked": false
@@ -609,13 +641,15 @@
       "source_repository_url": "https://github.com/CycloneDX/cyclonedx-python-lib",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/cyclonedx-python-lib/11.11.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/cyclonedx-python-lib/11.11.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "11.11.1",
       "yanked": false
@@ -646,13 +680,15 @@
       "source_repository_url": "https://github.com/tiran/defusedxml",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/defusedxml/0.7.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/defusedxml/0.7.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.7.1",
       "yanked": false
@@ -681,13 +717,15 @@
       "source_repository_url": "https://github.com/osprey-oss/deptry",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/deptry/0.25.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/deptry/0.25.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.25.1",
       "yanked": false
@@ -718,13 +756,15 @@
       "source_repository_url": "https://github.com/docker/docker-py",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/docker/7.2.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/docker/7.2.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "7.2.0",
       "yanked": false
@@ -757,13 +797,15 @@
       "source_repository_url": "https://foss.heptapod.net/openpyxl/et_xmlfile",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/et-xmlfile/2.0.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/et-xmlfile/2.0.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.0.0",
       "yanked": false
@@ -792,13 +834,15 @@
       "source_repository_url": "https://github.com/fastapi/fastapi",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/fastapi/0.136.3/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/fastapi/0.136.3/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.136.3",
       "yanked": false
@@ -829,13 +873,15 @@
       "source_repository_url": "https://github.com/tox-dev/py-filelock",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/filelock/3.32.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/filelock/3.32.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.32.2",
       "yanked": false
@@ -864,13 +910,15 @@
       "source_repository_url": "https://github.com/python-greenlet/greenlet",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/greenlet/3.3.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/greenlet/3.3.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.3.2",
       "yanked": false
@@ -901,13 +949,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/grimp/3.15/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/grimp/3.15/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.15",
       "yanked": false
@@ -940,13 +990,15 @@
       "source_repository_url": "https://github.com/python-hyper/h11",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/h11/0.16.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/h11/0.16.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.16.0",
       "yanked": false
@@ -979,13 +1031,15 @@
       "source_repository_url": "https://github.com/encode/httpcore",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/httpcore/1.0.9/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpcore/1.0.9/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.0.9",
       "yanked": false
@@ -1016,13 +1070,15 @@
       "source_repository_url": "https://github.com/pydantic/httpx2/blob/main/src/httpcore2",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/httpcore2/2.4.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpcore2/2.4.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.4.0",
       "yanked": false
@@ -1051,13 +1107,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/httptools/0.8.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/httptools/0.8.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.8.0",
       "yanked": false
@@ -1090,13 +1148,15 @@
       "source_repository_url": "https://github.com/encode/httpx",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/httpx/0.28.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpx/0.28.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.28.1",
       "yanked": false
@@ -1127,13 +1187,15 @@
       "source_repository_url": "https://github.com/pydantic/httpx2",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/httpx2/2.4.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/httpx2/2.4.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.4.0",
       "yanked": false
@@ -1162,13 +1224,15 @@
       "source_repository_url": "https://github.com/HypothesisWorks/hypothesis",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/hypothesis/6.155.7/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/hypothesis/6.155.7/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "6.155.7",
       "yanked": false
@@ -1199,13 +1263,15 @@
       "source_repository_url": "https://github.com/kjd/idna",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/idna/3.18/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/idna/3.18/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.18",
       "yanked": false
@@ -1236,13 +1302,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/import-linter/2.12/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/import-linter/2.12/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.12",
       "yanked": false
@@ -1271,13 +1339,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/iniconfig/2.3.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/iniconfig/2.3.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.3.0",
       "yanked": false
@@ -1308,13 +1378,15 @@
       "source_repository_url": "https://github.com/econchick/interrogate",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/interrogate/1.7.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/interrogate/1.7.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.7.0",
       "yanked": false
@@ -1343,13 +1415,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/librt/0.15.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/librt/0.15.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.15.0",
       "yanked": false
@@ -1378,13 +1452,15 @@
       "source_repository_url": "https://github.com/aboutcode-org/license-expression",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/license-expression/30.4.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/license-expression/30.4.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "30.4.4",
       "yanked": false
@@ -1415,13 +1491,15 @@
       "source_repository_url": "https://www.makotemplates.org/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/mako/1.3.12/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/mako/1.3.12/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.3.12",
       "yanked": false
@@ -1452,13 +1530,15 @@
       "source_repository_url": "https://mando.readthedocs.org/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/mando/0.7.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/mando/0.7.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.7.1",
       "yanked": false
@@ -1489,13 +1569,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/markdown-it-py/4.2.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/markdown-it-py/4.2.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "4.2.0",
       "yanked": false
@@ -1524,13 +1606,15 @@
       "source_repository_url": "https://github.com/pallets/markupsafe/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/markupsafe/3.0.3/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/markupsafe/3.0.3/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.0.3",
       "yanked": false
@@ -1561,13 +1645,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/mdurl/0.1.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/mdurl/0.1.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.1.2",
       "yanked": false
@@ -1596,13 +1682,15 @@
       "source_repository_url": "https://github.com/msgpack/msgpack-python/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/msgpack/1.2.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/msgpack/1.2.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.2.1",
       "yanked": false
@@ -1631,13 +1719,15 @@
       "source_repository_url": "https://github.com/python/mypy",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/mypy/2.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/mypy/2.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.1.0",
       "yanked": false
@@ -1666,13 +1756,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/mypy-extensions/1.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/mypy-extensions/1.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.1.0",
       "yanked": false
@@ -1705,13 +1797,15 @@
       "source_repository_url": "https://foss.heptapod.net/openpyxl/openpyxl",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/openpyxl/3.1.5/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/openpyxl/3.1.5/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.1.5",
       "yanked": false
@@ -1742,13 +1836,15 @@
       "source_repository_url": "https://github.com/package-url/packageurl-python",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/packageurl-python/0.17.6/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/packageurl-python/0.17.6/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.17.6",
       "yanked": false
@@ -1777,13 +1873,15 @@
       "source_repository_url": "https://github.com/pypa/packaging",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/packaging/26.3/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/packaging/26.3/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "26.3",
       "yanked": false
@@ -1814,13 +1912,15 @@
       "source_repository_url": "https://github.com/cpburnz/python-pathspec",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pathspec/1.1.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pathspec/1.1.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.1.1",
       "yanked": false
@@ -1849,13 +1949,15 @@
       "source_repository_url": "https://github.com/pypa/pip",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pip/26.1.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip/26.1.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "26.1.2",
       "yanked": false
@@ -1886,13 +1988,15 @@
       "source_repository_url": "http://github.com/di/pip-api",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pip-api/0.0.34/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip-api/0.0.34/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.0.34",
       "yanked": false
@@ -1923,13 +2027,15 @@
       "source_repository_url": "https://github.com/pypa/pip-audit",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pip-audit/2.10.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip-audit/2.10.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.10.1",
       "yanked": false
@@ -1958,13 +2064,15 @@
       "source_repository_url": "https://github.com/nexB/pip-requirements-parser",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pip-requirements-parser/32.0.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pip-requirements-parser/32.0.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "32.0.1",
       "yanked": false
@@ -1995,13 +2103,15 @@
       "source_repository_url": "https://github.com/tox-dev/platformdirs",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/platformdirs/4.11.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/platformdirs/4.11.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "4.11.2",
       "yanked": false
@@ -2032,13 +2142,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pluggy/1.6.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pluggy/1.6.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.6.0",
       "yanked": false
@@ -2067,13 +2179,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/prometheus-client/0.25.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/prometheus-client/0.25.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.25.0",
       "yanked": false
@@ -2104,13 +2218,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/prometheus-fastapi-instrumentator/8.0.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/prometheus-fastapi-instrumentator/8.0.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "8.0.0",
       "yanked": false
@@ -2143,13 +2259,15 @@
       "source_repository_url": "https://github.com/psycopg/psycopg2",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/psycopg2-binary/2.9.12/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/psycopg2-binary/2.9.12/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.9.12",
       "yanked": false
@@ -2180,13 +2298,15 @@
       "source_repository_url": "https://py.readthedocs.io/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/py/1.11.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/py/1.11.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.11.0",
       "yanked": false
@@ -2217,13 +2337,15 @@
       "source_repository_url": "https://github.com/madpah/serializable",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/py-serializable/2.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/py-serializable/2.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.1.0",
       "yanked": false
@@ -2252,13 +2374,15 @@
       "source_repository_url": "https://github.com/pydantic/pydantic",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pydantic/2.13.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pydantic/2.13.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.13.4",
       "yanked": false
@@ -2287,13 +2411,15 @@
       "source_repository_url": "https://github.com/pydantic/pydantic/tree/main/pydantic-core",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pydantic-core/2.46.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pydantic-core/2.46.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.46.4",
       "yanked": false
@@ -2322,13 +2448,15 @@
       "source_repository_url": "https://github.com/pygments/pygments",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pygments/2.20.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pygments/2.20.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.20.0",
       "yanked": false
@@ -2357,13 +2485,15 @@
       "source_repository_url": "https://github.com/pyparsing/pyparsing.git",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pyparsing/3.3.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pyparsing/3.3.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "3.3.2",
       "yanked": false
@@ -2392,13 +2522,15 @@
       "source_repository_url": "https://github.com/pytest-dev/pytest",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pytest/9.1.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest/9.1.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "9.1.1",
       "yanked": false
@@ -2427,13 +2559,15 @@
       "source_repository_url": "https://github.com/pytest-dev/pytest-asyncio",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pytest-asyncio/1.4.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest-asyncio/1.4.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.4.0",
       "yanked": false
@@ -2464,13 +2598,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pytest-cov/7.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest-cov/7.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "7.1.0",
       "yanked": false
@@ -2501,13 +2637,15 @@
       "source_repository_url": "https://github.com/RKrahl/pytest-dependency",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pytest-dependency/0.6.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pytest-dependency/0.6.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.6.1",
       "yanked": false
@@ -2539,13 +2677,15 @@
       "source_repository_url": "https://github.com/dateutil/dateutil",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/python-dateutil/2.9.0.post0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-dateutil/2.9.0.post0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.9.0.post0",
       "yanked": false
@@ -2576,13 +2716,15 @@
       "source_repository_url": "https://github.com/theskumar/python-dotenv",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/python-dotenv/1.2.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-dotenv/1.2.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.2.2",
       "yanked": false
@@ -2611,13 +2753,15 @@
       "source_repository_url": "https://github.com/nhairs/python-json-logger",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/python-json-logger/4.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-json-logger/4.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "4.1.0",
       "yanked": false
@@ -2648,13 +2792,15 @@
       "source_repository_url": "https://github.com/Kludex/python-multipart",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/python-multipart/0.0.32/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/python-multipart/0.0.32/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.0.32",
       "yanked": false
@@ -2684,13 +2830,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pywin32/312/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pywin32/312/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "312",
       "yanked": false
@@ -2723,13 +2871,15 @@
       "source_repository_url": "https://github.com/yaml/pyyaml",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/pyyaml/6.0.3/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/pyyaml/6.0.3/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "6.0.3",
       "yanked": false
@@ -2760,13 +2910,15 @@
       "source_repository_url": "https://github.com/rubik/radon",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/radon/6.0.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/radon/6.0.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "6.0.1",
       "yanked": false
@@ -2797,13 +2949,15 @@
       "source_repository_url": "https://github.com/psf/requests",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/requests/2.34.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/requests/2.34.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.34.2",
       "yanked": false
@@ -2834,13 +2988,15 @@
       "source_repository_url": "https://github.com/madpah/requirements-parser",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/requirements-parser/0.13.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/requirements-parser/0.13.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.13.1",
       "yanked": false
@@ -2871,13 +3027,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/rich/15.0.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/rich/15.0.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "15.0.0",
       "yanked": false
@@ -2906,13 +3064,15 @@
       "source_repository_url": "https://github.com/astral-sh/ruff",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/ruff/0.15.18/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/ruff/0.15.18/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.15.18",
       "yanked": false
@@ -2941,13 +3101,15 @@
       "source_repository_url": "https://github.com/pypa/setuptools",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/setuptools/83.0.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/setuptools/83.0.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "83.0.0",
       "yanked": false
@@ -2980,13 +3142,15 @@
       "source_repository_url": "https://github.com/benjaminp/six",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/six/1.17.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/six/1.17.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.17.0",
       "yanked": false
@@ -3017,13 +3181,15 @@
       "source_repository_url": "http://www.grantjenks.com/docs/sortedcontainers/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/sortedcontainers/2.4.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/sortedcontainers/2.4.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.4.0",
       "yanked": false
@@ -3052,13 +3218,15 @@
       "source_repository_url": "https://www.sqlalchemy.org",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/sqlalchemy/2.0.51/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/sqlalchemy/2.0.51/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.0.51",
       "yanked": false
@@ -3087,13 +3255,15 @@
       "source_repository_url": "https://github.com/Kludex/starlette",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/starlette/1.3.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/starlette/1.3.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.3.1",
       "yanked": false
@@ -3122,13 +3292,15 @@
       "source_repository_url": "https://opendev.org/openstack/stevedore",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/stevedore/5.9.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/stevedore/5.9.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "5.9.0",
       "yanked": false
@@ -3160,13 +3332,15 @@
       "source_repository_url": "https://github.com/hynek/structlog",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/structlog/26.1.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/structlog/26.1.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "26.1.0",
       "yanked": false
@@ -3195,13 +3369,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/tabulate/0.10.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/tabulate/0.10.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.10.0",
       "yanked": false
@@ -3232,13 +3408,15 @@
       "source_repository_url": "https://github.com/jd/tenacity",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/tenacity/9.1.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/tenacity/9.1.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "9.1.4",
       "yanked": false
@@ -3269,13 +3447,15 @@
       "source_repository_url": "https://github.com/testcontainers/testcontainers-python",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/testcontainers/4.14.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/testcontainers/4.14.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "4.14.2",
       "yanked": false
@@ -3304,13 +3484,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/tomli/2.4.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/tomli/2.4.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.4.1",
       "yanked": false
@@ -3341,13 +3523,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/tomli-w/1.2.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/tomli-w/1.2.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.2.0",
       "yanked": false
@@ -3376,13 +3560,15 @@
       "source_repository_url": "https://github.com/sethmlarson/truststore",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/truststore/0.10.4/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/truststore/0.10.4/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.10.4",
       "yanked": false
@@ -3411,13 +3597,15 @@
       "source_repository_url": "https://github.com/python/typeshed",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/types-python-dateutil/2.9.0.20260518/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/types-python-dateutil/2.9.0.20260518/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.9.0.20260518",
       "yanked": false
@@ -3448,13 +3636,15 @@
       "source_repository_url": "https://github.com/python/typing_extensions",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/typing-extensions/4.15.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/typing-extensions/4.15.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "4.15.0",
       "yanked": false
@@ -3483,13 +3673,15 @@
       "source_repository_url": "https://github.com/pydantic/typing-inspection",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/typing-inspection/0.4.2/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/typing-inspection/0.4.2/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.4.2",
       "yanked": false
@@ -3518,13 +3710,15 @@
       "source_repository_url": "https://github.com/urllib3/urllib3",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/urllib3/2.7.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/urllib3/2.7.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.7.0",
       "yanked": false
@@ -3553,13 +3747,15 @@
       "source_repository_url": "https://github.com/Kludex/uvicorn",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/uvicorn/0.49.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/uvicorn/0.49.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.49.0",
       "yanked": false
@@ -3590,13 +3786,15 @@
       "source_repository_url": "https://github.com/MagicStack/uvloop",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/uvloop/0.22.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/uvloop/0.22.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.22.1",
       "yanked": false
@@ -3627,13 +3825,15 @@
       "source_repository_url": "https://github.com/jendrikseipp/vulture",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/vulture/2.16/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/vulture/2.16/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.16",
       "yanked": false
@@ -3664,13 +3864,15 @@
       "source_repository_url": "https://github.com/samuelcolvin/watchfiles",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/watchfiles/1.1.1/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/watchfiles/1.1.1/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "1.1.1",
       "yanked": false
@@ -3699,13 +3901,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/websockets/16.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/websockets/16.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "16.0",
       "yanked": false
@@ -3734,13 +3938,15 @@
       "source_repository_url": null,
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/wrapt/2.3.0/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/wrapt/2.3.0/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "2.3.0",
       "yanked": false
@@ -3771,13 +3977,15 @@
       "source_repository_url": "https://xenon.readthedocs.org/",
       "supportability": {
         "approval_inference": "none",
-        "classification": "reviewed",
-        "eol_evidence": "not_published_in_pypi_release_metadata",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
         "next_review_due": "2026-09-11",
         "release_evidence_url": "https://pypi.org/project/xenon/0.9.3/",
         "reviewed_on": "2026-08-12",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
-        "vulnerability_advisory_channel": "https://pypi.org/pypi/xenon/0.9.3/json"
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
       },
       "version": "0.9.3",
       "yanked": false
@@ -3796,36 +4004,36 @@
   },
   "repository": "https://github.com/sgajbi/lotus-core",
   "schema_version": "lotus-core.dependency-technology-inventory.v1",
-  "source_commit": "66ce34891c48e551d53f195f75e2a2b34dd8ac5f",
+  "source_commit": "6a6ea78d38e3cd7b3bdaa948afa2478704001b7d",
   "source_locks": [
     {
       "path": "requirements/shared-runtime.lock.txt",
       "platform": "linux/amd64",
       "scope": "runtime",
-      "sha256": "f615c6da23bce344653cc19bfb1349f5aa1afd2d859619e49278ad88559c008a"
+      "sha256": "9109bdb1a97f89ce87f8907d48e032cb90dbfeff9511b5994d56541f00ac4647"
     },
     {
       "path": "requirements/shared-runtime-windows.lock.txt",
       "platform": "windows/amd64",
       "scope": "runtime",
-      "sha256": "40000b1e89f36fb907d6a36c11e904781e5623aa428a6319b8c7ac776d8b29f9"
+      "sha256": "5f42261258b3f506d262eead5eea457415c0f3809ae651c3e485dbecd6c86d33"
     },
     {
       "path": "requirements/ci-tooling.lock.txt",
       "platform": "linux/amd64",
       "scope": "ci_build_test",
-      "sha256": "396ad6eaa1559edd8a571515f58b8a0e664326bf1b1fa1903dc677ea85da7434"
+      "sha256": "64a60e660684f99ef3e122dcffa9ad4c3b39bf352e3829fedd2b5ad1d3ba19d5"
     },
     {
       "path": "requirements/ci-tooling-windows.lock.txt",
       "platform": "windows/amd64",
       "scope": "ci_build_test",
-      "sha256": "c691b62dab9fe23d7eb47677a06db33641f1c310ccda351b73ff056def425d97"
+      "sha256": "7692e9acc19e62c8362d71669fc0fbc8bd74fd5574e8a65e186c73acc6055076"
     }
   ],
   "summary": {
     "approved_license_count": 95,
-    "blocked_or_review_required_count": 9,
+    "blocked_or_review_required_count": 104,
     "certification_decision": "blocked",
     "component_count": 104
   },

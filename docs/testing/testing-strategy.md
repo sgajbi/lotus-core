@@ -175,11 +175,12 @@ Use `python scripts/development/update_shared_runtime_lock.py --check` and
 
 The dependency technology inventory covers the union of all four platform locks and does not read
 installed distributions. Its committed contract records exact release metadata digests and review
-dates. PyPI release evidence and pip-audit's advisory channel are inputs; neither package popularity
-nor an upstream URL is treated as an implied support promise. Lotus retains internal lifecycle and
-removal ownership. Compound, ambiguous, missing, stale, yanked, or pre-release evidence blocks
-certification. Ordinary CI remains report-only under the Platform pilot but always uploads the
-exact-SHA receipt; explicit certification uses the fail-closed target.
+dates. PyPI proves release existence only; it is neither a support policy nor a vulnerability-
+disclosure channel. Supportability remains `review_required` until governed upstream support,
+vulnerability-disclosure, and lifecycle authorities are recorded. Lotus retains internal lifecycle
+and removal ownership. Compound, ambiguous, missing, stale, yanked, pre-release, or unsupported
+evidence blocks certification. Ordinary CI remains report-only under the Platform pilot but always
+uploads the exact-SHA receipt; explicit certification uses the fail-closed target.
 
 The key covers the Python implementation/version, platform, invoking pip version, root and service
 `pyproject.toml` files, dependency/test/tooling lock inputs, and both cache implementation modules.
