@@ -17,15 +17,58 @@ def _step(name: str) -> dict[str, object]:
     return next(step for step in _steps() if step.get("name") == name)
 
 
-def test_manual_dispatch_can_certify_an_exact_feature_sha() -> None:
+def test_publish_boundary_is_limited_to_main_and_version_tags() -> None:
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
     release_job = workflow["jobs"]["publish-images"]
 
     assert "workflow_dispatch" in workflow[True]
     assert " ".join(str(release_job["if"]).split()) == (
-        "${{ github.event_name == 'workflow_dispatch' || "
-        "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}"
+        "${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}"
     )
+    assert workflow["permissions"] == {"contents": "read"}
+    assert release_job["permissions"] == {
+        "contents": "read",
+        "id-token": "write",
+        "packages": "write",
+    }
+
+
+def test_manual_feature_dispatch_is_diagnostic_and_non_release_shaped() -> None:
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    diagnostic_job = workflow["jobs"]["diagnose-images"]
+    release_job = workflow["jobs"]["publish-images"]
+
+    assert " ".join(str(diagnostic_job["if"]).split()) == (
+        "${{ github.event_name == 'workflow_dispatch' && "
+        "github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}"
+    )
+    assert diagnostic_job["permissions"] == {"contents": "read"}
+    assert diagnostic_job["strategy"]["matrix"] == release_job["strategy"]["matrix"]
+    diagnostic_text = yaml.safe_dump(diagnostic_job)
+    for forbidden in (
+        "docker login",
+        "--push",
+        "cosign",
+        "write_image_release_manifest.py",
+        "render_release_deployment.py",
+        "--promotion-environments",
+        "--format cyclonedx",
+    ):
+        assert forbidden not in diagnostic_text
+    for required in (
+        "--load",
+        "--evidence-posture diagnostic",
+        "--expected-evidence-posture diagnostic",
+    ):
+        assert required in diagnostic_text
+
+
+def test_image_matrix_has_one_source_owned_generator() -> None:
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    prepare = workflow["jobs"]["prepare-image-matrix"]
+
+    assert prepare["outputs"]["matrix"] == "${{ steps.matrix.outputs.matrix }}"
+    assert "write_image_build_matrix" in str(prepare["steps"])
 
 
 def test_image_scan_generates_receipt_before_policy_enforcement() -> None:

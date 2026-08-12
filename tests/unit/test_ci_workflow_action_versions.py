@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 
 from scripts.release.prebuild_ci_images import SERVICE_BUILDS
+from scripts.release.write_image_build_matrix import build_matrix
 
 GOVERNED_RUNTIME_WORKFLOWS = (
     Path(".github/workflows/pr-merge-gate.yml"),
@@ -489,20 +490,16 @@ def test_image_release_workflow_enforces_supply_chain_controls() -> None:
 
 
 def test_image_release_workflow_publishes_every_registered_service_image() -> None:
-    workflow_text = Path(".github/workflows/image-release.yml").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(
+        Path(".github/workflows/image-release.yml").read_text(encoding="utf-8")
+    )
+    matrix = build_matrix()
 
-    missing_entries: list[str] = []
-    for service, (local_tag, dockerfile) in SERVICE_BUILDS.items():
-        image_name = local_tag.removeprefix("lotus-core/").removesuffix(":local")
-        for expected in (
-            f"service: {service}",
-            f"image_name: {image_name}",
-            f"dockerfile: {dockerfile}",
-        ):
-            if expected not in workflow_text:
-                missing_entries.append(expected)
-
-    assert missing_entries == []
+    assert {entry["service"] for entry in matrix["include"]} == set(SERVICE_BUILDS)
+    assert "write_image_build_matrix" in str(workflow["jobs"]["prepare-image-matrix"])
+    assert workflow["jobs"]["publish-images"]["strategy"]["matrix"] == (
+        workflow["jobs"]["diagnose-images"]["strategy"]["matrix"]
+    )
 
 
 def test_pr_template_requires_documentation_acceptance_evidence() -> None:

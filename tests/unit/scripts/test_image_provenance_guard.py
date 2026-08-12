@@ -2,6 +2,10 @@ from pathlib import Path
 
 from scripts.quality.image_provenance_guard import find_image_provenance_findings
 
+SOURCE_WORKFLOW = (
+    Path(__file__).resolve().parents[3] / ".github" / "workflows" / "image-release.yml"
+)
+
 
 def _write_required_sources(root: Path, *, bootstrap_content: str | None = None) -> None:
     bootstrap = (
@@ -74,56 +78,7 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
     )
     workflow = root / ".github" / "workflows" / "image-release.yml"
     workflow.parent.mkdir(parents=True, exist_ok=True)
-    workflow.write_text(
-        "\n".join(
-            [
-                "fail-fast: false",
-                "github.event_name == 'workflow_dispatch'",
-                "permissions:",
-                "  packages: write",
-                "  id-token: write",
-                "docker buildx build",
-                "--push",
-                '--tag "${{ steps.meta.outputs.image_tag }}"',
-                "${GITHUB_SHA}",
-                "--sbom=true",
-                "--provenance=true",
-                "aquasec/trivy",
-                "--exit-code 0",
-                "--scanners vuln,secret",
-                "known_exploited_vulnerabilities.json",
-                "curl --fail --location --silent --show-error",
-                "--proto '=https' --proto-redir '=https' --max-redirs 3",
-                "--retry 3 --retry-all-errors --connect-timeout 10 --max-time 60",
-                "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
-                "--kev-catalog",
-                "--kev-fetched-at",
-                "--exception-register",
-                "--exception-schema",
-                "raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742",
-                "python -m scripts.release.image_scan_policy evaluate",
-                "python -m scripts.release.image_scan_policy unavailable",
-                "cisa_kev_fetch_failed",
-                "trivy_scan_failed",
-                "evidence_evaluation_failed",
-                "exception_schema_fetch_failed",
-                "Upload image scan policy receipt",
-                "image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}",
-                "if: ${{ always() }}",
-                "if-no-files-found: error",
-                "python -m scripts.release.image_scan_policy enforce",
-                "--enforced-at",
-                "--format cyclonedx",
-                "-sbom.cdx.json",
-                "cosign sign --yes",
-                "write_image_release_manifest.py",
-                '--image-digest "${{ steps.digest.outputs.image_digest }}"',
-                "--kubernetes-deploys-by-digest true",
-                "--promotion-environments dev uat prod",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    workflow.write_text(SOURCE_WORKFLOW.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def _write_dockerfile(root: Path, content: str) -> None:
@@ -202,6 +157,45 @@ def test_image_provenance_guard_rejects_scan_policy_ordering_drift(tmp_path: Pat
 
     assert any(
         "must be generated, uploaded, and enforced" in finding.detail for finding in findings
+    )
+
+
+def test_image_provenance_guard_rejects_workflow_level_write_permissions(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "permissions:\n  contents: read\n",
+            "permissions:\n  contents: read\n  packages: write\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("read-only by default" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_release_operation_in_diagnostic_job(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace("--load", "--push", 1),
+        encoding="utf-8",
+    )
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(
+        "diagnostic image job contains release operation --push" in finding.detail
+        for finding in findings
     )
 
 

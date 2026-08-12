@@ -2,14 +2,18 @@
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
-The committed machine contract binds lock and policy digests, exact package/version and lock
-membership, canonical PyPI release metadata digest, release/advisory URLs, generator identity,
-review dates, license evidence/classification, and a non-certifying claim boundary. Ninety-five
+The committed machine contract binds newline-normalized lock and policy digests, exact
+package/version and lock membership, canonical PyPI release metadata digest, generator identity,
+review dates, license evidence/classification, and a non-certifying claim boundary. PyPI proves
+release existence only; it cannot certify upstream support, lifecycle, or vulnerability disclosure.
+All 104 components therefore remain supportability `review_required` until those governed
+authorities exist. Ninety-five
 licenses classify from one approved SPDX expression or exact metadata mapping; eight require review
 for compound/ambiguous evidence and `mypy-extensions==1.1.0` is blocked for missing license metadata.
 The structural guard passes while certification remains blocked; `--enforce-allowed` fails closed.
 Feature, PR, and main lanes retain exact-SHA receipts, including a failure receipt when validation
-itself is unavailable. This adds no application dependency or runtime technology and makes no
+itself is unavailable. Cross-platform replay tests prove CRLF/LF checkout conversion cannot create
+false drift while material text changes still fail closed. This adds no application dependency or runtime technology and makes no
 popularity-based, production-ready, legal, or bank-buyable claim.
 
 CR-1685 base-image lifecycle authority (2026-08-12): issue #927's pinned Docker Official Python
@@ -64,6 +68,10 @@ The first exact-head dispatch (`31556058785`) then revealed that the workflow ex
 trigger but skipped every non-main/non-tag job. Authorized `workflow_dispatch` now permits an exact
 feature SHA while automatic publication stays main/tag-only; immutable SHA tagging and all release
 controls remain mandatory, and feature evidence does not replace protected PR or exact-main proof.
+A later bank-grade trust-boundary review removed release-shaped behavior from that feature path:
+manual feature dispatch now has read-only permissions, builds only runner-local images, and emits
+posture-bound diagnostic receipts that cannot be pushed, signed, promoted, or accepted by release
+enforcement. One source-owned 13-service matrix feeds both trusted release and diagnostic jobs.
 The receipt subsequently expanded to retain normalized LOW/MEDIUM/HIGH/CRITICAL identities and
 exact severity counts without changing the HIGH/CRITICAL release block. UNKNOWN severity remains
 fail-closed. This supplies source evidence for later Medium remediation ownership and Low review
