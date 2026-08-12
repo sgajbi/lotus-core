@@ -71,6 +71,37 @@ def test_license_classification_rejects_legacy_value_with_conflicting_classifier
     assert result["classification_reason"] == "conflicting_legacy_and_classifier_metadata"
 
 
+def test_license_classification_rejects_declared_expression_with_ambiguous_classifier() -> None:
+    result = inventory._license_classification(
+        {
+            "license_expression": "MIT",
+            "license": "",
+            "classifiers": ["License :: OSI Approved"],
+        },
+        _policy(),
+    )
+
+    assert result["classification"] == "review_required"
+    assert result["classification_reason"] == "ambiguous_classifier_with_declared_expression"
+
+
+def test_license_classification_rejects_declared_expression_classifier_conflict() -> None:
+    policy = _policy()
+    policy["approved_single_spdx_expressions"].append("BSD-3-Clause")  # type: ignore[union-attr]
+    policy["classifier_mappings"]["License :: OSI Approved :: BSD License"] = "BSD-3-Clause"  # type: ignore[index]
+    result = inventory._license_classification(
+        {
+            "license_expression": "MIT",
+            "license": "",
+            "classifiers": ["License :: OSI Approved :: BSD License"],
+        },
+        policy,
+    )
+
+    assert result["classification"] == "review_required"
+    assert result["classification_reason"] == "conflicting_declared_and_classifier_metadata"
+
+
 def test_locked_components_uses_only_governed_manifests(tmp_path: Path, monkeypatch) -> None:
     runtime = tmp_path / "runtime.lock"
     tooling = tmp_path / "tooling.lock"

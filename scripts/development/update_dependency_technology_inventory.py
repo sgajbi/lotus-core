@@ -97,10 +97,15 @@ def _license_classification(info: dict[str, Any], policy: dict[str, Any]) -> dic
             if value in policy["classifier_mappings"]
         }
     )
+    has_ambiguous_classifier = any(marker in classifiers for marker in policy["ambiguous_markers"])
     approved = set(policy["approved_single_spdx_expressions"])
     if declared:
         if COMPOUND_LICENSE.search(declared):
             status, reason = "review_required", "compound_declared_expression"
+        elif has_ambiguous_classifier:
+            status, reason = "review_required", "ambiguous_classifier_with_declared_expression"
+        elif mapped_classifiers and set(mapped_classifiers) != {declared}:
+            status, reason = "review_required", "conflicting_declared_and_classifier_metadata"
         elif declared in approved:
             status, reason = "approved", "approved_declared_expression"
         else:
@@ -118,9 +123,7 @@ def _license_classification(info: dict[str, Any], policy: dict[str, Any]) -> dic
             "conflicting_legacy_and_classifier_metadata",
             "pypi_metadata",
         )
-    elif len(mapped_classifiers) == 1 and not any(
-        marker in classifiers for marker in policy["ambiguous_markers"]
-    ):
+    elif len(mapped_classifiers) == 1 and not has_ambiguous_classifier:
         normalized = mapped_classifiers[0]
         status = "approved" if normalized in approved else "review_required"
         reason = "approved_classifier_mapping" if status == "approved" else "unapproved_classifier"
@@ -128,7 +131,7 @@ def _license_classification(info: dict[str, Any], policy: dict[str, Any]) -> dic
     elif (
         legacy in policy["legacy_license_mappings"]
         and set(mapped_classifiers) in (set(), {policy["legacy_license_mappings"][legacy]})
-        and not any(marker in classifiers for marker in policy["ambiguous_markers"])
+        and not has_ambiguous_classifier
     ):
         normalized = policy["legacy_license_mappings"][legacy]
         status = "approved" if normalized in approved else "review_required"

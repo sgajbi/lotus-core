@@ -58,9 +58,19 @@ def _validate_approved_license(
     source = license_evidence.get("classification_source")
     reason = license_evidence.get("classification_reason")
     if source == "pypi_license_expression":
+        mapped_classifiers = {
+            policy["classifier_mappings"][classifier]
+            for classifier in license_evidence.get("classifiers", [])
+            if classifier in policy["classifier_mappings"]
+        }
         evidence_matches = (
             reason == "approved_declared_expression"
             and license_evidence.get("declared_expression") == normalized
+            and mapped_classifiers in (set(), {normalized})
+            and not any(
+                marker in license_evidence.get("classifiers", [])
+                for marker in policy["ambiguous_markers"]
+            )
         )
     elif source == "pypi_classifier_mapping":
         mapped = {
