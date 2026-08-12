@@ -67,6 +67,8 @@ jobs:
         with:
           path: .cache/dependency-health
           key: dependency-health-${{ runner.os }}-${{ steps.dependency-health-cache-key.outputs.key }}
+      - name: Generate Dependency Technology Evidence
+        run: make dependency-technology-inventory
       - name: Lint
         run: make lint
       - name: Verify Technology Governance Receipts
@@ -95,6 +97,14 @@ jobs:
           path: output/dependency-health/*.json
           if-no-files-found: ignore
           retention-days: 14
+      - name: Upload dependency technology evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-merge-gate-dependency-technology-${{ github.run_id }}
+          path: output/dependency-technology/*.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Warning Gate
         run: make warning-gate
 

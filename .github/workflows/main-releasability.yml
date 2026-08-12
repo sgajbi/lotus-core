@@ -54,6 +54,8 @@ jobs:
         run: make install-ci
       - name: Verify Dependencies
         run: make verify-dependencies-clean
+      - name: Generate Dependency Technology Evidence
+        run: make dependency-technology-inventory
       - name: Lint
         run: make lint
       - name: Verify Technology Governance Receipts
@@ -82,6 +84,14 @@ jobs:
           path: output/dependency-health/*.json
           if-no-files-found: ignore
           retention-days: 30
+      - name: Upload dependency technology evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-releasability-dependency-technology-${{ github.run_id }}
+          path: output/dependency-technology/*.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Warning Gate
         run: make warning-gate
 
