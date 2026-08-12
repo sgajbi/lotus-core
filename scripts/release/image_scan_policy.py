@@ -24,7 +24,7 @@ from scripts.release.vulnerability_exception_policy import (
 )
 
 SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v5"
-POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v2"
+POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v3"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
 SCANNER_IMAGE = "aquasec/trivy:0.56.2"
@@ -305,8 +305,10 @@ def _finding_blocks(finding: dict[str, object]) -> bool:
         return finding["severity"] in BLOCKING_SEVERITIES
     if finding["known_exploited"] is True or finding["known_exploited"] is None:
         return True
-    if finding["approved_exception_ids"]:
-        return False
+    # Exception records are retained for ownership and audit, but cannot authorize
+    # a release until the workflow can re-evaluate the exact previously scanned
+    # artifact. Rebuilding after approval creates a different digest and must not
+    # transfer authority to that new subject.
     return finding["severity"] in BLOCKING_SEVERITIES or finding["severity"] == "MEDIUM"
 
 

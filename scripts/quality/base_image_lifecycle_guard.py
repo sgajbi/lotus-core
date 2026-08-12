@@ -143,6 +143,15 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
             findings.append("Debian package support evidence must bind linux/amd64")
         if not package_support.get("verified_command"):
             findings.append("Debian package support evidence requires its verified command")
+        package_verified_on = _parse_date(
+            package_support.get("verified_on"),
+            "distribution_package_support.verified_on",
+            findings,
+        )
+        if package_verified_on and package_verified_on > today:
+            findings.append("Debian package support evidence cannot be future-dated")
+        if observed_on and package_verified_on and package_verified_on != observed_on:
+            findings.append("Debian package support evidence must be refreshed with observed_on")
 
     discovered = {
         path.relative_to(root).as_posix()
