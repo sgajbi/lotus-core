@@ -4,6 +4,7 @@ import yaml
 
 from scripts.release.prebuild_ci_images import SERVICE_BUILDS
 from scripts.release.render_release_deployment import DEPLOYMENT_TARGETS
+from scripts.release.write_image_build_matrix import build_matrix
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LEGACY_TRANSACTION_WORKERS = {
@@ -74,7 +75,7 @@ def test_image_release_contains_only_unified_release_managed_workers() -> None:
     workflow_path = REPO_ROOT / ".github" / "workflows" / "image-release.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(workflow_text)
-    matrix = workflow["jobs"]["publish-images"]["strategy"]["matrix"]["include"]
+    matrix = build_matrix()["include"]
     services = {entry["service"] for entry in matrix}
     target = next(entry for entry in matrix if entry["service"] == TARGET_TRANSACTION_WORKER)
     derived_state_target = next(
@@ -98,5 +99,12 @@ def test_image_release_contains_only_unified_release_managed_workers() -> None:
         TARGET_DERIVED_STATE_WORKER,
     }
     assert "render_release_deployment.py" in workflow_text
+    assert "write_image_build_matrix" in str(workflow["jobs"]["prepare-image-matrix"])
+    assert workflow["jobs"]["publish-images"]["strategy"]["matrix"] == (
+        "${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}"
+    )
+    assert workflow["jobs"]["diagnose-images"]["strategy"]["matrix"] == (
+        "${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}"
+    )
     assert "portfolio_transaction_processing_service-kubernetes.yaml" not in workflow_text
     assert "${{ matrix.service }}-kubernetes.yaml" in workflow_text
