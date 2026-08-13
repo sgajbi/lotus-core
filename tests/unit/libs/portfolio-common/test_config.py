@@ -1,5 +1,6 @@
 import importlib
 import logging
+from pathlib import Path
 
 import pytest
 from portfolio_common.config import (
@@ -15,6 +16,22 @@ from portfolio_common.kafka_consumer_execution import (
     load_kafka_consumer_execution_profile,
 )
 from portfolio_common.runtime_settings import RuntimeConfigurationError
+
+CONFIG_SOURCE = (
+    Path(__file__).resolve().parents[4]
+    / "src"
+    / "libs"
+    / "portfolio-common"
+    / "portfolio_common"
+    / "config.py"
+)
+
+
+def test_shared_config_does_not_publish_unused_mongodb_credentials() -> None:
+    source = CONFIG_SOURCE.read_text(encoding="utf-8")
+
+    assert "MONGO_INITDB_ROOT_PASSWORD" not in source
+    assert "MONGO_URL" not in source
 
 
 def test_rejects_invalid_auto_offset_reset_value():
