@@ -221,6 +221,7 @@ jobs:
               --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
               --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
               --reason-code "$1" \
+              --authority-bundle "${authority_bundle_path}" \
               --output "${receipt_path}"
           }
           if ! docker run --rm \
@@ -251,6 +252,7 @@ jobs:
             --scan-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             --kev-catalog "${kev_catalog_path}" \
             --kev-fetched-at "${kev_fetched_at}" \
+            --authority-bundle "${authority_bundle_path}" \
             --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
             --exception-schema "${exception_schema_path}" \
             --output "${receipt_path}"; then
@@ -270,6 +272,7 @@ jobs:
             --receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
             --report "output/build-evidence/${{ matrix.service }}-trivy.json" \
             --kev-catalog "output/vulnerability-authority/cisa-kev.json" \
+            --authority-bundle "output/vulnerability-authority/vulnerability-authority-bundle.json" \
             --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
             --exception-schema "output/vulnerability-authority/vulnerability-exception-register.schema.json" \
             --expected-service "${{ matrix.service }}" \
@@ -439,6 +442,7 @@ jobs:
               --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
               --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
               --reason-code "$1" \
+              --authority-bundle "${authority_bundle_path}" \
               --evidence-posture diagnostic \
               --output "${receipt_path}"
           }
@@ -471,6 +475,7 @@ jobs:
             --scan-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             --kev-catalog "${kev_catalog_path}" \
             --kev-fetched-at "${kev_fetched_at}" \
+            --authority-bundle "${authority_bundle_path}" \
             --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
             --exception-schema "${exception_schema_path}" \
             --evidence-posture diagnostic \
@@ -491,6 +496,7 @@ jobs:
             --receipt "output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json" \
             --report "output/build-evidence/${{ matrix.service }}-diagnostic-trivy.json" \
             --kev-catalog "output/vulnerability-authority/cisa-kev.json" \
+            --authority-bundle "output/vulnerability-authority/vulnerability-authority-bundle.json" \
             --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
             --exception-schema "output/vulnerability-authority/vulnerability-exception-register.schema.json" \
             --expected-service "${{ matrix.service }}" \

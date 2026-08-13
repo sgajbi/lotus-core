@@ -16,6 +16,10 @@ from scripts.release.cisa_kev import (
     CisaKevError,
     load_cisa_kev_catalog,
 )
+from scripts.release.vulnerability_authority_bundle import (
+    VulnerabilityAuthorityBundleError,
+    load_vulnerability_authority_identity,
+)
 from scripts.release.vulnerability_exception_policy import (
     DEFAULT_REGISTER_PATH,
     VulnerabilityExceptionError,
@@ -23,7 +27,7 @@ from scripts.release.vulnerability_exception_policy import (
     load_vulnerability_exception_register,
 )
 
-SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v5"
+SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v6"
 POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v3"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
@@ -124,25 +128,35 @@ def build_unavailable_receipt(
     ci_run_attempt: str,
     generated_at: str,
     reason_code: str,
+    authority_bundle_path: Path,
     evidence_posture: str = "release",
 ) -> dict[str, object]:
     if reason_code not in UNAVAILABLE_REASON_CODES:
         raise ScanPolicyError("unsupported evidence-unavailable reason code")
+    source = _source_identity(
+        repository=repository,
+        git_commit_sha=git_commit_sha,
+        ci_run_id=ci_run_id,
+        ci_run_attempt=ci_run_attempt,
+    )
+    authority = load_vulnerability_authority_identity(
+        authority_bundle_path,
+        expected_repository=repository,
+        expected_git_commit_sha=git_commit_sha,
+        expected_ci_run_id=ci_run_id,
+        expected_ci_run_attempt=ci_run_attempt,
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "evidence_boundary": _evidence_boundary(evidence_posture),
         "generated_at_utc": _utc_timestamp(generated_at),
         "evidence_state": "unavailable",
-        "source": _source_identity(
-            repository=repository,
-            git_commit_sha=git_commit_sha,
-            ci_run_id=ci_run_id,
-            ci_run_attempt=ci_run_attempt,
-        ),
+        "source": source,
         "subject": _subject_identity(
             service=service, image_ref=image_ref, image_digest=image_digest
         ),
         "scanner": {"name": SCANNER_NAME, "version": SCANNER_VERSION, "image": SCANNER_IMAGE},
+        "vulnerability_authority": authority,
         "known_exploited_catalog": None,
         "vulnerability_exception_register": None,
         "policy": {"policy_id": POLICY_ID, "decision": "blocked"},
@@ -328,6 +342,7 @@ def build_policy_receipt(
     scan_timestamp: str,
     kev_catalog_path: Path,
     kev_fetched_at: str,
+    authority_bundle_path: Path,
     exception_register_path: Path = DEFAULT_REGISTER_PATH,
     exception_schema_path: Path | None = None,
     evidence_posture: str = "release",
@@ -337,6 +352,13 @@ def build_policy_receipt(
         git_commit_sha=git_commit_sha,
         ci_run_id=ci_run_id,
         ci_run_attempt=ci_run_attempt,
+    )
+    authority_identity = load_vulnerability_authority_identity(
+        authority_bundle_path,
+        expected_repository=repository,
+        expected_git_commit_sha=git_commit_sha,
+        expected_ci_run_id=ci_run_id,
+        expected_ci_run_attempt=ci_run_attempt,
     )
     subject_identity = _subject_identity(
         service=service, image_ref=image_ref, image_digest=image_digest
@@ -410,6 +432,7 @@ def build_policy_receipt(
             "image": scanner_image,
             "report_sha256": "sha256:" + hashlib.sha256(report_bytes).hexdigest(),
         },
+        "vulnerability_authority": authority_identity,
         "known_exploited_catalog": kev_catalog.receipt_identity(),
         "vulnerability_exception_register": {
             **exception_register.identity,
@@ -496,6 +519,7 @@ def enforce_policy_receipt(
     *,
     report_path: Path,
     kev_catalog_path: Path,
+    authority_bundle_path: Path,
     exception_register_path: Path = DEFAULT_REGISTER_PATH,
     exception_schema_path: Path | None = None,
     expected_service: str,
@@ -532,6 +556,15 @@ def enforce_policy_receipt(
     )
     if receipt.get("source") != expected_source:
         raise ScanPolicyError("image scan policy receipt source identity does not match")
+    expected_authority = load_vulnerability_authority_identity(
+        authority_bundle_path,
+        expected_repository=expected_repository,
+        expected_git_commit_sha=expected_git_commit_sha,
+        expected_ci_run_id=expected_ci_run_id,
+        expected_ci_run_attempt=expected_ci_run_attempt,
+    )
+    if receipt.get("vulnerability_authority") != expected_authority:
+        raise ScanPolicyError("image scan policy receipt authority identity does not match")
     expected_subject = _subject_identity(
         service=expected_service,
         image_ref=expected_image_ref,
@@ -564,6 +597,7 @@ def enforce_policy_receipt(
             ci_run_attempt=expected_ci_run_attempt,
             generated_at=receipt["generated_at_utc"],
             reason_code=str(reason_code or ""),
+            authority_bundle_path=authority_bundle_path,
             evidence_posture=expected_evidence_posture,
         )
         if receipt != expected_unavailable:
@@ -672,6 +706,7 @@ def enforce_policy_receipt(
         ),
         kev_catalog_path=kev_catalog_path,
         kev_fetched_at=_required_string(kev_identity.get("fetched_at_utc"), field="KEV fetched-at"),
+        authority_bundle_path=authority_bundle_path,
         exception_register_path=exception_register_path,
         exception_schema_path=exception_schema_path,
         evidence_posture=expected_evidence_posture,
@@ -704,6 +739,7 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--scanner-image", required=True)
     evaluate.add_argument("--scan-timestamp", required=True)
     evaluate.add_argument("--kev-catalog", required=True, type=Path)
+    evaluate.add_argument("--authority-bundle", required=True, type=Path)
     evaluate.add_argument("--kev-fetched-at", required=True)
     evaluate.add_argument("--exception-register", required=True, type=Path)
     evaluate.add_argument("--exception-schema", required=True, type=Path)
@@ -720,6 +756,7 @@ def _parser() -> argparse.ArgumentParser:
     unavailable.add_argument("--ci-run-id", required=True)
     unavailable.add_argument("--ci-run-attempt", required=True)
     unavailable.add_argument("--generated-at", required=True)
+    unavailable.add_argument("--authority-bundle", required=True, type=Path)
     unavailable.add_argument(
         "--reason-code", required=True, choices=sorted(UNAVAILABLE_REASON_CODES)
     )
@@ -731,6 +768,7 @@ def _parser() -> argparse.ArgumentParser:
     enforce.add_argument("--receipt", required=True, type=Path)
     enforce.add_argument("--report", required=True, type=Path)
     enforce.add_argument("--kev-catalog", required=True, type=Path)
+    enforce.add_argument("--authority-bundle", required=True, type=Path)
     enforce.add_argument("--exception-register", required=True, type=Path)
     enforce.add_argument("--exception-schema", required=True, type=Path)
     enforce.add_argument("--expected-service", required=True)
@@ -766,6 +804,7 @@ def main() -> int:
                 scan_timestamp=args.scan_timestamp,
                 kev_catalog_path=args.kev_catalog,
                 kev_fetched_at=args.kev_fetched_at,
+                authority_bundle_path=args.authority_bundle,
                 exception_register_path=args.exception_register,
                 exception_schema_path=args.exception_schema,
                 evidence_posture=args.evidence_posture,
@@ -784,6 +823,7 @@ def main() -> int:
                 ci_run_attempt=args.ci_run_attempt,
                 generated_at=args.generated_at,
                 reason_code=args.reason_code,
+                authority_bundle_path=args.authority_bundle,
                 evidence_posture=args.evidence_posture,
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -793,6 +833,7 @@ def main() -> int:
             args.receipt,
             report_path=args.report,
             kev_catalog_path=args.kev_catalog,
+            authority_bundle_path=args.authority_bundle,
             exception_register_path=args.exception_register,
             exception_schema_path=args.exception_schema,
             expected_service=args.expected_service,
@@ -806,7 +847,13 @@ def main() -> int:
             expected_evidence_posture=args.expected_evidence_posture,
         )
         return 0
-    except (OSError, CisaKevError, ScanPolicyError, VulnerabilityExceptionError) as exc:
+    except (
+        OSError,
+        CisaKevError,
+        ScanPolicyError,
+        VulnerabilityAuthorityBundleError,
+        VulnerabilityExceptionError,
+    ) as exc:
         raise SystemExit(str(exc)) from exc
 
 
