@@ -37,9 +37,77 @@ jobs:
         id: matrix
         run: python -m scripts.release.write_image_build_matrix --github-output "$GITHUB_OUTPUT"
 
+  prepare-vulnerability-authority:
+    name: Image Release / Prepare vulnerability authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Fetch and bind workflow vulnerability authority
+        shell: bash
+        run: |
+          authority_dir="output/vulnerability-authority"
+          bundle_path="${authority_dir}/vulnerability-authority-bundle.json"
+          kev_catalog_path="${authority_dir}/cisa-kev.json"
+          exception_schema_path="${authority_dir}/vulnerability-exception-register.schema.json"
+          mkdir -p "${authority_dir}"
+          write_unavailable_receipt() {
+            python -m scripts.release.vulnerability_authority_bundle unavailable \
+              --bundle "${bundle_path}" \
+              --repository "${GITHUB_REPOSITORY}" \
+              --git-commit-sha "${GITHUB_SHA}" \
+              --ci-run-id "${GITHUB_RUN_ID}" \
+              --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+              --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+              --reason-code "$1"
+          }
+          if ! curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --max-redirs 3 \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --user-agent "lotus-core-image-release/${GITHUB_SHA}" \
+            --output "${kev_catalog_path}" \
+            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"; then
+            write_unavailable_receipt cisa_kev_fetch_failed
+            exit 1
+          fi
+          kev_fetched_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          if ! curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --max-redirs 3 \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --user-agent "lotus-core-image-release/${GITHUB_SHA}" \
+            --output "${exception_schema_path}" \
+            "https://raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742/platform-contracts/vulnerability-exceptions/vulnerability-exception-register.schema.json"; then
+            write_unavailable_receipt exception_schema_fetch_failed
+            exit 1
+          fi
+          if ! python -m scripts.release.vulnerability_authority_bundle create \
+            --bundle "${bundle_path}" \
+            --kev-catalog "${kev_catalog_path}" \
+            --exception-schema "${exception_schema_path}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --kev-fetched-at "${kev_fetched_at}" \
+            --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; then
+            write_unavailable_receipt authority_validation_failed
+            exit 1
+          fi
+      - name: Upload workflow vulnerability authority
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: vulnerability-authority-attempt-${{ github.run_attempt }}
+          path: output/vulnerability-authority/
+          if-no-files-found: error
+          retention-days: 90
+
   publish-images:
     name: Image Release / Publish ${{ matrix.service }}
-    needs: prepare-image-matrix
+    needs: [prepare-image-matrix, prepare-vulnerability-authority]
     if: >-
       ${{ github.ref == 'refs/heads/main' ||
           startsWith(github.ref, 'refs/tags/v') }}
@@ -60,6 +128,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download workflow vulnerability authority
+        uses: actions/download-artifact@v8
+        with:
+          name: vulnerability-authority-attempt-${{ github.run_attempt }}
+          path: output/vulnerability-authority
       - name: Log in to GHCR
         run: echo "${{ github.token }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
       - name: Install Cosign
@@ -123,9 +196,20 @@ jobs:
           scanner_image="aquasec/trivy:0.56.2"
           report_path="output/build-evidence/${{ matrix.service }}-trivy.json"
           receipt_path="output/build-evidence/${{ matrix.service }}-image-scan-policy.json"
-          kev_catalog_path="output/build-evidence/${{ matrix.service }}-cisa-kev.json"
-          exception_schema_path="output/build-evidence/vulnerability-exception-register.schema.json"
-          kev_fetched_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          authority_dir="output/vulnerability-authority"
+          authority_bundle_path="${authority_dir}/vulnerability-authority-bundle.json"
+          kev_catalog_path="${authority_dir}/cisa-kev.json"
+          exception_schema_path="${authority_dir}/vulnerability-exception-register.schema.json"
+          python -m scripts.release.vulnerability_authority_bundle verify \
+            --bundle "${authority_bundle_path}" \
+            --kev-catalog "${kev_catalog_path}" \
+            --exception-schema "${exception_schema_path}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --verified-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          kev_fetched_at="$(python -c "import json, pathlib; print(json.loads(pathlib.Path('${authority_bundle_path}').read_text())['cisa_kev']['fetched_at_utc'])")"
           write_unavailable_receipt() {
             python -m scripts.release.image_scan_policy unavailable \
               --service "${{ matrix.service }}" \
@@ -139,24 +223,6 @@ jobs:
               --reason-code "$1" \
               --output "${receipt_path}"
           }
-          if ! curl --fail --location --silent --show-error \
-            --proto '=https' --proto-redir '=https' --max-redirs 3 \
-            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-            --user-agent "lotus-core-image-release/${GITHUB_SHA}" \
-            --output "${kev_catalog_path}" \
-            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"; then
-            write_unavailable_receipt cisa_kev_fetch_failed
-            exit 0
-          fi
-          if ! curl --fail --location --silent --show-error \
-            --proto '=https' --proto-redir '=https' --max-redirs 3 \
-            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-            --user-agent "lotus-core-image-release/${GITHUB_SHA}" \
-            --output "${exception_schema_path}" \
-            "https://raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742/platform-contracts/vulnerability-exceptions/vulnerability-exception-register.schema.json"; then
-            write_unavailable_receipt exception_schema_fetch_failed
-            exit 0
-          fi
           if ! docker run --rm \
             -v "$HOME/.docker:/root/.docker:ro" \
             -v "$PWD/output/build-evidence:/output" \
@@ -203,9 +269,9 @@ jobs:
           python -m scripts.release.image_scan_policy enforce \
             --receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
             --report "output/build-evidence/${{ matrix.service }}-trivy.json" \
-            --kev-catalog "output/build-evidence/${{ matrix.service }}-cisa-kev.json" \
+            --kev-catalog "output/vulnerability-authority/cisa-kev.json" \
             --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
-            --exception-schema "output/build-evidence/vulnerability-exception-register.schema.json" \
+            --exception-schema "output/vulnerability-authority/vulnerability-exception-register.schema.json" \
             --expected-service "${{ matrix.service }}" \
             --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
             --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \
@@ -271,7 +337,7 @@ jobs:
 
   diagnose-images:
     name: Image Release / Diagnose ${{ matrix.service }}
-    needs: prepare-image-matrix
+    needs: [prepare-image-matrix, prepare-vulnerability-authority]
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
           github.ref != 'refs/heads/main' &&
@@ -291,6 +357,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download workflow vulnerability authority
+        uses: actions/download-artifact@v8
+        with:
+          name: vulnerability-authority-attempt-${{ github.run_attempt }}
+          path: output/vulnerability-authority
       - name: Resolve diagnostic image metadata
         id: meta
         shell: bash
@@ -343,9 +414,20 @@ jobs:
           scanner_image="aquasec/trivy:0.56.2"
           report_path="output/build-evidence/${{ matrix.service }}-diagnostic-trivy.json"
           receipt_path="output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json"
-          kev_catalog_path="output/build-evidence/${{ matrix.service }}-diagnostic-cisa-kev.json"
-          exception_schema_path="output/build-evidence/vulnerability-exception-register.schema.json"
-          kev_fetched_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          authority_dir="output/vulnerability-authority"
+          authority_bundle_path="${authority_dir}/vulnerability-authority-bundle.json"
+          kev_catalog_path="${authority_dir}/cisa-kev.json"
+          exception_schema_path="${authority_dir}/vulnerability-exception-register.schema.json"
+          python -m scripts.release.vulnerability_authority_bundle verify \
+            --bundle "${authority_bundle_path}" \
+            --kev-catalog "${kev_catalog_path}" \
+            --exception-schema "${exception_schema_path}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --verified-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          kev_fetched_at="$(python -c "import json, pathlib; print(json.loads(pathlib.Path('${authority_bundle_path}').read_text())['cisa_kev']['fetched_at_utc'])")"
           write_unavailable_receipt() {
             python -m scripts.release.image_scan_policy unavailable \
               --service "${{ matrix.service }}" \
@@ -360,24 +442,6 @@ jobs:
               --evidence-posture diagnostic \
               --output "${receipt_path}"
           }
-          if ! curl --fail --location --silent --show-error \
-            --proto '=https' --proto-redir '=https' --max-redirs 3 \
-            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-            --user-agent "lotus-core-image-diagnostic/${GITHUB_SHA}" \
-            --output "${kev_catalog_path}" \
-            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"; then
-            write_unavailable_receipt cisa_kev_fetch_failed
-            exit 0
-          fi
-          if ! curl --fail --location --silent --show-error \
-            --proto '=https' --proto-redir '=https' --max-redirs 3 \
-            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-            --user-agent "lotus-core-image-diagnostic/${GITHUB_SHA}" \
-            --output "${exception_schema_path}" \
-            "https://raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742/platform-contracts/vulnerability-exceptions/vulnerability-exception-register.schema.json"; then
-            write_unavailable_receipt exception_schema_fetch_failed
-            exit 0
-          fi
           if ! docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD/output/build-evidence:/output" \
@@ -426,9 +490,9 @@ jobs:
           python -m scripts.release.image_scan_policy enforce \
             --receipt "output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json" \
             --report "output/build-evidence/${{ matrix.service }}-diagnostic-trivy.json" \
-            --kev-catalog "output/build-evidence/${{ matrix.service }}-diagnostic-cisa-kev.json" \
+            --kev-catalog "output/vulnerability-authority/cisa-kev.json" \
             --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
-            --exception-schema "output/build-evidence/vulnerability-exception-register.schema.json" \
+            --exception-schema "output/vulnerability-authority/vulnerability-exception-register.schema.json" \
             --expected-service "${{ matrix.service }}" \
             --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
             --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \

@@ -17,6 +17,10 @@ def _step(name: str) -> dict[str, object]:
     return next(step for step in _steps() if step.get("name") == name)
 
 
+def _workflow() -> dict[str, object]:
+    return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+
+
 def test_publish_boundary_is_limited_to_main_and_version_tags() -> None:
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
     release_job = workflow["jobs"]["publish-images"]
@@ -71,6 +75,69 @@ def test_image_matrix_has_one_source_owned_generator() -> None:
     assert "write_image_build_matrix" in str(prepare["steps"])
 
 
+def test_one_vulnerability_authority_is_bound_and_uploaded_per_attempt() -> None:
+    workflow = _workflow()
+    authority = workflow["jobs"]["prepare-vulnerability-authority"]
+    steps = authority["steps"]
+    prepare = next(
+        step
+        for step in steps
+        if step.get("name") == "Fetch and bind workflow vulnerability authority"
+    )
+    upload = next(
+        step for step in steps if step.get("name") == "Upload workflow vulnerability authority"
+    )
+    command = str(prepare["run"])
+
+    assert command.count("known_exploited_vulnerabilities.json") == 1
+    assert command.count("vulnerability-exception-register.schema.json") >= 2
+    assert "vulnerability_authority_bundle create" in command
+    assert "vulnerability_authority_bundle unavailable" in command
+    for reason in (
+        "cisa_kev_fetch_failed",
+        "exception_schema_fetch_failed",
+        "authority_validation_failed",
+    ):
+        assert reason in command
+    assert upload["if"] == "${{ always() }}"
+    assert upload["with"]["name"] == ("vulnerability-authority-attempt-${{ github.run_attempt }}")
+    assert upload["with"]["if-no-files-found"] == "error"
+
+
+def test_all_image_jobs_consume_the_same_attempt_authority() -> None:
+    workflow = _workflow()
+    for job_name in ("publish-images", "diagnose-images"):
+        job = workflow["jobs"][job_name]
+        assert job["needs"] == ["prepare-image-matrix", "prepare-vulnerability-authority"]
+        download = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Download workflow vulnerability authority"
+        )
+        assert download["uses"] == "actions/download-artifact@v8"
+        assert download["with"] == {
+            "name": "vulnerability-authority-attempt-${{ github.run_attempt }}",
+            "path": "output/vulnerability-authority",
+        }
+        job_text = yaml.safe_dump(job)
+        scan_step = next(
+            step
+            for step in job["steps"]
+            if step.get("name")
+            in {
+                "Generate image vulnerability and secret policy receipt",
+                "Generate diagnostic image scan receipt",
+            }
+        )
+        assert "vulnerability_authority_bundle verify" in str(scan_step["run"])
+        assert "output/vulnerability-authority/cisa-kev.json" in job_text
+        assert (
+            "output/vulnerability-authority/vulnerability-exception-register.schema.json"
+            in job_text
+        )
+        assert "curl --fail" not in job_text
+
+
 def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     steps = _steps()
     names = [step.get("name") for step in steps]
@@ -84,10 +151,7 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     generate = str(steps[generate_index]["run"])
     assert "--exit-code 0" in generate
     assert "--scanners vuln,secret" in generate
-    assert "known_exploited_vulnerabilities.json" in generate
-    assert "curl --fail --location --silent --show-error" in generate
-    assert "--proto '=https' --proto-redir '=https' --max-redirs 3" in generate
-    assert "--retry 3 --retry-all-errors --connect-timeout 10 --max-time 60" in generate
+    assert "vulnerability_authority_bundle verify" in generate
     assert "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL" in generate
     assert "--kev-catalog" in generate
     assert "--kev-fetched-at" in generate
@@ -96,21 +160,22 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     assert "python -m scripts.release.image_scan_policy evaluate" in generate
     assert "python -m scripts.release.image_scan_policy unavailable" in generate
     for reason_code in (
-        "cisa_kev_fetch_failed",
         "trivy_scan_failed",
         "evidence_evaluation_failed",
-        "exception_schema_fetch_failed",
     ):
         assert reason_code in generate
     assert "python -m scripts.release.image_scan_policy enforce" in str(steps[enforce_index]["run"])
     assert '--report "output/build-evidence/${{ matrix.service }}-trivy.json"' in str(
         steps[enforce_index]["run"]
     )
-    assert '--kev-catalog "output/build-evidence/${{ matrix.service }}-cisa-kev.json"' in str(
+    assert '--kev-catalog "output/vulnerability-authority/cisa-kev.json"' in str(
         steps[enforce_index]["run"]
     )
     assert "--exception-register" in str(steps[enforce_index]["run"])
-    assert "--exception-schema" in str(steps[enforce_index]["run"])
+    assert (
+        '--exception-schema "output/vulnerability-authority/'
+        'vulnerability-exception-register.schema.json"' in str(steps[enforce_index]["run"])
+    )
     assert "--enforced-at" in str(steps[enforce_index]["run"])
 
 
