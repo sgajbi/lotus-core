@@ -14,6 +14,7 @@ from portfolio_common.kafka_consumer import (
 )
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 from portfolio_common.logging_utils import correlation_id_var, traceparent_var
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio
@@ -29,6 +30,20 @@ class ConcreteTestConsumer(BaseConsumer):
 
     async def process_message(self, msg):
         await self.process_message_mock(msg)
+
+
+async def test_consumer_fails_before_client_construction_for_plaintext_production(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+
+    with pytest.raises(RuntimeConfigurationError, match="plaintext Kafka transport"):
+        ConcreteTestConsumer(
+            bootstrap_servers="mock_bs",
+            topic="test-topic",
+            group_id="test-group",
+        )
 
 
 @pytest.fixture
