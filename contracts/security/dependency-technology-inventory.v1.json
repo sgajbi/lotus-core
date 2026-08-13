@@ -865,10 +865,10 @@
       ],
       "name": "filelock",
       "prerelease": false,
-      "pypi_json_url": "https://pypi.org/pypi/filelock/3.32.2/json",
-      "pypi_metadata_sha256": "9a2878a6c834a6f670ba92b470ccb20b6e208c9f641b1767a679a5c57933f756",
-      "pypi_release_url": "https://pypi.org/project/filelock/3.32.2/",
-      "release_uploaded_at": "2026-07-29T22:46:03.520503Z",
+      "pypi_json_url": "https://pypi.org/pypi/filelock/3.32.3/json",
+      "pypi_metadata_sha256": "059781ff902a1ea001f6ac9b45a5756cf465817c599546df8ccbf5403bae4dff",
+      "pypi_release_url": "https://pypi.org/project/filelock/3.32.3/",
+      "release_uploaded_at": "2026-08-13T16:00:03.974131Z",
       "requires_python": ">=3.10",
       "source_repository_url": "https://github.com/tox-dev/py-filelock",
       "supportability": {
@@ -877,13 +877,13 @@
         "classification_reason": "upstream_support_evidence_not_governed",
         "eol_evidence_url": null,
         "next_review_due": "2026-09-12",
-        "release_evidence_url": "https://pypi.org/project/filelock/3.32.2/",
+        "release_evidence_url": "https://pypi.org/project/filelock/3.32.3/",
         "reviewed_on": "2026-08-13",
         "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
         "upstream_support_policy_url": null,
         "vulnerability_disclosure_url": null
       },
-      "version": "3.32.2",
+      "version": "3.32.3",
       "yanked": false
     },
     {
@@ -3057,7 +3057,7 @@
       "name": "ruff",
       "prerelease": false,
       "pypi_json_url": "https://pypi.org/pypi/ruff/0.15.18/json",
-      "pypi_metadata_sha256": "5116e21b5ce200b1d57b5d0fc8f2b2c8b47b38dba29b061b9e9d9a79d85a133b",
+      "pypi_metadata_sha256": "049db17087c7b13d027d39b9b63e3c6bcd1e3f92930c1e43c09dbeadc5832ec2",
       "pypi_release_url": "https://pypi.org/project/ruff/0.15.18/",
       "release_uploaded_at": "2026-06-18T18:25:03.062305Z",
       "requires_python": ">=3.7",
@@ -3740,7 +3740,7 @@
       "name": "uvicorn",
       "prerelease": false,
       "pypi_json_url": "https://pypi.org/pypi/uvicorn/0.49.0/json",
-      "pypi_metadata_sha256": "ccb31c3b26fa33d2efb9aff0525dcd355963b6065d7a4459b43b586240a15be0",
+      "pypi_metadata_sha256": "cfe1541cd7d78c3ad251da8ea0720e9f11a128feecb797cc2f5fe275876564d4",
       "pypi_release_url": "https://pypi.org/project/uvicorn/0.49.0/",
       "release_uploaded_at": "2026-06-03T22:01:29.037537Z",
       "requires_python": ">=3.10",
@@ -4022,13 +4022,13 @@
       "path": "requirements/ci-tooling.lock.txt",
       "platform": "linux/amd64",
       "scope": "ci_build_test",
-      "sha256": "93b4d0c2f86f07fe36d85e4a79b18e6566e9ffcba411dfd12453009c6ab2c56b"
+      "sha256": "6d718eece88b2ff72283118b6fbe1fd2a31d23d7a3f2234d9ceaf733947a9fbd"
     },
     {
       "path": "requirements/ci-tooling-windows.lock.txt",
       "platform": "windows/amd64",
       "scope": "ci_build_test",
-      "sha256": "9746b55b49b25f6b7f95f4cd27cad2c96be15cf2316fb69ee4b6f802c620ba80"
+      "sha256": "9460c2fc26abaee4a2c3cb5af4b7f720c91900ffe4126846bec58f62cb13f192"
     }
   ],
   "summary": {
