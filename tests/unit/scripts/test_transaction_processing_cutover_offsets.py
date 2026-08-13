@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sys
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,6 +30,30 @@ def test_offset_store_fails_before_clients_for_plaintext_production(monkeypatch)
 
     admin_client.assert_not_called()
     consumer.assert_not_called()
+
+
+def test_main_writes_blocked_receipt_when_kafka_security_is_invalid(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "cutover.json"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "transaction_processing_cutover_offsets.py",
+            "--bootstrap-servers",
+            "kafka:9093",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    assert cutover_module.main() == 1
+
+    receipt = json.loads(output_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "blocked"
+    assert receipt["mode"] == "dry-run"
+    assert "plaintext Kafka transport" in receipt["error"]
 
 
 def _snapshot(

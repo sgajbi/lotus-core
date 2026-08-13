@@ -25,6 +25,7 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from portfolio_common.connection_security import build_kafka_connection_config
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 INVALID_OFFSET = -1001
 
@@ -364,11 +365,12 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = _build_parser().parse_args()
     generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    store = KafkaOffsetStore(
-        bootstrap_servers=args.bootstrap_servers,
-        timeout_seconds=args.timeout_seconds,
-    )
+    store: KafkaOffsetStore | None = None
     try:
+        store = KafkaOffsetStore(
+            bootstrap_servers=args.bootstrap_servers,
+            timeout_seconds=args.timeout_seconds,
+        )
         results = execute_cutover(store=store, specs=_default_specs(args), apply=args.apply)
         report: dict[str, object] = {
             "schema": "lotus-core.transaction-processing-offset-cutover.v1",
@@ -378,7 +380,7 @@ def main() -> int:
             "results": results,
         }
         exit_code = 0
-    except (KafkaException, OffsetCutoverError) as exc:
+    except (KafkaException, OffsetCutoverError, RuntimeConfigurationError) as exc:
         report = {
             "schema": "lotus-core.transaction-processing-offset-cutover.v1",
             "generated_at": generated_at,
@@ -388,7 +390,8 @@ def main() -> int:
         }
         exit_code = 1
     finally:
-        store.close()
+        if store is not None:
+            store.close()
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
