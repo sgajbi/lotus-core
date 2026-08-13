@@ -239,7 +239,11 @@ Base-image lifecycle authority is retained separately in
 `contracts/security/base-image-lifecycle-inventory.v1.json`. Run
 `make base-image-lifecycle-guard` before release when the base digest, Dockerfiles, deployment
 platform, or upstream lifecycle changes, and at least every 30 days. The gate binds the OCI index to
-the exact supported `linux/amd64` child manifest and config digest, verifies that local CPython and
+the exact supported `linux/amd64` child manifest and config digest. It recomputes that chain from
+bounded raw registry evidence in `contracts/security/base-image-manifest-evidence.v1.json`, rather
+than trusting authored digest fields. Use `make refresh-base-image-manifest-evidence` after an
+intentional base identity or lifecycle review change, then review the evidence diff. The gate also
+verifies that local CPython and
 Debian fail-closed cutoffs do not exceed machine-readable upstream authority end dates, requires
 complete credential-free Docker Official Images identity evidence and exact-image Debian package-
 support evidence, and checks all Core
@@ -247,6 +251,13 @@ service Dockerfiles. Do not interpret other platforms present in the index, Dock
 status, or a digest alone as a support SLA. External Compose dependency images are local-validation
 infrastructure outside the Core-built release boundary and require environment-level governance
 before production use.
+
+The dependency technology inventory records the latest committed revision of its governed lock
+and policy inputs, while each CI receipt records the exact execution SHA. This distinction keeps
+provenance valid through the repository-approved rebase merge. `make dependency-technology-inventory`
+fails on unreachable source revisions, generator/repository/issue drift, future generation time,
+contradictory summaries, or readiness claims. A structurally valid blocked receipt is evidence of a
+governed gap, not production or bank-buyable certification.
 
 ## Shared Retry Policies
 
