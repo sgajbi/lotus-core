@@ -56,7 +56,7 @@ et-xmlfile==2.0.0
     # via
     #   -c requirements/shared-runtime.lock.txt
     #   openpyxl
-filelock==3.32.2
+filelock==3.32.3
     # via cachecontrol
 grimp==3.15
     # via import-linter
