@@ -35,6 +35,8 @@ GOVERNED_BASE_REGISTRY = "docker.io"
 GOVERNED_BASE_REPOSITORY = "library/python"
 GOVERNED_BASE_TAG = "3.11-slim-bookworm"
 GOVERNED_OFFICIAL_IMAGE_REGISTRY = "https://hub.docker.com/_/python"
+GOVERNED_OFFICIAL_IMAGE_SOURCE = "https://github.com/docker-library/python.git"
+GOVERNED_OFFICIAL_IMAGE_SOURCE_PATH = "3.11/slim-bookworm"
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,13 @@ def image_tag(image: str) -> str | None:
     """Return the tag encoded by a digest-pinned Docker image reference."""
     final_segment = image.partition("@")[0].rsplit("/", maxsplit=1)[-1]
     return final_segment.rsplit(":", maxsplit=1)[1] if ":" in final_segment else None
+
+
+def official_image_source_annotation(source_revision: str) -> str:
+    """Return the OCI source annotation expected for the governed build revision."""
+    return (
+        f"{GOVERNED_OFFICIAL_IMAGE_SOURCE}#{source_revision}:{GOVERNED_OFFICIAL_IMAGE_SOURCE_PATH}"
+    )
 
 
 def _parse_date(value: object, field: str, findings: list[str]) -> date | None:
@@ -246,6 +255,25 @@ def _validate_manifest_evidence(
             findings.append("selected index descriptor media type must bind the runtime manifest")
         if selected_descriptor.get("size") != runtime.get("size"):
             findings.append("selected index descriptor size must bind the runtime manifest")
+        annotations = selected_descriptor.get("annotations")
+        if not isinstance(annotations, dict):
+            findings.append("selected index descriptor must retain Official Images annotations")
+        else:
+            source_revision = lifecycle_record.get("source_revision")
+            if annotations.get("org.opencontainers.image.revision") != source_revision:
+                findings.append(
+                    "selected index descriptor revision must bind the lifecycle source revision"
+                )
+            expected_source_annotation = (
+                official_image_source_annotation(source_revision)
+                if isinstance(source_revision, str)
+                and re.fullmatch(r"[0-9a-f]{40}", source_revision)
+                else None
+            )
+            if annotations.get("org.opencontainers.image.source") != expected_source_annotation:
+                findings.append(
+                    "selected index descriptor source must bind the Official Images revision"
+                )
 
     decoded_runtime = _decode_json_evidence(
         runtime.get("raw_base64"), field="runtime_manifest.raw_base64", findings=findings
