@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from confluent_kafka import KafkaException
+from portfolio_common import kafka_admin as kafka_admin_module
 from portfolio_common.downstream_access import DownstreamAccessPolicy
 from portfolio_common.kafka_admin import (
     KafkaTopicPartitionMismatchError,
@@ -23,6 +24,12 @@ def test_ensure_topics_exist_passes_when_all_topics_exist(mock_admin_client_cls)
 
     ensure_topics_exist.__wrapped__(["topic-a", "topic-b"])
 
+    mock_admin_client_cls.assert_called_once_with(
+        {
+            "bootstrap.servers": kafka_admin_module.KAFKA_BOOTSTRAP_SERVERS,
+            "security.protocol": "PLAINTEXT",
+        }
+    )
     mock_admin_client.list_topics.assert_called_once_with(timeout=5)
 
 
