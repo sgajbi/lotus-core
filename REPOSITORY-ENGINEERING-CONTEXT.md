@@ -3865,6 +3865,19 @@ Most relevant current governance:
      autovacuum or another database-owned worker as a blank Core client identity. Only a `client
      backend` with blank `application_name` belongs in `__unattributed__`.
 
+242. `docker-compose.yml` is an explicitly app-local development boundary. Every Python runtime in
+     that composition must declare `ENVIRONMENT=local`; every Kafka client must declare local-only
+     `KAFKA_SECURITY_PROTOCOL=PLAINTEXT`. Outside explicit local/dev/development/test profiles,
+     shared database and Kafka construction must fail before client creation on the local password,
+     missing database password, `PLAINTEXT`, or `SASL_PLAINTEXT`. TLS/SASL trust and credentials
+     must come from deployment secret/trust mechanisms and must never appear in exception text.
+     Keep this policy centralized in `portfolio_common.connection_security` and apply it to
+     producers, consumers, admin clients, health probes, and operational clients. App-local Kafka
+     handles stale ZooKeeper broker registration only through bounded process retry while the prior
+     ephemeral session expires; never delete `/brokers/ids/1` or volumes on the normal startup path.
+     `make test-kafka-restart-recovery-gate` owns the isolated behavioral proof, including exact
+     container ownership, topic creation, two clean restart cycles, and a dependent service.
+
 ## Context Maintenance Rule
 
 Update this document when:
