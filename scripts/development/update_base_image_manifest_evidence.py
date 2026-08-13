@@ -10,6 +10,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from scripts.quality.base_image_lifecycle_guard import (
+    REGISTRY_API_AUTHORITIES,
+    image_registry_and_repository,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LIFECYCLE_INVENTORY = (
     REPO_ROOT / "contracts" / "security" / "base-image-lifecycle-inventory.v1.json"
@@ -19,7 +24,6 @@ SCHEMA_VERSION = "lotus-core.base-image-manifest-evidence.v1"
 EVIDENCE_ID = "lotus-core-python-base-image-manifest-evidence"
 GENERATOR_ID = "lotus-core-base-image-manifest-evidence"
 GENERATOR_VERSION = "1.0.0"
-REGISTRY_API_AUTHORITIES = {"docker.io": "https://registry-1.docker.io"}
 
 
 class ManifestEvidenceRefreshError(RuntimeError):
@@ -82,7 +86,12 @@ def build_evidence() -> dict[str, Any]:
     image = str(record["image"])
     platform = str(record["deployment_platform"])
     parent_digest = _digest_from_reference(image)
-    registry_authority = REGISTRY_API_AUTHORITIES.get(str(record.get("registry", "")))
+    image_registry, image_repository = image_registry_and_repository(image)
+    if record.get("registry") != image_registry or record.get("repository") != image_repository:
+        raise ManifestEvidenceRefreshError(
+            "governed lifecycle registry/repository must match the base image reference"
+        )
+    registry_authority = REGISTRY_API_AUTHORITIES.get(image_registry)
     if registry_authority is None:
         raise ManifestEvidenceRefreshError(
             "governed base image registry has no approved OCI API authority"
@@ -121,7 +130,7 @@ def build_evidence() -> dict[str, Any]:
         },
         "authority": {
             "registry": registry_authority,
-            "repository": str(record["repository"]),
+            "repository": image_repository,
         },
         "index": {
             "digest": parent_digest,

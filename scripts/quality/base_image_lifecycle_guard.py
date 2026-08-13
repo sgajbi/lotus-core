@@ -39,6 +39,27 @@ class BaseImageLifecycleFinding:
     detail: str
 
 
+def image_registry_and_repository(image: str) -> tuple[str, str]:
+    """Return the registry and repository encoded by a Docker image reference."""
+    name = image.partition("@")[0]
+    parts = name.split("/")
+    first = parts[0]
+    has_explicit_registry = len(parts) > 1 and (
+        "." in first or ":" in first or first == "localhost"
+    )
+    if has_explicit_registry:
+        registry = first
+        repository_parts = parts[1:]
+    else:
+        registry = "docker.io"
+        repository_parts = parts
+    repository_parts[-1] = repository_parts[-1].rsplit(":", maxsplit=1)[0]
+    repository = "/".join(repository_parts)
+    if registry == "docker.io" and "/" not in repository:
+        repository = f"library/{repository}"
+    return registry, repository
+
+
 def _parse_date(value: object, field: str, findings: list[str]) -> date | None:
     if not isinstance(value, str):
         findings.append(f"{field} must be an ISO date")
@@ -113,6 +134,9 @@ def _validate_manifest_evidence(
 
     image = lifecycle_record.get("image")
     platform = lifecycle_record.get("deployment_platform")
+    image_registry, image_repository = (
+        image_registry_and_repository(image) if isinstance(image, str) else (None, None)
+    )
     if evidence.get("image") != image:
         findings.append("manifest evidence image must bind the lifecycle image")
     if evidence.get("deployment_platform") != platform:
@@ -128,18 +152,16 @@ def _validate_manifest_evidence(
         registry_authority = authority.get("registry")
         if not _is_credential_free_https_url(registry_authority):
             findings.append("manifest evidence registry must be a credential-free HTTPS authority")
-        expected_registry_authority = REGISTRY_API_AUTHORITIES.get(
-            str(lifecycle_record.get("registry", ""))
-        )
+        expected_registry_authority = REGISTRY_API_AUTHORITIES.get(str(image_registry or ""))
         if expected_registry_authority is None:
-            findings.append("lifecycle registry has no governed OCI API authority")
+            findings.append("image registry has no governed OCI API authority")
         elif registry_authority != expected_registry_authority:
             findings.append("manifest evidence registry must bind the lifecycle registry")
         repository = authority.get("repository")
         if not isinstance(repository, str) or not repository.strip():
             findings.append("manifest evidence repository must be non-empty")
-        elif repository != lifecycle_record.get("repository"):
-            findings.append("manifest evidence repository must bind the lifecycle repository")
+        elif repository != image_repository:
+            findings.append("manifest evidence repository must bind the image repository")
 
     inspection = evidence.get("inspection")
     if not isinstance(inspection, dict):
@@ -257,8 +279,15 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
     image = record.get("image")
     if not isinstance(image, str) or not IMMUTABLE_IMAGE_RE.fullmatch(image):
         findings.append("base image must use an immutable sha256 manifest-list digest")
-    if record.get("registry") not in REGISTRY_API_AUTHORITIES:
+        image_registry, image_repository = None, None
+    else:
+        image_registry, image_repository = image_registry_and_repository(image)
+    if image_registry not in REGISTRY_API_AUTHORITIES:
         findings.append("base image registry must have a governed OCI API authority")
+    if record.get("registry") != image_registry:
+        findings.append("base image registry must match the image reference")
+    if record.get("repository") != image_repository:
+        findings.append("base image repository must match the image reference")
     if record.get("maturity") != "stable":
         findings.append("base image maturity must be stable; experimental images are prohibited")
     if record.get("governance_classification") != "approved_default":
