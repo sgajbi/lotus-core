@@ -132,7 +132,8 @@ evidence age are mandatory. An
 available architecture in an OCI index is not by itself a supported production platform; external
 Compose dependency images remain outside the Core-built release boundary.
 Dependency technology validation independently recomputes component summaries and enforces fixed
-non-certifying claims, repository/issue/generator identity, a reachable governed-input revision,
+non-certifying claims, repository/issue/generator identity, a reachable `origin/main` source
+baseline plus exact lock/policy digests,
 and a non-future generation timestamp. Its receipt binds the exact execution SHA. A blocked receipt
 does not authorize production use or assert bank readiness.
 Image publication, signing, release manifests, deployment rendering, and promotion eligibility are

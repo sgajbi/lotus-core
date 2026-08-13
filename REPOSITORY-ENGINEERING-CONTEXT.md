@@ -1134,9 +1134,9 @@ Most relevant current governance:
     quality-tool dispatch, and dependency-health checks select by execution platform. Regenerate
     both with `make compile-ci-tooling-lock`; do not hand-edit either lock or generate license/
     supportability evidence from a shared global environment.
-    Dependency inventory provenance distinguishes the latest committed revision of governed
-    lock/policy inputs from the exact validation execution SHA in the emitted receipt. This keeps
-    source provenance reachable after the approved rebase merge. Fixed repository, issue,
+    Dependency inventory provenance combines a reachable `origin/main` source baseline with exact
+    governed lock/policy digests and distinguishes both from the exact execution SHA in the receipt.
+    This avoids self-referential feature SHAs that the approved rebase merge rewrites. Fixed repository, issue,
     generator, claim-boundary, derived-summary, and non-future timestamp checks fail closed.
     Runtime resolution uses the same pinned resolver versions for distinct Linux/amd64 and
     Windows/amd64 closures. The Linux authority is resolved inside the exact governed Python 3.11

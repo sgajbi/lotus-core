@@ -33,7 +33,7 @@ CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventor
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
 The committed machine contract binds newline-normalized lock and policy digests, exact
 package/version and lock membership, and canonical PyPI release metadata digests. It records—but
-enforces—the generator/repository/issue identities and reachable governed-input source commit alongside review dates, license
+enforces—the generator/repository/issue identities and reachable source baseline alongside review dates, license
 evidence/classification, and a non-certifying claim boundary. PyPI proves
 release existence only; it cannot certify upstream support, lifecycle, or vulnerability disclosure.
 All 104 components therefore remain supportability `review_required` until those governed
@@ -46,9 +46,10 @@ itself is unavailable. Cross-platform replay tests prove CRLF/LF checkout conver
 false drift while material text changes still fail closed. This adds no application dependency or runtime technology and makes no
 popularity-based, production-ready, legal, or bank-buyable claim.
 The guard now also recomputes all summary counts and the technology state, and rejects any authored
-production-ready, bank-buyable, or popularity-based approval claim. Generator `1.1.0` records the
-latest committed lock/policy input revision so provenance survives the approved rebase merge; the
-CI receipt separately binds the exact execution SHA. Malformed, unreachable, or future-dated
+production-ready, bank-buyable, or popularity-based approval claim. Generator `1.2.0` records the
+reachable `origin/main` merge-base while exact lock/policy digests bind decisive content; the CI
+receipt separately binds the exact execution SHA. This avoids a self-referential feature SHA that
+would be rewritten by rebase merge. Malformed, unreachable, or future-dated
 provenance fails closed. Evidence and compatibility details:
 [CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md](./codebase-reviews/CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md).
 

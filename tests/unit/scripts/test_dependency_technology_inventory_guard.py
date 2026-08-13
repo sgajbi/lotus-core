@@ -70,7 +70,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                 "repository": guard.INVENTORY_REPOSITORY,
                 "governed_by_issue": guard.INVENTORY_ISSUE,
                 "generator": guard.INVENTORY_GENERATOR,
-                "source_commit": "c" * 40,
+                "source_baseline_commit": "c" * 40,
                 "generated_at_utc": "2026-08-12T00:00:00Z",
                 "claim_boundary": {
                     "bank_buyable_claim": False,
@@ -229,13 +229,13 @@ def test_inventory_provenance_must_match_governed_identity(
 def test_inventory_source_commit_must_be_a_reachable_full_sha(tmp_path: Path, monkeypatch) -> None:
     _lock, inventory_file = _fixture(tmp_path, monkeypatch)
     data = json.loads(inventory_file.read_text(encoding="utf-8"))
-    data["source_commit"] = "not-a-sha"
+    data["source_baseline_commit"] = "not-a-sha"
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     with pytest.raises(guard.InventoryValidationError, match="must be a full SHA"):
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
-    data["source_commit"] = "b" * 40
+    data["source_baseline_commit"] = "b" * 40
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
     monkeypatch.setattr(guard, "_commit_is_ancestor", lambda _candidate: False)
     with pytest.raises(guard.InventoryValidationError, match="not an ancestor"):
