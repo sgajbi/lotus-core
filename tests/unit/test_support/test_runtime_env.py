@@ -14,6 +14,33 @@ from tests.test_support.runtime_env import (
 )
 
 
+def test_prepare_test_runtime_declares_explicit_test_environment() -> None:
+    runtime = prepare_test_runtime(
+        profile="unit",
+        scope="runtime-security",
+        inherit_process_environment=False,
+    )
+
+    try:
+        assert runtime.values["ENVIRONMENT"] == "test"
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_prepare_test_runtime_preserves_explicit_environment() -> None:
+    runtime = prepare_test_runtime(
+        profile="unit",
+        scope="runtime-security",
+        env={"ENVIRONMENT": "staging"},
+        inherit_process_environment=False,
+    )
+
+    try:
+        assert runtime.values["ENVIRONMENT"] == "staging"
+    finally:
+        runtime.port_reservation.release()
+
+
 def _reserved_ports(runtime: PreparedTestRuntime) -> set[int]:
     return {int(runtime.values[key]) for key in runtime.port_reservation.reserved_port_keys}
 
