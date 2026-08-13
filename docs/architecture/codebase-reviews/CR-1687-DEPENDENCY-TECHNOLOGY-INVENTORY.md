@@ -24,10 +24,13 @@ record the exact checkout SHA. The generator is versioned `1.2.0` for this contr
 `make dependency-technology-inventory`:
 
 - validates fixed schema, inventory, repository, issue-owner, and generator identities;
-- requires the source baseline to be a full SHA reachable from the inspected checkout;
+- requires the source baseline to be a full SHA reachable from `origin/main`, so feature-only
+  ancestry cannot masquerade as reviewed mainline provenance;
 - requires a timezone-aware, non-future generation timestamp;
 - recomputes component coverage and lock membership from all four governed closures;
-- recomputes summary counts, certification decision, and technology state from component evidence;
+- recomputes summary counts, certification decision, and technology state from the complete
+  blocking posture, including classification, stale-review, yanked-release, and prerelease
+  findings;
 - prohibits production-ready, bank-buyable, or popularity-based approval claims;
 - validates policy-derived license classifications and support-review cadence; and
 - emits an exact-execution receipt which remains blocked while findings exist.
@@ -47,7 +50,8 @@ release-evidence truth. No supported-feature or platform-wide context change is 
 
 - focused generator and guard tests cover deterministic replay, prohibited claims, contradictory
   summaries, policy/lock drift, governed identity mutations, unreachable or malformed source SHAs,
-  future timestamps, ambiguous licenses, missing support authorities, and online authority drift;
+  future timestamps, feature-only baselines, ambiguous licenses, missing support authorities,
+  contradictory release/review posture, and online authority drift;
 - scoped Ruff format/check and MyPy;
 - online deterministic refresh of all 104 components from exact PyPI release endpoints; and
 - report-only guard result: structurally valid, 104 components, 120 blocking findings, zero

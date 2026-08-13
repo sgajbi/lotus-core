@@ -176,9 +176,9 @@ def _commit() -> str:
     return result.stdout.strip()
 
 
-def _commit_is_ancestor(candidate: str) -> bool:
+def _commit_is_mainline_ancestor(candidate: str) -> bool:
     result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", candidate, "HEAD"],
+        ["git", "merge-base", "--is-ancestor", candidate, "origin/main"],
         cwd=ROOT,
         check=False,
         capture_output=True,
@@ -202,9 +202,9 @@ def _validate_inventory_provenance(inventory: dict[str, Any], *, as_of: date) ->
         raise InventoryValidationError(
             "dependency inventory source_baseline_commit must be a full SHA"
         )
-    if not _commit_is_ancestor(source_commit):
+    if not _commit_is_mainline_ancestor(source_commit):
         raise InventoryValidationError(
-            "dependency inventory source_baseline_commit is not an ancestor of the checkout"
+            "dependency inventory source_baseline_commit is not an ancestor of origin/main"
         )
     generated_at = datetime.fromisoformat(
         str(inventory.get("generated_at_utc", "")).replace("Z", "+00:00")
@@ -236,7 +236,11 @@ def _expected_components(source_locks: list[dict[str, Any]]) -> dict[tuple[str, 
     return expected
 
 
-def _validate_inventory_claims(inventory: dict[str, Any], components: list[dict[str, Any]]) -> None:
+def _validate_inventory_claims(
+    inventory: dict[str, Any],
+    components: list[dict[str, Any]],
+    findings: list[dict[str, str]],
+) -> None:
     claim_boundary = inventory.get("claim_boundary")
     if not isinstance(claim_boundary, dict):
         raise InventoryValidationError("dependency inventory claim boundary is required")
@@ -251,11 +255,7 @@ def _validate_inventory_claims(inventory: dict[str, Any], components: list[dict[
     approved_license_count = sum(
         component.get("license", {}).get("classification") == "approved" for component in components
     )
-    blocked_component_count = sum(
-        component.get("license", {}).get("classification") != "approved"
-        or component.get("supportability", {}).get("classification") != "reviewed"
-        for component in components
-    )
+    blocked_component_count = len({finding["component"] for finding in findings})
     expected_summary = {
         "component_count": len(components),
         "approved_license_count": approved_license_count,
@@ -296,7 +296,6 @@ def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> d
     if not isinstance(components, list):
         raise InventoryValidationError("dependency inventory components must be a list")
     components = _validate_component_shapes(components)
-    _validate_inventory_claims(inventory, components)
     policy = inventory["policy"]
     policy_path = ROOT / str(policy["path"])
     if not policy_path.is_file() or normalized_text_sha256(policy_path) != policy["sha256"]:
@@ -403,6 +402,7 @@ def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> d
         raise InventoryValidationError(
             f"component coverage drift: missing={missing}, extra={extra}"
         )
+    _validate_inventory_claims(inventory, components, findings)
     authority_revalidated = False
     if not findings and verify_pypi_authority:
         for key, component in sorted(actual.items()):

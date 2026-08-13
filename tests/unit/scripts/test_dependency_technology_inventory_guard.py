@@ -139,7 +139,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     monkeypatch.setattr(guard, "ROOT", tmp_path)
     monkeypatch.setattr(guard, "INVENTORY_FILE", inventory_file)
     monkeypatch.setattr(guard, "_commit", lambda: "d" * 40)
-    monkeypatch.setattr(guard, "_commit_is_ancestor", lambda _candidate: True)
+    monkeypatch.setattr(guard, "_commit_is_mainline_ancestor", lambda _candidate: True)
     return locks[0][0], inventory_file
 
 
@@ -252,7 +252,9 @@ def test_inventory_provenance_must_match_governed_identity(
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
-def test_inventory_source_commit_must_be_a_reachable_full_sha(tmp_path: Path, monkeypatch) -> None:
+def test_inventory_source_commit_must_be_a_reachable_mainline_sha(
+    tmp_path: Path, monkeypatch
+) -> None:
     _lock, inventory_file = _fixture(tmp_path, monkeypatch)
     data = json.loads(inventory_file.read_text(encoding="utf-8"))
     data["source_baseline_commit"] = "not-a-sha"
@@ -263,9 +265,32 @@ def test_inventory_source_commit_must_be_a_reachable_full_sha(tmp_path: Path, mo
 
     data["source_baseline_commit"] = "b" * 40
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
-    monkeypatch.setattr(guard, "_commit_is_ancestor", lambda _candidate: False)
-    with pytest.raises(guard.InventoryValidationError, match="not an ancestor"):
+    monkeypatch.setattr(guard, "_commit_is_mainline_ancestor", lambda _candidate: False)
+    with pytest.raises(guard.InventoryValidationError, match="not an ancestor of origin/main"):
         guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_source_commit_reachability_is_checked_against_origin_main(monkeypatch) -> None:
+    captured: list[str] = []
+
+    def _run(command, **_kwargs):
+        captured.extend(command)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(guard.subprocess, "run", _run)
+
+    assert guard._commit_is_mainline_ancestor("a" * 40) is True
+    assert captured == [
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        "a" * 40,
+        "origin/main",
+    ]
 
 
 def test_inventory_generation_time_cannot_be_future_dated(tmp_path: Path, monkeypatch) -> None:
@@ -472,12 +497,37 @@ def test_yanked_release_blocks_certification(tmp_path: Path, monkeypatch) -> Non
     _lock, inventory_file = _fixture(tmp_path, monkeypatch)
     data = json.loads(inventory_file.read_text(encoding="utf-8"))
     data["components"][0]["yanked"] = True
+    data["claim_boundary"]["technology_state"] = "non_certifying"
+    data["summary"].update(
+        {
+            "blocked_or_review_required_count": 1,
+            "certification_decision": "blocked",
+        }
+    )
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     receipt = guard.validate_inventory(as_of=date(2026, 8, 12))
 
     assert receipt["certification_decision"] == "blocked"
     assert {finding["reason"] for finding in receipt["findings"]} == {"release_yanked"}
+
+
+@pytest.mark.parametrize("blocking_posture", ["release_yanked", "review_stale"])
+def test_complete_blocking_posture_must_be_reflected_in_inventory_claims(
+    tmp_path: Path, monkeypatch, blocking_posture: str
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    if blocking_posture == "release_yanked":
+        data["components"][0]["yanked"] = True
+    else:
+        data["components"][0]["supportability"].update(
+            {"reviewed_on": "2026-07-12", "next_review_due": "2026-08-11"}
+        )
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="summary contradicts"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
 def test_online_authority_rejects_recorded_yanked_posture_drift(
