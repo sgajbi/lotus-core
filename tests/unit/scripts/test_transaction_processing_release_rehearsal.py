@@ -37,6 +37,14 @@ ROLLBACK_DIGEST = "sha256:" + "d" * 64
 
 def _manifest(*, sha: str, digest: str) -> dict[str, object]:
     image_ref = "ghcr.io/sgajbi/lotus-core/portfolio-transaction-processing-service"
+    subject = {"image_ref": image_ref, "image_digest": digest}
+    source = {
+        "repository": "sgajbi/lotus-core",
+        "git_commit_sha": sha,
+        "ci_run_id": "31366752006",
+        "ci_run_attempt": "1",
+    }
+    digest_ref = f"{image_ref}@{digest}"
     return build_release_manifest(
         service="portfolio_transaction_processing_service",
         image_name="portfolio-transaction-processing-service",
@@ -48,13 +56,32 @@ def _manifest(*, sha: str, digest: str) -> dict[str, object]:
         image_version=sha,
         build_timestamp="2026-08-10T07:00:00Z",
         repo_url="https://github.com/sgajbi/lotus-core",
+        repository="sgajbi/lotus-core",
         ci_pipeline_run_id="31366752006",
-        sbom_generated=True,
-        vulnerability_scan_status="passed",
-        image_signed=True,
-        provenance_attestation_generated=True,
-        kubernetes_deploys_by_digest=True,
-        promotion_environments=["dev", "uat", "prod"],
+        ci_run_attempt="1",
+        scan_receipt={
+            "subject": {
+                "service": "portfolio_transaction_processing_service",
+                **subject,
+                "digest_image_ref": digest_ref,
+            },
+            "source": source,
+            "policy": {"decision": "passed"},
+        },
+        sbom={"subject": subject},
+        signature_verification={"subject": subject},
+        provenance_verification={"subject": subject},
+        base_image={
+            "dockerfile": "src/services/portfolio_transaction_processing_service/Dockerfile"
+        },
+        promotion_receipts=[
+            {
+                "environment": environment,
+                "image_ref": digest_ref,
+                "receipt_sha256": "sha256:" + str(index) * 64,
+            }
+            for index, environment in enumerate(("dev", "uat", "prod"), start=1)
+        ],
     )
 
 
