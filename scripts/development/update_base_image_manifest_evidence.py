@@ -19,6 +19,7 @@ SCHEMA_VERSION = "lotus-core.base-image-manifest-evidence.v1"
 EVIDENCE_ID = "lotus-core-python-base-image-manifest-evidence"
 GENERATOR_ID = "lotus-core-base-image-manifest-evidence"
 GENERATOR_VERSION = "1.0.0"
+REGISTRY_API_AUTHORITIES = {"docker.io": "https://registry-1.docker.io"}
 
 
 class ManifestEvidenceRefreshError(RuntimeError):
@@ -81,6 +82,11 @@ def build_evidence() -> dict[str, Any]:
     image = str(record["image"])
     platform = str(record["deployment_platform"])
     parent_digest = _digest_from_reference(image)
+    registry_authority = REGISTRY_API_AUTHORITIES.get(str(record.get("registry", "")))
+    if registry_authority is None:
+        raise ManifestEvidenceRefreshError(
+            "governed base image registry has no approved OCI API authority"
+        )
 
     index_bytes = _inspect_raw(image)
     if f"sha256:{_sha256(index_bytes)}" != parent_digest:
@@ -114,7 +120,7 @@ def build_evidence() -> dict[str, Any]:
             "child_reference": child_reference,
         },
         "authority": {
-            "registry": "https://registry-1.docker.io",
+            "registry": registry_authority,
             "repository": str(record["repository"]),
         },
         "index": {
