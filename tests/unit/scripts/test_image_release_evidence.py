@@ -11,12 +11,22 @@ from scripts.release.image_release_evidence import (
     base_image_evidence_identity,
     provenance_verification_identity,
     sbom_identity,
+    scan_receipt_identity,
     signature_verification_identity,
 )
 
 IMAGE_REF = "ghcr.io/sgajbi/lotus-core/query-service"
 IMAGE_DIGEST = "sha256:" + "a" * 64
 DOCKERFILE = "src/services/query_service/Dockerfile"
+AUTHORITY = {
+    "schema_version": "lotus-core.vulnerability-authority-bundle.v1",
+    "bundle_sha256": "sha256:" + "f" * 64,
+    "generated_at_utc": "2026-08-14T01:00:00Z",
+    "repository": "sgajbi/lotus-core",
+    "git_commit_sha": "1" * 40,
+    "ci_run_id": "123",
+    "ci_run_attempt": "1",
+}
 
 
 def _write(path: Path, value: object) -> Path:
@@ -54,6 +64,78 @@ def test_sbom_identity_rejects_malformed_or_empty_documents(
             image_ref=IMAGE_REF,
             image_digest=IMAGE_DIGEST,
         )
+
+
+def _scan_receipt() -> dict[str, object]:
+    return {
+        "schema_version": "lotus-core.image-scan-policy-receipt.v6",
+        "evidence_state": "available",
+        "evidence_boundary": {"posture": "release", "release_eligible": True},
+        "source": {
+            "repository": "sgajbi/lotus-core",
+            "git_commit_sha": "1" * 40,
+            "ci_run_id": "123",
+            "ci_run_attempt": "1",
+        },
+        "subject": {
+            "service": "query_service",
+            "image_ref": IMAGE_REF,
+            "image_digest": IMAGE_DIGEST,
+            "digest_image_ref": f"{IMAGE_REF}@{IMAGE_DIGEST}",
+        },
+        "scanner": {"name": "trivy", "report_sha256": "sha256:" + "2" * 64},
+        "vulnerability_authority": AUTHORITY,
+        "policy": {"policy_id": "policy", "decision": "passed", "finding_count": 0},
+        "findings": [],
+    }
+
+
+def _scan_identity(path: Path) -> dict[str, object]:
+    return scan_receipt_identity(
+        path,
+        service="query_service",
+        image_ref=IMAGE_REF,
+        image_digest=IMAGE_DIGEST,
+        repository="sgajbi/lotus-core",
+        git_commit_sha="1" * 40,
+        ci_run_id="123",
+        ci_run_attempt="1",
+        vulnerability_authority=AUTHORITY,
+    )
+
+
+def test_scan_receipt_identity_requires_passed_release_evidence(tmp_path: Path) -> None:
+    identity = _scan_identity(_write(tmp_path / "scan.json", _scan_receipt()))
+
+    assert identity["policy"]["decision"] == "passed"
+    assert identity["vulnerability_authority"] == AUTHORITY
+    assert identity["subject"]["image_digest"] == IMAGE_DIGEST
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("evidence_state", "unavailable", "unavailable"),
+        ("evidence_boundary", {"posture": "diagnostic"}, "not release evidence"),
+        ("policy", {"decision": "blocked"}, "did not pass"),
+    ],
+)
+def test_scan_receipt_identity_rejects_non_release_posture(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    receipt = _scan_receipt()
+    receipt[field] = value
+
+    with pytest.raises(ImageReleaseEvidenceError, match=message):
+        _scan_identity(_write(tmp_path / "scan.json", receipt))
+
+
+def test_scan_receipt_identity_rejects_authority_substitution(tmp_path: Path) -> None:
+    receipt = _scan_receipt()
+    receipt["vulnerability_authority"] = {**AUTHORITY, "bundle_sha256": "sha256:" + "0" * 64}
+
+    with pytest.raises(ImageReleaseEvidenceError, match="authority drifted"):
+        _scan_identity(_write(tmp_path / "scan.json", receipt))
 
 
 def test_signature_identity_requires_exact_digest_ref_and_certificate(tmp_path: Path) -> None:

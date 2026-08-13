@@ -15,6 +15,7 @@ SLSA_PROVENANCE_PREDICATE_TYPES = {
     "https://slsa.dev/provenance/v0.2",
     "https://slsa.dev/provenance/v1",
 }
+SCAN_RECEIPT_SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v6"
 
 
 class ImageReleaseEvidenceError(ValueError):
@@ -73,6 +74,63 @@ def sbom_identity(path: Path, *, image_ref: str, image_digest: str) -> dict[str,
         "spec_version": spec_version,
         "component_count": len(components),
         "subject": {"image_ref": image_ref, "image_digest": image_digest},
+    }
+
+
+def scan_receipt_identity(
+    path: Path,
+    *,
+    service: str,
+    image_ref: str,
+    image_digest: str,
+    repository: str,
+    git_commit_sha: str,
+    ci_run_id: str,
+    ci_run_attempt: str,
+    vulnerability_authority: dict[str, str],
+) -> dict[str, Any]:
+    """Validate a passed release scan receipt and bind its immutable identities."""
+    _validate_subject(image_ref=image_ref, image_digest=image_digest)
+    content, raw = _json(path, name="image scan policy receipt")
+    receipt = _object(raw, name="image scan policy receipt")
+    if receipt.get("schema_version") != SCAN_RECEIPT_SCHEMA_VERSION:
+        raise ImageReleaseEvidenceError("image scan receipt version is invalid")
+    if receipt.get("evidence_state") != "available":
+        raise ImageReleaseEvidenceError("image scan evidence is unavailable")
+    expected_source = {
+        "repository": repository,
+        "git_commit_sha": git_commit_sha,
+        "ci_run_id": ci_run_id,
+        "ci_run_attempt": ci_run_attempt,
+    }
+    if receipt.get("source") != expected_source:
+        raise ImageReleaseEvidenceError("image scan source identity drifted")
+    expected_subject = {
+        "service": service,
+        "image_ref": image_ref,
+        "image_digest": image_digest,
+        "digest_image_ref": f"{image_ref}@{image_digest}",
+    }
+    if receipt.get("subject") != expected_subject:
+        raise ImageReleaseEvidenceError("image scan subject identity drifted")
+    if receipt.get("vulnerability_authority") != vulnerability_authority:
+        raise ImageReleaseEvidenceError("image scan vulnerability authority drifted")
+    boundary = receipt.get("evidence_boundary")
+    if not isinstance(boundary, dict) or boundary.get("posture") != "release":
+        raise ImageReleaseEvidenceError("image scan receipt is not release evidence")
+    if boundary.get("release_eligible") is not True:
+        raise ImageReleaseEvidenceError("image scan receipt is not release eligible")
+    policy = receipt.get("policy")
+    if not isinstance(policy, dict) or policy.get("decision") != "passed":
+        raise ImageReleaseEvidenceError("image scan policy did not pass")
+    return {
+        "schema_version": SCAN_RECEIPT_SCHEMA_VERSION,
+        "sha256": _sha256(content),
+        "scanner": receipt.get("scanner"),
+        "policy": policy,
+        "vulnerability_authority": vulnerability_authority,
+        "subject": expected_subject,
+        "source": expected_source,
     }
 
 
