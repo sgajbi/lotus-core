@@ -174,6 +174,28 @@ def test_guard_rejects_credentialed_registry_authority(tmp_path: Path) -> None:
     )
 
 
+def test_guard_rejects_registry_authority_not_bound_to_lifecycle_registry(
+    tmp_path: Path,
+) -> None:
+    evidence = _manifest_evidence()
+    evidence["authority"]["registry"] = "https://attacker.example.invalid"  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    assert "manifest evidence registry must bind the lifecycle registry" in _details(tmp_path)
+
+
+def test_guard_rejects_lifecycle_registry_without_governed_api_authority(
+    tmp_path: Path,
+) -> None:
+    inventory = _inventory()
+    inventory["base_images"][0]["registry"] = "attacker.example.invalid"  # type: ignore[index]
+    _write_fixture(tmp_path, inventory)
+
+    details = _details(tmp_path)
+    assert "base image registry must have a governed OCI API authority" in details
+    assert "lifecycle registry has no governed OCI API authority" in details
+
+
 def test_guard_rejects_stale_review(tmp_path: Path) -> None:
     inventory = _inventory()
     inventory["base_images"][0]["next_review_on"] = "2026-08-11"  # type: ignore[index]

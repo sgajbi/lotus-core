@@ -30,6 +30,7 @@ COMPOSE_IMAGE_RE = re.compile(r"^\s*image:\s*(?P<image>\S+)\s*$", re.MULTILINE)
 REQUIRED_DEPLOYMENT_PLATFORM = "linux/amd64"
 OCI_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
 OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
+REGISTRY_API_AUTHORITIES = {"docker.io": "https://registry-1.docker.io"}
 
 
 @dataclass(frozen=True)
@@ -124,8 +125,16 @@ def _validate_manifest_evidence(
         findings.append("manifest evidence authority is required")
         repository = None
     else:
-        if not _is_credential_free_https_url(authority.get("registry")):
+        registry_authority = authority.get("registry")
+        if not _is_credential_free_https_url(registry_authority):
             findings.append("manifest evidence registry must be a credential-free HTTPS authority")
+        expected_registry_authority = REGISTRY_API_AUTHORITIES.get(
+            str(lifecycle_record.get("registry", ""))
+        )
+        if expected_registry_authority is None:
+            findings.append("lifecycle registry has no governed OCI API authority")
+        elif registry_authority != expected_registry_authority:
+            findings.append("manifest evidence registry must bind the lifecycle registry")
         repository = authority.get("repository")
         if not isinstance(repository, str) or not repository.strip():
             findings.append("manifest evidence repository must be non-empty")
@@ -248,6 +257,8 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
     image = record.get("image")
     if not isinstance(image, str) or not IMMUTABLE_IMAGE_RE.fullmatch(image):
         findings.append("base image must use an immutable sha256 manifest-list digest")
+    if record.get("registry") not in REGISTRY_API_AUTHORITIES:
+        findings.append("base image registry must have a governed OCI API authority")
     if record.get("maturity") != "stable":
         findings.append("base image maturity must be stable; experimental images are prohibited")
     if record.get("governance_classification") != "approved_default":

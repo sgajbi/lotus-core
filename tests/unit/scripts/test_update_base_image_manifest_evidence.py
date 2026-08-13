@@ -49,6 +49,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[bytes, bytes]:
                         "image": f"python:3.11@{_digest(index_payload)}",
                         "deployment_platform": "linux/amd64",
                         "observed_on": "2026-08-13",
+                        "registry": "docker.io",
                         "repository": "library/python",
                     }
                 ]
@@ -93,6 +94,18 @@ def test_build_evidence_rejects_missing_platform_manifest(tmp_path: Path, monkey
     _fixture(tmp_path, monkeypatch)
     with pytest.raises(updater.ManifestEvidenceRefreshError, match="exactly one"):
         updater._select_platform_manifest({"manifests": []}, "linux/amd64")
+
+
+def test_build_evidence_rejects_registry_without_governed_api_authority(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _fixture(tmp_path, monkeypatch)
+    lifecycle = json.loads(updater.LIFECYCLE_INVENTORY.read_text(encoding="utf-8"))
+    lifecycle["base_images"][0]["registry"] = "attacker.example.invalid"
+    updater.LIFECYCLE_INVENTORY.write_text(json.dumps(lifecycle), encoding="utf-8")
+
+    with pytest.raises(updater.ManifestEvidenceRefreshError, match="no approved OCI API authority"):
+        updater.build_evidence()
 
 
 def test_inspect_raw_uses_argument_safe_docker_invocation(monkeypatch) -> None:

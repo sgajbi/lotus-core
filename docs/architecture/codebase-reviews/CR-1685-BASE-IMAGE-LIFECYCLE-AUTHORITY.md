@@ -36,7 +36,9 @@ permitted platform, official-image membership, or upstream lifecycle changes.
 - all ten Core service Dockerfiles use the governed immutable base identity;
 - the `linux/amd64` child/config digest and attached-metadata distinction are explicit;
 - retained registry bytes hash to the governed parent/child identities and bind descriptor media
-  type, size, platform, child reference, and config digest;
+  type, size, platform, child reference, and config digest; the evidence registry API must equal
+  the governed authority mapped from the lifecycle registry, so an unrelated HTTPS endpoint cannot
+  claim provenance;
 - CPython and Debian authorities remain current, each local cutoff is bounded by its upstream
   authority end date, and the earliest local cutoff owns release posture;
 - Docker Official Images source/registry authority is complete, credential-free HTTPS evidence and
@@ -61,7 +63,8 @@ No API/OpenAPI, migration, supported-feature, or platform-context update is requ
   authority, wrong-image verification, and local cutoffs beyond upstream authority;
 - scoped Ruff format/check;
 - adversarial evidence tests cover missing/malformed registry evidence, changed parent or child
-  bytes, missing platform selection, descriptor drift, config drift, and credentialed authority;
+  bytes, missing platform selection, descriptor drift, config drift, credentialed authority, and
+  unrelated or ungoverned registry authorities;
 - direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
 - online `update_base_image_manifest_evidence.py --check` against Docker Hub raw OCI bytes;
 - exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited
