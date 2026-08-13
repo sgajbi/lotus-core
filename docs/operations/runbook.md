@@ -518,6 +518,46 @@ host enforcement, metrics access policy, safe unhandled-error responses, auth/au
 payload limits, upload limits where relevant, and the explicit operational unauthenticated
 allowlist for health, metrics, OpenAPI/docs, and version routes.
 
+## App-local connection security and Kafka restart recovery
+
+`docker-compose.yml` is an explicitly local development composition. Its Python services declare
+`ENVIRONMENT=local`; its Kafka clients declare `KAFKA_SECURITY_PROTOCOL=PLAINTEXT`; and its
+PostgreSQL `user/password` fallback is confined to that app-local boundary. Do not reuse this
+Compose file as a staging, UAT, or production deployment manifest.
+
+Outside an explicit `local`, `dev`, `development`, or `test` profile, Core rejects the local
+database password and any `PLAINTEXT` or `SASL_PLAINTEXT` Kafka transport before constructing the
+affected client. Production-like Kafka clients must use `SSL` or `SASL_SSL`, supply
+`KAFKA_SSL_CA_LOCATION`, and, for SASL, source `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME`, and
+`KAFKA_SASL_PASSWORD` from the deployment secret store. Database credentials must likewise arrive
+through the deployment secret store rather than a committed environment file or image layer.
+
+The app-local broker uses bounded `on-failure:5` restart policy because an interrupted broker can
+leave `/brokers/ids/1` owned until ZooKeeper expires the prior ephemeral session. Normal startup
+waits for that expiry and retries the unchanged broker process; it never deletes ZooKeeper state or
+application volumes. Certify this behavior with:
+
+```powershell
+make test-kafka-restart-recovery-gate
+```
+
+The gate owns a unique Compose project, verifies container ownership before interruption, proves
+topic creation, performs two clean stop/start cycles, starts a Kafka-dependent Core service, and
+emits machine-readable evidence. It tears down only its exact project and does not remove volumes.
+
+If the broker exhausts all five attempts, inspect the exact project first:
+
+```powershell
+docker compose ps
+docker compose logs --no-color --tail 200 zookeeper kafka
+docker inspect lotus-core-app-local-kafka-1 --format '{{.RestartCount}}'
+```
+
+A registration that remains owned can indicate another live broker session. Stop or reconcile that
+exact owner; do not delete `/brokers/ids/1`, run daemon-wide prune commands, or remove PostgreSQL,
+Kafka, or ZooKeeper volumes as the default remedy. Any destructive isolated reset is an explicit,
+last-resort operator action after ownership and recoverability evidence are recorded.
+
 Operational knobs:
 
 | Setting | Default | Purpose |
@@ -543,6 +583,10 @@ Operational knobs:
 | `LOTUS_CORE_DOWNSTREAM_MAX_PAGE_SIZE` | `500` | Shared maximum downstream page size for future paged adapters. |
 | `LOTUS_CORE_DOWNSTREAM_MAX_BATCH_SIZE` | `500` | Shared maximum downstream batch size for future batched adapters. |
 | `LOTUS_CORE_DOWNSTREAM_CACHE_ALLOWED` | `true` | Records whether downstream clients may cache responses under their contract. |
+| `KAFKA_SECURITY_PROTOCOL` | `PLAINTEXT` only in explicit local/dev/test | Shared librdkafka transport for producers, consumers, admin clients, health probes, and governed operational clients. Non-local profiles reject plaintext. |
+| `KAFKA_SSL_CA_LOCATION` | empty | Required trust bundle path for `SSL` and `SASL_SSL`; source it from the deployment trust/secret mechanism. |
+| `KAFKA_SASL_MECHANISM` | empty | Required for SASL; accepted values are `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`. |
+| `KAFKA_SASL_USERNAME` / `KAFKA_SASL_PASSWORD` | empty | Required SASL credentials; source them from the deployment secret store. |
 | `LOTUS_CORE_KAFKA_PRODUCER_CLIENT_ID` | `portfolio-analytics-producer` | Default Kafka producer client identity. Service-specific producers default to `<service_name>-producer` unless this global value or service override JSON is set. |
 | `LOTUS_CORE_KAFKA_PRODUCER_RETRIES` | `5` | Default producer retry count. |
 | `LOTUS_CORE_KAFKA_PRODUCER_LINGER_MS` | `5` | Default producer linger budget for batching. |
