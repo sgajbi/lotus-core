@@ -1,13 +1,33 @@
 from __future__ import annotations
 
-import pytest
+from unittest.mock import MagicMock
 
+import pytest
+from portfolio_common.runtime_settings import RuntimeConfigurationError
+
+from scripts.operations import transaction_processing_cutover_offsets as cutover_module
 from scripts.operations.transaction_processing_cutover_offsets import (
     ConsumerGroupSnapshot,
+    KafkaOffsetStore,
     OffsetCutoverError,
     PartitionOffset,
     build_offset_cutover_plan,
 )
+
+
+def test_offset_store_fails_before_clients_for_plaintext_production(monkeypatch) -> None:
+    admin_client = MagicMock()
+    consumer = MagicMock()
+    monkeypatch.setattr(cutover_module, "AdminClient", admin_client)
+    monkeypatch.setattr(cutover_module, "Consumer", consumer)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+
+    with pytest.raises(RuntimeConfigurationError, match="plaintext Kafka transport"):
+        KafkaOffsetStore(bootstrap_servers="kafka:9093", timeout_seconds=1)
+
+    admin_client.assert_not_called()
+    consumer.assert_not_called()
 
 
 def _snapshot(

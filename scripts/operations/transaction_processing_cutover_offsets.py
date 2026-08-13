@@ -24,6 +24,7 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
+from portfolio_common.connection_security import build_kafka_connection_config
 
 INVALID_OFFSET = -1001
 
@@ -163,10 +164,14 @@ def _validated_drained_offsets(
 class KafkaOffsetStore:
     def __init__(self, *, bootstrap_servers: str, timeout_seconds: float) -> None:
         self._timeout_seconds = timeout_seconds
-        self._admin = AdminClient({"bootstrap.servers": bootstrap_servers})
+        connection_config = build_kafka_connection_config(
+            bootstrap_servers,
+            service_name="transaction processing cutover",
+        )
+        self._admin = AdminClient(connection_config)
         self._metadata_consumer = Consumer(
             {
-                "bootstrap.servers": bootstrap_servers,
+                **connection_config,
                 "group.id": "portfolio_transaction_cutover_inspector",
                 "enable.auto.commit": False,
             }
