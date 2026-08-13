@@ -519,6 +519,7 @@ def main(
             endpoint_urls=requested_endpoints,
             keep_stack=args.keep_compose,
         )
+        managed_run.runtime.export_to(os.environ)
         with managed_run:
             endpoints = managed_run.runtime.endpoints
             args.ingestion_base_url = (
