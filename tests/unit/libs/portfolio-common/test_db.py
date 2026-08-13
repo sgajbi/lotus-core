@@ -259,6 +259,30 @@ def test_standalone_async_engine_uses_explicit_identity(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize(
+    ("factory_name", "url"),
+    [
+        ("create_sync_database_engine", "postgresql://user:password@host:5432/dbname"),
+        (
+            "create_async_database_engine",
+            "postgresql+asyncpg://user:password@host:5432/dbname",
+        ),
+    ],
+)
+def test_standalone_engine_rejects_direct_local_credentials_in_production(
+    monkeypatch,
+    factory_name,
+    url,
+):
+    import portfolio_common.db as db_module
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    engine_factory = getattr(db_module, factory_name)
+
+    with pytest.raises(RuntimeConfigurationError, match="local default database credentials"):
+        engine_factory(runtime_identity="offline-integrity-auditor", database_url=url)
+
+
 def test_database_runtime_identity_uses_bounded_local_fallback(monkeypatch):
     monkeypatch.delenv("SERVICE_NAME", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "local")

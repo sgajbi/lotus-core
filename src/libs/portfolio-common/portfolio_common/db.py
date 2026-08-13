@@ -91,8 +91,13 @@ def create_sync_database_engine(
 ) -> Engine:
     """Create a standalone synchronous engine with governed connection attribution."""
 
+    normalized_url = _normalize_database_url_scheme(
+        database_url or get_sync_database_url(),
+        async_mode=False,
+    )
+    validate_database_url_security(normalized_url, service_name=runtime_identity)
     return create_engine(
-        _normalize_database_url_scheme(database_url or get_sync_database_url(), async_mode=False),
+        normalized_url,
         pool_pre_ping=True,
         connect_args=sync_database_connect_args(explicit_identity=runtime_identity),
         **engine_options,
@@ -156,8 +161,13 @@ def create_async_database_engine(
 ) -> AsyncEngine:
     """Create a standalone asynchronous engine with governed connection attribution."""
 
+    normalized_url = _normalize_database_url_scheme(
+        database_url or get_async_database_url(),
+        async_mode=True,
+    )
+    validate_database_url_security(normalized_url, service_name=runtime_identity)
     return create_async_engine(
-        _normalize_database_url_scheme(database_url or get_async_database_url(), async_mode=True),
+        normalized_url,
         pool_pre_ping=True,
         connect_args=async_database_connect_args(explicit_identity=runtime_identity),
         **engine_options,
