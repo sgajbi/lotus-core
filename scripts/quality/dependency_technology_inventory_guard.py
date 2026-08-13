@@ -30,6 +30,14 @@ REQUIRED_SOURCE_LOCKS = frozenset(
     }
 )
 PYPI_USER_AGENT = "lotus-core-dependency-technology-certifier/1.0.0"
+INVENTORY_SCHEMA_VERSION = "lotus-core.dependency-technology-inventory.v1"
+INVENTORY_ID = "lotus-core-python-dependency-technology-inventory"
+INVENTORY_REPOSITORY = "https://github.com/sgajbi/lotus-core"
+INVENTORY_ISSUE = "https://github.com/sgajbi/lotus-core/issues/926"
+INVENTORY_GENERATOR = {
+    "id": "lotus-core-dependency-technology-inventory",
+    "version": "1.0.0",
+}
 
 
 class InventoryValidationError(RuntimeError):
@@ -168,6 +176,41 @@ def _commit() -> str:
     return result.stdout.strip()
 
 
+def _commit_is_ancestor(candidate: str) -> bool:
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", candidate, "HEAD"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def _validate_inventory_provenance(inventory: dict[str, Any], *, as_of: date) -> None:
+    expected = {
+        "schema_version": INVENTORY_SCHEMA_VERSION,
+        "inventory_id": INVENTORY_ID,
+        "repository": INVENTORY_REPOSITORY,
+        "governed_by_issue": INVENTORY_ISSUE,
+        "generator": INVENTORY_GENERATOR,
+    }
+    for field, value in expected.items():
+        if inventory.get(field) != value:
+            raise InventoryValidationError(f"dependency inventory {field} provenance drift")
+    source_commit = inventory.get("source_commit")
+    if not isinstance(source_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        raise InventoryValidationError("dependency inventory source_commit must be a full SHA")
+    if not _commit_is_ancestor(source_commit):
+        raise InventoryValidationError(
+            "dependency inventory source_commit is not an ancestor of the inspected checkout"
+        )
+    generated_at = datetime.fromisoformat(
+        str(inventory.get("generated_at_utc", "")).replace("Z", "+00:00")
+    )
+    if generated_at.tzinfo is None or generated_at.date() > as_of:
+        raise InventoryValidationError("dependency inventory generation time is invalid")
+
+
 def _expected_components(source_locks: list[dict[str, Any]]) -> dict[tuple[str, str], set[str]]:
     identities = [
         (str(lock["path"]), str(lock["scope"]), str(lock["platform"])) for lock in source_locks
@@ -232,6 +275,7 @@ def _validate_inventory_claims(inventory: dict[str, Any], components: list[dict[
 
 def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> dict[str, Any]:
     inventory = json.loads(INVENTORY_FILE.read_text(encoding="utf-8"))
+    _validate_inventory_provenance(inventory, as_of=as_of)
     components = inventory.get("components")
     if not isinstance(components, list):
         raise InventoryValidationError("dependency inventory components must be a list")
