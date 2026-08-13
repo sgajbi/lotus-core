@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import yaml
@@ -26,6 +27,7 @@ PYTHON_RUNTIME_SERVICES = frozenset(
     }
 )
 KAFKA_CLIENT_SERVICES = PYTHON_RUNTIME_SERVICES - {"migration-runner", "demo_data_loader"}
+DIRECT_KAFKA_CLIENT_CONSTRUCTORS = frozenset({"AdminClient", "Consumer", "Producer"})
 
 
 def _compose() -> dict[str, object]:
@@ -68,3 +70,31 @@ def test_kafka_retries_bounded_startup_without_mutating_zookeeper_state() -> Non
     assert "entrypoint" not in kafka
     assert "command" not in kafka
     assert "volumes" not in kafka
+
+
+def test_direct_kafka_clients_cannot_bypass_shared_transport_security() -> None:
+    client_construction_paths: set[Path] = set()
+    for source_root in (REPO_ROOT / "src", REPO_ROOT / "tools", REPO_ROOT / "scripts"):
+        for path in source_root.rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            if any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in DIRECT_KAFKA_CLIENT_CONSTRUCTORS
+                for node in ast.walk(tree)
+            ):
+                client_construction_paths.add(path)
+                assert "build_kafka_connection_config" in source, (
+                    f"{path.relative_to(REPO_ROOT)} constructs a Kafka client without the shared "
+                    "transport-security policy"
+                )
+
+    assert {path.relative_to(REPO_ROOT).as_posix() for path in client_construction_paths} == {
+        "scripts/operations/transaction_processing_cutover_offsets.py",
+        "src/libs/portfolio-common/portfolio_common/health.py",
+        "src/libs/portfolio-common/portfolio_common/kafka_admin.py",
+        "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
+        "src/libs/portfolio-common/portfolio_common/kafka_utils.py",
+        "tools/kafka_setup.py",
+    }
