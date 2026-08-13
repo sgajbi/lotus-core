@@ -14,6 +14,12 @@ the application and runtime suites. The inventory records its immutable OCI inde
 `linux/amd64` child manifest and config digests, Docker Official Images source revision, CPython
 security-support phase, Debian Bookworm LTS posture, and exact-image Debian package-support check.
 
+Core also retains the bounded raw OCI index and runtime-manifest bytes in
+`contracts/security/base-image-manifest-evidence.v1.json`. The guard recomputes the parent and child
+SHA-256 digests, selects exactly one `linux/amd64` descriptor, and derives the config identity from
+the verified child document. Digest-shaped authored fields cannot independently authorize this
+chain.
+
 Availability in a multi-platform index is not treated as deployment support. The governed release
 target is `linux/amd64`; historical index entries for other platforms do not authorize production
 deployment. Python's upstream authority describes support through approximately October 2027, so
@@ -29,6 +35,8 @@ permitted platform, official-image membership, or upstream lifecycle changes.
 
 - all ten Core service Dockerfiles use the governed immutable base identity;
 - the `linux/amd64` child/config digest and attached-metadata distinction are explicit;
+- retained registry bytes hash to the governed parent/child identities and bind descriptor media
+  type, size, platform, child reference, and config digest;
 - CPython and Debian authorities remain current, each local cutoff is bounded by its upstream
   authority end date, and the earliest local cutoff owns release posture;
 - Docker Official Images source/registry authority is complete, credential-free HTTPS evidence and
@@ -52,6 +60,9 @@ No API/OpenAPI, migration, supported-feature, or platform-context update is requ
   unresolved target child digest, missing package-support proof, incomplete/credentialed identity
   authority, wrong-image verification, and local cutoffs beyond upstream authority;
 - scoped Ruff format/check;
+- adversarial evidence tests cover missing/malformed registry evidence, changed parent or child
+  bytes, missing platform selection, descriptor drift, config drift, and credentialed authority;
 - direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
+- online `update_base_image_manifest_evidence.py --check` against Docker Hub raw OCI bytes;
 - exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited
   installed-package finding on 2026-08-12.
