@@ -71,10 +71,18 @@ REQUIRED_RELEASE_WORKFLOW_SNIPPETS = (
     "--format cyclonedx",
     "-sbom.cdx.json",
     "cosign sign --yes",
+    "cosign verify",
+    "cosign attest --yes --type slsaprovenance",
+    "cosign verify-attestation",
+    "write_slsa_provenance_predicate",
     "write_image_release_manifest.py",
     '--image-digest "${{ steps.digest.outputs.image_digest }}"',
-    "--kubernetes-deploys-by-digest true",
-    "--promotion-environments dev uat prod",
+    "--scan-receipt",
+    "--authority-bundle",
+    "--signature-verification",
+    "--provenance-verification",
+    "--base-lifecycle-inventory",
+    "--base-manifest-evidence",
 )
 
 
@@ -266,6 +274,9 @@ def _release_workflow_findings(root: Path) -> list[ImageProvenanceFinding]:
         "Upload image scan policy receipt",
         "python -m scripts.release.image_scan_policy enforce",
         "cosign sign --yes",
+        "cosign verify",
+        "cosign attest --yes --type slsaprovenance",
+        "cosign verify-attestation",
         "write_image_release_manifest.py",
     )
     step_offsets = [workflow_content.find(step) for step in ordered_release_steps]

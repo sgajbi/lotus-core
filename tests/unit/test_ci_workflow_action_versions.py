@@ -515,10 +515,16 @@ def test_image_release_workflow_enforces_supply_chain_controls() -> None:
         "--format cyclonedx",
         "-sbom.cdx.json",
         "cosign sign --yes",
+        "cosign verify",
+        "cosign attest --yes --type slsaprovenance",
+        "cosign verify-attestation",
         "write_image_release_manifest.py",
         '--image-digest "${{ steps.digest.outputs.image_digest }}"',
-        "--kubernetes-deploys-by-digest true",
-        "--promotion-environments dev uat prod",
+        "--scan-receipt",
+        "--authority-bundle",
+        "--signature-verification",
+        "--provenance-verification",
+        "--base-lifecycle-inventory",
     )
 
     missing_terms = [term for term in required_terms if term not in workflow_text]
