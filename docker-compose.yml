@@ -60,6 +60,9 @@ services:
     depends_on:
       zookeeper:
         condition: service_healthy
+    # A recreated broker can race ZooKeeper's bounded expiry of the prior ephemeral session.
+    # Retry the unchanged broker startup; never delete broker registration or persistent data.
+    restart: "on-failure:5"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
