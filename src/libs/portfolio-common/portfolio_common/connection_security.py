@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from urllib.parse import unquote, urlsplit
 
 from portfolio_common.runtime_settings import (
     RuntimeConfigurationError,
     explicit_local_config_profile_enabled,
+    kafka_connection_security_settings,
     runtime_environment_name,
 )
 
 DEFAULT_LOCAL_PASSWORDS = frozenset({"password"})
-KAFKA_SECURITY_PROTOCOL_ENV = "KAFKA_SECURITY_PROTOCOL"
-KAFKA_SSL_CA_LOCATION_ENV = "KAFKA_SSL_CA_LOCATION"
-KAFKA_SASL_MECHANISM_ENV = "KAFKA_SASL_MECHANISM"
-KAFKA_SASL_USERNAME_ENV = "KAFKA_SASL_USERNAME"
-KAFKA_SASL_PASSWORD_ENV = "KAFKA_SASL_PASSWORD"
 KAFKA_SECURITY_PROTOCOLS = frozenset({"PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"})
 KAFKA_SASL_MECHANISMS = frozenset({"PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"})
 
@@ -53,7 +48,8 @@ def build_kafka_connection_config(
 ) -> dict[str, object]:
     """Build one validated librdkafka connection configuration for every Core client."""
 
-    protocol = os.getenv(KAFKA_SECURITY_PROTOCOL_ENV, "PLAINTEXT").strip().upper()
+    settings = kafka_connection_security_settings()
+    protocol = settings.security_protocol.strip().upper()
     if protocol not in KAFKA_SECURITY_PROTOCOLS:
         raise _kafka_security_error(service_name, "unsupported Kafka security protocol")
     if not explicit_local_config_profile_enabled() and protocol in {
@@ -71,12 +67,14 @@ def build_kafka_connection_config(
     }
     if protocol in {"SSL", "SASL_SSL"}:
         config["ssl.ca.location"] = _required_kafka_setting(
-            KAFKA_SSL_CA_LOCATION_ENV,
+            "KAFKA_SSL_CA_LOCATION",
+            settings.ssl_ca_location,
             service_name=service_name,
         )
     if protocol in {"SASL_PLAINTEXT", "SASL_SSL"}:
         mechanism = _required_kafka_setting(
-            KAFKA_SASL_MECHANISM_ENV,
+            "KAFKA_SASL_MECHANISM",
+            settings.sasl_mechanism,
             service_name=service_name,
         ).upper()
         if mechanism not in KAFKA_SASL_MECHANISMS:
@@ -85,11 +83,13 @@ def build_kafka_connection_config(
             {
                 "sasl.mechanism": mechanism,
                 "sasl.username": _required_kafka_setting(
-                    KAFKA_SASL_USERNAME_ENV,
+                    "KAFKA_SASL_USERNAME",
+                    settings.sasl_username,
                     service_name=service_name,
                 ),
                 "sasl.password": _required_kafka_setting(
-                    KAFKA_SASL_PASSWORD_ENV,
+                    "KAFKA_SASL_PASSWORD",
+                    settings.sasl_password,
                     service_name=service_name,
                 ),
             }
@@ -97,8 +97,8 @@ def build_kafka_connection_config(
     return config
 
 
-def _required_kafka_setting(name: str, *, service_name: str) -> str:
-    value = os.getenv(name, "").strip()
+def _required_kafka_setting(name: str, value: str, *, service_name: str) -> str:
+    value = value.strip()
     if not value:
         raise _kafka_security_error(service_name, f"required Kafka setting {name} is missing")
     return value
