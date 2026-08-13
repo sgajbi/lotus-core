@@ -275,12 +275,27 @@ def _validate_inventory_claims(inventory: dict[str, Any], components: list[dict[
         )
 
 
+def _validate_component_shapes(components: list[object]) -> list[dict[str, Any]]:
+    validated: list[dict[str, Any]] = []
+    for index, component in enumerate(components):
+        if not isinstance(component, dict):
+            raise InventoryValidationError(f"component {index} must be an object")
+        for field in ("license", "supportability"):
+            if not isinstance(component.get(field), dict):
+                raise InventoryValidationError(
+                    f"component {index} {field} evidence must be an object"
+                )
+        validated.append(component)
+    return validated
+
+
 def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> dict[str, Any]:
     inventory = json.loads(INVENTORY_FILE.read_text(encoding="utf-8"))
     _validate_inventory_provenance(inventory, as_of=as_of)
     components = inventory.get("components")
     if not isinstance(components, list):
         raise InventoryValidationError("dependency inventory components must be a list")
+    components = _validate_component_shapes(components)
     _validate_inventory_claims(inventory, components)
     policy = inventory["policy"]
     policy_path = ROOT / str(policy["path"])

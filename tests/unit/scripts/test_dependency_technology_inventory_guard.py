@@ -205,6 +205,32 @@ def test_inventory_technology_state_must_match_component_evidence(
 
 
 @pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda data: data["components"].__setitem__(0, None), "component 0 must be an object"),
+        (
+            lambda data: data["components"][0].__setitem__("license", None),
+            "component 0 license evidence must be an object",
+        ),
+        (
+            lambda data: data["components"][0].__setitem__("supportability", []),
+            "component 0 supportability evidence must be an object",
+        ),
+    ],
+)
+def test_malformed_component_shapes_fail_with_governed_error(
+    tmp_path: Path, monkeypatch, mutation, message: str
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    mutation(data)
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match=message):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     [
         ("schema_version", "lotus-core.dependency-technology-inventory.v0"),
@@ -541,3 +567,20 @@ def test_validation_failure_still_writes_fail_closed_receipt(tmp_path: Path, mon
     assert receipt["status"] == "failed"
     assert receipt["certification_decision"] == "unavailable"
     assert receipt["claim_boundary"]["release_certifying"] is False
+
+
+def test_malformed_component_still_writes_fail_closed_receipt(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["license"] = None
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+    output = tmp_path / "receipt.json"
+    monkeypatch.setattr(guard, "DEFAULT_OUTPUT", output)
+    monkeypatch.setattr(sys, "argv", ["guard", "--output", str(output)])
+
+    assert guard.main() == 1
+    receipt = json.loads(output.read_text(encoding="utf-8"))
+    assert receipt["status"] == "failed"
+    assert receipt["certification_decision"] == "unavailable"
+    assert receipt["failure_type"] == "InventoryValidationError"
+    assert receipt["failure"] == "component 0 license evidence must be an object"
