@@ -139,14 +139,7 @@ def test_locked_component_identity_is_stable_across_checkout_newlines(
     assert locks[0]["sha256"] == replayed_locks[0]["sha256"]
 
 
-def test_source_commit_is_stable_repository_baseline(tmp_path: Path, monkeypatch) -> None:
-    policy_file = tmp_path / "policy.json"
-    lock = tmp_path / "runtime.lock"
-    policy_file.write_text("{}\n", encoding="utf-8")
-    lock.write_text("demo==1.0\n", encoding="utf-8")
-    monkeypatch.setattr(inventory, "ROOT", tmp_path)
-    monkeypatch.setattr(inventory, "POLICY_FILE", policy_file)
-    monkeypatch.setattr(inventory, "LOCKS", (("runtime", "linux/amd64", lock),))
+def test_source_commit_is_stable_repository_baseline(monkeypatch) -> None:
     captured: list[str] = []
 
     def _run(command, **_kwargs):
