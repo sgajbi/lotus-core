@@ -35,8 +35,9 @@ that no runtime consumed them.
 ## Same-pattern review
 
 The scoped search covered every direct `Producer`, `Consumer`, and `AdminClient` construction in
-`src`, `tools`, and `scripts`; the operational offset-cutover client was the only bypass and was
-aligned. All shared synchronous and asynchronous database URL paths now validate before engine
+`src`, `tools`, and `scripts`. It found two bypasses: the operational offset-cutover client and the
+topic-provisioning client. Both now use the shared policy, including construction-time negative
+tests. All shared synchronous and asynchronous database URL paths validate before engine
 construction. No other Mongo runtime consumer exists. No API, OpenAPI, schema, migration, event,
 topic identity, partition count, dependency, framework, or technology version changed.
 
