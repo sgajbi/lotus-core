@@ -65,6 +65,13 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     inventory_file.write_text(
         json.dumps(
             {
+                "schema_version": guard.INVENTORY_SCHEMA_VERSION,
+                "inventory_id": guard.INVENTORY_ID,
+                "repository": guard.INVENTORY_REPOSITORY,
+                "governed_by_issue": guard.INVENTORY_ISSUE,
+                "generator": guard.INVENTORY_GENERATOR,
+                "source_commit": "c" * 40,
+                "generated_at_utc": "2026-08-12T00:00:00Z",
                 "claim_boundary": {
                     "bank_buyable_claim": False,
                     "popularity_based_approval": False,
@@ -132,6 +139,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     monkeypatch.setattr(guard, "ROOT", tmp_path)
     monkeypatch.setattr(guard, "INVENTORY_FILE", inventory_file)
     monkeypatch.setattr(guard, "_commit", lambda: "d" * 40)
+    monkeypatch.setattr(guard, "_commit_is_ancestor", lambda _candidate: True)
     return locks[0][0], inventory_file
 
 
@@ -193,6 +201,54 @@ def test_inventory_technology_state_must_match_component_evidence(
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     with pytest.raises(guard.InventoryValidationError, match="technology state contradicts"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", "lotus-core.dependency-technology-inventory.v0"),
+        ("inventory_id", "another-inventory"),
+        ("repository", "https://github.com/example/fork"),
+        ("governed_by_issue", "https://github.com/sgajbi/lotus-core/issues/1"),
+        ("generator", {"id": "uncontrolled-generator", "version": "1.0.0"}),
+    ],
+)
+def test_inventory_provenance_must_match_governed_identity(
+    tmp_path: Path, monkeypatch, field: str, value: object
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data[field] = value
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match=f"{field} provenance drift"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_inventory_source_commit_must_be_a_reachable_full_sha(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["source_commit"] = "not-a-sha"
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="must be a full SHA"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+    data["source_commit"] = "b" * 40
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(guard, "_commit_is_ancestor", lambda _candidate: False)
+    with pytest.raises(guard.InventoryValidationError, match="not an ancestor"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_inventory_generation_time_cannot_be_future_dated(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["generated_at_utc"] = "2026-08-13T00:00:00Z"
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="generation time is invalid"):
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
