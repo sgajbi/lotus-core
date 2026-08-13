@@ -10,6 +10,7 @@ from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_TOPIC_PARTITION_COUNTS,
 )
+from portfolio_common.connection_security import build_kafka_connection_config
 from portfolio_common.logging_utils import setup_logging
 
 # Setup basic logging for the tool
@@ -100,8 +101,7 @@ def _partition_mismatches(existing_topics: dict[str, object]) -> dict[str, dict[
 
 def main():
     """Main function to set up Kafka topics."""
-    conf = {"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS}
-    admin_client = AdminClient(conf)
+    admin_client = build_topic_admin_client()
 
     # Retry connecting to Kafka
     max_retries = 10
@@ -127,6 +127,17 @@ def main():
 
     create_topics(admin_client)
     logger.info("Kafka topic setup complete.")
+
+
+def build_topic_admin_client() -> AdminClient:
+    """Construct the topic administrator through the shared transport-security boundary."""
+
+    return AdminClient(
+        build_kafka_connection_config(
+            KAFKA_BOOTSTRAP_SERVERS,
+            service_name="Kafka topic provisioning",
+        )
+    )
 
 
 if __name__ == "__main__":
