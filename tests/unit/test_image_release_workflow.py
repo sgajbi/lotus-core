@@ -181,6 +181,51 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     assert "--enforced-at" in str(steps[enforce_index]["run"])
 
 
+def test_manifest_consumes_verified_same_artifact_evidence() -> None:
+    steps = _steps()
+    names = [step.get("name") for step in steps]
+    ordered = [
+        "Enforce image vulnerability and secret policy",
+        "Export image SBOM",
+        "Sign image digest",
+        "Verify image signature identity",
+        "Attest source-bound SLSA provenance",
+        "Verify signed provenance identity",
+        "Write image release manifest",
+    ]
+
+    assert [names.index(name) for name in ordered] == sorted(names.index(name) for name in ordered)
+    manifest = str(_step("Write image release manifest")["run"])
+    for required in (
+        "--scan-receipt",
+        "--authority-bundle",
+        "--sbom",
+        "--signature-verification",
+        "--provenance-verification",
+        "--base-lifecycle-inventory",
+        "--base-manifest-evidence",
+        "--dockerfile",
+    ):
+        assert required in manifest
+    for removed_assertion in (
+        "--sbom-generated",
+        "--vulnerability-scan-status",
+        "--image-signed",
+        "--provenance-attestation-generated",
+        "--promotion-environments",
+    ):
+        assert removed_assertion not in manifest
+
+
+def test_candidate_workflow_does_not_claim_unperformed_environment_promotion() -> None:
+    names = [step.get("name") for step in _steps()]
+    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "Render immutable Kubernetes release" not in names
+    assert "--promotion-environments dev uat prod" not in workflow_text
+    assert "${{ matrix.service }}-kubernetes.yaml" not in workflow_text
+
+
 def test_scan_receipt_upload_is_fail_closed_and_runs_after_failed_generation() -> None:
     upload = _step("Upload image scan policy receipt")
 

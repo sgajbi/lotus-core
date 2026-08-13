@@ -297,6 +297,52 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: cosign sign --yes "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
+      - name: Verify image signature identity
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        shell: bash
+        run: |
+          certificate_issuer="https://token.actions.githubusercontent.com"
+          certificate_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}"
+          cosign verify \
+            --certificate-identity "${certificate_identity}" \
+            --certificate-oidc-issuer "${certificate_issuer}" \
+            --output json \
+            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}" \
+            > "output/build-evidence/${{ matrix.service }}-signature-verification.json"
+      - name: Attest source-bound SLSA provenance
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        shell: bash
+        run: |
+          predicate="output/build-evidence/${{ matrix.service }}-slsa-provenance-predicate.json"
+          python -m scripts.release.write_slsa_provenance_predicate \
+            --repository "${GITHUB_REPOSITORY}" \
+            --repository-url "${{ steps.meta.outputs.repo_url }}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --workflow-ref "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}" \
+            --service "${{ matrix.service }}" \
+            --dockerfile "${{ matrix.dockerfile }}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --buildx-metadata "output/build-evidence/${{ matrix.service }}-buildx-metadata.json" \
+            --output "${predicate}"
+          cosign attest --yes --type slsaprovenance --predicate "${predicate}" \
+            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
+      - name: Verify signed provenance identity
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        shell: bash
+        run: |
+          certificate_issuer="https://token.actions.githubusercontent.com"
+          certificate_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}"
+          cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity "${certificate_identity}" \
+            --certificate-oidc-issuer "${certificate_issuer}" \
+            --output json \
+            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}" \
+            > "output/build-evidence/${{ matrix.service }}-provenance-verification.json"
       - name: Write image release manifest
         run: |
           python scripts/release/write_image_release_manifest.py \
@@ -310,21 +356,20 @@ jobs:
             --image-version "${GITHUB_SHA}" \
             --build-timestamp "${{ steps.meta.outputs.build_timestamp }}" \
             --repo-url "${{ steps.meta.outputs.repo_url }}" \
+            --repository "${GITHUB_REPOSITORY}" \
             --ci-pipeline-run-id "${GITHUB_RUN_ID}" \
-            --sbom-generated true \
-            --vulnerability-scan-status passed \
-            --image-signed true \
-            --provenance-attestation-generated true \
-            --kubernetes-deploys-by-digest true \
-            --promotion-environments dev uat prod \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --scan-receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
+            --authority-bundle "output/vulnerability-authority/vulnerability-authority-bundle.json" \
+            --sbom "output/build-evidence/${{ matrix.service }}-sbom.cdx.json" \
+            --signature-verification "output/build-evidence/${{ matrix.service }}-signature-verification.json" \
+            --provenance-verification "output/build-evidence/${{ matrix.service }}-provenance-verification.json" \
+            --certificate-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-subject-pattern "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}" \
+            --base-lifecycle-inventory "contracts/security/base-image-lifecycle-inventory.v1.json" \
+            --base-manifest-evidence "contracts/security/base-image-manifest-evidence.v1.json" \
+            --dockerfile "${{ matrix.dockerfile }}" \
             --output "output/build-evidence/${{ matrix.service }}-image-release-manifest.json"
-      - name: Render immutable Kubernetes release
-        if: ${{ matrix.service == 'portfolio_transaction_processing_service' || matrix.service == 'portfolio_derived_state_service' }}
-        run: |
-          python scripts/release/render_release_deployment.py \
-            --service "${{ matrix.service }}" \
-            --release-manifest "output/build-evidence/${{ matrix.service }}-image-release-manifest.json" \
-            --output "output/build-evidence/${{ matrix.service }}-kubernetes.yaml"
       - name: Upload image release evidence
         uses: actions/upload-artifact@v7
         with:
@@ -333,7 +378,9 @@ jobs:
             output/build-evidence/${{ matrix.service }}-buildx-metadata.json
             output/build-evidence/${{ matrix.service }}-digest-ref.txt
             output/build-evidence/${{ matrix.service }}-sbom.cdx.json
-            output/build-evidence/${{ matrix.service }}-kubernetes.yaml
+            output/build-evidence/${{ matrix.service }}-signature-verification.json
+            output/build-evidence/${{ matrix.service }}-slsa-provenance-predicate.json
+            output/build-evidence/${{ matrix.service }}-provenance-verification.json
             output/build-evidence/${{ matrix.service }}-image-release-manifest.json
           if-no-files-found: error
           retention-days: 90
