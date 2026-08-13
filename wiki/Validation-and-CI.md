@@ -97,17 +97,18 @@ polling records the reason and stops without another wait cycle.
 The manifest identifies Git commit, branch, repository, CI run, generated-at time, service image
 IDs, Dockerfile hashes, Compose hash, dependency-lock hash, dependency-closure hash, bundle digest,
 and manifest content hash. Release publication remains separate: only Image Release pushes to GHCR,
-scans and signs images, emits attestations/SBOMs, and records digest-based promotion evidence.
+scans and signs images, emits attestations/SBOMs, and writes evidence-bound candidate manifests.
 Image Release uploads a separate versioned `image-scan-policy-<service>-attempt-<run-attempt>` receipt before
 enforcing each immutable image decision. The receipt retains normalized Low, Medium, High, and
 Critical finding identities and counts. Unknown severity is retained as an actionable,
-non-exceptionable blocked finding rather than being collapsed into unavailable evidence. A
-A Medium, High, or Critical vulnerability or secret finding blocks all later
+non-exceptionable blocked finding rather than being collapsed into unavailable evidence. A Medium,
+High, or Critical vulnerability or secret finding blocks all later
 SBOM-export, signing, release-manifest, and deployment-rendering steps but preserves the secret-safe
 receipt for remediation. Missing, malformed, wrong-digest, and inconsistent receipts fail closed;
 a retained blocked receipt is not release certification.
-Each scan receipt also binds a freshly fetched official CISA KEV catalog version, release/fetch
-times, entry count, and source digest. Known-exploited findings block at every severity. Missing,
+One workflow-attempt authority bundle binds a freshly fetched official CISA KEV catalog version,
+release/fetch times, entry count, source digest, and the pinned Platform exception-schema identity.
+All 13 image jobs consume the same bundle. Known-exploited findings block at every severity. Missing,
 malformed, below-baseline, stale, or unclassifiable exploitation evidence fails closed; Core never
 infers KEV status from package name or severity. HTTPS-only redirects prevent source downgrade;
 the reviewed completeness and anti-rollback boundary lives in
@@ -116,8 +117,9 @@ Fetch, scan, or evaluation failure still uploads an exact-source, secret-safe re
 and enforcement rejects evidence older than 30 minutes or materially future-dated.
 Receipts also bind the Core exception-register digest and its source-pinned Platform schema
 authority. Medium, High, Critical, KEV, and unclassified exploitation findings remain blocking.
-Exact exception records retain ownership evidence but cannot authorize release until the workflow
-can rescan the same immutable artifact without rebuilding it. The default register is empty, and
+Exact exception records retain ownership evidence but cannot authorize release. Enforcement
+reopens the retained report and authority files against the same immutable digest before signing
+and again at the manifest boundary. The default register is empty, and
 `make image-provenance-guard` rejects malformed ownership/approval/evidence, expiry, permanent
 suppression, and wrong digest/advisory/severity matches.
 The same command enforces the authored base-image lifecycle inventory. Core-built service images
@@ -140,8 +142,12 @@ non-certifying claims, repository/issue/generator identity, a reachable `origin/
 baseline plus exact lock/policy digests,
 and a non-future generation timestamp. Its receipt binds the exact execution SHA. A blocked receipt
 does not authorize production use or assert bank readiness.
-Image publication, signing, release manifests, deployment rendering, and promotion eligibility are
-limited to `main` and `v*` tags. Manual feature dispatch builds only runner-local images and retains
+Release manifest v2 binds the passed scan/authority receipt, CycloneDX bytes, Cosign GitHub Actions
+certificate identity, signed SLSA subject, and governed `linux/amd64` base identities to one image
+digest. It emits candidate posture and no promotions unless independent environment receipts exist;
+the candidate workflow does not render a deployment. Image publication, signing, attestation, and
+candidate manifests are limited to `main` and `v*` tags. Manual feature dispatch builds only
+runner-local images and retains
 normalized `diagnostic` scan receipts under read-only permissions. Diagnostic evidence cannot be
 used by release enforcement and does not replace protected PR or exact-main proof.
 
@@ -240,8 +246,9 @@ used by release enforcement and does not replace protected PR or exact-main proo
   protects layering and repository boundary posture
 - `make image-provenance-guard`
   protects OCI image labels, CI build args, CI-only image publication, Git SHA image tags, digest
-  release manifests, SBOM/provenance/signing/scan controls, digest-based Kubernetes references,
-  same-image promotion evidence, no-build-secret posture, and the shared `/version` endpoint
+  release manifests, shared vulnerability authority, SBOM/provenance/signing/scan evidence binding,
+  truthful candidate-versus-promotion posture, digest-based Kubernetes references,
+  no-build-secret posture, and the shared `/version` endpoint
 - `make supported-features-guard`
   protects `docs/features/supported-features.md` and `wiki/Supported-Features.md` against unsupported
   capability claims, missing evidence links, stale feature status, and missing fail-closed or
