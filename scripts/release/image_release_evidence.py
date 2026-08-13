@@ -1,0 +1,196 @@
+"""Validate same-artifact image evidence before release-manifest construction."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+SCHEMA_VERSION = "lotus-core.image-release-evidence.v1"
+SLSA_PROVENANCE_PREDICATE_TYPES = {
+    "https://slsa.dev/provenance/v0.2",
+    "https://slsa.dev/provenance/v1",
+}
+
+
+class ImageReleaseEvidenceError(ValueError):
+    """Raised when release evidence is missing, malformed, or artifact-mismatched."""
+
+
+def _json(path: Path, *, name: str) -> tuple[bytes, Any]:
+    try:
+        content = path.read_bytes()
+        value = json.loads(content.decode("utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ImageReleaseEvidenceError(f"cannot read {name}") from exc
+    return content, value
+
+
+def _sha256(content: bytes) -> str:
+    return "sha256:" + hashlib.sha256(content).hexdigest()
+
+
+def _object(value: Any, *, name: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ImageReleaseEvidenceError(f"{name} must be an object")
+    return value
+
+
+def _array(value: Any, *, name: str) -> list[Any]:
+    if not isinstance(value, list) or not value:
+        raise ImageReleaseEvidenceError(f"{name} must be a non-empty array")
+    return value
+
+
+def _validate_subject(*, image_ref: str, image_digest: str) -> None:
+    if not image_ref.strip():
+        raise ImageReleaseEvidenceError("image ref is required")
+    if not SHA256_PATTERN.fullmatch(image_digest):
+        raise ImageReleaseEvidenceError("image digest must be a sha256 digest")
+
+
+def sbom_identity(path: Path, *, image_ref: str, image_digest: str) -> dict[str, Any]:
+    """Validate a non-empty CycloneDX document and bind its bytes to the subject."""
+    _validate_subject(image_ref=image_ref, image_digest=image_digest)
+    content, raw = _json(path, name="CycloneDX SBOM")
+    sbom = _object(raw, name="CycloneDX SBOM")
+    if sbom.get("bomFormat") != "CycloneDX":
+        raise ImageReleaseEvidenceError("SBOM must use CycloneDX")
+    spec_version = sbom.get("specVersion")
+    if not isinstance(spec_version, str) or not spec_version.strip():
+        raise ImageReleaseEvidenceError("SBOM spec version is required")
+    components = sbom.get("components")
+    if not isinstance(components, list) or not components:
+        raise ImageReleaseEvidenceError("SBOM must contain components")
+    return {
+        "media_type": "application/vnd.cyclonedx+json",
+        "sha256": _sha256(content),
+        "bom_format": "CycloneDX",
+        "spec_version": spec_version,
+        "component_count": len(components),
+        "subject": {"image_ref": image_ref, "image_digest": image_digest},
+    }
+
+
+def signature_verification_identity(
+    path: Path, *, image_ref: str, image_digest: str
+) -> dict[str, Any]:
+    """Validate Cosign verification output for exactly the target digest."""
+    _validate_subject(image_ref=image_ref, image_digest=image_digest)
+    content, raw = _json(path, name="Cosign signature verification")
+    entries = _array(raw, name="Cosign signature verification")
+    identities: list[dict[str, str]] = []
+    for entry in entries:
+        item = _object(entry, name="Cosign signature entry")
+        critical = _object(item.get("critical"), name="Cosign critical identity")
+        image = _object(critical.get("image"), name="Cosign image identity")
+        identity = _object(critical.get("identity"), name="Cosign repository identity")
+        if image.get("docker-manifest-digest") != image_digest:
+            raise ImageReleaseEvidenceError("signature verification image digest drifted")
+        if identity.get("docker-reference") != image_ref:
+            raise ImageReleaseEvidenceError("signature verification image ref drifted")
+        optional = _object(item.get("optional"), name="Cosign optional claims")
+        issuer = optional.get("Issuer") or optional.get("issuer")
+        subject = optional.get("Subject") or optional.get("subject")
+        if not isinstance(issuer, str) or not issuer.strip():
+            raise ImageReleaseEvidenceError("signature verification issuer is required")
+        if not isinstance(subject, str) or not subject.strip():
+            raise ImageReleaseEvidenceError("signature verification subject is required")
+        identities.append({"issuer": issuer, "subject": subject})
+    return {
+        "media_type": "application/vnd.dev.cosign.simplesigning.v1+json",
+        "sha256": _sha256(content),
+        "verification_count": len(entries),
+        "certificate_identities": identities,
+        "subject": {"image_ref": image_ref, "image_digest": image_digest},
+    }
+
+
+def provenance_verification_identity(
+    path: Path, *, image_ref: str, image_digest: str
+) -> dict[str, Any]:
+    """Validate signed DSSE provenance subjects against the exact image digest."""
+    _validate_subject(image_ref=image_ref, image_digest=image_digest)
+    content, raw = _json(path, name="Cosign provenance verification")
+    entries = _array(raw, name="Cosign provenance verification")
+    predicate_types: set[str] = set()
+    digest_hex = image_digest.removeprefix("sha256:")
+    for entry in entries:
+        envelope = _object(entry, name="Cosign provenance envelope")
+        payload = envelope.get("payload")
+        if not isinstance(payload, str) or not payload:
+            raise ImageReleaseEvidenceError("provenance envelope payload is required")
+        try:
+            statement = json.loads(base64.b64decode(payload, validate=True))
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ImageReleaseEvidenceError("provenance payload is invalid") from exc
+        statement = _object(statement, name="provenance statement")
+        predicate_type = statement.get("predicateType")
+        if predicate_type not in SLSA_PROVENANCE_PREDICATE_TYPES:
+            raise ImageReleaseEvidenceError("provenance predicate type must be SLSA provenance")
+        subjects = statement.get("subject")
+        if not isinstance(subjects, list) or not any(
+            isinstance(subject, dict)
+            and isinstance(subject.get("digest"), dict)
+            and subject["digest"].get("sha256") == digest_hex
+            for subject in subjects
+        ):
+            raise ImageReleaseEvidenceError("provenance subject digest drifted")
+        predicate_types.add(predicate_type)
+    return {
+        "media_type": "application/vnd.dsse.envelope.v1+json",
+        "sha256": _sha256(content),
+        "verification_count": len(entries),
+        "predicate_types": sorted(predicate_types),
+        "subject": {"image_ref": image_ref, "image_digest": image_digest},
+    }
+
+
+def base_image_evidence_identity(
+    *, inventory_path: Path, manifest_path: Path, dockerfile_path: str
+) -> dict[str, Any]:
+    """Bind lifecycle and linux/amd64 manifest evidence to the target Dockerfile."""
+    inventory_content, inventory_raw = _json(inventory_path, name="base lifecycle inventory")
+    manifest_content, manifest_raw = _json(manifest_path, name="base manifest evidence")
+    inventory = _object(inventory_raw, name="base lifecycle inventory")
+    manifest = _object(manifest_raw, name="base manifest evidence")
+    if inventory.get("schema_version") != "lotus-core.base-image-lifecycle-inventory.v1":
+        raise ImageReleaseEvidenceError("base lifecycle inventory version is invalid")
+    if manifest.get("schema_version") != "lotus-core.base-image-manifest-evidence.v1":
+        raise ImageReleaseEvidenceError("base manifest evidence version is invalid")
+    candidates = inventory.get("base_images")
+    if not isinstance(candidates, list):
+        raise ImageReleaseEvidenceError("base lifecycle inventory images are invalid")
+    matches = [
+        item
+        for item in candidates
+        if isinstance(item, dict) and dockerfile_path in item.get("covered_dockerfiles", [])
+    ]
+    if len(matches) != 1:
+        raise ImageReleaseEvidenceError("Dockerfile must map to exactly one base image")
+    base = matches[0]
+    platform = manifest.get("deployment_platform")
+    runtime_manifest = manifest.get("runtime_manifest")
+    if platform != base.get("deployment_platform") or platform != "linux/amd64":
+        raise ImageReleaseEvidenceError("base-image deployment architecture drifted")
+    if not isinstance(runtime_manifest, dict):
+        raise ImageReleaseEvidenceError("base runtime manifest identity is missing")
+    if runtime_manifest.get("digest") != base.get("resolved_manifest_digest"):
+        raise ImageReleaseEvidenceError("base runtime manifest digest drifted")
+    if runtime_manifest.get("config_digest") != base.get("config_digest"):
+        raise ImageReleaseEvidenceError("base runtime config digest drifted")
+    if manifest.get("image") != base.get("image"):
+        raise ImageReleaseEvidenceError("base image identity drifted")
+    return {
+        "inventory_sha256": _sha256(inventory_content),
+        "manifest_evidence_sha256": _sha256(manifest_content),
+        "dockerfile": dockerfile_path,
+        "base_image": base["image"],
+        "deployment_platform": platform,
+        "runtime_manifest_digest": runtime_manifest["digest"],
+        "config_digest": runtime_manifest["config_digest"],
+    }
