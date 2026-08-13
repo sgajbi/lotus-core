@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1689 vulnerability authority and release evidence binding (2026-08-14): #928/#720 review found
+that 13 image jobs could fetch different vulnerability authorities and that release manifest v1
+accepted boolean SBOM/scan/signature/provenance/promotion assertions without inspecting evidence.
+One digest-bound CISA KEV plus Platform exception-schema bundle now governs an exact workflow
+attempt. Scan receipt v6 binds that bundle to the exact report and image; enforcement reopens all
+decisive files and repeats at the manifest boundary. Manifest v2 validates the CycloneDX bytes,
+Cosign workflow certificate identity, signed SLSA subject, and governed linux/amd64 base identities.
+Candidate builds no longer fabricate dev/UAT/prod promotions or render deployments. #720 remains
+open for real same-image deployment and rollback receipts. Evidence and compatibility details:
+[CR-1689-VULNERABILITY-AUTHORITY-AND-RELEASE-EVIDENCE.md](./codebase-reviews/CR-1689-VULNERABILITY-AUTHORITY-AND-RELEASE-EVIDENCE.md).
+
 CR-1688 release-exception fail-closed review (2026-08-12): late PR #944 review proved that an
 approved exception could incorrectly override High/Critical policy and that even a Medium
 digest-bound exception could not authorize the originally scanned artifact through a rebuild-only

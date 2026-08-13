@@ -1052,8 +1052,10 @@ Most relevant current governance:
     `scripts/release/prebuild_ci_images.py` supplies build args and timing evidence in CI,
     `scripts/release/runtime_image_set.py` owns ephemeral cross-job transport and exact-source
     verification, and `scripts/release/write_build_provenance.py` records matching build evidence.
-    `.github/workflows/image-release.yml` remains the only image-push path. Before signing or
-    promotion evidence, it uses `scripts/release/image_scan_policy.py` to convert Trivy's
+    `.github/workflows/image-release.yml` remains the only image-push path. One preparation job
+    validates and digest-binds CISA KEV plus the pinned Platform exception schema to the exact
+    workflow attempt; all 13 image jobs consume that same authority. Before signing, it uses
+    `scripts/release/image_scan_policy.py` to convert Trivy's
     immutable-digest vulnerability and secret scan into a secret-safe policy receipt, uploads one
     service-specific receipt even when enforcement blocks. Receipts retain normalized
     UNKNOWN/LOW/MEDIUM/HIGH/CRITICAL identities and counts. UNKNOWN severity remains an actionable,
@@ -1072,13 +1074,15 @@ Most relevant current governance:
     `contracts/security/vulnerability-exception-register.v1.json`, validated against the pinned
     Platform schema authority. The register is empty by default. Exact digest/advisory/severity,
     approved, unexpired, owned records are retained as remediation evidence but cannot authorize a
-    release until the workflow can re-evaluate that same scanned digest without rebuilding it.
+    release. Enforcement reopens the retained report and authority files against the same immutable
+    digest both before signing and again at the manifest boundary.
     Medium, High, Critical, KEV, and unclassified findings therefore remain blocking. This adds no
     runtime dependency.
-    After enforcement passes,
-    `scripts/release/write_image_release_manifest.py` records digest, OCI label parity, SBOM, scan,
-    signing, provenance-attestation, digest-deploy, and same-image-promotion evidence across `dev`,
-    `uat`, and `prod`. `make image-provenance-guard` blocks drift,
+    After enforcement passes, `scripts/release/write_image_release_manifest.py` v2 validates and
+    binds the exact digest to the scan/authority receipt, CycloneDX bytes, Cosign GitHub Actions
+    certificate identity, signed SLSA subject, and governed linux/amd64 base identities. A build is
+    a candidate only: the workflow records no `dev`/`uat`/`prod` promotion and renders no deployment
+    without independent environment receipts. `make image-provenance-guard` blocks drift,
     including secret-like Dockerfile/workflow build ARG or ENV additions. Local builds may report
     `LOTUS_IMAGE_DIGEST=unknown` until a release lane or deploy manifest supplies the resolved
     digest.
@@ -1167,8 +1171,9 @@ Most relevant current governance:
     Governed authority review and a reviewed preservation workflow remain required before any
     component can become `reviewed`; always inspect the machine diff and rerun both inventory and
     certification guards.
-    Image Release trust is separately bounded: only `main` and `v*` tags may push, sign, export
-    release SBOMs, write release manifests, render deployments, or declare promotion eligibility.
+    Image Release trust is separately bounded: only `main` and `v*` tags may push, sign, attest,
+    export release SBOMs, or write candidate release manifests. Candidate creation does not prove
+    environment deployment or same-image promotion.
     Feature-ref `workflow_dispatch` has read-only permissions, builds runner-local images, and emits
     posture-bound `diagnostic` scan receipts that release enforcement must reject.
 50. Cost-calculator persistence boundaries must strip event-envelope fields before transaction-table
