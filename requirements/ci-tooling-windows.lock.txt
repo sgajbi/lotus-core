@@ -28,7 +28,7 @@ certifi==2026.2.25
     #   httpcore
     #   httpx
     #   requests
-charset-normalizer==3.4.9
+charset-normalizer==3.5.0
     # via requests
 click==8.4.2
     # via
@@ -49,7 +49,7 @@ coverage==7.15.1
     # via
     #   -r requirements/ci-tooling.in
     #   pytest-cov
-cyclonedx-python-lib==11.11.1
+cyclonedx-python-lib==11.12.0
     # via pip-audit
 defusedxml==0.7.1
     # via py-serializable
