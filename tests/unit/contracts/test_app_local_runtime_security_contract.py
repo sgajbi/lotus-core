@@ -59,3 +59,12 @@ def test_app_local_postgres_defaults_remain_scoped_to_app_local_composition() ->
     assert compose["x-lotus-stack-contract"]["stack_classification"] == "app-local"
     assert postgres_environment["POSTGRES_USER"] == "${POSTGRES_USER:-user}"
     assert postgres_environment["POSTGRES_PASSWORD"] == "${POSTGRES_PASSWORD:-password}"
+
+
+def test_kafka_retries_bounded_startup_without_mutating_zookeeper_state() -> None:
+    kafka = _compose()["services"]["kafka"]
+
+    assert kafka["restart"] == "on-failure:5"
+    assert "entrypoint" not in kafka
+    assert "command" not in kafka
+    assert "volumes" not in kafka
