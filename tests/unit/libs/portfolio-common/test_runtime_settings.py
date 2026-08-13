@@ -9,9 +9,38 @@ from portfolio_common.runtime_settings import (
     env_int,
     env_json_map,
     env_optional_str,
+    explicit_local_config_profile_enabled,
     production_security_profile_enabled,
+    runtime_environment_name,
     strict_config_validation_enabled,
 )
+
+
+@pytest.mark.parametrize("environment", ["local", "dev", "development", "test", " LOCAL "])
+def test_explicit_local_profile_requires_a_named_local_environment(
+    monkeypatch, environment: str
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+
+    assert explicit_local_config_profile_enabled() is True
+
+
+@pytest.mark.parametrize("environment", [None, "", "staging", "uat", "production", "custom"])
+def test_explicit_local_profile_rejects_missing_and_non_local_environments(
+    monkeypatch, environment: str | None
+) -> None:
+    if environment is None:
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("ENVIRONMENT", environment)
+
+    assert explicit_local_config_profile_enabled() is False
+
+
+def test_runtime_environment_name_does_not_invent_local_authority(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+    assert runtime_environment_name() == ""
 
 
 def test_optional_string_preserves_missing_and_blank_values(monkeypatch) -> None:
