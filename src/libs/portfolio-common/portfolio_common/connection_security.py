@@ -82,12 +82,12 @@ def build_kafka_connection_config(
         config.update(
             {
                 "sasl.mechanism": mechanism,
-                "sasl.username": _required_kafka_setting(
+                "sasl.username": _required_kafka_secret(
                     "KAFKA_SASL_USERNAME",
                     settings.sasl_username,
                     service_name=service_name,
                 ),
-                "sasl.password": _required_kafka_setting(
+                "sasl.password": _required_kafka_secret(
                     "KAFKA_SASL_PASSWORD",
                     settings.sasl_password,
                     service_name=service_name,
@@ -100,6 +100,12 @@ def build_kafka_connection_config(
 def _required_kafka_setting(name: str, value: str, *, service_name: str) -> str:
     value = value.strip()
     if not value:
+        raise _kafka_security_error(service_name, f"required Kafka setting {name} is missing")
+    return value
+
+
+def _required_kafka_secret(name: str, value: str, *, service_name: str) -> str:
+    if not value.strip():
         raise _kafka_security_error(service_name, f"required Kafka setting {name} is missing")
     return value
 

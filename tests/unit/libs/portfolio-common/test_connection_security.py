@@ -151,6 +151,34 @@ def test_sasl_ssl_kafka_requires_and_maps_secret_sourced_credentials(monkeypatch
     }
 
 
+def test_sasl_ssl_kafka_preserves_credential_whitespace(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "SASL_SSL")
+    monkeypatch.setenv("KAFKA_SSL_CA_LOCATION", "/run/secrets/kafka-ca.pem")
+    monkeypatch.setenv("KAFKA_SASL_MECHANISM", "SCRAM-SHA-512")
+    monkeypatch.setenv("KAFKA_SASL_USERNAME", " core-service ")
+    monkeypatch.setenv("KAFKA_SASL_PASSWORD", " secret-value ")
+
+    config = build_kafka_connection_config("kafka:9093", service_name="test-service")
+
+    assert config["sasl.username"] == " core-service "
+    assert config["sasl.password"] == " secret-value "
+
+
+@pytest.mark.parametrize("name", ["KAFKA_SASL_USERNAME", "KAFKA_SASL_PASSWORD"])
+def test_sasl_ssl_kafka_rejects_whitespace_only_credentials(monkeypatch, name: str) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "SASL_SSL")
+    monkeypatch.setenv("KAFKA_SSL_CA_LOCATION", "/run/secrets/kafka-ca.pem")
+    monkeypatch.setenv("KAFKA_SASL_MECHANISM", "SCRAM-SHA-512")
+    monkeypatch.setenv("KAFKA_SASL_USERNAME", "core-service")
+    monkeypatch.setenv("KAFKA_SASL_PASSWORD", "secret-value")
+    monkeypatch.setenv(name, "   ")
+
+    with pytest.raises(RuntimeConfigurationError, match=f"{name} is missing"):
+        build_kafka_connection_config("kafka:9093", service_name="test-service")
+
+
 def test_kafka_security_error_does_not_disclose_sasl_secret(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "SASL_SSL")
