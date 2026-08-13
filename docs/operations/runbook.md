@@ -168,40 +168,48 @@ lane:
 2. adds OCI labels for commit, branch, repo URL, image version, build time, and CI run ID,
 3. pushes images to GHCR from CI only,
 4. captures the resolved image digest in a release manifest and runtime metadata,
-5. fetches the authoritative CISA Known Exploited Vulnerabilities catalog over HTTPS-only redirects, validates it against the reviewed completeness floor in
+5. fetches the authoritative CISA Known Exploited Vulnerabilities catalog once per workflow attempt
+   over HTTPS-only redirects, validates it against the reviewed completeness floor in
    `contracts/security/cisa-kev-authority-policy.v1.json`, binds its
    version, release/fetch times, entry count, and source digest into the receipt, and blocks a KEV
-   finding regardless of scanner severity,
+   finding regardless of scanner severity; the same digest-bound bundle also contains the pinned
+   Platform exception-schema identity and is shared unchanged by all 13 image jobs,
 6. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
    scanning and uploads it before enforcing the release decision,
 7. retains normalized Low and Medium finding identities/counts for governance and fails on Medium,
    High, or Critical vulnerability or secret findings; exact exception records remain ownership
-   evidence but cannot authorize release until the workflow can rescan the same immutable artifact,
+   evidence but cannot authorize release,
 8. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
    after scan enforcement passes,
-9. signs the digest reference with Cosign only after scan enforcement passes,
-10. records digest-based Kubernetes deployment and same-image promotion evidence across `dev`,
-   `uat`, and `prod`, and
+9. signs the digest reference with Cosign, verifies the GitHub Actions certificate identity, emits
+   and verifies source-bound SLSA provenance, then re-enforces the retained scan evidence against
+   the same digest,
+10. writes a candidate manifest from the verified scan, authority, SBOM, signature, provenance, and
+    governed `linux/amd64` base identities; it records no environment promotion without receipts,
+    and
 11. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
    `make image-provenance-guard`.
 
-Publication, signing, SBOM export, release manifests, deployment rendering, and promotion
-eligibility are limited to `main` and `v*` tags. `workflow_dispatch` on an exact feature SHA builds
+Publication, signing, SBOM export, and candidate release manifests are limited to `main` and `v*`
+tags. Deployment rendering requires separate completed promotion evidence and is not performed by
+the candidate workflow. `workflow_dispatch` on an exact feature SHA builds
 each governed service image only in the runner-local Docker store and uploads a normalized
 `diagnostic` scan receipt. It has read-only repository permissions, cannot push or sign images, and
 cannot emit release or promotion evidence. A passing diagnostic receipt is branch-qualified
 pre-merge evidence only; it does not make the branch releasable or replace protected PR and
 exact-main validation.
 
-Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v5` receipt as
+Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v6` receipt as
 `image-scan-policy-<service>-attempt-<run-attempt>` even when the
 policy blocks. The receipt binds the repository, exact commit, workflow run and attempt, service,
 immutable image digest,
-scanner identity, scan time, source-report digest, normalized finding identities, and decision. It
+scanner identity, scan time, source-report digest, shared authority-bundle digest, normalized
+finding identities, and decision. It
 never copies a secret match or source-code excerpt from Trivy. A missing, malformed, wrong-digest,
 or inconsistent receipt fails closed. UNKNOWN vulnerability or secret severity is retained as a
 normalized, non-exceptionable blocked finding so operators receive the advisory/component identity;
-it is not mislabeled as scanner unavailability. The CISA KEV feed is fetched immediately before scanning;
+it is not mislabeled as scanner unavailability. The CISA KEV feed is fetched once immediately
+before the image matrix;
 missing, malformed, empty, wrong-title, duplicate-CVE, future-dated, below-baseline, or replayed
 pre-baseline catalog
 evidence fails closed. Fetch, scan, and evaluation failures produce a bounded reason-code receipt
