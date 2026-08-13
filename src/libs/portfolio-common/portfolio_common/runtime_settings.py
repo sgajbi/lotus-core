@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
 PRODUCTION_SECURITY_PROFILE_ENV = "LOTUS_CORE_PRODUCTION_SECURITY_PROFILE"
 LOCAL_CONFIG_ENVIRONMENTS = {"", "local", "dev", "development", "test"}
+EXPLICIT_LOCAL_CONFIG_ENVIRONMENTS = {"local", "dev", "development", "test"}
 PRODUCTION_SECURITY_ENVIRONMENTS = {
     "prod",
     "production",
@@ -28,11 +29,23 @@ class RuntimeConfigurationError(ValueError):
     """Raised when strict runtime configuration validation rejects an env value."""
 
 
+def runtime_environment_name() -> str:
+    """Return the normalized runtime environment without inventing profile authority."""
+
+    return os.getenv("ENVIRONMENT", "").strip().lower()
+
+
+def explicit_local_config_profile_enabled() -> bool:
+    """Return whether an explicit local/dev/test profile authorizes local-only defaults."""
+
+    return runtime_environment_name() in EXPLICIT_LOCAL_CONFIG_ENVIRONMENTS
+
+
 def strict_config_validation_enabled() -> bool:
     raw = os.getenv(STRICT_CONFIG_VALIDATION_ENV)
     if raw is not None:
         return raw.strip().lower() in TRUTHY_ENV_VALUES
-    environment = os.getenv("ENVIRONMENT", "local").strip().lower()
+    environment = runtime_environment_name()
     return environment not in LOCAL_CONFIG_ENVIRONMENTS
 
 
@@ -53,7 +66,7 @@ def production_security_profile_enabled(*, service_name: str) -> bool:
                 service_name=service_name,
             )
         )
-    environment = os.getenv("ENVIRONMENT", "local").strip().lower()
+    environment = runtime_environment_name()
     return environment in PRODUCTION_SECURITY_ENVIRONMENTS
 
 
