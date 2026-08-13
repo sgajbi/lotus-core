@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import sessionmaker
 
 from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER
+from .connection_security import validate_database_url_security
 from .database_runtime_identity import async_database_connect_args, sync_database_connect_args
 
 _LEGACY_POSTGRES_SCHEME = "postgres://"
@@ -60,7 +61,9 @@ def get_sync_database_url():
         # Fallback for cases where neither is set
         url = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
-    return _normalize_database_url_scheme(url, async_mode=False)
+    normalized_url = _normalize_database_url_scheme(url, async_mode=False)
+    validate_database_url_security(normalized_url, service_name="lotus-core")
+    return normalized_url
 
 
 _engine = None
@@ -129,7 +132,9 @@ def get_async_database_url():
         # Fallback for cases where neither is set
         url = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
-    return _normalize_database_url_scheme(url, async_mode=True)
+    normalized_url = _normalize_database_url_scheme(url, async_mode=True)
+    validate_database_url_security(normalized_url, service_name="lotus-core")
+    return normalized_url
 
 
 def get_async_engine():
