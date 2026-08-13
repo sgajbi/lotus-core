@@ -95,9 +95,7 @@ def test_explicit_local_profile_allows_plaintext_kafka(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("environment", [None, "", "staging", "uat", "production", "custom"])
-def test_non_local_profile_rejects_plaintext_kafka(
-    monkeypatch, environment: str | None
-) -> None:
+def test_non_local_profile_rejects_plaintext_kafka(monkeypatch, environment: str | None) -> None:
     if environment is None:
         monkeypatch.delenv("ENVIRONMENT", raising=False)
     else:
