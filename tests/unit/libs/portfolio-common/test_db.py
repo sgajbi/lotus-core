@@ -119,6 +119,31 @@ def test_async_database_url_preserves_asyncpg_driver_scheme(monkeypatch):
     assert get_async_database_url() == "postgresql+asyncpg://user:pass@host:5432/dbname"
 
 
+@pytest.mark.parametrize("url_loader", [get_sync_database_url, get_async_database_url])
+def test_database_url_loader_rejects_local_default_in_production(monkeypatch, url_loader):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://user:password@postgres:5432/portfolio_db",
+    )
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    with pytest.raises(RuntimeConfigurationError, match="local default database credentials"):
+        url_loader()
+
+
+@pytest.mark.parametrize("url_loader", [get_sync_database_url, get_async_database_url])
+def test_database_url_loader_allows_default_in_explicit_local_profile(monkeypatch, url_loader):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://user:password@postgres:5432/portfolio_db",
+    )
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    assert url_loader().endswith("user:password@postgres:5432/portfolio_db")
+
+
 @pytest.mark.asyncio
 async def test_asyncsessionlocal_creates_async_engine_lazily(monkeypatch):
     async_calls = []
@@ -289,6 +314,11 @@ def test_governed_environment_fails_before_engine_creation_without_identity(monk
         lambda *args, **kwargs: sync_calls.append((args, kwargs)),
     )
     monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://service:governed-secret@postgres:5432/portfolio_db",
+    )
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
     monkeypatch.delenv("SERVICE_NAME", raising=False)
 
     import portfolio_common.db as db_module
