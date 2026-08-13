@@ -101,10 +101,28 @@ def test_build_evidence_rejects_registry_without_governed_api_authority(
 ) -> None:
     _fixture(tmp_path, monkeypatch)
     lifecycle = json.loads(updater.LIFECYCLE_INVENTORY.read_text(encoding="utf-8"))
-    lifecycle["base_images"][0]["registry"] = "attacker.example.invalid"
+    record = lifecycle["base_images"][0]
+    record["image"] = "ghcr.io/attacker/forged-python@" + str(record["image"]).partition("@")[2]
+    record["registry"] = "ghcr.io"
+    record["repository"] = "attacker/forged-python"
     updater.LIFECYCLE_INVENTORY.write_text(json.dumps(lifecycle), encoding="utf-8")
 
     with pytest.raises(updater.ManifestEvidenceRefreshError, match="no approved OCI API authority"):
+        updater.build_evidence()
+
+
+def test_build_evidence_rejects_lifecycle_location_not_bound_to_image(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _fixture(tmp_path, monkeypatch)
+    lifecycle = json.loads(updater.LIFECYCLE_INVENTORY.read_text(encoding="utf-8"))
+    lifecycle["base_images"][0]["image"] = (
+        "ghcr.io/attacker/forged-python@"
+        + str(lifecycle["base_images"][0]["image"]).partition("@")[2]
+    )
+    updater.LIFECYCLE_INVENTORY.write_text(json.dumps(lifecycle), encoding="utf-8")
+
+    with pytest.raises(updater.ManifestEvidenceRefreshError, match="must match"):
         updater.build_evidence()
 
 

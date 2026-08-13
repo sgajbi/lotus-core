@@ -69,8 +69,10 @@ The late authority-binding slice retains bounded raw Docker Hub index and child-
 The guard independently hashes both documents, selects exactly one `linux/amd64` descriptor, and
 binds descriptor media type/size/digest, child reference, and config digest. Missing, malformed, or
 mutated evidence and credentialed registry authorities fail closed; digest-shaped authored fields
-cannot certify the chain. Registry evidence must also equal the governed OCI API authority mapped
-from the lifecycle registry; an arbitrary credential-free HTTPS endpoint cannot claim provenance.
+cannot certify the chain. The guard independently derives registry and repository identity from
+the Docker image reference; lifecycle location fields and the governed OCI API authority must all
+match it, so arbitrary authored metadata or another credential-free HTTPS endpoint cannot claim
+provenance.
 CR-1686 deterministic CI/build/test dependency closure (2026-08-12): #926's license-inventory
 acceptance audit found that `requirements/ci-tooling.lock.txt` contained only direct pins, while
 transitive tooling and test dependencies were resolved from mutable package metadata. A complete

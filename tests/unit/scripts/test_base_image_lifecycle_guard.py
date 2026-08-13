@@ -184,7 +184,7 @@ def test_guard_rejects_registry_authority_not_bound_to_lifecycle_registry(
     assert "manifest evidence registry must bind the lifecycle registry" in _details(tmp_path)
 
 
-def test_guard_rejects_lifecycle_registry_without_governed_api_authority(
+def test_guard_rejects_lifecycle_registry_not_bound_to_image_reference(
     tmp_path: Path,
 ) -> None:
     inventory = _inventory()
@@ -192,8 +192,34 @@ def test_guard_rejects_lifecycle_registry_without_governed_api_authority(
     _write_fixture(tmp_path, inventory)
 
     details = _details(tmp_path)
+    assert "base image registry must match the image reference" in details
+
+
+def test_guard_binds_registry_and_repository_to_explicit_image_reference(
+    tmp_path: Path,
+) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    forged_image = "ghcr.io/attacker/forged-python@" + str(record["image"]).partition("@")[2]
+    record["image"] = forged_image
+    record["distribution_package_support"]["image"] = forged_image
+    record["identity_evidence"]["verified_command"] = (  # type: ignore[index]
+        f"docker buildx imagetools inspect {forged_image}"
+    )
+    evidence = _manifest_evidence()
+    evidence["image"] = forged_image
+    evidence["inspection"]["parent_reference"] = forged_image  # type: ignore[index]
+    evidence["inspection"]["child_reference"] = (  # type: ignore[index]
+        "ghcr.io/attacker/forged-python@" + str(evidence["runtime_manifest"]["digest"])  # type: ignore[index]
+    )
+    _write_fixture(tmp_path, inventory, evidence)
+
+    details = _details(tmp_path)
     assert "base image registry must have a governed OCI API authority" in details
-    assert "lifecycle registry has no governed OCI API authority" in details
+    assert "base image registry must match the image reference" in details
+    assert "base image repository must match the image reference" in details
+    assert "image registry has no governed OCI API authority" in details
+    assert "manifest evidence repository must bind the image repository" in details
 
 
 def test_guard_rejects_stale_review(tmp_path: Path) -> None:
