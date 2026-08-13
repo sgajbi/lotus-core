@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -708,6 +709,7 @@ def test_main_reenters_under_managed_dynamic_runtime(
     assert original_main(args, None) == 0
     assert prepared[0]["scope"] == "performance-load-gate"
     assert prepared[0]["services"] == tuple(performance_load_gate.PERFORMANCE_GATE_SERVICES)
+    managed_run.runtime.export_to.assert_called_once_with(os.environ)
     assert args.ingestion_base_url == "http://localhost:26000"
     assert args.transaction_processing_base_url == "http://localhost:26090"
     assert args.host_database_url.endswith("localhost:26432/portfolio_db")
