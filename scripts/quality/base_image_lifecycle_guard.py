@@ -31,6 +31,10 @@ REQUIRED_DEPLOYMENT_PLATFORM = "linux/amd64"
 OCI_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
 OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 REGISTRY_API_AUTHORITIES = {"docker.io": "https://registry-1.docker.io"}
+GOVERNED_BASE_REGISTRY = "docker.io"
+GOVERNED_BASE_REPOSITORY = "library/python"
+GOVERNED_BASE_TAG = "3.11-slim-bookworm"
+GOVERNED_OFFICIAL_IMAGE_REGISTRY = "https://hub.docker.com/_/python"
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,12 @@ def image_registry_and_repository(image: str) -> tuple[str, str]:
     if registry == "docker.io" and "/" not in repository:
         repository = f"library/{repository}"
     return registry, repository
+
+
+def image_tag(image: str) -> str | None:
+    """Return the tag encoded by a digest-pinned Docker image reference."""
+    final_segment = image.partition("@")[0].rsplit("/", maxsplit=1)[-1]
+    return final_segment.rsplit(":", maxsplit=1)[1] if ":" in final_segment else None
 
 
 def _parse_date(value: object, field: str, findings: list[str]) -> date | None:
@@ -288,6 +298,14 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
         findings.append("base image registry must match the image reference")
     if record.get("repository") != image_repository:
         findings.append("base image repository must match the image reference")
+    if image_registry != GOVERNED_BASE_REGISTRY:
+        findings.append("base image must use the governed Docker Official Images registry")
+    if image_repository != GOVERNED_BASE_REPOSITORY:
+        findings.append("base image must use the governed library/python repository")
+    if isinstance(image, str) and image_tag(image) != GOVERNED_BASE_TAG:
+        findings.append("base image must use the governed 3.11-slim-bookworm tag")
+    if record.get("tag") != GOVERNED_BASE_TAG:
+        findings.append("base image lifecycle tag must match the governed tag")
     if record.get("maturity") != "stable":
         findings.append("base image maturity must be stable; experimental images are prohibited")
     if record.get("governance_classification") != "approved_default":
@@ -337,6 +355,16 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
                 findings.append(
                     f"identity_evidence.{field} must be a credential-free HTTPS authority"
                 )
+        if identity_evidence.get("official_image_registry") != GOVERNED_OFFICIAL_IMAGE_REGISTRY:
+            findings.append("Official Images registry authority must bind library/python")
+        source_revision = record.get("source_revision")
+        expected_source = (
+            f"https://github.com/docker-library/python/tree/{source_revision}/3.11/slim-bookworm"
+            if isinstance(source_revision, str) and re.fullmatch(r"[0-9a-f]{40}", source_revision)
+            else None
+        )
+        if identity_evidence.get("official_image_source") != expected_source:
+            findings.append("Official Images source authority must bind the governed revision")
         verified_command = identity_evidence.get("verified_command")
         if not isinstance(verified_command, str) or not verified_command.strip():
             findings.append("identity_evidence.verified_command must be non-empty")

@@ -72,7 +72,9 @@ mutated evidence and credentialed registry authorities fail closed; digest-shape
 cannot certify the chain. The guard independently derives registry and repository identity from
 the Docker image reference; lifecycle location fields and the governed OCI API authority must all
 match it, so arbitrary authored metadata or another credential-free HTTPS endpoint cannot claim
-provenance.
+provenance. Acceptance is also constrained to the reviewed Docker Official Images
+`library/python:3.11-slim-bookworm` identity and exact source revision; internal consistency alone
+cannot transfer its lifecycle approval to another Docker Hub namespace.
 CR-1686 deterministic CI/build/test dependency closure (2026-08-12): #926's license-inventory
 acceptance audit found that `requirements/ci-tooling.lock.txt` contained only direct pins, while
 transitive tooling and test dependencies were resolved from mutable package metadata. A complete
