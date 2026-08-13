@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from confluent_kafka import KafkaException, Producer
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .connection_security import build_kafka_connection_config
 from .event_mapping import kafka_outbox_id
 from .kafka_producer_policy import (
     DEFAULT_PRODUCER_SERVICE,
@@ -50,8 +51,6 @@ class KafkaProducer:
     def _initialize_producer(self):
         try:
             conf = {
-                # Broker connectivity
-                "bootstrap.servers": self.bootstrap_servers,
                 # Reliability
                 "enable.idempotence": True,  # ensure de-dup on broker
                 "acks": "all",
@@ -61,6 +60,12 @@ class KafkaProducer:
                 # migration evidence must not depend on an implicit client default.
                 "partitioner": "consistent_random",
             }
+            conf.update(
+                build_kafka_connection_config(
+                    self.bootstrap_servers,
+                    service_name=self.service_name,
+                )
+            )
             conf.update(self.producer_policy.as_confluent_config())
 
             self.producer = Producer(conf)

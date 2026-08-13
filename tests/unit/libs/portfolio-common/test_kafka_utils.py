@@ -27,6 +27,7 @@ def test_kafka_producer_initialization(MockProducer):
     config = MockProducer.call_args[0][0]
 
     assert config["bootstrap.servers"] == "mock:9092"
+    assert config["security.protocol"] == "PLAINTEXT"
     assert config["enable.idempotence"] is True
     assert config["acks"] == "all"
     assert config["max.in.flight.requests.per.connection"] == 5
@@ -40,6 +41,19 @@ def test_kafka_producer_initialization(MockProducer):
     assert config["request.timeout.ms"] == 30000
     assert config["queue.buffering.max.messages"] == 100000
     assert config["queue.buffering.max.kbytes"] == 1048576
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_kafka_producer_fails_before_client_construction_for_plaintext_production(
+    MockProducer, monkeypatch
+):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+
+    with pytest.raises(RuntimeConfigurationError, match="plaintext Kafka transport"):
+        KafkaProducer(bootstrap_servers="mock:9092")
+
+    MockProducer.assert_not_called()
 
 
 def test_kafka_producer_policy_uses_service_specific_identity_by_default(monkeypatch):
