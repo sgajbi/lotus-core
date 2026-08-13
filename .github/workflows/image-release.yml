@@ -343,6 +343,23 @@ jobs:
             --output json \
             "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}" \
             > "output/build-evidence/${{ matrix.service }}-provenance-verification.json"
+      - name: Re-verify scan receipt at manifest boundary
+        run: |
+          python -m scripts.release.image_scan_policy enforce \
+            --receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
+            --report "output/build-evidence/${{ matrix.service }}-trivy.json" \
+            --kev-catalog "output/vulnerability-authority/cisa-kev.json" \
+            --authority-bundle "output/vulnerability-authority/vulnerability-authority-bundle.json" \
+            --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
+            --exception-schema "output/vulnerability-authority/vulnerability-exception-register.schema.json" \
+            --expected-service "${{ matrix.service }}" \
+            --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
+            --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-git-commit-sha "${GITHUB_SHA}" \
+            --expected-ci-run-id "${GITHUB_RUN_ID}" \
+            --expected-ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --enforced-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
       - name: Write image release manifest
         run: |
           python scripts/release/write_image_release_manifest.py \
