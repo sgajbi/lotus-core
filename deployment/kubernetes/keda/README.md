@@ -14,13 +14,17 @@ portfolio derived-state consumer groups.
 
 ## Prerequisites
 1. KEDA installed in the cluster.
-2. Kafka bootstrap DNS reachable from KEDA operator and workloads.
-3. The deployments referenced by `processing-scaledobjects.yaml` exist.
-4. The transaction-processing Kafka offset handoff has completed before its first pod starts.
+2. Each scale-target container exposes `KAFKA_BOOTSTRAP_SERVERS`; KEDA resolves the environment-
+   specific TLS endpoint through `bootstrapServersFromEnv`.
+3. `lotus-core-kafka` provides `sasl-username` and `sasl-password`, and
+   `lotus-core-kafka-trust` provides `ca.pem` in the `lotus-core` namespace.
+4. The deployments referenced by `processing-scaledobjects.yaml` exist.
+5. The transaction-processing Kafka offset handoff has completed before its first pod starts.
 
 ## Usage
-1. Review namespace and bootstrap servers. Change lag or replica bounds only with partition, DB pool,
-   and recovery evidence.
+1. Review namespace and the TLS bootstrap endpoint. Preserve the shared `SCRAM-SHA-512`
+   `TriggerAuthentication`; change lag or replica bounds only with partition, DB pool, and recovery
+   evidence.
 2. Apply:
    ```bash
    kubectl apply -k deployment/kubernetes/keda

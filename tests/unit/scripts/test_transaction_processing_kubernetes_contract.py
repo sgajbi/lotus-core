@@ -82,6 +82,10 @@ def test_transaction_processing_deployment_uses_external_runtime_configuration()
     environment = {item["name"]: item for item in container["env"]}
 
     assert environment["SERVICE_NAME"]["value"] == "portfolio-transaction-processing"
+    assert environment["ENVIRONMENT"]["valueFrom"]["configMapKeyRef"] == {
+        "name": "lotus-core-runtime",
+        "key": "environment",
+    }
     assert environment["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
         "name": "lotus-core-database",
         "key": "database-url",
@@ -89,6 +93,30 @@ def test_transaction_processing_deployment_uses_external_runtime_configuration()
     assert environment["KAFKA_BOOTSTRAP_SERVERS"]["valueFrom"]["configMapKeyRef"] == {
         "name": "lotus-core-runtime",
         "key": "kafka-bootstrap-servers",
+    }
+    assert environment["KAFKA_SECURITY_PROTOCOL"]["value"] == "SASL_SSL"
+    assert environment["KAFKA_SSL_CA_LOCATION"]["value"] == (
+        "/var/run/secrets/lotus-core/kafka/ca.pem"
+    )
+    assert environment["KAFKA_SASL_MECHANISM"]["value"] == "SCRAM-SHA-512"
+    assert environment["KAFKA_SASL_USERNAME"]["valueFrom"]["secretKeyRef"] == {
+        "name": "lotus-core-kafka",
+        "key": "sasl-username",
+    }
+    assert environment["KAFKA_SASL_PASSWORD"]["valueFrom"]["secretKeyRef"] == {
+        "name": "lotus-core-kafka",
+        "key": "sasl-password",
+    }
+    assert {item["name"]: item for item in container["volumeMounts"]}["kafka-trust"] == {
+        "name": "kafka-trust",
+        "mountPath": "/var/run/secrets/lotus-core/kafka",
+        "readOnly": True,
+    }
+    assert {item["name"]: item for item in deployment["spec"]["template"]["spec"]["volumes"]}[
+        "kafka-trust"
+    ]["secret"] == {
+        "secretName": "lotus-core-kafka-trust",
+        "defaultMode": 0o440,
     }
 
 

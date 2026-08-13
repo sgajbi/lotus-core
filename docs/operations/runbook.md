@@ -532,6 +532,12 @@ affected client. Production-like Kafka clients must use `SSL` or `SASL_SSL`, sup
 `KAFKA_SASL_PASSWORD` from the deployment secret store. Database credentials must likewise arrive
 through the deployment secret store rather than a committed environment file or image layer.
 
+The release-managed Kubernetes base enforces `SASL_SSL` with `SCRAM-SHA-512`. Each deployment reads
+the environment name from `lotus-core-runtime`, SASL credentials from `lotus-core-kafka`, and a
+read-only `ca.pem` trust bundle from `lotus-core-kafka-trust`. Missing configuration blocks pod
+startup; promoted workloads do not inherit the app-local plaintext exception.
+KEDA lag scalers use the same secrets through `lotus-core-kafka-auth` and the TLS broker listener.
+
 The app-local broker uses bounded `on-failure:5` restart policy because an interrupted broker can
 leave `/brokers/ids/1` owned until ZooKeeper expires the prior ephemeral session. Normal startup
 waits for that expiry and retries the unchanged broker process; it never deletes ZooKeeper state or

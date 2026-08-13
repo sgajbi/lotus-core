@@ -32,6 +32,13 @@ health probes, and the transaction cutover client all consume the same policy. T
 credential compatibility constants were removed after a repository-wide reference scan proved
 that no runtime consumed them.
 
+The release-managed Kubernetes base declares its environment explicitly, fixes Kafka transport to
+`SASL_SSL` with `SCRAM-SHA-512`, and requires secret-sourced credentials plus a read-only CA bundle.
+The KEDA lag scalers use the same SASL/TLS secrets through one `TriggerAuthentication` instead of
+connecting to the app-local plaintext listener.
+The app-local `.env.example` declares the inverse bounded posture explicitly so documented host-side
+topic and migration commands remain usable without making an unspecified profile local by default.
+
 ## Same-pattern review
 
 The scoped search covered every direct `Producer`, `Consumer`, and `AdminClient` construction in
@@ -41,6 +48,10 @@ tests. All shared synchronous and asynchronous database URL paths, plus the Alem
 migration path, validate before engine or migration context construction. No other Mongo runtime
 consumer exists. No API, OpenAPI, schema, migration revision, event, topic identity, partition
 count, dependency, framework, or technology version changed.
+
+PR review found that callers supplying a URL directly to the standalone sync/async engine factories
+could skip the URL loaders. Both factories now normalize and validate the selected URL before
+engine construction, closing the same credential-policy bypass for offline and operational tools.
 
 ## Evidence
 
@@ -53,6 +64,8 @@ count, dependency, framework, or technology version changed.
   topic creator exit `0`, two clean restart cycles, and healthy `ingestion_service`.
 - Focused configuration, database, producer, consumer, admin, health, Compose-contract, gate,
   and operational-client tests passed with warnings treated as errors.
+- PR review hardening added direct-URL rejection tests and deployment-contract tests for both
+  release-managed workloads, including environment, SASL credentials, and CA mount authority.
 
 ## Documentation and compatibility
 

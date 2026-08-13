@@ -253,11 +253,16 @@ make ci-local
 App-local isolated stack:
 
 ```bash
+cp .env.example .env
 docker compose up -d
 python -m tools.kafka_setup
 python -m alembic upgrade head
 curl http://localhost:8090/health/ready
 ```
+
+The example file explicitly declares `ENVIRONMENT=local` and
+`KAFKA_SECURITY_PROTOCOL=PLAINTEXT`. Do not reuse those local-only settings in a promoted
+environment.
 
 Important runtime note:
 
