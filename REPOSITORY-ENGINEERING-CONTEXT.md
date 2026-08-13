@@ -1086,7 +1086,11 @@ Most relevant current governance:
     `contracts/security/base-image-lifecycle-inventory.v1.json`. Every Core-built service image
     currently shares the stable Docker Official `python:3.11-slim-bookworm` OCI index, with the
     governed deployment target bound separately to its exact `linux/amd64` child and config
-    digests. Multi-platform index availability is not production support. The inventory binds
+    digests. Retained raw registry bytes in
+    `contracts/security/base-image-manifest-evidence.v1.json` are the cryptographic authority: the
+    guard hashes the index and child, selects exactly one governed platform descriptor, and derives
+    the config digest. Refresh with `make refresh-base-image-manifest-evidence`; never hand-author
+    digest claims. Multi-platform index availability is not production support. The inventory binds
     CPython and Debian lifecycle authority, machine-readable upstream end dates that bound every
     conservative local cutoff, complete credential-free Docker Official Images identity authority,
     exact-image `debian-security-support` evidence, owner, and a maximum 30-day review cadence. Missing,
@@ -1130,6 +1134,10 @@ Most relevant current governance:
     quality-tool dispatch, and dependency-health checks select by execution platform. Regenerate
     both with `make compile-ci-tooling-lock`; do not hand-edit either lock or generate license/
     supportability evidence from a shared global environment.
+    Dependency inventory provenance distinguishes the latest committed revision of governed
+    lock/policy inputs from the exact validation execution SHA in the emitted receipt. This keeps
+    source provenance reachable after the approved rebase merge. Fixed repository, issue,
+    generator, claim-boundary, derived-summary, and non-future timestamp checks fail closed.
     Runtime resolution uses the same pinned resolver versions for distinct Linux/amd64 and
     Windows/amd64 closures. The Linux authority is resolved inside the exact governed Python 3.11
     base and intentionally includes `uvloop`; the Windows engineering authority includes
