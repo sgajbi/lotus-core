@@ -32,9 +32,9 @@ upload-time, and raw license evidence before it can emit an allowed decision.
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
 The committed machine contract binds newline-normalized lock and policy digests, exact
-package/version and lock membership, and canonical PyPI release metadata digests. It records—but
-enforces—the generator/repository/issue identities and reachable source baseline alongside review dates, license
-evidence/classification, and a non-certifying claim boundary. PyPI proves
+package/version and lock membership, and canonical PyPI release metadata digests. It records and
+enforces the generator/repository/issue identities and `origin/main`-reachable source baseline
+alongside review dates, license evidence/classification, and a non-certifying claim boundary. PyPI proves
 release existence only; it cannot certify upstream support, lifecycle, or vulnerability disclosure.
 All 104 components therefore remain supportability `review_required` until those governed
 authorities exist. Eighty-eight
@@ -50,7 +50,9 @@ production-ready, bank-buyable, or popularity-based approval claim. Generator `1
 reachable `origin/main` merge-base while exact lock/policy digests bind decisive content; the CI
 receipt separately binds the exact execution SHA. This avoids a self-referential feature SHA that
 would be rewritten by rebase merge. Malformed, unreachable, or future-dated
-provenance fails closed. Evidence and compatibility details:
+provenance fails closed. The derived blocked-component count and technology state include all
+findings, including yanked/prerelease releases and overdue review evidence; classification-only
+summaries cannot contradict the emitted receipt. Evidence and compatibility details:
 [CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md](./codebase-reviews/CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md).
 
 CR-1685 base-image lifecycle authority (2026-08-12): issue #927's pinned Docker Official Python
