@@ -33,7 +33,7 @@ CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventor
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
 The committed machine contract binds newline-normalized lock and policy digests, exact
 package/version and lock membership, and canonical PyPI release metadata digests. It records—but
-does not yet enforce—the generator identity and source commit alongside review dates, license
+enforces—the generator/repository/issue identities and reachable governed-input source commit alongside review dates, license
 evidence/classification, and a non-certifying claim boundary. PyPI proves
 release existence only; it cannot certify upstream support, lifecycle, or vulnerability disclosure.
 All 104 components therefore remain supportability `review_required` until those governed
@@ -45,6 +45,12 @@ Feature, PR, and main lanes retain exact-SHA receipts, including a failure recei
 itself is unavailable. Cross-platform replay tests prove CRLF/LF checkout conversion cannot create
 false drift while material text changes still fail closed. This adds no application dependency or runtime technology and makes no
 popularity-based, production-ready, legal, or bank-buyable claim.
+The guard now also recomputes all summary counts and the technology state, and rejects any authored
+production-ready, bank-buyable, or popularity-based approval claim. Generator `1.1.0` records the
+latest committed lock/policy input revision so provenance survives the approved rebase merge; the
+CI receipt separately binds the exact execution SHA. Malformed, unreachable, or future-dated
+provenance fails closed. Evidence and compatibility details:
+[CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md](./codebase-reviews/CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md).
 
 CR-1685 base-image lifecycle authority (2026-08-12): issue #927's pinned Docker Official Python
 image proved immutable identity but not supported lifetime or deployment architecture. Core now
@@ -56,6 +62,11 @@ historical OCI index do not imply production support. CPython 3.11 remains in se
 a conservative `2027-10-01` cutoff, Debian 12 remains in LTS through 2028-06-30, and review cadence
 is bounded to 30 days. The mature runtime stack is unchanged. Evidence and compatibility details:
 [CR-1685-BASE-IMAGE-LIFECYCLE-AUTHORITY.md](./codebase-reviews/CR-1685-BASE-IMAGE-LIFECYCLE-AUTHORITY.md).
+The late authority-binding slice retains bounded raw Docker Hub index and child-manifest bytes.
+The guard independently hashes both documents, selects exactly one `linux/amd64` descriptor, and
+binds descriptor media type/size/digest, child reference, and config digest. Missing, malformed, or
+mutated evidence and credentialed registry authorities fail closed; digest-shaped authored fields
+cannot certify the chain.
 CR-1686 deterministic CI/build/test dependency closure (2026-08-12): #926's license-inventory
 acceptance audit found that `requirements/ci-tooling.lock.txt` contained only direct pins, while
 transitive tooling and test dependencies were resolved from mutable package metadata. A complete
