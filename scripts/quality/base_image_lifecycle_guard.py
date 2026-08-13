@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -12,12 +15,21 @@ from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = Path("contracts/security/base-image-lifecycle-inventory.v1.json")
+MANIFEST_EVIDENCE_PATH = Path("contracts/security/base-image-manifest-evidence.v1.json")
 SCHEMA_VERSION = "lotus-core.base-image-lifecycle-inventory.v1"
 INVENTORY_ID = "lotus-core-base-image-lifecycle"
+MANIFEST_EVIDENCE_SCHEMA_VERSION = "lotus-core.base-image-manifest-evidence.v1"
+MANIFEST_EVIDENCE_ID = "lotus-core-python-base-image-manifest-evidence"
+MANIFEST_EVIDENCE_GENERATOR = {
+    "id": "lotus-core-base-image-manifest-evidence",
+    "version": "1.0.0",
+}
 IMMUTABLE_IMAGE_RE = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 BASE_ARG_RE = re.compile(r"^ARG PYTHON_IMAGE=(?P<image>\S+)$", re.MULTILINE)
 COMPOSE_IMAGE_RE = re.compile(r"^\s*image:\s*(?P<image>\S+)\s*$", re.MULTILINE)
 REQUIRED_DEPLOYMENT_PLATFORM = "linux/amd64"
+OCI_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
+OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 
 
 @dataclass(frozen=True)
@@ -59,6 +71,163 @@ def _external_compose_images(root: Path) -> set[str]:
                 continue
             images.add(image)
     return images
+
+
+def _decode_json_evidence(
+    value: object, *, field: str, findings: list[str]
+) -> tuple[bytes, dict[str, Any]] | None:
+    if not isinstance(value, str):
+        findings.append(f"{field} must contain base64-encoded raw registry evidence")
+        return None
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        findings.append(f"{field} must contain valid base64")
+        return None
+    try:
+        document = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        findings.append(f"{field} must decode to a JSON object")
+        return None
+    if not isinstance(document, dict):
+        findings.append(f"{field} must decode to a JSON object")
+        return None
+    return raw, document
+
+
+def _sha256_digest(raw: bytes) -> str:
+    return f"sha256:{hashlib.sha256(raw).hexdigest()}"
+
+
+def _validate_manifest_evidence(
+    evidence: dict[str, Any], *, lifecycle_record: dict[str, Any]
+) -> list[str]:
+    findings: list[str] = []
+    if evidence.get("schema_version") != MANIFEST_EVIDENCE_SCHEMA_VERSION:
+        findings.append(f"schema_version must be {MANIFEST_EVIDENCE_SCHEMA_VERSION}")
+    if evidence.get("evidence_id") != MANIFEST_EVIDENCE_ID:
+        findings.append(f"evidence_id must be {MANIFEST_EVIDENCE_ID}")
+    if evidence.get("generator") != MANIFEST_EVIDENCE_GENERATOR:
+        findings.append("generator identity and version must match the governed generator")
+
+    image = lifecycle_record.get("image")
+    platform = lifecycle_record.get("deployment_platform")
+    if evidence.get("image") != image:
+        findings.append("manifest evidence image must bind the lifecycle image")
+    if evidence.get("deployment_platform") != platform:
+        findings.append("manifest evidence platform must bind the lifecycle deployment platform")
+    if evidence.get("observed_on") != lifecycle_record.get("observed_on"):
+        findings.append("manifest evidence must be refreshed with lifecycle observed_on")
+
+    authority = evidence.get("authority")
+    if not isinstance(authority, dict):
+        findings.append("manifest evidence authority is required")
+        repository = None
+    else:
+        if not _is_credential_free_https_url(authority.get("registry")):
+            findings.append("manifest evidence registry must be a credential-free HTTPS authority")
+        repository = authority.get("repository")
+        if not isinstance(repository, str) or not repository.strip():
+            findings.append("manifest evidence repository must be non-empty")
+        elif repository != lifecycle_record.get("repository"):
+            findings.append("manifest evidence repository must bind the lifecycle repository")
+
+    inspection = evidence.get("inspection")
+    if not isinstance(inspection, dict):
+        findings.append("manifest evidence inspection references are required")
+        inspection = {}
+    if inspection.get("tool") != "docker buildx imagetools inspect --raw":
+        findings.append("manifest evidence inspection tool must be the governed raw inspector")
+    if inspection.get("parent_reference") != image:
+        findings.append("manifest evidence parent reference must bind the lifecycle image")
+
+    index = evidence.get("index")
+    if not isinstance(index, dict):
+        findings.append("manifest evidence index is required")
+        index = {}
+    decoded_index = _decode_json_evidence(
+        index.get("raw_base64"), field="index.raw_base64", findings=findings
+    )
+    parent_digest = image.rpartition("@")[2] if isinstance(image, str) else None
+    if index.get("digest") != parent_digest:
+        findings.append("manifest evidence index digest must bind the lifecycle image digest")
+
+    selected_descriptor: dict[str, Any] | None = None
+    if decoded_index is not None:
+        raw_index, index_document = decoded_index
+        if _sha256_digest(raw_index) != parent_digest:
+            findings.append("raw index digest must match the lifecycle image digest")
+        if index_document.get("schemaVersion") != 2:
+            findings.append("raw index schemaVersion must be 2")
+        if index_document.get("mediaType") != OCI_INDEX_MEDIA_TYPE:
+            findings.append("raw index mediaType must be the OCI image index media type")
+        if index.get("media_type") != index_document.get("mediaType"):
+            findings.append("manifest evidence index media type must match raw index evidence")
+        manifests = index_document.get("manifests")
+        if not isinstance(manifests, list):
+            findings.append("raw index manifests must be a list")
+        else:
+            os_name, architecture = (
+                platform.split("/", maxsplit=1)
+                if isinstance(platform, str) and "/" in platform
+                else (None, None)
+            )
+            candidates = [
+                descriptor
+                for descriptor in manifests
+                if isinstance(descriptor, dict)
+                and descriptor.get("platform") == {"architecture": architecture, "os": os_name}
+            ]
+            if len(candidates) != 1:
+                findings.append("raw index must contain exactly one governed runtime platform")
+            else:
+                selected_descriptor = candidates[0]
+
+    runtime = evidence.get("runtime_manifest")
+    if not isinstance(runtime, dict):
+        findings.append("runtime manifest evidence is required")
+        runtime = {}
+    runtime_digest = runtime.get("digest")
+    if runtime_digest != lifecycle_record.get("resolved_manifest_digest"):
+        findings.append("runtime manifest digest must bind the lifecycle child digest")
+    image_repository = image.rpartition("@")[0] if isinstance(image, str) else None
+    expected_child_reference = (
+        f"{image_repository}@{runtime_digest}"
+        if image_repository and isinstance(runtime_digest, str)
+        else None
+    )
+    if inspection.get("child_reference") != expected_child_reference:
+        findings.append("manifest evidence child reference must bind the selected child digest")
+    if selected_descriptor is not None:
+        if selected_descriptor.get("digest") != runtime_digest:
+            findings.append("selected index descriptor must bind the runtime manifest digest")
+        if selected_descriptor.get("mediaType") != runtime.get("media_type"):
+            findings.append("selected index descriptor media type must bind the runtime manifest")
+        if selected_descriptor.get("size") != runtime.get("size"):
+            findings.append("selected index descriptor size must bind the runtime manifest")
+
+    decoded_runtime = _decode_json_evidence(
+        runtime.get("raw_base64"), field="runtime_manifest.raw_base64", findings=findings
+    )
+    if runtime.get("config_digest") != lifecycle_record.get("config_digest"):
+        findings.append("runtime config digest must bind the lifecycle config digest")
+    if decoded_runtime is not None:
+        raw_runtime, runtime_document = decoded_runtime
+        if _sha256_digest(raw_runtime) != runtime_digest:
+            findings.append("raw runtime manifest digest must match the selected child digest")
+        if runtime.get("size") != len(raw_runtime):
+            findings.append("runtime manifest size must match the retained raw bytes")
+        if runtime_document.get("schemaVersion") != 2:
+            findings.append("raw runtime manifest schemaVersion must be 2")
+        if runtime_document.get("mediaType") != OCI_MANIFEST_MEDIA_TYPE:
+            findings.append("raw runtime manifest mediaType must be the OCI manifest media type")
+        if runtime.get("media_type") != runtime_document.get("mediaType"):
+            findings.append("runtime manifest media type must match raw manifest evidence")
+        config = runtime_document.get("config")
+        raw_config_digest = config.get("digest") if isinstance(config, dict) else None
+        if raw_config_digest != runtime.get("config_digest"):
+            findings.append("raw runtime manifest must bind the retained config digest")
+    return findings
 
 
 def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -> list[str]:
@@ -244,10 +413,35 @@ def find_base_image_lifecycle_findings(
         return [BaseImageLifecycleFinding(INVENTORY_PATH, f"invalid JSON: {exc}")]
     if not isinstance(inventory, dict):
         return [BaseImageLifecycleFinding(INVENTORY_PATH, "inventory root must be an object")]
-    return [
+    findings = [
         BaseImageLifecycleFinding(INVENTORY_PATH, detail)
         for detail in _validate_inventory(inventory, root=root, today=today or date.today())
     ]
+    evidence_path = root / MANIFEST_EVIDENCE_PATH
+    if not evidence_path.exists():
+        return [
+            *findings,
+            BaseImageLifecycleFinding(MANIFEST_EVIDENCE_PATH, "missing manifest evidence"),
+        ]
+    try:
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return [
+            *findings,
+            BaseImageLifecycleFinding(MANIFEST_EVIDENCE_PATH, f"invalid JSON: {exc}"),
+        ]
+    records = inventory.get("base_images")
+    lifecycle_record = records[0] if isinstance(records, list) and records else None
+    if not isinstance(evidence, dict):
+        findings.append(
+            BaseImageLifecycleFinding(MANIFEST_EVIDENCE_PATH, "evidence root must be an object")
+        )
+    elif isinstance(lifecycle_record, dict):
+        findings.extend(
+            BaseImageLifecycleFinding(MANIFEST_EVIDENCE_PATH, detail)
+            for detail in _validate_manifest_evidence(evidence, lifecycle_record=lifecycle_record)
+        )
+    return findings
 
 
 def main() -> int:

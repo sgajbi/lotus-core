@@ -7,6 +7,7 @@ import pytest
 
 from scripts.quality.base_image_lifecycle_guard import (
     INVENTORY_PATH,
+    MANIFEST_EVIDENCE_PATH,
     REPO_ROOT,
     find_base_image_lifecycle_findings,
 )
@@ -21,7 +22,15 @@ def _inventory() -> dict[str, object]:
     return json.loads((REPO_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
 
 
-def _write_fixture(root: Path, inventory: dict[str, object]) -> None:
+def _manifest_evidence() -> dict[str, object]:
+    return json.loads((REPO_ROOT / MANIFEST_EVIDENCE_PATH).read_text(encoding="utf-8"))
+
+
+def _write_fixture(
+    root: Path,
+    inventory: dict[str, object],
+    manifest_evidence: dict[str, object] | None = None,
+) -> None:
     dockerfile = root / "src/services/query_service/Dockerfile"
     dockerfile.parent.mkdir(parents=True)
     dockerfile.write_text(f"ARG PYTHON_IMAGE={GOVERNED_IMAGE}\n", encoding="utf-8")
@@ -37,6 +46,11 @@ def _write_fixture(root: Path, inventory: dict[str, object]) -> None:
     inventory_path.parent.mkdir(parents=True)
     inventory_path.write_text(
         json.dumps(inventory, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    evidence_path = root / MANIFEST_EVIDENCE_PATH
+    evidence_path.write_text(
+        json.dumps(manifest_evidence or _manifest_evidence(), indent=2) + "\n",
         encoding="utf-8",
     )
 
