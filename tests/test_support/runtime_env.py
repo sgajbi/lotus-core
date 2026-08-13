@@ -410,6 +410,7 @@ def prepare_test_runtime(
     runtime_env.setdefault("LOTUS_TEST_ENV_PROFILE", selected_profile)
     runtime_env.setdefault("LOTUS_TEST_SCOPE", selected_scope)
     runtime_env.setdefault("LOTUS_TEST_DYNAMIC_PORTS", "true" if dynamic_ports else "false")
+    runtime_env.setdefault("ENVIRONMENT", "test")
 
     compose_project_generated = not (
         preserve_existing and bool(runtime_env.get("COMPOSE_PROJECT_NAME"))
