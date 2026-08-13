@@ -209,7 +209,7 @@ def _validate_inventory_provenance(inventory: dict[str, Any], *, as_of: date) ->
     generated_at = datetime.fromisoformat(
         str(inventory.get("generated_at_utc", "")).replace("Z", "+00:00")
     )
-    if generated_at.tzinfo is None or generated_at.date() > as_of:
+    if generated_at.tzinfo is None or generated_at.astimezone(UTC).date() > as_of:
         raise InventoryValidationError("dependency inventory generation time is invalid")
 
 
