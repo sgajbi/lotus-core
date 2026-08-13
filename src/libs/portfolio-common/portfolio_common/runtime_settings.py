@@ -29,7 +29,6 @@ KAFKA_SECURITY_PROTOCOL_ENV = "KAFKA_SECURITY_PROTOCOL"
 KAFKA_SSL_CA_LOCATION_ENV = "KAFKA_SSL_CA_LOCATION"
 KAFKA_SASL_MECHANISM_ENV = "KAFKA_SASL_MECHANISM"
 KAFKA_SASL_USERNAME_ENV = "KAFKA_SASL_USERNAME"
-KAFKA_SASL_PASSWORD_ENV = "KAFKA_SASL_PASSWORD"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +50,7 @@ def kafka_connection_security_settings() -> KafkaConnectionSecuritySettings:
         ssl_ca_location=env_str(KAFKA_SSL_CA_LOCATION_ENV, ""),
         sasl_mechanism=env_str(KAFKA_SASL_MECHANISM_ENV, ""),
         sasl_username=env_str(KAFKA_SASL_USERNAME_ENV, ""),
-        sasl_password=env_str(KAFKA_SASL_PASSWORD_ENV, ""),
+        sasl_password=env_str("KAFKA_SASL_PASSWORD", ""),
     )
 
 
