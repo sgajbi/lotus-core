@@ -191,11 +191,20 @@ def test_manifest_consumes_verified_same_artifact_evidence() -> None:
         "Verify image signature identity",
         "Attest source-bound SLSA provenance",
         "Verify signed provenance identity",
+        "Re-verify scan receipt at manifest boundary",
         "Write image release manifest",
     ]
 
     assert [names.index(name) for name in ordered] == sorted(names.index(name) for name in ordered)
     manifest = str(_step("Write image release manifest")["run"])
+    boundary_enforcement = str(_step("Re-verify scan receipt at manifest boundary")["run"])
+    assert "python -m scripts.release.image_scan_policy enforce" in boundary_enforcement
+    assert '--report "output/build-evidence/${{ matrix.service }}-trivy.json"' in (
+        boundary_enforcement
+    )
+    assert '--expected-image-digest "${{ steps.digest.outputs.image_digest }}"' in (
+        boundary_enforcement
+    )
     for required in (
         "--scan-receipt",
         "--authority-bundle",

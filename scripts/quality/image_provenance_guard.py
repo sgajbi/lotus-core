@@ -277,6 +277,7 @@ def _release_workflow_findings(root: Path) -> list[ImageProvenanceFinding]:
         "cosign verify",
         "cosign attest --yes --type slsaprovenance",
         "cosign verify-attestation",
+        "Re-verify scan receipt at manifest boundary",
         "write_image_release_manifest.py",
     )
     step_offsets = [workflow_content.find(step) for step in ordered_release_steps]
