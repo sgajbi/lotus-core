@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tests.test_support.docker_stack import wait_for_compose_service_success  # noqa: E402
 from tests.test_support.managed_compose_run import prepare_managed_compose_run  # noqa: E402
 
 KAFKA_SERVICE = "kafka"
@@ -95,6 +96,12 @@ def run_recovery_gate(args: argparse.Namespace) -> KafkaRestartRecoveryEvidence:
     )
     environment = managed.runtime.values
     with managed:
+        wait_for_compose_service_success(
+            managed.compose_file,
+            TOPIC_CREATOR_SERVICE,
+            timeout_seconds=int(args.startup_timeout_seconds),
+            runtime=managed.runtime,
+        )
         interrupted_container_id = _compose_container_id(
             managed.compose_command,
             KAFKA_SERVICE,
@@ -119,6 +126,21 @@ def run_recovery_gate(args: argparse.Namespace) -> KafkaRestartRecoveryEvidence:
         if recovered.container_id == interrupted_container_id:
             raise KafkaRestartRecoveryError("Kafka interruption did not create a new container.")
 
+        _run(
+            managed.compose_command(
+                "up",
+                "-d",
+                "--force-recreate",
+                TOPIC_CREATOR_SERVICE,
+            ),
+            environment=environment,
+        )
+        wait_for_compose_service_success(
+            managed.compose_file,
+            TOPIC_CREATOR_SERVICE,
+            timeout_seconds=int(args.recovery_timeout_seconds),
+            runtime=managed.runtime,
+        )
         topic_creator_exit_code = _service_exit_code(
             managed.compose_command,
             TOPIC_CREATOR_SERVICE,
