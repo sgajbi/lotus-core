@@ -303,6 +303,18 @@ def test_inventory_generation_time_cannot_be_future_dated(tmp_path: Path, monkey
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
+def test_inventory_generation_time_uses_utc_date_for_offset_timestamp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["generated_at_utc"] = "2026-08-12T23:59:59-12:00"
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="generation time is invalid"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
 def test_exact_online_pypi_authority_allows_certification(tmp_path: Path, monkeypatch) -> None:
     _fixture(tmp_path, monkeypatch)
     monkeypatch.setattr(guard, "_fetch_pypi_metadata", lambda _url: _pypi_payload())
