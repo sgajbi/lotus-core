@@ -15,6 +15,7 @@ from alembic.autogenerate import render_python_code
 from alembic.operations.ops import CreateTableOp, UpgradeOps
 from portfolio_common.alembic_numeric import render_financial_numeric
 from portfolio_common.financial_numeric import ExactNumeric
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 from sqlalchemy import Column, Integer, MetaData, Table
 
 ALEMBIC_ENV = Path("alembic/env.py")
@@ -140,4 +141,19 @@ def test_alembic_environment_fails_closed_without_database_url(
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     with pytest.raises(Exception, match="Neither HOST_DATABASE_URL nor DATABASE_URL"):
+        runpy.run_path(str(ALEMBIC_ENV))
+
+
+def test_alembic_environment_rejects_local_credentials_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_alembic_context(monkeypatch, offline=True)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://user:password@postgres:5432/portfolio_db",
+    )
+
+    with pytest.raises(RuntimeConfigurationError, match="local default database credentials"):
         runpy.run_path(str(ALEMBIC_ENV))

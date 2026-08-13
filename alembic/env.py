@@ -37,6 +37,7 @@ if config.config_file_name:
 database_models = importlib.import_module("portfolio_common.database_models")
 alembic_numeric = importlib.import_module("portfolio_common.alembic_numeric")
 database_runtime_identity = importlib.import_module("portfolio_common.database_runtime_identity")
+connection_security = importlib.import_module("portfolio_common.connection_security")
 
 target_metadata = database_models.Base.metadata
 render_financial_numeric = alembic_numeric.render_financial_numeric
@@ -57,6 +58,10 @@ def get_db_url():
     if "asyncpg" in url:
         url = url.replace("postgresql+asyncpg://", "postgresql://")
 
+    connection_security.validate_database_url_security(
+        url,
+        service_name="Alembic migration runner",
+    )
     return url
 
 
