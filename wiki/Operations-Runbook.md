@@ -93,11 +93,18 @@ and arbitrary environment overrides fail before runtime preparation. Canary DLQ 
 from durable rows scoped to the exact stable consumer group and source topic, not from readiness.
 
 ```bash
+export ENVIRONMENT=local
+export KAFKA_SECURITY_PROTOCOL=PLAINTEXT
 python scripts/operations/transaction_processing_cutover_offsets.py --bootstrap-servers localhost:9092
 curl http://localhost:8090/health/ready
 curl http://localhost:8090/version
 make test-performance-load-gate
 ```
+
+Those values are bounded to the local rehearsal. Promoted cutovers must declare the actual
+environment and source Kafka TLS/SASL trust and credentials from the deployment secret store. An
+absent or invalid connection-security profile fails closed and writes a `status=blocked` cutover
+receipt rather than attempting offset inspection or mutation.
 
 Treat load-gate throughput as completed cost/cashflow/position processing. Request submission rate
 alone is not capacity evidence. Keep the target and legacy topologies mutually exclusive.

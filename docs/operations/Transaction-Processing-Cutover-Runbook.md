@@ -13,6 +13,12 @@ only their runtime shell and normal-path transaction boundary are consolidated.
    `transactions.persisted` partition.
 4. Producers can be quiesced for the offset handoff window.
 5. Target and legacy topology must never run concurrently.
+6. Export the connection-security profile used by the cutover command. For the bounded local
+   rehearsal shown below, set `ENVIRONMENT=local` and `KAFKA_SECURITY_PROTOCOL=PLAINTEXT`. For a
+   promoted environment, set its actual environment name and supply the governed
+   `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SSL_CA_LOCATION`, and, for SASL, mechanism, username, and
+   password through the deployment secret store. The command fails closed and writes a blocked
+   receipt when this authority is absent or invalid.
 
 ## Handoff
 
@@ -21,6 +27,8 @@ only their runtime shell and normal-path transaction boundary are consolidated.
 3. Audit the handoff without mutation:
 
    ```bash
+   export ENVIRONMENT=local
+   export KAFKA_SECURITY_PROTOCOL=PLAINTEXT
    python scripts/operations/transaction_processing_cutover_offsets.py \
      --bootstrap-servers localhost:9092 \
      --output output/transaction-processing-offset-cutover-dry-run.json
