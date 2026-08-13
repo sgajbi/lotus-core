@@ -191,8 +191,51 @@ def _expected_components(source_locks: list[dict[str, Any]]) -> dict[tuple[str, 
     return expected
 
 
+def _validate_inventory_claims(inventory: dict[str, Any], components: list[dict[str, Any]]) -> None:
+    claim_boundary = inventory.get("claim_boundary")
+    if not isinstance(claim_boundary, dict):
+        raise InventoryValidationError("dependency inventory claim boundary is required")
+    for field in (
+        "production_ready_claim",
+        "bank_buyable_claim",
+        "popularity_based_approval",
+    ):
+        if claim_boundary.get(field) is not False:
+            raise InventoryValidationError(f"dependency inventory prohibits {field}")
+
+    approved_license_count = sum(
+        component.get("license", {}).get("classification") == "approved" for component in components
+    )
+    blocked_component_count = sum(
+        component.get("license", {}).get("classification") != "approved"
+        or component.get("supportability", {}).get("classification") != "reviewed"
+        for component in components
+    )
+    expected_summary = {
+        "component_count": len(components),
+        "approved_license_count": approved_license_count,
+        "blocked_or_review_required_count": blocked_component_count,
+        "certification_decision": "blocked" if blocked_component_count else "allowed",
+    }
+    if inventory.get("summary") != expected_summary:
+        raise InventoryValidationError(
+            "dependency inventory summary contradicts component evidence"
+        )
+    expected_technology_state = (
+        "non_certifying" if blocked_component_count else "approved_default_candidate"
+    )
+    if claim_boundary.get("technology_state") != expected_technology_state:
+        raise InventoryValidationError(
+            "dependency inventory technology state contradicts component evidence"
+        )
+
+
 def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> dict[str, Any]:
     inventory = json.loads(INVENTORY_FILE.read_text(encoding="utf-8"))
+    components = inventory.get("components")
+    if not isinstance(components, list):
+        raise InventoryValidationError("dependency inventory components must be a list")
+    _validate_inventory_claims(inventory, components)
     policy = inventory["policy"]
     policy_path = ROOT / str(policy["path"])
     if not policy_path.is_file() or normalized_text_sha256(policy_path) != policy["sha256"]:
@@ -204,7 +247,7 @@ def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> d
     expected = _expected_components(inventory["source_locks"])
     actual: dict[tuple[str, str], dict[str, Any]] = {}
     findings: list[dict[str, str]] = []
-    for component in inventory["components"]:
+    for component in components:
         key = (_canonical_name(str(component["name"])), str(component["version"]))
         if key in actual:
             raise InventoryValidationError(f"duplicate component: {key[0]}=={key[1]}")

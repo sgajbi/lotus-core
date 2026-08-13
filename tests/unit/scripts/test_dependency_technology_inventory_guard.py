@@ -65,6 +65,12 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     inventory_file.write_text(
         json.dumps(
             {
+                "claim_boundary": {
+                    "bank_buyable_claim": False,
+                    "popularity_based_approval": False,
+                    "production_ready_claim": False,
+                    "technology_state": "approved_default_candidate",
+                },
                 "policy": {"path": "contracts/security/policy.json", "sha256": _sha(policy)},
                 "source_locks": [
                     {
@@ -113,6 +119,12 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                         },
                     }
                 ],
+                "summary": {
+                    "approved_license_count": 1,
+                    "blocked_or_review_required_count": 0,
+                    "certification_decision": "allowed",
+                    "component_count": 1,
+                },
             }
         ),
         encoding="utf-8",
@@ -135,6 +147,53 @@ def test_complete_inventory_requires_online_authority_before_certification(
     assert receipt["source_commit"] == "d" * 40
     assert receipt["finding_count"] == 0
     assert receipt["pypi_authority_revalidation"]["status"] == "not_run"
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["production_ready_claim", "bank_buyable_claim", "popularity_based_approval"],
+)
+def test_inventory_prohibited_claims_fail_closed(tmp_path: Path, monkeypatch, field: str) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["claim_boundary"][field] = True
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match=f"prohibits {field}"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("component_count", 2),
+        ("approved_license_count", 0),
+        ("blocked_or_review_required_count", 1),
+        ("certification_decision", "blocked"),
+    ],
+)
+def test_inventory_summary_must_match_component_evidence(
+    tmp_path: Path, monkeypatch, field: str, value: object
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["summary"][field] = value
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="summary contradicts"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_inventory_technology_state_must_match_component_evidence(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["claim_boundary"]["technology_state"] = "non_certifying"
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="technology state contradicts"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
 
 
 def test_exact_online_pypi_authority_allows_certification(tmp_path: Path, monkeypatch) -> None:
@@ -178,6 +237,14 @@ def test_review_required_and_stale_evidence_block_certification(
     data["components"][0]["license"]["classification"] = "review_required"
     data["components"][0]["supportability"]["reviewed_on"] = "2026-07-12"
     data["components"][0]["supportability"]["next_review_due"] = "2026-08-11"
+    data["claim_boundary"]["technology_state"] = "non_certifying"
+    data["summary"].update(
+        {
+            "approved_license_count": 0,
+            "blocked_or_review_required_count": 1,
+            "certification_decision": "blocked",
+        }
+    )
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     receipt = guard.validate_inventory(as_of=date(2026, 8, 12))
