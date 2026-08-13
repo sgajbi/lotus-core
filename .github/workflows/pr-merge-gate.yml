@@ -98,6 +98,8 @@ jobs:
         run: make typecheck
       - name: Architecture Guard
         run: make architecture-guard
+      - name: Verify Base Image Registry Evidence
+        run: make base-image-registry-evidence-check
       - name: OpenAPI Gate
         run: make openapi-gate
       - name: API Vocabulary Gate

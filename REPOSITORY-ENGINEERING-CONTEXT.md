@@ -1092,6 +1092,9 @@ Most relevant current governance:
     the config digest. The selected descriptor's retained OCI revision and exact Official Images
     source annotation must bind the lifecycle source claim. Refresh with
     `make refresh-base-image-manifest-evidence`; never hand-author digest or source claims.
+    Protected PR and exact-main validation run `make base-image-registry-evidence-check` to refetch
+    the immutable registry bytes and compare without writing, so offline self-consistency cannot
+    create source authority.
     Multi-platform index availability is not production support. The inventory binds
     CPython and Debian lifecycle authority, machine-readable upstream end dates that bound every
     conservative local cutoff, complete credential-free Docker Official Images identity authority,

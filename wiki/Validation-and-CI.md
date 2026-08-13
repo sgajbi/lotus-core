@@ -126,7 +126,9 @@ the recorded `linux/amd64` child/config digests. Retained raw OCI index and chil
 hashed by the guard; the selected platform descriptor binds child media type, size, digest, and
 config identity. Its retained OCI revision and exact Official Images source annotation also bind
 the lifecycle source claim, so mutually consistent authored source fields are insufficient.
-`make refresh-base-image-manifest-evidence` is the governed online refresh path.
+Protected PR and exact-main lanes run the read-only
+`make base-image-registry-evidence-check`; `make refresh-base-image-manifest-evidence` is the
+separate governed online refresh path.
 Local CPython and Debian cutoffs cannot exceed
 machine-readable upstream authority end dates. Complete credential-free Docker Official Images
 identity evidence, exact-image Debian package-support status, ownership, and a maximum 30-day

@@ -72,6 +72,8 @@ No API/OpenAPI, migration, supported-feature, or platform-context update is requ
   unrelated or ungoverned registry authorities, image/lifecycle location mismatches, and
   self-consistent but unapproved Docker Hub repositories or fabricated source revisions;
 - direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
-- online `update_base_image_manifest_evidence.py --check` against Docker Hub raw OCI bytes;
+- protected PR and exact-main lanes run `make base-image-registry-evidence-check`, which refetches
+  Docker Hub raw OCI bytes and compares them with the retained digest-bound evidence without
+  rewriting source truth;
 - exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited
   installed-package finding on 2026-08-12.

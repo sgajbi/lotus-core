@@ -77,7 +77,9 @@ provenance. Acceptance is also constrained to the reviewed Docker Official Image
 cannot transfer its lifecycle approval to another Docker Hub namespace. The retained raw index's
 selected `linux/amd64` descriptor must independently carry the same OCI revision and exact
 Docker Official Images source annotation, so changing two authored source fields together cannot
-fabricate provenance.
+fabricate provenance. Protected PR and exact-main lanes also refetch the immutable parent and child
+bytes from the governed registry and require byte-for-byte evidence parity; offline self-consistency
+cannot substitute for registry authority.
 CR-1686 deterministic CI/build/test dependency closure (2026-08-12): #926's license-inventory
 acceptance audit found that `requirements/ci-tooling.lock.txt` contained only direct pins, while
 transitive tooling and test dependencies were resolved from mutable package metadata. A complete

@@ -448,6 +448,22 @@ def test_quality_baseline_runs_workflow_governance_gate() -> None:
     assert "make quality-workflow-governance-gate" in workflow_text
 
 
+def test_protected_delivery_replays_base_image_evidence_from_registry() -> None:
+    for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        steps = workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+        registry_checks = [
+            step for step in steps if step.get("name") == "Verify Base Image Registry Evidence"
+        ]
+
+        assert registry_checks == [
+            {
+                "name": "Verify Base Image Registry Evidence",
+                "run": "make base-image-registry-evidence-check",
+            }
+        ]
+
+
 def test_quality_baseline_runs_manifest_integration_lite_collection_gate() -> None:
     workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
     makefile_text = Path("Makefile").read_text(encoding="utf-8")
