@@ -7,6 +7,7 @@ from confluent_kafka.admin import AdminClient
 from tenacity import retry
 
 from .config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_PARTITION_COUNTS
+from .connection_security import build_kafka_connection_config
 from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
 from .retry_policy import KAFKA_ADMIN_STARTUP_RETRY, tenacity_retry_kwargs
 
@@ -67,7 +68,12 @@ def ensure_topics_exist(required_topics: List[str]):
 
 
 def _build_admin_client() -> AdminClient:
-    return AdminClient({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
+    return AdminClient(
+        build_kafka_connection_config(
+            KAFKA_BOOTSTRAP_SERVERS,
+            service_name="kafka topic administration",
+        )
+    )
 
 
 def _verify_required_topics(

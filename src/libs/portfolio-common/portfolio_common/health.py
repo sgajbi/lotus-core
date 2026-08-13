@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from .build_metadata import BuildMetadataResponse, build_metadata_payload
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .connection_security import build_kafka_connection_config
 from .db import AsyncSessionLocal, get_async_engine
 from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
 from .logging_utils import log_operation_event
@@ -190,7 +191,12 @@ async def check_kafka_health(policy: DownstreamAccessPolicy | None = None) -> bo
     """Checks if a connection can be established with Kafka."""
     resolved_policy = policy or load_downstream_access_policy()
     try:
-        admin_client = AdminClient({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
+        admin_client = AdminClient(
+            build_kafka_connection_config(
+                KAFKA_BOOTSTRAP_SERVERS,
+                service_name="Kafka health probe",
+            )
+        )
         await asyncio.to_thread(
             admin_client.list_topics,
             timeout=resolved_policy.request_timeout_seconds,

@@ -353,6 +353,12 @@ async def test_kafka_health_uses_downstream_request_timeout(monkeypatch):
 
     assert await health_module.check_kafka_health() is True
 
+    admin_client_cls.assert_called_once_with(
+        {
+            "bootstrap.servers": health_module.KAFKA_BOOTSTRAP_SERVERS,
+            "security.protocol": "PLAINTEXT",
+        }
+    )
     admin_client.list_topics.assert_called_once_with(timeout=1.234)
 
 
