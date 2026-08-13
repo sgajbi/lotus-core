@@ -13,6 +13,10 @@ x-lotus-stack-contract:
     - app-local-observability
 
 x-shared-python-env: &shared_python_env
+  # This composition is deliberately app-local. Production-like deployments must provide
+  # governed credentials and encrypted Kafka settings through their deployment manifests.
+  ENVIRONMENT: local
+  KAFKA_SECURITY_PROTOCOL: PLAINTEXT
   PYTHONPATH: /app/src/libs/portfolio-common
   # App-local/load profiles must drain durable stage amplification within the bank-day budget.
   OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS: ${OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS:-1}
@@ -87,6 +91,8 @@ services:
         condition: service_healthy
     command: ["python", "-m", "tools.kafka_setup"]
     environment:
+      ENVIRONMENT: local
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
     networks:
       - app_network
@@ -118,6 +124,7 @@ services:
     image: lotus-core/migration-runner:local
     hostname: migration-runner
     environment:
+      ENVIRONMENT: local
       SERVICE_NAME: migration-runner
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -490,6 +497,7 @@ services:
     image: lotus-core/demo-data-loader:local
     hostname: demo_data_loader
     environment:
+      ENVIRONMENT: local
       DEMO_DATA_PACK_ENABLED: ${DEMO_DATA_PACK_ENABLED:-true}
       DEMO_DATA_PACK_WAIT_SECONDS: ${DEMO_DATA_PACK_WAIT_SECONDS:-900}
       DEMO_DATA_PACK_POLL_INTERVAL_SECONDS: ${DEMO_DATA_PACK_POLL_INTERVAL_SECONDS:-3}
