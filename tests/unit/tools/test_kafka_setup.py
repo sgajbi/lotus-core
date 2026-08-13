@@ -6,8 +6,42 @@ from unittest.mock import MagicMock
 import pytest
 from confluent_kafka import KafkaError, KafkaException
 from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
-from tools.kafka_setup import KafkaTopicProvisioningError, create_topics
+from tools import kafka_setup as kafka_setup_module
+from tools.kafka_setup import (
+    KafkaTopicProvisioningError,
+    build_topic_admin_client,
+    create_topics,
+)
+
+
+def test_topic_admin_client_uses_shared_local_transport_policy(monkeypatch) -> None:
+    admin_client = MagicMock()
+    monkeypatch.setattr(kafka_setup_module, "AdminClient", admin_client)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+
+    build_topic_admin_client()
+
+    admin_client.assert_called_once_with(
+        {
+            "bootstrap.servers": kafka_setup_module.KAFKA_BOOTSTRAP_SERVERS,
+            "security.protocol": "PLAINTEXT",
+        }
+    )
+
+
+def test_topic_admin_client_rejects_plaintext_production_before_construction(monkeypatch) -> None:
+    admin_client = MagicMock()
+    monkeypatch.setattr(kafka_setup_module, "AdminClient", admin_client)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+
+    with pytest.raises(RuntimeConfigurationError, match="plaintext Kafka transport"):
+        build_topic_admin_client()
+
+    admin_client.assert_not_called()
 
 
 def test_create_topics_uses_each_source_owned_partition_count() -> None:
