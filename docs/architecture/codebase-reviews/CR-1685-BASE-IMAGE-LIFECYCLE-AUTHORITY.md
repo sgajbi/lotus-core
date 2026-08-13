@@ -39,7 +39,8 @@ permitted platform, official-image membership, or upstream lifecycle changes.
   type, size, platform, child reference, and config digest; Docker reference parsing independently
   derives the image registry/repository, which must match both the lifecycle fields and the
   governed registry API authority, so authored metadata cannot reattribute another registry's
-  bytes;
+  bytes; the approved identity is specifically Docker Official Images `library/python` with the
+  governed `3.11-slim-bookworm` tag and source revision, not any self-consistent Docker Hub image;
 - CPython and Debian authorities remain current, each local cutoff is bounded by its upstream
   authority end date, and the earliest local cutoff owns release posture;
 - Docker Official Images source/registry authority is complete, credential-free HTTPS evidence and
@@ -65,7 +66,8 @@ No API/OpenAPI, migration, supported-feature, or platform-context update is requ
 - scoped Ruff format/check;
 - adversarial evidence tests cover missing/malformed registry evidence, changed parent or child
   bytes, missing platform selection, descriptor drift, config drift, credentialed authority, and
-  unrelated or ungoverned registry authorities, and image/lifecycle location mismatches;
+  unrelated or ungoverned registry authorities, image/lifecycle location mismatches, and
+  self-consistent but unapproved Docker Hub repositories;
 - direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
 - online `update_base_image_manifest_evidence.py --check` against Docker Hub raw OCI bytes;
 - exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited

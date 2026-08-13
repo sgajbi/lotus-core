@@ -46,11 +46,12 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[bytes, bytes]:
             {
                 "base_images": [
                     {
-                        "image": f"python:3.11@{_digest(index_payload)}",
+                        "image": f"python:3.11-slim-bookworm@{_digest(index_payload)}",
                         "deployment_platform": "linux/amd64",
                         "observed_on": "2026-08-13",
                         "registry": "docker.io",
                         "repository": "library/python",
+                        "tag": "3.11-slim-bookworm",
                     }
                 ]
             }

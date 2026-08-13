@@ -11,8 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from scripts.quality.base_image_lifecycle_guard import (
+    GOVERNED_BASE_REGISTRY,
+    GOVERNED_BASE_REPOSITORY,
+    GOVERNED_BASE_TAG,
     REGISTRY_API_AUTHORITIES,
     image_registry_and_repository,
+    image_tag,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -95,6 +99,15 @@ def build_evidence() -> dict[str, Any]:
     if registry_authority is None:
         raise ManifestEvidenceRefreshError(
             "governed base image registry has no approved OCI API authority"
+        )
+    if (
+        image_registry != GOVERNED_BASE_REGISTRY
+        or image_repository != GOVERNED_BASE_REPOSITORY
+        or image_tag(image) != GOVERNED_BASE_TAG
+        or record.get("tag") != GOVERNED_BASE_TAG
+    ):
+        raise ManifestEvidenceRefreshError(
+            "governed base image must remain Docker Official library/python:3.11-slim-bookworm"
         )
 
     index_bytes = _inspect_raw(image)
