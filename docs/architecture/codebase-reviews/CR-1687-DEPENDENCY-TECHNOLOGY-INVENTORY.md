@@ -14,17 +14,17 @@ metadata. PyPI proves publication metadata; it does not prove support, operation
 bank readiness. Support remains `review_required` until Technology Risk and Open Source Governance
 records reviewed upstream support, vulnerability-disclosure, and lifecycle authorities.
 
-The inventory generator records the latest committed revision of its governed lock and policy
-inputs. This source revision remains reachable after a feature branch is rebased onto `main`.
-Execution receipts separately record the exact checkout SHA, so input provenance and validation
-execution provenance are both truthful. The generator is versioned `1.1.0` for this contract.
+The inventory generator records the reachable `origin/main` merge-base inspected when evidence is
+refreshed. Exact lock and policy digests bind the decisive input content without introducing a
+self-referential feature SHA that a rebase merge would rewrite. Execution receipts separately
+record the exact checkout SHA. The generator is versioned `1.2.0` for this contract.
 
 ## Enforcement
 
 `make dependency-technology-inventory`:
 
 - validates fixed schema, inventory, repository, issue-owner, and generator identities;
-- requires the source revision to be a full SHA reachable from the inspected checkout;
+- requires the source baseline to be a full SHA reachable from the inspected checkout;
 - requires a timezone-aware, non-future generation timestamp;
 - recomputes component coverage and lock membership from all four governed closures;
 - recomputes summary counts, certification decision, and technology state from component evidence;

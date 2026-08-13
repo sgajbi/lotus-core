@@ -36,7 +36,7 @@ INVENTORY_REPOSITORY = "https://github.com/sgajbi/lotus-core"
 INVENTORY_ISSUE = "https://github.com/sgajbi/lotus-core/issues/926"
 INVENTORY_GENERATOR = {
     "id": "lotus-core-dependency-technology-inventory",
-    "version": "1.1.0",
+    "version": "1.2.0",
 }
 
 
@@ -197,12 +197,14 @@ def _validate_inventory_provenance(inventory: dict[str, Any], *, as_of: date) ->
     for field, value in expected.items():
         if inventory.get(field) != value:
             raise InventoryValidationError(f"dependency inventory {field} provenance drift")
-    source_commit = inventory.get("source_commit")
+    source_commit = inventory.get("source_baseline_commit")
     if not isinstance(source_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
-        raise InventoryValidationError("dependency inventory source_commit must be a full SHA")
+        raise InventoryValidationError(
+            "dependency inventory source_baseline_commit must be a full SHA"
+        )
     if not _commit_is_ancestor(source_commit):
         raise InventoryValidationError(
-            "dependency inventory source_commit is not an ancestor of the inspected checkout"
+            "dependency inventory source_baseline_commit is not an ancestor of the checkout"
         )
     generated_at = datetime.fromisoformat(
         str(inventory.get("generated_at_utc", "")).replace("Z", "+00:00")

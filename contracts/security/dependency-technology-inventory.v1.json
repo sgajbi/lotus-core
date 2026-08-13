@@ -3994,7 +3994,7 @@
   "generated_at_utc": "2026-08-13T00:00:00Z",
   "generator": {
     "id": "lotus-core-dependency-technology-inventory",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "governed_by_issue": "https://github.com/sgajbi/lotus-core/issues/926",
   "inventory_id": "lotus-core-python-dependency-technology-inventory",
@@ -4004,7 +4004,7 @@
   },
   "repository": "https://github.com/sgajbi/lotus-core",
   "schema_version": "lotus-core.dependency-technology-inventory.v1",
-  "source_commit": "27de943e61428684a013e4fedee6cc4180a83b9b",
+  "source_baseline_commit": "c2026bc9be08b355cd64c3654d65d41c6858c0a9",
   "source_locks": [
     {
       "path": "requirements/shared-runtime.lock.txt",

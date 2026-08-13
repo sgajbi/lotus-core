@@ -252,10 +252,11 @@ status, or a digest alone as a support SLA. External Compose dependency images a
 infrastructure outside the Core-built release boundary and require environment-level governance
 before production use.
 
-The dependency technology inventory records the latest committed revision of its governed lock
-and policy inputs, while each CI receipt records the exact execution SHA. This distinction keeps
-provenance valid through the repository-approved rebase merge. `make dependency-technology-inventory`
-fails on unreachable source revisions, generator/repository/issue drift, future generation time,
+The dependency technology inventory records a reachable `origin/main` source baseline plus exact
+governed lock/policy digests, while each CI receipt records the exact execution SHA. This avoids a
+self-referential feature SHA that the repository-approved rebase merge would rewrite.
+`make dependency-technology-inventory` fails on unreachable source baselines,
+generator/repository/issue drift, future generation time,
 contradictory summaries, or readiness claims. A structurally valid blocked receipt is evidence of a
 governed gap, not production or bank-buyable certification.
 

@@ -139,7 +139,7 @@ def test_locked_component_identity_is_stable_across_checkout_newlines(
     assert locks[0]["sha256"] == replayed_locks[0]["sha256"]
 
 
-def test_source_commit_is_derived_from_governed_input_history(tmp_path: Path, monkeypatch) -> None:
+def test_source_commit_is_stable_repository_baseline(tmp_path: Path, monkeypatch) -> None:
     policy_file = tmp_path / "policy.json"
     lock = tmp_path / "runtime.lock"
     policy_file.write_text("{}\n", encoding="utf-8")
@@ -160,15 +160,7 @@ def test_source_commit_is_derived_from_governed_input_history(tmp_path: Path, mo
     monkeypatch.setattr(inventory.subprocess, "run", _run)
 
     assert inventory._source_commit() == "a" * 40
-    assert captured == [
-        "git",
-        "log",
-        "-1",
-        "--format=%H",
-        "--",
-        "runtime.lock",
-        "policy.json",
-    ]
+    assert captured == ["git", "merge-base", "HEAD", "origin/main"]
 
 
 def test_build_inventory_is_replay_stable_for_identical_sources(
