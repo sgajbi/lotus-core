@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -17,11 +18,32 @@ from scripts.release.image_scan_policy import (
     build_unavailable_receipt,
     enforce_policy_receipt,
 )
+from scripts.release.vulnerability_authority_bundle import (
+    VulnerabilityAuthorityBundleError,
+)
 
 FULL_SHA = "a" * 40
 IMAGE_DIGEST = "sha256:" + "b" * 64
 IMAGE_REF = "ghcr.io/sgajbi/lotus-core/query-service"
 DIGEST_REF = f"{IMAGE_REF}@{IMAGE_DIGEST}"
+
+
+def _write_authority_bundle(tmp_path: Path) -> Path:
+    path = tmp_path / "vulnerability-authority-bundle.json"
+    payload = {
+        "schema_version": "lotus-core.vulnerability-authority-bundle.v1",
+        "generated_at_utc": "2026-08-12T02:02:01Z",
+        "repository": "sgajbi/lotus-core",
+        "git_commit_sha": FULL_SHA,
+        "ci_run_id": "12345",
+        "ci_run_attempt": "2",
+        "cisa_kev": {"source_sha256": "sha256:" + "c" * 64},
+        "exception_schema": {"source_sha256": "sha256:" + "d" * 64},
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    payload["bundle_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +118,7 @@ def _receipt(report_path: Path, **overrides: Any) -> dict[str, object]:
         "scan_timestamp": "2026-08-12T02:03:04Z",
         "kev_catalog_path": kev_catalog_path,
         "kev_fetched_at": "2026-08-12T02:02:00Z",
+        "authority_bundle_path": _write_authority_bundle(report_path.parent),
     }
     values.update(overrides)
     return build_policy_receipt(report_path=report_path, **values)
@@ -105,6 +128,7 @@ def _enforce(receipt_path: Path, **overrides: Any) -> None:
     values = {
         "report_path": receipt_path.parent / "trivy.json",
         "kev_catalog_path": receipt_path.parent / "cisa-kev.json",
+        "authority_bundle_path": receipt_path.parent / "vulnerability-authority-bundle.json",
         "expected_service": "query_service",
         "expected_image_ref": IMAGE_REF,
         "expected_image_digest": IMAGE_DIGEST,
@@ -129,6 +153,7 @@ def test_unavailable_receipt_is_secret_safe_exact_and_fail_closed(tmp_path: Path
         ci_run_attempt="2",
         generated_at="2026-08-12T02:03:04Z",
         reason_code="cisa_kev_fetch_failed",
+        authority_bundle_path=_write_authority_bundle(tmp_path),
     )
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
@@ -150,7 +175,7 @@ def test_enforcement_rejects_stale_or_future_receipt(tmp_path: Path, enforced_at
         _enforce(receipt_path, enforced_at=enforced_at)
 
 
-@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4"])
+@pytest.mark.parametrize("version", ["v1", "v2", "v3", "v4", "v5"])
 def test_current_enforcement_rejects_prior_receipt_versions(tmp_path: Path, version: str) -> None:
     receipt = _receipt(_write_report(tmp_path, results=[]))
     receipt["schema_version"] = f"lotus-core.image-scan-policy-receipt.{version}"
@@ -173,6 +198,15 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
         "promotion_eligible": False,
     }
     assert receipt["source"] == {
+        "repository": "sgajbi/lotus-core",
+        "git_commit_sha": FULL_SHA,
+        "ci_run_id": "12345",
+        "ci_run_attempt": "2",
+    }
+    assert receipt["vulnerability_authority"] == {
+        "schema_version": "lotus-core.vulnerability-authority-bundle.v1",
+        "bundle_sha256": receipt["vulnerability_authority"]["bundle_sha256"],
+        "generated_at_utc": "2026-08-12T02:02:01Z",
         "repository": "sgajbi/lotus-core",
         "git_commit_sha": FULL_SHA,
         "ci_run_id": "12345",
@@ -217,6 +251,29 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
     }
     assert receipt["findings"] == []
     assert str(receipt["scanner"]["report_sha256"]).startswith("sha256:")
+
+
+def test_enforcement_rejects_tampered_authority_bundle(tmp_path: Path) -> None:
+    receipt = _receipt(_write_report(tmp_path, results=[]))
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    authority_path = tmp_path / "vulnerability-authority-bundle.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["cisa_kev"]["source_sha256"] = "sha256:" + "e" * 64
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(VulnerabilityAuthorityBundleError, match="digest does not match"):
+        _enforce(receipt_path)
+
+
+def test_enforcement_rejects_receipt_authority_substitution(tmp_path: Path) -> None:
+    receipt = _receipt(_write_report(tmp_path, results=[]))
+    receipt["vulnerability_authority"]["bundle_sha256"] = "sha256:" + "f" * 64
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ScanPolicyError, match="authority identity does not match"):
+        _enforce(receipt_path)
 
 
 def test_high_vulnerability_builds_blocked_normalized_receipt(tmp_path: Path) -> None:

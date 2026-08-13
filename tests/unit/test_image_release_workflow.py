@@ -154,6 +154,7 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     assert "vulnerability_authority_bundle verify" in generate
     assert "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL" in generate
     assert "--kev-catalog" in generate
+    assert "--authority-bundle" in generate
     assert "--kev-fetched-at" in generate
     assert "--exception-register" in generate
     assert "--exception-schema" in generate
@@ -172,6 +173,7 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
         steps[enforce_index]["run"]
     )
     assert "--exception-register" in str(steps[enforce_index]["run"])
+    assert "--authority-bundle" in str(steps[enforce_index]["run"])
     assert (
         '--exception-schema "output/vulnerability-authority/'
         'vulnerability-exception-register.schema.json"' in str(steps[enforce_index]["run"])
