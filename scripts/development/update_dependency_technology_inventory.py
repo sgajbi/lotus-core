@@ -27,7 +27,7 @@ LOCKS = (
 PIN = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^\s;]+)$")
 COMPOUND_LICENSE = re.compile(r"\s(?:AND|OR|WITH)\s", re.IGNORECASE)
 GENERATOR_ID = "lotus-core-dependency-technology-inventory"
-GENERATOR_VERSION = "1.0.0"
+GENERATOR_VERSION = "1.1.0"
 
 
 class InventoryRefreshError(RuntimeError):
@@ -176,12 +176,21 @@ def _release_timestamp(payload: dict[str, Any]) -> str | None:
     return timestamps[0] if timestamps else None
 
 
-def _git_commit() -> str:
-    override = os.getenv("GITHUB_SHA")
-    if override and re.fullmatch(r"[0-9a-fA-F]{40}", override):
-        return override.lower()
+def _source_commit() -> str:
     result = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True
+        [
+            "git",
+            "log",
+            "-1",
+            "--format=%H",
+            "--",
+            *(path.relative_to(ROOT).as_posix() for *_identity, path in LOCKS),
+            POLICY_FILE.relative_to(ROOT).as_posix(),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     return result.stdout.strip()
 
@@ -255,7 +264,7 @@ def build_inventory(*, reviewed_on: date) -> dict[str, Any]:
         "inventory_id": "lotus-core-python-dependency-technology-inventory",
         "governed_by_issue": "https://github.com/sgajbi/lotus-core/issues/926",
         "repository": "https://github.com/sgajbi/lotus-core",
-        "source_commit": _git_commit(),
+        "source_commit": _source_commit(),
         "generated_at_utc": generated_at,
         "generator": {"id": GENERATOR_ID, "version": GENERATOR_VERSION},
         "policy": {

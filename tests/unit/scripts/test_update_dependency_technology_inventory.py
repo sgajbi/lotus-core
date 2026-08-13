@@ -139,6 +139,38 @@ def test_locked_component_identity_is_stable_across_checkout_newlines(
     assert locks[0]["sha256"] == replayed_locks[0]["sha256"]
 
 
+def test_source_commit_is_derived_from_governed_input_history(tmp_path: Path, monkeypatch) -> None:
+    policy_file = tmp_path / "policy.json"
+    lock = tmp_path / "runtime.lock"
+    policy_file.write_text("{}\n", encoding="utf-8")
+    lock.write_text("demo==1.0\n", encoding="utf-8")
+    monkeypatch.setattr(inventory, "ROOT", tmp_path)
+    monkeypatch.setattr(inventory, "POLICY_FILE", policy_file)
+    monkeypatch.setattr(inventory, "LOCKS", (("runtime", "linux/amd64", lock),))
+    captured: list[str] = []
+
+    def _run(command, **_kwargs):
+        captured.extend(command)
+
+        class Result:
+            stdout = "a" * 40 + "\n"
+
+        return Result()
+
+    monkeypatch.setattr(inventory.subprocess, "run", _run)
+
+    assert inventory._source_commit() == "a" * 40
+    assert captured == [
+        "git",
+        "log",
+        "-1",
+        "--format=%H",
+        "--",
+        "runtime.lock",
+        "policy.json",
+    ]
+
+
 def test_build_inventory_is_replay_stable_for_identical_sources(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -161,7 +193,7 @@ def test_build_inventory_is_replay_stable_for_identical_sources(
             {("demo", "1.0"): {"runtime:linux/amd64"}},
         ),
     )
-    monkeypatch.setattr(inventory, "_git_commit", lambda: "b" * 40)
+    monkeypatch.setattr(inventory, "_source_commit", lambda: "b" * 40)
     monkeypatch.setattr(
         inventory,
         "_fetch_pypi",

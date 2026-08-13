@@ -36,7 +36,7 @@ INVENTORY_REPOSITORY = "https://github.com/sgajbi/lotus-core"
 INVENTORY_ISSUE = "https://github.com/sgajbi/lotus-core/issues/926"
 INVENTORY_GENERATOR = {
     "id": "lotus-core-dependency-technology-inventory",
-    "version": "1.0.0",
+    "version": "1.1.0",
 }
 
 
