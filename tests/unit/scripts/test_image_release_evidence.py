@@ -18,6 +18,8 @@ from scripts.release.image_release_evidence import (
 IMAGE_REF = "ghcr.io/sgajbi/lotus-core/query-service"
 IMAGE_DIGEST = "sha256:" + "a" * 64
 DOCKERFILE = "src/services/query_service/Dockerfile"
+ISSUER = "https://token.actions.githubusercontent.com"
+SUBJECT_PATTERN = r"repo:sgajbi/lotus-core:ref:refs/heads/main"
 AUTHORITY = {
     "schema_version": "lotus-core.vulnerability-authority-bundle.v1",
     "bundle_sha256": "sha256:" + "f" * 64,
@@ -155,7 +157,13 @@ def test_signature_identity_requires_exact_digest_ref_and_certificate(tmp_path: 
         ],
     )
 
-    identity = signature_verification_identity(path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST)
+    identity = signature_verification_identity(
+        path,
+        image_ref=IMAGE_REF,
+        image_digest=IMAGE_DIGEST,
+        expected_issuer=ISSUER,
+        expected_subject_pattern=SUBJECT_PATTERN,
+    )
 
     assert identity["verification_count"] == 1
     assert identity["certificate_identities"][0]["subject"].startswith("repo:sgajbi/")
@@ -175,7 +183,46 @@ def test_signature_identity_rejects_artifact_mismatch(tmp_path: Path) -> None:
         ],
     )
     with pytest.raises(ImageReleaseEvidenceError, match="digest drifted"):
-        signature_verification_identity(path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST)
+        signature_verification_identity(
+            path,
+            image_ref=IMAGE_REF,
+            image_digest=IMAGE_DIGEST,
+            expected_issuer=ISSUER,
+            expected_subject_pattern=SUBJECT_PATTERN,
+        )
+
+
+@pytest.mark.parametrize(
+    ("issuer", "subject", "message"),
+    [
+        ("https://unexpected.example", "repo:sgajbi/lotus-core:ref:refs/heads/main", "issuer"),
+        (ISSUER, "repo:attacker/fork:ref:refs/heads/main", "subject"),
+    ],
+)
+def test_signature_identity_rejects_certificate_identity_drift(
+    tmp_path: Path, issuer: str, subject: str, message: str
+) -> None:
+    path = _write(
+        tmp_path / "signature.json",
+        [
+            {
+                "critical": {
+                    "image": {"docker-manifest-digest": IMAGE_DIGEST},
+                    "identity": {"docker-reference": IMAGE_REF},
+                },
+                "optional": {"Issuer": issuer, "Subject": subject},
+            }
+        ],
+    )
+
+    with pytest.raises(ImageReleaseEvidenceError, match=message):
+        signature_verification_identity(
+            path,
+            image_ref=IMAGE_REF,
+            image_digest=IMAGE_DIGEST,
+            expected_issuer=ISSUER,
+            expected_subject_pattern=SUBJECT_PATTERN,
+        )
 
 
 def _attestation_payload(digest: str = IMAGE_DIGEST) -> str:

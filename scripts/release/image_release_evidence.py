@@ -135,12 +135,21 @@ def scan_receipt_identity(
 
 
 def signature_verification_identity(
-    path: Path, *, image_ref: str, image_digest: str
+    path: Path,
+    *,
+    image_ref: str,
+    image_digest: str,
+    expected_issuer: str,
+    expected_subject_pattern: str,
 ) -> dict[str, Any]:
     """Validate Cosign verification output for exactly the target digest."""
     _validate_subject(image_ref=image_ref, image_digest=image_digest)
     content, raw = _json(path, name="Cosign signature verification")
     entries = _array(raw, name="Cosign signature verification")
+    try:
+        subject_pattern = re.compile(expected_subject_pattern)
+    except re.error as exc:
+        raise ImageReleaseEvidenceError("signature subject pattern is invalid") from exc
     identities: list[dict[str, str]] = []
     for entry in entries:
         item = _object(entry, name="Cosign signature entry")
@@ -158,12 +167,18 @@ def signature_verification_identity(
             raise ImageReleaseEvidenceError("signature verification issuer is required")
         if not isinstance(subject, str) or not subject.strip():
             raise ImageReleaseEvidenceError("signature verification subject is required")
+        if issuer != expected_issuer:
+            raise ImageReleaseEvidenceError("signature verification issuer drifted")
+        if subject_pattern.fullmatch(subject) is None:
+            raise ImageReleaseEvidenceError("signature verification subject drifted")
         identities.append({"issuer": issuer, "subject": subject})
     return {
         "media_type": "application/vnd.dev.cosign.simplesigning.v1+json",
         "sha256": _sha256(content),
         "verification_count": len(entries),
         "certificate_identities": identities,
+        "expected_certificate_issuer": expected_issuer,
+        "expected_certificate_subject_pattern": expected_subject_pattern,
         "subject": {"image_ref": image_ref, "image_digest": image_digest},
     }
 
