@@ -17,7 +17,9 @@ security-support phase, Debian Bookworm LTS posture, and exact-image Debian pack
 Core also retains the bounded raw OCI index and runtime-manifest bytes in
 `contracts/security/base-image-manifest-evidence.v1.json`. The guard recomputes the parent and child
 SHA-256 digests, selects exactly one `linux/amd64` descriptor, and derives the config identity from
-the verified child document. Digest-shaped authored fields cannot independently authorize this
+the verified child document. The selected descriptor's retained OCI revision and source
+annotations must also bind the lifecycle source revision and exact Docker Official Images source
+path. Digest-shaped or mutually consistent authored fields cannot independently authorize this
 chain.
 
 Availability in a multi-platform index is not treated as deployment support. The governed release
@@ -40,7 +42,8 @@ permitted platform, official-image membership, or upstream lifecycle changes.
   derives the image registry/repository, which must match both the lifecycle fields and the
   governed registry API authority, so authored metadata cannot reattribute another registry's
   bytes; the approved identity is specifically Docker Official Images `library/python` with the
-  governed `3.11-slim-bookworm` tag and source revision, not any self-consistent Docker Hub image;
+  governed `3.11-slim-bookworm` tag; the source revision must equal the revision annotation inside
+  the digest-bound platform descriptor, not any self-consistent authored value or Docker Hub image;
 - CPython and Debian authorities remain current, each local cutoff is bounded by its upstream
   authority end date, and the earliest local cutoff owns release posture;
 - Docker Official Images source/registry authority is complete, credential-free HTTPS evidence and
@@ -67,7 +70,7 @@ No API/OpenAPI, migration, supported-feature, or platform-context update is requ
 - adversarial evidence tests cover missing/malformed registry evidence, changed parent or child
   bytes, missing platform selection, descriptor drift, config drift, credentialed authority, and
   unrelated or ungoverned registry authorities, image/lifecycle location mismatches, and
-  self-consistent but unapproved Docker Hub repositories;
+  self-consistent but unapproved Docker Hub repositories or fabricated source revisions;
 - direct `make base-image-lifecycle-guard` and `make image-provenance-guard`;
 - online `update_base_image_manifest_evidence.py --check` against Docker Hub raw OCI bytes;
 - exact-image `debian-security-support` execution on `linux/amd64` produced no ended or limited

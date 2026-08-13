@@ -17,6 +17,7 @@ from scripts.quality.base_image_lifecycle_guard import (
     REGISTRY_API_AUTHORITIES,
     image_registry_and_repository,
     image_tag,
+    official_image_source_annotation,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -117,6 +118,17 @@ def build_evidence() -> dict[str, Any]:
         )
     index = _load_json(index_bytes, label="OCI index")
     child_descriptor = _select_platform_manifest(index, platform)
+    source_revision = str(record.get("source_revision", ""))
+    source_annotations = child_descriptor.get("annotations")
+    if (
+        not isinstance(source_annotations, dict)
+        or source_annotations.get("org.opencontainers.image.revision") != source_revision
+        or source_annotations.get("org.opencontainers.image.source")
+        != official_image_source_annotation(source_revision)
+    ):
+        raise ManifestEvidenceRefreshError(
+            "registry runtime descriptor does not bind the governed Official Images source revision"
+        )
     child_digest = str(child_descriptor.get("digest", ""))
 
     repository = image.split("@", maxsplit=1)[0]

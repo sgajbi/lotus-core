@@ -142,6 +142,20 @@ def test_guard_rejects_child_digest_not_bound_to_index_descriptor(tmp_path: Path
     assert "selected index descriptor must bind the runtime manifest digest" in details
 
 
+def test_guard_rejects_source_revision_not_bound_to_raw_index_descriptor(tmp_path: Path) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["source_revision"] = "0" * 40
+    record["identity_evidence"]["official_image_source"] = (  # type: ignore[index]
+        "https://github.com/docker-library/python/tree/" + "0" * 40 + "/3.11/slim-bookworm"
+    )
+    _write_fixture(tmp_path, inventory)
+
+    details = _details(tmp_path)
+    assert "selected index descriptor revision must bind the lifecycle source revision" in details
+    assert "selected index descriptor source must bind the Official Images revision" in details
+
+
 def test_guard_rejects_raw_child_bytes_not_bound_to_child_digest(tmp_path: Path) -> None:
     evidence = _manifest_evidence()
     encoded = evidence["runtime_manifest"]["raw_base64"]  # type: ignore[index]

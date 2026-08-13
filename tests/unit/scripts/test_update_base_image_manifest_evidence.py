@@ -17,6 +17,7 @@ def _digest(payload: bytes) -> str:
 
 
 def _fixture(tmp_path: Path, monkeypatch) -> tuple[bytes, bytes]:
+    source_revision = "a" * 40
     child_payload = _raw(
         {
             "schemaVersion": 2,
@@ -36,6 +37,13 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[bytes, bytes]:
                     "mediaType": "application/vnd.oci.image.manifest.v1+json",
                     "size": len(child_payload),
                     "platform": {"architecture": "amd64", "os": "linux"},
+                    "annotations": {
+                        "org.opencontainers.image.revision": source_revision,
+                        "org.opencontainers.image.source": (
+                            "https://github.com/docker-library/python.git#"
+                            f"{source_revision}:3.11/slim-bookworm"
+                        ),
+                    },
                 }
             ],
         }
@@ -52,6 +60,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[bytes, bytes]:
                         "registry": "docker.io",
                         "repository": "library/python",
                         "tag": "3.11-slim-bookworm",
+                        "source_revision": source_revision,
                     }
                 ]
             }
@@ -95,6 +104,21 @@ def test_build_evidence_rejects_missing_platform_manifest(tmp_path: Path, monkey
     _fixture(tmp_path, monkeypatch)
     with pytest.raises(updater.ManifestEvidenceRefreshError, match="exactly one"):
         updater._select_platform_manifest({"manifests": []}, "linux/amd64")
+
+
+def test_build_evidence_rejects_source_revision_not_bound_by_registry_descriptor(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _fixture(tmp_path, monkeypatch)
+    lifecycle = json.loads(updater.LIFECYCLE_INVENTORY.read_text(encoding="utf-8"))
+    lifecycle["base_images"][0]["source_revision"] = "0" * 40
+    updater.LIFECYCLE_INVENTORY.write_text(json.dumps(lifecycle), encoding="utf-8")
+
+    with pytest.raises(
+        updater.ManifestEvidenceRefreshError,
+        match="does not bind the governed Official Images source revision",
+    ):
+        updater.build_evidence()
 
 
 def test_build_evidence_rejects_registry_without_governed_api_authority(
