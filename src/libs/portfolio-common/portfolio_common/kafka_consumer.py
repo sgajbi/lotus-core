@@ -24,6 +24,7 @@ from .config import (
     KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS,
     get_kafka_consumer_runtime_overrides,
 )
+from .connection_security import build_kafka_connection_config
 from .database_models import ConsumerDlqEvent, IngestionJob
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
@@ -258,14 +259,19 @@ class BaseConsumer(ABC):
         self._metrics = metrics
         self._consumer = None
         self._producer = None
-        self._consumer_config = {
-            "bootstrap.servers": bootstrap_servers,
-            "group.id": group_id,
-            "auto.offset.reset": "earliest",
-            "enable.auto.commit": False,
-            "session.timeout.ms": 30000,
-            "heartbeat.interval.ms": 3000,
-        }
+        self._consumer_config = build_kafka_connection_config(
+            bootstrap_servers,
+            service_name=f"{group_id} consumer",
+        )
+        self._consumer_config.update(
+            {
+                "group.id": group_id,
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": False,
+                "session.timeout.ms": 30000,
+                "heartbeat.interval.ms": 3000,
+            }
+        )
         runtime_overrides = get_kafka_consumer_runtime_overrides(group_id)
         if runtime_overrides:
             self._consumer_config.update(runtime_overrides)
