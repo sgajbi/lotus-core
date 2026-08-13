@@ -9,6 +9,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
+ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
 PYTHON_RUNTIME_SERVICES = frozenset(
     {
         "kafka-topic-creator",
@@ -42,6 +43,17 @@ def test_app_local_python_services_declare_local_environment_authority() -> None
         service: services[service].get("environment", {}).get("ENVIRONMENT")
         for service in PYTHON_RUNTIME_SERVICES
     } == {service: "local" for service in PYTHON_RUNTIME_SERVICES}
+
+
+def test_app_local_environment_template_declares_local_security_authority() -> None:
+    settings = dict(
+        line.split("=", maxsplit=1)
+        for line in ENV_EXAMPLE_PATH.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#") and "=" in line
+    )
+
+    assert settings["ENVIRONMENT"] == "local"
+    assert settings["KAFKA_SECURITY_PROTOCOL"] == "PLAINTEXT"
 
 
 def test_app_local_kafka_clients_declare_plaintext_as_local_only() -> None:

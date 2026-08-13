@@ -87,6 +87,10 @@ def test_portfolio_derived_state_deployment_uses_external_runtime_configuration(
     environment = {item["name"]: item for item in container["env"]}
 
     assert environment["SERVICE_NAME"]["value"] == "portfolio-derived-state"
+    assert environment["ENVIRONMENT"]["valueFrom"]["configMapKeyRef"] == {
+        "name": "lotus-core-runtime",
+        "key": "environment",
+    }
     assert environment["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
         "name": "lotus-core-database",
         "key": "database-url",
@@ -94,6 +98,30 @@ def test_portfolio_derived_state_deployment_uses_external_runtime_configuration(
     assert environment["KAFKA_BOOTSTRAP_SERVERS"]["valueFrom"]["configMapKeyRef"] == {
         "name": "lotus-core-runtime",
         "key": "kafka-bootstrap-servers",
+    }
+    assert environment["KAFKA_SECURITY_PROTOCOL"]["value"] == "SASL_SSL"
+    assert environment["KAFKA_SSL_CA_LOCATION"]["value"] == (
+        "/var/run/secrets/lotus-core/kafka/ca.pem"
+    )
+    assert environment["KAFKA_SASL_MECHANISM"]["value"] == "SCRAM-SHA-512"
+    assert environment["KAFKA_SASL_USERNAME"]["valueFrom"]["secretKeyRef"] == {
+        "name": "lotus-core-kafka",
+        "key": "sasl-username",
+    }
+    assert environment["KAFKA_SASL_PASSWORD"]["valueFrom"]["secretKeyRef"] == {
+        "name": "lotus-core-kafka",
+        "key": "sasl-password",
+    }
+    assert {item["name"]: item for item in container["volumeMounts"]}["kafka-trust"] == {
+        "name": "kafka-trust",
+        "mountPath": "/var/run/secrets/lotus-core/kafka",
+        "readOnly": True,
+    }
+    assert {item["name"]: item for item in deployment["spec"]["template"]["spec"]["volumes"]}[
+        "kafka-trust"
+    ]["secret"] == {
+        "secretName": "lotus-core-kafka-trust",
+        "defaultMode": 0o440,
     }
     optional_tuning_keys = {
         "PORTFOLIO_AGGREGATION_WORKER_COUNT": "portfolio-aggregation-worker-count",
@@ -125,13 +153,16 @@ def test_keda_scales_one_derived_state_runtime_from_preserved_position_group() -
     assert scaler["spec"]["minReplicaCount"] >= 1
     assert [trigger["metadata"] for trigger in scaler["spec"]["triggers"]] == [
         {
-            "bootstrapServers": "kafka:9092",
+            "bootstrapServersFromEnv": "KAFKA_BOOTSTRAP_SERVERS",
+            "tls": "enable",
+            "sasl": "scram_sha512",
             "consumerGroup": "timeseries_generator_group_positions",
             "topic": "valuation.snapshot.persisted",
             "lagThreshold": "400",
             "offsetResetPolicy": "latest",
         }
     ]
+    assert scaler["spec"]["triggers"][0]["authenticationRef"] == {"name": "lotus-core-kafka-auth"}
 
 
 def test_deployment_inventory_contains_no_retired_derived_state_runtime() -> None:

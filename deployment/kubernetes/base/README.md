@@ -22,6 +22,13 @@ kubectl apply -f output/deployment/portfolio-derived-state.yaml
 
 The renderer fails unless the manifest proves SBOM generation, passed vulnerability scanning,
 signature, provenance, digest deployment, and one identical digest for dev, UAT, and prod. Supply
-`lotus-core-database` Secret key `database-url` and `lotus-core-runtime` ConfigMap key
-`kafka-bootstrap-servers` before deployment. Complete the governed Kafka offset handoff before the
-first target pod starts.
+the following configuration before deployment:
+
+- `lotus-core-database` Secret key `database-url` with a non-default credential;
+- `lotus-core-runtime` ConfigMap keys `environment` and `kafka-bootstrap-servers`;
+- `lotus-core-kafka` Secret keys `sasl-username` and `sasl-password`;
+- `lotus-core-kafka-trust` Secret key `ca.pem` containing the broker CA bundle.
+
+The base deliberately fixes promoted Kafka transport to `SASL_SSL` with `SCRAM-SHA-512` and mounts
+the CA read-only. Missing release authority prevents pod startup; it never falls back to app-local
+plaintext. Complete the governed Kafka offset handoff before the first target pod starts.

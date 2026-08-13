@@ -252,6 +252,11 @@ use local-only `PLAINTEXT`, and PostgreSQL development credentials stay inside t
 Staging, UAT, production, and unspecified profiles fail closed on the local database password or
 plaintext Kafka. Production-like deployments must provide database secrets plus Kafka TLS/SASL
 trust and credentials through their deployment secret mechanism.
+The release-managed Kubernetes base fixes Kafka transport to `SASL_SSL` with `SCRAM-SHA-512`, reads
+the environment from `lotus-core-runtime`, reads credentials from `lotus-core-kafka`, and mounts the
+`lotus-core-kafka-trust` CA bundle read-only. Missing release authority blocks pod startup instead
+of falling back to plaintext.
+KEDA lag scalers share that SASL/TLS authority instead of connecting to the local plaintext port.
 
 An interrupted Kafka broker can temporarily leave `/brokers/ids/1` owned by its previous ZooKeeper
 session. App-local Kafka retries the unchanged startup at most five times while that ephemeral

@@ -68,6 +68,11 @@ spec:
           env:
             - name: SERVICE_NAME
               value: portfolio-derived-state
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: lotus-core-runtime
+                  key: environment
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -78,6 +83,22 @@ spec:
                 configMapKeyRef:
                   name: lotus-core-runtime
                   key: kafka-bootstrap-servers
+            - name: KAFKA_SECURITY_PROTOCOL
+              value: SASL_SSL
+            - name: KAFKA_SSL_CA_LOCATION
+              value: /var/run/secrets/lotus-core/kafka/ca.pem
+            - name: KAFKA_SASL_MECHANISM
+              value: SCRAM-SHA-512
+            - name: KAFKA_SASL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: lotus-core-kafka
+                  key: sasl-username
+            - name: KAFKA_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lotus-core-kafka
+                  key: sasl-password
             - name: OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS
               value: "1"
             - name: OUTBOX_DISPATCHER_BATCH_SIZE
@@ -160,9 +181,16 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
+            - name: kafka-trust
+              mountPath: /var/run/secrets/lotus-core/kafka
+              readOnly: true
             - name: temporary-files
               mountPath: /tmp
       volumes:
+        - name: kafka-trust
+          secret:
+            secretName: lotus-core-kafka-trust
+            defaultMode: 0440
         - name: temporary-files
           emptyDir:
             sizeLimit: 256Mi

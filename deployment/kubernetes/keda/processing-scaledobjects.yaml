@@ -1,4 +1,21 @@
 apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: lotus-core-kafka-auth
+  namespace: lotus-core
+spec:
+  secretTargetRef:
+    - parameter: username
+      name: lotus-core-kafka
+      key: sasl-username
+    - parameter: password
+      name: lotus-core-kafka
+      key: sasl-password
+    - parameter: ca
+      name: lotus-core-kafka-trust
+      key: ca.pem
+---
+apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: portfolio-transaction-processing
@@ -13,18 +30,26 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: kafka:9092
+        bootstrapServersFromEnv: KAFKA_BOOTSTRAP_SERVERS
+        tls: enable
+        sasl: scram_sha512
         consumerGroup: portfolio_transaction_processing_group
         topic: transactions.persisted
         lagThreshold: "200"
         offsetResetPolicy: earliest
+      authenticationRef:
+        name: lotus-core-kafka-auth
     - type: kafka
       metadata:
-        bootstrapServers: kafka:9092
+        bootstrapServersFromEnv: KAFKA_BOOTSTRAP_SERVERS
+        tls: enable
+        sasl: scram_sha512
         consumerGroup: portfolio_transaction_replay_request_group
         topic: transactions.reprocessing.requested
         lagThreshold: "200"
         offsetResetPolicy: earliest
+      authenticationRef:
+        name: lotus-core-kafka-auth
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -41,11 +66,15 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: kafka:9092
+        bootstrapServersFromEnv: KAFKA_BOOTSTRAP_SERVERS
+        tls: enable
+        sasl: scram_sha512
         consumerGroup: position_valuation_worker_group
         topic: valuation.job.requested
         lagThreshold: "150"
         offsetResetPolicy: latest
+      authenticationRef:
+        name: lotus-core-kafka-auth
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -62,8 +91,12 @@ spec:
   triggers:
     - type: kafka
       metadata:
-        bootstrapServers: kafka:9092
+        bootstrapServersFromEnv: KAFKA_BOOTSTRAP_SERVERS
+        tls: enable
+        sasl: scram_sha512
         consumerGroup: timeseries_generator_group_positions
         topic: valuation.snapshot.persisted
         lagThreshold: "400"
         offsetResetPolicy: latest
+      authenticationRef:
+        name: lotus-core-kafka-auth
