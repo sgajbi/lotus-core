@@ -1,3 +1,4 @@
+import base64
 import copy
 import json
 from datetime import date
@@ -87,6 +88,90 @@ def test_guard_rejects_missing_lifecycle_inventory(tmp_path: Path) -> None:
     findings = find_base_image_lifecycle_findings(tmp_path, today=date(2026, 8, 12))
 
     assert [finding.detail for finding in findings] == ["missing lifecycle inventory"]
+
+
+def test_guard_rejects_missing_manifest_evidence(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, _inventory())
+    (tmp_path / MANIFEST_EVIDENCE_PATH).unlink()
+
+    findings = find_base_image_lifecycle_findings(tmp_path, today=date(2026, 8, 12))
+
+    assert [finding.detail for finding in findings] == ["missing manifest evidence"]
+
+
+def test_guard_rejects_malformed_raw_index_evidence(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    evidence["index"]["raw_base64"] = "not base64!"  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    assert "index.raw_base64 must contain valid base64" in _details(tmp_path)
+
+
+def test_guard_rejects_raw_index_bytes_not_bound_to_parent_digest(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    encoded = evidence["index"]["raw_base64"]  # type: ignore[index]
+    raw = base64.b64decode(encoded) + b"\n"
+    evidence["index"]["raw_base64"] = base64.b64encode(raw).decode("ascii")  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    assert "raw index digest must match the lifecycle image digest" in _details(tmp_path)
+
+
+def test_guard_rejects_platform_descriptor_drift(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    encoded = evidence["index"]["raw_base64"]  # type: ignore[index]
+    index = json.loads(base64.b64decode(encoded))
+    for descriptor in index["manifests"]:
+        if descriptor.get("platform") == {"architecture": "amd64", "os": "linux"}:
+            descriptor["platform"] = {"architecture": "arm64", "os": "linux"}
+    evidence["index"]["raw_base64"] = base64.b64encode(  # type: ignore[index]
+        json.dumps(index, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii")
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    assert "raw index must contain exactly one governed runtime platform" in _details(tmp_path)
+
+
+def test_guard_rejects_child_digest_not_bound_to_index_descriptor(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    evidence["runtime_manifest"]["digest"] = "sha256:" + "0" * 64  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    details = _details(tmp_path)
+    assert "runtime manifest digest must bind the lifecycle child digest" in details
+    assert "selected index descriptor must bind the runtime manifest digest" in details
+
+
+def test_guard_rejects_raw_child_bytes_not_bound_to_child_digest(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    encoded = evidence["runtime_manifest"]["raw_base64"]  # type: ignore[index]
+    raw = base64.b64decode(encoded) + b"\n"
+    evidence["runtime_manifest"]["raw_base64"] = base64.b64encode(raw).decode("ascii")  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    details = _details(tmp_path)
+    assert "raw runtime manifest digest must match the selected child digest" in details
+    assert "runtime manifest size must match the retained raw bytes" in details
+
+
+def test_guard_rejects_config_digest_claim_not_bound_to_raw_child(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    evidence["runtime_manifest"]["config_digest"] = "sha256:" + "0" * 64  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    details = _details(tmp_path)
+    assert "raw runtime manifest must bind the retained config digest" in details
+    assert "runtime config digest must bind the lifecycle config digest" in details
+
+
+def test_guard_rejects_credentialed_registry_authority(tmp_path: Path) -> None:
+    evidence = _manifest_evidence()
+    evidence["authority"]["registry"] = "https://user:secret@registry-1.docker.io"  # type: ignore[index]
+    _write_fixture(tmp_path, _inventory(), evidence)
+
+    assert "manifest evidence registry must be a credential-free HTTPS authority" in _details(
+        tmp_path
+    )
 
 
 def test_guard_rejects_stale_review(tmp_path: Path) -> None:
