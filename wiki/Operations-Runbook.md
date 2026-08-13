@@ -247,6 +247,21 @@ When app-local runtime is unhealthy, check this order:
 4. service health routes are responding
 5. demo data loader completed if the scenario expects seeded data
 
+The Core Compose file is explicitly app-local: services declare `ENVIRONMENT=local`, Kafka clients
+use local-only `PLAINTEXT`, and PostgreSQL development credentials stay inside that boundary.
+Staging, UAT, production, and unspecified profiles fail closed on the local database password or
+plaintext Kafka. Production-like deployments must provide database secrets plus Kafka TLS/SASL
+trust and credentials through their deployment secret mechanism.
+
+An interrupted Kafka broker can temporarily leave `/brokers/ids/1` owned by its previous ZooKeeper
+session. App-local Kafka retries the unchanged startup at most five times while that ephemeral
+session expires; it never deletes registration state or volumes. Run
+`make test-kafka-restart-recovery-gate` for isolated restart certification. If attempts are
+exhausted, inspect `docker compose ps` and the exact ZooKeeper/Kafka logs for another live broker.
+Do not use daemon-wide prune, direct ZooKeeper node deletion, or volume removal as default recovery.
+The full command and secret-sourcing contract is in the repository
+[operations runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/runbook.md#app-local-connection-security-and-kafka-restart-recovery).
+
 Runtime-facing API services and worker health web apps expose `/health/live`, `/health/ready`, and
 `/metrics`. They also expose `GET /version`, which returns the image provenance values embedded
 during build or deployment: Git commit SHA, Git branch, build timestamp, repo URL, image version,
