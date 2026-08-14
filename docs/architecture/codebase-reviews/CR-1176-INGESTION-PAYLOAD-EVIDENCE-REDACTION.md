@@ -85,5 +85,9 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
 
 Focused evidence includes 73 replay/evidence/migration tests, 65 failure/lifecycle/command tests,
 31 idempotency-boundary/diagnostic tests, OpenAPI gate success, and regenerated API-vocabulary
-parity. Issue #559 remains in progress until migration integration, full local/remote gates, PR,
-exact-main validation, and verified issue closure are complete.
+parity. A dedicated PostgreSQL database on the existing Core local stack passed full-history
+upgrade to `c157b2c3d524`, verified all seven governed payload-evidence columns and nullability,
+downgraded to `c156b2c3d523`, and re-applied `c157b2c3d524`. The exact temporary database was then
+removed; the shared `portfolio_db` remained at `c156b2c3d523` and every Core application container
+remained healthy. Issue #559 is fixed locally and remains open until protected-PR, exact-main,
+wiki-publication, and verified closure evidence are complete.
