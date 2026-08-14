@@ -4756,8 +4756,8 @@ class IngestionJob(Base):
     failure_reason = Column(Text, nullable=True)
     failure_status_code = Column(Integer, nullable=True)
     failure_code = Column(String, nullable=True)
-    failure_detail = Column(JSON, nullable=True)
-    failure_headers = Column(JSON, nullable=True)
+    failure_detail = Column(JSON(none_as_null=True), nullable=True)
+    failure_headers = Column(JSON(none_as_null=True), nullable=True)
     # Fingerprint-only policy records require a database NULL, not JSON ``null``.
     # Keep this on the mapped type so every ingestion workflow receives the same
     # persistence semantics without adapter-specific coercion.
