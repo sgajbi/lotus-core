@@ -11,6 +11,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import SourceObservationEvidence
+
 
 class ClientIncomeNeedsScheduleRequest(BaseModel):
     """Select effective client income-needs schedules for one portfolio."""
@@ -28,7 +30,7 @@ class ClientIncomeNeedsScheduleRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class ClientIncomeNeedsScheduleEntry(BaseModel):
+class ClientIncomeNeedsScheduleEntry(SourceObservationEvidence):
     """One effective client income-needs schedule."""
 
     schedule_id: str = Field(..., description="Source-owned income-needs schedule identifier.")
@@ -41,7 +43,6 @@ class ClientIncomeNeedsScheduleEntry(BaseModel):
     end_date: date | None = Field(None, description="Income-needs schedule end date.")
     priority: int = Field(..., description="Source-supplied priority.")
     funding_policy: str | None = Field(None, description="Bank/source funding policy reference.")
-    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
     model_config = ConfigDict()
 
 
@@ -93,7 +94,7 @@ class LiquidityReserveRequirementRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class LiquidityReserveRequirementEntry(BaseModel):
+class LiquidityReserveRequirementEntry(SourceObservationEvidence):
     """One effective liquidity reserve requirement."""
 
     reserve_requirement_id: str = Field(..., description="Source-owned reserve requirement id.")
@@ -107,7 +108,6 @@ class LiquidityReserveRequirementEntry(BaseModel):
     effective_from: date = Field(..., description="Requirement effective start date.")
     effective_to: date | None = Field(None, description="Requirement effective end date.")
     requirement_version: int = Field(..., description="Selected requirement version.")
-    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
     model_config = ConfigDict()
 
 
@@ -162,7 +162,7 @@ class PlannedWithdrawalScheduleRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class PlannedWithdrawalScheduleEntry(BaseModel):
+class PlannedWithdrawalScheduleEntry(SourceObservationEvidence):
     """One planned withdrawal source record."""
 
     withdrawal_schedule_id: str = Field(..., description="Source-owned withdrawal schedule id.")
@@ -173,7 +173,6 @@ class PlannedWithdrawalScheduleEntry(BaseModel):
     scheduled_date: date = Field(..., description="Scheduled withdrawal date.")
     recurrence_frequency: str | None = Field(None, description="Optional recurrence cadence.")
     purpose_code: str | None = Field(None, description="Optional source purpose code.")
-    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
     model_config = ConfigDict()
 
 

@@ -72,6 +72,8 @@ def _restriction() -> ClientRestrictionSourceRecord:
         observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
         created_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
         updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+        source_system="crm-master",
+        quality_status="accepted",
     )
 
 
@@ -100,6 +102,9 @@ async def test_resolves_ready_profile_through_typed_source_port() -> None:
     assert response.client_id == "CIF_SG_000184"
     assert response.supportability.state == "READY"
     assert response.restrictions[0].asset_classes == ["private_credit"]
+    assert response.restrictions[0].source_system == "crm-master"
+    assert response.restrictions[0].observed_at == datetime(2026, 5, 3, 9, tzinfo=UTC)
+    assert response.restrictions[0].quality_status == "accepted"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
     assert response.data_quality_status == "ACCEPTED"
     assert response.snapshot_id is not None

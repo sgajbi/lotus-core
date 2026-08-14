@@ -12,6 +12,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .common import SourceObservationEvidence
+
 
 def _normalize_instrument_eligibility_security_ids(security_ids: list[str]) -> list[str]:
     normalized = [security_id.strip() for security_id in security_ids]
@@ -59,7 +61,7 @@ class InstrumentEligibilityBulkRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class InstrumentEligibilityRecord(BaseModel):
+class InstrumentEligibilityRecord(SourceObservationEvidence):
     security_id: str = Field(..., description="Canonical security identifier.", examples=["AAPL"])
     found: bool = Field(
         ...,
@@ -108,13 +110,6 @@ class InstrumentEligibilityRecord(BaseModel):
     effective_to: date | None = Field(
         None, description="Resolved effective end date; null when open-ended or unknown."
     )
-    quality_status: str = Field(
-        ..., description="Source data quality status.", examples=["ACCEPTED"]
-    )
-    source_record_id: str | None = Field(
-        None, description="Source record identifier for audit and replay."
-    )
-
     model_config = ConfigDict()
 
 

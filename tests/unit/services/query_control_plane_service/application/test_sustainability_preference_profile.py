@@ -72,6 +72,8 @@ def _preference() -> SustainabilityPreferenceSourceRecord:
         observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
         created_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
         updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+        source_system="sustainability-master",
+        quality_status="accepted",
     )
 
 
@@ -99,6 +101,9 @@ async def test_resolves_ready_preference_profile() -> None:
     assert response.supportability.state == "READY"
     assert response.preferences[0].minimum_allocation == Decimal("0.2000000000")
     assert response.preferences[0].exclusion_codes == ["THERMAL_COAL"]
+    assert response.preferences[0].source_system == "sustainability-master"
+    assert response.preferences[0].observed_at == datetime(2026, 5, 3, 9, tzinfo=UTC)
+    assert response.preferences[0].quality_status == "accepted"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
     assert response.snapshot_id is not None
     assert reader.calls == ["binding", "preferences"]

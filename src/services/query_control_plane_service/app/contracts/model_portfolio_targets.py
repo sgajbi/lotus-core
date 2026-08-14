@@ -11,6 +11,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import SourceObservationEvidence
+
 
 class ModelPortfolioTargetRequest(BaseModel):
     as_of_date: date = Field(
@@ -35,7 +37,7 @@ class ModelPortfolioTargetRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class ModelPortfolioTargetRow(BaseModel):
+class ModelPortfolioTargetRow(SourceObservationEvidence):
     instrument_id: str = Field(
         ...,
         description="Canonical instrument identifier in the model target universe.",
@@ -61,17 +63,6 @@ class ModelPortfolioTargetRow(BaseModel):
         description="Target lifecycle status from the model source system.",
         examples=["active"],
     )
-    quality_status: str = Field(
-        ...,
-        description="Data quality status for this target row.",
-        examples=["accepted"],
-    )
-    source_record_id: str | None = Field(
-        None,
-        description="Source record identifier for deterministic replay.",
-        examples=["model_sg_balanced_202603_eq_us_aapl"],
-    )
-
     model_config = ConfigDict()
 
 

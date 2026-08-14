@@ -25,3 +25,5 @@ class SustainabilityPreferenceSourceRecord:
     observed_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+    source_system: str | None = None
+    quality_status: str = "accepted"

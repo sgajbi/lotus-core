@@ -39,6 +39,8 @@ def _row():
         effective_from=date(2026, 1, 1),
         effective_to=None,
         profile_version="2",
+        source_system="tax-master",
+        quality_status="accepted",
         source_record_id="tax-profile:2",
         observed_at=timestamp,
         created_at=timestamp,
@@ -62,6 +64,8 @@ async def test_selects_latest_active_profile_and_maps_values() -> None:
 
     assert str(records[0].withholding_tax_rate) == "0.1500000000"
     assert records[0].treaty_codes == ("US_SG_TREATY",)
+    assert records[0].source_system == "tax-master"
+    assert records[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "row_number() OVER (PARTITION BY client_tax_profiles.tax_profile_id" in sql
     assert "client_tax_profiles.profile_status = 'active'" in sql

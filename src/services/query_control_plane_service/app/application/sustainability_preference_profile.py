@@ -117,5 +117,8 @@ def _entry(record: SustainabilityPreferenceSourceRecord) -> SustainabilityPrefer
         effective_from=record.effective_from,
         effective_to=record.effective_to,
         preference_version=record.preference_version,
+        source_system=record.source_system,
         source_record_id=record.source_record_id,
+        observed_at=record.observed_at,
+        quality_status=record.quality_status,
     )

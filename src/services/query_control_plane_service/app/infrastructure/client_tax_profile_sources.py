@@ -86,6 +86,8 @@ def _record(row: Any) -> ClientTaxProfileSourceRecord:
         observed_at=row.observed_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        source_system=row.source_system,
+        quality_status=row.quality_status,
     )
 
 

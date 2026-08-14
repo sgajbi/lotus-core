@@ -23,6 +23,8 @@ class ClientIncomeNeedSourceRecord:
     observed_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+    source_system: str | None = None
+    quality_status: str = "accepted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +46,8 @@ class LiquidityReserveRequirementSourceRecord:
     observed_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+    source_system: str | None = None
+    quality_status: str = "accepted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,3 +66,5 @@ class PlannedWithdrawalSourceRecord:
     observed_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+    source_system: str | None = None
+    quality_status: str = "accepted"

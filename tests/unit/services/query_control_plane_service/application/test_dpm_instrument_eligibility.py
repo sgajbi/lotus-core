@@ -75,6 +75,9 @@ def test_complete_eligibility_batch_is_ready_current_and_deterministic() -> None
     assert first.content_hash == second.content_hash
     assert first.source_batch_fingerprint is None
     assert first.source_digest == first.content_hash
+    assert first.records[0].source_system == "eligibility_master"
+    assert first.records[0].observed_at == EVIDENCE_AT
+    assert first.records[0].quality_status == "ACCEPTED"
 
 
 def test_response_preserves_request_order_and_represents_missing_security() -> None:
@@ -87,6 +90,9 @@ def test_response_preserves_request_order_and_represents_missing_security() -> N
     assert [record.security_id for record in response.records] == ["UNKNOWN", "EQ_US_AAPL"]
     assert response.records[0].found is False
     assert response.records[0].restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
+    assert response.records[0].source_system is None
+    assert response.records[0].observed_at is None
+    assert response.records[0].quality_status == "MISSING"
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.missing_security_ids == ["UNKNOWN"]
     assert response.data_quality_status == "PARTIAL"

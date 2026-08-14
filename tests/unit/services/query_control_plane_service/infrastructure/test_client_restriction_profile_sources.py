@@ -57,6 +57,8 @@ def _restriction_row() -> SimpleNamespace:
         effective_from=date(2026, 1, 1),
         effective_to=None,
         restriction_version=2,
+        source_system="crm-master",
+        quality_status="accepted",
         source_record_id="client-restriction:2",
         observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
         created_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
@@ -101,6 +103,8 @@ async def test_selects_latest_active_restriction_per_scope_and_code() -> None:
 
     assert restrictions[0].asset_classes == ("private_credit",)
     assert restrictions[0].instrument_ids == ()
+    assert restrictions[0].source_system == "crm-master"
+    assert restrictions[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "row_number() OVER (PARTITION BY client_restriction_profiles.restriction_scope" in sql
     assert "client_restriction_profiles.restriction_status = 'active'" in sql

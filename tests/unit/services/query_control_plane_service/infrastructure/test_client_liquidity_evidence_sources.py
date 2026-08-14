@@ -46,6 +46,8 @@ async def test_income_query_is_effective_active_ranked_and_typed() -> None:
                 end_date=None,
                 priority="2",
                 funding_policy="INCOME_FIRST",
+                source_system="wealth-planning-master",
+                quality_status="accepted",
                 source_record_id="income:1",
                 **_timestamps(),
             )
@@ -61,6 +63,8 @@ async def test_income_query_is_effective_active_ranked_and_typed() -> None:
 
     assert str(records[0].amount) == "12000.2500"
     assert records[0].priority == 2
+    assert records[0].source_system == "wealth-planning-master"
+    assert records[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "row_number() OVER (PARTITION BY client_income_needs_schedules.schedule_id" in sql
     assert "client_income_needs_schedules.need_status = 'active'" in sql
@@ -84,6 +88,8 @@ async def test_reserve_query_preserves_version_precedence_and_mapping() -> None:
                 effective_from=date(2026, 1, 1),
                 effective_to=None,
                 requirement_version="3",
+                source_system="wealth-planning-master",
+                quality_status="accepted",
                 source_record_id="reserve:3",
                 **_timestamps(),
             )
@@ -99,6 +105,8 @@ async def test_reserve_query_preserves_version_precedence_and_mapping() -> None:
 
     assert records[0].requirement_version == 3
     assert records[0].horizon_days == 180
+    assert records[0].source_system == "wealth-planning-master"
+    assert records[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "liquidity_reserve_requirements.requirement_version DESC" in sql
     assert "liquidity_reserve_requirements.reserve_status = 'active'" in sql
@@ -118,6 +126,8 @@ async def test_withdrawal_query_applies_inclusive_horizon_and_stable_order() -> 
                 scheduled_date=date(2026, 6, 1),
                 recurrence_frequency=None,
                 purpose_code="PRIVATE_MARKET_CALL",
+                source_system="wealth-planning-master",
+                quality_status="accepted",
                 source_record_id="withdrawal:1",
                 **_timestamps(),
             )
@@ -133,6 +143,8 @@ async def test_withdrawal_query_applies_inclusive_horizon_and_stable_order() -> 
     )
 
     assert str(records[0].amount) == "50000.0000"
+    assert records[0].source_system == "wealth-planning-master"
+    assert records[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "planned_withdrawal_schedules.scheduled_date >= '2026-05-03'" in sql
     assert "planned_withdrawal_schedules.scheduled_date <= '2026-06-02'" in sql
