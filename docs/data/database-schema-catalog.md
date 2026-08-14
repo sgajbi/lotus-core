@@ -1312,10 +1312,10 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## `ingestion_jobs`
 
 - **Purpose**: Ingestion job tracking and ops visibility.
-- **Description**: Batch/API submission lifecycle records with status and correlation.
+- **Description**: Batch/API submission lifecycle records with source-safe failure outcomes and versioned durable request-evidence and replay authority.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`, `src/services/ingestion_service/app/main.py`
-- **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/services/ingestion_job_lifecycle.py`, `src/services/ingestion_service/app/services/ingestion_payload_evidence.py`, `src/services/ingestion_service/app/infrastructure/ingestion_idempotency_replay_reader.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`, `src/services/ingestion_service/app/main.py`
+- **Typical access patterns**: As-of/date-range reads, idempotent submission checks against a keyed full-payload fingerprint, status-filtered job polling, and fail-closed replay authorization from the persisted evidence policy and technical expiry.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `job_id` (String): Identifier for job.
@@ -1330,7 +1330,19 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `submitted_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
   - `completed_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
   - `failure_reason` (Text): Human-readable reason for failure/exception status.
-  - `request_payload` (JSON): JSON payload storing structured request/result or metadata content.
+  - `failure_status_code` (Integer): Source HTTP status for the governed failure outcome; present only with a stable failure code.
+  - `failure_code` (String): Stable product-safe failure code recorded with the failure status.
+  - `failure_detail` (JSON): Source-safe structured failure detail; SQL `NULL` when no governed failure outcome exists.
+  - `failure_headers` (JSON): Source-safe allowlisted failure headers needed for retry behavior; SQL `NULL` when absent.
+  - `request_payload` (JSON): Source-safe replay payload when policy-authorized; SQL `NULL` for fingerprint-only evidence.
+  - `request_payload_fingerprint` (String): Purpose-bound, key-versioned HMAC over the full canonical request used for equality/conflict proof; it does not authorize replay or reconstruct payload.
+  - `request_payload_policy_version` (String): Version of the endpoint-family evidence policy applied when the job was accepted.
+  - `request_payload_classification` (String): Governed sensitivity classification for the submitted payload evidence.
+  - `request_payload_representation` (String): Durable evidence posture (`source_safe_replay`, `fingerprint_only`, or legacy-redacted compatibility evidence).
+  - `request_payload_replay_eligible` (Boolean): Whether the durable source evidence authorizes full replay before technical expiry.
+  - `request_payload_partial_replay_eligible` (Boolean): Whether the same policy explicitly authorizes record-subset replay; cannot be true when full replay is ineligible.
+  - `request_payload_replay_expires_at` (DateTime): Finite UTC technical cutoff for replay authority; absent for non-replayable evidence.
+  - `request_payload_retention_authority` (String): Named governing retention decision for the evidence posture; never caller-supplied free text.
   - `retry_count` (Integer): Domain attribute used by the owning module.
   - `last_retried_at` (DateTime): Domain attribute used by the owning module.
 
