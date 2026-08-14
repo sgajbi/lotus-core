@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -41,6 +41,27 @@ class _FakeScalarRows:
 
     def all(self):
         return self._rows
+
+
+def _replayable_job(**overrides: object) -> SimpleNamespace:
+    values = {
+        "job_id": "job_123",
+        "endpoint": "/ingest/transactions",
+        "entity_type": "transaction",
+        "accepted_count": 3,
+        "request_payload": {
+            "transactions": [
+                {"transaction_id": "txn_1"},
+                {"transaction_id": "txn_2"},
+            ]
+        },
+        "request_payload_policy_version": "ingestion-evidence-policy.v1",
+        "request_payload_representation": "source_safe_replay",
+        "request_payload_replay_eligible": True,
+        "request_payload_replay_expires_at": datetime(2099, 1, 1, tzinfo=UTC),
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
 
 
 def test_failed_record_keys_from_failures_filters_and_sorts_strings():
@@ -94,18 +115,7 @@ def test_replayable_record_keys_from_payload_ignores_unknown_or_malformed_payloa
 
 
 def test_build_record_status_response_maps_job_and_failures():
-    job = SimpleNamespace(
-        job_id="job_123",
-        endpoint="/ingest/transactions",
-        entity_type="transaction",
-        accepted_count=3,
-        request_payload={
-            "transactions": [
-                {"transaction_id": "txn_1"},
-                {"transaction_id": "txn_2"},
-            ]
-        },
-    )
+    job = _replayable_job()
     failures = [_Failure(["txn_2", "txn_3"])]
 
     response = build_record_status_response(job=job, failures=failures)
@@ -118,10 +128,8 @@ def test_build_record_status_response_maps_job_and_failures():
 
 
 def test_build_record_status_response_ignores_malformed_request_payload():
-    job = SimpleNamespace(
+    job = _replayable_job(
         job_id="job_456",
-        endpoint="/ingest/transactions",
-        entity_type="transaction",
         accepted_count=1,
         request_payload=["not", "a", "dict"],
     )
@@ -131,6 +139,46 @@ def test_build_record_status_response_ignores_malformed_request_payload():
     assert response.job_id == "job_456"
     assert response.failed_record_keys == []
     assert response.replayable_record_keys == []
+
+
+@pytest.mark.parametrize(
+    "authority_override",
+    [
+        {"request_payload_policy_version": "legacy.v0"},
+        {"request_payload_replay_eligible": False},
+        {"request_payload_representation": "fingerprint_only"},
+        {"request_payload_replay_expires_at": None},
+    ],
+)
+def test_build_record_status_response_does_not_publish_unauthorized_replay_keys(
+    authority_override: dict[str, object],
+) -> None:
+    response = build_record_status_response(
+        job=_replayable_job(**authority_override),
+        failures=[],
+        observed_at=datetime(2026, 8, 14, tzinfo=UTC),
+    )
+
+    assert response.replayable_record_keys == []
+
+
+def test_build_record_status_response_stops_reporting_keys_at_exact_expiry() -> None:
+    expiry = datetime(2026, 8, 14, tzinfo=UTC)
+    job = _replayable_job(request_payload_replay_expires_at=expiry)
+
+    before_expiry = build_record_status_response(
+        job=job,
+        failures=[],
+        observed_at=expiry - timedelta(microseconds=1),
+    )
+    at_expiry = build_record_status_response(
+        job=job,
+        failures=[],
+        observed_at=expiry,
+    )
+
+    assert before_expiry.replayable_record_keys == ["txn_1", "txn_2"]
+    assert at_expiry.replayable_record_keys == []
 
 
 @pytest.mark.asyncio
@@ -150,7 +198,7 @@ async def test_load_record_status_response_returns_none_for_missing_job():
 @pytest.mark.asyncio
 async def test_load_record_status_response_loads_job_and_ordered_failures():
     now = datetime.now(UTC)
-    job = SimpleNamespace(
+    job = _replayable_job(
         job_id="job_789",
         endpoint="/ingest/portfolios",
         entity_type="portfolio",

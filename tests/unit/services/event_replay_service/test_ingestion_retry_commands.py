@@ -64,6 +64,59 @@ async def test_ingestion_job_retry_dry_run_records_audit_and_returns_job() -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("dry_run", [True, False])
+async def test_ingestion_job_retry_rechecks_expiry_after_awaited_controls(
+    dry_run: bool,
+) -> None:
+    context = SimpleNamespace(
+        endpoint="/ingest/instruments",
+        request_payload={"instruments": [{"security_id": "BOND_1"}]},
+        request_payload_policy_version="ingestion-evidence-policy.v1",
+        request_payload_representation="source_safe_replay",
+        request_payload_replay_eligible=True,
+        request_payload_partial_replay_eligible=True,
+        request_payload_replay_expires_at=datetime(2099, 8, 16, tzinfo=UTC),
+        idempotency_key="idem-001",
+        submitted_at=datetime(2026, 7, 4, 9, 0, tzinfo=UTC),
+    )
+
+    async def expire_during_retry_permission(*_args, **_kwargs) -> None:
+        if dry_run:
+            context.request_payload_replay_expires_at = datetime(2000, 1, 1, tzinfo=UTC)
+
+    async def expire_during_duplicate_lookup(*_args, **_kwargs) -> None:
+        if not dry_run:
+            context.request_payload_replay_expires_at = datetime(2000, 1, 1, tzinfo=UTC)
+        return None
+
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
+    ingestion_job_service.assert_retry_allowed_for_records = AsyncMock(
+        side_effect=expire_during_retry_permission
+    )
+    ingestion_job_service.find_successful_replay_audit_by_fingerprint = AsyncMock(
+        side_effect=expire_during_duplicate_lookup
+    )
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock()
+    replay_payload_dispatcher = MagicMock()
+    replay_payload_dispatcher.replay_payload = AsyncMock()
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _retry_service(
+            ingestion_job_service=ingestion_job_service,
+            replay_payload_dispatcher=replay_payload_dispatcher,
+        ).retry_ingestion_job(
+            job_id="job-expired-during-controls",
+            retry_request=IngestionRetryRequest(dry_run=dry_run, record_keys=[]),
+            requested_by="ops",
+        )
+
+    assert exc_info.value.detail["code"] == "INGESTION_JOB_REPLAY_EVIDENCE_EXPIRED"
+    replay_payload_dispatcher.replay_payload.assert_not_awaited()
+    ingestion_job_service.record_consumer_dlq_replay_audit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_ingestion_job_retry_success_audit_failure_is_not_bookkeeping_success() -> None:
     context = SimpleNamespace(endpoint="/ingest/transactions")
     ingestion_job_service = MagicMock()

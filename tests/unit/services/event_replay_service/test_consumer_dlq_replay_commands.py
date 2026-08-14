@@ -77,6 +77,53 @@ async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("dry_run", [True, False])
+async def test_consumer_dlq_replay_rechecks_expiry_after_awaited_controls(
+    dry_run: bool,
+) -> None:
+    context = _replay_context()
+
+    async def expire_during_retry_permission(*_args, **_kwargs) -> None:
+        if dry_run:
+            context.request_payload_replay_expires_at = datetime(2000, 1, 1, tzinfo=UTC)
+
+    async def expire_during_duplicate_lookup(*_args, **_kwargs) -> None:
+        if not dry_run:
+            context.request_payload_replay_expires_at = datetime(2000, 1, 1, tzinfo=UTC)
+        return None
+
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_consumer_dlq_event = AsyncMock(
+        return_value=SimpleNamespace(event_id="dlq-001", correlation_id="corr-001")
+    )
+    ingestion_job_service.get_unique_replayable_job_by_correlation_id = AsyncMock(
+        return_value=SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")
+    )
+    ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
+    ingestion_job_service.find_successful_replay_audit_by_fingerprint = AsyncMock(
+        side_effect=expire_during_duplicate_lookup
+    )
+    ingestion_job_service.assert_retry_allowed_for_records = AsyncMock(
+        side_effect=expire_during_retry_permission
+    )
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-001")
+    replay_payload_dispatcher = MagicMock()
+    replay_payload_dispatcher.replay_payload = AsyncMock()
+
+    response = await _consumer_service(
+        ingestion_job_service=ingestion_job_service,
+        replay_payload_dispatcher=replay_payload_dispatcher,
+    ).replay_consumer_dlq_event(
+        event_id="dlq-001",
+        command=ConsumerDlqReplayCommand(dry_run=dry_run, requested_by="ops"),
+    )
+
+    assert response.replay_status == "not_replayable"
+    assert response.message.endswith("expired.")
+    replay_payload_dispatcher.replay_payload.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_consumer_dlq_replay_uses_durable_owner_without_correlation_lookup() -> None:
     context = _replay_context()
     ingestion_job_service = MagicMock()
