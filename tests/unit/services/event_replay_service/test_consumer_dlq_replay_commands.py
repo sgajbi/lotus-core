@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -25,14 +25,24 @@ def _consumer_service(
     )
 
 
+def _replay_context(**overrides: object) -> SimpleNamespace:
+    values = {
+        "endpoint": "/ingest/instruments",
+        "request_payload": {"instruments": [{"instrument_id": "BOND_1"}]},
+        "request_payload_policy_version": "ingestion-evidence-policy.v1",
+        "request_payload_representation": "source_safe_replay",
+        "request_payload_replay_eligible": True,
+        "request_payload_replay_expires_at": datetime(2099, 8, 14, tzinfo=UTC),
+        "idempotency_key": "idem-001",
+        "submitted_at": datetime(2026, 7, 4, 9, 0, tzinfo=UTC),
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> None:
-    context = SimpleNamespace(
-        endpoint="/ingest/transactions",
-        request_payload={"transactions": [{"transaction_id": "T1"}]},
-        idempotency_key="idem-001",
-        submitted_at=datetime(2026, 7, 4, 9, 0),
-    )
+    context = _replay_context()
     ingestion_job_service = MagicMock()
     ingestion_job_service.get_consumer_dlq_event = AsyncMock(
         return_value=SimpleNamespace(event_id="dlq-001", correlation_id="corr-001")
@@ -68,12 +78,7 @@ async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> No
 
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_uses_durable_owner_without_correlation_lookup() -> None:
-    context = SimpleNamespace(
-        endpoint="/ingest/transactions",
-        request_payload={"transactions": [{"transaction_id": "T1"}]},
-        idempotency_key="idem-001",
-        submitted_at=datetime(2026, 7, 4, 9, 0),
-    )
+    context = _replay_context()
     ingestion_job_service = MagicMock()
     ingestion_job_service.get_consumer_dlq_event = AsyncMock(
         return_value=SimpleNamespace(
@@ -235,11 +240,7 @@ async def test_consumer_dlq_replay_candidate_records_missing_payload_response() 
         return_value={"job_id": "job-001", "correlation_id": "corr-001", "status": "failed"}
     )
     ingestion_job_service.get_job_replay_context = AsyncMock(
-        return_value=SimpleNamespace(
-            endpoint="/ingest/transactions",
-            request_payload=None,
-            idempotency_key="idem-001",
-        )
+        return_value=_replay_context(request_payload=None)
     )
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-002")
 
@@ -254,17 +255,13 @@ async def test_consumer_dlq_replay_candidate_records_missing_payload_response() 
 
     assert response.replay_status == "not_replayable"
     assert response.job_id == "job-001"
-    assert response.message == "Correlated ingestion job does not have durable replay payload."
+    assert response.message.endswith("payload_unavailable.")
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> None:
-    context = SimpleNamespace(
-        endpoint="/ingest/transactions",
-        request_payload={"transactions": [{"transaction_id": "T1"}]},
-        idempotency_key="idem-001",
-    )
+    context = _replay_context()
     ingestion_job_service = MagicMock()
     ingestion_job_service.get_unique_replayable_job_by_correlation_id = AsyncMock(
         return_value=SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")
@@ -290,11 +287,7 @@ async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> Non
 
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_fingerprint_is_scoped_to_event() -> None:
-    context = SimpleNamespace(
-        endpoint="/ingest/transactions",
-        request_payload={"transactions": [{"transaction_id": "T1"}]},
-        idempotency_key="idem-001",
-    )
+    context = _replay_context()
     ingestion_job_service = MagicMock()
     ingestion_job_service.get_unique_replayable_job_by_correlation_id = AsyncMock(
         return_value=SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="failed")

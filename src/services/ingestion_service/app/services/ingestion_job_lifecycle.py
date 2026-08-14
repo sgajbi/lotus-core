@@ -47,6 +47,12 @@ class IngestionJobReplayContext:
     accepted_count: int
     idempotency_key: str | None
     request_payload: dict[str, Any] | None
+    request_payload_policy_version: str
+    request_payload_representation: str
+    request_payload_replay_eligible: bool
+    request_payload_partial_replay_eligible: bool
+    request_payload_replay_expires_at: datetime | None
+    request_payload_retention_authority: str
     submitted_at: datetime
 
 
@@ -410,6 +416,12 @@ async def get_job_replay_context_response(
             accepted_count=row.accepted_count,
             idempotency_key=row.idempotency_key,
             request_payload=payload,
+            request_payload_policy_version=row.request_payload_policy_version,
+            request_payload_representation=row.request_payload_representation,
+            request_payload_replay_eligible=row.request_payload_replay_eligible,
+            request_payload_partial_replay_eligible=(row.request_payload_partial_replay_eligible),
+            request_payload_replay_expires_at=row.request_payload_replay_expires_at,
+            request_payload_retention_authority=row.request_payload_retention_authority,
             submitted_at=row.submitted_at,
         )
     return None

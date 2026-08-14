@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
+from src.services.ingestion_service.app.domain.ingestion_replay_evidence import (
+    ReplayEvidenceFailure,
+    replay_evidence_failure,
+)
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionRetryRequest
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
@@ -31,6 +35,9 @@ INGESTION_JOB_RETRY_REMEDIATIONS = {
     "not_found": "Verify the ingestion job id from the operations job list before retrying.",
     "retry_unsupported": (
         "Recover the source batch from upstream records; this job has no durable replay payload."
+    ),
+    "retry_evidence_expired": (
+        "Recover and submit a fresh source batch; the bounded durable replay evidence expired."
     ),
     "partial_retry_unsupported": (
         "Retry the full stored payload or use an endpoint with governed partial retry support."
@@ -121,7 +128,12 @@ class IngestionRetryCommandService:
         )
         return await self._required_job_after_retry(job_id)
 
-    async def _required_job_replay_context(self, job_id: str) -> Any:
+    async def _required_job_replay_context(
+        self,
+        job_id: str,
+        *,
+        observed_at: datetime | None = None,
+    ) -> Any:
         context = await self.ingestion_job_service.get_job_replay_context(job_id)
         if context is None:
             raise ReplayCommandError(
@@ -133,17 +145,28 @@ class IngestionRetryCommandService:
                     remediation=INGESTION_JOB_RETRY_REMEDIATIONS["not_found"],
                 ),
             )
-        if context.request_payload is None:
+        evidence_failure = replay_evidence_failure(
+            context,
+            observed_at=observed_at or datetime.now(UTC),
+        )
+        if evidence_failure is not None:
+            expired = evidence_failure is ReplayEvidenceFailure.EXPIRED
+            outcome = "retry_evidence_expired" if expired else "retry_unsupported"
             raise ReplayCommandError(
                 HTTP_CONFLICT,
                 ingestion_job_retry_problem_detail(
-                    code="INGESTION_JOB_RETRY_UNSUPPORTED",
-                    message=(
-                        f"Ingestion job '{job_id}' does not have stored request payload and "
-                        "cannot be retried."
+                    code=(
+                        "INGESTION_JOB_REPLAY_EVIDENCE_EXPIRED"
+                        if expired
+                        else "INGESTION_JOB_RETRY_UNSUPPORTED"
                     ),
-                    outcome="retry_unsupported",
-                    remediation=INGESTION_JOB_RETRY_REMEDIATIONS["retry_unsupported"],
+                    message=(
+                        f"Ingestion job '{job_id}' cannot be retried because its durable "
+                        f"replay evidence is {evidence_failure.value}."
+                    ),
+                    outcome=outcome,
+                    remediation=INGESTION_JOB_RETRY_REMEDIATIONS[outcome],
+                    replay_evidence_failure=evidence_failure.value,
                 ),
             )
         return context
@@ -154,6 +177,19 @@ class IngestionRetryCommandService:
         context: Any,
         retry_request: IngestionRetryRequest,
     ) -> dict[str, Any]:
+        if (
+            retry_request.record_keys
+            and getattr(context, "request_payload_partial_replay_eligible", None) is not True
+        ):
+            raise ReplayCommandError(
+                HTTP_CONFLICT,
+                ingestion_job_retry_problem_detail(
+                    code="INGESTION_PARTIAL_RETRY_UNSUPPORTED",
+                    message="The durable replay policy does not authorize partial replay.",
+                    outcome="partial_retry_unsupported",
+                    remediation=INGESTION_JOB_RETRY_REMEDIATIONS["partial_retry_unsupported"],
+                ),
+            )
         try:
             return filter_payload_by_record_keys(
                 endpoint=context.endpoint,

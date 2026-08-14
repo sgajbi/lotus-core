@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -30,8 +30,13 @@ async def test_ingestion_job_retry_dry_run_records_audit_and_returns_job() -> No
     context = SimpleNamespace(
         endpoint="/ingest/transactions",
         request_payload={"transactions": [{"transaction_id": "T1"}]},
+        request_payload_policy_version="ingestion-evidence-policy.v1",
+        request_payload_representation="source_safe_replay",
+        request_payload_replay_eligible=True,
+        request_payload_partial_replay_eligible=True,
+        request_payload_replay_expires_at=datetime(2099, 8, 16, tzinfo=UTC),
         idempotency_key="idem-001",
-        submitted_at=datetime(2026, 7, 4, 9, 0),
+        submitted_at=datetime(2026, 7, 4, 9, 0, tzinfo=UTC),
     )
     ingestion_job_service = MagicMock()
     ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
@@ -120,10 +125,75 @@ async def test_ingestion_job_retry_unsupported_payload_uses_recovery_detail() ->
     assert "durable replay payload" in exc_info.value.detail["remediation"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("context_overrides", "expected_failure"),
+    [
+        ({"request_payload_policy_version": "legacy.v0"}, "policy_unavailable"),
+        ({"request_payload_replay_eligible": False}, "policy_ineligible"),
+        ({"request_payload_representation": "fingerprint_only"}, "representation_unavailable"),
+        ({"request_payload": None}, "payload_unavailable"),
+        ({"request_payload_replay_expires_at": None}, "expiry_unavailable"),
+    ],
+)
+async def test_ingestion_job_retry_rejects_unavailable_authority(
+    context_overrides: dict[str, object],
+    expected_failure: str,
+) -> None:
+    values = {
+        "request_payload_policy_version": "ingestion-evidence-policy.v1",
+        "request_payload_replay_eligible": True,
+        "request_payload_representation": "source_safe_replay",
+        "request_payload": {"instruments": [{"instrument_id": "BOND_1"}]},
+        "request_payload_replay_expires_at": datetime(2026, 8, 16, tzinfo=UTC),
+    }
+    values.update(context_overrides)
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_job_replay_context = AsyncMock(return_value=SimpleNamespace(**values))
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _retry_service(
+            ingestion_job_service=ingestion_job_service
+        )._required_job_replay_context(
+            "job-unavailable",
+            observed_at=datetime(2026, 8, 15, tzinfo=UTC),
+        )
+
+    assert exc_info.value.detail["code"] == "INGESTION_JOB_RETRY_UNSUPPORTED"
+    assert exc_info.value.detail["replay_evidence_failure"] == expected_failure
+
+
+@pytest.mark.asyncio
+async def test_ingestion_job_retry_rejects_expired_authority() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_job_replay_context = AsyncMock(
+        return_value=SimpleNamespace(
+            request_payload_policy_version="ingestion-evidence-policy.v1",
+            request_payload_replay_eligible=True,
+            request_payload_representation="source_safe_replay",
+            request_payload={"instruments": [{"instrument_id": "BOND_1"}]},
+            request_payload_replay_expires_at=datetime(2026, 8, 14, tzinfo=UTC),
+        )
+    )
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _retry_service(
+            ingestion_job_service=ingestion_job_service
+        )._required_job_replay_context(
+            "job-expired",
+            observed_at=datetime(2026, 8, 15, tzinfo=UTC),
+        )
+
+    assert exc_info.value.detail["code"] == "INGESTION_JOB_REPLAY_EVIDENCE_EXPIRED"
+    assert exc_info.value.detail["outcome"] == "retry_evidence_expired"
+    assert exc_info.value.detail["replay_evidence_failure"] == "expired"
+
+
 def test_ingestion_job_retry_partial_unsupported_uses_recovery_detail() -> None:
     context = SimpleNamespace(
         endpoint="/ingest/market-prices",
         request_payload={"market_prices": [{"security_id": "S1"}]},
+        request_payload_partial_replay_eligible=False,
     )
 
     with pytest.raises(ReplayCommandError) as exc_info:
@@ -142,6 +212,7 @@ def test_ingestion_job_retry_missing_partial_record_keys_uses_recovery_detail() 
     context = SimpleNamespace(
         endpoint="/ingest/transactions",
         request_payload={"transactions": [{"transaction_id": "T1"}]},
+        request_payload_partial_replay_eligible=True,
     )
 
     with pytest.raises(ReplayCommandError) as exc_info:
