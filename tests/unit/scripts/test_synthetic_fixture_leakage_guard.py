@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.quality import synthetic_fixture_leakage_guard as guard
+from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL
+from scripts.release.vulnerability_authority_bundle import (
+    SCHEMA_VERSION as VULNERABILITY_AUTHORITY_SCHEMA_VERSION,
+)
+
+RUN_ID = "31758759912"
+RUN_ATTEMPT = "1"
+FULL_SHA = "a" * 40
 
 
 def _write(path: Path, content: str) -> None:
@@ -62,6 +73,59 @@ def _write_standard(repo_root: Path, standard: dict[str, object]) -> Path:
     return standard_path
 
 
+def _canonical_sha256(value: dict[str, object]) -> str:
+    content = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(content).hexdigest()
+
+
+def _write_verified_cisa_authority(repo_root: Path) -> tuple[Path, Path]:
+    authority_dir = (
+        repo_root
+        / "output"
+        / "ci-evidence"
+        / RUN_ID
+        / f"vulnerability-authority-attempt-{RUN_ATTEMPT}"
+    )
+    kev_path = authority_dir / "cisa-kev.json"
+    bundle_path = authority_dir / "vulnerability-authority-bundle.json"
+    _write(kev_path, '{"contact":"kev-coordination@cisa.dhs.gov"}')
+    source_sha256 = "sha256:" + hashlib.sha256(kev_path.read_bytes()).hexdigest()
+    payload: dict[str, object] = {
+        "schema_version": VULNERABILITY_AUTHORITY_SCHEMA_VERSION,
+        "generated_at_utc": "2026-08-14T00:01:00Z",
+        "repository": guard.CORE_REPOSITORY_IDENTITY,
+        "git_commit_sha": FULL_SHA,
+        "ci_run_id": RUN_ID,
+        "ci_run_attempt": RUN_ATTEMPT,
+        "cisa_kev": {
+            "source_url": CISA_KEV_SOURCE_URL,
+            "catalog_version": "2026.08.14",
+            "date_released_utc": "2026-08-14T00:00:00Z",
+            "fetched_at_utc": "2026-08-14T00:00:30Z",
+            "source_sha256": source_sha256,
+            "entry_count": 1668,
+        },
+        "exception_schema": {
+            "source_repository": "sgajbi/lotus-platform",
+            "source_commit": "b" * 40,
+            "source_path": "platform-contracts/vulnerability-exceptions/schema.json",
+            "source_schema_id": "https://lotus-platform.local/schema.json",
+            "source_schema_version": "lotus-platform.vulnerability-exception-register.v1",
+            "source_git_blob_sha1": "c" * 40,
+            "source_sha256": "sha256:" + "d" * 64,
+        },
+    }
+    bundle = {**payload, "bundle_sha256": _canonical_sha256(payload)}
+    _write(bundle_path, json.dumps(bundle))
+    return kev_path, bundle_path
+
+
+def _rewrite_bundle_digest(bundle_path: Path, bundle: dict[str, object]) -> None:
+    payload = {key: value for key, value in bundle.items() if key != "bundle_sha256"}
+    bundle["bundle_sha256"] = _canonical_sha256(payload)
+    _write(bundle_path, json.dumps(bundle))
+
+
 def test_synthetic_fixture_guard_accepts_current_repo_truth() -> None:
     assert guard.evaluate_synthetic_fixture_governance() == []
 
@@ -76,6 +140,118 @@ def test_synthetic_fixture_guard_accepts_minimal_valid_repo(tmp_path: Path) -> N
         )
         == []
     )
+
+
+def test_synthetic_fixture_guard_accepts_digest_bound_cisa_source(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    _write_verified_cisa_authority(tmp_path)
+
+    assert (
+        guard.evaluate_synthetic_fixture_governance(
+            repo_root=tmp_path,
+            standard_path=standard_path,
+        )
+        == []
+    )
+
+
+def test_synthetic_fixture_guard_rejects_path_only_authority_spoof(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    spoof_path = (
+        tmp_path
+        / "output"
+        / "ci-evidence"
+        / RUN_ID
+        / f"vulnerability-authority-attempt-{RUN_ATTEMPT}"
+        / "cisa-kev.json"
+    )
+    _write(spoof_path, '{"contact":"personal@example.com"}')
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
+
+
+def test_synthetic_fixture_guard_rejects_tampered_authority_bytes(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    kev_path, _ = _write_verified_cisa_authority(tmp_path)
+    _write(kev_path, '{"contact":"tampered@example.com"}')
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("repository", "sgajbi/other"),
+        ("ci_run_id", "999"),
+        ("ci_run_attempt", "2"),
+        ("git_commit_sha", "short"),
+    ],
+)
+def test_synthetic_fixture_guard_rejects_authority_identity_drift(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    _, bundle_path = _write_verified_cisa_authority(tmp_path)
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle[field] = value
+    _rewrite_bundle_digest(bundle_path, bundle)
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_url", "https://example.com/cisa-kev.json"),
+        ("fetched_at_utc", "2026-08-13T22:00:00Z"),
+        ("fetched_at_utc", "2026-08-14T00:02:00Z"),
+    ],
+)
+def test_synthetic_fixture_guard_rejects_unverified_cisa_metadata(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    _, bundle_path = _write_verified_cisa_authority(tmp_path)
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["cisa_kev"][field] = value
+    _rewrite_bundle_digest(bundle_path, bundle)
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
+
+
+def test_synthetic_fixture_guard_rejects_mismatched_bundle_digest(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    _, bundle_path = _write_verified_cisa_authority(tmp_path)
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["repository"] = "sgajbi/other"
+    _write(bundle_path, json.dumps(bundle))
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
 
 
 def test_synthetic_fixture_guard_rejects_concrete_credentials(tmp_path: Path) -> None:

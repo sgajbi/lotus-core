@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL
+from scripts.release.vulnerability_authority_bundle import (
+    FULL_GIT_SHA_PATTERN,
+    MAX_VULNERABILITY_AUTHORITY_AGE_SECONDS,
+    SHA256_PATTERN,
+    VulnerabilityAuthorityBundleError,
+    load_vulnerability_authority_identity,
+)
+from scripts.release.vulnerability_authority_bundle import (
+    SCHEMA_VERSION as VULNERABILITY_AUTHORITY_SCHEMA_VERSION,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STANDARD_PATH = REPO_ROOT / "docs" / "standards" / "synthetic-test-data-governance.v1.json"
@@ -63,6 +77,19 @@ SECRET_FIELD_RE = re.compile(
     r'"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|secret|password|authorization)"\s*:\s*"([^"]+)"',
     re.IGNORECASE,
 )
+VERIFIED_CISA_KEV_PATH_RE = re.compile(
+    r"^output/ci-evidence/(?P<run_id>[1-9][0-9]*)/"
+    r"vulnerability-authority-attempt-(?P<run_attempt>[1-9][0-9]*)/cisa-kev\.json$"
+)
+EXPECTED_CISA_KEV_IDENTITY_FIELDS = {
+    "source_url",
+    "catalog_version",
+    "date_released_utc",
+    "fetched_at_utc",
+    "source_sha256",
+    "entry_count",
+}
+CORE_REPOSITORY_IDENTITY = "sgajbi/lotus-core"
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,6 +431,8 @@ def _evaluate_file(
     allowed_cif_ids: set[str],
     allowed_service_emails: set[str],
 ) -> list[SyntheticFixtureFinding]:
+    if _is_verified_cisa_kev_source(path, repo_root=repo_root):
+        return []
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(repo_root).as_posix()
     findings: list[SyntheticFixtureFinding] = []
@@ -444,6 +473,83 @@ def _evaluate_file(
                 )
             )
     return findings
+
+
+def _is_verified_cisa_kev_source(path: Path, *, repo_root: Path) -> bool:
+    """Classify only digest-bound official source bytes as third-party authority."""
+    relative_path = path.relative_to(repo_root).as_posix()
+    path_match = VERIFIED_CISA_KEV_PATH_RE.fullmatch(relative_path)
+    if path_match is None:
+        return False
+
+    bundle_path = path.with_name("vulnerability-authority-bundle.json")
+    try:
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        if not isinstance(bundle, dict):
+            return False
+        git_commit_sha = bundle.get("git_commit_sha")
+        if (
+            not isinstance(git_commit_sha, str)
+            or FULL_GIT_SHA_PATTERN.fullmatch(git_commit_sha) is None
+        ):
+            return False
+        run_id = path_match.group("run_id")
+        run_attempt = path_match.group("run_attempt")
+        load_vulnerability_authority_identity(
+            bundle_path,
+            expected_repository=CORE_REPOSITORY_IDENTITY,
+            expected_git_commit_sha=git_commit_sha,
+            expected_ci_run_id=run_id,
+            expected_ci_run_attempt=run_attempt,
+        )
+        if bundle.get("schema_version") != VULNERABILITY_AUTHORITY_SCHEMA_VERSION:
+            return False
+        cisa_kev = bundle.get("cisa_kev")
+        if not isinstance(cisa_kev, dict) or set(cisa_kev) != EXPECTED_CISA_KEV_IDENTITY_FIELDS:
+            return False
+        if cisa_kev.get("source_url") != CISA_KEV_SOURCE_URL:
+            return False
+        source_sha256 = cisa_kev.get("source_sha256")
+        if not isinstance(source_sha256, str) or SHA256_PATTERN.fullmatch(source_sha256) is None:
+            return False
+        actual_source_sha256 = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual_source_sha256 != source_sha256:
+            return False
+        if not _has_valid_authority_creation_window(bundle, cisa_kev):
+            return False
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+        VulnerabilityAuthorityBundleError,
+    ):
+        return False
+    return True
+
+
+def _has_valid_authority_creation_window(bundle: dict[str, Any], cisa_kev: dict[str, Any]) -> bool:
+    try:
+        generated_at = _utc_timestamp(bundle.get("generated_at_utc"))
+        fetched_at = _utc_timestamp(cisa_kev.get("fetched_at_utc"))
+        released_at = _utc_timestamp(cisa_kev.get("date_released_utc"))
+    except (TypeError, ValueError):
+        return False
+    creation_age_seconds = (generated_at - fetched_at).total_seconds()
+    return (
+        released_at <= fetched_at <= generated_at <= datetime.now(UTC)
+        and 0 <= creation_age_seconds <= MAX_VULNERABILITY_AUTHORITY_AGE_SECONDS
+    )
+
+
+def _utc_timestamp(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise TypeError("authority timestamp must be a string")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
+        raise ValueError("authority timestamp must use explicit UTC")
+    return parsed.astimezone(UTC)
 
 
 def _append_regex_findings(
