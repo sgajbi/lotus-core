@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -427,6 +428,9 @@ def _base_files(tmp_path: Path) -> tuple[Path, Path]:
                     "deployment_platform": "linux/amd64",
                     "resolved_manifest_digest": runtime_digest,
                     "config_digest": config_digest,
+                    "observed_on": "2026-08-13",
+                    "next_review_on": "2026-09-11",
+                    "supported_through": "2027-06-30",
                     "covered_dockerfiles": [DOCKERFILE],
                 }
             ],
@@ -448,12 +452,17 @@ def test_base_image_identity_binds_dockerfile_and_runtime_architecture(tmp_path:
     inventory, manifest = _base_files(tmp_path)
 
     identity = base_image_evidence_identity(
-        inventory_path=inventory, manifest_path=manifest, dockerfile_path=DOCKERFILE
+        inventory_path=inventory,
+        manifest_path=manifest,
+        dockerfile_path=DOCKERFILE,
+        verified_on=date(2026, 8, 14),
     )
 
     assert identity["dockerfile"] == DOCKERFILE
     assert identity["deployment_platform"] == "linux/amd64"
     assert identity["runtime_manifest_digest"] == "sha256:" + "d" * 64
+    assert identity["verified_on"] == "2026-08-14"
+    assert identity["next_review_on"] == "2026-09-11"
 
 
 def test_base_image_identity_rejects_architecture_drift(tmp_path: Path) -> None:
@@ -464,5 +473,35 @@ def test_base_image_identity_rejects_architecture_drift(tmp_path: Path) -> None:
 
     with pytest.raises(ImageReleaseEvidenceError, match="architecture drifted"):
         base_image_evidence_identity(
-            inventory_path=inventory, manifest_path=manifest, dockerfile_path=DOCKERFILE
+            inventory_path=inventory,
+            manifest_path=manifest,
+            dockerfile_path=DOCKERFILE,
+            verified_on=date(2026, 8, 14),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("observed_on", "2026-08-15", "future-dated"),
+        ("next_review_on", "2026-08-13", "review is overdue"),
+        ("supported_through", "2026-08-13", "support lifecycle has expired"),
+        ("next_review_on", "not-a-date", "must be an ISO date"),
+        ("supported_through", None, "must be an ISO date"),
+    ],
+)
+def test_base_image_identity_revalidates_lifecycle_at_release_boundary(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    inventory, manifest = _base_files(tmp_path)
+    payload = json.loads(inventory.read_text(encoding="utf-8"))
+    payload["base_images"][0][field] = value
+    _write(inventory, payload)
+
+    with pytest.raises(ImageReleaseEvidenceError, match=message):
+        base_image_evidence_identity(
+            inventory_path=inventory,
+            manifest_path=manifest,
+            dockerfile_path=DOCKERFILE,
+            verified_on=date(2026, 8, 14),
         )
