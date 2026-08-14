@@ -17,6 +17,7 @@ from scripts.release.cisa_kev import (
     load_cisa_kev_catalog,
 )
 from scripts.release.vulnerability_authority_bundle import (
+    MAX_VULNERABILITY_AUTHORITY_AGE_SECONDS,
     VulnerabilityAuthorityBundleError,
     load_vulnerability_authority_identity,
 )
@@ -40,7 +41,6 @@ UNCLASSIFIED_SEVERITIES = frozenset({"UNKNOWN"})
 KNOWN_SEVERITIES = BLOCKING_SEVERITIES | KNOWN_NONBLOCKING_SEVERITIES | UNCLASSIFIED_SEVERITIES
 FULL_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
-MAX_KEV_TO_SCAN_AGE_SECONDS = 900
 MAX_RECEIPT_TO_ENFORCEMENT_AGE_SECONDS = 1800
 MAX_ENFORCEMENT_FUTURE_SKEW_SECONDS = 60
 UNAVAILABLE_REASON_CODES = frozenset(
@@ -383,9 +383,9 @@ def build_policy_receipt(
     )
     scan_time = datetime.fromisoformat(normalized_scan_timestamp.replace("Z", "+00:00"))
     catalog_age_seconds = (scan_time - kev_catalog.fetched_at_utc).total_seconds()
-    if not 0 <= catalog_age_seconds <= MAX_KEV_TO_SCAN_AGE_SECONDS:
+    if not 0 <= catalog_age_seconds <= MAX_VULNERABILITY_AUTHORITY_AGE_SECONDS:
         raise ScanPolicyError(
-            "CISA KEV fetch must precede the scan receipt by no more than 15 minutes"
+            "CISA KEV fetch must precede the scan receipt by no more than 60 minutes"
         )
     report_bytes = report_path.read_bytes()
     report = _load_json_object(report_path, evidence_name="Trivy report")

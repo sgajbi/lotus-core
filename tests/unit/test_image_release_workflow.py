@@ -141,6 +141,7 @@ def test_all_image_jobs_consume_the_same_attempt_authority() -> None:
             }
         )
         assert "vulnerability_authority_bundle verify" in str(scan_step["run"])
+        assert "--maximum-age-seconds 3600" in str(scan_step["run"])
         assert "output/vulnerability-authority/cisa-kev.json" in job_text
         assert (
             "output/vulnerability-authority/vulnerability-exception-register.schema.json"
