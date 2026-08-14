@@ -13,6 +13,7 @@ DUPLICATE_SOURCE_KEY = "DUPLICATE_SOURCE_KEY"
 MISSING_REQUIRED_LINEAGE = "MISSING_REQUIRED_LINEAGE"
 INVALID_TRANSACTION_LIFECYCLE_LINK = "INVALID_TRANSACTION_LIFECYCLE_LINK"
 INVALID_QUALITY_STATUS = "INVALID_QUALITY_STATUS"
+INVALID_OBSERVED_AT = "INVALID_OBSERVED_AT"
 INVALID_THRESHOLD_PAIR = "INVALID_THRESHOLD_PAIR"
 MISSING_RULE_EVIDENCE = "MISSING_RULE_EVIDENCE"
 INVALID_ALLOCATION_BOUNDS = "INVALID_ALLOCATION_BOUNDS"
@@ -46,6 +47,10 @@ INGESTION_VALIDATION_TAXONOMY: dict[str, dict[str, str]] = {
     INVALID_QUALITY_STATUS: {
         "message": "quality_status is invalid.",
         "remediation": "Provide a non-blank governed quality status.",
+    },
+    INVALID_OBSERVED_AT: {
+        "message": "observed_at is invalid.",
+        "remediation": "Provide an ISO 8601 timestamp with an explicit timezone offset.",
     },
     INVALID_THRESHOLD_PAIR: {
         "message": "Threshold amount and currency must be supplied together.",
