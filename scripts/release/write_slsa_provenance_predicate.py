@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -23,6 +24,7 @@ def build_predicate(
     ci_run_id: str,
     ci_run_attempt: str,
     buildx_metadata: dict[str, Any],
+    sbom_sha256: str,
 ) -> dict[str, Any]:
     """Bind source, workflow, build inputs, and Buildx result metadata."""
     if not FULL_GIT_SHA_PATTERN.fullmatch(git_commit_sha):
@@ -44,6 +46,8 @@ def build_predicate(
     container_digest = buildx_metadata.get("containerimage.digest")
     if not isinstance(container_digest, str) or not container_digest.startswith("sha256:"):
         raise ValueError("Buildx metadata must contain the container image digest")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", sbom_sha256):
+        raise ValueError("SBOM digest must be sha256")
     return {
         "buildDefinition": {
             "buildType": SLSA_BUILD_TYPE,
@@ -73,7 +77,8 @@ def build_predicate(
                 {
                     "name": "buildx-result",
                     "content": buildx_metadata,
-                }
+                },
+                {"name": "cyclonedx-sbom", "digest": {"sha256": sbom_sha256[7:]}},
             ],
         },
     }
@@ -90,6 +95,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--ci-run-id", required=True)
     parser.add_argument("--ci-run-attempt", required=True)
     parser.add_argument("--buildx-metadata", required=True, type=Path)
+    parser.add_argument("--sbom", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser
 
@@ -112,6 +118,7 @@ def main() -> int:
         ci_run_id=args.ci_run_id,
         ci_run_attempt=args.ci_run_attempt,
         buildx_metadata=metadata,
+        sbom_sha256="sha256:" + hashlib.sha256(args.sbom.read_bytes()).hexdigest(),
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(predicate, indent=2) + "\n", encoding="utf-8")

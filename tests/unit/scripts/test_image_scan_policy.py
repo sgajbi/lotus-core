@@ -114,7 +114,10 @@ def _receipt(report_path: Path, **overrides: Any) -> dict[str, object]:
         "ci_run_attempt": "2",
         "scanner_name": "trivy",
         "scanner_version": "0.56.2",
-        "scanner_image": "aquasec/trivy:0.56.2",
+        "scanner_image": (
+            "aquasec/trivy:0.56.2@sha256:"
+            "26245f364b6f5d223003dc344ec1eb5eb8439052bfecb31d79aeba0c74344b3a"
+        ),
         "scan_timestamp": "2026-08-12T02:03:04Z",
         "kev_catalog_path": kev_catalog_path,
         "kev_fetched_at": "2026-08-12T02:02:00Z",

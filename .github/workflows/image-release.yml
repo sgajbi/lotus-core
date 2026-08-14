@@ -122,6 +122,8 @@ jobs:
       matrix: ${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -133,11 +135,24 @@ jobs:
         with:
           name: vulnerability-authority-attempt-${{ github.run_attempt }}
           path: output/vulnerability-authority
+      - name: Verify release source is reachable from protected main
+        shell: bash
+        run: |
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main; then
+            echo "Release source ${GITHUB_SHA} is not reachable from origin/main." >&2
+            exit 1
+          fi
       - name: Log in to GHCR
         run: echo "${{ github.token }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
       - name: Install Cosign
         run: |
           go install github.com/sigstore/cosign/v2/cmd/cosign@v2.4.1
+          cosign_path="$(go env GOPATH)/bin/cosign"
+          if ! "${cosign_path}" version | grep --fixed-strings 'GitVersion:    v2.4.1'; then
+            echo "Governed Cosign version verification failed." >&2
+            exit 1
+          fi
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Resolve immutable image metadata
         id: meta
@@ -193,7 +208,12 @@ jobs:
       - name: Generate image vulnerability and secret policy receipt
         shell: bash
         run: |
-          scanner_image="aquasec/trivy:0.56.2"
+          scanner_image="aquasec/trivy:0.56.2@sha256:26245f364b6f5d223003dc344ec1eb5eb8439052bfecb31d79aeba0c74344b3a"
+          scanner_version="$(docker run --rm "${scanner_image}" --version)"
+          if [ "${scanner_version}" != "Version: 0.56.2" ]; then
+            echo "Governed Trivy version drifted: ${scanner_version}" >&2
+            exit 1
+          fi
           report_path="output/build-evidence/${{ matrix.service }}-trivy.json"
           receipt_path="output/build-evidence/${{ matrix.service }}-image-scan-policy.json"
           authority_dir="output/vulnerability-authority"
@@ -326,8 +346,9 @@ jobs:
             --ci-run-id "${GITHUB_RUN_ID}" \
             --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
             --buildx-metadata "output/build-evidence/${{ matrix.service }}-buildx-metadata.json" \
+            --sbom "output/build-evidence/${{ matrix.service }}-sbom.cdx.json" \
             --output "${predicate}"
-          cosign attest --yes --type slsaprovenance --predicate "${predicate}" \
+          cosign attest --yes --type slsaprovenance1 --predicate "${predicate}" \
             "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
       - name: Verify signed provenance identity
         env:
@@ -337,7 +358,7 @@ jobs:
           certificate_issuer="https://token.actions.githubusercontent.com"
           certificate_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}"
           cosign verify-attestation \
-            --type slsaprovenance \
+            --type slsaprovenance1 \
             --certificate-identity "${certificate_identity}" \
             --certificate-oidc-issuer "${certificate_issuer}" \
             --output json \
@@ -383,6 +404,7 @@ jobs:
             --provenance-verification "output/build-evidence/${{ matrix.service }}-provenance-verification.json" \
             --certificate-issuer "https://token.actions.githubusercontent.com" \
             --certificate-subject-pattern "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}" \
+            --workflow-ref "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/image-release.yml@${GITHUB_REF}" \
             --base-lifecycle-inventory "contracts/security/base-image-lifecycle-inventory.v1.json" \
             --base-manifest-evidence "contracts/security/base-image-manifest-evidence.v1.json" \
             --dockerfile "${{ matrix.dockerfile }}" \
@@ -478,7 +500,12 @@ jobs:
       - name: Generate diagnostic image scan receipt
         shell: bash
         run: |
-          scanner_image="aquasec/trivy:0.56.2"
+          scanner_image="aquasec/trivy:0.56.2@sha256:26245f364b6f5d223003dc344ec1eb5eb8439052bfecb31d79aeba0c74344b3a"
+          scanner_version="$(docker run --rm "${scanner_image}" --version)"
+          if [ "${scanner_version}" != "Version: 0.56.2" ]; then
+            echo "Governed Trivy version drifted: ${scanner_version}" >&2
+            exit 1
+          fi
           report_path="output/build-evidence/${{ matrix.service }}-diagnostic-trivy.json"
           receipt_path="output/build-evidence/${{ matrix.service }}-diagnostic-image-scan-policy.json"
           authority_dir="output/vulnerability-authority"

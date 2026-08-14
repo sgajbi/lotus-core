@@ -516,7 +516,7 @@ def test_image_release_workflow_enforces_supply_chain_controls() -> None:
         "-sbom.cdx.json",
         "cosign sign --yes",
         "cosign verify",
-        "cosign attest --yes --type slsaprovenance",
+        "cosign attest --yes --type slsaprovenance1",
         "cosign verify-attestation",
         "write_image_release_manifest.py",
         '--image-digest "${{ steps.digest.outputs.image_digest }}"',

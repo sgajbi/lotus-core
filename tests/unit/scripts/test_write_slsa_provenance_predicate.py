@@ -19,6 +19,7 @@ def _predicate(**overrides):
         "ci_run_id": "123",
         "ci_run_attempt": "1",
         "buildx_metadata": {"containerimage.digest": "sha256:" + "b" * 64},
+        "sbom_sha256": "sha256:" + "c" * 64,
     }
     values.update(overrides)
     return build_predicate(**values)
@@ -35,6 +36,10 @@ def test_predicate_binds_source_workflow_build_and_result() -> None:
     assert predicate["runDetails"]["byproducts"][0]["content"] == {
         "containerimage.digest": "sha256:" + "b" * 64
     }
+    assert predicate["runDetails"]["byproducts"][1] == {
+        "name": "cyclonedx-sbom",
+        "digest": {"sha256": "c" * 64},
+    }
 
 
 @pytest.mark.parametrize(
@@ -44,6 +49,7 @@ def test_predicate_binds_source_workflow_build_and_result() -> None:
         ({"workflow_ref": ""}, "workflow ref is required"),
         ({"ci_run_attempt": "no"}, "must be numeric"),
         ({"buildx_metadata": {}}, "container image digest"),
+        ({"sbom_sha256": "missing"}, "SBOM digest"),
     ],
 )
 def test_predicate_rejects_incomplete_identity(overrides, message: str) -> None:

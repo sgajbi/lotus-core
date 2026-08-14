@@ -29,6 +29,20 @@ AUTHORITY = {
     "ci_run_id": "123",
     "ci_run_attempt": "1",
 }
+WORKFLOW_REF = (
+    "https://github.com/sgajbi/lotus-core/.github/workflows/image-release.yml@refs/heads/main"
+)
+SBOM_SHA256 = "sha256:" + "9" * 64
+PROVENANCE_KWARGS = {
+    "repository": "sgajbi/lotus-core",
+    "git_commit_sha": "1" * 40,
+    "workflow_ref": WORKFLOW_REF,
+    "service": "query_service",
+    "dockerfile": DOCKERFILE,
+    "ci_run_id": "123",
+    "ci_run_attempt": "1",
+    "sbom_sha256": SBOM_SHA256,
+}
 
 
 def _write(path: Path, value: object) -> Path:
@@ -230,7 +244,35 @@ def _attestation_payload(digest: str = IMAGE_DIGEST) -> str:
         "_type": "https://in-toto.io/Statement/v1",
         "subject": [{"name": IMAGE_REF, "digest": {"sha256": digest.removeprefix("sha256:")}}],
         "predicateType": "https://slsa.dev/provenance/v1",
-        "predicate": {"buildDefinition": {}},
+        "predicate": {
+            "buildDefinition": {
+                "buildType": "https://github.com/Attestations/GitHubActionsWorkflow@v1",
+                "externalParameters": {
+                    "repository": "sgajbi/lotus-core",
+                    "workflow_ref": WORKFLOW_REF,
+                    "service": "query_service",
+                    "dockerfile": DOCKERFILE,
+                },
+                "internalParameters": {"ci_run_id": "123", "ci_run_attempt": "1"},
+                "resolvedDependencies": [
+                    {
+                        "uri": "git+https://github.com/sgajbi/lotus-core",
+                        "digest": {"gitCommit": "1" * 40},
+                    }
+                ],
+            },
+            "runDetails": {
+                "builder": {"id": WORKFLOW_REF},
+                "metadata": {"invocationId": "sgajbi/lotus-core/actions/runs/123/attempts/1"},
+                "byproducts": [
+                    {
+                        "name": "buildx-result",
+                        "content": {"containerimage.digest": digest},
+                    },
+                    {"name": "cyclonedx-sbom", "digest": {"sha256": "9" * 64}},
+                ],
+            },
+        },
     }
     return base64.b64encode(json.dumps(statement).encode()).decode()
 
@@ -239,7 +281,7 @@ def test_provenance_identity_decodes_and_binds_dsse_subject(tmp_path: Path) -> N
     path = _write(tmp_path / "provenance.json", [{"payload": _attestation_payload()}])
 
     identity = provenance_verification_identity(
-        path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST
+        path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST, **PROVENANCE_KWARGS
     )
 
     assert identity["predicate_types"] == ["https://slsa.dev/provenance/v1"]
@@ -252,7 +294,9 @@ def test_provenance_identity_rejects_subject_mismatch(tmp_path: Path) -> None:
         [{"payload": _attestation_payload("sha256:" + "b" * 64)}],
     )
     with pytest.raises(ImageReleaseEvidenceError, match="subject digest drifted"):
-        provenance_verification_identity(path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST)
+        provenance_verification_identity(
+            path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST, **PROVENANCE_KWARGS
+        )
 
 
 def test_provenance_identity_rejects_non_slsa_attestation(tmp_path: Path) -> None:
@@ -268,7 +312,54 @@ def test_provenance_identity_rejects_non_slsa_attestation(tmp_path: Path) -> Non
     path = _write(tmp_path / "provenance.json", [{"payload": payload}])
 
     with pytest.raises(ImageReleaseEvidenceError, match="must be SLSA provenance"):
-        provenance_verification_identity(path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST)
+        provenance_verification_identity(
+            path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST, **PROVENANCE_KWARGS
+        )
+
+
+def test_provenance_identity_rejects_legacy_slsa_v02_attestation(tmp_path: Path) -> None:
+    statement = {
+        "_type": "https://in-toto.io/Statement/v0.1",
+        "subject": [
+            {"name": IMAGE_REF, "digest": {"sha256": IMAGE_DIGEST.removeprefix("sha256:")}}
+        ],
+        "predicateType": "https://slsa.dev/provenance/v0.2",
+        "predicate": {},
+    }
+    payload = base64.b64encode(json.dumps(statement).encode()).decode()
+    path = _write(tmp_path / "provenance.json", [{"payload": payload}])
+
+    with pytest.raises(ImageReleaseEvidenceError, match="statement type is invalid"):
+        provenance_verification_identity(
+            path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST, **PROVENANCE_KWARGS
+        )
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        ({"repository": "sgajbi/substituted"}, "external parameters"),
+        ({"git_commit_sha": "2" * 40}, "source revision"),
+        ({"workflow_ref": WORKFLOW_REF + "-other"}, "external parameters"),
+        ({"service": "persistence_service"}, "external parameters"),
+        ({"dockerfile": "src/services/persistence_service/Dockerfile"}, "external parameters"),
+        ({"ci_run_id": "999"}, "run identity"),
+        ({"ci_run_attempt": "2"}, "run identity"),
+        ({"sbom_sha256": "sha256:" + "8" * 64}, "SBOM digest"),
+    ],
+)
+def test_provenance_identity_rejects_source_and_evidence_substitution(
+    tmp_path: Path, override: dict[str, str], message: str
+) -> None:
+    path = _write(tmp_path / "provenance.json", [{"payload": _attestation_payload()}])
+
+    with pytest.raises(ImageReleaseEvidenceError, match=message):
+        provenance_verification_identity(
+            path,
+            image_ref=IMAGE_REF,
+            image_digest=IMAGE_DIGEST,
+            **{**PROVENANCE_KWARGS, **override},
+        )
 
 
 def _base_files(tmp_path: Path) -> tuple[Path, Path]:
