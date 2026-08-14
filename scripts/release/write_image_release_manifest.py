@@ -277,6 +277,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provenance-verification", required=True, type=Path)
     parser.add_argument("--certificate-issuer", required=True)
     parser.add_argument("--certificate-subject-pattern", required=True)
+    parser.add_argument("--workflow-ref", required=True)
     parser.add_argument("--base-lifecycle-inventory", required=True, type=Path)
     parser.add_argument("--base-manifest-evidence", required=True, type=Path)
     parser.add_argument("--dockerfile", required=True)
@@ -294,6 +295,7 @@ def main() -> int:
         expected_ci_run_attempt=args.ci_run_attempt,
     )
     common_subject = {"image_ref": args.image_ref, "image_digest": args.image_digest}
+    sbom = sbom_identity(args.sbom, **common_subject)
     scan = scan_receipt_identity(
         args.scan_receipt,
         service=args.service,
@@ -317,7 +319,7 @@ def main() -> int:
         ci_pipeline_run_id=args.ci_pipeline_run_id,
         ci_run_attempt=args.ci_run_attempt,
         scan_receipt=scan,
-        sbom=sbom_identity(args.sbom, **common_subject),
+        sbom=sbom,
         signature_verification=signature_verification_identity(
             args.signature_verification,
             expected_issuer=args.certificate_issuer,
@@ -325,7 +327,16 @@ def main() -> int:
             **common_subject,
         ),
         provenance_verification=provenance_verification_identity(
-            args.provenance_verification, **common_subject
+            args.provenance_verification,
+            repository=args.repository,
+            git_commit_sha=args.git_commit_sha,
+            workflow_ref=args.workflow_ref,
+            service=args.service,
+            dockerfile=args.dockerfile,
+            ci_run_id=args.ci_pipeline_run_id,
+            ci_run_attempt=args.ci_run_attempt,
+            sbom_sha256=str(sbom["sha256"]),
+            **common_subject,
         ),
         base_image=base_image_evidence_identity(
             inventory_path=args.base_lifecycle_inventory,

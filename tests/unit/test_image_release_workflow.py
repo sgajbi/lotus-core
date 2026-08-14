@@ -37,6 +37,17 @@ def test_publish_boundary_is_limited_to_main_and_version_tags() -> None:
     }
 
 
+def test_publish_source_must_be_reachable_from_protected_main() -> None:
+    checkout = _steps()[0]
+    command = str(_step("Verify release source is reachable from protected main")["run"])
+
+    assert checkout["uses"] == "actions/checkout@v6"
+    assert checkout["with"]["fetch-depth"] == 0
+    assert "git fetch --no-tags origin" in command
+    assert "refs/heads/main:refs/remotes/origin/main" in command
+    assert 'git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main' in command
+
+
 def test_manual_feature_dispatch_is_diagnostic_and_non_release_shaped() -> None:
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
     diagnostic_job = workflow["jobs"]["diagnose-images"]
@@ -179,6 +190,16 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
         'vulnerability-exception-register.schema.json"' in str(steps[enforce_index]["run"])
     )
     assert "--enforced-at" in str(steps[enforce_index]["run"])
+    assert "aquasec/trivy:0.56.2@sha256:" in generate
+    assert 'scanner_version="$(docker run --rm "${scanner_image}" --version)"' in generate
+    assert '"${scanner_version}" != "Version: 0.56.2"' in generate
+
+
+def test_cosign_install_is_version_verified_before_signing() -> None:
+    install = str(_step("Install Cosign")["run"])
+
+    assert "github.com/sigstore/cosign/v2/cmd/cosign@v2.4.1" in install
+    assert "GitVersion:    v2.4.1" in install
 
 
 def test_manifest_consumes_verified_same_artifact_evidence() -> None:
@@ -214,6 +235,7 @@ def test_manifest_consumes_verified_same_artifact_evidence() -> None:
         "--base-lifecycle-inventory",
         "--base-manifest-evidence",
         "--dockerfile",
+        "--workflow-ref",
     ):
         assert required in manifest
     for removed_assertion in (

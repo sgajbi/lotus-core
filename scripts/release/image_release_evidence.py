@@ -11,10 +11,7 @@ from typing import Any
 
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 SCHEMA_VERSION = "lotus-core.image-release-evidence.v1"
-SLSA_PROVENANCE_PREDICATE_TYPES = {
-    "https://slsa.dev/provenance/v0.2",
-    "https://slsa.dev/provenance/v1",
-}
+SLSA_PROVENANCE_PREDICATE_TYPES = {"https://slsa.dev/provenance/v1"}
 SCAN_RECEIPT_SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v6"
 
 
@@ -184,7 +181,18 @@ def signature_verification_identity(
 
 
 def provenance_verification_identity(
-    path: Path, *, image_ref: str, image_digest: str
+    path: Path,
+    *,
+    image_ref: str,
+    image_digest: str,
+    repository: str,
+    git_commit_sha: str,
+    workflow_ref: str,
+    service: str,
+    dockerfile: str,
+    ci_run_id: str,
+    ci_run_attempt: str,
+    sbom_sha256: str,
 ) -> dict[str, Any]:
     """Validate signed DSSE provenance subjects against the exact image digest."""
     _validate_subject(image_ref=image_ref, image_digest=image_digest)
@@ -202,17 +210,81 @@ def provenance_verification_identity(
         except (ValueError, json.JSONDecodeError) as exc:
             raise ImageReleaseEvidenceError("provenance payload is invalid") from exc
         statement = _object(statement, name="provenance statement")
+        if statement.get("_type") != "https://in-toto.io/Statement/v1":
+            raise ImageReleaseEvidenceError("provenance statement type is invalid")
         predicate_type = statement.get("predicateType")
         if predicate_type not in SLSA_PROVENANCE_PREDICATE_TYPES:
             raise ImageReleaseEvidenceError("provenance predicate type must be SLSA provenance")
         subjects = statement.get("subject")
         if not isinstance(subjects, list) or not any(
             isinstance(subject, dict)
+            and subject.get("name") == image_ref
             and isinstance(subject.get("digest"), dict)
             and subject["digest"].get("sha256") == digest_hex
             for subject in subjects
         ):
             raise ImageReleaseEvidenceError("provenance subject digest drifted")
+        predicate = _object(statement.get("predicate"), name="provenance predicate")
+        build_definition = _object(
+            predicate.get("buildDefinition"), name="provenance build definition"
+        )
+        if build_definition.get("buildType") != (
+            "https://github.com/Attestations/GitHubActionsWorkflow@v1"
+        ):
+            raise ImageReleaseEvidenceError("provenance build type drifted")
+        if build_definition.get("externalParameters") != {
+            "repository": repository,
+            "workflow_ref": workflow_ref,
+            "service": service,
+            "dockerfile": dockerfile,
+        }:
+            raise ImageReleaseEvidenceError("provenance external parameters drifted")
+        if build_definition.get("internalParameters") != {
+            "ci_run_id": ci_run_id,
+            "ci_run_attempt": ci_run_attempt,
+        }:
+            raise ImageReleaseEvidenceError("provenance run identity drifted")
+        dependencies = build_definition.get("resolvedDependencies")
+        expected_dependency = {
+            "uri": f"git+https://github.com/{repository}",
+            "digest": {"gitCommit": git_commit_sha},
+        }
+        if dependencies != [expected_dependency]:
+            raise ImageReleaseEvidenceError("provenance source revision drifted")
+        run_details = _object(predicate.get("runDetails"), name="provenance run details")
+        if run_details.get("builder") != {"id": workflow_ref}:
+            raise ImageReleaseEvidenceError("provenance builder identity drifted")
+        expected_invocation = f"{repository}/actions/runs/{ci_run_id}/attempts/{ci_run_attempt}"
+        metadata = _object(run_details.get("metadata"), name="provenance run metadata")
+        if metadata.get("invocationId") != expected_invocation:
+            raise ImageReleaseEvidenceError("provenance invocation identity drifted")
+        byproducts = run_details.get("byproducts")
+        if not isinstance(byproducts, list):
+            raise ImageReleaseEvidenceError("provenance byproducts are missing")
+        buildx = next(
+            (
+                item
+                for item in byproducts
+                if isinstance(item, dict) and item.get("name") == "buildx-result"
+            ),
+            None,
+        )
+        if not isinstance(buildx, dict) or not isinstance(buildx.get("content"), dict):
+            raise ImageReleaseEvidenceError("provenance Buildx result is missing")
+        if buildx["content"].get("containerimage.digest") != image_digest:
+            raise ImageReleaseEvidenceError("provenance Buildx digest drifted")
+        sbom = next(
+            (
+                item
+                for item in byproducts
+                if isinstance(item, dict) and item.get("name") == "cyclonedx-sbom"
+            ),
+            None,
+        )
+        if not isinstance(sbom, dict) or sbom.get("digest") != {
+            "sha256": sbom_sha256.removeprefix("sha256:")
+        }:
+            raise ImageReleaseEvidenceError("provenance SBOM digest drifted")
         predicate_types.add(predicate_type)
     return {
         "media_type": "application/vnd.dsse.envelope.v1+json",

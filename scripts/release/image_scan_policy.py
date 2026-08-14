@@ -31,7 +31,9 @@ SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v6"
 POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v3"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
-SCANNER_IMAGE = "aquasec/trivy:0.56.2"
+SCANNER_IMAGE = (
+    "aquasec/trivy:0.56.2@sha256:26245f364b6f5d223003dc344ec1eb5eb8439052bfecb31d79aeba0c74344b3a"
+)
 BLOCKING_SEVERITIES = frozenset({"HIGH", "CRITICAL"})
 KNOWN_NONBLOCKING_SEVERITIES = frozenset({"LOW", "MEDIUM"})
 UNCLASSIFIED_SEVERITIES = frozenset({"UNKNOWN"})
