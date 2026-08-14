@@ -114,6 +114,15 @@ _STRONG_AUTHORITY_SOURCE_LINEAGE = SourceLineagePolicy(
     source_version=LineageFieldPosture.REQUIRED,
 )
 
+_REQUIRED_OBSERVATION_SOURCE_LINEAGE = SourceLineagePolicy(
+    source_system=LineageFieldPosture.REQUIRED,
+    source_record_id=LineageFieldPosture.REQUIRED,
+    observed_at=LineageFieldPosture.REQUIRED,
+    quality_status=LineageFieldPosture.OPTIONAL,
+    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
+    source_version=LineageFieldPosture.OPTIONAL,
+)
+
 _ASSIGNMENT_SOURCE_LINEAGE = SourceLineagePolicy(
     source_system=LineageFieldPosture.OPTIONAL,
     source_record_id=LineageFieldPosture.NOT_APPLICABLE,
@@ -134,6 +143,7 @@ _IDENTITY_ONLY_SOURCE_LINEAGE = SourceLineagePolicy(
 
 _SOURCE_LINEAGE_OVERRIDES = {
     "/ingest/benchmark-assignments": _ASSIGNMENT_SOURCE_LINEAGE,
+    "/ingest/portfolio-party-role-assignments": _REQUIRED_OBSERVATION_SOURCE_LINEAGE,
     "/ingest/reference/cash-accounts": _IDENTITY_ONLY_SOURCE_LINEAGE,
     "/ingest/reference/instrument-lookthrough-components": _IDENTITY_ONLY_SOURCE_LINEAGE,
 }
