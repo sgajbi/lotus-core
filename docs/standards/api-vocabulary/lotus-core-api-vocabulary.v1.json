@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-11T04:24:34.432794+00:00",
+  "generatedAt": "2026-08-14T05:34:04.236609+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -2971,6 +2971,10 @@
       "description": "Effective-dated instrument eligibility profiles to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "security_id": "AAPL",
           "eligibility_status": "APPROVED",
           "product_shelf_status": "APPROVED",
@@ -2991,11 +2995,7 @@
           "country_of_risk": "US",
           "effective_from": "2026-04-01",
           "effective_to": "2026-02-27",
-          "eligibility_version": 1,
-          "source_system": "product_shelf",
-          "source_record_id": "AAPL-elig-20260401",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "accepted"
+          "eligibility_version": 1
         }
       ],
       "type": "array",
@@ -3762,6 +3762,10 @@
       "description": "Effective-dated client income-needs schedules to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -3774,11 +3778,7 @@
           "start_date": "2026-02-27",
           "end_date": "2026-02-27",
           "priority": 10,
-          "funding_policy": "example_value",
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "funding_policy": "example_value"
         }
       ],
       "type": "array",
@@ -4608,6 +4608,10 @@
       "description": "Effective-dated liquidity reserve requirements to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -4621,11 +4625,7 @@
           "policy_source": "example_policy_source",
           "effective_from": "2026-02-27",
           "effective_to": "2026-02-27",
-          "requirement_version": 1,
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "requirement_version": 1
         }
       ],
       "type": "array",
@@ -6029,6 +6029,10 @@
       "description": "Planned withdrawal schedules to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -6039,11 +6043,7 @@
           "currency": "USD",
           "scheduled_date": "2026-02-27",
           "recurrence_frequency": "ONE_TIME",
-          "purpose_code": "example_value",
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "purpose_code": "example_value"
         }
       ],
       "type": "array",
@@ -6758,7 +6758,7 @@
       "semanticId": "lotus.quality_status",
       "canonicalTerm": "quality_status",
       "preferredName": "quality_status",
-      "description": "Data quality status for the model definition.",
+      "description": "Canonical source data-quality status.",
       "example": "accepted",
       "type": "string",
       "locations": [
@@ -7595,6 +7595,10 @@
       "description": "Effective-dated client restriction profile records to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -7618,11 +7622,7 @@
           ],
           "effective_from": "2026-02-27",
           "effective_to": "2026-02-27",
-          "restriction_version": 1,
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "restriction_version": 1
         }
       ],
       "type": "array",
@@ -9183,6 +9183,10 @@
       "description": "Effective-dated sustainability preference profile records to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -9203,11 +9207,7 @@
           ],
           "effective_from": "2026-02-27",
           "effective_to": "2026-02-27",
-          "preference_version": 1,
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "preference_version": 1
         }
       ],
       "type": "array",
@@ -9538,6 +9538,10 @@
       "description": "Effective-dated client tax profile records to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -9557,11 +9561,7 @@
           ],
           "effective_from": "2026-02-27",
           "effective_to": "2026-02-27",
-          "profile_version": 1,
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "profile_version": 1
         }
       ],
       "type": "array",
@@ -9593,6 +9593,10 @@
       "description": "Effective-dated client tax rule-set records to ingest or upsert.",
       "example": [
         {
+          "source_system": "MSCI",
+          "source_record_id": "source-record-20260102",
+          "observed_at": "2026-01-02T21:00:00Z",
+          "quality_status": "accepted",
           "client_id": "CLIENT_001",
           "portfolio_id": "DEMO_DPM_EUR_001",
           "mandate_id": "example_value",
@@ -9617,11 +9621,7 @@
           "threshold_currency": "example_value",
           "effective_from": "2026-02-27",
           "effective_to": "2026-02-27",
-          "rule_version": 1,
-          "source_system": "example_value",
-          "source_record_id": "example_value",
-          "observed_at": "2026-02-27T10:30:00Z",
-          "quality_status": "ACTIVE"
+          "rule_version": 1
         }
       ],
       "type": "array",
@@ -29549,6 +29549,38 @@
             "attributeRef": "lotus.model_portfolios"
           },
           {
+            "name": "model_portfolios[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "model_portfolios[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "model_portfolios[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "model_portfolios[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "model_portfolios[].model_portfolio_id",
             "location": "body",
             "required": true,
@@ -29635,38 +29667,6 @@
             "type": "object",
             "semanticId": "lotus.effective_to",
             "attributeRef": "lotus.effective_to"
-          },
-          {
-            "name": "model_portfolios[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "model_portfolios[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "model_portfolios[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "model_portfolios[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -29790,6 +29790,38 @@
             "attributeRef": "lotus.model_portfolio_targets"
           },
           {
+            "name": "model_portfolio_targets[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "model_portfolio_targets[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "model_portfolio_targets[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "model_portfolio_targets[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "model_portfolio_targets[].model_portfolio_id",
             "location": "body",
             "required": true,
@@ -29860,38 +29892,6 @@
             "type": "object",
             "semanticId": "lotus.effective_to",
             "attributeRef": "lotus.effective_to"
-          },
-          {
-            "name": "model_portfolio_targets[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "model_portfolio_targets[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "model_portfolio_targets[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "model_portfolio_targets[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -30023,6 +30023,38 @@
             "type": "array",
             "semanticId": "lotus.eligibility_profiles",
             "attributeRef": "lotus.eligibility_profiles"
+          },
+          {
+            "name": "eligibility_profiles[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "eligibility_profiles[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "eligibility_profiles[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "eligibility_profiles[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "eligibility_profiles[].security_id",
@@ -30175,38 +30207,6 @@
             "type": "integer",
             "semanticId": "lotus.eligibility_version",
             "attributeRef": "lotus.eligibility_version"
-          },
-          {
-            "name": "eligibility_profiles[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "eligibility_profiles[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "eligibility_profiles[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "eligibility_profiles[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -30342,6 +30342,38 @@
             "type": "array",
             "semanticId": "lotus.mandate_bindings",
             "attributeRef": "lotus.mandate_bindings"
+          },
+          {
+            "name": "mandate_bindings[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "mandate_bindings[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "mandate_bindings[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "mandate_bindings[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "mandate_bindings[].portfolio_id",
@@ -30526,38 +30558,6 @@
             "type": "integer",
             "semanticId": "lotus.binding_version",
             "attributeRef": "lotus.binding_version"
-          },
-          {
-            "name": "mandate_bindings[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "mandate_bindings[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "mandate_bindings[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "mandate_bindings[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -31129,6 +31129,38 @@
             "attributeRef": "lotus.restriction_profiles"
           },
           {
+            "name": "restriction_profiles[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "restriction_profiles[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "restriction_profiles[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "restriction_profiles[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "restriction_profiles[].client_id",
             "location": "body",
             "required": true,
@@ -31255,38 +31287,6 @@
             "type": "integer",
             "semanticId": "lotus.restriction_version",
             "attributeRef": "lotus.restriction_version"
-          },
-          {
-            "name": "restriction_profiles[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "restriction_profiles[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "restriction_profiles[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "restriction_profiles[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -31416,6 +31416,38 @@
             "attributeRef": "lotus.sustainability_preferences"
           },
           {
+            "name": "sustainability_preferences[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "sustainability_preferences[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "sustainability_preferences[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "sustainability_preferences[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "sustainability_preferences[].client_id",
             "location": "body",
             "required": true,
@@ -31534,38 +31566,6 @@
             "type": "integer",
             "semanticId": "lotus.preference_version",
             "attributeRef": "lotus.preference_version"
-          },
-          {
-            "name": "sustainability_preferences[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "sustainability_preferences[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "sustainability_preferences[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "sustainability_preferences[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -31696,6 +31696,38 @@
             "attributeRef": "lotus.tax_profiles"
           },
           {
+            "name": "tax_profiles[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "tax_profiles[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "tax_profiles[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "tax_profiles[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "tax_profiles[].client_id",
             "location": "body",
             "required": true,
@@ -31822,38 +31854,6 @@
             "type": "integer",
             "semanticId": "lotus.profile_version",
             "attributeRef": "lotus.profile_version"
-          },
-          {
-            "name": "tax_profiles[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "tax_profiles[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "tax_profiles[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "tax_profiles[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -31985,6 +31985,38 @@
             "type": "array",
             "semanticId": "lotus.tax_rule_sets",
             "attributeRef": "lotus.tax_rule_sets"
+          },
+          {
+            "name": "tax_rule_sets[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "tax_rule_sets[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "tax_rule_sets[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "tax_rule_sets[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "tax_rule_sets[].client_id",
@@ -32137,38 +32169,6 @@
             "type": "integer",
             "semanticId": "lotus.rule_version",
             "attributeRef": "lotus.rule_version"
-          },
-          {
-            "name": "tax_rule_sets[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "tax_rule_sets[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "tax_rule_sets[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "tax_rule_sets[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -32296,6 +32296,38 @@
             "attributeRef": "lotus.income_needs_schedules"
           },
           {
+            "name": "income_needs_schedules[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "income_needs_schedules[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "income_needs_schedules[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "income_needs_schedules[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "income_needs_schedules[].client_id",
             "location": "body",
             "required": true,
@@ -32398,38 +32430,6 @@
             "type": "object",
             "semanticId": "lotus.funding_policy",
             "attributeRef": "lotus.funding_policy"
-          },
-          {
-            "name": "income_needs_schedules[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "income_needs_schedules[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "income_needs_schedules[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "income_needs_schedules[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -32558,6 +32558,38 @@
             "attributeRef": "lotus.liquidity_reserve_requirements"
           },
           {
+            "name": "liquidity_reserve_requirements[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "liquidity_reserve_requirements[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "liquidity_reserve_requirements[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "liquidity_reserve_requirements[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "liquidity_reserve_requirements[].client_id",
             "location": "body",
             "required": true,
@@ -32668,38 +32700,6 @@
             "type": "integer",
             "semanticId": "lotus.requirement_version",
             "attributeRef": "lotus.requirement_version"
-          },
-          {
-            "name": "liquidity_reserve_requirements[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "liquidity_reserve_requirements[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "liquidity_reserve_requirements[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "liquidity_reserve_requirements[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -32825,6 +32825,38 @@
             "attributeRef": "lotus.planned_withdrawal_schedules"
           },
           {
+            "name": "planned_withdrawal_schedules[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "planned_withdrawal_schedules[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "planned_withdrawal_schedules[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "planned_withdrawal_schedules[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
+          },
+          {
             "name": "planned_withdrawal_schedules[].client_id",
             "location": "body",
             "required": true,
@@ -32911,38 +32943,6 @@
             "type": "object",
             "semanticId": "lotus.purpose_code",
             "attributeRef": "lotus.purpose_code"
-          },
-          {
-            "name": "planned_withdrawal_schedules[].source_system",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_system",
-            "attributeRef": "lotus.source_system"
-          },
-          {
-            "name": "planned_withdrawal_schedules[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "planned_withdrawal_schedules[].observed_at",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.observed_at",
-            "attributeRef": "lotus.observed_at"
-          },
-          {
-            "name": "planned_withdrawal_schedules[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
