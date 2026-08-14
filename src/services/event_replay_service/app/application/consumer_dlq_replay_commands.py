@@ -519,7 +519,11 @@ class ConsumerDlqReplayCommandService:
         except ReplayCommandError:
             raise
         except Exception as exc:
-            replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
+            replay_reason = project_ingestion_failure_evidence(
+                failure_code="INGESTION_DLQ_REPLAY_BOOKKEEPING_FAILED",
+                failure_detail=None,
+                failure_headers=None,
+            ).reason
             replay_audit_id = await self._record_mandatory_replay_audit(
                 event_id=event_id,
                 replay_fingerprint=replay_fingerprint,

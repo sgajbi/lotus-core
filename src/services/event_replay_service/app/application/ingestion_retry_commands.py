@@ -446,7 +446,11 @@ class IngestionRetryCommandService:
         except ReplayCommandError:
             raise
         except Exception as exc:
-            replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
+            replay_reason = project_ingestion_failure_evidence(
+                failure_code="INGESTION_RETRY_BOOKKEEPING_FAILED",
+                failure_detail=None,
+                failure_headers=None,
+            ).reason
             replay_audit_id = await self._record_mandatory_replay_audit(
                 recovery_path="ingestion_job_retry",
                 event_id=f"job:{job_id}",

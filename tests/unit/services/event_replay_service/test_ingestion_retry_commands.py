@@ -471,6 +471,9 @@ async def test_ingestion_job_retry_bookkeeping_failure_uses_recovery_detail() ->
         "replay_audit_id": "audit-book",
         "replay_fingerprint": "fp-001",
     }
+    _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
+    assert audit_kwargs["replay_reason"] == exc_info.value.detail["message"]
+    assert "downstream detail" not in str(audit_kwargs)
 
 
 @pytest.mark.asyncio
