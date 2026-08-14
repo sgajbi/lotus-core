@@ -105,12 +105,12 @@ _OPTIONAL_SOURCE_LINEAGE = SourceLineagePolicy(
     source_version=LineageFieldPosture.OPTIONAL,
 )
 
-_REQUIRED_SOURCE_LINEAGE = SourceLineagePolicy(
+_STRONG_AUTHORITY_SOURCE_LINEAGE = SourceLineagePolicy(
     source_system=LineageFieldPosture.REQUIRED,
     source_record_id=LineageFieldPosture.REQUIRED,
     observed_at=LineageFieldPosture.REQUIRED,
-    quality_status=LineageFieldPosture.REQUIRED,
-    source_batch_id=LineageFieldPosture.OPTIONAL,
+    quality_status=LineageFieldPosture.NOT_APPLICABLE,
+    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
     source_version=LineageFieldPosture.REQUIRED,
 )
 
@@ -270,7 +270,7 @@ _REFERENCE_POLICIES = tuple(
         entity_type,
         classification=classification,
         source_lineage=(
-            _REQUIRED_SOURCE_LINEAGE
+            _STRONG_AUTHORITY_SOURCE_LINEAGE
             if endpoint in _STRONG_LINEAGE_ENDPOINTS
             else _SOURCE_LINEAGE_OVERRIDES.get(endpoint, _OPTIONAL_SOURCE_LINEAGE)
         ),

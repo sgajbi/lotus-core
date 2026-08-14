@@ -121,3 +121,8 @@ Review also showed that an unkeyed SHA-256 reference allowed dictionary confirma
 low-entropy idempotency keys. Diagnostics now use an explicitly injected, domain-separated
 HMAC-SHA-256 reference with a visible key id; stale OpenAPI examples no longer disclose synthetic
 raw keys.
+The two strong source-authority families retain required source identity, observation, and version
+posture, but now declare `quality_status` and `source_batch_id` not applicable because their current
+DTO/domain contracts do not capture those fields; lifecycle status remains separately represented
+by `assignment_status` or `fact_status`. This removes a false registry guarantee without weakening
+any validated source authority or changing a request/response shape.
