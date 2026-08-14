@@ -228,7 +228,8 @@ jobs:
             --git-commit-sha "${GITHUB_SHA}" \
             --ci-run-id "${GITHUB_RUN_ID}" \
             --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
-            --verified-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            --verified-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --maximum-age-seconds 3600
           kev_fetched_at="$(python -c "import json, pathlib; print(json.loads(pathlib.Path('${authority_bundle_path}').read_text())['cisa_kev']['fetched_at_utc'])")"
           write_unavailable_receipt() {
             python -m scripts.release.image_scan_policy unavailable \
@@ -520,7 +521,8 @@ jobs:
             --git-commit-sha "${GITHUB_SHA}" \
             --ci-run-id "${GITHUB_RUN_ID}" \
             --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
-            --verified-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            --verified-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --maximum-age-seconds 3600
           kev_fetched_at="$(python -c "import json, pathlib; print(json.loads(pathlib.Path('${authority_bundle_path}').read_text())['cisa_kev']['fetched_at_utc'])")"
           write_unavailable_receipt() {
             python -m scripts.release.image_scan_policy unavailable \

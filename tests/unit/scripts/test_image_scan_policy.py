@@ -737,11 +737,20 @@ def test_unapproved_scanner_identity_fails_closed(tmp_path: Path) -> None:
 
 
 def test_stale_kev_fetch_fails_closed(tmp_path: Path) -> None:
-    with pytest.raises(ScanPolicyError, match="no more than 15 minutes"):
+    with pytest.raises(ScanPolicyError, match="no more than 60 minutes"):
         _receipt(
             _write_report(tmp_path, results=[]),
             kev_fetched_at="2026-08-12T01:00:00Z",
         )
+
+
+def test_kev_fetch_remains_valid_through_permitted_image_build_window(tmp_path: Path) -> None:
+    receipt = _receipt(
+        _write_report(tmp_path, results=[]),
+        kev_fetched_at="2026-08-12T01:18:00Z",
+    )
+
+    assert receipt["policy"]["decision"] == "passed"
 
 
 def test_enforcement_accepts_passed_receipt(tmp_path: Path) -> None:

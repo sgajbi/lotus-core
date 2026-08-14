@@ -215,7 +215,9 @@ pre-baseline catalog
 evidence fails closed. Fetch, scan, and evaluation failures produce a bounded reason-code receipt
 without copying remote bodies or scanner error detail. Enforcement rejects receipts or KEV evidence
 older than 30 minutes (or future-dated beyond 60 seconds), while generation separately requires the
-KEV fetch to precede the scan by no more than 15 minutes. A vulnerability without a classifiable CVE exploitation identity
+KEV fetch to precede the scan by no more than 60 minutes. That window covers the governed 45-minute
+image-job timeout plus setup margin; authority older than the permitted workflow window still fails
+closed. A vulnerability without a classifiable CVE exploitation identity
 also blocks instead of being assumed absent from KEV. The receipt retains only KEV catalog identity
 and digest, not a duplicate raw catalog. Blocked jobs must not export a release SBOM, sign the image,
 write a promotion manifest, or render a deployment. Retained failure receipts are remediation
