@@ -734,7 +734,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 {
                     "idempotency_key": None,
                     "idempotency_key_reference": (
-                        "sha256:f2a976ef4dd4e3e34f7d555d13c7ab2a6273af2be26e76b1dc006c4f07ae50b2"
+                        "hmac-sha256:v1:ops-2026-08:"
+                        "f2a976ef4dd4e3e34f7d555d13c7ab2a6273af2be26e76b1dc006c4f07ae50b2"
                     ),
                     "usage_count": 3,
                     "endpoint_count": 2,
@@ -750,7 +751,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 {
                     "idempotency_key": None,
                     "idempotency_key_reference": (
-                        "sha256:4eaa20fa37b251ffefbeaf26030aae166c0d90db40e028c600be20759ad24be3"
+                        "hmac-sha256:v1:ops-2026-08:"
+                        "4eaa20fa37b251ffefbeaf26030aae166c0d90db40e028c600be20759ad24be3"
                     ),
                     "usage_count": 2,
                     "endpoint_count": 1,
@@ -5457,7 +5459,8 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
             {
                 "idempotency_key": None,
                 "idempotency_key_reference": (
-                    "sha256:f2a976ef4dd4e3e34f7d555d13c7ab2a6273af2be26e76b1dc006c4f07ae50b2"
+                    "hmac-sha256:v1:ops-2026-08:"
+                    "f2a976ef4dd4e3e34f7d555d13c7ab2a6273af2be26e76b1dc006c4f07ae50b2"
                 ),
                 "usage_count": 3,
                 "endpoint_count": 2,
@@ -5473,7 +5476,8 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
             {
                 "idempotency_key": None,
                 "idempotency_key_reference": (
-                    "sha256:4eaa20fa37b251ffefbeaf26030aae166c0d90db40e028c600be20759ad24be3"
+                    "hmac-sha256:v1:ops-2026-08:"
+                    "4eaa20fa37b251ffefbeaf26030aae166c0d90db40e028c600be20759ad24be3"
                 ),
                 "usage_count": 2,
                 "endpoint_count": 1,
