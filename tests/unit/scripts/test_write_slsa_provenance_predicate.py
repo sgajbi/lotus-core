@@ -1,3 +1,6 @@
+import base64
+import json
+
 import pytest
 
 from scripts.release.write_slsa_provenance_predicate import (
@@ -33,9 +36,8 @@ def test_predicate_binds_source_workflow_build_and_result() -> None:
         "gitCommit": "a" * 40
     }
     assert predicate["runDetails"]["metadata"]["invocationId"].endswith("/123/attempts/1")
-    assert predicate["runDetails"]["byproducts"][0]["content"] == {
-        "containerimage.digest": "sha256:" + "b" * 64
-    }
+    encoded = predicate["runDetails"]["byproducts"][0]["content"]
+    assert json.loads(base64.b64decode(encoded)) == {"containerimage.digest": "sha256:" + "b" * 64}
     assert predicate["runDetails"]["byproducts"][1] == {
         "name": "cyclonedx-sbom",
         "digest": {"sha256": "c" * 64},

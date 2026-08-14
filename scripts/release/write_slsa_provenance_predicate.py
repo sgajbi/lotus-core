@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -76,7 +77,11 @@ def build_predicate(
             "byproducts": [
                 {
                     "name": "buildx-result",
-                    "content": buildx_metadata,
+                    "content": base64.b64encode(
+                        json.dumps(buildx_metadata, sort_keys=True, separators=(",", ":")).encode(
+                            "utf-8"
+                        )
+                    ).decode("ascii"),
                 },
                 {"name": "cyclonedx-sbom", "digest": {"sha256": sbom_sha256[7:]}},
             ],

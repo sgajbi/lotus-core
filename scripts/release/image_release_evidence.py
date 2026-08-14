@@ -269,9 +269,15 @@ def provenance_verification_identity(
             ),
             None,
         )
-        if not isinstance(buildx, dict) or not isinstance(buildx.get("content"), dict):
+        if not isinstance(buildx, dict) or not isinstance(buildx.get("content"), str):
             raise ImageReleaseEvidenceError("provenance Buildx result is missing")
-        if buildx["content"].get("containerimage.digest") != image_digest:
+        try:
+            buildx_content = json.loads(base64.b64decode(buildx["content"], validate=True))
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ImageReleaseEvidenceError("provenance Buildx result is invalid") from exc
+        if not isinstance(buildx_content, dict):
+            raise ImageReleaseEvidenceError("provenance Buildx result is invalid")
+        if buildx_content.get("containerimage.digest") != image_digest:
             raise ImageReleaseEvidenceError("provenance Buildx digest drifted")
         sbom = next(
             (
