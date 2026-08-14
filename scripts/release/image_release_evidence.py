@@ -8,6 +8,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote
 
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 SCHEMA_VERSION = "lotus-core.image-release-evidence.v1"
@@ -51,8 +52,34 @@ def _validate_subject(*, image_ref: str, image_digest: str) -> None:
         raise ImageReleaseEvidenceError("image digest must be a sha256 digest")
 
 
+def _cyclonedx_image_subject(
+    sbom: dict[str, Any], *, image_ref: str, image_digest: str
+) -> dict[str, str]:
+    """Read the OCI subject declared by Trivy's CycloneDX metadata component."""
+    metadata = _object(sbom.get("metadata"), name="CycloneDX metadata")
+    component = _object(metadata.get("component"), name="CycloneDX metadata component")
+    if component.get("type") != "container":
+        raise ImageReleaseEvidenceError("SBOM metadata subject must be a container")
+    purl = component.get("purl")
+    if not isinstance(purl, str) or not purl.startswith("pkg:oci/"):
+        raise ImageReleaseEvidenceError("SBOM metadata subject must have an OCI purl")
+    coordinates, separator, query = purl.removeprefix("pkg:oci/").partition("?")
+    name, digest_separator, encoded_digest = coordinates.rpartition("@")
+    if not separator or not digest_separator or not name:
+        raise ImageReleaseEvidenceError("SBOM metadata OCI purl is malformed")
+    parameters = parse_qs(query, keep_blank_values=True)
+    repositories = parameters.get("repository_url", [])
+    if len(repositories) != 1:
+        raise ImageReleaseEvidenceError("SBOM metadata OCI repository is required")
+    declared_ref = repositories[0]
+    declared_digest = unquote(encoded_digest)
+    if declared_ref != image_ref or declared_digest != image_digest:
+        raise ImageReleaseEvidenceError("SBOM metadata image subject drifted")
+    return {"image_ref": declared_ref, "image_digest": declared_digest, "purl": purl}
+
+
 def sbom_identity(path: Path, *, image_ref: str, image_digest: str) -> dict[str, Any]:
-    """Validate a non-empty CycloneDX document and bind its bytes to the subject."""
+    """Validate CycloneDX bytes and their declared OCI subject identity."""
     _validate_subject(image_ref=image_ref, image_digest=image_digest)
     content, raw = _json(path, name="CycloneDX SBOM")
     sbom = _object(raw, name="CycloneDX SBOM")
@@ -64,13 +91,14 @@ def sbom_identity(path: Path, *, image_ref: str, image_digest: str) -> dict[str,
     components = sbom.get("components")
     if not isinstance(components, list) or not components:
         raise ImageReleaseEvidenceError("SBOM must contain components")
+    subject = _cyclonedx_image_subject(sbom, image_ref=image_ref, image_digest=image_digest)
     return {
         "media_type": "application/vnd.cyclonedx+json",
         "sha256": _sha256(content),
         "bom_format": "CycloneDX",
         "spec_version": spec_version,
         "component_count": len(components),
-        "subject": {"image_ref": image_ref, "image_digest": image_digest},
+        "subject": subject,
     }
 
 
