@@ -10,7 +10,13 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import TextClause
+
+from tests.integration.ingestion_job_sql_fixture import (
+    transaction_payload_evidence_insert_fragments,
+)
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -21,8 +27,11 @@ MIGRATION = (
     / "c121b2c3d4fa_feat_add_ingestion_failure_outcomes.py"
 )
 
-JOB_INSERT = text(
-    """
+
+def _job_insert(connection: Connection) -> TextClause:
+    evidence_columns, evidence_values = transaction_payload_evidence_insert_fragments(connection)
+    return text(
+        f"""
     INSERT INTO ingestion_jobs (
         job_id,
         endpoint,
@@ -36,7 +45,7 @@ JOB_INSERT = text(
         failure_status_code,
         failure_code,
         failure_detail,
-        failure_headers
+        failure_headers{evidence_columns}
     ) VALUES (
         :job_id,
         '/ingest/transactions',
@@ -50,10 +59,10 @@ JOB_INSERT = text(
         :failure_status_code,
         :failure_code,
         CAST(:failure_detail AS JSON),
-        CAST(:failure_headers AS JSON)
+        CAST(:failure_headers AS JSON){evidence_values}
     )
     """
-)
+    )
 
 
 def _bind_operations(migration: dict[str, Any], connection) -> None:
@@ -125,6 +134,7 @@ def test_ingestion_failure_outcome_migration_round_trip_and_constraint(
             )
         ).scalar_one()
         assert validated is True
+        job_insert = _job_insert(connection)
 
         base = {
             "status": "queued",
@@ -134,9 +144,9 @@ def test_ingestion_failure_outcome_migration_round_trip_and_constraint(
             "failure_detail": None,
             "failure_headers": None,
         }
-        connection.execute(JOB_INSERT, base | {"job_id": "job-outcome-legacy"})
+        connection.execute(job_insert, base | {"job_id": "job-outcome-legacy"})
         connection.execute(
-            JOB_INSERT,
+            job_insert,
             base
             | {
                 "job_id": "job-outcome-complete",
@@ -163,7 +173,7 @@ def test_ingestion_failure_outcome_migration_round_trip_and_constraint(
             savepoint = connection.begin_nested()
             with pytest.raises(IntegrityError):
                 connection.execute(
-                    JOB_INSERT,
+                    job_insert,
                     base
                     | {
                         "job_id": f"job-outcome-invalid-{sequence}",
