@@ -9,6 +9,7 @@ from ..DTOs.ingestion_job_dto import (
     IngestionIdempotencyDiagnosticItemResponse,
     IngestionIdempotencyDiagnosticsResponse,
 )
+from ..request_metadata import idempotency_key_reference
 
 
 async def load_idempotency_diagnostics_response(
@@ -122,7 +123,8 @@ def _to_idempotency_diagnostic_item(
     payload_conflict_detected = max_payload_fingerprints_per_endpoint > 1
     collision_detected = endpoint_count > 1 or payload_conflict_detected
     return IngestionIdempotencyDiagnosticItemResponse(
-        idempotency_key=key,
+        idempotency_key=None,
+        idempotency_key_reference=idempotency_key_reference(key),
         usage_count=usage_count,
         endpoint_count=endpoint_count,
         payload_fingerprint_count=payload_fingerprint_count,
