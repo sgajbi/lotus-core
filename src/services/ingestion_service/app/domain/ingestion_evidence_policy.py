@@ -114,6 +114,30 @@ _REQUIRED_SOURCE_LINEAGE = SourceLineagePolicy(
     source_version=LineageFieldPosture.REQUIRED,
 )
 
+_ASSIGNMENT_SOURCE_LINEAGE = SourceLineagePolicy(
+    source_system=LineageFieldPosture.OPTIONAL,
+    source_record_id=LineageFieldPosture.NOT_APPLICABLE,
+    observed_at=LineageFieldPosture.NOT_APPLICABLE,
+    quality_status=LineageFieldPosture.NOT_APPLICABLE,
+    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
+    source_version=LineageFieldPosture.OPTIONAL,
+)
+
+_IDENTITY_ONLY_SOURCE_LINEAGE = SourceLineagePolicy(
+    source_system=LineageFieldPosture.OPTIONAL,
+    source_record_id=LineageFieldPosture.OPTIONAL,
+    observed_at=LineageFieldPosture.NOT_APPLICABLE,
+    quality_status=LineageFieldPosture.NOT_APPLICABLE,
+    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
+    source_version=LineageFieldPosture.NOT_APPLICABLE,
+)
+
+_SOURCE_LINEAGE_OVERRIDES = {
+    "/ingest/benchmark-assignments": _ASSIGNMENT_SOURCE_LINEAGE,
+    "/ingest/reference/cash-accounts": _IDENTITY_ONLY_SOURCE_LINEAGE,
+    "/ingest/reference/instrument-lookthrough-components": _IDENTITY_ONLY_SOURCE_LINEAGE,
+}
+
 
 def _fingerprint_policy(
     endpoint: str,
@@ -248,7 +272,7 @@ _REFERENCE_POLICIES = tuple(
         source_lineage=(
             _REQUIRED_SOURCE_LINEAGE
             if endpoint in _STRONG_LINEAGE_ENDPOINTS
-            else _OPTIONAL_SOURCE_LINEAGE
+            else _SOURCE_LINEAGE_OVERRIDES.get(endpoint, _OPTIONAL_SOURCE_LINEAGE)
         ),
     )
     for endpoint, entity_type, classification in _REFERENCE_FAMILIES
