@@ -398,8 +398,14 @@ async def test_ingestion_job_retry_publish_failure_uses_recovery_detail() -> Non
         "replay_audit_id": "audit-pub",
         "replay_fingerprint": "fp-001",
     }
+    _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
+    assert audit_kwargs["replay_reason"] == (
+        "Ingestion job retry could not be published to the downstream ingestion pipeline."
+    )
+    assert "sensitive downstream detail" not in str(audit_kwargs)
     ingestion_job_service.mark_failed.assert_awaited_once()
-    _, mark_failed_args = ingestion_job_service.mark_failed.await_args
+    mark_failed_positional, mark_failed_args = ingestion_job_service.mark_failed.await_args
+    assert mark_failed_positional[1] == audit_kwargs["replay_reason"]
     assert mark_failed_args["failure_phase"] == "retry_publish"
     assert mark_failed_args["failed_record_keys"] == ["T1"]
 

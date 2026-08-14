@@ -109,6 +109,13 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
         if "UPDATE ingestion_job_failures" in statement
     )
     assert "historical_failure_reason" in history_failure_scrub
+    replay_failure_scrub = next(
+        statement
+        for statement in execute_statements
+        if "UPDATE consumer_dlq_replay_audits" in statement
+    )
+    assert "historical_replay_failure_reason" in replay_failure_scrub
+    assert "WHERE replay_status = 'failed'" in replay_failure_scrub
     backfill = next(
         statement
         for statement in execute_statements

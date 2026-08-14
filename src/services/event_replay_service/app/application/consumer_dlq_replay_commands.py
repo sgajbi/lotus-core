@@ -6,6 +6,9 @@ from typing import Any
 
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
+from src.services.ingestion_service.app.application.ingestion_failure_evidence import (
+    project_ingestion_failure_evidence,
+)
 from src.services.ingestion_service.app.domain.ingestion_replay_evidence import (
     ReplayEvidenceFailure,
     replay_evidence_failure,
@@ -438,6 +441,11 @@ class ConsumerDlqReplayCommandService:
                     idempotency_key=context.idempotency_key,
                 )
         except Exception as exc:
+            failure_reason = project_ingestion_failure_evidence(
+                failure_code="INGESTION_DLQ_REPLAY_FAILED",
+                failure_detail=None,
+                failure_headers=None,
+            ).reason
             replay_audit_id = await self._record_mandatory_replay_audit(
                 event_id=event_id,
                 replay_fingerprint=replay_fingerprint,
@@ -446,14 +454,14 @@ class ConsumerDlqReplayCommandService:
                 endpoint=context.endpoint,
                 replay_status="failed",
                 dry_run=False,
-                replay_reason=str(exc),
+                replay_reason=failure_reason,
                 requested_by=requested_by,
             )
             raise ReplayCommandError(
                 HTTP_INTERNAL_SERVER_ERROR,
                 {
                     "code": "INGESTION_DLQ_REPLAY_FAILED",
-                    "message": str(exc),
+                    "message": failure_reason,
                     "replay_audit_id": replay_audit_id,
                 },
             ) from exc
