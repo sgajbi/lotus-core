@@ -445,6 +445,12 @@ def _base_files(tmp_path: Path) -> tuple[Path, Path]:
             "runtime_manifest": {"digest": runtime_digest, "config_digest": config_digest},
         },
     )
+    dockerfile = tmp_path / DOCKERFILE
+    dockerfile.parent.mkdir(parents=True, exist_ok=True)
+    dockerfile.write_text(
+        f"ARG PYTHON_IMAGE={base_image}\nFROM ${{PYTHON_IMAGE}} AS runtime-base\n",
+        encoding="utf-8",
+    )
     return inventory, manifest
 
 
@@ -456,6 +462,7 @@ def test_base_image_identity_binds_dockerfile_and_runtime_architecture(tmp_path:
         manifest_path=manifest,
         dockerfile_path=DOCKERFILE,
         verified_on=date(2026, 8, 14),
+        repository_root=tmp_path,
     )
 
     assert identity["dockerfile"] == DOCKERFILE
@@ -463,6 +470,8 @@ def test_base_image_identity_binds_dockerfile_and_runtime_architecture(tmp_path:
     assert identity["runtime_manifest_digest"] == "sha256:" + "d" * 64
     assert identity["verified_on"] == "2026-08-14"
     assert identity["next_review_on"] == "2026-09-11"
+    assert identity["declared_base_image"] == "python:3.11@sha256:" + "c" * 64
+    assert identity["dockerfile_sha256"].startswith("sha256:")
 
 
 def test_base_image_identity_rejects_architecture_drift(tmp_path: Path) -> None:
@@ -477,6 +486,7 @@ def test_base_image_identity_rejects_architecture_drift(tmp_path: Path) -> None:
             manifest_path=manifest,
             dockerfile_path=DOCKERFILE,
             verified_on=date(2026, 8, 14),
+            repository_root=tmp_path,
         )
 
 
@@ -504,4 +514,48 @@ def test_base_image_identity_revalidates_lifecycle_at_release_boundary(
             manifest_path=manifest,
             dockerfile_path=DOCKERFILE,
             verified_on=date(2026, 8, 14),
+            repository_root=tmp_path,
+        )
+
+
+def test_base_image_identity_rejects_dockerfile_base_drift(tmp_path: Path) -> None:
+    inventory, manifest = _base_files(tmp_path)
+    dockerfile = tmp_path / DOCKERFILE
+    dockerfile.write_text(
+        "ARG PYTHON_IMAGE=python:3.12-slim-bookworm@sha256:"
+        + "f" * 64
+        + "\nFROM ${PYTHON_IMAGE} AS runtime-base\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ImageReleaseEvidenceError, match="base image drifted"):
+        base_image_evidence_identity(
+            inventory_path=inventory,
+            manifest_path=manifest,
+            dockerfile_path=DOCKERFILE,
+            verified_on=date(2026, 8, 14),
+            repository_root=tmp_path,
+        )
+
+
+@pytest.mark.parametrize(
+    "dockerfile_content",
+    [
+        "FROM python:3.11-slim-bookworm AS runtime-base\n",
+        "ARG PYTHON_IMAGE=python:3.11@sha256:" + "c" * 64 + "\n",
+    ],
+)
+def test_base_image_identity_rejects_unbound_dockerfile_base(
+    tmp_path: Path, dockerfile_content: str
+) -> None:
+    inventory, manifest = _base_files(tmp_path)
+    (tmp_path / DOCKERFILE).write_text(dockerfile_content, encoding="utf-8")
+
+    with pytest.raises(ImageReleaseEvidenceError, match="declare and consume"):
+        base_image_evidence_identity(
+            inventory_path=inventory,
+            manifest_path=manifest,
+            dockerfile_path=DOCKERFILE,
+            verified_on=date(2026, 8, 14),
+            repository_root=tmp_path,
         )

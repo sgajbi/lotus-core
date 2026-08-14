@@ -15,6 +15,8 @@ SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 SCHEMA_VERSION = "lotus-core.image-release-evidence.v1"
 SLSA_PROVENANCE_PREDICATE_TYPES = {"https://slsa.dev/provenance/v1"}
 SCAN_RECEIPT_SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v6"
+BASE_IMAGE_ARG_PATTERN = re.compile(r"ARG PYTHON_IMAGE=(?P<image>\S+)")
+RUNTIME_BASE_DECLARATION = "FROM ${PYTHON_IMAGE} AS runtime-base"
 
 
 class ImageReleaseEvidenceError(ValueError):
@@ -41,6 +43,32 @@ def _iso_date(value: object, *, field: str) -> date:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise ImageReleaseEvidenceError(f"base lifecycle {field} must be an ISO date") from exc
+
+
+def _dockerfile_base_identity(*, dockerfile_path: str, repository_root: Path) -> dict[str, str]:
+    root = repository_root.resolve()
+    candidate = (root / dockerfile_path).resolve()
+    if not candidate.is_relative_to(root) or not candidate.is_file():
+        raise ImageReleaseEvidenceError("release Dockerfile is missing or outside the repository")
+    try:
+        content = candidate.read_bytes()
+        text = content.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ImageReleaseEvidenceError("cannot read release Dockerfile") from exc
+    lines = text.splitlines()
+    matches = [
+        match.group("image")
+        for line in lines
+        if (match := BASE_IMAGE_ARG_PATTERN.fullmatch(line)) is not None
+    ]
+    if len(matches) != 1 or lines.count(RUNTIME_BASE_DECLARATION) != 1:
+        raise ImageReleaseEvidenceError(
+            "release Dockerfile must declare and consume exactly one PYTHON_IMAGE base"
+        )
+    return {
+        "declared_base_image": matches[0],
+        "dockerfile_sha256": _sha256(content),
+    }
 
 
 def _object(value: Any, *, name: str) -> dict[str, Any]:
@@ -345,6 +373,7 @@ def base_image_evidence_identity(
     manifest_path: Path,
     dockerfile_path: str,
     verified_on: date | None = None,
+    repository_root: Path = Path("."),
 ) -> dict[str, Any]:
     """Bind lifecycle and linux/amd64 manifest evidence to the target Dockerfile."""
     inventory_content, inventory_raw = _json(inventory_path, name="base lifecycle inventory")
@@ -366,6 +395,11 @@ def base_image_evidence_identity(
     if len(matches) != 1:
         raise ImageReleaseEvidenceError("Dockerfile must map to exactly one base image")
     base = matches[0]
+    dockerfile_identity = _dockerfile_base_identity(
+        dockerfile_path=dockerfile_path, repository_root=repository_root
+    )
+    if dockerfile_identity["declared_base_image"] != base.get("image"):
+        raise ImageReleaseEvidenceError("Dockerfile base image drifted from lifecycle evidence")
     verification_date = verified_on or datetime.now(UTC).date()
     observed_on = _iso_date(base.get("observed_on"), field="observed_on")
     next_review_on = _iso_date(base.get("next_review_on"), field="next_review_on")
@@ -392,6 +426,7 @@ def base_image_evidence_identity(
         "inventory_sha256": _sha256(inventory_content),
         "manifest_evidence_sha256": _sha256(manifest_content),
         "dockerfile": dockerfile_path,
+        **dockerfile_identity,
         "base_image": base["image"],
         "deployment_platform": platform,
         "runtime_manifest_digest": runtime_manifest["digest"],
