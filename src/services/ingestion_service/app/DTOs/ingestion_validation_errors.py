@@ -46,7 +46,7 @@ INGESTION_VALIDATION_TAXONOMY: dict[str, dict[str, str]] = {
     },
     INVALID_QUALITY_STATUS: {
         "message": "quality_status is invalid.",
-        "remediation": "Provide a non-blank governed quality status.",
+        "remediation": "Provide a non-blank string containing a governed quality status.",
     },
     INVALID_OBSERVED_AT: {
         "message": "observed_at is invalid.",

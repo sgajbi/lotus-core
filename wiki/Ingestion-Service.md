@@ -48,9 +48,10 @@ unkeyed payload fingerprints are removed because they could confirm guessable re
 
 Reference-data records use canonical source-observation fields: `source_system`,
 `source_record_id`, `observed_at`, and `quality_status`. A supplied `observed_at` must include an
-explicit timezone offset. Legacy `source_vendor` and `source_timestamp` request aliases remain
-accepted where documented, but new query records publish canonical names and never synthesize
-missing source authority.
+explicit timezone offset. A supplied `quality_status` must be a non-blank string; only an omitted
+field receives the documented `accepted` default. Legacy `source_vendor` and `source_timestamp`
+request aliases remain accepted where documented, but new query records publish canonical names
+and never synthesize missing source authority.
 
 ## Reader Map
 

@@ -438,6 +438,29 @@ def test_reference_data_source_observation_rejects_blank_quality_status() -> Non
     assert error["ctx"]["field_path"] == "quality_status"
 
 
+@pytest.mark.parametrize("invalid_quality_status", [None, True, 123, {}, []])
+def test_reference_data_source_observation_rejects_non_string_quality_status(
+    invalid_quality_status: object,
+) -> None:
+    with pytest.raises(ValidationError, match="quality_status must be a string") as exc_info:
+        BenchmarkDefinitionRecord.model_validate(
+            _benchmark_definition(quality_status=invalid_quality_status)
+        )
+
+    error = exc_info.value.errors()[0]
+    assert error["type"] == INVALID_QUALITY_STATUS
+    assert error["ctx"]["field_path"] == "quality_status"
+
+
+def test_reference_data_source_observation_defaults_omitted_quality_status() -> None:
+    payload = _benchmark_definition()
+    payload.pop("quality_status", None)
+
+    record = BenchmarkDefinitionRecord.model_validate(payload)
+
+    assert record.quality_status == "accepted"
+
+
 @pytest.mark.parametrize(
     ("record_type", "payload_factory"),
     [
