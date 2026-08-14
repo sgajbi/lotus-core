@@ -98,6 +98,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
         select(IngestionJob).where(IngestionJob.job_id == JOB_ID)
     )
     assert persisted_job is not None
+    assert persisted_job.request_payload is None
     assert persisted_job.request_payload_fingerprint == ingestion_payload_fingerprint(payload)
     assert await mark_job_queued(job_id=JOB_ID, session_factory=session_provider) is True
 

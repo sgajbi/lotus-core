@@ -544,6 +544,13 @@ def test_daily_position_valuation_receipt_enforces_complete_one_to_one_evidence(
     ]
 
 
+def test_ingestion_job_persists_absent_request_payload_as_database_null() -> None:
+    request_payload = IngestionJob.__table__.columns.request_payload
+
+    assert request_payload.nullable is True
+    assert request_payload.type.none_as_null is True
+
+
 @pytest.mark.parametrize(
     (
         "table_name",
