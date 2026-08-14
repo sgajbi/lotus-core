@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
@@ -8,8 +8,10 @@ from portfolio_common.openapi_enrichment import exact_numeric_openapi_descriptio
 from portfolio_common.pydantic_financial_numeric import ExactPositiveDecimal18_4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class ClientIncomeNeedsScheduleRecord(BaseModel):
+
+class ClientIncomeNeedsScheduleRecord(SourceObservationLineage):
     client_id: str = Field(..., description="Client identifier bound to the income-needs schedule.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the schedule.")
     mandate_id: str | None = Field(None, description="Mandate identifier when schedule-specific.")
@@ -42,10 +44,6 @@ class ClientIncomeNeedsScheduleRecord(BaseModel):
     end_date: date | None = Field(None, description="Income-needs schedule end date.")
     priority: int = Field(1, ge=1)
     funding_policy: str | None = Field(None)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
 
     @field_validator("currency", mode="before")
     @classmethod

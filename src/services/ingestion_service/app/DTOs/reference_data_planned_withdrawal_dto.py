@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
@@ -8,8 +8,10 @@ from portfolio_common.openapi_enrichment import exact_numeric_openapi_descriptio
 from portfolio_common.pydantic_financial_numeric import ExactPositiveDecimal18_4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class PlannedWithdrawalScheduleRecord(BaseModel):
+
+class PlannedWithdrawalScheduleRecord(SourceObservationLineage):
     client_id: str = Field(..., description="Client identifier bound to the withdrawal schedule.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the withdrawal schedule.")
     mandate_id: str | None = Field(None, description="Mandate identifier when withdrawal-specific.")
@@ -40,10 +42,6 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
         Literal["ONE_TIME", "MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "ANNUAL"] | None
     ) = Field(None)
     purpose_code: str | None = Field(None)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
 
     @field_validator("currency", mode="before")
     @classmethod

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Literal
 
@@ -14,6 +14,7 @@ from .ingestion_validation_errors import (
     validate_effective_window,
     validate_unique_records,
 )
+from .reference_data_source_observation_dto import SourceObservationLineage
 
 
 def _validate_tax_profile_effective_window(
@@ -62,7 +63,7 @@ def _tax_profile_has_applicable_detail(
     )
 
 
-class ClientTaxProfileRecord(BaseModel):
+class ClientTaxProfileRecord(SourceObservationLineage):
     client_id: str = Field(..., description="Client identifier bound to the tax profile.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the tax profile.")
     mandate_id: str | None = Field(
@@ -96,10 +97,6 @@ class ClientTaxProfileRecord(BaseModel):
     effective_from: date = Field(..., description="Tax profile effective start date.")
     effective_to: date | None = Field(None, description="Tax profile effective end date.")
     profile_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
 
     @model_validator(mode="after")
     def validate_profile(self) -> "ClientTaxProfileRecord":

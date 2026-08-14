@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class DiscretionaryMandateBindingRecord(BaseModel):
+
+class DiscretionaryMandateBindingRecord(SourceObservationLineage):
     portfolio_id: str = Field(
         ..., description="Canonical portfolio identifier.", examples=["PB_SG_GLOBAL_BAL_001"]
     )
@@ -105,26 +107,6 @@ class DiscretionaryMandateBindingRecord(BaseModel):
     )
     binding_version: int = Field(
         1, description="Binding version used for deterministic effective-date tie-breaks.", ge=1
-    )
-    source_system: str | None = Field(
-        None,
-        description="Upstream mandate administration source system.",
-        examples=["mandate_admin"],
-    )
-    source_record_id: str | None = Field(
-        None,
-        description="Source record identifier for deterministic replay.",
-        examples=["mandate_001_v1"],
-    )
-    observed_at: datetime | None = Field(
-        None,
-        description="Timestamp when the upstream source observed or published the binding.",
-        examples=["2026-04-01T09:00:00Z"],
-    )
-    quality_status: str = Field(
-        "accepted",
-        description="Data quality status for the mandate binding.",
-        examples=["accepted"],
     )
 
     @model_validator(mode="after")

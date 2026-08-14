@@ -6,8 +6,10 @@ from typing import Literal, cast
 from portfolio_common.domain.currency import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class ModelPortfolioDefinitionRecord(BaseModel):
+
+class ModelPortfolioDefinitionRecord(SourceObservationLineage):
     model_portfolio_id: str = Field(
         ...,
         description="Canonical model portfolio identifier.",
@@ -65,28 +67,6 @@ class ModelPortfolioDefinitionRecord(BaseModel):
         None,
         description="Model version effective end date, null when open-ended.",
         examples=["2026-12-31"],
-    )
-    source_system: str | None = Field(
-        None,
-        description="Upstream model portfolio source system.",
-        examples=["investment_office_model_system"],
-    )
-    source_record_id: str | None = Field(
-        None,
-        description="Source record identifier for deterministic replay.",
-        examples=["model_sg_balanced_202603"],
-    )
-    observed_at: datetime | None = Field(
-        None,
-        description=(
-            "Timestamp when the upstream source observed or published the model definition."
-        ),
-        examples=["2026-03-20T09:00:00Z"],
-    )
-    quality_status: str = Field(
-        "accepted",
-        description="Data quality status for the model definition.",
-        examples=["accepted"],
     )
 
     @field_validator("base_currency", mode="before")
