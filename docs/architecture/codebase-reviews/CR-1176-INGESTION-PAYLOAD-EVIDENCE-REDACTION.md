@@ -156,3 +156,13 @@ silently ignoring caller input. Ordinary families likewise declare `source_versi
 only benchmark assignments and the two strong-authority families declare version posture because
 their DTOs validate and persist it. This removes false registry guarantees without weakening any
 validated source authority or changing a request/response shape.
+
+PR #948 rebase-merged to `main` as `43c8933fd40d5e45a1097619623878d3d41bfec4` after all
+23 exact-head merge-gate jobs passed. The first exact-main Integration Full execution then exposed
+two older migration fixtures that inserted directly into the current `ingestion_jobs` table without
+the seven mandatory c157 policy fields. Fix-forward PR #950 uses one schema-aware fixture contract:
+older schemas omit fields they do not own, the complete c157 schema receives the exact restricted,
+fingerprint-only, non-replayable policy, and a partial evidence schema fails closed. Both migration
+proofs now run in the protected `unit-db` lane as well as Integration Full, preventing the same
+fixture drift from reaching main again. Mutable run, merge, wiki-parity, and verified issue-closure
+evidence remains in #559 rather than being duplicated in this review record.
