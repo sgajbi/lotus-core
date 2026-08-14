@@ -129,8 +129,10 @@ pip-audit==2.10.1
     # via -r requirements/ci-tooling.in
 pip-requirements-parser==32.0.1
     # via pip-audit
-platformdirs==4.11.2
-    # via pip-audit
+platformdirs==4.11.3
+    # via
+    #   -r requirements/ci-tooling.in
+    #   pip-audit
 pluggy==1.6.0
     # via
     #   pytest
