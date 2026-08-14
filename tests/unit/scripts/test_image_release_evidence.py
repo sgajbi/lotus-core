@@ -50,16 +50,35 @@ def _write(path: Path, value: object) -> Path:
     return path
 
 
+def _sbom(*, image_ref: str = IMAGE_REF, image_digest: str = IMAGE_DIGEST) -> dict[str, object]:
+    encoded_digest = image_digest.replace(":", "%3A")
+    encoded_ref = image_ref.replace("/", "%2F")
+    return {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "metadata": {
+            "component": {
+                "type": "container",
+                "name": image_ref.rsplit("/", maxsplit=1)[-1],
+                "purl": (f"pkg:oci/image@{encoded_digest}?arch=amd64&repository_url={encoded_ref}"),
+            }
+        },
+        "components": [{"name": "runtime-package"}],
+    }
+
+
 def test_sbom_identity_requires_non_empty_cyclonedx(tmp_path: Path) -> None:
     path = _write(
         tmp_path / "sbom.json",
-        {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": [{"name": "x"}]},
+        _sbom(),
     )
 
     identity = sbom_identity(path, image_ref=IMAGE_REF, image_digest=IMAGE_DIGEST)
 
     assert identity["component_count"] == 1
     assert identity["subject"]["image_digest"] == IMAGE_DIGEST
+    assert identity["subject"]["image_ref"] == IMAGE_REF
+    assert identity["subject"]["purl"].startswith("pkg:oci/")
     assert identity["sha256"].startswith("sha256:")
 
 
@@ -75,6 +94,36 @@ def test_sbom_identity_rejects_malformed_or_empty_documents(
     tmp_path: Path, document: dict[str, object]
 ) -> None:
     with pytest.raises(ImageReleaseEvidenceError):
+        sbom_identity(
+            _write(tmp_path / "sbom.json", document),
+            image_ref=IMAGE_REF,
+            image_digest=IMAGE_DIGEST,
+        )
+
+
+@pytest.mark.parametrize(
+    ("image_ref", "image_digest"),
+    [
+        ("ghcr.io/sgajbi/lotus-core/other-service", IMAGE_DIGEST),
+        (IMAGE_REF, "sha256:" + "b" * 64),
+    ],
+)
+def test_sbom_identity_rejects_an_unrelated_declared_subject(
+    tmp_path: Path, image_ref: str, image_digest: str
+) -> None:
+    with pytest.raises(ImageReleaseEvidenceError, match="subject drifted"):
+        sbom_identity(
+            _write(tmp_path / "sbom.json", _sbom(image_ref=image_ref, image_digest=image_digest)),
+            image_ref=IMAGE_REF,
+            image_digest=IMAGE_DIGEST,
+        )
+
+
+def test_sbom_identity_rejects_missing_subject_metadata(tmp_path: Path) -> None:
+    document = _sbom()
+    document.pop("metadata")
+
+    with pytest.raises(ImageReleaseEvidenceError, match="CycloneDX metadata"):
         sbom_identity(
             _write(tmp_path / "sbom.json", document),
             image_ref=IMAGE_REF,
