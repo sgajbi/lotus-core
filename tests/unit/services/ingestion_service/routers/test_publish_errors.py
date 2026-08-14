@@ -35,7 +35,7 @@ def test_ingestion_publish_failed_detail_includes_dependency_retry_and_lineage()
 
     assert detail == {
         "code": "INGESTION_PUBLISH_FAILED",
-        "message": "Failed to publish transaction 'T2'.",
+        "message": "Ingestion publishing failed before durable queue confirmation.",
         "dependency": "kafka",
         "retryable": True,
         "retry_after_seconds": 30,
@@ -47,6 +47,7 @@ def test_ingestion_publish_failed_detail_includes_dependency_retry_and_lineage()
         "request_id": "REQ:req-001",
         "trace_id": "trace-001",
     }
+    assert "Failed to publish transaction" not in str(detail)
 
 
 def test_raise_ingestion_publish_unavailable_uses_503_retry_after() -> None:

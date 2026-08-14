@@ -3,7 +3,7 @@ from src.services.ingestion_service.app.application.ingestion_publish_outcome im
 )
 
 
-def test_publish_failure_detail_preserves_partial_publication_and_lineage() -> None:
+def test_publish_failure_detail_preserves_safe_partial_publication_and_lineage() -> None:
     failed_keys = ["TX-002", "TX-003"]
 
     detail = build_ingestion_publish_failure_detail(
@@ -18,7 +18,7 @@ def test_publish_failure_detail_preserves_partial_publication_and_lineage() -> N
 
     assert detail == {
         "code": "INGESTION_PUBLISH_FAILED",
-        "message": "Kafka publish failed after one record.",
+        "message": "Ingestion publishing failed before durable queue confirmation.",
         "dependency": "kafka",
         "retryable": True,
         "retry_after_seconds": 30,
@@ -30,4 +30,5 @@ def test_publish_failure_detail_preserves_partial_publication_and_lineage() -> N
         "request_id": "req-001",
         "trace_id": "trace-001",
     }
+    assert "Kafka publish failed" not in str(detail)
     assert detail["failed_record_keys"] is not failed_keys
