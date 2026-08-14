@@ -141,5 +141,7 @@ posture, but now declare `quality_status` and `source_batch_id` not applicable b
 DTO/domain contracts do not capture those fields; lifecycle status remains separately represented
 by `assignment_status` or `fact_status`. All reference-data policies declare `source_batch_id` not
 applicable until a governed envelope contract validates and persists batch authority instead of
-silently ignoring caller input. This removes a false registry guarantee without weakening any
+silently ignoring caller input. Ordinary families likewise declare `source_version` not applicable;
+only benchmark assignments and the two strong-authority families declare version posture because
+their DTOs validate and persist it. This removes false registry guarantees without weakening any
 validated source authority or changing a request/response shape.

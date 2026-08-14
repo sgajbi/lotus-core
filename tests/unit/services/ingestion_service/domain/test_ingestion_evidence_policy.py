@@ -19,6 +19,11 @@ from src.services.ingestion_service.app.domain.ingestion_evidence_policy import 
 
 def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() -> None:
     commands = REFERENCE_DATA_INGESTION_REGISTRY.all_commands()
+    versioned_endpoints = {
+        "/ingest/benchmark-assignments",
+        "/ingest/instrument-valuation-policy-assignments",
+        "/ingest/authoritative-market-price-source-facts",
+    }
 
     assert len(commands) == 25
     for command in commands:
@@ -31,6 +36,8 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         assert policy.replay_eligible is False
         assert policy.replay_ttl is None
         assert policy.source_lineage.source_batch_id is LineageFieldPosture.NOT_APPLICABLE
+        if command.endpoint not in versioned_endpoints:
+            assert policy.source_lineage.source_version is LineageFieldPosture.NOT_APPLICABLE
         assert set(policy.source_lineage.__dataclass_fields__) == {
             "source_system",
             "source_record_id",
