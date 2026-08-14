@@ -209,6 +209,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 entity_type=entity_type,
                 payload=request_payload,
                 observed_at=observed_at,
+                fingerprint_key_id="test-router",
+                fingerprint_hmac_secret="test-router-ingestion-evidence-secret",
             )
             self.jobs[job_id] = IngestionJobResponse(
                 job_id=job_id,

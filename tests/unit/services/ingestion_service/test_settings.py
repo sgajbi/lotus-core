@@ -19,8 +19,9 @@ def test_load_ingestion_service_settings_defaults(monkeypatch):
     monkeypatch.delenv("LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE", raising=False)
     monkeypatch.delenv("LOTUS_CORE_INGEST_OPS_JWT_REQUIRED_SCOPE", raising=False)
     monkeypatch.delenv("LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED", raising=False)
-    monkeypatch.delenv("LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID", raising=False)
-    monkeypatch.delenv("LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON", raising=False)
     monkeypatch.delenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", raising=False)
     monkeypatch.delenv("LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", raising=False)
     monkeypatch.delenv("LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON", raising=False)
@@ -35,7 +36,8 @@ def test_load_ingestion_service_settings_defaults(monkeypatch):
     assert settings.ops_auth.jwt_previous_keys == {}
     assert settings.ops_auth.jwt_required_scope == "lotus-core.ingestion.ops"
     assert settings.ops_auth.static_token_non_local_approved is False
-    assert settings.idempotency_reference.key_id == "local-dev"
+    assert settings.evidence_hmac.key_id == "local-dev"
+    assert settings.evidence_hmac.previous_keys == {}
     assert settings.rate_limit.enforcement_scope == "local_process"
     assert settings.rate_limit.gateway_policy_id == ""
     assert settings.adapter_mode.upload_max_bytes == 5_242_880
@@ -186,10 +188,10 @@ def test_load_ingestion_service_settings_strict_accepts_approved_static_token(mo
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "token_only")
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_TOKEN", "prod-static-token")
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED", "true")
-    monkeypatch.setenv("LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID", "ops-2026-08")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID", "ops-2026-08")
     monkeypatch.setenv(
-        "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET",
-        "purpose-specific-idempotency-secret-001",
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET",
+        "purpose-specific-ingestion-evidence-secret-001",
     )
 
     settings = load_ingestion_service_settings()
@@ -210,10 +212,10 @@ def test_load_ingestion_service_settings_strict_accepts_complete_jwt_policy(monk
         "LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
         '{"prod-key-previous":"previous-secret"}',
     )
-    monkeypatch.setenv("LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID", "ops-2026-08")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID", "ops-2026-08")
     monkeypatch.setenv(
-        "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET",
-        "purpose-specific-idempotency-secret-001",
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET",
+        "purpose-specific-ingestion-evidence-secret-001",
     )
 
     settings = load_ingestion_service_settings()
@@ -222,15 +224,53 @@ def test_load_ingestion_service_settings_strict_accepts_complete_jwt_policy(monk
     assert settings.ops_auth.jwt_previous_keys == {"prod-key-previous": "previous-secret"}
 
 
+def test_load_ingestion_service_settings_loads_retained_evidence_rotation_keys(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID", "active-key")
+    monkeypatch.setenv(
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET",
+        "active-ingestion-evidence-secret-32-bytes",
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON",
+        '{"prior-key":"prior-ingestion-evidence-secret-32-bytes"}',
+    )
+
+    settings = load_ingestion_service_settings()
+
+    assert settings.evidence_hmac.key_id == "active-key"
+    assert settings.evidence_hmac.previous_keys == {
+        "prior-key": "prior-ingestion-evidence-secret-32-bytes"
+    }
+
+
+def test_load_ingestion_service_settings_rejects_active_key_duplicated_in_rotation_map(
+    monkeypatch,
+):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID", "active-key")
+    monkeypatch.setenv(
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET",
+        "active-ingestion-evidence-secret-32-bytes",
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON",
+        '{"active-key":"prior-ingestion-evidence-secret-32-bytes"}',
+    )
+
+    with pytest.raises(IngestionConfigurationError, match="active key id"):
+        load_ingestion_service_settings()
+
+
 @pytest.mark.parametrize(
     ("key_id", "secret", "expected_setting"),
     [
-        ("local-dev", "purpose-specific-idempotency-secret-001", "REFERENCE_KEY_ID"),
-        ("ops-2026-08", "short", "REFERENCE_HMAC_SECRET"),
-        ("invalid/key", "purpose-specific-idempotency-secret-001", "REFERENCE_KEY_ID"),
+        ("local-dev", "purpose-specific-ingestion-evidence-secret-001", "HMAC_KEY_ID"),
+        ("ops-2026-08", "short", "HMAC_SECRET"),
+        ("invalid/key", "purpose-specific-ingestion-evidence-secret-001", "HMAC_KEY_ID"),
     ],
 )
-def test_load_ingestion_service_settings_rejects_unsafe_idempotency_reference_authority(
+def test_load_ingestion_service_settings_rejects_unsafe_ingestion_evidence_authority(
     monkeypatch: pytest.MonkeyPatch,
     key_id: str,
     secret: str,
@@ -240,8 +280,8 @@ def test_load_ingestion_service_settings_rejects_unsafe_idempotency_reference_au
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "token_only")
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_TOKEN", "prod-static-token")
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED", "true")
-    monkeypatch.setenv("LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID", key_id)
-    monkeypatch.setenv("LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET", secret)
+    monkeypatch.setenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID", key_id)
+    monkeypatch.setenv("LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET", secret)
 
     with pytest.raises(IngestionConfigurationError, match=expected_setting):
         load_ingestion_service_settings()

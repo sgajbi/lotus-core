@@ -4786,7 +4786,8 @@ class IngestionJob(Base):
         ),
         CheckConstraint(
             "request_payload_fingerprint IS NULL OR "
-            "request_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            "request_payload_fingerprint ~ "
+            "'^hmac-sha256:v1:[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[0-9a-f]{64}$'",
             name="ck_ingestion_jobs_payload_fingerprint_format",
         ),
         CheckConstraint(

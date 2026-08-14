@@ -14,9 +14,9 @@ STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
 LOCAL_CONFIG_ENVIRONMENTS = {"", "local", "dev", "development", "test"}
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 FALSY_ENV_VALUES = {"0", "false", "no", "off"}
-LOCAL_IDEMPOTENCY_REFERENCE_KEY_ID = "local-dev"
-LOCAL_IDEMPOTENCY_REFERENCE_HMAC_SECRET = "lotus-core-idempotency-reference-local-only"  # nosec B105
-_IDEMPOTENCY_REFERENCE_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+LOCAL_INGESTION_EVIDENCE_KEY_ID = "local-dev"
+LOCAL_INGESTION_EVIDENCE_HMAC_SECRET = "lotus-core-ingestion-evidence-local-only"  # nosec B105
+_INGESTION_EVIDENCE_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 IngestionRateLimitEnforcementScope = Literal[
     "local_process",
@@ -241,9 +241,10 @@ class IngestionOpsAuthSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class IngestionIdempotencyReferenceSettings:
+class IngestionEvidenceHmacSettings:
     key_id: str
     hmac_secret: str
+    previous_keys: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,7 +304,7 @@ class IngestionServiceSettings:
     ops_auth: IngestionOpsAuthSettings
     rate_limit: IngestionRateLimitSettings
     runtime_policy: IngestionRuntimePolicySettings
-    idempotency_reference: IngestionIdempotencyReferenceSettings
+    evidence_hmac: IngestionEvidenceHmacSettings
 
 
 def _load_calculator_peak_lag_age_seconds() -> dict[str, int]:
@@ -339,14 +340,22 @@ def _load_calculator_peak_lag_age_seconds() -> dict[str, int]:
 
 
 def _load_ops_jwt_previous_keys() -> dict[str, str]:
-    raw = os.getenv("LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON")
+    return _load_secret_key_mapping("LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON")
+
+
+def _load_ingestion_evidence_previous_keys() -> dict[str, str]:
+    return _load_secret_key_mapping("LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON")
+
+
+def _load_secret_key_mapping(env_name: str) -> dict[str, str]:
+    raw = os.getenv(env_name)
     if not raw:
         return {}
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         _invalid_env_setting(
-            name="LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+            name=env_name,
             raw=raw,
             default={},
             reason="expected JSON object mapping key ids to secrets",
@@ -354,7 +363,7 @@ def _load_ops_jwt_previous_keys() -> dict[str, str]:
         return {}
     if not isinstance(parsed, dict):
         _invalid_env_setting(
-            name="LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+            name=env_name,
             raw=raw,
             default={},
             reason="expected JSON object mapping key ids to secrets",
@@ -364,7 +373,7 @@ def _load_ops_jwt_previous_keys() -> dict[str, str]:
     for key_id, secret in parsed.items():
         if not isinstance(key_id, str) or not key_id.strip():
             _invalid_env_setting(
-                name="LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+                name=env_name,
                 raw=raw,
                 default={},
                 reason="expected non-empty string key ids",
@@ -372,7 +381,7 @@ def _load_ops_jwt_previous_keys() -> dict[str, str]:
             return {}
         if not isinstance(secret, str) or not secret.strip():
             _invalid_env_setting(
-                name=f"LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON.{key_id}",
+                name=f"{env_name}.{key_id}",
                 raw=secret,
                 default="",
                 reason="expected non-empty secret value",
@@ -431,31 +440,54 @@ def _validate_ops_auth_settings(settings: IngestionOpsAuthSettings) -> None:
             )
 
 
-def _validate_idempotency_reference_settings(
-    settings: IngestionIdempotencyReferenceSettings,
+def _validate_ingestion_evidence_hmac_settings(
+    settings: IngestionEvidenceHmacSettings,
 ) -> None:
-    if _IDEMPOTENCY_REFERENCE_KEY_ID_PATTERN.fullmatch(settings.key_id) is None:
+    if _INGESTION_EVIDENCE_KEY_ID_PATTERN.fullmatch(settings.key_id) is None:
         raise IngestionConfigurationError(
             "Invalid ingestion service configuration for "
-            "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID: expected a 1-64 character "
+            "LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID: expected a 1-64 character "
             "alphanumeric, period, underscore, or hyphen key id."
+        )
+    invalid_previous_key_ids = [
+        key_id
+        for key_id in settings.previous_keys
+        if _INGESTION_EVIDENCE_KEY_ID_PATTERN.fullmatch(key_id) is None
+    ]
+    if invalid_previous_key_ids:
+        raise IngestionConfigurationError(
+            "Invalid ingestion service configuration for "
+            "LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON: every key id must use the "
+            "governed 1-64 character format."
+        )
+    if settings.key_id in settings.previous_keys:
+        raise IngestionConfigurationError(
+            "Invalid ingestion service configuration for "
+            "LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON: active key id must not also "
+            "be listed as a previous key."
+        )
+    if not settings.hmac_secret:
+        raise IngestionConfigurationError(
+            "Invalid ingestion service configuration for "
+            "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET: a non-empty secret is required."
         )
     if not _strict_config_validation_enabled():
         return
-    if settings.key_id == LOCAL_IDEMPOTENCY_REFERENCE_KEY_ID:
+    if settings.key_id == LOCAL_INGESTION_EVIDENCE_KEY_ID:
         raise IngestionConfigurationError(
             "Invalid ingestion service configuration for "
-            "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID: strict profiles require a "
+            "LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID: strict profiles require a "
             "non-local key id."
         )
-    if (
-        settings.hmac_secret == LOCAL_IDEMPOTENCY_REFERENCE_HMAC_SECRET
-        or len(settings.hmac_secret) < 32
+    secrets = {settings.key_id: settings.hmac_secret, **settings.previous_keys}
+    if any(
+        secret == LOCAL_INGESTION_EVIDENCE_HMAC_SECRET or len(secret) < 32
+        for secret in secrets.values()
     ):
         raise IngestionConfigurationError(
             "Invalid ingestion service configuration for "
-            "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET: strict profiles require a "
-            "purpose-specific secret of at least 32 characters."
+            "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET and previous key values: strict profiles "
+            "require purpose-specific secrets of at least 32 characters."
         )
 
 
@@ -635,19 +667,20 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
                 ),
             ),
         ),
-        idempotency_reference=IngestionIdempotencyReferenceSettings(
+        evidence_hmac=IngestionEvidenceHmacSettings(
             key_id=_env_str(
-                "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID",
-                LOCAL_IDEMPOTENCY_REFERENCE_KEY_ID,
+                "LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID",
+                LOCAL_INGESTION_EVIDENCE_KEY_ID,
             ),
             hmac_secret=_env_str(
-                "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET",
-                LOCAL_IDEMPOTENCY_REFERENCE_HMAC_SECRET,
+                "LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET",
+                LOCAL_INGESTION_EVIDENCE_HMAC_SECRET,
             ),
+            previous_keys=_load_ingestion_evidence_previous_keys(),
         ),
     )
     _validate_ops_auth_settings(settings.ops_auth)
-    _validate_idempotency_reference_settings(settings.idempotency_reference)
+    _validate_ingestion_evidence_hmac_settings(settings.evidence_hmac)
     return settings
 
 

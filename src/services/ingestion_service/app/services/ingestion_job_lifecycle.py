@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -27,7 +27,7 @@ from ..DTOs.ingestion_job_dto import (
 )
 from .ingestion_payload_evidence import (
     build_ingestion_payload_evidence,
-    ingestion_payload_fingerprint,
+    ingestion_payload_fingerprint_matches,
 )
 
 
@@ -120,6 +120,9 @@ async def create_or_get_job_result(
     request_id: str,
     trace_id: str,
     request_payload: dict[str, Any] | None,
+    fingerprint_key_id: str,
+    fingerprint_hmac_secret: str,
+    fingerprint_previous_keys: Mapping[str, str],
     session_factory,
 ) -> IngestionJobCreateResult:
     if request_payload is None:
@@ -129,7 +132,13 @@ async def create_or_get_job_result(
         entity_type=entity_type,
         payload=request_payload,
         observed_at=datetime.now(UTC),
+        fingerprint_key_id=fingerprint_key_id,
+        fingerprint_hmac_secret=fingerprint_hmac_secret,
     )
+    fingerprint_keyring = {
+        **fingerprint_previous_keys,
+        fingerprint_key_id: fingerprint_hmac_secret,
+    }
     async for db in session_factory():
         async with db.begin():
             if idempotency_key:
@@ -157,6 +166,7 @@ async def create_or_get_job_result(
                             None,
                         ),
                         requested_payload=request_payload,
+                        fingerprint_keyring=fingerprint_keyring,
                     ):
                         raise IngestionIdempotencyConflictError(
                             endpoint=endpoint,
@@ -523,10 +533,14 @@ def _idempotency_payload_conflicts(
     *,
     existing_payload_fingerprint: str | None,
     requested_payload: dict[str, Any] | None,
+    fingerprint_keyring: Mapping[str, str],
 ) -> bool:
-    requested_payload_fingerprint = ingestion_payload_fingerprint(requested_payload)
     if existing_payload_fingerprint is not None:
-        return existing_payload_fingerprint != requested_payload_fingerprint
+        return not ingestion_payload_fingerprint_matches(
+            stored_fingerprint=existing_payload_fingerprint,
+            payload=requested_payload,
+            secrets_by_key_id=fingerprint_keyring,
+        )
     # A legacy row without the full original request fingerprint cannot prove
     # payload identity. Redacted bodies are deliberately insufficient because
     # two requests that differ only in a sensitive value would otherwise alias.

@@ -19,7 +19,8 @@ depends_on: str | Sequence[str] | None = None
 _CHECKS = {
     "ck_ingestion_jobs_payload_fingerprint_format": (
         "request_payload_fingerprint IS NULL OR "
-        "request_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'"
+        "request_payload_fingerprint ~ "
+        "'^hmac-sha256:v1:[A-Za-z0-9][A-Za-z0-9._-]{0,63}:[0-9a-f]{64}$'"
     ),
     "ck_ingestion_jobs_payload_classification": (
         "request_payload_classification IN "
@@ -127,6 +128,10 @@ def upgrade() -> None:
             """
         )
     )
+    # Existing unkeyed digests can confirm guessable restricted request values offline and cannot
+    # be converted without the original request. Remove them; legacy rows then fail closed on
+    # idempotent replay while new writes use key-versioned, domain-separated HMAC evidence.
+    op.execute(sa.text("UPDATE ingestion_jobs SET request_payload_fingerprint = NULL"))
     # Legacy writers could persist raw exception text, request values, and uncontrolled
     # headers. Those values cannot be proven source-safe after the fact. Replace the bounded
     # operator-facing reason and purge the unstructured detail/header bodies before the new

@@ -78,6 +78,12 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
     assert "json_typeof(failure_detail) = 'null'" in normalization
     assert "json_typeof(failure_headers) = 'null'" in normalization
     assert normalization.count("THEN NULL") == 3
+    fingerprint_scrub = next(
+        statement
+        for statement in execute_statements
+        if "SET request_payload_fingerprint = NULL" in statement
+    )
+    assert "UPDATE ingestion_jobs" in fingerprint_scrub
     job_failure_scrub = next(
         statement
         for statement in execute_statements
@@ -108,6 +114,11 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
     ]
     checks = [operation for operation in operations if operation[0] == "create_check"]
     assert len(checks) == 8
+    fingerprint_check = next(
+        operation for operation in checks if operation[2].endswith("payload_fingerprint_format")
+    )
+    assert "hmac-sha256:v1:" in fingerprint_check[3]
+    assert "^sha256:" not in fingerprint_check[3]
     assert all(operation[4] == {"postgresql_not_valid": True} for operation in checks)
     assert (
         sum(

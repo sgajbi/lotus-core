@@ -1,5 +1,10 @@
 # CR-1188 Ingestion Idempotency Full Fingerprint
 
+> Current authority: PR #948 / issue #559 supersedes the unkeyed digest described in this
+> historical review. New ingestion request fingerprints are key-versioned, domain-separated
+> HMAC-SHA-256 values; migration `c157b2c3d524` removes legacy unkeyed values, and idempotency
+> comparison fails closed when the declared active or retained rotation key is unavailable.
+
 Date: 2026-06-30
 
 ## Objective

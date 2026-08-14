@@ -66,7 +66,8 @@ for the same idempotency key with different canonical payloads.
 The follow-up implementation replaces the original uniform redacted-body posture with a versioned,
 endpoint-owned policy registry covering all 35 job-creating ingestion families:
 
-- every new job retains the deterministic SHA-256 fingerprint of the complete original request;
+- every new job retains a deterministic, key-versioned HMAC-SHA-256 fingerprint of the complete
+  original request under a request-payload-specific cryptographic domain;
 - restricted, confidential, or unsupported replay families retain no request body;
 - only approved reference-data families retain a source-safe replay body, with a 24-hour technical
   expiry distinct from the legal retention/hold/deletion authority tracked by #708;
@@ -87,7 +88,10 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
 - `X-Idempotency-Key` is a bounded opaque identifier, and operator diagnostics expose only a
   purpose-bound, key-versioned HMAC-SHA-256 pseudonym while the deprecated raw-key field is always
   null. Non-local profiles fail startup without a separate, non-local reference key of at least 32
-  characters; JWT and auth-context signing keys are not reused.
+  characters; JWT and auth-context signing keys are not reused. Payload fingerprints share the
+  governed ingestion-evidence key authority under a distinct domain; retained prior keys allow
+  deterministic equality checks during rotation, and the migration removes historical unkeyed
+  fingerprints that could confirm guessable restricted inputs.
 
 Focused evidence includes 73 replay/evidence/migration tests, 65 failure/lifecycle/command tests,
 31 idempotency-boundary/diagnostic tests, OpenAPI gate success, and regenerated API-vocabulary
@@ -124,7 +128,11 @@ actual shared context during awaited controls and prove fail-closed outcomes wit
 Review also showed that an unkeyed SHA-256 reference allowed dictionary confirmation of accepted
 low-entropy idempotency keys. Diagnostics now use an explicitly injected, domain-separated
 HMAC-SHA-256 reference with a visible key id; stale OpenAPI examples no longer disclose synthetic
-raw keys.
+raw keys. A later review applied the same threat model to complete request fingerprints: every new
+fingerprint is now a purpose-bound, key-versioned HMAC; active and retained prior keys preserve
+same-payload equality through rotation; unknown keys fail closed; and migration `c157b2c3d524`
+removes historical unkeyed request fingerprints that cannot be securely converted without their
+original inputs.
 The two strong source-authority families retain required source identity, observation, and version
 posture, but now declare `quality_status` and `source_batch_id` not applicable because their current
 DTO/domain contracts do not capture those fields; lifecycle status remains separately represented

@@ -64,10 +64,13 @@ class IngestionJobResponse(BaseModel):
     request_payload_fingerprint: str | None = Field(
         default=None,
         description=(
-            "Deterministic SHA-256 fingerprint of the complete original request payload. "
-            "The fingerprint remains available when policy forbids retaining a replay body."
+            "Deterministic, key-versioned HMAC-SHA-256 fingerprint of the complete original "
+            "request payload. It supports equality checks without enabling offline confirmation "
+            "of guessable restricted values."
         ),
-        examples=["sha256:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"],
+        examples=[
+            "hmac-sha256:v1:ops-2026-08:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"
+        ],
     )
     request_payload_policy_version: str | None = Field(
         default=None,

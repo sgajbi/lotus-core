@@ -35,6 +35,8 @@ IDEMPOTENCY_KEY = "IDEMPOTENCY_LIFECYCLE_DB_001"
 CORRELATION_ID = "CID-BOUNDARY-01"
 REQUEST_ID = "REQ_LIFECYCLE_DB_001"
 TRACE_ID = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+FINGERPRINT_KEY_ID = "test-lifecycle"
+FINGERPRINT_SECRET = "test-lifecycle-ingestion-evidence-secret"
 
 
 def _session_provider(
@@ -90,6 +92,9 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
         request_id=REQUEST_ID,
         trace_id=TRACE_ID,
         request_payload=payload,
+        fingerprint_key_id=FINGERPRINT_KEY_ID,
+        fingerprint_hmac_secret=FINGERPRINT_SECRET,
+        fingerprint_previous_keys={},
         session_factory=session_provider,
     )
     assert created.created is True
@@ -99,7 +104,11 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
     )
     assert persisted_job is not None
     assert persisted_job.request_payload is None
-    assert persisted_job.request_payload_fingerprint == ingestion_payload_fingerprint(payload)
+    assert persisted_job.request_payload_fingerprint == ingestion_payload_fingerprint(
+        payload,
+        key_id=FINGERPRINT_KEY_ID,
+        hmac_secret=FINGERPRINT_SECRET,
+    )
     assert await mark_job_queued(job_id=JOB_ID, session_factory=session_provider) is True
 
     await transaction_boundary._seed_portfolio(async_db_session)

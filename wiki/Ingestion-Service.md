@@ -23,7 +23,8 @@ unambiguous upstream batch.
 
 Ingestion jobs do not retain every request body. Core applies a versioned endpoint-family policy:
 
-- all classified jobs retain a deterministic SHA-256 fingerprint of the complete original request;
+- all classified jobs retain a deterministic, key-versioned HMAC-SHA-256 fingerprint of the
+  complete original request;
 - sensitive or replay-unsupported families retain fingerprint-only evidence;
 - approved source-safe reference-data replay bodies expire after 24 hours;
 - replay fails closed when policy, representation, payload, expiry, or partial-replay authority is
@@ -37,8 +38,11 @@ are not durable or replayable. The governing migration replaces untrusted histor
 with a bounded safe message and removes historical detail and header bodies while retaining stable
 failure codes and failed-record keys for recovery. Idempotency diagnostics expose a purpose-bound,
 key-versioned HMAC-SHA-256 pseudonym rather than the caller's raw `X-Idempotency-Key`. Non-local
-profiles require a separately governed reference key; rotating its declared key id intentionally
-changes the pseudonym without changing durable idempotency equality semantics.
+profiles require a separately governed ingestion-evidence key; rotating its declared key id
+intentionally changes the pseudonym. Request-payload fingerprints use a separate cryptographic
+domain and retain
+explicit prior-key authority so rotation preserves durable idempotency equality. Historical
+unkeyed payload fingerprints are removed because they could confirm guessable restricted values.
 
 Reference-data records use canonical source-observation fields: `source_system`,
 `source_record_id`, `observed_at`, and `quality_status`. A supplied `observed_at` must include an

@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import re
 from uuid import uuid4
 
@@ -10,6 +8,8 @@ from portfolio_common.logging_utils import (
     request_id_var,
     trace_id_var,
 )
+
+from .application.ingestion_evidence_hmac import purpose_bound_hmac_sha256_reference
 
 _IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _INVALID_IDEMPOTENCY_KEY_DETAIL = {
@@ -32,11 +32,12 @@ def resolve_idempotency_key(request: Request) -> str | None:
 
 def idempotency_key_reference(*, value: str, key_id: str, hmac_secret: str) -> str:
     """Return a purpose-bound pseudonymous operator reference for a validated key."""
-    if not key_id or not hmac_secret:
-        raise ValueError("Idempotency reference key id and HMAC secret are required.")
-    message = b"lotus-core/ingestion/idempotency-key-reference/v1\x00" + value.encode("utf-8")
-    digest = hmac.new(hmac_secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
-    return f"hmac-sha256:v1:{key_id}:{digest}"
+    return purpose_bound_hmac_sha256_reference(
+        purpose=b"lotus-core/ingestion/idempotency-key-reference/v1",
+        value=value.encode("utf-8"),
+        key_id=key_id,
+        hmac_secret=hmac_secret,
+    )
 
 
 def create_ingestion_job_id() -> str:
