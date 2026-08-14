@@ -78,12 +78,24 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
     assert "json_typeof(failure_detail) = 'null'" in normalization
     assert "json_typeof(failure_headers) = 'null'" in normalization
     assert normalization.count("THEN NULL") == 3
-    fingerprint_scrub = next(
+    fingerprint_scrubs = [
         statement
         for statement in execute_statements
         if "SET request_payload_fingerprint = NULL" in statement
+    ]
+    assert fingerprint_scrubs == [
+        "UPDATE ingestion_jobs SET request_payload_fingerprint = NULL",
+        "UPDATE ingestion_jobs SET request_payload_fingerprint = NULL",
+    ]
+    downgrade_scrub_index = max(
+        index
+        for index, operation in enumerate(operations)
+        if operation == ("execute", fingerprint_scrubs[-1])
     )
-    assert "UPDATE ingestion_jobs" in fingerprint_scrub
+    first_drop_column_index = next(
+        index for index, operation in enumerate(operations) if operation[0] == "drop_column"
+    )
+    assert downgrade_scrub_index < first_drop_column_index
     job_failure_scrub = next(
         statement
         for statement in execute_statements

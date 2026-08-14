@@ -14,7 +14,7 @@ STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
 LOCAL_CONFIG_ENVIRONMENTS = {"", "local", "dev", "development", "test"}
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 FALSY_ENV_VALUES = {"0", "false", "no", "off"}
-_REDACTED_SECRET_SETTING_VALUE = "[REDACTED]"
+_REDACTED_SETTING_VALUE = "[REDACTED]"
 LOCAL_INGESTION_EVIDENCE_KEY_ID = "local-dev"
 LOCAL_INGESTION_EVIDENCE_HMAC_SECRET = "lotus-core-ingestion-evidence-local-only"  # nosec B105
 _INGESTION_EVIDENCE_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -357,7 +357,7 @@ def _load_secret_key_mapping(env_name: str) -> dict[str, str]:
     except json.JSONDecodeError:
         _invalid_env_setting(
             name=env_name,
-            raw=_REDACTED_SECRET_SETTING_VALUE,
+            raw=_REDACTED_SETTING_VALUE,
             default={},
             reason="expected JSON object mapping key ids to secrets",
         )
@@ -365,7 +365,7 @@ def _load_secret_key_mapping(env_name: str) -> dict[str, str]:
     if not isinstance(parsed, dict):
         _invalid_env_setting(
             name=env_name,
-            raw=_REDACTED_SECRET_SETTING_VALUE,
+            raw=_REDACTED_SETTING_VALUE,
             default={},
             reason="expected JSON object mapping key ids to secrets",
         )
@@ -375,7 +375,7 @@ def _load_secret_key_mapping(env_name: str) -> dict[str, str]:
         if not isinstance(key_id, str) or not key_id.strip():
             _invalid_env_setting(
                 name=env_name,
-                raw=_REDACTED_SECRET_SETTING_VALUE,
+                raw=_REDACTED_SETTING_VALUE,
                 default={},
                 reason="expected non-empty string key ids",
             )
@@ -383,7 +383,7 @@ def _load_secret_key_mapping(env_name: str) -> dict[str, str]:
         if not isinstance(secret, str) or not secret.strip():
             _invalid_env_setting(
                 name=f"{env_name}.{key_id}",
-                raw=_REDACTED_SECRET_SETTING_VALUE,
+                raw=_REDACTED_SETTING_VALUE,
                 default="",
                 reason="expected non-empty secret value",
             )
