@@ -33,10 +33,12 @@ The technical replay expiry does not define legal retention, hold, or deletion p
 governed separately by issue #708. Job responses expose the applied policy posture but never expose
 the retained request body. Failure evidence uses stable product messages and allowlisted recovery
 fields; arbitrary exception text, credentials, private request values, and non-allowlisted headers
-are not durable or replayable. Idempotency diagnostics expose a purpose-bound, key-versioned
-HMAC-SHA-256 pseudonym rather than the caller's raw `X-Idempotency-Key`. Non-local profiles require
-a separately governed reference key; rotating its declared key id intentionally changes the
-pseudonym without changing durable idempotency equality semantics.
+are not durable or replayable. The governing migration replaces untrusted historical failure text
+with a bounded safe message and removes historical detail and header bodies while retaining stable
+failure codes and failed-record keys for recovery. Idempotency diagnostics expose a purpose-bound,
+key-versioned HMAC-SHA-256 pseudonym rather than the caller's raw `X-Idempotency-Key`. Non-local
+profiles require a separately governed reference key; rotating its declared key id intentionally
+changes the pseudonym without changing durable idempotency equality semantics.
 
 Reference-data records use canonical source-observation fields: `source_system`,
 `source_record_id`, `observed_at`, and `quality_status`. A supplied `observed_at` must include an

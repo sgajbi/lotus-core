@@ -80,6 +80,10 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
   nested unknown fields, credentials, and arbitrary headers are removed; only stable product
   messages, allowlisted recovery fields, and numeric `Retry-After` survive initial response and
   idempotent replay;
+- migration replaces historical job and failure-history reason text with one bounded safe message
+  and purges historical detail and header bodies, because legacy free-form evidence cannot be
+  proven safe after capture; stable failure codes and failed-record keys remain available for
+  recovery;
 - `X-Idempotency-Key` is a bounded opaque identifier, and operator diagnostics expose only a
   purpose-bound, key-versioned HMAC-SHA-256 pseudonym while the deprecated raw-key field is always
   null. Non-local profiles fail startup without a separate, non-local reference key of at least 32

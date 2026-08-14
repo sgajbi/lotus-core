@@ -78,6 +78,19 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
     assert "json_typeof(failure_detail) = 'null'" in normalization
     assert "json_typeof(failure_headers) = 'null'" in normalization
     assert normalization.count("THEN NULL") == 3
+    job_failure_scrub = next(
+        statement
+        for statement in execute_statements
+        if "UPDATE ingestion_jobs" in statement and "historical_failure_reason" in statement
+    )
+    assert "failure_detail = NULL" in job_failure_scrub
+    assert "failure_headers = NULL" in job_failure_scrub
+    history_failure_scrub = next(
+        statement
+        for statement in execute_statements
+        if "UPDATE ingestion_job_failures" in statement
+    )
+    assert "historical_failure_reason" in history_failure_scrub
     backfill = next(
         statement
         for statement in execute_statements

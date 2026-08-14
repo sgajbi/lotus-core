@@ -65,6 +65,11 @@ _POLICY_COLUMNS = (
     "request_payload_retention_authority",
 )
 
+_HISTORICAL_FAILURE_REASON = (
+    "Ingestion processing failed. Historical diagnostic evidence was removed during "
+    "the source-safe evidence migration."
+)
+
 
 def upgrade() -> None:
     """Add policy snapshots and remove unsupported historical replay payloads."""
@@ -121,6 +126,32 @@ def upgrade() -> None:
                OR json_typeof(failure_headers) = 'null'
             """
         )
+    )
+    # Legacy writers could persist raw exception text, request values, and uncontrolled
+    # headers. Those values cannot be proven source-safe after the fact. Replace the bounded
+    # operator-facing reason and purge the unstructured detail/header bodies before the new
+    # projection policy becomes authoritative. Failure codes and failed record keys remain the
+    # stable recovery evidence.
+    op.execute(
+        sa.text(
+            """
+            UPDATE ingestion_jobs
+            SET failure_reason = :historical_failure_reason,
+                failure_detail = NULL,
+                failure_headers = NULL
+            WHERE failure_reason IS NOT NULL
+               OR failure_detail IS NOT NULL
+               OR failure_headers IS NOT NULL
+            """
+        ).bindparams(historical_failure_reason=_HISTORICAL_FAILURE_REASON)
+    )
+    op.execute(
+        sa.text(
+            """
+            UPDATE ingestion_job_failures
+            SET failure_reason = :historical_failure_reason
+            """
+        ).bindparams(historical_failure_reason=_HISTORICAL_FAILURE_REASON)
     )
     # Historical redacted bodies do not carry policy or source authority. Retain them only for
     # the four source-safe internal families, mark every historical row non-replayable, and purge
