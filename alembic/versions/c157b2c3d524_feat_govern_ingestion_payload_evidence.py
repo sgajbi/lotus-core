@@ -157,9 +157,9 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             """
-            UPDATE consumer_dlq_replay_audits
+            UPDATE consumer_dlq_replay_audit
             SET replay_reason = :historical_replay_failure_reason
-            WHERE replay_status = 'failed'
+            WHERE replay_status IN ('failed', 'replayed_bookkeeping_failed')
             """
         ).bindparams(historical_replay_failure_reason=_HISTORICAL_REPLAY_FAILURE_REASON)
     )

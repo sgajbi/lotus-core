@@ -139,6 +139,12 @@ original inputs. The downgrade clears c157 HMAC fingerprints because the prior a
 convert or compare them truthfully under its legacy unkeyed algorithm.
 Historical failed replay-audit reasons are replaced during c157 migration because prior dispatcher
 exceptions could contain broker credentials, connection URIs, or private request values.
+The final same-pattern review extended that boundary to post-publish bookkeeping failures: both
+ingestion-job retry and consumer-DLQ replay now project a bounded code-owned reason before audit
+persistence and response publication, and c157 scrubs both `failed` and
+`replayed_bookkeeping_failed` historical rows in the mapped `consumer_dlq_replay_audit` table.
+Protected CI caught and corrected an earlier plural table-name typo before merge; the executable
+migration guard now pins the singular mapped table and both unsafe historical statuses.
 The two strong source-authority families retain required source identity, observation, and version
 posture, but now declare `quality_status` and `source_batch_id` not applicable because their current
 DTO/domain contracts do not capture those fields; lifecycle status remains separately represented

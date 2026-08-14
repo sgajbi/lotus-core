@@ -20,6 +20,12 @@ _SAFE_MESSAGES = {
     "INGESTION_DLQ_REPLAY_FAILED": (
         "Consumer DLQ replay could not be published to the downstream ingestion pipeline."
     ),
+    "INGESTION_RETRY_BOOKKEEPING_FAILED": (
+        "Replay publish succeeded but post-publish bookkeeping did not complete."
+    ),
+    "INGESTION_DLQ_REPLAY_BOOKKEEPING_FAILED": (
+        "Replay publish succeeded but post-publish bookkeeping did not complete."
+    ),
     "MARKET_PRICE_SOURCE_FACT_CONFLICT": (
         "Authoritative market-price source evidence conflicts with persisted authority."
     ),

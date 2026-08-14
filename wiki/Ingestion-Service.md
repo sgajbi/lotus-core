@@ -34,9 +34,11 @@ The technical replay expiry does not define legal retention, hold, or deletion p
 governed separately by issue #708. Job responses expose the applied policy posture but never expose
 the retained request body. Failure evidence uses stable product messages and allowlisted recovery
 fields; arbitrary exception text, credentials, private request values, and non-allowlisted headers
-are not durable or replayable. The governing migration replaces untrusted historical failure text
-with a bounded safe message and removes historical detail and header bodies while retaining stable
-failure codes and failed-record keys for recovery. Idempotency diagnostics expose a purpose-bound,
+are not durable or replayable. This includes replay publish failures and post-publish bookkeeping
+failures recorded in replay audits. The governing migration replaces untrusted historical job,
+failure-history, and failed replay-audit text with bounded safe messages and removes historical
+detail and header bodies while retaining stable failure codes and failed-record keys for recovery.
+Idempotency diagnostics expose a purpose-bound,
 key-versioned HMAC-SHA-256 pseudonym rather than the caller's raw `X-Idempotency-Key`. Non-local
 profiles require a separately governed ingestion-evidence key; rotating its declared key id
 intentionally changes the pseudonym. Request-payload fingerprints use a separate cryptographic

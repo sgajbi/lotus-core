@@ -452,3 +452,41 @@ async def test_consumer_dlq_replay_bookkeeping_conflict_uses_governed_detail() -
         "replay_fingerprint": "fp-001",
     }
     ingestion_job_service.mark_retried_and_queued.assert_awaited_once_with("job-001")
+
+
+@pytest.mark.asyncio
+async def test_consumer_dlq_replay_bookkeeping_failure_records_only_source_safe_reason() -> None:
+    context = SimpleNamespace(endpoint="/ingest/transactions")
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.mark_retried_and_queued = AsyncMock(
+        side_effect=RuntimeError("postgresql://operator:credential@db/private-request-value")
+    )
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
+        return_value="audit-bookkeeping"
+    )
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _consumer_service(
+            ingestion_job_service=ingestion_job_service
+        )._mark_consumer_dlq_replay_replayed(
+            event_id="dlq-001",
+            correlation_id="corr-001",
+            job_id="job-001",
+            context=context,
+            replay_fingerprint="fp-001",
+            requested_by="ops",
+        )
+
+    safe_reason = "Replay publish succeeded but post-publish bookkeeping did not complete."
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == {
+        "code": "INGESTION_DLQ_REPLAY_BOOKKEEPING_FAILED",
+        "message": safe_reason,
+        "replay_audit_id": "audit-bookkeeping",
+        "replay_fingerprint": "fp-001",
+    }
+    _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
+    assert audit_kwargs["replay_status"] == "replayed_bookkeeping_failed"
+    assert audit_kwargs["replay_reason"] == safe_reason
+    assert "credential" not in str(audit_kwargs)
+    assert "private-request-value" not in str(audit_kwargs)
