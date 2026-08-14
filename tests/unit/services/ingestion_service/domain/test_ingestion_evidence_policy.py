@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from src.services.ingestion_service.app.application.reference_data_ingestion_registry import (
@@ -27,6 +29,7 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         assert policy.source_lineage is not None
         assert policy.durable_representation is DurablePayloadRepresentation.FINGERPRINT_ONLY
         assert policy.replay_eligible is False
+        assert policy.replay_ttl is None
         assert set(policy.source_lineage.__dataclass_fields__) == {
             "source_system",
             "source_record_id",
@@ -73,6 +76,7 @@ def test_sensitive_payload_families_are_fingerprint_only() -> None:
         assert policy.classification is PayloadClassification.RESTRICTED
         assert policy.durable_representation is DurablePayloadRepresentation.FINGERPRINT_ONLY
         assert policy.replay_eligible is False
+        assert policy.replay_ttl is None
 
 
 def test_only_source_safe_internal_families_authorize_payload_replay() -> None:
@@ -88,6 +92,11 @@ def test_only_source_safe_internal_families_authorize_payload_replay() -> None:
         "/ingest/fx-rates": False,
         "/ingest/business-dates": True,
     }
+    assert {
+        policy.replay_ttl
+        for policy in INGESTION_EVIDENCE_POLICY_REGISTRY.all_policies()
+        if policy.replay_eligible
+    } == {timedelta(hours=24)}
 
 
 def test_strong_authority_families_require_source_identity_and_version() -> None:
@@ -125,6 +134,7 @@ def test_policy_rejects_impossible_replay_posture() -> None:
             durable_representation=DurablePayloadRepresentation.FINGERPRINT_ONLY,
             replay_eligible=True,
             partial_replay_eligible=False,
+            replay_ttl=None,
         )
 
     with pytest.raises(ValueError, match="Partial replay"):
@@ -135,6 +145,18 @@ def test_policy_rejects_impossible_replay_posture() -> None:
             durable_representation=DurablePayloadRepresentation.SOURCE_SAFE_REPLAY,
             replay_eligible=False,
             partial_replay_eligible=True,
+            replay_ttl=None,
+        )
+
+    with pytest.raises(ValueError, match="cannot declare a replay TTL"):
+        IngestionEvidencePolicy(
+            endpoint="/ingest/impossible",
+            entity_type="impossible",
+            classification=PayloadClassification.INTERNAL,
+            durable_representation=DurablePayloadRepresentation.FINGERPRINT_ONLY,
+            replay_eligible=False,
+            partial_replay_eligible=False,
+            replay_ttl=timedelta(hours=1),
         )
 
 
