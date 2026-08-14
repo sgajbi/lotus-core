@@ -11,6 +11,7 @@ from ..application.ingestion_bookkeeping_outcome import (
     INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
     build_ingestion_bookkeeping_failure_detail,
 )
+from ..application.ingestion_failure_evidence import project_ingestion_failure_evidence
 from ..application.ingestion_idempotency_replay import (
     resolve_ingestion_idempotency_replay,
 )
@@ -220,14 +221,20 @@ class ReferenceDataIngestionCommandHandler:
         code: str,
         exc: Exception,
     ) -> NoReturn:
-        detail = {
+        unsafe_detail = {
             "code": code,
             "message": str(exc),
             "job_id": job_id,
         }
+        evidence = project_ingestion_failure_evidence(
+            failure_code=code,
+            failure_detail=unsafe_detail,
+            failure_headers=None,
+        )
+        detail = evidence.detail or {"code": code, "message": evidence.reason}
         await self.ingestion_job_service.mark_failed(
             job_id,
-            str(exc),
+            evidence.reason,
             failure_phase="persist",
             failure_status_code=status_code,
             failure_code=code,

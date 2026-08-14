@@ -354,13 +354,13 @@ async def test_batch_publish_command_marks_failed_on_publish_error() -> None:
     assert exc_info.value.publish_error is publish_error
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "job-1",
-        "broker timeout",
+        "Ingestion publishing failed before durable queue confirmation.",
         failed_record_keys=["T1"],
         failure_status_code=503,
         failure_code="INGESTION_PUBLISH_FAILED",
         failure_detail={
             "code": "INGESTION_PUBLISH_FAILED",
-            "message": "broker timeout",
+            "message": "Ingestion publishing failed before durable queue confirmation.",
             "dependency": "kafka",
             "retryable": True,
             "retry_after_seconds": 30,

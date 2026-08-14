@@ -138,8 +138,13 @@ async def test_mark_failed_uses_atomic_update_and_records_failure(
         failed_record_keys=["tx-001"],
         failure_status_code=503,
         failure_code="INGESTION_PUBLISH_FAILED",
-        failure_detail={"dependency": "kafka", "retryable": True},
-        failure_headers={"Retry-After": "30"},
+        failure_detail={
+            "dependency": "kafka",
+            "retryable": True,
+            "message": "password=secret at kafka.internal:9093",
+            "request_payload": {"client_email": "client@example.com"},
+        },
+        failure_headers={"Retry-After": "30", "Authorization": "Bearer secret"},
     )
 
     assert len(session.executed_statements) == 1
@@ -151,13 +156,29 @@ async def test_mark_failed_uses_atomic_update_and_records_failure(
     assert "failure_detail=:failure_detail" in compiled_sql
     assert "failure_headers=:failure_headers" in compiled_sql
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
+    compiled_params = session.executed_statements[0].compile().params
+    assert compiled_params["failure_reason"] == (
+        "Ingestion publishing failed before durable queue confirmation."
+    )
+    assert compiled_params["failure_detail"] == {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Ingestion publishing failed before durable queue confirmation.",
+        "dependency": "kafka",
+        "retryable": True,
+    }
+    assert compiled_params["failure_headers"] == {"Retry-After": "30"}
+    assert "secret" not in repr(compiled_params)
+    assert "client@example.com" not in repr(compiled_params)
 
     assert len(session.added_rows) == 1
     failure_row = session.added_rows[0]
     assert isinstance(failure_row, DBIngestionJobFailure)
     assert failure_row.job_id == "job_mark_failed"
     assert failure_row.failure_phase == "retry_publish"
-    assert failure_row.failure_reason == "publish failed"
+    assert (
+        failure_row.failure_reason
+        == "Ingestion publishing failed before durable queue confirmation."
+    )
     assert failure_row.failed_record_keys == ["tx-001"]
 
 
@@ -291,10 +312,14 @@ async def test_record_failure_observation_preserves_job_status_and_records_failu
     assert isinstance(failure_row, DBIngestionJobFailure)
     assert failure_row.job_id == "job_publish_bookkeeping"
     assert failure_row.failure_phase == "queue_bookkeeping"
-    assert failure_row.failure_reason == "queue state write failed"
+    assert failure_row.failure_reason == (
+        "Ingestion work completed, but job bookkeeping did not complete afterward."
+    )
     assert session.returned_row.failure_status_code == 500
     assert session.returned_row.failure_code == "INGESTION_JOB_BOOKKEEPING_FAILED"
     assert session.returned_row.failure_detail == {
+        "code": "INGESTION_JOB_BOOKKEEPING_FAILED",
+        "message": ("Ingestion work completed, but job bookkeeping did not complete afterward."),
         "work_state": "published",
         "retry_safe": False,
     }

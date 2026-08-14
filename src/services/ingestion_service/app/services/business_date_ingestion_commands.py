@@ -242,7 +242,7 @@ class BusinessDateIngestionCommandHandler:
             )
             await self.ingestion_job_service.mark_failed(
                 job_id,
-                str(exc),
+                str(detail["message"]),
                 failed_record_keys=exc.failed_record_keys,
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,

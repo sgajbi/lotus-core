@@ -58,8 +58,9 @@ def test_failed_job_replays_durable_failure_outcome_without_mutating_evidence() 
     assert resolution.status_code == 409
     assert resolution.detail == {
         "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
-        "message": "Competing source version.",
-        "source_scope": "LOTUS_PB_SG|SG_PRIVATE_BANK_BOOK",
+        "message": (
+            "Authoritative market-price source evidence conflicts with persisted authority."
+        ),
         "job_id": "ing_job_001",
     }
     assert resolution.headers == {"Retry-After": "30"}
@@ -84,7 +85,7 @@ def test_durable_failure_outcome_takes_precedence_over_nonterminal_status() -> N
     assert resolution.status_code == 500
     assert resolution.detail == {
         "code": "INGESTION_JOB_BOOKKEEPING_FAILED",
-        "message": "The previous ingestion attempt failed.",
+        "message": ("Ingestion work completed, but job bookkeeping did not complete afterward."),
         "work_state": "persisted",
         "retry_safe": False,
         "job_id": "ing_job_001",
@@ -123,7 +124,7 @@ def test_durable_failure_without_client_detail_does_not_expose_recorded_reason()
     assert resolution.status_code == 503
     assert resolution.detail == {
         "code": "INGESTION_PUBLISH_FAILED",
-        "message": "The previous ingestion attempt failed.",
+        "message": "Ingestion publishing failed before durable queue confirmation.",
         "job_id": "ing_job_001",
     }
 

@@ -226,7 +226,7 @@ async def test_business_date_command_replays_original_failed_outcome() -> None:
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == {
         "code": "INGESTION_PUBLISH_FAILED",
-        "message": "Kafka unavailable.",
+        "message": "Ingestion publishing failed before durable queue confirmation.",
         "job_id": "job-existing",
     }
     assert exc_info.value.headers == {"Retry-After": "30"}
@@ -274,13 +274,13 @@ async def test_business_date_command_marks_failed_for_publish_error() -> None:
     assert exc_info.value.job_id == "job-business-date"
     job_service.mark_failed.assert_awaited_once_with(
         "job-business-date",
-        "failed to publish business date",
+        "Ingestion publishing failed before durable queue confirmation.",
         failed_record_keys=["GLOBAL|2026-03-10"],
         failure_status_code=503,
         failure_code="INGESTION_PUBLISH_FAILED",
         failure_detail={
             "code": "INGESTION_PUBLISH_FAILED",
-            "message": "failed to publish business date",
+            "message": "Ingestion publishing failed before durable queue confirmation.",
             "dependency": "kafka",
             "retryable": True,
             "retry_after_seconds": 30,

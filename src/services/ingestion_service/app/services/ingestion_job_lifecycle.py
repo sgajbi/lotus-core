@@ -15,6 +15,7 @@ from portfolio_common.monitoring import (
 )
 from sqlalchemy import and_, desc, func, null, select, text, update
 
+from ..application.ingestion_failure_evidence import project_ingestion_failure_evidence
 from ..domain.ingestion_job_lifecycle_policy import (
     IngestionJobStatus,
     IngestionJobTransition,
@@ -253,6 +254,14 @@ async def mark_job_failed(
                 failure_detail=failure_detail,
                 failure_headers=failure_headers,
             )
+            evidence = project_ingestion_failure_evidence(
+                failure_code=failure_code,
+                failure_detail=failure_detail,
+                failure_headers=failure_headers,
+            )
+            if failure_outcome_values:
+                failure_outcome_values["failure_detail"] = evidence.detail
+                failure_outcome_values["failure_headers"] = evidence.headers
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
@@ -260,7 +269,7 @@ async def mark_job_failed(
                 .values(
                     status=IngestionJobStatus.FAILED.value,
                     completed_at=datetime.now(UTC),
-                    failure_reason=failure_reason,
+                    failure_reason=evidence.reason,
                     **failure_outcome_values,
                 )
                 .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
@@ -272,7 +281,7 @@ async def mark_job_failed(
                 _build_failure_row(
                     job_id=job_id,
                     failure_phase=failure_phase,
-                    failure_reason=failure_reason,
+                    failure_reason=evidence.reason,
                     failed_record_keys=failed_record_keys,
                 )
             )
@@ -304,18 +313,27 @@ async def record_job_failure_observation(
             )
             if row is None:
                 return
-            for field_name, value in _failure_outcome_values(
+            failure_outcome_values = _failure_outcome_values(
                 failure_status_code=failure_status_code,
                 failure_code=failure_code,
                 failure_detail=failure_detail,
                 failure_headers=failure_headers,
-            ).items():
+            )
+            evidence = project_ingestion_failure_evidence(
+                failure_code=failure_code,
+                failure_detail=failure_detail,
+                failure_headers=failure_headers,
+            )
+            if failure_outcome_values:
+                failure_outcome_values["failure_detail"] = evidence.detail
+                failure_outcome_values["failure_headers"] = evidence.headers
+            for field_name, value in failure_outcome_values.items():
                 setattr(row, field_name, value)
             db.add(
                 _build_failure_row(
                     job_id=job_id,
                     failure_phase=failure_phase,
-                    failure_reason=failure_reason,
+                    failure_reason=evidence.reason,
                     failed_record_keys=failed_record_keys,
                 )
             )
