@@ -91,3 +91,17 @@ downgraded to `c156b2c3d523`, and re-applied `c157b2c3d524`. The exact temporary
 removed; the shared `portfolio_db` remained at `c156b2c3d523` and every Core application container
 remained healthy. Issue #559 is fixed locally and remains open until protected-PR, exact-main,
 wiki-publication, and verified closure evidence are complete.
+
+Protected CI then exposed two test-boundary gaps and both were fixed forward. SQLAlchemy's default
+JSON binding encoded Python `None` as JSON `null`, which violated the database invariant requiring
+fingerprint-only rows to retain no request body. The mapped `request_payload` type now uses
+`JSON(none_as_null=True)`, with model and real-PostgreSQL lifecycle guards. The operations harness
+also retained raw fixture bodies and legacy exception assertions after production had become
+policy-aware and source-safe. It now builds evidence through the production registry, derives
+record replayability only from the durable representation, uses `/ingest/instruments` for positive
+retry and matching instrument-DLQ proofs, keeps restricted transaction evidence explicitly
+non-replayable, and verifies that diagnostics contain only non-reversible idempotency-key
+references. Repository-native `make test-ops-contract` passed all 318 cases; the focused
+payload/retry/DLQ cohort passed 45 cases; the database-model cohort passed 54 cases; MyPy passed all
+318 source files; and the full architecture guard passed. Exact-head and exact-main CI evidence is
+recorded on GitHub rather than inferred from these local results.
