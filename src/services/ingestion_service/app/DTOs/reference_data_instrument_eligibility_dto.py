@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .reference_data_source_observation_dto import SourceObservationLineage
 
 _BUY_BLOCKING_SHELF_STATUSES = {"BANNED", "SUSPENDED"}
 
@@ -23,7 +25,7 @@ def _validate_sell_permission(product_shelf_status: str, sell_allowed: bool) -> 
         raise ValueError("sell_allowed must be false for banned instruments")
 
 
-class InstrumentEligibilityProfileRecord(BaseModel):
+class InstrumentEligibilityProfileRecord(SourceObservationLineage):
     security_id: str = Field(
         ..., description="Canonical instrument/security identifier.", examples=["AAPL"]
     )
@@ -81,20 +83,6 @@ class InstrumentEligibilityProfileRecord(BaseModel):
     )
     eligibility_version: int = Field(
         1, description="Eligibility version used for effective-date tie-breaks.", ge=1
-    )
-    source_system: str | None = Field(
-        None, description="Upstream shelf/compliance source system.", examples=["product_shelf"]
-    )
-    source_record_id: str | None = Field(
-        None, description="Source record identifier for replay.", examples=["AAPL-elig-20260401"]
-    )
-    observed_at: datetime | None = Field(
-        None, description="Timestamp when the source observed or published this profile."
-    )
-    quality_status: str = Field(
-        "accepted",
-        description="Data quality status for the eligibility profile.",
-        examples=["accepted"],
     )
 
     @model_validator(mode="after")

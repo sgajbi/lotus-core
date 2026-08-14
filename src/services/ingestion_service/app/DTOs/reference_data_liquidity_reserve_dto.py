@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
@@ -8,8 +8,10 @@ from portfolio_common.openapi_enrichment import exact_numeric_openapi_descriptio
 from portfolio_common.pydantic_financial_numeric import ExactPositiveDecimal18_4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class LiquidityReserveRequirementRecord(BaseModel):
+
+class LiquidityReserveRequirementRecord(SourceObservationLineage):
     client_id: str = Field(..., description="Client identifier bound to the reserve requirement.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the reserve requirement.")
     mandate_id: str | None = Field(
@@ -43,10 +45,6 @@ class LiquidityReserveRequirementRecord(BaseModel):
     effective_from: date = Field(..., description="Requirement effective start date.")
     effective_to: date | None = Field(None, description="Requirement effective end date.")
     requirement_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
 
     @field_validator("currency", mode="before")
     @classmethod

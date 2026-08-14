@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class ClientRestrictionProfileRecord(BaseModel):
+
+class ClientRestrictionProfileRecord(SourceObservationLineage):
     client_id: str = Field(..., description="Client identifier bound to the restriction profile.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the restriction profile.")
     mandate_id: str | None = Field(
@@ -33,10 +35,6 @@ class ClientRestrictionProfileRecord(BaseModel):
     effective_from: date = Field(..., description="Restriction effective start date.")
     effective_to: date | None = Field(None, description="Restriction effective end date.")
     restriction_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
 
     @model_validator(mode="after")
     def validate_profile(self) -> "ClientRestrictionProfileRecord":

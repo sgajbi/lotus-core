@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
@@ -41,6 +42,9 @@ from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     RiskFreeSeriesRecord,
     SustainabilityPreferenceProfileIngestionRequest,
     SustainabilityPreferenceProfileRecord,
+)
+from src.services.ingestion_service.app.DTOs.reference_data_source_observation_dto import (
+    SourceObservationLineage,
 )
 
 
@@ -334,6 +338,47 @@ def _planned_withdrawal_schedule(**overrides: object) -> dict[str, object]:
     }
     record.update(overrides)
     return record
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload_factory"),
+    [
+        (DiscretionaryMandateBindingRecord, _mandate_binding),
+        (ModelPortfolioDefinitionRecord, _model_portfolio_definition),
+        (ModelPortfolioTargetRecord, _target_record),
+        (InstrumentEligibilityProfileRecord, _eligibility_profile),
+        (ClientRestrictionProfileRecord, _restriction_profile),
+        (SustainabilityPreferenceProfileRecord, _sustainability_profile),
+        (ClientTaxProfileRecord, _tax_profile),
+        (ClientTaxRuleSetRecord, _tax_rule_set),
+        (ClientIncomeNeedsScheduleRecord, _income_needs_schedule),
+        (LiquidityReserveRequirementRecord, _liquidity_reserve_requirement),
+        (PlannedWithdrawalScheduleRecord, _planned_withdrawal_schedule),
+    ],
+)
+def test_reference_data_records_share_canonical_source_observation_lineage(
+    record_type: type[BaseModel],
+    payload_factory: Callable[..., dict[str, object]],
+) -> None:
+    assert issubclass(record_type, SourceObservationLineage)
+    record = record_type.model_validate(
+        payload_factory(
+            source_vendor=" upstream-system ",
+            source_record_id="record-001",
+            source_timestamp="2026-08-14T09:00:00Z",
+            quality_status=" ACCEPTED ",
+        )
+    )
+
+    assert record.source_system == " upstream-system "
+    assert record.source_record_id == "record-001"
+    assert record.observed_at is not None
+    assert record.quality_status == "accepted"
+    dumped = record.model_dump(mode="json")
+    assert dumped["source_system"] == " upstream-system "
+    assert dumped["observed_at"] == "2026-08-14T09:00:00Z"
+    assert "source_vendor" not in record_type.model_json_schema()["properties"]
+    assert "source_timestamp" not in record_type.model_json_schema()["properties"]
 
 
 def test_model_portfolio_definition_normalizes_base_currency() -> None:

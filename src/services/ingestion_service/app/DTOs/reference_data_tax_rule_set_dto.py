@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Literal, cast
 
@@ -19,6 +19,7 @@ from .ingestion_validation_errors import (
     validate_effective_window,
     validate_unique_records,
 )
+from .reference_data_source_observation_dto import SourceObservationLineage
 
 
 def _validate_tax_rule_effective_window(
@@ -90,7 +91,7 @@ def _validate_tax_rule_evidence(
     )
 
 
-class ClientTaxRuleSetRecord(BaseModel):
+class ClientTaxRuleSetRecord(SourceObservationLineage):
     client_id: str = Field(..., description="Client identifier bound to the tax rule set.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the tax rule set.")
     mandate_id: str | None = Field(
@@ -136,10 +137,6 @@ class ClientTaxRuleSetRecord(BaseModel):
     effective_from: date = Field(..., description="Tax rule effective start date.")
     effective_to: date | None = Field(None, description="Tax rule effective end date.")
     rule_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
 
     @field_validator("threshold_currency", mode="before")
     @classmethod
