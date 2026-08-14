@@ -4760,6 +4760,13 @@ class IngestionJob(Base):
     failure_headers = Column(JSON, nullable=True)
     request_payload = Column(JSON, nullable=True)
     request_payload_fingerprint = Column(String, nullable=True)
+    request_payload_policy_version = Column(String(64), nullable=False)
+    request_payload_classification = Column(String(32), nullable=False)
+    request_payload_representation = Column(String(32), nullable=False)
+    request_payload_replay_eligible = Column(Boolean, nullable=False)
+    request_payload_partial_replay_eligible = Column(Boolean, nullable=False)
+    request_payload_replay_expires_at = Column(DateTime(timezone=True), nullable=True)
+    request_payload_retention_authority = Column(String(128), nullable=False)
     retry_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_retried_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -4773,6 +4780,51 @@ class IngestionJob(Base):
             "AND failure_code = btrim(failure_code) "
             "AND failure_code <> '')",
             name="ck_ingestion_jobs_failure_outcome_complete",
+        ),
+        CheckConstraint(
+            "request_payload_fingerprint IS NULL OR "
+            "request_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_ingestion_jobs_payload_fingerprint_format",
+        ),
+        CheckConstraint(
+            "request_payload_classification IN ('internal', 'confidential', 'restricted', "
+            "'legacy_unclassified')",
+            name="ck_ingestion_jobs_payload_classification",
+        ),
+        CheckConstraint(
+            "request_payload_representation IN ('source_safe_replay', 'fingerprint_only', "
+            "'legacy_redacted')",
+            name="ck_ingestion_jobs_payload_representation",
+        ),
+        CheckConstraint(
+            "request_payload_partial_replay_eligible = false OR "
+            "request_payload_replay_eligible = true",
+            name="ck_ingestion_jobs_payload_partial_replay",
+        ),
+        CheckConstraint(
+            "(request_payload_replay_eligible = true "
+            "AND request_payload_representation = 'source_safe_replay' "
+            "AND request_payload IS NOT NULL "
+            "AND request_payload_fingerprint IS NOT NULL "
+            "AND request_payload_replay_expires_at IS NOT NULL) OR "
+            "(request_payload_replay_eligible = false "
+            "AND request_payload_replay_expires_at IS NULL)",
+            name="ck_ingestion_jobs_payload_replay_authority",
+        ),
+        CheckConstraint(
+            "request_payload_representation <> 'fingerprint_only' OR request_payload IS NULL",
+            name="ck_ingestion_jobs_fingerprint_only_payload_absent",
+        ),
+        CheckConstraint(
+            "request_payload_replay_expires_at IS NULL OR "
+            "request_payload_replay_expires_at NOT IN "
+            "('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_ingestion_jobs_payload_expiry_finite",
+        ),
+        CheckConstraint(
+            "btrim(request_payload_policy_version) <> '' AND "
+            "btrim(request_payload_retention_authority) <> ''",
+            name="ck_ingestion_jobs_payload_policy_identity",
         ),
         Index("ix_ingestion_jobs_submitted_at", "submitted_at"),
         Index("ix_ingestion_jobs_status_submitted_at", "status", submitted_at.desc()),
