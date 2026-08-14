@@ -99,7 +99,7 @@ def test_only_source_safe_internal_families_authorize_payload_replay() -> None:
     } == {timedelta(hours=24)}
 
 
-def test_strong_authority_families_require_source_identity_and_version() -> None:
+def test_strong_authority_families_declare_exact_source_identity_and_version_posture() -> None:
     for endpoint in (
         "/ingest/instrument-valuation-policy-assignments",
         "/ingest/authoritative-market-price-source-facts",
@@ -109,9 +109,9 @@ def test_strong_authority_families_require_source_identity_and_version() -> None
         assert lineage.source_system is LineageFieldPosture.REQUIRED
         assert lineage.source_record_id is LineageFieldPosture.REQUIRED
         assert lineage.observed_at is LineageFieldPosture.REQUIRED
-        assert lineage.quality_status is LineageFieldPosture.REQUIRED
+        assert lineage.quality_status is LineageFieldPosture.NOT_APPLICABLE
         assert lineage.source_version is LineageFieldPosture.REQUIRED
-        assert lineage.source_batch_id is LineageFieldPosture.OPTIONAL
+        assert lineage.source_batch_id is LineageFieldPosture.NOT_APPLICABLE
 
 
 @pytest.mark.parametrize(
