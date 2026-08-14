@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from enum import StrEnum
 
 INGESTION_EVIDENCE_POLICY_VERSION = "ingestion-evidence-policy.v1"
 RETENTION_AUTHORITY = "lotus-core#708"
+SOURCE_SAFE_REPLAY_TTL = timedelta(hours=24)
 
 
 class LineageFieldPosture(StrEnum):
@@ -44,6 +46,7 @@ class IngestionEvidencePolicy:
     durable_representation: DurablePayloadRepresentation
     replay_eligible: bool
     partial_replay_eligible: bool
+    replay_ttl: timedelta | None
     source_lineage: SourceLineagePolicy | None = None
     policy_version: str = INGESTION_EVIDENCE_POLICY_VERSION
     retention_authority: str = RETENTION_AUTHORITY
@@ -60,6 +63,12 @@ class IngestionEvidencePolicy:
             and self.replay_eligible
         ):
             raise ValueError("Fingerprint-only evidence cannot authorize payload replay.")
+        if self.replay_eligible and self.replay_ttl is None:
+            raise ValueError("Replay-eligible evidence requires a technical expiry.")
+        if not self.replay_eligible and self.replay_ttl is not None:
+            raise ValueError("Replay-ineligible evidence cannot declare a replay TTL.")
+        if self.replay_ttl is not None and self.replay_ttl <= timedelta(0):
+            raise ValueError("Replay TTL must be positive.")
 
 
 class IngestionEvidencePolicyRegistry:
@@ -120,6 +129,7 @@ def _fingerprint_policy(
         durable_representation=DurablePayloadRepresentation.FINGERPRINT_ONLY,
         replay_eligible=False,
         partial_replay_eligible=False,
+        replay_ttl=None,
         source_lineage=source_lineage,
     )
 
@@ -137,6 +147,7 @@ def _replay_policy(
         durable_representation=DurablePayloadRepresentation.SOURCE_SAFE_REPLAY,
         replay_eligible=True,
         partial_replay_eligible=partial_replay_eligible,
+        replay_ttl=SOURCE_SAFE_REPLAY_TTL,
     )
 
 
