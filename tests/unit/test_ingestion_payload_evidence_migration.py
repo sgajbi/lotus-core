@@ -14,6 +14,37 @@ MIGRATION = (
     / "versions"
     / "c157b2c3d524_feat_govern_ingestion_payload_evidence.py"
 )
+SCHEMA_CATALOG = (
+    Path(__file__).resolve().parents[2] / "docs" / "data" / "database-schema-catalog.md"
+)
+
+
+def test_ingestion_job_schema_catalog_publishes_governed_evidence_columns() -> None:
+    catalog = SCHEMA_CATALOG.read_text(encoding="utf-8")
+    ingestion_jobs = catalog.split("## `ingestion_jobs`", maxsplit=1)[1].split(
+        "## `ingestion_job_failures`", maxsplit=1
+    )[0]
+
+    for column in (
+        "failure_status_code",
+        "failure_code",
+        "failure_detail",
+        "failure_headers",
+        "request_payload",
+        "request_payload_fingerprint",
+        "request_payload_policy_version",
+        "request_payload_classification",
+        "request_payload_representation",
+        "request_payload_replay_eligible",
+        "request_payload_partial_replay_eligible",
+        "request_payload_replay_expires_at",
+        "request_payload_retention_authority",
+    ):
+        assert f"`{column}`" in ingestion_jobs
+
+    assert "does not authorize replay or reconstruct payload" in ingestion_jobs
+    assert "SQL `NULL` for fingerprint-only evidence" in ingestion_jobs
+    assert "Named governing retention decision" in ingestion_jobs
 
 
 def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
