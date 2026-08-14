@@ -49,6 +49,10 @@ from src.services.ingestion_service.app.services.business_date_ingestion_policy 
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
     IngestionIdempotencyConflictError,
 )
+from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
+    IngestionPayloadEvidence,
+    build_ingestion_payload_evidence,
+)
 
 try:
     from app import ops_controls as app_ops_controls
@@ -89,6 +93,9 @@ from src.services.ingestion_service.app.services.ingestion_service import Ingest
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
+
+SAFE_PUBLISH_FAILURE_MESSAGE = "Ingestion publishing failed before durable queue confirmation."
+SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE = "Reference-data persistence failed."
 
 
 def _assert_publish_dependency_failure(
@@ -151,6 +158,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         def __init__(self):
             self.jobs: dict[str, IngestionJobResponse] = {}
             self.job_payloads: dict[str, dict] = {}
+            self.job_evidence: dict[str, IngestionPayloadEvidence] = {}
             self.failures: dict[str, list[dict]] = {}
             self.replay_audit: dict[str, dict] = {}
             self.fail_replay_audit_statuses: set[str] = set()
@@ -193,6 +201,15 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                                 idempotency_key=idempotency_key,
                             )
                         return SimpleNamespace(job=existing, created=False)
+            if request_payload is None:
+                raise ValueError("Ingestion jobs require request payload evidence.")
+            observed_at = datetime.now(UTC)
+            payload_evidence = build_ingestion_payload_evidence(
+                endpoint=endpoint,
+                entity_type=entity_type,
+                payload=request_payload,
+                observed_at=observed_at,
+            )
             self.jobs[job_id] = IngestionJobResponse(
                 job_id=job_id,
                 endpoint=endpoint,
@@ -200,10 +217,18 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 status="accepted",
                 accepted_count=accepted_count,
                 idempotency_key=idempotency_key,
+                request_payload_fingerprint=payload_evidence.request_payload_fingerprint,
+                request_payload_policy_version=payload_evidence.policy_version,
+                request_payload_classification=payload_evidence.classification,
+                request_payload_representation=payload_evidence.durable_representation,
+                request_payload_replay_eligible=payload_evidence.replay_eligible,
+                request_payload_partial_replay_eligible=(payload_evidence.partial_replay_eligible),
+                request_payload_replay_expires_at=payload_evidence.replay_expires_at,
+                request_payload_retention_authority=payload_evidence.retention_authority,
                 correlation_id=correlation_id,
                 request_id=request_id,
                 trace_id=trace_id,
-                submitted_at=datetime.now(UTC),
+                submitted_at=observed_at,
                 completed_at=None,
                 failure_reason=None,
                 retry_count=0,
@@ -211,6 +236,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             )
             if request_payload:
                 self.job_payloads[job_id] = request_payload
+            self.job_evidence[job_id] = payload_evidence
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
         async def mark_queued(self, job_id: str) -> bool:
@@ -332,13 +358,19 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             record = self.jobs.get(job_id)
             if record is None:
                 return None
+            evidence = self.job_evidence[job_id]
             return SimpleNamespace(
                 job_id=job_id,
                 endpoint=record.endpoint,
                 entity_type=record.entity_type,
                 accepted_count=record.accepted_count,
                 idempotency_key=record.idempotency_key,
-                request_payload=self.job_payloads.get(job_id),
+                request_payload=evidence.request_payload,
+                request_payload_policy_version=evidence.policy_version,
+                request_payload_representation=evidence.durable_representation,
+                request_payload_replay_eligible=evidence.replay_eligible,
+                request_payload_partial_replay_eligible=evidence.partial_replay_eligible,
+                request_payload_replay_expires_at=evidence.replay_expires_at,
                 submitted_at=record.submitted_at,
             )
 
@@ -566,6 +598,19 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             return events[:limit]
 
         async def get_consumer_dlq_event(self, event_id: str):
+            if event_id == "cdlq_test_instrument_001":
+                return SimpleNamespace(
+                    event_id=event_id,
+                    original_topic="instruments.raw.received",
+                    consumer_group="persistence-service-group",
+                    dlq_topic="dlq.persistence_service",
+                    original_key="SEC_REPLAY_001",
+                    error_reason_code="VALIDATION_ERROR",
+                    error_reason="ValidationError: instrument source record is invalid",
+                    correlation_id="ING:test-instrument-correlation",
+                    payload_excerpt='{"security_id":"SEC_REPLAY_001"}',
+                    observed_at=datetime(2026, 3, 6, 9, 11, 5, 812000, tzinfo=UTC),
+                )
             if event_id == "cdlq_test_001":
                 return SimpleNamespace(
                     event_id=event_id,
@@ -637,7 +682,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             job = self.jobs.get(job_id)
             if not job:
                 return None
-            payload = self.job_payloads.get(job_id, {})
+            payload = self.job_evidence[job_id].request_payload or {}
             replayable_keys: list[str] = []
             if job.endpoint == "/ingest/transactions":
                 replayable_keys = [
@@ -687,7 +732,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         ):
             keys = [
                 {
-                    "idempotency_key": "integration-ingestion-idempotency-001",
+                    "idempotency_key": None,
+                    "idempotency_key_reference": (
+                        "sha256:f2a976ef4dd4e3e34f7d555d13c7ab2a6273af2be26e76b1dc006c4f07ae50b2"
+                    ),
                     "usage_count": 3,
                     "endpoint_count": 2,
                     "payload_fingerprint_count": 2,
@@ -700,7 +748,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                     "reuse_classification": "cross_endpoint_reuse",
                 },
                 {
-                    "idempotency_key": "integration-ingestion-idempotency-002",
+                    "idempotency_key": None,
+                    "idempotency_key_reference": (
+                        "sha256:4eaa20fa37b251ffefbeaf26030aae166c0d90db40e028c600be20759ad24be3"
+                    ),
                     "usage_count": 2,
                     "endpoint_count": 1,
                     "payload_fingerprint_count": 1,
@@ -1351,6 +1402,19 @@ def _instrument_batch_payload(*security_ids: str) -> dict[str, list[dict[str, ob
     }
 
 
+async def _seed_replayable_instrument_job(
+    client: httpx.AsyncClient,
+    security_id: str,
+) -> str:
+    response = await client.post(
+        "/ingest/instruments",
+        headers={"X-Correlation-Id": "ING:test-instrument-correlation"},
+        json=_instrument_batch_payload(security_id),
+    )
+    assert response.status_code == 202
+    return response.json()["job_id"]
+
+
 def _market_price_batch_payload(*security_ids: str) -> dict[str, list[dict[str, object]]]:
     ids = security_ids or ("SEC_PRICE_001",)
     return {
@@ -1627,8 +1691,9 @@ async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
         failed_response,
         failed_record_keys=["P1", "P2"],
     )
-    assert "Failed to publish portfolio 'P1'" in detail["message"]
-    assert "Remaining unpublished record keys: P1, P2" in detail["message"]
+    assert detail["message"] == SAFE_PUBLISH_FAILURE_MESSAGE
+    assert "P1" not in detail["message"]
+    assert "P2" not in detail["message"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -1736,7 +1801,7 @@ async def test_ingest_single_transaction_returns_failed_record_keys_when_publish
         response,
         failed_record_keys=["TX_SINGLE_PUBLISH_FAIL_001"],
     )
-    assert detail["message"] == "Failed to publish transaction 'TX_SINGLE_PUBLISH_FAIL_001'."
+    assert detail["message"] == SAFE_PUBLISH_FAILURE_MESSAGE
 
 
 async def test_ingest_transactions_endpoint(
@@ -2022,8 +2087,7 @@ async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
     assert job_body["status"] == "failed"
     assert job_body["accepted_count"] == 1
     assert job_body["idempotency_key"] == "job-detail-failed-idempotency-001"
-    assert "TX_JOB_DETAIL_FAILED_001" in job_body["failure_reason"]
-    assert "Remaining unpublished record keys" in job_body["failure_reason"]
+    assert job_body["failure_reason"] == SAFE_PUBLISH_FAILURE_MESSAGE
     assert job_body["completed_at"]
     assert job_body["retry_count"] == 0
     assert job_body["last_retried_at"] is None
@@ -2162,7 +2226,7 @@ async def test_ingestion_job_failures_endpoint_returns_full_failure_rows(
     assert failure["failure_id"]
     assert failure["job_id"] == job_id
     assert failure["failure_phase"] == "publish"
-    assert "TX_FAILURE_ROW_001" in failure["failure_reason"]
+    assert failure["failure_reason"] == SAFE_PUBLISH_FAILURE_MESSAGE
     assert failure["failed_record_keys"] == ["TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"]
     assert failure["failed_at"]
 
@@ -2299,12 +2363,12 @@ async def test_ingestion_job_failure_history_and_retry(
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
-    payload = _transaction_batch_payload("TX_FAIL_001")
+    payload = _instrument_batch_payload("SEC_FAIL_001")
 
-    failed_response = await async_test_client.post("/ingest/transactions", json=payload)
+    failed_response = await async_test_client.post("/ingest/instruments", json=payload)
     _assert_publish_dependency_failure(
         failed_response,
-        failed_record_keys=["TX_FAIL_001"],
+        failed_record_keys=["SEC_FAIL_001"],
     )
 
     jobs_response = await event_replay_test_client.get(
@@ -2319,7 +2383,7 @@ async def test_ingestion_job_failure_history_and_retry(
     )
     assert failure_history.status_code == 200
     assert failure_history.json()["total"] >= 1
-    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["TX_FAIL_001"]
+    assert failure_history.json()["failures"][0]["failed_record_keys"] == ["SEC_FAIL_001"]
 
     mock_kafka_producer.publish_message.side_effect = None
     retry_response = await event_replay_test_client.post(f"/ingestion/jobs/{failed_job_id}/retry")
@@ -2833,12 +2897,12 @@ async def test_ingest_benchmark_assignments_marks_job_failed_when_persist_fails(
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "benchmark assignment persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "benchmark assignment persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -3027,12 +3091,12 @@ async def test_ingest_benchmark_definitions_marks_job_failed_when_persist_fails(
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "benchmark definition persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "benchmark definition persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -3220,12 +3284,12 @@ async def test_ingest_benchmark_compositions_marks_job_failed_when_persist_fails
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "benchmark composition persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "benchmark composition persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -3388,12 +3452,12 @@ async def test_ingest_indices_marks_job_failed_when_persist_fails(
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "index definition persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "index definition persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -3579,12 +3643,12 @@ async def test_ingest_index_price_series_marks_job_failed_when_persist_fails(
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "index price series persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "index price series persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -3772,12 +3836,12 @@ async def test_ingest_index_return_series_marks_job_failed_when_persist_fails(
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "index return series persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "index return series persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -3968,12 +4032,12 @@ async def test_ingest_benchmark_return_series_marks_job_failed_when_persist_fail
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "benchmark return series persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "benchmark return series persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -4153,12 +4217,12 @@ async def test_ingest_risk_free_series_marks_job_failed_when_persist_fails(
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "risk-free series persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "risk-free series persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -4348,12 +4412,12 @@ async def test_ingest_classification_taxonomy_marks_job_failed_when_persist_fail
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "classification taxonomy persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "classification taxonomy persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -4367,29 +4431,13 @@ async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publ
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_RETRY_BOOKKEEPING_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
+    payload = _instrument_batch_payload("SEC_RETRY_BOOKKEEPING_001")
 
-    failed_response = await async_test_client.post("/ingest/transactions", json=payload)
+    failed_response = await async_test_client.post("/ingest/instruments", json=payload)
 
     _assert_publish_dependency_failure(
         failed_response,
-        failed_record_keys=["TX_RETRY_BOOKKEEPING_001"],
+        failed_record_keys=["SEC_RETRY_BOOKKEEPING_001"],
     )
 
     jobs_response = await event_replay_test_client.get(
@@ -4514,43 +4562,14 @@ async def test_ingestion_job_partial_retry_dry_run(
     event_replay_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_PARTIAL_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            },
-            {
-                "transaction_id": "TX_PARTIAL_002",
-                "portfolio_id": "P1",
-                "instrument_id": "I2",
-                "security_id": "S2",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            },
-        ]
-    }
-    ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
+    payload = _instrument_batch_payload("SEC_PARTIAL_001", "SEC_PARTIAL_002")
+    ingest_response = await async_test_client.post("/ingest/instruments", json=payload)
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
 
     dry_run = await event_replay_test_client.post(
         f"/ingestion/jobs/{job_id}/retry",
-        json={"record_keys": ["TX_PARTIAL_002"], "dry_run": True},
+        json={"record_keys": ["SEC_PARTIAL_002"], "dry_run": True},
     )
     assert dry_run.status_code == 200
     body = dry_run.json()
@@ -4573,24 +4592,8 @@ async def test_ingestion_job_retry_blocks_duplicate_fingerprint(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_RETRY_DUP_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    ingest_response = await async_test_client.post("/ingest/transactions", json=payload)
+    payload = _instrument_batch_payload("SEC_RETRY_DUP_001")
+    ingest_response = await async_test_client.post("/ingest/instruments", json=payload)
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
     first = await event_replay_test_client.post(
@@ -4613,8 +4616,8 @@ async def test_ingestion_job_full_retry_returns_complete_job_contract(
 ):
     mock_kafka_producer.publish_message.reset_mock()
     ingest_response = await async_test_client.post(
-        "/ingest/transactions",
-        json=_transaction_batch_payload("TX_RETRY_FULL_001"),
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_RETRY_FULL_001"),
         headers={
             "X-Idempotency-Key": "job-retry-full-001",
             "X-Correlation-Id": "ING:test-retry-full-correlation",
@@ -4629,8 +4632,8 @@ async def test_ingestion_job_full_retry_returns_complete_job_contract(
     assert retry_response.status_code == 200
     body = retry_response.json()
     assert body["job_id"] == job_id
-    assert body["endpoint"] == "/ingest/transactions"
-    assert body["entity_type"] == "transaction"
+    assert body["endpoint"] == "/ingest/instruments"
+    assert body["entity_type"] == "instrument"
     assert body["status"] == "queued"
     assert body["accepted_count"] == 1
     assert body["idempotency_key"] == "job-retry-full-001"
@@ -4675,17 +4678,17 @@ async def test_ingestion_job_retry_returns_not_found_and_unsupported_payload_err
     )
     assert ingest_response.status_code == 202
     job_id = ingest_response.json()["job_id"]
-    ingestion_test_harness["fake_job_service"].job_payloads.pop(job_id)
-
     unsupported = await event_replay_test_client.post(f"/ingestion/jobs/{job_id}/retry")
 
     assert unsupported.status_code == 409
     unsupported_detail = unsupported.json()["detail"]
     assert unsupported_detail["code"] == "INGESTION_JOB_RETRY_UNSUPPORTED"
     assert unsupported_detail["message"] == (
-        f"Ingestion job '{job_id}' does not have stored request payload and cannot be retried."
+        f"Ingestion job '{job_id}' cannot be retried because its durable replay evidence is "
+        "policy_ineligible."
     )
     assert unsupported_detail["outcome"] == "retry_unsupported"
+    assert unsupported_detail["replay_evidence_failure"] == "policy_ineligible"
     assert unsupported_detail["remediation"]
 
 
@@ -4709,20 +4712,20 @@ async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_m
     partial_detail = partial_unsupported.json()["detail"]
     assert partial_detail["code"] == "INGESTION_PARTIAL_RETRY_UNSUPPORTED"
     assert partial_detail["message"] == (
-        "Partial retry is not supported for endpoint '/ingest/market-prices'."
+        "The durable replay policy does not authorize partial replay."
     )
     assert partial_detail["outcome"] == "partial_retry_unsupported"
     assert partial_detail["remediation"]
 
-    transaction_response = await async_test_client.post(
-        "/ingest/transactions",
-        json=_transaction_batch_payload("TX_RETRY_PAUSED_001"),
+    instrument_response = await async_test_client.post(
+        "/ingest/instruments",
+        json=_instrument_batch_payload("SEC_RETRY_PAUSED_001"),
     )
-    assert transaction_response.status_code == 202
-    transaction_job_id = transaction_response.json()["job_id"]
+    assert instrument_response.status_code == 202
+    instrument_job_id = instrument_response.json()["job_id"]
     ingestion_test_harness["fake_job_service"].mode = "paused"
 
-    blocked = await event_replay_test_client.post(f"/ingestion/jobs/{transaction_job_id}/retry")
+    blocked = await event_replay_test_client.post(f"/ingestion/jobs/{instrument_job_id}/retry")
 
     assert blocked.status_code == 409
     blocked_detail = blocked.json()["detail"]
@@ -5443,13 +5446,19 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
         params={"lookback_minutes": 1440, "limit": 2},
     )
     assert response.status_code == 200
+    serialized_response = json.dumps(response.json(), sort_keys=True)
+    assert "integration-ingestion-idempotency-001" not in serialized_response
+    assert "integration-ingestion-idempotency-002" not in serialized_response
     assert response.json() == {
         "lookback_minutes": 1440,
         "total_keys": 2,
         "collisions": 1,
         "keys": [
             {
-                "idempotency_key": "integration-ingestion-idempotency-001",
+                "idempotency_key": None,
+                "idempotency_key_reference": (
+                    "sha256:f2a976ef4dd4e3e34f7d555d13c7ab2a6273af2be26e76b1dc006c4f07ae50b2"
+                ),
                 "usage_count": 3,
                 "endpoint_count": 2,
                 "payload_fingerprint_count": 2,
@@ -5462,7 +5471,10 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
                 "reuse_classification": "cross_endpoint_reuse",
             },
             {
-                "idempotency_key": "integration-ingestion-idempotency-002",
+                "idempotency_key": None,
+                "idempotency_key_reference": (
+                    "sha256:4eaa20fa37b251ffefbeaf26030aae166c0d90db40e028c600be20759ad24be3"
+                ),
                 "usage_count": 2,
                 "endpoint_count": 1,
                 "payload_fingerprint_count": 1,
@@ -5490,7 +5502,7 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
         assert invalid_response.status_code == 422
 
 
-async def test_ingestion_job_record_status_endpoint_returns_transaction_replayability(
+async def test_ingestion_job_record_status_does_not_fabricate_transaction_replayability(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
@@ -5512,7 +5524,7 @@ async def test_ingestion_job_record_status_endpoint_returns_transaction_replayab
         "entity_type": "transaction",
         "accepted_count": 2,
         "failed_record_keys": [],
-        "replayable_record_keys": ["TX_RECORD_001", "TX_RECORD_002"],
+        "replayable_record_keys": [],
     }
 
 
@@ -5542,7 +5554,7 @@ async def test_ingestion_job_record_status_endpoint_merges_failure_keys(
     assert body["entity_type"] == "transaction"
     assert body["accepted_count"] == 2
     assert body["failed_record_keys"] == ["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"]
-    assert body["replayable_record_keys"] == ["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"]
+    assert body["replayable_record_keys"] == []
 
 
 async def test_ingestion_job_record_status_endpoint_returns_supported_source_keys(
@@ -5567,7 +5579,7 @@ async def test_ingestion_job_record_status_endpoint_returns_supported_source_key
         ]
     }
     cases = [
-        ("/ingest/portfolios", portfolio_payload, "portfolio", ["P_RECORD_001"]),
+        ("/ingest/portfolios", portfolio_payload, "portfolio", []),
         (
             "/ingest/instruments",
             _instrument_batch_payload("SEC_RECORD_001"),
@@ -5614,36 +5626,15 @@ async def test_replay_consumer_dlq_event_endpoint(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_REPLAY_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    await async_test_client.post(
-        "/ingest/transactions",
-        headers={"X-Correlation-Id": "ING:test-correlation-id"},
-        json=payload,
-    )
+    await _seed_replayable_instrument_job(async_test_client, "SEC_REPLAY_001")
     response = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": True},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["event_id"] == "cdlq_test_001"
-    assert body["correlation_id"] == "ING:test-correlation-id"
+    assert body["event_id"] == "cdlq_test_instrument_001"
+    assert body["correlation_id"] == "ING:test-instrument-correlation"
     assert body["job_id"]
     assert body["replay_status"] == "dry_run"
     assert body["replay_audit_id"]
@@ -5686,32 +5677,14 @@ async def test_replay_consumer_dlq_event_reports_audit_write_failure_for_dry_run
     event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_REPLAY_AUDIT_FAIL_DRY_RUN_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    await async_test_client.post(
-        "/ingest/transactions",
-        headers={"X-Correlation-Id": "ING:test-correlation-id"},
-        json=payload,
+    await _seed_replayable_instrument_job(
+        async_test_client,
+        "SEC_REPLAY_AUDIT_FAIL_DRY_RUN_001",
     )
     ingestion_test_harness["fake_job_service"].fail_replay_audit_statuses.add("dry_run")
 
     response = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": True},
     )
 
@@ -5740,35 +5713,14 @@ async def test_replay_consumer_dlq_event_blocks_duplicate_replay(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_REPLAY_DUP_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    await async_test_client.post(
-        "/ingest/transactions",
-        headers={"X-Correlation-Id": "ING:test-correlation-id"},
-        json=payload,
-    )
+    await _seed_replayable_instrument_job(async_test_client, "SEC_REPLAY_DUP_001")
     first = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": False},
     )
     assert first.status_code == 200
     second = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": False},
     )
     assert second.status_code == 200
@@ -5781,33 +5733,14 @@ async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publi
     event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_REPLAY_BOOKKEEPING_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    ingest_response = await async_test_client.post(
-        "/ingest/transactions",
-        headers={"X-Correlation-Id": "ING:test-correlation-id"},
-        json=payload,
+    job_id = await _seed_replayable_instrument_job(
+        async_test_client,
+        "SEC_REPLAY_BOOKKEEPING_001",
     )
-    job_id = ingest_response.json()["job_id"]
     ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.add(job_id)
 
     first = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": False},
     )
     assert first.status_code == 500
@@ -5825,7 +5758,7 @@ async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publi
 
     ingestion_test_harness["fake_job_service"].fail_mark_queued_job_ids.discard(job_id)
     second = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": False},
     )
     assert second.status_code == 200
@@ -5837,35 +5770,16 @@ async def test_replay_consumer_dlq_event_reports_audit_write_failure_after_publi
     event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_REPLAY_AUDIT_FAIL_AFTER_PUBLISH_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    ingest_response = await async_test_client.post(
-        "/ingest/transactions",
-        headers={"X-Correlation-Id": "ING:test-correlation-id"},
-        json=payload,
+    job_id = await _seed_replayable_instrument_job(
+        async_test_client,
+        "SEC_REPLAY_AUDIT_FAIL_AFTER_PUBLISH_001",
     )
-    job_id = ingest_response.json()["job_id"]
     fake_job_service = ingestion_test_harness["fake_job_service"]
     fake_job_service.fail_mark_queued_job_ids.add(job_id)
     fake_job_service.fail_replay_audit_statuses.add("replayed_bookkeeping_failed")
 
     response = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": False},
     )
 
@@ -5881,30 +5795,9 @@ async def test_ingestion_replay_audit_list_and_get_filters_full_rows(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
 ):
-    payload = {
-        "transactions": [
-            {
-                "transaction_id": "TX_REPLAY_AUDIT_001",
-                "portfolio_id": "P1",
-                "instrument_id": "I1",
-                "security_id": "S1",
-                "transaction_date": "2025-08-12T10:00:00Z",
-                "transaction_type": "BUY",
-                "quantity": 1,
-                "price": 1,
-                "gross_transaction_amount": 1,
-                "trade_currency": "USD",
-                "currency": "USD",
-            }
-        ]
-    }
-    await async_test_client.post(
-        "/ingest/transactions",
-        headers={"X-Correlation-Id": "ING:test-correlation-id"},
-        json=payload,
-    )
+    await _seed_replayable_instrument_job(async_test_client, "SEC_REPLAY_AUDIT_001")
     replay_response = await event_replay_test_client.post(
-        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        "/ingestion/dlq/consumer-events/cdlq_test_instrument_001/replay",
         json={"dry_run": True},
     )
     assert replay_response.status_code == 200
@@ -5927,13 +5820,13 @@ async def test_ingestion_replay_audit_list_and_get_filters_full_rows(
             {
                 "replay_id": replay_id,
                 "recovery_path": "consumer_dlq_replay",
-                "event_id": "cdlq_test_001",
+                "event_id": "cdlq_test_instrument_001",
                 "replay_fingerprint": replay_fingerprint,
-                "correlation_id": "ING:test-correlation-id",
+                "correlation_id": "ING:test-instrument-correlation",
                 "correlation_missing_reason": None,
                 "alternate_lookup_key": None,
                 "job_id": replay_body["job_id"],
-                "endpoint": "/ingest/transactions",
+                "endpoint": "/ingest/instruments",
                 "replay_status": "dry_run",
                 "dry_run": True,
                 "replay_reason": "Dry-run successful. Correlated ingestion job is replayable.",
@@ -6691,12 +6584,12 @@ async def test_ingest_instrument_lookthrough_components_marks_job_failed_when_pe
     assert response.status_code == 500
     body = response.json()
     assert body["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
-    assert body["detail"]["message"] == "instrument lookthrough component persist failed"
+    assert body["detail"]["message"] == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
     job_id = body["detail"]["job_id"]
 
     failed_job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert failed_job.status == "failed"
-    assert failed_job.failure_reason == "instrument lookthrough component persist failed"
+    assert failed_job.failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -6887,8 +6780,7 @@ async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_f
     )
     assert replay_detail == detail
     assert mock_kafka_producer.publish_message.call_count == 2
-    assert "'business_dates': 1" in body["detail"]["message"]
-    assert "'portfolios': 0" in body["detail"]["message"]
+    assert body["detail"]["message"] == SAFE_PUBLISH_FAILURE_MESSAGE
     job_id = detail["job_id"]
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
@@ -7510,7 +7402,7 @@ async def test_upload_commit_returns_failed_record_keys_when_publish_fails(
         failed_record_keys=["T2"],
         published_record_count=1,
     )
-    assert "Remaining unpublished record keys: T2" in body["detail"]["message"]
+    assert body["detail"]["message"] == SAFE_PUBLISH_FAILURE_MESSAGE
     assert mock_kafka_producer.publish_message.call_count == 2
 
 
@@ -8474,7 +8366,7 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
         if job.status == "failed"
     ]
     assert len(failed_jobs) == 1
-    assert failed_jobs[0].failure_reason == "cash account master persist failed"
+    assert failed_jobs[0].failure_reason == SAFE_REFERENCE_PERSIST_FAILURE_MESSAGE
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
