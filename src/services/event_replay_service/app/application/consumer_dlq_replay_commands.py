@@ -112,6 +112,18 @@ class ConsumerDlqReplayCommandService:
             submitted_at=replay_candidate.context.submitted_at,
             replay_record_count=payload_record_count(replay_candidate.context.request_payload),
         )
+        evidence_failure = replay_evidence_failure(replay_candidate.context)
+        if evidence_failure is not None:
+            return await self._consumer_dlq_missing_payload_result(
+                event_id=event_id,
+                correlation_id=event.correlation_id,
+                replay_job_id=replay_candidate.job_id,
+                context=replay_candidate.context,
+                replay_fingerprint=replay_candidate.replay_fingerprint,
+                evidence_failure=evidence_failure,
+                dry_run=command.dry_run,
+                requested_by=command.requested_by,
+            )
         if command.dry_run:
             return await self._record_consumer_dlq_replay_result(
                 event_id=event_id,

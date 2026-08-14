@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+from datetime import datetime
 from typing import Any
 
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
 from sqlalchemy import desc, select
 
+from ..domain.ingestion_replay_evidence import replay_evidence_failure
 from ..DTOs.ingestion_job_dto import IngestionJobRecordStatusResponse
 
 SessionFactory = Callable[[], AsyncIterator[object]]
@@ -64,8 +66,14 @@ def build_record_status_response(
     *,
     job: DBIngestionJob,
     failures: list[Any],
+    observed_at: datetime | None = None,
 ) -> IngestionJobRecordStatusResponse:
-    payload = job.request_payload if isinstance(job.request_payload, dict) else {}
+    payload = (
+        job.request_payload
+        if replay_evidence_failure(job, observed_at=observed_at) is None
+        and isinstance(job.request_payload, dict)
+        else {}
+    )
     return IngestionJobRecordStatusResponse(
         job_id=job.job_id,
         entity_type=job.entity_type,

@@ -99,6 +99,7 @@ class IngestionRetryCommandService:
         )
 
         if retry_request.dry_run:
+            self._assert_replay_evidence_authorized(job_id=job_id, context=context)
             return await self._dry_run_ingestion_job_retry(
                 job_id=job_id,
                 context=context,
@@ -112,6 +113,7 @@ class IngestionRetryCommandService:
             replay_fingerprint=replay_fingerprint,
             requested_by=requested_by,
         )
+        self._assert_replay_evidence_authorized(job_id=job_id, context=context)
         await self._publish_ingestion_job_retry(
             job_id=job_id,
             context=context,
@@ -145,6 +147,20 @@ class IngestionRetryCommandService:
                     remediation=INGESTION_JOB_RETRY_REMEDIATIONS["not_found"],
                 ),
             )
+        self._assert_replay_evidence_authorized(
+            job_id=job_id,
+            context=context,
+            observed_at=observed_at,
+        )
+        return context
+
+    def _assert_replay_evidence_authorized(
+        self,
+        *,
+        job_id: str,
+        context: Any,
+        observed_at: datetime | None = None,
+    ) -> None:
         evidence_failure = replay_evidence_failure(
             context,
             observed_at=observed_at or datetime.now(UTC),
@@ -169,7 +185,6 @@ class IngestionRetryCommandService:
                     replay_evidence_failure=evidence_failure.value,
                 ),
             )
-        return context
 
     def _retry_payload_or_error(
         self,
