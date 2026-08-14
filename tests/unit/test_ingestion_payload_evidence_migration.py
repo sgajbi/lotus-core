@@ -114,14 +114,15 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
         for statement in execute_statements
         if "SET request_payload_fingerprint = NULL" in statement
     ]
-    assert fingerprint_scrubs == [
-        "UPDATE ingestion_jobs SET request_payload_fingerprint = NULL",
-        "UPDATE ingestion_jobs SET request_payload_fingerprint = NULL",
-    ]
+    assert fingerprint_scrubs[0] == "UPDATE ingestion_jobs SET request_payload_fingerprint = NULL"
+    assert len(fingerprint_scrubs) == 2
+    downgrade_scrub = fingerprint_scrubs[-1]
+    assert "request_payload_fingerprint = NULL" in downgrade_scrub
+    assert "request_payload = NULL" in downgrade_scrub
     downgrade_scrub_index = max(
         index
         for index, operation in enumerate(operations)
-        if operation == ("execute", fingerprint_scrubs[-1])
+        if operation == ("execute", downgrade_scrub)
     )
     first_drop_column_index = next(
         index for index, operation in enumerate(operations) if operation[0] == "drop_column"
