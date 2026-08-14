@@ -11,6 +11,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import SourceObservationEvidence
+
 
 class ClientTaxRuleSetRequest(BaseModel):
     """Select effective tax-reference rules for one portfolio and date."""
@@ -36,7 +38,7 @@ class ClientTaxRuleSetRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class ClientTaxRuleSetEntry(BaseModel):
+class ClientTaxRuleSetEntry(SourceObservationEvidence):
     """One effective client tax-reference rule."""
 
     rule_set_id: str = Field(..., description="Source-owned tax rule-set identifier.")
@@ -55,7 +57,6 @@ class ClientTaxRuleSetEntry(BaseModel):
     effective_from: date = Field(..., description="Tax rule effective start date.")
     effective_to: date | None = Field(None, description="Tax rule effective end date.")
     rule_version: int = Field(..., description="Selected rule version.")
-    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
     model_config = ConfigDict()
 
 

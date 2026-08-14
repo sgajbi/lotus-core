@@ -11,6 +11,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import SourceObservationEvidence
+
 
 class SustainabilityPreferenceProfileRequest(BaseModel):
     """Select effective sustainability preferences for one portfolio and date."""
@@ -37,7 +39,7 @@ class SustainabilityPreferenceProfileRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class SustainabilityPreferenceProfileEntry(BaseModel):
+class SustainabilityPreferenceProfileEntry(SourceObservationEvidence):
     """One effective sustainability preference."""
 
     preference_framework: str = Field(
@@ -76,7 +78,6 @@ class SustainabilityPreferenceProfileEntry(BaseModel):
     effective_from: date = Field(..., description="Preference effective start date.")
     effective_to: date | None = Field(None, description="Preference effective end date.")
     preference_version: int = Field(..., description="Selected preference profile version.")
-    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
     model_config = ConfigDict()
 
 

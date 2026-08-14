@@ -69,6 +69,8 @@ def _profile() -> ClientTaxProfileSourceRecord:
         observed_at=timestamp,
         created_at=timestamp,
         updated_at=timestamp,
+        source_system="tax-master",
+        quality_status="accepted",
     )
 
 
@@ -95,6 +97,9 @@ async def test_resolves_ready_tax_profile() -> None:
     assert response.generated_at == datetime(2026, 5, 3, 10, tzinfo=UTC)
     assert response.supportability.state == "READY"
     assert response.profiles[0].withholding_tax_rate == Decimal("0.1500000000")
+    assert response.profiles[0].source_system == "tax-master"
+    assert response.profiles[0].observed_at == datetime(2026, 5, 3, 9, tzinfo=UTC)
+    assert response.profiles[0].quality_status == "accepted"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
     assert response.snapshot_id is not None
     assert reader.calls == ["binding", "profiles"]

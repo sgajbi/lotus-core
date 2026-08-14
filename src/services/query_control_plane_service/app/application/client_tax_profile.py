@@ -123,5 +123,8 @@ def _entry(record: ClientTaxProfileSourceRecord) -> ClientTaxProfileEntry:
         effective_from=record.effective_from,
         effective_to=record.effective_to,
         profile_version=record.profile_version,
+        source_system=record.source_system,
         source_record_id=record.source_record_id,
+        observed_at=record.observed_at,
+        quality_status=record.quality_status,
     )

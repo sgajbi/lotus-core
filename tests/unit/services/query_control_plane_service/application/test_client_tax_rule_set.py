@@ -72,6 +72,8 @@ def _rule() -> ClientTaxRuleSourceRecord:
         observed_at=timestamp,
         created_at=timestamp,
         updated_at=timestamp,
+        source_system="tax-policy-master",
+        quality_status="accepted",
     )
 
 
@@ -95,6 +97,9 @@ async def test_resolves_ready_tax_rules() -> None:
     assert response.generated_at == datetime(2026, 5, 3, 10, tzinfo=UTC)
     assert response.supportability.state == "READY"
     assert response.rules[0].rate == Decimal("0.3000000000")
+    assert response.rules[0].source_system == "tax-policy-master"
+    assert response.rules[0].observed_at == datetime(2026, 5, 3, 9, tzinfo=UTC)
+    assert response.rules[0].quality_status == "accepted"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
     assert reader.calls == ["binding", "rules"]
 

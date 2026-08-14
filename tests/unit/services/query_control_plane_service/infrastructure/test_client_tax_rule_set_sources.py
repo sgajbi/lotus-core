@@ -43,6 +43,8 @@ def _row():
         effective_from=date(2026, 1, 1),
         effective_to=None,
         rule_version="3",
+        source_system="tax-policy-master",
+        quality_status="accepted",
         source_record_id="tax-rule:3",
         observed_at=timestamp,
         created_at=timestamp,
@@ -64,6 +66,8 @@ async def test_selects_latest_active_rule_and_maps_values() -> None:
     assert records[0].tax_year == 2026
     assert records[0].rate == Decimal("0.3000000000")
     assert records[0].threshold_amount is None
+    assert records[0].source_system == "tax-policy-master"
+    assert records[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert (
         "row_number() OVER (PARTITION BY client_tax_rule_sets.rule_set_id, "

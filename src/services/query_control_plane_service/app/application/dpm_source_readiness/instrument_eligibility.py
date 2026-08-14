@@ -121,8 +121,10 @@ def _eligibility_record(evidence: InstrumentEligibilityEvidence) -> InstrumentEl
         country_of_risk=evidence.country_of_risk,
         effective_from=evidence.effective_from,
         effective_to=evidence.effective_to,
+        source_system=evidence.source_system,
         quality_status=_control_code(evidence.quality_status),
         source_record_id=evidence.source_record_id,
+        observed_at=evidence.observed_at,
     )
 
 
@@ -146,8 +148,10 @@ def _missing_record(security_id: str) -> InstrumentEligibilityRecord:
         country_of_risk=None,
         effective_from=None,
         effective_to=None,
+        source_system=None,
         quality_status="MISSING",
         source_record_id=None,
+        observed_at=None,
     )
 
 

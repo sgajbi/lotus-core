@@ -90,6 +90,8 @@ async def test_resolves_ready_income_needs_evidence() -> None:
             observed_at=_evidence_time(),
             created_at=_evidence_time(),
             updated_at=_evidence_time(),
+            source_system="wealth-planning-master",
+            quality_status="accepted",
         )
     ]
     request = ClientIncomeNeedsScheduleRequest(as_of_date=date(2026, 5, 3), tenant_id="default")
@@ -100,6 +102,9 @@ async def test_resolves_ready_income_needs_evidence() -> None:
 
     assert response is not None
     assert response.schedules[0].amount == Decimal("12000.2500")
+    assert response.schedules[0].source_system == "wealth-planning-master"
+    assert response.schedules[0].observed_at == _evidence_time()
+    assert response.schedules[0].quality_status == "accepted"
     assert response.supportability.state == "READY"
     assert response.generated_at == datetime(2026, 5, 3, 10, tzinfo=UTC)
     assert response.latest_evidence_timestamp == _evidence_time()
@@ -127,6 +132,8 @@ async def test_resolves_ready_reserve_requirement_evidence() -> None:
             observed_at=_evidence_time(),
             created_at=_evidence_time(),
             updated_at=_evidence_time(),
+            source_system="wealth-planning-master",
+            quality_status="accepted",
         )
     ]
 
@@ -138,6 +145,9 @@ async def test_resolves_ready_reserve_requirement_evidence() -> None:
     assert response is not None
     assert response.requirements[0].required_amount == Decimal("250000.0000")
     assert response.requirements[0].requirement_version == 3
+    assert response.requirements[0].source_system == "wealth-planning-master"
+    assert response.requirements[0].observed_at == _evidence_time()
+    assert response.requirements[0].quality_status == "accepted"
     assert response.supportability.reason == "LIQUIDITY_RESERVE_REQUIREMENT_READY"
 
 
@@ -158,6 +168,8 @@ async def test_resolves_ready_withdrawals_and_carries_horizon() -> None:
             observed_at=_evidence_time(),
             created_at=_evidence_time(),
             updated_at=_evidence_time(),
+            source_system="wealth-planning-master",
+            quality_status="accepted",
         )
     ]
     request = PlannedWithdrawalScheduleRequest(as_of_date=date(2026, 5, 3), horizon_days=180)
@@ -172,6 +184,9 @@ async def test_resolves_ready_withdrawals_and_carries_horizon() -> None:
     assert first is not None and second is not None
     assert first.horizon_days == 180
     assert first.withdrawals[0].purpose_code == "PRIVATE_MARKET_CALL"
+    assert first.withdrawals[0].source_system == "wealth-planning-master"
+    assert first.withdrawals[0].observed_at == _evidence_time()
+    assert first.withdrawals[0].quality_status == "accepted"
     assert first.snapshot_id == second.snapshot_id
     assert reader.calls[1][1]["horizon_days"] == 180
 

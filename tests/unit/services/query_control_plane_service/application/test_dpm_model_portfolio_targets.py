@@ -90,6 +90,9 @@ async def test_model_targets_are_ready_with_current_deterministic_source_proof()
     assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.source_refs == ["lotus-core://source/DpmModelPortfolioTarget/MODEL_1/2026-04-10"]
+    assert first.targets[0].source_system == "model_office"
+    assert first.targets[0].observed_at == EVIDENCE_AT
+    assert first.targets[0].quality_status == "accepted"
 
 
 @pytest.mark.asyncio

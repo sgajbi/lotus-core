@@ -122,8 +122,10 @@ def _target_row(evidence: ModelPortfolioTargetEvidence) -> ModelPortfolioTargetR
         min_weight=evidence.min_weight,
         max_weight=evidence.max_weight,
         target_status=evidence.target_status,
+        source_system=evidence.source_system,
         quality_status=evidence.quality_status,
         source_record_id=evidence.source_record_id,
+        observed_at=evidence.observed_at,
     )
 
 

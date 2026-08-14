@@ -10,6 +10,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import SourceObservationEvidence
+
 
 class ClientRestrictionProfileRequest(BaseModel):
     """Select effective restrictions for one portfolio and business date."""
@@ -37,7 +39,7 @@ class ClientRestrictionProfileRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class ClientRestrictionProfileEntry(BaseModel):
+class ClientRestrictionProfileEntry(SourceObservationEvidence):
     """One effective client or mandate restriction."""
 
     restriction_scope: str = Field(
@@ -78,8 +80,6 @@ class ClientRestrictionProfileEntry(BaseModel):
     effective_from: date = Field(..., description="Restriction effective start date.")
     effective_to: date | None = Field(None, description="Restriction effective end date.")
     restriction_version: int = Field(..., description="Selected restriction profile version.")
-    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
-
     model_config = ConfigDict()
 
 

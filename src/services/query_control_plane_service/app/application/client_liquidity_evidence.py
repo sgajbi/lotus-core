@@ -253,7 +253,10 @@ def _income_entry(record: ClientIncomeNeedSourceRecord) -> ClientIncomeNeedsSche
         end_date=record.end_date,
         priority=record.priority,
         funding_policy=record.funding_policy,
+        source_system=record.source_system,
         source_record_id=record.source_record_id,
+        observed_at=record.observed_at,
+        quality_status=record.quality_status,
     )
 
 
@@ -272,7 +275,10 @@ def _reserve_entry(
         effective_from=record.effective_from,
         effective_to=record.effective_to,
         requirement_version=record.requirement_version,
+        source_system=record.source_system,
         source_record_id=record.source_record_id,
+        observed_at=record.observed_at,
+        quality_status=record.quality_status,
     )
 
 
@@ -286,5 +292,8 @@ def _withdrawal_entry(record: PlannedWithdrawalSourceRecord) -> PlannedWithdrawa
         scheduled_date=record.scheduled_date,
         recurrence_frequency=record.recurrence_frequency,
         purpose_code=record.purpose_code,
+        source_system=record.source_system,
         source_record_id=record.source_record_id,
+        observed_at=record.observed_at,
+        quality_status=record.quality_status,
     )

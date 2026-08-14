@@ -45,6 +45,8 @@ def _row():
         effective_from=date(2026, 1, 1),
         effective_to=None,
         preference_version="2",
+        source_system="sustainability-master",
+        quality_status="accepted",
         source_record_id="preference:2",
         observed_at=timestamp,
         created_at=timestamp,
@@ -69,6 +71,8 @@ async def test_selects_latest_active_preference_and_maps_values() -> None:
     assert str(records[0].minimum_allocation) == "0.2000000000"
     assert records[0].maximum_allocation is None
     assert records[0].applies_to_asset_classes == ("equity",)
+    assert records[0].source_system == "sustainability-master"
+    assert records[0].quality_status == "accepted"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert (
         "row_number() OVER (PARTITION BY sustainability_preference_profiles.preference_framework"
