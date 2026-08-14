@@ -72,6 +72,11 @@ source observation; cash-account and look-through families truthfully declare un
 observation/quality fields rather than fabricating authority. Source-batch identity remains an
 envelope-level design and is not invented per record.
 
+Portfolio party-role assignments declare `source_system`, `source_record_id`, and `observed_at` as
+required, matching their strict request DTO. Their governed quality status and assignment version
+retain their documented defaults, so the registry declares those two fields optional rather than
+misstating the endpoint contract.
+
 ## 2026-08-14 Query And Validation Closure
 
 - Shared validation now rejects a supplied `observed_at` without an explicit timezone offset under

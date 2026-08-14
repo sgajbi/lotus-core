@@ -23,6 +23,7 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         "/ingest/benchmark-assignments",
         "/ingest/instrument-valuation-policy-assignments",
         "/ingest/authoritative-market-price-source-facts",
+        "/ingest/portfolio-party-role-assignments",
     }
 
     assert len(commands) == 25
@@ -120,6 +121,20 @@ def test_strong_authority_families_declare_exact_source_identity_and_version_pos
         assert lineage.quality_status is LineageFieldPosture.NOT_APPLICABLE
         assert lineage.source_version is LineageFieldPosture.REQUIRED
         assert lineage.source_batch_id is LineageFieldPosture.NOT_APPLICABLE
+
+
+def test_party_role_family_declares_required_observation_authority() -> None:
+    lineage = INGESTION_EVIDENCE_POLICY_REGISTRY.require(
+        "/ingest/portfolio-party-role-assignments"
+    ).source_lineage
+
+    assert lineage is not None
+    assert lineage.source_system is LineageFieldPosture.REQUIRED
+    assert lineage.source_record_id is LineageFieldPosture.REQUIRED
+    assert lineage.observed_at is LineageFieldPosture.REQUIRED
+    assert lineage.quality_status is LineageFieldPosture.OPTIONAL
+    assert lineage.source_version is LineageFieldPosture.OPTIONAL
+    assert lineage.source_batch_id is LineageFieldPosture.NOT_APPLICABLE
 
 
 @pytest.mark.parametrize(
