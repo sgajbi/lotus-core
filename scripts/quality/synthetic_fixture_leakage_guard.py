@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL
+from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL, CisaKevError, load_cisa_kev_catalog
 from scripts.release.vulnerability_authority_bundle import (
     FULL_GIT_SHA_PATTERN,
     MAX_VULNERABILITY_AUTHORITY_AGE_SECONDS,
@@ -431,8 +431,7 @@ def _evaluate_file(
     allowed_cif_ids: set[str],
     allowed_service_emails: set[str],
 ) -> list[SyntheticFixtureFinding]:
-    if _is_verified_cisa_kev_source(path, repo_root=repo_root):
-        return []
+    verified_cisa_kev_source = _is_verified_cisa_kev_source(path, repo_root=repo_root)
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(repo_root).as_posix()
     findings: list[SyntheticFixtureFinding] = []
@@ -441,7 +440,8 @@ def _evaluate_file(
     for match in EMAIL_RE.finditer(text):
         candidate = match.group(0)
         if (
-            JAVA_OBJECT_REFERENCE_RE.fullmatch(candidate) is None
+            not verified_cisa_kev_source
+            and JAVA_OBJECT_REFERENCE_RE.fullmatch(candidate) is None
             and candidate.lower() not in allowed_service_emails
         ):
             findings.append(
@@ -515,12 +515,19 @@ def _is_verified_cisa_kev_source(path: Path, *, repo_root: Path) -> bool:
         actual_source_sha256 = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
         if actual_source_sha256 != source_sha256:
             return False
+        catalog = load_cisa_kev_catalog(
+            path,
+            fetched_at=str(cisa_kev.get("fetched_at_utc", "")),
+        )
+        if catalog.receipt_identity() != cisa_kev:
+            return False
         if not _has_valid_authority_creation_window(bundle, cisa_kev):
             return False
     except (
         OSError,
         UnicodeDecodeError,
         json.JSONDecodeError,
+        CisaKevError,
         TypeError,
         ValueError,
         VulnerabilityAuthorityBundleError,

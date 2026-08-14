@@ -27,8 +27,11 @@ display name.
 - Follow-up #949 made optional retained-evidence scanning order-independent. The guard exempts only
   the exact CISA KEV source bytes whose canonical sibling authority bundle binds the Core repository,
   numeric workflow run and attempt, full source commit, official source URL, internally valid
-  creation window, and matching source digest. Receipts, manifests, path-only lookalikes, and
-  unverifiable or tampered authority files remain scanned.
+  creation window, structurally valid complete catalog receipt, and matching source digest. Only
+  personal-email findings are suppressed for that verified catalog; bearer tokens, credentialed
+  URLs, client/account identifiers, CIF values, and secret fields are still evaluated. Receipts,
+  manifests, path-only lookalikes, and unverifiable or tampered authority files remain fully
+  scanned.
 
 ## Compatibility
 

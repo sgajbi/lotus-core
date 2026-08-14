@@ -9,7 +9,7 @@
       "Prefer SYNTH_* identifiers for new reusable fixtures.",
       "Existing canonical front-office seed identifiers that look client-like must be cataloged here before they appear in committed fixture, example, seed, or evidence surfaces.",
       "Do not use real client names, personal emails, external account numbers, access tokens, authorization credentials, database connection strings, or API keys in committed fixtures.",
-      "Third-party authority source bytes are not Lotus synthetic fixture data. Exempt only the exact CISA KEV source path when its canonical sibling bundle binds the Core repository, workflow run and attempt, full source commit, official source URL, valid creation window, and exact source digest; receipts, manifests, lookalikes, and unverified source files remain scanned."
+      "Third-party authority source bytes are not Lotus synthetic fixture data. Suppress only personal-email findings in a structurally valid CISA KEV catalog at the exact source path when its canonical sibling bundle binds the Core repository, workflow run and attempt, full source commit, official source URL, valid creation window, complete catalog receipt, and exact source digest; every other leakage rule still runs, and receipts, manifests, lookalikes, and unverified source files remain fully scanned."
     ],
     "realism_requirements": [
       "Representative private-banking fixtures must model client, account, portfolio, custody, instrument, transaction, cash, FX, benchmark, and reporting-currency relationships.",
