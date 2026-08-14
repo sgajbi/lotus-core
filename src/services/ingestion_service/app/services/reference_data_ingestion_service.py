@@ -32,6 +32,7 @@ from portfolio_common.database_models import (
     SustainabilityPreferenceProfile,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +44,16 @@ from .market_price_source_fact_writer import MarketPriceSourceFactWriter
 from .valuation_policy_assignment_writer import (
     ValuationPolicyAssignmentAuthorityChange,
     ValuationPolicyAssignmentWriter,
+)
+
+_PRESERVE_EXISTING_LINEAGE_ON_NULL = frozenset(
+    {
+        "source_system",
+        "source_vendor",
+        "source_record_id",
+        "observed_at",
+        "source_timestamp",
+    }
 )
 
 
@@ -751,7 +762,14 @@ class ReferenceDataIngestionService:
             payload.append(row)
 
         stmt = insert(model).values(payload)
-        update_map = {column: getattr(stmt.excluded, column) for column in update_columns}
+        update_map = {
+            column: (
+                func.coalesce(getattr(stmt.excluded, column), getattr(model, column))
+                if column in _PRESERVE_EXISTING_LINEAGE_ON_NULL
+                else getattr(stmt.excluded, column)
+            )
+            for column in update_columns
+        }
         update_map["updated_at"] = now
         stmt = stmt.on_conflict_do_update(index_elements=conflict_columns, set_=update_map)
         await self._db.execute(stmt)

@@ -650,6 +650,63 @@ async def test_upsert_benchmark_definitions_maps_canonical_lineage_to_legacy_col
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("method_name", "record", "preserved_columns", "ordinary_column"),
+    [
+        (
+            "upsert_model_portfolio_definitions",
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "model_portfolio_version": "2026.03",
+                "display_name": "Singapore Balanced DPM Model",
+                "base_currency": "SGD",
+                "risk_profile": "balanced",
+                "mandate_type": "discretionary",
+                "approval_status": "approved",
+                "effective_from": "2026-03-25",
+                "source_system": None,
+                "source_record_id": None,
+                "observed_at": None,
+            },
+            ("source_system", "source_record_id", "observed_at"),
+            "effective_to",
+        ),
+        (
+            "upsert_benchmark_definitions",
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "benchmark_name": "Global Balanced 60/40 Total Return",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "effective_from": "2025-01-01",
+                "source_system": None,
+                "source_record_id": None,
+                "observed_at": None,
+            },
+            ("source_vendor", "source_record_id", "source_timestamp"),
+            "effective_to",
+        ),
+    ],
+)
+async def test_upsert_preserves_existing_lineage_when_correction_omits_it(
+    method_name: str,
+    record: dict[str, object],
+    preserved_columns: tuple[str, ...],
+    ordinary_column: str,
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await getattr(service, method_name)([record])
+
+    compiled = str(db.execute.await_args.args[0].compile()).lower()
+    for column in preserved_columns:
+        assert f"{column} = coalesce(excluded.{column}," in compiled
+    assert f"{ordinary_column} = excluded.{ordinary_column}" in compiled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("method_name", "record", "compiled_param"),
     [
         (
