@@ -70,6 +70,10 @@ _HISTORICAL_FAILURE_REASON = (
     "Ingestion processing failed. Historical diagnostic evidence was removed during "
     "the source-safe evidence migration."
 )
+_HISTORICAL_REPLAY_FAILURE_REASON = (
+    "Replay processing failed. Historical diagnostic evidence was removed during "
+    "the source-safe evidence migration."
+)
 
 
 def upgrade() -> None:
@@ -149,6 +153,15 @@ def upgrade() -> None:
                OR failure_headers IS NOT NULL
             """
         ).bindparams(historical_failure_reason=_HISTORICAL_FAILURE_REASON)
+    )
+    op.execute(
+        sa.text(
+            """
+            UPDATE consumer_dlq_replay_audits
+            SET replay_reason = :historical_replay_failure_reason
+            WHERE replay_status = 'failed'
+            """
+        ).bindparams(historical_replay_failure_reason=_HISTORICAL_REPLAY_FAILURE_REASON)
     )
     op.execute(
         sa.text(

@@ -70,6 +70,7 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
   original request under a request-payload-specific cryptographic domain;
 - malformed active or retained-key configuration never publishes supplied secret material in
   fallback logs;
+- retry and consumer-DLQ replay failures persist and return only bounded, code-owned reasons;
 - restricted, confidential, or unsupported replay families retain no request body;
 - only approved reference-data families retain a source-safe replay body, with a 24-hour technical
   expiry distinct from the legal retention/hold/deletion authority tracked by #708;
@@ -136,6 +137,8 @@ same-payload equality through rotation; unknown keys fail closed; and migration 
 removes historical unkeyed request fingerprints that cannot be securely converted without their
 original inputs. The downgrade clears c157 HMAC fingerprints because the prior application cannot
 convert or compare them truthfully under its legacy unkeyed algorithm.
+Historical failed replay-audit reasons are replaced during c157 migration because prior dispatcher
+exceptions could contain broker credentials, connection URIs, or private request values.
 The two strong source-authority families retain required source identity, observation, and version
 posture, but now declare `quality_status` and `source_batch_id` not applicable because their current
 DTO/domain contracts do not capture those fields; lifecycle status remains separately represented

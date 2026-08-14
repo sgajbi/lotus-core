@@ -7,6 +7,9 @@ from typing import Any
 
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
+from src.services.ingestion_service.app.application.ingestion_failure_evidence import (
+    project_ingestion_failure_evidence,
+)
 from src.services.ingestion_service.app.domain.ingestion_replay_evidence import (
     ReplayEvidenceFailure,
     replay_evidence_failure,
@@ -343,18 +346,23 @@ class IngestionRetryCommandService:
                 replay_payload_dispatcher=self.replay_payload_dispatcher,
             )
         except Exception as exc:
+            failure_reason = project_ingestion_failure_evidence(
+                failure_code="INGESTION_RETRY_PUBLISH_FAILED",
+                failure_detail=None,
+                failure_headers=None,
+            ).reason
             replay_audit_id = await self._record_ingestion_job_retry_audit(
                 job_id=job_id,
                 context=context,
                 replay_fingerprint=replay_fingerprint,
                 replay_status="failed",
                 dry_run=False,
-                replay_reason=str(exc),
+                replay_reason=failure_reason,
                 requested_by=requested_by,
             )
             failure_recorded = await self.ingestion_job_service.mark_failed(
                 job_id,
-                str(exc),
+                failure_reason,
                 failure_phase="retry_publish",
                 failed_record_keys=retry_request.record_keys,
             )
@@ -377,10 +385,7 @@ class IngestionRetryCommandService:
                 HTTP_INTERNAL_SERVER_ERROR,
                 ingestion_job_retry_problem_detail(
                     code="INGESTION_RETRY_PUBLISH_FAILED",
-                    message=(
-                        "Ingestion job retry could not be published to the downstream ingestion "
-                        "pipeline."
-                    ),
+                    message=failure_reason,
                     outcome="publish_failed",
                     remediation=INGESTION_JOB_RETRY_REMEDIATIONS["publish_failed"],
                     replay_audit_id=replay_audit_id,

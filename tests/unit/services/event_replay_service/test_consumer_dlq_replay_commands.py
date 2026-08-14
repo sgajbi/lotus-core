@@ -388,6 +388,40 @@ async def test_consumer_dlq_replay_success_audit_failure_is_not_bookkeeping_succ
 
 
 @pytest.mark.asyncio
+async def test_consumer_dlq_replay_publish_failure_records_only_source_safe_reason() -> None:
+    context = _replay_context()
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-failed")
+    replay_payload_dispatcher = MagicMock()
+    replay_payload_dispatcher.replay_payload = AsyncMock(
+        side_effect=RuntimeError("broker://user:credential@host private-request-value")
+    )
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _consumer_service(
+            ingestion_job_service=ingestion_job_service,
+            replay_payload_dispatcher=replay_payload_dispatcher,
+        )._publish_consumer_dlq_replay(
+            event_id="dlq-001",
+            correlation_id="corr-001",
+            job_id="job-001",
+            context=context,
+            replay_fingerprint="fp-001",
+            requested_by="ops",
+        )
+
+    safe_reason = "Consumer DLQ replay could not be published to the downstream ingestion pipeline."
+    assert exc_info.value.detail == {
+        "code": "INGESTION_DLQ_REPLAY_FAILED",
+        "message": safe_reason,
+        "replay_audit_id": "audit-failed",
+    }
+    _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
+    assert audit_kwargs["replay_reason"] == safe_reason
+    assert "credential" not in str(audit_kwargs)
+
+
+@pytest.mark.asyncio
 async def test_consumer_dlq_replay_bookkeeping_conflict_uses_governed_detail() -> None:
     context = SimpleNamespace(endpoint="/ingest/transactions")
     ingestion_job_service = MagicMock()

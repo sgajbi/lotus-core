@@ -14,6 +14,12 @@ _SAFE_MESSAGES = {
     "INGESTION_JOB_BOOKKEEPING_FAILED": (
         "Ingestion work completed, but job bookkeeping did not complete afterward."
     ),
+    "INGESTION_RETRY_PUBLISH_FAILED": (
+        "Ingestion job retry could not be published to the downstream ingestion pipeline."
+    ),
+    "INGESTION_DLQ_REPLAY_FAILED": (
+        "Consumer DLQ replay could not be published to the downstream ingestion pipeline."
+    ),
     "MARKET_PRICE_SOURCE_FACT_CONFLICT": (
         "Authoritative market-price source evidence conflicts with persisted authority."
     ),
