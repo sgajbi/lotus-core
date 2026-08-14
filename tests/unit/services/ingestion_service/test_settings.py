@@ -163,6 +163,33 @@ def test_load_ingestion_service_settings_local_fallback_logs_warning(monkeypatch
     assert "falling back to default" in caplog.text
 
 
+@pytest.mark.parametrize(
+    "env_name",
+    [
+        "LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+        "LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON",
+    ],
+)
+def test_secret_key_mapping_fallback_never_logs_supplied_key_material(
+    monkeypatch,
+    caplog,
+    env_name: str,
+) -> None:
+    secret_bearing_value = '{"prior-key":"usable-secret-material"'
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv(env_name, secret_bearing_value)
+    caplog.set_level(logging.WARNING, logger="src.services.ingestion_service.app.settings")
+
+    load_ingestion_service_settings()
+
+    matching_records = [
+        record for record in caplog.records if getattr(record, "setting", None) == env_name
+    ]
+    assert len(matching_records) == 1
+    assert matching_records[0].raw_value == "[REDACTED]"
+    assert "usable-secret-material" not in caplog.text
+
+
 def test_load_ingestion_service_settings_strict_rejects_missing_jwt_policy(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "jwt_only")

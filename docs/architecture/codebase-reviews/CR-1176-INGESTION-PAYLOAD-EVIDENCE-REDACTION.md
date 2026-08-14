@@ -68,6 +68,8 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
 
 - every new job retains a deterministic, key-versioned HMAC-SHA-256 fingerprint of the complete
   original request under a request-payload-specific cryptographic domain;
+- malformed active or retained-key configuration never publishes supplied secret material in
+  fallback logs;
 - restricted, confidential, or unsupported replay families retain no request body;
 - only approved reference-data families retain a source-safe replay body, with a 24-hour technical
   expiry distinct from the legal retention/hold/deletion authority tracked by #708;
@@ -136,5 +138,7 @@ original inputs.
 The two strong source-authority families retain required source identity, observation, and version
 posture, but now declare `quality_status` and `source_batch_id` not applicable because their current
 DTO/domain contracts do not capture those fields; lifecycle status remains separately represented
-by `assignment_status` or `fact_status`. This removes a false registry guarantee without weakening
-any validated source authority or changing a request/response shape.
+by `assignment_status` or `fact_status`. All reference-data policies declare `source_batch_id` not
+applicable until a governed envelope contract validates and persists batch authority instead of
+silently ignoring caller input. This removes a false registry guarantee without weakening any
+validated source authority or changing a request/response shape.

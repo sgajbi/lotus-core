@@ -101,7 +101,7 @@ _OPTIONAL_SOURCE_LINEAGE = SourceLineagePolicy(
     source_record_id=LineageFieldPosture.OPTIONAL,
     observed_at=LineageFieldPosture.OPTIONAL,
     quality_status=LineageFieldPosture.OPTIONAL,
-    source_batch_id=LineageFieldPosture.OPTIONAL,
+    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
     source_version=LineageFieldPosture.OPTIONAL,
 )
 

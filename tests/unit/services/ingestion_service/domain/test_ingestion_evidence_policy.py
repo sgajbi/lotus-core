@@ -30,6 +30,7 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         assert policy.durable_representation is DurablePayloadRepresentation.FINGERPRINT_ONLY
         assert policy.replay_eligible is False
         assert policy.replay_ttl is None
+        assert policy.source_lineage.source_batch_id is LineageFieldPosture.NOT_APPLICABLE
         assert set(policy.source_lineage.__dataclass_fields__) == {
             "source_system",
             "source_record_id",
