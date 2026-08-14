@@ -51,3 +51,23 @@ Updated the codebase review ledger, quality scorecard, refactor health report, r
 engineering context, and RFC-0083 ingestion source-lineage target model. No repo-local wiki page
 changed because this slice does not add an operator command or runbook; OpenAPI remains the
 published API contract surface for the DTO field names.
+
+## 2026-08-14 Follow-Up Tranche
+
+- Reused the same contract for 11 ordinary reference families that had duplicated the identical
+  optional lineage shape: mandate bindings, model definitions and targets, instrument eligibility,
+  client restrictions, sustainability preferences, tax profiles and rule sets, income-needs
+  schedules, liquidity reserves, and planned withdrawals.
+- Removed the duplicate field declarations while retaining canonical serialization and legacy
+  `source_vendor`/`source_timestamp` input aliases.
+- Changed the shared upsert boundary so an omitted/null source identity or observation value cannot
+  erase existing `source_system`, `source_vendor`, `source_record_id`, `observed_at`, or
+  `source_timestamp` authority. Ordinary nullable business fields keep their existing overwrite
+  semantics, and an incoming populated lineage value still replaces the previous value.
+- Focused validation: 119 DTO, registry, and persistence tests passed; Ruff and diff checks passed.
+
+Issue #557 remains open for the deliberately separate incomplete-family and additive read-contract
+work. Benchmark assignment needs a decision separating source observation from processing time;
+cash-account and look-through families need additive observation/quality persistence; query
+contracts that currently discard stored lineage require downstream-safe additions. Source-batch
+identity remains an envelope-level design and was not fabricated per record.

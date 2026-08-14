@@ -60,3 +60,30 @@ not add columns or route fields.
 Issue #559 remains open pending PR, GitHub CI, and QA evidence. Further slices should add
 schema-backed payload fingerprints, endpoint retention policy declarations, and conflict handling
 for the same idempotency key with different canonical payloads.
+
+## 2026-08-14 Governed Evidence Tranche
+
+The follow-up implementation replaces the original uniform redacted-body posture with a versioned,
+endpoint-owned policy registry covering all 35 job-creating ingestion families:
+
+- every new job retains the deterministic SHA-256 fingerprint of the complete original request;
+- restricted, confidential, or unsupported replay families retain no request body;
+- only approved reference-data families retain a source-safe replay body, with a 24-hour technical
+  expiry distinct from the legal retention/hold/deletion authority tracked by #708;
+- historical bodies outside the approved families are purged by migration, while legacy redacted
+  rows remain explicitly non-replayable because they cannot prove full request identity;
+- job, operator-retry, and consumer-DLQ paths fail closed for missing/legacy policy, ineligible or
+  wrong representation, absent payload/expiry, expired authority, or unauthorized partial replay;
+- job responses publish policy version, classification, representation, replay eligibility, expiry,
+  and retention authority without publishing the retained body;
+- durable failures use one source-safe projection: arbitrary exception text, request/client data,
+  nested unknown fields, credentials, and arbitrary headers are removed; only stable product
+  messages, allowlisted recovery fields, and numeric `Retry-After` survive initial response and
+  idempotent replay;
+- `X-Idempotency-Key` is a bounded opaque identifier, and operator diagnostics expose only a full
+  SHA-256 reference while the deprecated raw-key field is always null.
+
+Focused evidence includes 73 replay/evidence/migration tests, 65 failure/lifecycle/command tests,
+31 idempotency-boundary/diagnostic tests, OpenAPI gate success, and regenerated API-vocabulary
+parity. Issue #559 remains in progress until migration integration, full local/remote gates, PR,
+exact-main validation, and verified issue closure are complete.

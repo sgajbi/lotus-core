@@ -19,6 +19,23 @@ the canonical ingestion job, failure, replay-audit, retained-payload, and consum
 Source-batch identity is nullable and appears only when retained payload evidence proves one
 unambiguous upstream batch.
 
+## Durable request and failure evidence
+
+Ingestion jobs do not retain every request body. Core applies a versioned endpoint-family policy:
+
+- all classified jobs retain a deterministic SHA-256 fingerprint of the complete original request;
+- sensitive or replay-unsupported families retain fingerprint-only evidence;
+- approved source-safe reference-data replay bodies expire after 24 hours;
+- replay fails closed when policy, representation, payload, expiry, or partial-replay authority is
+  absent, legacy, ineligible, or expired.
+
+The technical replay expiry does not define legal retention, hold, or deletion policy; that remains
+governed separately by issue #708. Job responses expose the applied policy posture but never expose
+the retained request body. Failure evidence uses stable product messages and allowlisted recovery
+fields; arbitrary exception text, credentials, private request values, and non-allowlisted headers
+are not durable or replayable. Idempotency diagnostics expose a SHA-256 key reference rather than
+the caller's raw `X-Idempotency-Key`.
+
 ## Reader Map
 
 | Reader | Use this page for | Evidence path |
