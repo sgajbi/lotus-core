@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import re
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote
@@ -31,6 +32,15 @@ def _json(path: Path, *, name: str) -> tuple[bytes, Any]:
 
 def _sha256(content: bytes) -> str:
     return "sha256:" + hashlib.sha256(content).hexdigest()
+
+
+def _iso_date(value: object, *, field: str) -> date:
+    if not isinstance(value, str):
+        raise ImageReleaseEvidenceError(f"base lifecycle {field} must be an ISO date")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ImageReleaseEvidenceError(f"base lifecycle {field} must be an ISO date") from exc
 
 
 def _object(value: Any, *, name: str) -> dict[str, Any]:
@@ -330,7 +340,11 @@ def provenance_verification_identity(
 
 
 def base_image_evidence_identity(
-    *, inventory_path: Path, manifest_path: Path, dockerfile_path: str
+    *,
+    inventory_path: Path,
+    manifest_path: Path,
+    dockerfile_path: str,
+    verified_on: date | None = None,
 ) -> dict[str, Any]:
     """Bind lifecycle and linux/amd64 manifest evidence to the target Dockerfile."""
     inventory_content, inventory_raw = _json(inventory_path, name="base lifecycle inventory")
@@ -352,6 +366,16 @@ def base_image_evidence_identity(
     if len(matches) != 1:
         raise ImageReleaseEvidenceError("Dockerfile must map to exactly one base image")
     base = matches[0]
+    verification_date = verified_on or datetime.now(UTC).date()
+    observed_on = _iso_date(base.get("observed_on"), field="observed_on")
+    next_review_on = _iso_date(base.get("next_review_on"), field="next_review_on")
+    supported_through = _iso_date(base.get("supported_through"), field="supported_through")
+    if observed_on > verification_date:
+        raise ImageReleaseEvidenceError("base lifecycle observation is future-dated")
+    if next_review_on < verification_date:
+        raise ImageReleaseEvidenceError("base lifecycle review is overdue")
+    if supported_through < verification_date:
+        raise ImageReleaseEvidenceError("base image support lifecycle has expired")
     platform = manifest.get("deployment_platform")
     runtime_manifest = manifest.get("runtime_manifest")
     if platform != base.get("deployment_platform") or platform != "linux/amd64":
@@ -372,4 +396,8 @@ def base_image_evidence_identity(
         "deployment_platform": platform,
         "runtime_manifest_digest": runtime_manifest["digest"],
         "config_digest": runtime_manifest["config_digest"],
+        "observed_on": observed_on.isoformat(),
+        "next_review_on": next_review_on.isoformat(),
+        "supported_through": supported_through.isoformat(),
+        "verified_on": verification_date.isoformat(),
     }
