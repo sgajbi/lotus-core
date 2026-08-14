@@ -71,7 +71,18 @@ def test_ingestion_payload_evidence_migration_is_fail_closed_and_reversible(
         "request_payload_replay_expires_at",
         "request_payload_retention_authority",
     ]
-    backfill = next(operation[1] for operation in operations if operation[0] == "execute")
+    execute_statements = [operation[1] for operation in operations if operation[0] == "execute"]
+    normalization = next(
+        statement for statement in execute_statements if "json_typeof(request_payload)" in statement
+    )
+    assert "json_typeof(failure_detail) = 'null'" in normalization
+    assert "json_typeof(failure_headers) = 'null'" in normalization
+    assert normalization.count("THEN NULL") == 3
+    backfill = next(
+        statement
+        for statement in execute_statements
+        if "ingestion-evidence-policy.legacy.v0" in statement
+    )
     assert "request_payload = CASE" in backfill
     assert "ELSE NULL" in backfill
     assert "ingestion-evidence-policy.legacy.v0" in backfill

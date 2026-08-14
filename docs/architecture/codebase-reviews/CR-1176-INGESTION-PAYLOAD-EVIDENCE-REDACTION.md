@@ -94,8 +94,11 @@ wiki-publication, and verified closure evidence are complete.
 
 Protected CI then exposed two test-boundary gaps and both were fixed forward. SQLAlchemy's default
 JSON binding encoded Python `None` as JSON `null`, which violated the database invariant requiring
-fingerprint-only rows to retain no request body. The mapped `request_payload` type now uses
-`JSON(none_as_null=True)`, with model and real-PostgreSQL lifecycle guards. The operations harness
+fingerprint-only rows to retain no request body and made absent failure detail/header evidence look
+durably present. All three nullable JSON evidence columns now use `JSON(none_as_null=True)`, and
+the migration normalizes historical JSON literal nulls to SQL `NULL` before it classifies retained
+payload authority. Model, migration, and isolated real-PostgreSQL guards prove that absent request
+payload, failure detail, and failure headers remain SQL `NULL`. The operations harness
 also retained raw fixture bodies and legacy exception assertions after production had become
 policy-aware and source-safe. It now builds evidence through the production registry, derives
 record replayability only from the durable representation, uses `/ingest/instruments` for positive

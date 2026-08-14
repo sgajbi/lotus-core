@@ -97,6 +97,31 @@ def upgrade() -> None:
         "ingestion_jobs",
         sa.Column("request_payload_retention_authority", sa.String(length=128), nullable=True),
     )
+    # Older SQLAlchemy JSON mappings encoded Python None as the JSON literal null. Normalize
+    # absence before classifying historical payloads so JSON null cannot be mistaken for a
+    # retained replay body, and apply the same source-safe absence semantics to failure evidence.
+    op.execute(
+        sa.text(
+            """
+            UPDATE ingestion_jobs
+            SET request_payload = CASE
+                    WHEN json_typeof(request_payload) = 'null' THEN NULL
+                    ELSE request_payload
+                END,
+                failure_detail = CASE
+                    WHEN json_typeof(failure_detail) = 'null' THEN NULL
+                    ELSE failure_detail
+                END,
+                failure_headers = CASE
+                    WHEN json_typeof(failure_headers) = 'null' THEN NULL
+                    ELSE failure_headers
+                END
+            WHERE json_typeof(request_payload) = 'null'
+               OR json_typeof(failure_detail) = 'null'
+               OR json_typeof(failure_headers) = 'null'
+            """
+        )
+    )
     # Historical redacted bodies do not carry policy or source authority. Retain them only for
     # the four source-safe internal families, mark every historical row non-replayable, and purge
     # payload bodies that never had a supported replay dispatcher.
