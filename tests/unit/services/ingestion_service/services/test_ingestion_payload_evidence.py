@@ -71,6 +71,11 @@ class _FakeCreateSession:
         row.last_retried_at = None
 
 
+class _FakeLookupCreateSession(_FakeCreateSession):
+    async def scalar(self, _stmt):
+        return None
+
+
 class _FakeExistingSession:
     def __init__(self, existing):
         self.existing = existing
@@ -365,6 +370,37 @@ async def test_create_or_get_job_persists_expiring_source_safe_instrument_replay
     assert row.request_payload_replay_eligible is True
     assert row.request_payload_partial_replay_eligible is True
     assert row.request_payload_replay_expires_at > datetime.now(UTC)
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_locks_before_creating_new_idempotent_job() -> None:
+    session = _FakeLookupCreateSession()
+    payload = {"transactions": [{"transaction_id": "T1", "portfolio_id": "P1"}]}
+
+    result = await create_or_get_job_result(
+        job_id="job_new_idempotent",
+        endpoint="/ingest/transactions",
+        entity_type="transaction",
+        accepted_count=1,
+        idempotency_key="idem_new",
+        correlation_id="corr_new",
+        request_id="req_new",
+        trace_id="trace_new",
+        request_payload=payload,
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+    )
+
+    assert result.created is True
+    assert result.job.job_id == "job_new_idempotent"
+    assert session.lock_calls == [
+        (
+            "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
+            {"lock_key": "/ingest/transactions|idem_new"},
+        )
+    ]
+    assert session.added_rows[0].request_payload_fingerprint == ingestion_payload_fingerprint(
+        payload
+    )
 
 
 @pytest.mark.asyncio
