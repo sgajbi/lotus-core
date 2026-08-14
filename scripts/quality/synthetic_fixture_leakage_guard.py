@@ -90,6 +90,11 @@ EXPECTED_CISA_KEV_IDENTITY_FIELDS = {
     "entry_count",
 }
 CORE_REPOSITORY_IDENTITY = "sgajbi/lotus-core"
+CISA_KEV_KERNEL_MESSAGE_URL_RE = re.compile(
+    r"https://lore\.kernel\.org/linux-cve-announce/"
+    r"(?P<message_id>[0-9]{8,14}(?:\.[0-9]+)?-[0-9]+-[A-Za-z0-9._-]+@kernel\.org)"
+    r"(?:/[^\"\s;]*)?"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -431,7 +436,7 @@ def _evaluate_file(
     allowed_cif_ids: set[str],
     allowed_service_emails: set[str],
 ) -> list[SyntheticFixtureFinding]:
-    verified_cisa_kev_source = _is_verified_cisa_kev_source(path, repo_root=repo_root)
+    verified_authority_message_ids = _verified_cisa_kev_message_ids(path, repo_root=repo_root)
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(repo_root).as_posix()
     findings: list[SyntheticFixtureFinding] = []
@@ -440,7 +445,7 @@ def _evaluate_file(
     for match in EMAIL_RE.finditer(text):
         candidate = match.group(0)
         if (
-            not verified_cisa_kev_source
+            candidate not in verified_authority_message_ids
             and JAVA_OBJECT_REFERENCE_RE.fullmatch(candidate) is None
             and candidate.lower() not in allowed_service_emails
         ):
@@ -475,24 +480,24 @@ def _evaluate_file(
     return findings
 
 
-def _is_verified_cisa_kev_source(path: Path, *, repo_root: Path) -> bool:
-    """Classify only digest-bound official source bytes as third-party authority."""
+def _verified_cisa_kev_message_ids(path: Path, *, repo_root: Path) -> frozenset[str]:
+    """Return non-email kernel message IDs from a verified CISA KEV catalog."""
     relative_path = path.relative_to(repo_root).as_posix()
     path_match = VERIFIED_CISA_KEV_PATH_RE.fullmatch(relative_path)
     if path_match is None:
-        return False
+        return frozenset()
 
     bundle_path = path.with_name("vulnerability-authority-bundle.json")
     try:
         bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
         if not isinstance(bundle, dict):
-            return False
+            return frozenset()
         git_commit_sha = bundle.get("git_commit_sha")
         if (
             not isinstance(git_commit_sha, str)
             or FULL_GIT_SHA_PATTERN.fullmatch(git_commit_sha) is None
         ):
-            return False
+            return frozenset()
         run_id = path_match.group("run_id")
         run_attempt = path_match.group("run_attempt")
         load_vulnerability_authority_identity(
@@ -503,26 +508,27 @@ def _is_verified_cisa_kev_source(path: Path, *, repo_root: Path) -> bool:
             expected_ci_run_attempt=run_attempt,
         )
         if bundle.get("schema_version") != VULNERABILITY_AUTHORITY_SCHEMA_VERSION:
-            return False
+            return frozenset()
         cisa_kev = bundle.get("cisa_kev")
         if not isinstance(cisa_kev, dict) or set(cisa_kev) != EXPECTED_CISA_KEV_IDENTITY_FIELDS:
-            return False
+            return frozenset()
         if cisa_kev.get("source_url") != CISA_KEV_SOURCE_URL:
-            return False
+            return frozenset()
         source_sha256 = cisa_kev.get("source_sha256")
         if not isinstance(source_sha256, str) or SHA256_PATTERN.fullmatch(source_sha256) is None:
-            return False
+            return frozenset()
         actual_source_sha256 = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
         if actual_source_sha256 != source_sha256:
-            return False
+            return frozenset()
         catalog = load_cisa_kev_catalog(
             path,
             fetched_at=str(cisa_kev.get("fetched_at_utc", "")),
         )
         if catalog.receipt_identity() != cisa_kev:
-            return False
+            return frozenset()
         if not _has_valid_authority_creation_window(bundle, cisa_kev):
-            return False
+            return frozenset()
+        catalog_source = json.loads(path.read_text(encoding="utf-8-sig"))
     except (
         OSError,
         UnicodeDecodeError,
@@ -532,8 +538,27 @@ def _is_verified_cisa_kev_source(path: Path, *, repo_root: Path) -> bool:
         ValueError,
         VulnerabilityAuthorityBundleError,
     ):
-        return False
-    return True
+        return frozenset()
+    return _kernel_advisory_message_ids(catalog_source)
+
+
+def _kernel_advisory_message_ids(catalog_source: object) -> frozenset[str]:
+    if not isinstance(catalog_source, dict):
+        return frozenset()
+    vulnerabilities = catalog_source.get("vulnerabilities")
+    if not isinstance(vulnerabilities, list):
+        return frozenset()
+    message_ids: set[str] = set()
+    for vulnerability in vulnerabilities:
+        if not isinstance(vulnerability, dict):
+            return frozenset()
+        notes = vulnerability.get("notes")
+        if not isinstance(notes, str):
+            continue
+        message_ids.update(
+            match.group("message_id") for match in CISA_KEV_KERNEL_MESSAGE_URL_RE.finditer(notes)
+        )
+    return frozenset(message_ids)
 
 
 def _has_valid_authority_creation_window(bundle: dict[str, Any], cisa_kev: dict[str, Any]) -> bool:

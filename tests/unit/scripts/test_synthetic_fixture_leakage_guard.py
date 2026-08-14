@@ -94,7 +94,9 @@ def _write_verified_cisa_authority(repo_root: Path) -> tuple[Path, Path]:
     completeness_policy = json.loads(DEFAULT_COMPLETENESS_POLICY_PATH.read_text(encoding="utf-8"))
     entry_count = completeness_policy["minimum_entry_count"]
     vulnerabilities = [{"cveID": f"CVE-2026-{10000 + index}"} for index in range(entry_count)]
-    vulnerabilities[0]["notes"] = "kev-coordination@cisa.dhs.gov"
+    vulnerabilities[0]["notes"] = (
+        "https://lore.kernel.org/linux-cve-announce/20240610090330.1347021-2-lee@kernel.org/T/#u"
+    )
     _write(
         kev_path,
         json.dumps(
@@ -205,6 +207,26 @@ def test_verified_cisa_source_still_scans_non_email_leakage_rules(tmp_path: Path
     )
 
     assert {finding.rule for finding in findings} == {"concrete-secret-field"}
+
+
+def test_verified_cisa_source_rejects_arbitrary_added_email(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    kev_path, bundle_path = _write_verified_cisa_authority(tmp_path)
+    catalog = json.loads(kev_path.read_text(encoding="utf-8"))
+    catalog["contact"] = "client@example.com"
+    _write(kev_path, json.dumps(catalog))
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["cisa_kev"]["source_sha256"] = (
+        "sha256:" + hashlib.sha256(kev_path.read_bytes()).hexdigest()
+    )
+    _rewrite_bundle_digest(bundle_path, bundle)
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert {finding.rule for finding in findings} == {"personal-email-address"}
 
 
 def test_synthetic_fixture_guard_rejects_path_only_authority_spoof(tmp_path: Path) -> None:
