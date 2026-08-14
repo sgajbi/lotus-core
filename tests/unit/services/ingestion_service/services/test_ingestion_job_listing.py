@@ -181,6 +181,32 @@ async def test_load_job_list_response_maps_rows_and_next_cursor():
 
 
 @pytest.mark.asyncio
+async def test_load_job_list_response_without_filters_preserves_key_disclosure_policy():
+    keyed_row = _job_row("job-keyed")
+    unkeyed_row = _job_row("job-unkeyed")
+    unkeyed_row.idempotency_key = None
+    session = _FakeSession([keyed_row, unkeyed_row])
+
+    result, next_cursor = await load_job_list_response(
+        filters=IngestionJobListFilters(),
+        cursor=None,
+        limit=2,
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+        reference_key_id=_REFERENCE_KEY_ID,
+        reference_hmac_secret=_REFERENCE_HMAC_SECRET,
+    )
+
+    assert session.scalar_calls == 0
+    assert session.scalars_calls == 1
+    assert [job.job_id for job in result] == ["job-keyed", "job-unkeyed"]
+    assert [job.model_dump()["idempotency_key"] for job in result] == [None, None]
+    assert result[0].idempotency_key_reference is not None
+    assert result[0].idempotency_key_reference.startswith(f"hmac-sha256:v1:{_REFERENCE_KEY_ID}:")
+    assert result[1].idempotency_key_reference is None
+    assert next_cursor is None
+
+
+@pytest.mark.asyncio
 async def test_load_unique_replayable_job_by_correlation_id_maps_only_row():
     session = _FakeSession([_job_row("job_500_plus")])
 

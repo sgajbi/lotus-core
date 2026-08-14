@@ -145,13 +145,13 @@ INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE = {
 
 INGESTION_JOB_RECORD_STATUS_RESPONSE_EXAMPLE = {
     "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
-    "entity_type": "transaction",
+    "entity_type": "instrument",
     "accepted_count": 3,
-    "failed_record_keys": ["TXN-2026-000145", "TXN-2026-000146"],
+    "failed_record_keys": ["SG0000000001", "SG0000000002"],
     "replayable_record_keys": [
-        "TXN-2026-000145",
-        "TXN-2026-000146",
-        "TXN-2026-000147",
+        "SG0000000001",
+        "SG0000000002",
+        "SG0000000003",
     ],
 }
 

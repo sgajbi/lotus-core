@@ -226,15 +226,16 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert get_records["summary"] == "Get ingestion job record-level status"
     assert "Derive replayable keys from stored payload" in get_records["description"]
     assert record_job_id_parameter["description"] == "Ingestion job identifier."
+    assert record_example["entity_type"] == "instrument"
     assert record_example["accepted_count"] == 3
     assert record_example["failed_record_keys"] == [
-        "TXN-2026-000145",
-        "TXN-2026-000146",
+        "SG0000000001",
+        "SG0000000002",
     ]
     assert record_example["replayable_record_keys"] == [
-        "TXN-2026-000145",
-        "TXN-2026-000146",
-        "TXN-2026-000147",
+        "SG0000000001",
+        "SG0000000002",
+        "SG0000000003",
     ]
     assert record_not_found["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
 
