@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError, model_validator
 from src.services.ingestion_service.app.DTOs.ingestion_validation_errors import (
     DUPLICATE_SOURCE_KEY,
     INVALID_EFFECTIVE_WINDOW,
+    INVALID_OBSERVED_AT,
     INVALID_QUALITY_STATUS,
     INVALID_THRESHOLD_PAIR,
     MISSING_REQUIRED_LINEAGE,
@@ -435,6 +436,34 @@ def test_reference_data_source_observation_rejects_blank_quality_status() -> Non
     error = exc_info.value.errors()[0]
     assert error["type"] == INVALID_QUALITY_STATUS
     assert error["ctx"]["field_path"] == "quality_status"
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload_factory"),
+    [
+        (DiscretionaryMandateBindingRecord, _mandate_binding),
+        (ModelPortfolioDefinitionRecord, _model_portfolio_definition),
+        (ModelPortfolioTargetRecord, _target_record),
+        (InstrumentEligibilityProfileRecord, _eligibility_profile),
+        (ClientRestrictionProfileRecord, _restriction_profile),
+        (SustainabilityPreferenceProfileRecord, _sustainability_profile),
+        (ClientTaxProfileRecord, _tax_profile),
+        (ClientTaxRuleSetRecord, _tax_rule_set),
+        (ClientIncomeNeedsScheduleRecord, _income_needs_schedule),
+        (LiquidityReserveRequirementRecord, _liquidity_reserve_requirement),
+        (PlannedWithdrawalScheduleRecord, _planned_withdrawal_schedule),
+    ],
+)
+def test_reference_data_records_reject_naive_observation_timestamps(
+    record_type: type[BaseModel],
+    payload_factory: Callable[..., dict[str, object]],
+) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        record_type.model_validate(payload_factory(observed_at="2026-08-14T09:00:00"))
+
+    error = exc_info.value.errors()[0]
+    assert error["type"] == INVALID_OBSERVED_AT
+    assert error["ctx"]["field_path"] == "observed_at"
 
 
 def test_ingestion_validation_taxonomy_returns_missing_lineage_code() -> None:

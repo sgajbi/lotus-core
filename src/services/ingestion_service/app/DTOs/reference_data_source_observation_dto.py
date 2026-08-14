@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from .ingestion_validation_errors import (
+    INVALID_OBSERVED_AT,
     INVALID_QUALITY_STATUS,
     raise_ingestion_validation_error,
 )
@@ -53,3 +54,14 @@ class SourceObservationLineage(BaseModel):
                 message="quality_status must not be blank",
             )
         return normalized
+
+    @field_validator("observed_at")
+    @classmethod
+    def _require_timezone_aware_observation(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise_ingestion_validation_error(
+                INVALID_OBSERVED_AT,
+                field_path="observed_at",
+                message="observed_at must include a timezone offset",
+            )
+        return value
