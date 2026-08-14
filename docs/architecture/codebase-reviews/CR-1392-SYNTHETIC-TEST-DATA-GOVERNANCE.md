@@ -62,3 +62,13 @@ The #949 follow-up changes no command, operator workflow, API, or runtime postur
 repository-context or wiki source change is required. The canonical policy remains
 `docs/standards/synthetic-test-data-governance.v1.json`; duplicating its classifier details into the
 wiki would create a second maintenance surface.
+
+## Mainline Closure
+
+- PR #951 merged by approved rebase at main `447bc9d0f5023a03a675d03e1faabc57ff24edad`.
+- Exact-head Remote Feature `31840612030`, Quality Baseline `31840617595`, and PR Merge Gate
+  `31840617584` passed after both P1 review findings were fixed forward.
+- Exact-main Main Releasability `31843239403` passed all 24 jobs, including 1,115 integration tests,
+  E2E Full, failure recovery, immutable image build, Docker smoke, latency, and fast/full load.
+- Strict wiki parity remained zero diff; no publication was required because wiki source did not
+  change.
