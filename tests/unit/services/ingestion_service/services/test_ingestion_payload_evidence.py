@@ -269,6 +269,10 @@ async def test_create_or_get_job_persists_fingerprint_only_policy_for_transactio
     )
 
     assert result.created is True
+    assert result.job.request_payload_policy_version == "ingestion-evidence-policy.v1"
+    assert result.job.request_payload_classification == "restricted"
+    assert result.job.request_payload_representation == "fingerprint_only"
+    assert result.job.request_payload_replay_eligible is False
     row = session.added_rows[0]
     assert row.request_payload is None
     assert row.request_payload_fingerprint == ingestion_payload_fingerprint(payload)

@@ -26,6 +26,12 @@ IngestionReplayPosture = Literal[
     "replay_bookkeeping_failed",
 ]
 IngestionRepairPosture = Literal["not_required", "required", "repaired", "unknown"]
+IngestionPayloadClassification = Literal[
+    "internal", "confidential", "restricted", "legacy_unclassified"
+]
+IngestionPayloadRepresentation = Literal[
+    "source_safe_replay", "fingerprint_only", "legacy_redacted"
+]
 
 
 class IngestionJobResponse(BaseModel):
@@ -58,10 +64,50 @@ class IngestionJobResponse(BaseModel):
     request_payload_fingerprint: str | None = Field(
         default=None,
         description=(
-            "Deterministic fingerprint of the source-safe retained request payload; "
-            "null when no replay payload was retained."
+            "Deterministic SHA-256 fingerprint of the complete original request payload. "
+            "The fingerprint remains available when policy forbids retaining a replay body."
         ),
         examples=["sha256:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"],
+    )
+    request_payload_policy_version: str | None = Field(
+        default=None,
+        description="Version of the durable payload evidence policy applied at ingestion time.",
+        examples=["ingestion-evidence-policy.v1"],
+    )
+    request_payload_classification: IngestionPayloadClassification | None = Field(
+        default=None,
+        description="Governed information classification of the submitted payload family.",
+        examples=["restricted"],
+    )
+    request_payload_representation: IngestionPayloadRepresentation | None = Field(
+        default=None,
+        description=(
+            "Durable representation retained for the request: bounded source-safe replay, "
+            "fingerprint only, or a non-authoritative legacy redaction."
+        ),
+        examples=["fingerprint_only"],
+    )
+    request_payload_replay_eligible: bool | None = Field(
+        default=None,
+        description="Whether the policy snapshot authorizes full payload replay.",
+        examples=[False],
+    )
+    request_payload_partial_replay_eligible: bool | None = Field(
+        default=None,
+        description="Whether the policy snapshot authorizes record-filtered replay.",
+        examples=[False],
+    )
+    request_payload_replay_expires_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Technical expiry of replay authority; null for fingerprint-only or legacy evidence."
+        ),
+        examples=["2026-08-15T13:22:24.201Z"],
+    )
+    request_payload_retention_authority: str | None = Field(
+        default=None,
+        description="Durable issue or policy authority governing retention and deletion posture.",
+        examples=["lotus-core#708"],
     )
     correlation_id: str = Field(
         description="Correlation identifier for cross-service traceability.",

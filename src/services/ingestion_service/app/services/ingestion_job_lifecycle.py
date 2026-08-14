@@ -71,6 +71,17 @@ def to_job_response(job: DBIngestionJob) -> IngestionJobResponse:
         accepted_count=job.accepted_count,
         idempotency_key=job.idempotency_key,
         request_payload_fingerprint=getattr(job, "request_payload_fingerprint", None),
+        request_payload_policy_version=getattr(job, "request_payload_policy_version", None),
+        request_payload_classification=getattr(job, "request_payload_classification", None),
+        request_payload_representation=getattr(job, "request_payload_representation", None),
+        request_payload_replay_eligible=getattr(job, "request_payload_replay_eligible", None),
+        request_payload_partial_replay_eligible=getattr(
+            job, "request_payload_partial_replay_eligible", None
+        ),
+        request_payload_replay_expires_at=getattr(job, "request_payload_replay_expires_at", None),
+        request_payload_retention_authority=getattr(
+            job, "request_payload_retention_authority", None
+        ),
         correlation_id=job.correlation_id,
         request_id=job.request_id,
         trace_id=job.trace_id,
