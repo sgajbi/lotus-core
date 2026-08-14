@@ -11,7 +11,7 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
-from .common import IntegrationWindow
+from .common import IntegrationWindow, SourceObservationEvidence
 
 
 class RiskFreeSeriesRequest(BaseModel):
@@ -38,7 +38,7 @@ class RiskFreeSeriesRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class RiskFreeSeriesPoint(BaseModel):
+class RiskFreeSeriesPoint(SourceObservationEvidence):
     """One canonical risk-free series point."""
 
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
@@ -53,7 +53,6 @@ class RiskFreeSeriesPoint(BaseModel):
         None, description="Compounding convention for rates.", examples=["simple"]
     )
     series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
 
 
 class RiskFreeSeriesResponse(SourceDataProductRuntimeMetadata):

@@ -76,6 +76,9 @@ def build_index_price_series_response(
                 series_currency=row.series_currency,
                 value_convention=row.value_convention,
                 quality_status=row.quality_status,
+                source_system=row.source_vendor,
+                source_record_id=row.source_record_id,
+                observed_at=row.observed_at,
             )
             for row in rows
         ],
@@ -114,6 +117,9 @@ def build_index_return_series_response(
                 return_convention=row.return_convention,
                 series_currency=row.series_currency,
                 quality_status=row.quality_status,
+                source_system=row.source_vendor,
+                source_record_id=row.source_record_id,
+                observed_at=row.observed_at,
             )
             for row in rows
         ],

@@ -11,7 +11,7 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
-from .common import IntegrationWindow
+from .common import IntegrationWindow, SourceObservationEvidence
 
 
 class BenchmarkReturnSeriesRequest(BaseModel):
@@ -32,7 +32,7 @@ class BenchmarkReturnSeriesRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkReturnSeriesPoint(BaseModel):
+class BenchmarkReturnSeriesPoint(SourceObservationEvidence):
     """One canonical benchmark return point."""
 
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
@@ -44,8 +44,6 @@ class BenchmarkReturnSeriesPoint(BaseModel):
         ..., description="Return convention label.", examples=["total_return_index"]
     )
     series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
     model_config = ConfigDict()
 
 

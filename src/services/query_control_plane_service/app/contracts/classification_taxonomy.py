@@ -10,6 +10,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .common import SourceObservationEvidence
+
 
 class ClassificationTaxonomyRequest(BaseModel):
     """Request effective taxonomy labels at one business date."""
@@ -29,7 +31,7 @@ class ClassificationTaxonomyRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class ClassificationTaxonomyEntry(BaseModel):
+class ClassificationTaxonomyEntry(SourceObservationEvidence):
     """One governed classification label effective on the requested date."""
 
     classification_set_id: str = Field(
@@ -55,8 +57,6 @@ class ClassificationTaxonomyEntry(BaseModel):
         description="Effective end date.",
         examples=["2026-12-31"],
     )
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
     model_config = ConfigDict()
 
 

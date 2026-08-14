@@ -67,6 +67,9 @@ def test_complete_window_is_current_and_deterministic() -> None:
     assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.points[0].benchmark_return == Decimal("0.0019")
+    assert first.points[0].source_system == "provider"
+    assert first.points[0].source_record_id == "return:2026-04-09"
+    assert first.points[0].observed_at == EVIDENCE_AT
 
 
 def test_stale_partial_window_is_not_current() -> None:

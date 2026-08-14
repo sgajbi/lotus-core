@@ -70,6 +70,9 @@ def build_risk_free_series_response(
                 compounding_convention=row.compounding_convention,
                 series_currency=row.series_currency,
                 quality_status=row.quality_status,
+                source_system=row.source_vendor,
+                source_record_id=row.source_record_id,
+                observed_at=row.observed_at,
             )
             for row in rows
         ],
