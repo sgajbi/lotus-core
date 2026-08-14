@@ -28,6 +28,7 @@ def _job(
     accepted_count: int = 2,
     retry_count: int = 0,
     request_payload_fingerprint: str | None = "sha256:payload-001",
+    idempotency_key: str | None = None,
 ) -> IngestionJobResponse:
     return IngestionJobResponse(
         job_id="job-001",
@@ -35,6 +36,7 @@ def _job(
         entity_type="transaction",
         status=status,
         accepted_count=accepted_count,
+        idempotency_key=idempotency_key,
         request_payload_fingerprint=request_payload_fingerprint,
         correlation_id="corr-001",
         request_id="request-001",
@@ -267,9 +269,24 @@ def test_bundle_identity_changes_with_persisted_request_fingerprint() -> None:
     assert first.evidence_bundle_id != second.evidence_bundle_id
 
 
-def test_canonical_job_mapping_exposes_persisted_request_fingerprint() -> None:
-    persisted = _job(request_payload_fingerprint="sha256:persisted").model_dump()
-    persisted["idempotency_key"] = "caller-key"
+@pytest.mark.parametrize(
+    ("raw_key", "include_raw_key", "expected_raw_key", "expects_reference"),
+    [
+        ("caller-key", True, "caller-key", True),
+        ("caller-key", False, None, True),
+        (None, False, None, False),
+    ],
+)
+def test_canonical_job_mapping_applies_idempotency_disclosure_posture(
+    raw_key: str | None,
+    include_raw_key: bool,
+    expected_raw_key: str | None,
+    expects_reference: bool,
+) -> None:
+    persisted = _job(
+        request_payload_fingerprint="sha256:persisted",
+        idempotency_key=raw_key,
+    ).model_dump()
     row = SimpleNamespace(
         **persisted,
         request_payload={},
@@ -279,12 +296,14 @@ def test_canonical_job_mapping_exposes_persisted_request_fingerprint() -> None:
         row,
         reference_key_id="ops-test",
         reference_hmac_secret="unit-test-idempotency-reference-secret",
-        include_raw_idempotency_key=False,
+        include_raw_idempotency_key=include_raw_key,
     )
 
     assert response.request_payload_fingerprint == "sha256:persisted"
-    assert response.model_dump()["idempotency_key"] is None
-    assert response.idempotency_key_reference is not None
+    assert response.model_dump()["idempotency_key"] == expected_raw_key
+    assert (response.idempotency_key_reference is not None) is expects_reference
+    if response.idempotency_key_reference is not None:
+        assert response.idempotency_key_reference.startswith("hmac-sha256:v1:ops-test:")
 
 
 def test_ambiguous_source_scope_remains_null_instead_of_using_request_hash() -> None:
