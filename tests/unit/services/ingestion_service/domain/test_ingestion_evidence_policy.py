@@ -114,6 +114,54 @@ def test_strong_authority_families_require_source_identity_and_version() -> None
         assert lineage.source_batch_id is LineageFieldPosture.OPTIONAL
 
 
+@pytest.mark.parametrize(
+    ("endpoint", "expected"),
+    [
+        (
+            "/ingest/benchmark-assignments",
+            {
+                "source_system": "optional",
+                "source_record_id": "not_applicable",
+                "observed_at": "not_applicable",
+                "quality_status": "not_applicable",
+                "source_batch_id": "not_applicable",
+                "source_version": "optional",
+            },
+        ),
+        (
+            "/ingest/reference/cash-accounts",
+            {
+                "source_system": "optional",
+                "source_record_id": "optional",
+                "observed_at": "not_applicable",
+                "quality_status": "not_applicable",
+                "source_batch_id": "not_applicable",
+                "source_version": "not_applicable",
+            },
+        ),
+        (
+            "/ingest/reference/instrument-lookthrough-components",
+            {
+                "source_system": "optional",
+                "source_record_id": "optional",
+                "observed_at": "not_applicable",
+                "quality_status": "not_applicable",
+                "source_batch_id": "not_applicable",
+                "source_version": "not_applicable",
+            },
+        ),
+    ],
+)
+def test_incomplete_families_declare_truthful_not_applicable_lineage(
+    endpoint: str,
+    expected: dict[str, str],
+) -> None:
+    lineage = INGESTION_EVIDENCE_POLICY_REGISTRY.require(endpoint).source_lineage
+
+    assert lineage is not None
+    assert {field: getattr(lineage, field).value for field in expected} == expected
+
+
 def test_registry_fails_closed_for_unknown_endpoint_or_entity_mismatch() -> None:
     with pytest.raises(KeyError, match="Unclassified ingestion endpoint"):
         INGESTION_EVIDENCE_POLICY_REGISTRY.require("/ingest/unknown")
