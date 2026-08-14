@@ -134,7 +134,8 @@ raw keys. A later review applied the same threat model to complete request finge
 fingerprint is now a purpose-bound, key-versioned HMAC; active and retained prior keys preserve
 same-payload equality through rotation; unknown keys fail closed; and migration `c157b2c3d524`
 removes historical unkeyed request fingerprints that cannot be securely converted without their
-original inputs.
+original inputs. The downgrade clears c157 HMAC fingerprints because the prior application cannot
+convert or compare them truthfully under its legacy unkeyed algorithm.
 The two strong source-authority families retain required source identity, observation, and version
 posture, but now declare `quality_status` and `source_batch_id` not applicable because their current
 DTO/domain contracts do not capture those fields; lifecycle status remains separately represented
