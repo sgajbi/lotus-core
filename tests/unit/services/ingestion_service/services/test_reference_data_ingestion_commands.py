@@ -177,7 +177,9 @@ async def test_reference_data_command_replays_original_failed_outcome() -> None:
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == {
         "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
-        "message": "competing exact price authority",
+        "message": (
+            "Authoritative market-price source evidence conflicts with persisted authority."
+        ),
         "job_id": "ref-job-failed",
     }
     registry_command.persist.assert_not_awaited()
@@ -227,18 +229,18 @@ async def test_reference_data_command_marks_failed_on_persist_error() -> None:
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == {
         "code": "REFERENCE_DATA_PERSIST_FAILED",
-        "message": "db unavailable",
+        "message": "Reference-data persistence failed.",
         "job_id": "ref-job-1",
     }
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
-        "db unavailable",
+        "Reference-data persistence failed.",
         failure_phase="persist",
         failure_status_code=500,
         failure_code="REFERENCE_DATA_PERSIST_FAILED",
         failure_detail={
             "code": "REFERENCE_DATA_PERSIST_FAILED",
-            "message": "db unavailable",
+            "message": "Reference-data persistence failed.",
             "job_id": "ref-job-1",
         },
     )
@@ -264,18 +266,18 @@ async def test_reference_data_command_maps_valuation_authority_conflict_to_409()
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == {
         "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
-        "message": "overlapping valuation authority",
+        "message": ("Valuation-policy assignment evidence conflicts with persisted authority."),
         "job_id": "ref-job-1",
     }
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
-        "overlapping valuation authority",
+        "Valuation-policy assignment evidence conflicts with persisted authority.",
         failure_phase="persist",
         failure_status_code=409,
         failure_code="VALUATION_POLICY_ASSIGNMENT_CONFLICT",
         failure_detail={
             "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
-            "message": "overlapping valuation authority",
+            "message": ("Valuation-policy assignment evidence conflicts with persisted authority."),
             "job_id": "ref-job-1",
         },
     )
@@ -301,18 +303,22 @@ async def test_reference_data_command_maps_market_price_authority_conflict_to_40
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == {
         "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
-        "message": "competing exact price authority",
+        "message": (
+            "Authoritative market-price source evidence conflicts with persisted authority."
+        ),
         "job_id": "ref-job-1",
     }
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
-        "competing exact price authority",
+        "Authoritative market-price source evidence conflicts with persisted authority.",
         failure_phase="persist",
         failure_status_code=409,
         failure_code="MARKET_PRICE_SOURCE_FACT_CONFLICT",
         failure_detail={
             "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
-            "message": "competing exact price authority",
+            "message": (
+                "Authoritative market-price source evidence conflicts with persisted authority."
+            ),
             "job_id": "ref-job-1",
         },
     )

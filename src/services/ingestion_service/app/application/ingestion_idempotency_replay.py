@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
+from .ingestion_failure_evidence import project_ingestion_failure_evidence
+
 SAFE_PREVIOUS_FAILURE_MESSAGE = "The previous ingestion attempt failed."
 
 
@@ -97,15 +99,17 @@ def _durable_failure_resolution(
 ) -> IngestionIdempotencyReplayResolution:
     status_code = failure_status_code if failure_status_code is not None else 500
     code = failure_code or "INGESTION_PREVIOUS_ATTEMPT_FAILED"
-    stored_detail = getattr(job, "failure_detail", None)
-    detail = dict(stored_detail) if stored_detail is not None else {}
-    detail["code"] = code
+    evidence = project_ingestion_failure_evidence(
+        failure_code=code,
+        failure_detail=getattr(job, "failure_detail", None),
+        failure_headers=getattr(job, "failure_headers", None),
+    )
+    detail = dict(evidence.detail or {})
     detail.setdefault("message", SAFE_PREVIOUS_FAILURE_MESSAGE)
     detail["job_id"] = job.job_id
-    stored_headers = getattr(job, "failure_headers", None)
     return IngestionIdempotencyReplayResolution(
         disposition=IngestionIdempotencyReplayDisposition.FAILED,
         status_code=status_code,
         detail=detail,
-        headers=dict(stored_headers) if stored_headers is not None else None,
+        headers=evidence.headers,
     )
