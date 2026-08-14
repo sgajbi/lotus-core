@@ -12,6 +12,10 @@ from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
+from tests.integration.ingestion_job_sql_fixture import (
+    transaction_payload_evidence_insert_fragments,
+)
+
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
 MIGRATION = (
@@ -65,6 +69,9 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
     with db_engine.begin() as connection:
         operations = _bind_operations(migration, connection)
         _normalize_to_previous_revision(operations, connection)
+        evidence_columns, evidence_values = transaction_payload_evidence_insert_fragments(
+            connection
+        )
         for job_id, correlation_id in (
             ("job-unique", "corr-unique"),
             ("job-shared-1", "corr-shared"),
@@ -72,13 +79,13 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
         ):
             connection.execute(
                 text(
-                    """
+                    f"""
                     INSERT INTO ingestion_jobs (
                         job_id, endpoint, entity_type, status, accepted_count,
-                        correlation_id, request_id, trace_id
+                        correlation_id, request_id, trace_id{evidence_columns}
                     ) VALUES (
                         :job_id, '/ingest/transactions', 'transaction', 'queued', 1,
-                        :correlation_id, :job_id, :job_id
+                        :correlation_id, :job_id, :job_id{evidence_values}
                     )
                     """
                 ),
