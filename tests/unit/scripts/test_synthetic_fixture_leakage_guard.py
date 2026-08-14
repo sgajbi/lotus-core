@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 from scripts.quality import synthetic_fixture_leakage_guard as guard
-from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL
+from scripts.release.cisa_kev import (
+    DEFAULT_COMPLETENESS_POLICY_PATH,
+    load_cisa_kev_catalog,
+)
 from scripts.release.vulnerability_authority_bundle import (
     SCHEMA_VERSION as VULNERABILITY_AUTHORITY_SCHEMA_VERSION,
 )
@@ -88,8 +91,26 @@ def _write_verified_cisa_authority(repo_root: Path) -> tuple[Path, Path]:
     )
     kev_path = authority_dir / "cisa-kev.json"
     bundle_path = authority_dir / "vulnerability-authority-bundle.json"
-    _write(kev_path, '{"contact":"kev-coordination@cisa.dhs.gov"}')
-    source_sha256 = "sha256:" + hashlib.sha256(kev_path.read_bytes()).hexdigest()
+    completeness_policy = json.loads(DEFAULT_COMPLETENESS_POLICY_PATH.read_text(encoding="utf-8"))
+    entry_count = completeness_policy["minimum_entry_count"]
+    vulnerabilities = [{"cveID": f"CVE-2026-{10000 + index}"} for index in range(entry_count)]
+    vulnerabilities[0]["notes"] = "kev-coordination@cisa.dhs.gov"
+    _write(
+        kev_path,
+        json.dumps(
+            {
+                "title": "CISA Catalog of Known Exploited Vulnerabilities",
+                "catalogVersion": completeness_policy["baseline_catalog_version"],
+                "dateReleased": completeness_policy["baseline_date_released_utc"],
+                "count": entry_count,
+                "vulnerabilities": vulnerabilities,
+            }
+        ),
+    )
+    cisa_kev_identity = load_cisa_kev_catalog(
+        kev_path,
+        fetched_at="2026-08-14T00:00:30Z",
+    ).receipt_identity()
     payload: dict[str, object] = {
         "schema_version": VULNERABILITY_AUTHORITY_SCHEMA_VERSION,
         "generated_at_utc": "2026-08-14T00:01:00Z",
@@ -97,14 +118,7 @@ def _write_verified_cisa_authority(repo_root: Path) -> tuple[Path, Path]:
         "git_commit_sha": FULL_SHA,
         "ci_run_id": RUN_ID,
         "ci_run_attempt": RUN_ATTEMPT,
-        "cisa_kev": {
-            "source_url": CISA_KEV_SOURCE_URL,
-            "catalog_version": "2026.08.14",
-            "date_released_utc": "2026-08-14T00:00:00Z",
-            "fetched_at_utc": "2026-08-14T00:00:30Z",
-            "source_sha256": source_sha256,
-            "entry_count": 1668,
-        },
+        "cisa_kev": cisa_kev_identity,
         "exception_schema": {
             "source_repository": "sgajbi/lotus-platform",
             "source_commit": "b" * 40,
@@ -153,6 +167,44 @@ def test_synthetic_fixture_guard_accepts_digest_bound_cisa_source(tmp_path: Path
         )
         == []
     )
+
+
+def test_synthetic_fixture_guard_rejects_self_consistent_non_kev_pair(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    kev_path, bundle_path = _write_verified_cisa_authority(tmp_path)
+    _write(kev_path, '{"contact":"forged@example.com"}')
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["cisa_kev"]["source_sha256"] = (
+        "sha256:" + hashlib.sha256(kev_path.read_bytes()).hexdigest()
+    )
+    _rewrite_bundle_digest(bundle_path, bundle)
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
+
+
+def test_verified_cisa_source_still_scans_non_email_leakage_rules(tmp_path: Path) -> None:
+    standard_path = _write_standard(tmp_path, _minimal_standard(tmp_path))
+    kev_path, bundle_path = _write_verified_cisa_authority(tmp_path)
+    catalog = json.loads(kev_path.read_text(encoding="utf-8"))
+    catalog["password"] = "concrete-secret"
+    _write(kev_path, json.dumps(catalog))
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["cisa_kev"]["source_sha256"] = (
+        "sha256:" + hashlib.sha256(kev_path.read_bytes()).hexdigest()
+    )
+    _rewrite_bundle_digest(bundle_path, bundle)
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert {finding.rule for finding in findings} == {"concrete-secret-field"}
 
 
 def test_synthetic_fixture_guard_rejects_path_only_authority_spoof(tmp_path: Path) -> None:
