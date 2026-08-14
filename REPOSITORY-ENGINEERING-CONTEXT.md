@@ -259,10 +259,14 @@ Current repository posture:
     unknown or stale header values are omitted from the DLQ payload, header, and evidence row so a
     foreign-key failure cannot cause duplicate publication or stop source consumption.
 28. Reference-data ingestion source-observation lineage now has a shared DTO contract for
-    benchmark, index, risk-free, and classification families. The canonical API-facing fields are
-    `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
-    `source_vendor` and `source_timestamp` inputs remain accepted and are mapped to the existing
-    storage columns until persistence migrations are explicitly approved.
+    benchmark, index, risk-free, classification, mandate-binding, model-portfolio, instrument-
+    eligibility, client-restriction, sustainability, tax, income-needs, liquidity-reserve, and
+    planned-withdrawal families. The canonical API-facing fields are `source_system`,
+    `source_record_id`, `observed_at`, and `quality_status`; legacy `source_vendor` and
+    `source_timestamp` inputs remain accepted and are mapped to the existing storage columns until
+    persistence migrations are explicitly approved. Upserts preserve existing source identity and
+    observation when a correction omits optional lineage; do not extend that COALESCE behavior to
+    nullable business fields or defaulted quality disposition.
 29. Consumer DLQ and replay-audit evidence now follows a correlation-or-reason contract:
     `correlation_id` remains nullable for legacy and malformed events, but missing-correlation rows
     must carry `correlation_missing_reason` and `alternate_lookup_key` for support lookup and replay
@@ -286,6 +290,12 @@ Current repository posture:
     return HTTP 503 with `Retry-After`, dependency=`kafka`, retryability, correlation lineage,
     failed-record keys, publish state, and published-record count. Reference-data persistence
     failures and post-publish bookkeeping failures remain distinct HTTP 500 contracts.
+    Durable ingestion failure evidence must pass through the shared source-safe projector. Do not
+    persist or replay arbitrary exception text, request/client data, credentials, nested unknown
+    detail, or non-allowlisted headers. Initial failure responses and idempotent replay must use the
+    same stable product message and bounded recovery fields. `X-Idempotency-Key` is a validated
+    1-128 character opaque protocol identifier; operational diagnostics publish only its full
+    SHA-256 reference and never the raw caller value.
 32. Direct ingestion post-publish or post-persist bookkeeping failures must preserve the
     `INGESTION_JOB_BOOKKEEPING_FAILED` code while making partial-failure state explicit with
     `publish_state`, `work_state`, `published_record_count`, `retry_safe=false`,
