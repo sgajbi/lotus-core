@@ -98,7 +98,8 @@ def test_image_release_contains_only_unified_release_managed_workers() -> None:
         TARGET_TRANSACTION_WORKER,
         TARGET_DERIVED_STATE_WORKER,
     }
-    assert "render_release_deployment.py" in workflow_text
+    assert "write_image_release_manifest.py" in workflow_text
+    assert "render_release_deployment.py" not in workflow_text
     assert "write_image_build_matrix" in str(workflow["jobs"]["prepare-image-matrix"])
     assert workflow["jobs"]["publish-images"]["strategy"]["matrix"] == (
         "${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}"
@@ -107,4 +108,4 @@ def test_image_release_contains_only_unified_release_managed_workers() -> None:
         "${{ fromJson(needs.prepare-image-matrix.outputs.matrix) }}"
     )
     assert "portfolio_transaction_processing_service-kubernetes.yaml" not in workflow_text
-    assert "${{ matrix.service }}-kubernetes.yaml" in workflow_text
+    assert "${{ matrix.service }}-kubernetes.yaml" not in workflow_text
