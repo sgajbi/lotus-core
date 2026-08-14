@@ -10,6 +10,7 @@ from src.services.ingestion_service.app.services.ingestion_job_lifecycle import 
     create_or_get_job_result,
 )
 from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
+    build_ingestion_payload_evidence,
     ingestion_payload_fingerprint,
     source_safe_payload_fingerprint,
     source_safe_request_payload,
@@ -137,7 +138,6 @@ def test_source_safe_request_payload_redacts_sensitive_values_without_mutating_i
             }
         ]
     }
-
     redacted = source_safe_request_payload(payload)
 
     assert payload["transactions"][0]["account_number"] == "123456789"
@@ -151,6 +151,95 @@ def test_source_safe_request_payload_redacts_sensitive_values_without_mutating_i
             }
         ]
     }
+
+
+def test_sensitive_family_retains_only_full_non_reversible_fingerprint() -> None:
+    observed_at = datetime(2026, 8, 14, 4, 0, tzinfo=UTC)
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "T1",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "amount": "1000000.00",
+            }
+        ]
+    }
+
+    evidence = build_ingestion_payload_evidence(
+        endpoint="/ingest/transactions",
+        entity_type="transaction",
+        payload=payload,
+        observed_at=observed_at,
+    )
+
+    assert evidence.request_payload is None
+    assert evidence.request_payload_fingerprint == ingestion_payload_fingerprint(payload)
+    assert evidence.classification == "restricted"
+    assert evidence.durable_representation == "fingerprint_only"
+    assert evidence.replay_eligible is False
+    assert evidence.partial_replay_eligible is False
+    assert evidence.replay_expires_at is None
+    assert evidence.retention_authority == "lotus-core#708"
+
+
+def test_source_safe_internal_family_has_bounded_replay_payload() -> None:
+    observed_at = datetime(2026, 8, 14, 4, 0, tzinfo=UTC)
+    payload = {
+        "instruments": [
+            {
+                "security_id": "US0378331005",
+                "authorization": "Bearer source-secret",
+            }
+        ]
+    }
+
+    evidence = build_ingestion_payload_evidence(
+        endpoint="/ingest/instruments",
+        entity_type="instrument",
+        payload=payload,
+        observed_at=observed_at,
+    )
+
+    assert evidence.request_payload == {
+        "instruments": [
+            {
+                "security_id": "US0378331005",
+                "authorization": "***REDACTED***",
+            }
+        ]
+    }
+    assert evidence.request_payload_fingerprint == ingestion_payload_fingerprint(payload)
+    assert evidence.classification == "internal"
+    assert evidence.durable_representation == "source_safe_replay"
+    assert evidence.replay_eligible is True
+    assert evidence.partial_replay_eligible is True
+    assert evidence.replay_expires_at == datetime(2026, 8, 15, 4, 0, tzinfo=UTC)
+
+
+def test_payload_evidence_rejects_unknown_endpoint_entity_or_naive_time() -> None:
+    with pytest.raises(KeyError, match="Unclassified ingestion endpoint"):
+        build_ingestion_payload_evidence(
+            endpoint="/ingest/unknown",
+            entity_type="unknown",
+            payload={"records": []},
+            observed_at=datetime(2026, 8, 14, tzinfo=UTC),
+        )
+
+    with pytest.raises(ValueError, match="entity mismatch"):
+        build_ingestion_payload_evidence(
+            endpoint="/ingest/instruments",
+            entity_type="portfolio",
+            payload={"instruments": []},
+            observed_at=datetime(2026, 8, 14, tzinfo=UTC),
+        )
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        build_ingestion_payload_evidence(
+            endpoint="/ingest/instruments",
+            entity_type="instrument",
+            payload={"instruments": []},
+            observed_at=datetime(2026, 8, 14),
+        )
 
 
 @pytest.mark.asyncio
