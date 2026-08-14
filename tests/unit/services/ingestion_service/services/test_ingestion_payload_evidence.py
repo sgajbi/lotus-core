@@ -243,7 +243,7 @@ def test_payload_evidence_rejects_unknown_endpoint_entity_or_naive_time() -> Non
 
 
 @pytest.mark.asyncio
-async def test_create_or_get_job_persists_source_safe_request_payload():
+async def test_create_or_get_job_persists_fingerprint_only_policy_for_transaction():
     session = _FakeCreateSession()
     payload = {
         "transactions": [
@@ -269,20 +269,53 @@ async def test_create_or_get_job_persists_source_safe_request_payload():
     )
 
     assert result.created is True
-    assert session.added_rows[0].request_payload == {
-        "transactions": [
+    row = session.added_rows[0]
+    assert row.request_payload is None
+    assert row.request_payload_fingerprint == ingestion_payload_fingerprint(payload)
+    assert row.request_payload_policy_version == "ingestion-evidence-policy.v1"
+    assert row.request_payload_classification == "restricted"
+    assert row.request_payload_representation == "fingerprint_only"
+    assert row.request_payload_replay_eligible is False
+    assert row.request_payload_partial_replay_eligible is False
+    assert row.request_payload_replay_expires_at is None
+    assert row.request_payload_retention_authority == "lotus-core#708"
+    assert session.lock_calls == []
+    assert payload["transactions"][0]["authorization"] == "Bearer secret-token"
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_persists_expiring_source_safe_instrument_replay():
+    session = _FakeCreateSession()
+    payload = {
+        "instruments": [
             {
-                "transaction_id": "T1",
-                "portfolio_id": "P1",
-                "authorization": "***REDACTED***",
+                "instrument_id": "BOND_1",
+                "name": "Singapore Government Bond",
+                "authorization": "Bearer secret-token",
             }
         ]
     }
-    assert session.added_rows[0].request_payload_fingerprint == ingestion_payload_fingerprint(
-        payload
+
+    await create_or_get_job_result(
+        job_id="job_instrument",
+        endpoint="/ingest/instruments",
+        entity_type="instrument",
+        accepted_count=1,
+        idempotency_key=None,
+        correlation_id="corr_1",
+        request_id="req_1",
+        trace_id="trace_1",
+        request_payload=payload,
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
     )
-    assert session.lock_calls == []
-    assert payload["transactions"][0]["authorization"] == "Bearer secret-token"
+
+    row = session.added_rows[0]
+    assert row.request_payload["instruments"][0]["authorization"] == "***REDACTED***"
+    assert row.request_payload_fingerprint == ingestion_payload_fingerprint(payload)
+    assert row.request_payload_representation == "source_safe_replay"
+    assert row.request_payload_replay_eligible is True
+    assert row.request_payload_partial_replay_eligible is True
+    assert row.request_payload_replay_expires_at > datetime.now(UTC)
 
 
 @pytest.mark.asyncio
