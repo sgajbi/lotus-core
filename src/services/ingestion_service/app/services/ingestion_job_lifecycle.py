@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 from uuid import uuid4
 
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
@@ -25,9 +25,8 @@ from ..DTOs.ingestion_job_dto import (
     IngestionJobResponse,
 )
 from .ingestion_payload_evidence import (
+    build_ingestion_payload_evidence,
     ingestion_payload_fingerprint,
-    source_safe_payload_fingerprint,
-    source_safe_request_payload,
 )
 
 
@@ -105,6 +104,14 @@ async def create_or_get_job_result(
     request_payload: dict[str, Any] | None,
     session_factory,
 ) -> IngestionJobCreateResult:
+    if request_payload is None:
+        raise ValueError("Ingestion jobs require request payload evidence.")
+    payload_evidence = build_ingestion_payload_evidence(
+        endpoint=endpoint,
+        entity_type=entity_type,
+        payload=request_payload,
+        observed_at=datetime.now(UTC),
+    )
     async for db in session_factory():
         async with db.begin():
             if idempotency_key:
@@ -126,7 +133,6 @@ async def create_or_get_job_result(
                 )
                 if existing is not None:
                     if _idempotency_payload_conflicts(
-                        existing_payload=existing.request_payload,
                         existing_payload_fingerprint=getattr(
                             existing,
                             "request_payload_fingerprint",
@@ -150,11 +156,15 @@ async def create_or_get_job_result(
                 correlation_id=correlation_id,
                 request_id=request_id,
                 trace_id=trace_id,
-                request_payload=cast(
-                    dict[str, Any] | None,
-                    source_safe_request_payload(request_payload),
-                ),
-                request_payload_fingerprint=ingestion_payload_fingerprint(request_payload),
+                request_payload=payload_evidence.request_payload,
+                request_payload_fingerprint=payload_evidence.request_payload_fingerprint,
+                request_payload_policy_version=payload_evidence.policy_version,
+                request_payload_classification=payload_evidence.classification,
+                request_payload_representation=payload_evidence.durable_representation,
+                request_payload_replay_eligible=payload_evidence.replay_eligible,
+                request_payload_partial_replay_eligible=(payload_evidence.partial_replay_eligible),
+                request_payload_replay_expires_at=payload_evidence.replay_expires_at,
+                request_payload_retention_authority=payload_evidence.retention_authority,
             )
             db.add(row)
             await db.flush()
@@ -470,14 +480,13 @@ def _failure_outcome_values(
 
 def _idempotency_payload_conflicts(
     *,
-    existing_payload: Any,
     existing_payload_fingerprint: str | None,
     requested_payload: dict[str, Any] | None,
 ) -> bool:
     requested_payload_fingerprint = ingestion_payload_fingerprint(requested_payload)
     if existing_payload_fingerprint is not None:
         return existing_payload_fingerprint != requested_payload_fingerprint
-    existing_payload_dict = existing_payload if isinstance(existing_payload, dict) else None
-    return source_safe_payload_fingerprint(
-        existing_payload_dict
-    ) != source_safe_payload_fingerprint(requested_payload)
+    # A legacy row without the full original request fingerprint cannot prove
+    # payload identity. Redacted bodies are deliberately insufficient because
+    # two requests that differ only in a sensitive value would otherwise alias.
+    return True

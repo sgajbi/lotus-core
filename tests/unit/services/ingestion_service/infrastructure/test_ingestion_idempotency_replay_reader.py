@@ -116,21 +116,19 @@ async def test_different_current_fingerprint_does_not_replay() -> None:
 
 
 @pytest.mark.parametrize(
-    ("existing_payload", "requested_payload", "matches"),
+    ("existing_payload", "requested_payload"),
     [
         (
             {"transaction_ids": ["T1"], "authorization": "Bearer old"},
             {"authorization": "Bearer new", "transaction_ids": ["T1"]},
-            True,
         ),
-        ({"transaction_ids": ["T1"]}, {"transaction_ids": ["T2"]}, False),
-        ("unreadable-legacy-payload", None, True),
+        ({"transaction_ids": ["T1"]}, {"transaction_ids": ["T1"]}),
+        ("unreadable-legacy-payload", None),
     ],
 )
-async def test_legacy_payload_comparison_preserves_source_safe_semantics(
+async def test_legacy_payload_without_full_fingerprint_fails_closed(
     existing_payload: object,
     requested_payload: dict | None,
-    matches: bool,
 ) -> None:
     reader, _ = _reader(
         _job(
@@ -145,4 +143,4 @@ async def test_legacy_payload_comparison_preserves_source_safe_semantics(
         request_payload=requested_payload,
     )
 
-    assert (result is not None) is matches
+    assert result is None
