@@ -92,6 +92,13 @@ async def test_openapi_includes_replay_examples(async_test_client):
     assert "partial_dry_run" in retry_examples
     assert retry_examples["partial_dry_run"]["value"]["dry_run"] is True
     assert retry_response_example["job_id"] == "job_01J5S0J6D3BAVMK2E1V0WQ7MCC"
+    assert "idempotency_key" not in retry_response_example
+    assert retry_response_example["idempotency_key_reference"].startswith(
+        "hmac-sha256:v1:ops-2026-08:"
+    )
+    job_schema = schema["components"]["schemas"]["IngestionJobResponse"]["properties"]
+    assert job_schema["idempotency_key"]["deprecated"] is True
+    assert "idempotency_key_reference" in job_schema
 
     replay_operation = schema["paths"]["/ingestion/dlq/consumer-events/{event_id}/replay"]["post"]
     replay_examples = replay_operation["requestBody"]["content"]["application/json"]["examples"]

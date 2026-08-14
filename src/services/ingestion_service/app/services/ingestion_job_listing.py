@@ -79,6 +79,8 @@ async def load_job_list_response(
     cursor: str | None,
     limit: int,
     session_factory,
+    reference_key_id: str,
+    reference_hmac_secret: str,
 ) -> tuple[list[IngestionJobResponse], str | None]:
     async for db in session_factory():
         cursor_row = None
@@ -91,7 +93,18 @@ async def load_job_list_response(
         )
         rows = list((await db.scalars(stmt)).all())
         page = ingestion_job_list_page(rows=rows, limit=limit)
-        return ([to_job_response(row) for row in page.rows], page.next_cursor)
+        return (
+            [
+                to_job_response(
+                    row,
+                    reference_key_id=reference_key_id,
+                    reference_hmac_secret=reference_hmac_secret,
+                    include_raw_idempotency_key=False,
+                )
+                for row in page.rows
+            ],
+            page.next_cursor,
+        )
     return ([], None)
 
 
@@ -99,6 +112,8 @@ async def load_unique_replayable_job_by_correlation_id(
     *,
     correlation_id: str,
     session_factory,
+    reference_key_id: str,
+    reference_hmac_secret: str,
 ) -> IngestionJobResponse | None:
     async for db in session_factory():
         rows = list(
@@ -110,5 +125,14 @@ async def load_unique_replayable_job_by_correlation_id(
                 )
             ).all()
         )
-        return to_job_response(rows[0]) if len(rows) == 1 else None
+        return (
+            to_job_response(
+                rows[0],
+                reference_key_id=reference_key_id,
+                reference_hmac_secret=reference_hmac_secret,
+                include_raw_idempotency_key=False,
+            )
+            if len(rows) == 1
+            else None
+        )
     return None

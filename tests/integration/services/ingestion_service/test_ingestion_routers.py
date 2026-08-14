@@ -38,6 +38,7 @@ from src.services.ingestion_service.app.ports.ingestion_idempotency_replay impor
 from src.services.ingestion_service.app.ports.transaction_reprocessing import (
     TransactionReprocessingTargetReadError,
 )
+from src.services.ingestion_service.app.request_metadata import idempotency_key_reference
 from src.services.ingestion_service.app.services import (
     business_date_ingestion_commands,
     ingestion_publish_commands,
@@ -90,6 +91,9 @@ from src.services.ingestion_service.app.services.ingestion_job_service import (
     get_ingestion_job_service,
 )
 from src.services.ingestion_service.app.services.ingestion_service import IngestionService
+
+_OPS_REFERENCE_KEY_ID = "test-router"
+_OPS_REFERENCE_HMAC_SECRET = "test-router-ingestion-evidence-secret"
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
@@ -187,7 +191,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 for existing in self.jobs.values():
                     if (
                         existing.endpoint == endpoint
-                        and existing.idempotency_key == idempotency_key
+                        and existing.model_dump()["idempotency_key"] == idempotency_key
                     ):
                         existing_payload = self.job_payloads.get(existing.job_id)
                         if (
@@ -353,8 +357,27 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.jobs[job_id] = record
             return True
 
+        @staticmethod
+        def _operational_job_projection(job: IngestionJobResponse) -> IngestionJobResponse:
+            raw_key = job.model_dump()["idempotency_key"]
+            return job.model_copy(
+                update={
+                    "idempotency_key": None,
+                    "idempotency_key_reference": (
+                        idempotency_key_reference(
+                            value=raw_key,
+                            key_id=_OPS_REFERENCE_KEY_ID,
+                            hmac_secret=_OPS_REFERENCE_HMAC_SECRET,
+                        )
+                        if raw_key is not None
+                        else None
+                    ),
+                }
+            )
+
         async def get_job(self, job_id: str) -> IngestionJobResponse | None:
-            return self.jobs.get(job_id)
+            job = self.jobs.get(job_id)
+            return self._operational_job_projection(job) if job is not None else None
 
         async def get_job_replay_context(self, job_id: str) -> SimpleNamespace | None:
             record = self.jobs.get(job_id)
@@ -366,7 +389,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 endpoint=record.endpoint,
                 entity_type=record.entity_type,
                 accepted_count=record.accepted_count,
-                idempotency_key=record.idempotency_key,
+                idempotency_key=record.model_dump()["idempotency_key"],
                 request_payload=evidence.request_payload,
                 request_payload_policy_version=evidence.policy_version,
                 request_payload_representation=evidence.durable_representation,
@@ -420,7 +443,13 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                         break
             page_rows = filtered[:limit]
             next_cursor = page_rows[-1].job_id if len(filtered) > limit and page_rows else None
-            return ([job.model_dump(mode="json") for job in page_rows], next_cursor)
+            return (
+                [
+                    self._operational_job_projection(job).model_dump(mode="json")
+                    for job in page_rows
+                ],
+                next_cursor,
+            )
 
         async def list_failures(self, job_id: str, limit: int = 100) -> list[dict]:
             return self.failures.get(job_id, [])[:limit]
@@ -1243,7 +1272,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if not idempotency_key:
                 return None
             for existing in self._job_service.jobs.values():
-                if existing.endpoint != endpoint or existing.idempotency_key != idempotency_key:
+                if (
+                    existing.endpoint != endpoint
+                    or existing.model_dump()["idempotency_key"] != idempotency_key
+                ):
                     continue
                 existing_payload = self._job_service.job_payloads.get(existing.job_id)
                 if (
@@ -2051,7 +2083,10 @@ async def test_ingestion_jobs_status_endpoint(
     assert job_body["entity_type"] == "transaction"
     assert job_body["status"] == "queued"
     assert job_body["accepted_count"] == 1
-    assert job_body["idempotency_key"] == "job-detail-idempotency-001"
+    assert job_body["idempotency_key"] is None
+    assert job_body["idempotency_key_reference"].startswith(
+        f"hmac-sha256:v1:{_OPS_REFERENCE_KEY_ID}:"
+    )
     assert job_body["correlation_id"] == "ING:test-job-detail-correlation"
     assert job_body["request_id"]
     assert job_body["trace_id"]
@@ -2090,7 +2125,10 @@ async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
     assert job_body["entity_type"] == "transaction"
     assert job_body["status"] == "failed"
     assert job_body["accepted_count"] == 1
-    assert job_body["idempotency_key"] == "job-detail-failed-idempotency-001"
+    assert job_body["idempotency_key"] is None
+    assert job_body["idempotency_key_reference"].startswith(
+        f"hmac-sha256:v1:{_OPS_REFERENCE_KEY_ID}:"
+    )
     assert job_body["failure_reason"] == SAFE_PUBLISH_FAILURE_MESSAGE
     assert job_body["completed_at"]
     assert job_body["retry_count"] == 0
@@ -2170,6 +2208,10 @@ async def test_ingestion_jobs_list_endpoint_filters_and_paginates(
         assert filtered_body["jobs"][0]["job_id"] == expected_job_id
         assert filtered_body["jobs"][0]["status"] == status_filter
         assert filtered_body["jobs"][0]["entity_type"] == "transaction"
+        assert filtered_body["jobs"][0]["idempotency_key"] is None
+        assert filtered_body["jobs"][0]["idempotency_key_reference"].startswith(
+            f"hmac-sha256:v1:{_OPS_REFERENCE_KEY_ID}:"
+        )
 
     entity_miss = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -4640,7 +4682,8 @@ async def test_ingestion_job_full_retry_returns_complete_job_contract(
     assert body["entity_type"] == "instrument"
     assert body["status"] == "queued"
     assert body["accepted_count"] == 1
-    assert body["idempotency_key"] == "job-retry-full-001"
+    assert body["idempotency_key"] is None
+    assert body["idempotency_key_reference"].startswith(f"hmac-sha256:v1:{_OPS_REFERENCE_KEY_ID}:")
     assert body["correlation_id"] == "ING:test-retry-full-correlation"
     assert body["request_id"]
     assert body["trace_id"]

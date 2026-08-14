@@ -38,9 +38,10 @@ are not durable or replayable. This includes replay publish failures and post-pu
 failures recorded in replay audits. The governing migration replaces untrusted historical job,
 failure-history, and failed replay-audit text with bounded safe messages and removes historical
 detail and header bodies while retaining stable failure codes and failed-record keys for recovery.
-Idempotency diagnostics expose a purpose-bound,
-key-versioned HMAC-SHA-256 pseudonym rather than the caller's raw `X-Idempotency-Key`. Non-local
-profiles require a separately governed ingestion-evidence key; rotating its declared key id
+Idempotency diagnostics and operational job list, detail, retry, and evidence responses expose a
+purpose-bound, key-versioned HMAC-SHA-256 pseudonym rather than the caller's raw
+`X-Idempotency-Key`; the originating ingestion acknowledgement may still echo the supplied key.
+Non-local profiles require a separately governed ingestion-evidence key; rotating its declared key id
 intentionally changes the pseudonym. Request-payload fingerprints use a separate cryptographic
 domain and retain
 explicit prior-key authority so rotation preserves durable idempotency equality. Historical

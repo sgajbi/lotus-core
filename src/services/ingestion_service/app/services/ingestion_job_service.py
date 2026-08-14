@@ -252,7 +252,12 @@ class IngestionJobService:
         )
 
     async def get_job(self, job_id: str) -> IngestionJobResponse | None:
-        return await get_job_response(job_id=job_id, session_factory=get_async_db_session)
+        return await get_job_response(
+            job_id=job_id,
+            session_factory=get_async_db_session,
+            reference_key_id=_SETTINGS.evidence_hmac.key_id,
+            reference_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
+        )
 
     async def get_job_replay_context(self, job_id: str) -> IngestionJobReplayContext | None:
         return await get_job_replay_context_response(
@@ -267,6 +272,8 @@ class IngestionJobService:
         return await load_unique_replayable_job_by_correlation_id(
             correlation_id=correlation_id,
             session_factory=get_async_db_session,
+            reference_key_id=_SETTINGS.evidence_hmac.key_id,
+            reference_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
         )
 
     async def list_jobs(
@@ -289,6 +296,8 @@ class IngestionJobService:
             cursor=cursor,
             limit=limit,
             session_factory=get_async_db_session,
+            reference_key_id=_SETTINGS.evidence_hmac.key_id,
+            reference_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
         )
 
     async def list_failures(

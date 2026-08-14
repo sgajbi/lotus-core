@@ -8,7 +8,11 @@ INGESTION_JOB_RESPONSE_EXAMPLE = {
     "entity_type": "transaction",
     "status": "queued",
     "accepted_count": 125,
-    "idempotency_key": "ingestion-transactions-batch-20260306-001",
+    "idempotency_key": None,
+    "idempotency_key_reference": (
+        "hmac-sha256:v1:ops-2026-08:"
+        "6a144175d216004612747a27a1daecc816334b295076941e203816799b4b1b67"
+    ),
     "request_payload_fingerprint": (
         "hmac-sha256:v1:ops-2026-08:"
         "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"

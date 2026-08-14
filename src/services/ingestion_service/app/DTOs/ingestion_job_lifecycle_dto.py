@@ -58,8 +58,23 @@ class IngestionJobResponse(BaseModel):
     )
     idempotency_key: str | None = Field(
         default=None,
-        description="Client idempotency key if supplied for the request.",
-        examples=["ingestion-transactions-batch-20260228-001"],
+        deprecated=True,
+        description=(
+            "Deprecated raw-key field. It may be echoed to the originating ingestion request "
+            "but is always null in operational job list, detail, retry, and evidence projections."
+        ),
+    )
+    idempotency_key_reference: str | None = Field(
+        default=None,
+        description=(
+            "Key-versioned HMAC-SHA-256 pseudonymous reference for the client idempotency key; "
+            "null when no key was supplied. Rotation of the declared key id intentionally "
+            "changes the value."
+        ),
+        examples=[
+            "hmac-sha256:v1:ops-2026-08:"
+            "6a144175d216004612747a27a1daecc816334b295076941e203816799b4b1b67"
+        ],
     )
     request_payload_fingerprint: str | None = Field(
         default=None,
