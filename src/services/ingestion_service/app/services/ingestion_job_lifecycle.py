@@ -25,6 +25,7 @@ from ..DTOs.ingestion_job_dto import (
     IngestionJobFailureResponse,
     IngestionJobResponse,
 )
+from ..request_metadata import idempotency_key_reference
 from .ingestion_payload_evidence import (
     build_ingestion_payload_evidence,
     ingestion_payload_fingerprint_matches,
@@ -63,14 +64,30 @@ class IngestionJobCreateResult:
     created: bool
 
 
-def to_job_response(job: DBIngestionJob) -> IngestionJobResponse:
+def to_job_response(
+    job: DBIngestionJob,
+    *,
+    reference_key_id: str,
+    reference_hmac_secret: str,
+    include_raw_idempotency_key: bool,
+) -> IngestionJobResponse:
+    raw_idempotency_key = job.idempotency_key
     return IngestionJobResponse(
         job_id=job.job_id,
         endpoint=job.endpoint,
         entity_type=job.entity_type,
         status=job.status,  # type: ignore[arg-type]
         accepted_count=job.accepted_count,
-        idempotency_key=job.idempotency_key,
+        idempotency_key=raw_idempotency_key if include_raw_idempotency_key else None,
+        idempotency_key_reference=(
+            idempotency_key_reference(
+                value=raw_idempotency_key,
+                key_id=reference_key_id,
+                hmac_secret=reference_hmac_secret,
+            )
+            if raw_idempotency_key is not None
+            else None
+        ),
         request_payload_fingerprint=getattr(job, "request_payload_fingerprint", None),
         request_payload_policy_version=getattr(job, "request_payload_policy_version", None),
         request_payload_classification=getattr(job, "request_payload_classification", None),
@@ -172,7 +189,15 @@ async def create_or_get_job_result(
                             endpoint=endpoint,
                             idempotency_key=idempotency_key,
                         )
-                    return IngestionJobCreateResult(job=to_job_response(existing), created=False)
+                    return IngestionJobCreateResult(
+                        job=to_job_response(
+                            existing,
+                            reference_key_id=fingerprint_key_id,
+                            reference_hmac_secret=fingerprint_hmac_secret,
+                            include_raw_idempotency_key=True,
+                        ),
+                        created=False,
+                    )
 
             row = DBIngestionJob(
                 job_id=job_id,
@@ -197,7 +222,15 @@ async def create_or_get_job_result(
             db.add(row)
             await db.flush()
             INGESTION_JOBS_CREATED_TOTAL.labels(endpoint=endpoint, entity_type=entity_type).inc()
-            return IngestionJobCreateResult(job=to_job_response(row), created=True)
+            return IngestionJobCreateResult(
+                job=to_job_response(
+                    row,
+                    reference_key_id=fingerprint_key_id,
+                    reference_hmac_secret=fingerprint_hmac_secret,
+                    include_raw_idempotency_key=True,
+                ),
+                created=True,
+            )
 
     msg = "Unable to create ingestion job due to unavailable database session."
     raise RuntimeError(msg)
@@ -427,12 +460,23 @@ async def get_job_response(
     *,
     job_id: str,
     session_factory,
+    reference_key_id: str,
+    reference_hmac_secret: str,
 ) -> IngestionJobResponse | None:
     async for db in session_factory():
         row = await db.scalar(
             select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
         )
-        return to_job_response(row) if row else None
+        return (
+            to_job_response(
+                row,
+                reference_key_id=reference_key_id,
+                reference_hmac_secret=reference_hmac_secret,
+                include_raw_idempotency_key=False,
+            )
+            if row
+            else None
+        )
     return None
 
 

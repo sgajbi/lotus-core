@@ -31,10 +31,12 @@ This runbook summarizes the ingestion operations controls expected for productio
   - `LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON` (key-id-to-secret map retained only while
     durable payload fingerprints signed by prior rotation keys remain queryable)
 
-Idempotency diagnostics return only a domain-separated, key-versioned HMAC-SHA-256 pseudonym.
-They never return the raw caller key. Request-payload fingerprints use a separate HMAC domain and
-verify with the declared active or retained prior key, so rotation preserves durable equality.
-The raw durable idempotency key continues to own ingestion lookup semantics.
+Idempotency diagnostics and operational job list, detail, retry, and evidence responses return only
+a domain-separated, key-versioned HMAC-SHA-256 pseudonym. They never return the raw caller key; the
+deprecated raw-key field is null. The originating ingestion acknowledgement may echo the key to the
+caller that supplied it. Request-payload fingerprints use a separate HMAC domain and verify with
+the declared active or retained prior key, so rotation preserves durable equality. The raw durable
+idempotency key continues to own ingestion lookup semantics.
 
 ### Manual testing recommendation
 

@@ -88,9 +88,11 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
   and purges historical detail and header bodies, because legacy free-form evidence cannot be
   proven safe after capture; stable failure codes and failed-record keys remain available for
   recovery;
-- `X-Idempotency-Key` is a bounded opaque identifier, and operator diagnostics expose only a
-  purpose-bound, key-versioned HMAC-SHA-256 pseudonym while the deprecated raw-key field is always
-  null. Non-local profiles fail startup without a separate, non-local reference key of at least 32
+- `X-Idempotency-Key` is a bounded opaque identifier. Idempotency diagnostics and operational job
+  list, detail, retry, and evidence projections expose only a purpose-bound, key-versioned
+  HMAC-SHA-256 pseudonym while the deprecated raw-key field is null. The originating ingestion
+  acknowledgement may still echo the caller's own key. Non-local profiles fail startup without a
+  separate, non-local reference key of at least 32
   characters; JWT and auth-context signing keys are not reused. Payload fingerprints share the
   governed ingestion-evidence key authority under a distinct domain; retained prior keys allow
   deterministic equality checks during rotation, and the migration removes historical unkeyed

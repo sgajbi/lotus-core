@@ -15,6 +15,9 @@ from src.services.ingestion_service.app.services.ingestion_job_listing import (
     load_unique_replayable_job_by_correlation_id,
 )
 
+_REFERENCE_KEY_ID = "ops-test"
+_REFERENCE_HMAC_SECRET = "unit-test-idempotency-reference-secret"
+
 
 def test_ingestion_job_list_page_returns_rows_and_next_cursor():
     rows = [
@@ -163,12 +166,17 @@ async def test_load_job_list_response_maps_rows_and_next_cursor():
         cursor="job_4",
         limit=2,
         session_factory=lambda: _SingleSessionAsyncIterable(session),
+        reference_key_id=_REFERENCE_KEY_ID,
+        reference_hmac_secret=_REFERENCE_HMAC_SECRET,
     )
 
     assert session.scalar_calls == 1
     assert session.scalars_calls == 1
     assert [job.job_id for job in result] == ["job_3", "job_2"]
     assert result[0].endpoint == "/ingest/transactions"
+    assert result[0].model_dump()["idempotency_key"] is None
+    assert result[0].idempotency_key_reference is not None
+    assert result[0].idempotency_key_reference.startswith(f"hmac-sha256:v1:{_REFERENCE_KEY_ID}:")
     assert next_cursor == "job_2"
 
 
@@ -179,12 +187,16 @@ async def test_load_unique_replayable_job_by_correlation_id_maps_only_row():
     result = await load_unique_replayable_job_by_correlation_id(
         correlation_id="corr-job_500_plus",
         session_factory=lambda: _SingleSessionAsyncIterable(session),
+        reference_key_id=_REFERENCE_KEY_ID,
+        reference_hmac_secret=_REFERENCE_HMAC_SECRET,
     )
 
     assert session.scalars_calls == 1
     assert result is not None
     assert result.job_id == "job_500_plus"
     assert result.correlation_id == "corr-job_500_plus"
+    assert result.model_dump()["idempotency_key"] is None
+    assert result.idempotency_key_reference is not None
     assert "correlation_id = :correlation_id_1" in str(session.last_statement)
     assert "ORDER BY ingestion_jobs.id DESC" in str(session.last_statement)
 
@@ -197,6 +209,8 @@ async def test_load_unique_replayable_job_by_correlation_id_fails_closed(rows):
     result = await load_unique_replayable_job_by_correlation_id(
         correlation_id="corr-missing",
         session_factory=lambda: _SingleSessionAsyncIterable(session),
+        reference_key_id=_REFERENCE_KEY_ID,
+        reference_hmac_secret=_REFERENCE_HMAC_SECRET,
     )
 
     assert session.scalars_calls == 1

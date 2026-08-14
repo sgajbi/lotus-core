@@ -268,14 +268,23 @@ def test_bundle_identity_changes_with_persisted_request_fingerprint() -> None:
 
 
 def test_canonical_job_mapping_exposes_persisted_request_fingerprint() -> None:
+    persisted = _job(request_payload_fingerprint="sha256:persisted").model_dump()
+    persisted["idempotency_key"] = "caller-key"
     row = SimpleNamespace(
-        **_job(request_payload_fingerprint="sha256:persisted").model_dump(),
+        **persisted,
         request_payload={},
     )
 
-    response = to_job_response(row)
+    response = to_job_response(
+        row,
+        reference_key_id="ops-test",
+        reference_hmac_secret="unit-test-idempotency-reference-secret",
+        include_raw_idempotency_key=False,
+    )
 
     assert response.request_payload_fingerprint == "sha256:persisted"
+    assert response.model_dump()["idempotency_key"] is None
+    assert response.idempotency_key_reference is not None
 
 
 def test_ambiguous_source_scope_remains_null_instead_of_using_request_hash() -> None:
