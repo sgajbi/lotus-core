@@ -213,9 +213,9 @@ before the image matrix;
 missing, malformed, empty, wrong-title, duplicate-CVE, future-dated, below-baseline, or replayed
 pre-baseline catalog
 evidence fails closed. Fetch, scan, and evaluation failures produce a bounded reason-code receipt
-without copying remote bodies or scanner error detail. Enforcement rejects receipts or KEV evidence
-older than 30 minutes (or future-dated beyond 60 seconds), while generation separately requires the
-KEV fetch to precede the scan by no more than 60 minutes. That window covers the governed 45-minute
+without copying remote bodies or scanner error detail. Enforcement rejects scan receipts older than
+30 minutes and KEV authority older than 60 minutes (or either future-dated beyond 60 seconds), while
+generation likewise requires the KEV fetch to precede the scan by no more than 60 minutes. That window covers the governed 45-minute
 image-job timeout plus setup margin; authority older than the permitted workflow window still fails
 closed. A vulnerability without a classifiable CVE exploitation identity
 also blocks instead of being assumed absent from KEV. The receipt retains only KEV catalog identity

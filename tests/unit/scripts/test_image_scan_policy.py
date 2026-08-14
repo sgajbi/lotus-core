@@ -745,12 +745,17 @@ def test_stale_kev_fetch_fails_closed(tmp_path: Path) -> None:
 
 
 def test_kev_fetch_remains_valid_through_permitted_image_build_window(tmp_path: Path) -> None:
+    report = _write_report(tmp_path, results=[])
     receipt = _receipt(
-        _write_report(tmp_path, results=[]),
+        report,
         kev_fetched_at="2026-08-12T01:18:00Z",
     )
 
     assert receipt["policy"]["decision"] == "passed"
+
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    _enforce(receipt_path)
 
 
 def test_enforcement_accepts_passed_receipt(tmp_path: Path) -> None:

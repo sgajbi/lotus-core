@@ -625,7 +625,7 @@ def enforce_policy_receipt(
     if not (
         -MAX_ENFORCEMENT_FUTURE_SKEW_SECONDS
         <= kev_age_seconds
-        <= MAX_RECEIPT_TO_ENFORCEMENT_AGE_SECONDS
+        <= MAX_VULNERABILITY_AUTHORITY_AGE_SECONDS
     ):
         raise ScanPolicyError("CISA KEV authority evidence is stale or future-dated")
     kev_digest = _required_string(kev_identity.get("source_sha256"), field="KEV source digest")
