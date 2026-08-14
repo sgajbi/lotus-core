@@ -77,6 +77,9 @@ envelope-level design and is not invented per record.
 - Shared validation now rejects a supplied `observed_at` without an explicit timezone offset under
   stable code `INVALID_OBSERVED_AT`; omission remains valid for families whose registry policy
   declares observation time optional.
+- A supplied `quality_status` must be a non-blank string before normalization. Omission alone uses
+  the documented `accepted` default; explicit null, boolean, numeric, object, and list values fail
+  under stable code `INVALID_QUALITY_STATUS` instead of being promoted or stringified.
 - Query records now publish canonical `source_system`, `source_record_id`, `observed_at`, and
   `quality_status` for index price/return, benchmark return, risk-free, classification taxonomy,
   client restriction, sustainability preference, client tax profile/rule, income need, liquidity

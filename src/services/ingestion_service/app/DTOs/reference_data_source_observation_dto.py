@@ -44,9 +44,13 @@ class SourceObservationLineage(BaseModel):
     @field_validator("quality_status", mode="before")
     @classmethod
     def _normalize_quality_status(cls, value: object) -> str:
-        if value is None:
-            return "accepted"
-        normalized = str(value).strip().lower()
+        if not isinstance(value, str):
+            raise_ingestion_validation_error(
+                INVALID_QUALITY_STATUS,
+                field_path="quality_status",
+                message="quality_status must be a string",
+            )
+        normalized = value.strip().lower()
         if not normalized:
             raise_ingestion_validation_error(
                 INVALID_QUALITY_STATUS,
