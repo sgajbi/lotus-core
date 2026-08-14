@@ -13,13 +13,91 @@ from scripts.validation.docker_endpoint_smoke import (
     SMOKE_SECURITY_ID,
     SMOKE_TRANSACTION_ID,
     SMOKE_TRANSACTION_ID_2,
+    _accepted_job_id,
     _bounded_smoke_window_query,
     _cleanup_existing_smoke_state,
+    _probe_source_safe_retry,
     _resolve_postgres_container,
     _wait_expected_status,
     _wait_transaction_visible,
     build_smoke_cleanup_sql,
 )
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (
+            SimpleNamespace(status_code=202, json=lambda: {"job_id": " job_source_safe "}),
+            "job_source_safe",
+        ),
+        (SimpleNamespace(status_code=202, json=lambda: {"job_id": ""}), None),
+        (SimpleNamespace(status_code=202, json=lambda: {"job_id": None}), None),
+        (SimpleNamespace(status_code=409, json=lambda: {"job_id": "job_restricted"}), None),
+        (None, None),
+    ],
+)
+def test_accepted_job_id_requires_successful_non_empty_batch_authority(response, expected):
+    assert _accepted_job_id(response) == expected
+
+
+def test_accepted_job_id_fails_closed_on_non_json_acceptance() -> None:
+    response = SimpleNamespace(
+        status_code=202,
+        json=Mock(side_effect=ValueError("invalid JSON")),
+    )
+
+    assert _accepted_job_id(response) is None
+
+
+def test_retry_probe_uses_source_safe_acceptance_job_not_arbitrary_list_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_mock = Mock()
+    monkeypatch.setattr(docker_endpoint_smoke, "_call", call_mock)
+    results = []
+
+    _probe_source_safe_retry(
+        results,
+        event_replay_url="http://event-replay",
+        headers={"X-Ops-Role": "operator"},
+        acceptance_response=SimpleNamespace(
+            status_code=202,
+            json=lambda: {"job_id": "job_source_safe_instrument"},
+        ),
+    )
+
+    call_mock.assert_called_once_with(
+        results,
+        name="job retry dry run",
+        method="POST",
+        url=("http://event-replay/ingestion/jobs/job_source_safe_instrument/retry"),
+        expected={200},
+        headers={"X-Ops-Role": "operator"},
+        json={"dry_run": True, "record_keys": []},
+    )
+
+
+def test_retry_probe_does_not_fallback_when_source_safe_authority_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_mock = Mock()
+    monkeypatch.setattr(docker_endpoint_smoke, "_call", call_mock)
+    results = []
+
+    _probe_source_safe_retry(
+        results,
+        event_replay_url="http://event-replay",
+        headers={"X-Ops-Role": "operator"},
+        acceptance_response=None,
+    )
+
+    call_mock.assert_not_called()
+    assert len(results) == 1
+    assert results[0].ok is False
+    assert results[0].note == (
+        "job_id not discovered from source-safe instrument acceptance response"
+    )
 
 
 def test_docker_endpoint_smoke_uses_deterministic_identifiers():
