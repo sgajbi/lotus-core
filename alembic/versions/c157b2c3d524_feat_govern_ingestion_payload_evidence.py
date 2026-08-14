@@ -225,8 +225,18 @@ def downgrade() -> None:
     for name in reversed(tuple(_CHECKS)):
         op.drop_constraint(name, "ingestion_jobs", type_="check")
     # HMAC evidence written by c157 cannot be converted to the unkeyed SHA-256 value expected by
-    # the previous application. Clear it so an identical request after rollback fails closed to
-    # legacy payload comparison instead of being misclassified as a conflicting payload.
-    op.execute(sa.text("UPDATE ingestion_jobs SET request_payload_fingerprint = NULL"))
+    # the previous application. The retained source-safe body must be removed with it: the legacy
+    # application compares redacted payload bodies when no fingerprint exists, and two distinct
+    # requests can collapse to the same redacted representation. Clearing both authorities makes
+    # every c157 job fail closed after rollback instead of replaying an earlier outcome.
+    op.execute(
+        sa.text(
+            """
+            UPDATE ingestion_jobs
+            SET request_payload_fingerprint = NULL,
+                request_payload = NULL
+            """
+        )
+    )
     for column_name in reversed(_POLICY_COLUMNS):
         op.drop_column("ingestion_jobs", column_name)
