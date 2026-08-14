@@ -266,7 +266,11 @@ Current repository posture:
     `source_timestamp` inputs remain accepted and are mapped to the existing storage columns until
     persistence migrations are explicitly approved. Upserts preserve existing source identity and
     observation when a correction omits optional lineage; do not extend that COALESCE behavior to
-    nullable business fields or defaulted quality disposition.
+    nullable business fields or defaulted quality disposition. A supplied `observed_at` must carry
+    an explicit timezone offset. Applicable query-record contracts must publish stored source
+    identity, observation time, and quality; unavailable evidence stays null/`MISSING` and must not
+    be synthesized. Existing versioned benchmark/index definition responses retain legacy
+    vendor/timestamp names until a downstream-safe versioned migration.
 29. Consumer DLQ and replay-audit evidence now follows a correlation-or-reason contract:
     `correlation_id` remains nullable for legacy and malformed events, but missing-correlation rows
     must carry `correlation_missing_reason` and `alternate_lookup_key` for support lookup and replay

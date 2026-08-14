@@ -66,8 +66,30 @@ published API contract surface for the DTO field names.
   semantics, and an incoming populated lineage value still replaces the previous value.
 - Focused validation: 119 DTO, registry, and persistence tests passed; Ruff and diff checks passed.
 
-Issue #557 remains open for the deliberately separate incomplete-family and additive read-contract
-work. Benchmark assignment needs a decision separating source observation from processing time;
-cash-account and look-through families need additive observation/quality persistence; query
-contracts that currently discard stored lineage require downstream-safe additions. Source-batch
-identity remains an envelope-level design and was not fabricated per record.
+The registry explicitly declares every lineage field required, optional, or not applicable across
+all 25 reference-data families. Benchmark assignment keeps its processing timestamp separate from
+source observation; cash-account and look-through families truthfully declare unavailable
+observation/quality fields rather than fabricating authority. Source-batch identity remains an
+envelope-level design and is not invented per record.
+
+## 2026-08-14 Query And Validation Closure
+
+- Shared validation now rejects a supplied `observed_at` without an explicit timezone offset under
+  stable code `INVALID_OBSERVED_AT`; omission remains valid for families whose registry policy
+  declares observation time optional.
+- Query records now publish canonical `source_system`, `source_record_id`, `observed_at`, and
+  `quality_status` for index price/return, benchmark return, risk-free, classification taxonomy,
+  client restriction, sustainability preference, client tax profile/rule, income need, liquidity
+  reserve, planned withdrawal, model target, and instrument-eligibility evidence.
+- SQL adapters retain stored source system and quality evidence through persistence-independent
+  domain records. Missing instrument eligibility explicitly returns null source identity/time and
+  `MISSING` quality; it does not fabricate upstream authority.
+- Existing benchmark and index definition products retain their versioned legacy
+  `source_vendor`/`source_timestamp` response properties for downstream compatibility; their
+  source evidence was already preserved rather than discarded. Canonical naming applies to new
+  and migrated contracts until a separately versioned removal is downstream-safe.
+
+Closure validation: 14 initial query-lineage tests, 49 client/DPM application and adapter tests,
+and the combined 134-test DTO/query regression slice passed. Ruff, diff checks,
+`make openapi-gate`, and `make api-vocabulary-gate` passed. The API vocabulary was regenerated.
+No database migration, route, topic, partition, dependency, or runtime-topology change was needed.
