@@ -476,9 +476,17 @@ class IngestionJobBookkeepingRepairResponse(BaseModel):
 
 
 class IngestionIdempotencyDiagnosticItemResponse(BaseModel):
-    idempotency_key: str = Field(
-        description="Client-supplied idempotency key.",
-        examples=["ingestion-transactions-batch-20260301-001"],
+    idempotency_key: None = Field(
+        default=None,
+        deprecated=True,
+        description=(
+            "Deprecated raw-key field. Always null because operator diagnostics do not disclose "
+            "caller-supplied idempotency keys."
+        ),
+    )
+    idempotency_key_reference: str = Field(
+        description="Stable non-reversible SHA-256 reference for the client idempotency key.",
+        examples=["sha256:6a144175d216004612747a27a1daecc816334b295076941e203816799b4b1b67"],
     )
     usage_count: int = Field(
         ge=1,

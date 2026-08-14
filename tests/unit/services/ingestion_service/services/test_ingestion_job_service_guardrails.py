@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.services.ingestion_service.app.request_metadata import idempotency_key_reference
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
 from src.services.ingestion_service.app.services import (
     ingestion_replay_audits as replay_audits_module,
@@ -515,17 +516,20 @@ async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints
 
     assert response.total_keys == 3
     assert response.collisions == 2
-    assert response.keys[0].idempotency_key == "key_conflict"
+    assert response.keys[0].model_dump()["idempotency_key"] is None
+    assert response.keys[0].idempotency_key_reference == idempotency_key_reference("key_conflict")
     assert response.keys[0].collision_detected is True
     assert response.keys[0].payload_conflict_detected is True
     assert response.keys[0].reuse_classification == "conflicting_payload_reuse"
-    assert response.keys[1].idempotency_key == "key_shared"
+    assert response.keys[1].model_dump()["idempotency_key"] is None
+    assert response.keys[1].idempotency_key_reference == idempotency_key_reference("key_shared")
     assert response.keys[1].collision_detected is True
     assert response.keys[1].payload_conflict_detected is False
     assert response.keys[1].reuse_classification == "cross_endpoint_reuse"
     assert response.keys[1].endpoints == ["positions", "transactions"]
     assert response.keys[2].collision_detected is False
     assert response.keys[2].reuse_classification == "single_record_or_benign_replay"
+    assert "key_conflict" not in response.model_dump_json()
 
 
 async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(
