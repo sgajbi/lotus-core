@@ -8,7 +8,8 @@
     "required_identifier_posture": [
       "Prefer SYNTH_* identifiers for new reusable fixtures.",
       "Existing canonical front-office seed identifiers that look client-like must be cataloged here before they appear in committed fixture, example, seed, or evidence surfaces.",
-      "Do not use real client names, personal emails, external account numbers, access tokens, authorization credentials, database connection strings, or API keys in committed fixtures."
+      "Do not use real client names, personal emails, external account numbers, access tokens, authorization credentials, database connection strings, or API keys in committed fixtures.",
+      "Third-party authority source bytes are not Lotus synthetic fixture data. Exempt only the exact CISA KEV source path when its canonical sibling bundle binds the Core repository, workflow run and attempt, full source commit, official source URL, valid creation window, and exact source digest; receipts, manifests, lookalikes, and unverified source files remain scanned."
     ],
     "realism_requirements": [
       "Representative private-banking fixtures must model client, account, portfolio, custody, instrument, transaction, cash, FX, benchmark, and reporting-currency relationships.",
@@ -113,6 +114,11 @@
       "Add reusable fixtures to fixture_catalog in this file.",
       "Run make synthetic-fixture-leakage-guard and cite it in issue/PR evidence.",
       "If an existing fixture is ambiguous but cannot be changed safely in the current slice, create or cite a follow-up issue in remediation_log."
+    ],
+    "retaining_third_party_authority": [
+      "Retain downloaded authority bytes with their canonical workflow-attempt bundle; do not edit either artifact.",
+      "Do not add external email allowlists, broad output exclusions, or weaker leakage expressions to accommodate upstream authority text.",
+      "A missing, malformed, internally stale, future-dated, identity-drifted, or digest-mismatched bundle fails closed and leaves the source file under ordinary leakage scanning."
     ]
   }
 }
