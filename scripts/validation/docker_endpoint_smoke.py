@@ -256,6 +256,51 @@ def _call(
         return None
 
 
+def _accepted_job_id(response: requests.Response | None) -> str | None:
+    """Return the durable job authority from a successful batch-acceptance response."""
+    if response is None or response.status_code != 202:
+        return None
+    try:
+        job_id = response.json().get("job_id")
+    except (AttributeError, ValueError):
+        return None
+    return job_id.strip() if isinstance(job_id, str) and job_id.strip() else None
+
+
+def _probe_source_safe_retry(
+    results: list[CheckResult],
+    *,
+    event_replay_url: str,
+    headers: dict[str, str],
+    acceptance_response: requests.Response | None,
+) -> None:
+    """Exercise positive retry only against a job whose endpoint policy permits replay."""
+    replayable_job_id = _accepted_job_id(acceptance_response)
+    if replayable_job_id:
+        _call(
+            results,
+            name="job retry dry run",
+            method="POST",
+            url=f"{event_replay_url}/ingestion/jobs/{replayable_job_id}/retry",
+            expected={200},
+            headers=headers,
+            json={"dry_run": True, "record_keys": []},
+        )
+        return
+
+    results.append(
+        CheckResult(
+            name="job retry dry run",
+            method="POST",
+            url=f"{event_replay_url}/ingestion/jobs/{{source_safe_job_id}}/retry",
+            status=0,
+            ok=False,
+            note="job_id not discovered from source-safe instrument acceptance response",
+            response=None,
+        )
+    )
+
+
 def _record_contract_check(
     results: list[CheckResult],
     *,
@@ -637,7 +682,7 @@ def main(
             ]
         },
     )
-    _call(
+    instrument_ingestion_response = _call(
         results,
         name="ingest instruments",
         method="POST",
@@ -866,15 +911,6 @@ def main(
             expected={200},
             headers=ops_headers,
         )
-        _call(
-            results,
-            name="job retry dry run",
-            method="POST",
-            url=f"{event_replay}/ingestion/jobs/{job_id}/retry",
-            expected={200},
-            headers=ops_headers,
-            json={"dry_run": True, "record_keys": []},
-        )
     else:
         results.append(
             CheckResult(
@@ -887,6 +923,13 @@ def main(
                 response=None,
             )
         )
+
+    _probe_source_safe_retry(
+        results,
+        event_replay_url=event_replay,
+        headers=ops_headers,
+        acceptance_response=instrument_ingestion_response,
+    )
 
     _call(
         results,
