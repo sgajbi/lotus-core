@@ -32,6 +32,14 @@ class _SingleSessionAsyncIterable:
         return self._session
 
 
+class _EmptySessionAsyncIterable:
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise StopAsyncIteration
+
+
 class _FakeBegin:
     async def __aenter__(self):
         return self
@@ -239,6 +247,43 @@ def test_payload_evidence_rejects_unknown_endpoint_entity_or_naive_time() -> Non
             entity_type="instrument",
             payload={"instruments": []},
             observed_at=datetime(2026, 8, 14),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_rejects_missing_request_evidence_before_database_access() -> None:
+    def unexpected_session_factory():
+        pytest.fail("database access must not occur without request evidence")
+
+    with pytest.raises(ValueError, match="require request payload evidence"):
+        await create_or_get_job_result(
+            job_id="job_missing_evidence",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=0,
+            idempotency_key=None,
+            correlation_id="corr_missing_evidence",
+            request_id="req_missing_evidence",
+            trace_id="trace_missing_evidence",
+            request_payload=None,
+            session_factory=unexpected_session_factory,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_fails_closed_when_database_session_is_unavailable() -> None:
+    with pytest.raises(RuntimeError, match="unavailable database session"):
+        await create_or_get_job_result(
+            job_id="job_without_session",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=1,
+            idempotency_key=None,
+            correlation_id="corr_without_session",
+            request_id="req_without_session",
+            trace_id="trace_without_session",
+            request_payload={"transactions": [{"transaction_id": "T1"}]},
+            session_factory=_EmptySessionAsyncIterable,
         )
 
 
