@@ -342,6 +342,12 @@ def _persisted_job(*, request_payload: object) -> SimpleNamespace:
         retry_count=0,
         last_retried_at=None,
         request_payload=request_payload,
+        request_payload_policy_version="ingestion-evidence-policy.v1",
+        request_payload_representation="source_safe_replay",
+        request_payload_replay_eligible=True,
+        request_payload_partial_replay_eligible=True,
+        request_payload_replay_expires_at=datetime(2026, 7, 29, tzinfo=UTC),
+        request_payload_retention_authority="lotus-core#708",
     )
 
 
@@ -405,6 +411,9 @@ async def test_get_job_replay_context_maps_only_object_payloads(
     else:
         assert response is not None
         assert response.request_payload == expected_payload
+        assert response.request_payload_policy_version == "ingestion-evidence-policy.v1"
+        assert response.request_payload_replay_eligible is True
+        assert response.request_payload_replay_expires_at == datetime(2026, 7, 29, tzinfo=UTC)
     assert len(session.executed_statements) == 1
 
 

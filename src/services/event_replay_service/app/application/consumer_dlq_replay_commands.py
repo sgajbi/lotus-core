@@ -6,6 +6,10 @@ from typing import Any
 
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
+from src.services.ingestion_service.app.domain.ingestion_replay_evidence import (
+    ReplayEvidenceFailure,
+    replay_evidence_failure,
+)
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
 from .replay_command_errors import ReplayCommandError
@@ -195,9 +199,14 @@ class ConsumerDlqReplayCommandService:
         replay_job_id: str,
         context: Any | None,
         replay_fingerprint: str,
+        evidence_failure: ReplayEvidenceFailure,
         dry_run: bool,
         requested_by: str | None,
     ) -> ConsumerDlqReplayResult:
+        replay_reason = (
+            "Correlated ingestion job durable replay evidence is not authorized: "
+            f"{evidence_failure.value}."
+        )
         return await self._record_consumer_dlq_replay_result(
             event_id=event_id,
             correlation_id=correlation_id,
@@ -206,8 +215,8 @@ class ConsumerDlqReplayCommandService:
             replay_fingerprint=replay_fingerprint,
             replay_status="not_replayable",
             dry_run=dry_run,
-            replay_reason="Correlated ingestion job does not have durable replay payload.",
-            message="Correlated ingestion job does not have durable replay payload.",
+            replay_reason=replay_reason,
+            message=replay_reason,
             requested_by=requested_by,
         )
 
@@ -245,13 +254,19 @@ class ConsumerDlqReplayCommandService:
             replay_job_id=replay_job_id,
             context=context,
         )
-        if context is None or context.request_payload is None:
+        evidence_failure = (
+            ReplayEvidenceFailure.PAYLOAD_UNAVAILABLE
+            if context is None
+            else replay_evidence_failure(context)
+        )
+        if evidence_failure is not None:
             return await self._consumer_dlq_missing_payload_result(
                 event_id=event_id,
                 correlation_id=correlation_id,
                 replay_job_id=replay_job_id,
                 context=context,
                 replay_fingerprint=replay_fingerprint,
+                evidence_failure=evidence_failure,
                 dry_run=dry_run,
                 requested_by=requested_by,
             )
