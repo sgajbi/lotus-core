@@ -127,6 +127,9 @@ def _to_contract(record: ClassificationTaxonomyEvidence) -> ClassificationTaxono
         effective_from=record.effective_from,
         effective_to=record.effective_to,
         quality_status=record.quality_status,
+        source_system=record.source_vendor,
+        source_record_id=record.source_record_id,
+        observed_at=record.observed_at,
     )
 
 

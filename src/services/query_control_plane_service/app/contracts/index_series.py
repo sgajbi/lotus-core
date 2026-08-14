@@ -11,7 +11,7 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
-from .common import IntegrationWindow
+from .common import IntegrationWindow, SourceObservationEvidence
 
 
 class IndexSeriesRequest(BaseModel):
@@ -31,17 +31,16 @@ class IndexSeriesRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class IndexPriceSeriesPoint(BaseModel):
+class IndexPriceSeriesPoint(SourceObservationEvidence):
     """One canonical index price point."""
 
     series_date: date
     index_price: Decimal
     series_currency: str
     value_convention: str
-    quality_status: str
 
 
-class IndexReturnSeriesPoint(BaseModel):
+class IndexReturnSeriesPoint(SourceObservationEvidence):
     """One canonical index return point."""
 
     series_date: date
@@ -49,7 +48,6 @@ class IndexReturnSeriesPoint(BaseModel):
     return_period: str
     return_convention: str
     series_currency: str
-    quality_status: str
 
 
 class IndexSeriesResponseMetadata(SourceDataProductRuntimeMetadata):

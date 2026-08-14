@@ -68,6 +68,9 @@ async def test_service_reads_scope_and_returns_current_source_proof() -> None:
     assert response.source_batch_fingerprint is None
     assert response.source_refs
     assert response.source_lineage["source_owner"] == "lotus-core"
+    assert response.records[0].source_system == "lotus-reference"
+    assert response.records[0].source_record_id == "taxonomy-equity"
+    assert response.records[0].observed_at == EVIDENCE_TIME
 
 
 @pytest.mark.asyncio

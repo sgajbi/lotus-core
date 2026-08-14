@@ -84,6 +84,9 @@ def test_complete_price_window_is_current_and_content_hash_is_deterministic() ->
     assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.generated_at != second.generated_at
+    assert first.points[0].source_system == "MSCI"
+    assert first.points[0].source_record_id == "price:2026-04-09"
+    assert first.points[0].observed_at == EVIDENCE_AT
 
 
 def test_partial_return_window_is_not_claimed_current() -> None:
@@ -97,6 +100,8 @@ def test_partial_return_window_is_not_claimed_current() -> None:
     assert response.completeness_status == "PARTIAL"
     assert response.record_count == 1
     assert response.data_quality_status == "STALE"
+    assert response.points[0].source_system == "MSCI"
+    assert response.points[0].source_record_id == "return:2026-04-10"
     assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
     assert response.request_fingerprint

@@ -65,6 +65,9 @@ def test_complete_window_is_current_and_hash_is_deterministic() -> None:
     assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.points[0].day_count_convention == "act_360"
+    assert first.points[0].source_system == "Federal Reserve Bank of New York"
+    assert first.points[0].source_record_id == "sofr:2026-04-09"
+    assert first.points[0].observed_at == EVIDENCE_AT
 
 
 def test_stale_partial_window_is_not_current() -> None:
