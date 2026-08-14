@@ -80,8 +80,10 @@ endpoint-owned policy registry covering all 35 job-creating ingestion families:
   nested unknown fields, credentials, and arbitrary headers are removed; only stable product
   messages, allowlisted recovery fields, and numeric `Retry-After` survive initial response and
   idempotent replay;
-- `X-Idempotency-Key` is a bounded opaque identifier, and operator diagnostics expose only a full
-  SHA-256 reference while the deprecated raw-key field is always null.
+- `X-Idempotency-Key` is a bounded opaque identifier, and operator diagnostics expose only a
+  purpose-bound, key-versioned HMAC-SHA-256 pseudonym while the deprecated raw-key field is always
+  null. Non-local profiles fail startup without a separate, non-local reference key of at least 32
+  characters; JWT and auth-context signing keys are not reused.
 
 Focused evidence includes 73 replay/evidence/migration tests, 65 failure/lifecycle/command tests,
 31 idempotency-boundary/diagnostic tests, OpenAPI gate success, and regenerated API-vocabulary
@@ -108,3 +110,14 @@ references. Repository-native `make test-ops-contract` passed all 318 cases; the
 payload/retry/DLQ cohort passed 45 cases; the database-model cohort passed 54 cases; MyPy passed all
 318 source files; and the full architecture guard passed. Exact-head and exact-main CI evidence is
 recorded on GitHub rather than inferred from these local results.
+
+PR review found two further authority-boundary defects. Record-status responses could continue to
+advertise replayable record keys after the 24-hour authority expired, and both retry command paths
+could cross expiry while awaiting permission or duplicate controls. Record projection now uses the
+same evidence authorization as replay, and ingestion-job plus consumer-DLQ commands recheck a fresh
+UTC observation immediately before dry-run acknowledgement or dispatch. Race tests expire the
+actual shared context during awaited controls and prove fail-closed outcomes without publication.
+Review also showed that an unkeyed SHA-256 reference allowed dictionary confirmation of accepted
+low-entropy idempotency keys. Diagnostics now use an explicitly injected, domain-separated
+HMAC-SHA-256 reference with a visible key id; stale OpenAPI examples no longer disclose synthetic
+raw keys.

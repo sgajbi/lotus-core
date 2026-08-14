@@ -485,8 +485,14 @@ class IngestionIdempotencyDiagnosticItemResponse(BaseModel):
         ),
     )
     idempotency_key_reference: str = Field(
-        description="Stable non-reversible SHA-256 reference for the client idempotency key.",
-        examples=["sha256:6a144175d216004612747a27a1daecc816334b295076941e203816799b4b1b67"],
+        description=(
+            "Stable, key-versioned HMAC-SHA-256 pseudonymous reference for the client "
+            "idempotency key. Rotation of the declared key id intentionally changes the value."
+        ),
+        examples=[
+            "hmac-sha256:v1:ops-2026-08:"
+            "6a144175d216004612747a27a1daecc816334b295076941e203816799b4b1b67"
+        ],
     )
     usage_count: int = Field(
         ge=1,

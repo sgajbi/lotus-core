@@ -17,6 +17,8 @@ async def load_idempotency_diagnostics_response(
     lookback_minutes: int,
     limit: int,
     session_factory,
+    reference_key_id: str,
+    reference_hmac_secret: str,
 ) -> IngestionIdempotencyDiagnosticsResponse:
     async for db in session_factory():
         since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
@@ -78,6 +80,8 @@ async def load_idempotency_diagnostics_response(
                 endpoints_raw=endpoints_raw,
                 first_seen_at=first_seen_at,
                 last_seen_at=last_seen_at,
+                reference_key_id=reference_key_id,
+                reference_hmac_secret=reference_hmac_secret,
             )
             for (
                 key,
@@ -114,6 +118,8 @@ def _to_idempotency_diagnostic_item(
     endpoints_raw: object,
     first_seen_at,
     last_seen_at,
+    reference_key_id: str,
+    reference_hmac_secret: str,
 ) -> IngestionIdempotencyDiagnosticItemResponse:
     usage_count = int(usage_count_raw or 0)
     endpoint_count = int(endpoint_count_raw or 0)
@@ -124,7 +130,11 @@ def _to_idempotency_diagnostic_item(
     collision_detected = endpoint_count > 1 or payload_conflict_detected
     return IngestionIdempotencyDiagnosticItemResponse(
         idempotency_key=None,
-        idempotency_key_reference=idempotency_key_reference(key),
+        idempotency_key_reference=idempotency_key_reference(
+            value=key,
+            key_id=reference_key_id,
+            hmac_secret=reference_hmac_secret,
+        ),
         usage_count=usage_count,
         endpoint_count=endpoint_count,
         payload_fingerprint_count=payload_fingerprint_count,

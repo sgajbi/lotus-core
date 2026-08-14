@@ -497,7 +497,11 @@ INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE = {
     "collisions": 1,
     "keys": [
         {
-            "idempotency_key": "integration-ingestion-idempotency-001",
+            "idempotency_key": None,
+            "idempotency_key_reference": (
+                "hmac-sha256:v1:ops-2026-08:"
+                "1f2c60c94de37f601c8a679992c0316d654bcbef11dc9860759e71f5362e846d"
+            ),
             "usage_count": 3,
             "endpoint_count": 2,
             "payload_fingerprint_count": 2,
@@ -510,7 +514,11 @@ INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE = {
             "reuse_classification": "cross_endpoint_reuse",
         },
         {
-            "idempotency_key": "integration-ingestion-idempotency-002",
+            "idempotency_key": None,
+            "idempotency_key_reference": (
+                "hmac-sha256:v1:ops-2026-08:"
+                "7de1590df924e86f5aa82193bd78616955b9d13e5bcd6ed76e372076bc0ec128"
+            ),
             "usage_count": 2,
             "endpoint_count": 1,
             "payload_fingerprint_count": 1,

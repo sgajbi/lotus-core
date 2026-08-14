@@ -533,6 +533,11 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert idempotency_params["limit"]["schema"]["maximum"] == 500
     assert idempotency_example["collisions"] == 1
     assert idempotency_example["keys"][0]["collision_detected"] is True
+    assert all(item.get("idempotency_key") is None for item in idempotency_example["keys"])
+    assert all(
+        item["idempotency_key_reference"].startswith("hmac-sha256:v1:ops-2026-08:")
+        for item in idempotency_example["keys"]
+    )
     assert idempotency_example["keys"][0]["endpoint_count"] == 2
 
 

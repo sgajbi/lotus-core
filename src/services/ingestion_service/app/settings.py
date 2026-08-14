@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal, cast
@@ -13,6 +14,9 @@ STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
 LOCAL_CONFIG_ENVIRONMENTS = {"", "local", "dev", "development", "test"}
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 FALSY_ENV_VALUES = {"0", "false", "no", "off"}
+LOCAL_IDEMPOTENCY_REFERENCE_KEY_ID = "local-dev"
+LOCAL_IDEMPOTENCY_REFERENCE_HMAC_SECRET = "lotus-core-idempotency-reference-local-only"  # nosec B105
+_IDEMPOTENCY_REFERENCE_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 IngestionRateLimitEnforcementScope = Literal[
     "local_process",
@@ -237,6 +241,12 @@ class IngestionOpsAuthSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class IngestionIdempotencyReferenceSettings:
+    key_id: str
+    hmac_secret: str
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionRateLimitSettings:
     enabled: bool
     window_seconds: int
@@ -293,6 +303,7 @@ class IngestionServiceSettings:
     ops_auth: IngestionOpsAuthSettings
     rate_limit: IngestionRateLimitSettings
     runtime_policy: IngestionRuntimePolicySettings
+    idempotency_reference: IngestionIdempotencyReferenceSettings
 
 
 def _load_calculator_peak_lag_age_seconds() -> dict[str, int]:
@@ -418,6 +429,34 @@ def _validate_ops_auth_settings(settings: IngestionOpsAuthSettings) -> None:
                 "strict profiles require a non-default static ops token when static token auth is "
                 "explicitly approved."
             )
+
+
+def _validate_idempotency_reference_settings(
+    settings: IngestionIdempotencyReferenceSettings,
+) -> None:
+    if _IDEMPOTENCY_REFERENCE_KEY_ID_PATTERN.fullmatch(settings.key_id) is None:
+        raise IngestionConfigurationError(
+            "Invalid ingestion service configuration for "
+            "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID: expected a 1-64 character "
+            "alphanumeric, period, underscore, or hyphen key id."
+        )
+    if not _strict_config_validation_enabled():
+        return
+    if settings.key_id == LOCAL_IDEMPOTENCY_REFERENCE_KEY_ID:
+        raise IngestionConfigurationError(
+            "Invalid ingestion service configuration for "
+            "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID: strict profiles require a "
+            "non-local key id."
+        )
+    if (
+        settings.hmac_secret == LOCAL_IDEMPOTENCY_REFERENCE_HMAC_SECRET
+        or len(settings.hmac_secret) < 32
+    ):
+        raise IngestionConfigurationError(
+            "Invalid ingestion service configuration for "
+            "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET: strict profiles require a "
+            "purpose-specific secret of at least 32 characters."
+        )
 
 
 def _env_int_from_mapping(values: dict[str, object], key: str, default: int) -> int:
@@ -596,8 +635,19 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
                 ),
             ),
         ),
+        idempotency_reference=IngestionIdempotencyReferenceSettings(
+            key_id=_env_str(
+                "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID",
+                LOCAL_IDEMPOTENCY_REFERENCE_KEY_ID,
+            ),
+            hmac_secret=_env_str(
+                "LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET",
+                LOCAL_IDEMPOTENCY_REFERENCE_HMAC_SECRET,
+            ),
+        ),
     )
     _validate_ops_auth_settings(settings.ops_auth)
+    _validate_idempotency_reference_settings(settings.idempotency_reference)
     return settings
 
 

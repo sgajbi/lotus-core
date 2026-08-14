@@ -517,12 +517,21 @@ async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints
     assert response.total_keys == 3
     assert response.collisions == 2
     assert response.keys[0].model_dump()["idempotency_key"] is None
-    assert response.keys[0].idempotency_key_reference == idempotency_key_reference("key_conflict")
+    reference_settings = service_module._SETTINGS.idempotency_reference
+    assert response.keys[0].idempotency_key_reference == idempotency_key_reference(
+        value="key_conflict",
+        key_id=reference_settings.key_id,
+        hmac_secret=reference_settings.hmac_secret,
+    )
     assert response.keys[0].collision_detected is True
     assert response.keys[0].payload_conflict_detected is True
     assert response.keys[0].reuse_classification == "conflicting_payload_reuse"
     assert response.keys[1].model_dump()["idempotency_key"] is None
-    assert response.keys[1].idempotency_key_reference == idempotency_key_reference("key_shared")
+    assert response.keys[1].idempotency_key_reference == idempotency_key_reference(
+        value="key_shared",
+        key_id=reference_settings.key_id,
+        hmac_secret=reference_settings.hmac_secret,
+    )
     assert response.keys[1].collision_detected is True
     assert response.keys[1].payload_conflict_detected is False
     assert response.keys[1].reuse_classification == "cross_endpoint_reuse"

@@ -532,6 +532,8 @@ class IngestionJobService:
             lookback_minutes=lookback_minutes,
             limit=limit,
             session_factory=get_async_db_session,
+            reference_key_id=_SETTINGS.idempotency_reference.key_id,
+            reference_hmac_secret=_SETTINGS.idempotency_reference.hmac_secret,
         )
 
     async def get_error_budget_status(
