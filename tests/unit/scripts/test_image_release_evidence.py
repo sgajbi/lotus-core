@@ -267,7 +267,9 @@ def _attestation_payload(digest: str = IMAGE_DIGEST) -> str:
                 "byproducts": [
                     {
                         "name": "buildx-result",
-                        "content": {"containerimage.digest": digest},
+                        "content": base64.b64encode(
+                            json.dumps({"containerimage.digest": digest}).encode()
+                        ).decode(),
                     },
                     {"name": "cyclonedx-sbom", "digest": {"sha256": "9" * 64}},
                 ],

@@ -309,7 +309,7 @@ jobs:
           docker run --rm \
             -v "$HOME/.docker:/root/.docker:ro" \
             -v "$PWD/output/build-evidence:/output" \
-            aquasec/trivy:0.56.2 image \
+            aquasec/trivy:0.56.2@sha256:26245f364b6f5d223003dc344ec1eb5eb8439052bfecb31d79aeba0c74344b3a image \
             --format cyclonedx \
             --output "/output/${{ matrix.service }}-sbom.cdx.json" \
             "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
