@@ -33,7 +33,7 @@ def _settings(
         ops_auth=None,  # type: ignore[arg-type]
         rate_limit=None,  # type: ignore[arg-type]
         runtime_policy=None,  # type: ignore[arg-type]
-        idempotency_reference=None,  # type: ignore[arg-type]
+        evidence_hmac=None,  # type: ignore[arg-type]
     )
 
 

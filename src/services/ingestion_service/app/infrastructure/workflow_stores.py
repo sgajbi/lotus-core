@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..ports.ingestion_workflow_stores import ReplayAuditRecord
@@ -17,8 +17,18 @@ from ..services.ingestion_replay_audits import (
 
 
 class SqlAlchemyIngestionJobStore:
-    def __init__(self, *, session_factory: Callable[[], Any]):
+    def __init__(
+        self,
+        *,
+        session_factory: Callable[[], Any],
+        fingerprint_key_id: str,
+        fingerprint_hmac_secret: str,
+        fingerprint_previous_keys: Mapping[str, str],
+    ):
         self._session_factory = session_factory
+        self._fingerprint_key_id = fingerprint_key_id
+        self._fingerprint_hmac_secret = fingerprint_hmac_secret
+        self._fingerprint_previous_keys = dict(fingerprint_previous_keys)
 
     async def create_or_get_job(
         self,
@@ -43,6 +53,9 @@ class SqlAlchemyIngestionJobStore:
             request_id=request_id,
             trace_id=trace_id,
             request_payload=request_payload,
+            fingerprint_key_id=self._fingerprint_key_id,
+            fingerprint_hmac_secret=self._fingerprint_hmac_secret,
+            fingerprint_previous_keys=self._fingerprint_previous_keys,
             session_factory=self._session_factory,
         )
 

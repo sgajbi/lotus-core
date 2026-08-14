@@ -24,6 +24,9 @@ from .services.ingestion_publish_commands import IngestionPublishCommandHandler
 from .services.ingestion_service import IngestionService
 from .services.reference_data_ingestion_commands import ReferenceDataIngestionCommandHandler
 from .services.reference_data_ingestion_service import ReferenceDataIngestionService
+from .settings import get_ingestion_service_settings
+
+_SETTINGS = get_ingestion_service_settings()
 
 
 def adapter_mode_disabled_http_error(exc: AdapterModeDisabledError) -> HTTPException:
@@ -73,7 +76,14 @@ def get_business_date_ingestion_policy(
 def get_ingestion_idempotency_replay_reader(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> IngestionIdempotencyReplayReader:
-    return SqlAlchemyIngestionIdempotencyReplayReader(db)
+    evidence_hmac = _SETTINGS.evidence_hmac
+    return SqlAlchemyIngestionIdempotencyReplayReader(
+        db,
+        fingerprint_keyring={
+            **evidence_hmac.previous_keys,
+            evidence_hmac.key_id: evidence_hmac.hmac_secret,
+        },
+    )
 
 
 def get_business_date_ingestion_command_handler(

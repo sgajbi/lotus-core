@@ -25,13 +25,16 @@ This runbook summarizes the ingestion operations controls expected for productio
   - `LOTUS_CORE_INGEST_OPS_JWT_ISSUER` (optional issuer validation)
   - `LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE` (optional audience validation)
   - `LOTUS_CORE_INGEST_OPS_JWT_CLOCK_SKEW_SECONDS` (default: `60`)
-  - `LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_KEY_ID` (purpose-specific active HMAC key id)
-  - `LOTUS_CORE_INGEST_IDEMPOTENCY_REFERENCE_HMAC_SECRET` (at least 32 characters and supplied
-    from the deployment secret store in non-local profiles; do not reuse JWT or auth-context keys)
+  - `LOTUS_CORE_INGEST_EVIDENCE_HMAC_KEY_ID` (active ingestion-evidence HMAC key id)
+  - `LOTUS_CORE_INGEST_EVIDENCE_HMAC_SECRET` (at least 32 characters and supplied from the
+    deployment secret store in non-local profiles; do not reuse JWT or auth-context keys)
+  - `LOTUS_CORE_INGEST_EVIDENCE_HMAC_PREVIOUS_KEYS_JSON` (key-id-to-secret map retained only while
+    durable payload fingerprints signed by prior rotation keys remain queryable)
 
 Idempotency diagnostics return only a domain-separated, key-versioned HMAC-SHA-256 pseudonym.
-They never return the raw caller key. Key rotation intentionally changes the diagnostic pseudonym;
-the raw durable key continues to own ingestion equality and conflict semantics.
+They never return the raw caller key. Request-payload fingerprints use a separate HMAC domain and
+verify with the declared active or retained prior key, so rotation preserves durable equality.
+The raw durable idempotency key continues to own ingestion lookup semantics.
 
 ### Manual testing recommendation
 

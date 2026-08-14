@@ -8,11 +8,26 @@ from src.services.ingestion_service.app.infrastructure.ingestion_idempotency_rep
     SqlAlchemyIngestionIdempotencyReplayReader,
 )
 from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
-    ingestion_payload_fingerprint,
+    ingestion_payload_fingerprint as _ingestion_payload_fingerprint,
+)
+from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
     source_safe_request_payload,
 )
 
 pytestmark = pytest.mark.asyncio
+
+_ACTIVE_KEY_ID = "test-active"
+_ACTIVE_SECRET = "test-active-ingestion-evidence-secret"
+_PREVIOUS_KEY_ID = "test-previous"
+_PREVIOUS_SECRET = "test-previous-ingestion-evidence-secret"
+_KEYRING = {
+    _ACTIVE_KEY_ID: _ACTIVE_SECRET,
+    _PREVIOUS_KEY_ID: _PREVIOUS_SECRET,
+}
+
+
+def ingestion_payload_fingerprint(payload, *, key_id=_ACTIVE_KEY_ID, secret=_ACTIVE_SECRET):
+    return _ingestion_payload_fingerprint(payload, key_id=key_id, hmac_secret=secret)
 
 
 def _job(
@@ -46,7 +61,7 @@ def _job(
 
 def _reader(existing: object | None):
     db = SimpleNamespace(scalar=AsyncMock(return_value=existing))
-    return SqlAlchemyIngestionIdempotencyReplayReader(db), db
+    return SqlAlchemyIngestionIdempotencyReplayReader(db, fingerprint_keyring=_KEYRING), db
 
 
 async def test_missing_idempotency_key_does_not_query_store() -> None:
@@ -95,6 +110,29 @@ async def test_matching_current_fingerprint_returns_established_job() -> None:
     assert result.accepted_count == 2
     assert result.status == "queued"
     assert result.failure_status_code is None
+
+
+async def test_matching_retained_rotation_key_returns_established_job() -> None:
+    payload = {"transaction_ids": ["T1", "T2"]}
+    reader, _ = _reader(
+        _job(
+            request_payload=source_safe_request_payload(payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(
+                payload,
+                key_id=_PREVIOUS_KEY_ID,
+                secret=_PREVIOUS_SECRET,
+            ),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        endpoint="/reprocess/transactions",
+        idempotency_key="idem-reprocess",
+        request_payload=payload,
+    )
+
+    assert result is not None
+    assert result.job_id == "job-existing"
 
 
 async def test_different_current_fingerprint_does_not_replay() -> None:

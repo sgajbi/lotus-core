@@ -299,7 +299,10 @@ Current repository posture:
     detail, or non-allowlisted headers. Initial failure responses and idempotent replay must use the
     same stable product message and bounded recovery fields. `X-Idempotency-Key` is a validated
     1-128 character opaque protocol identifier; operational diagnostics publish only its full
-    SHA-256 reference and never the raw caller value.
+    purpose-bound, key-versioned HMAC-SHA-256 reference and never the raw caller value. Complete
+    request-payload fingerprints use the same governed ingestion-evidence key authority under a
+    separate cryptographic domain, include the key id, and must verify against the active or
+    explicitly retained rotation key; never restore unkeyed hashes for restricted request evidence.
 32. Direct ingestion post-publish or post-persist bookkeeping failures must preserve the
     `INGESTION_JOB_BOOKKEEPING_FAILED` code while making partial-failure state explicit with
     `publish_state`, `work_state`, `published_record_count`, `retry_safe=false`,

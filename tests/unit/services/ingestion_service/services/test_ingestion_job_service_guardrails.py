@@ -517,7 +517,7 @@ async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints
     assert response.total_keys == 3
     assert response.collisions == 2
     assert response.keys[0].model_dump()["idempotency_key"] is None
-    reference_settings = service_module._SETTINGS.idempotency_reference
+    reference_settings = service_module._SETTINGS.evidence_hmac
     assert response.keys[0].idempotency_key_reference == idempotency_key_reference(
         value="key_conflict",
         key_id=reference_settings.key_id,

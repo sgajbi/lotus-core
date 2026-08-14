@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -7,14 +8,49 @@ import pytest
 from src.services.ingestion_service.app.main import ingestion_idempotency_conflict_handler
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
     IngestionIdempotencyConflictError,
-    create_or_get_job_result,
+)
+from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
+    create_or_get_job_result as _create_or_get_job_result,
 )
 from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
-    build_ingestion_payload_evidence,
-    ingestion_payload_fingerprint,
-    source_safe_payload_fingerprint,
+    build_ingestion_payload_evidence as _build_ingestion_payload_evidence,
+)
+from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
+    ingestion_payload_fingerprint as _ingestion_payload_fingerprint,
+)
+from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
+    ingestion_payload_fingerprint_matches,
     source_safe_request_payload,
 )
+
+_FINGERPRINT_KEY_ID = "test-key"
+_FINGERPRINT_SECRET = "test-ingestion-evidence-secret-32-bytes"
+_FINGERPRINT_PREVIOUS_KEYS: dict[str, str] = {}
+
+
+def ingestion_payload_fingerprint(payload):
+    return _ingestion_payload_fingerprint(
+        payload,
+        key_id=_FINGERPRINT_KEY_ID,
+        hmac_secret=_FINGERPRINT_SECRET,
+    )
+
+
+def build_ingestion_payload_evidence(**kwargs):
+    return _build_ingestion_payload_evidence(
+        **kwargs,
+        fingerprint_key_id=_FINGERPRINT_KEY_ID,
+        fingerprint_hmac_secret=_FINGERPRINT_SECRET,
+    )
+
+
+async def create_or_get_job_result(**kwargs):
+    return await _create_or_get_job_result(
+        **kwargs,
+        fingerprint_key_id=_FINGERPRINT_KEY_ID,
+        fingerprint_hmac_secret=_FINGERPRINT_SECRET,
+        fingerprint_previous_keys=_FINGERPRINT_PREVIOUS_KEYS,
+    )
 
 
 class _SingleSessionAsyncIterable:
@@ -130,14 +166,54 @@ def test_ingestion_payload_fingerprint_is_canonical_for_key_order():
     right = {"source": "api", "transactions": [{"amount": "10", "transaction_id": "T1"}]}
 
     assert ingestion_payload_fingerprint(left) == ingestion_payload_fingerprint(right)
-    assert ingestion_payload_fingerprint(left).startswith("sha256:")
+    assert ingestion_payload_fingerprint(left).startswith("hmac-sha256:v1:test-key:")
 
 
-def test_source_safe_payload_fingerprint_redacts_before_hashing_sensitive_values():
+def test_ingestion_payload_fingerprint_resists_low_entropy_dictionary_confirmation():
+    payload = {"transaction_ids": ["T1"]}
+
+    fingerprint = ingestion_payload_fingerprint(payload)
+    plain_digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    assert fingerprint != f"sha256:{plain_digest}"
+    assert plain_digest not in fingerprint
+
+
+def test_ingestion_payload_fingerprint_verifies_retained_rotation_key_and_fails_unknown_key():
+    payload = {"transaction_ids": ["T1"]}
+    prior = _ingestion_payload_fingerprint(
+        payload,
+        key_id="prior-key",
+        hmac_secret="prior-ingestion-evidence-secret-32-bytes",
+    )
+    assert prior is not None
+
+    assert ingestion_payload_fingerprint_matches(
+        stored_fingerprint=prior,
+        payload=payload,
+        secrets_by_key_id={"prior-key": "prior-ingestion-evidence-secret-32-bytes"},
+    )
+    assert not ingestion_payload_fingerprint_matches(
+        stored_fingerprint=prior,
+        payload=payload,
+        secrets_by_key_id={"test-key": _FINGERPRINT_SECRET},
+    )
+    assert not ingestion_payload_fingerprint_matches(
+        stored_fingerprint=f"sha256:{'a' * 64}",
+        payload=payload,
+        secrets_by_key_id={"test-key": _FINGERPRINT_SECRET},
+    )
+
+
+def test_source_safe_payload_projection_redacts_sensitive_values_before_fingerprinting():
     left = {"authorization": "Bearer first-token", "records": [{"id": "1"}]}
     right = {"authorization": "Bearer second-token", "records": [{"id": "1"}]}
 
-    assert source_safe_payload_fingerprint(left) == source_safe_payload_fingerprint(right)
+    assert ingestion_payload_fingerprint(
+        source_safe_request_payload(left)
+    ) == ingestion_payload_fingerprint(source_safe_request_payload(right))
 
 
 def test_source_safe_request_payload_redacts_sensitive_values_without_mutating_input():
@@ -533,9 +609,9 @@ async def test_create_or_get_job_rejects_same_idempotency_key_with_different_sen
             session_factory=lambda: _SingleSessionAsyncIterable(session),
         )
 
-    assert source_safe_payload_fingerprint(existing_payload) == source_safe_payload_fingerprint(
-        requested_payload
-    )
+    assert ingestion_payload_fingerprint(
+        source_safe_request_payload(existing_payload)
+    ) == ingestion_payload_fingerprint(source_safe_request_payload(requested_payload))
     assert ingestion_payload_fingerprint(existing_payload) != ingestion_payload_fingerprint(
         requested_payload
     )

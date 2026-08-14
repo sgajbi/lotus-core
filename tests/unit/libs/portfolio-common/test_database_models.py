@@ -154,7 +154,7 @@ def test_transaction_precision_policy_covers_every_numeric_ledger_column() -> No
 
 def test_ingestion_job_declares_complete_failure_outcome_contract() -> None:
     table = IngestionJob.__table__
-    constraint_names = {constraint.name for constraint in table.constraints}
+    constraints = {constraint.name: constraint for constraint in table.constraints}
 
     assert {
         "failure_status_code",
@@ -162,7 +162,12 @@ def test_ingestion_job_declares_complete_failure_outcome_contract() -> None:
         "failure_detail",
         "failure_headers",
     } <= set(table.columns.keys())
-    assert "ck_ingestion_jobs_failure_outcome_complete" in constraint_names
+    assert "ck_ingestion_jobs_failure_outcome_complete" in constraints
+    fingerprint_constraint = str(
+        constraints["ck_ingestion_jobs_payload_fingerprint_format"].sqltext
+    )
+    assert "hmac-sha256:v1:" in fingerprint_constraint
+    assert "^sha256:" not in fingerprint_constraint
 
 
 def test_average_cost_pool_state_declares_integrity_constraints_and_support_index() -> None:

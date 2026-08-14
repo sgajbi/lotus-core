@@ -10,7 +10,8 @@ INGESTION_JOB_RESPONSE_EXAMPLE = {
     "accepted_count": 125,
     "idempotency_key": "ingestion-transactions-batch-20260306-001",
     "request_payload_fingerprint": (
-        "sha256:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"
+        "hmac-sha256:v1:ops-2026-08:"
+        "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"
     ),
     "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
     "request_id": "REQ:3a63936e-bf29-41e2-9f16-faf4e561d845",

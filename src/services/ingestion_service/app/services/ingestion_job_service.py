@@ -132,7 +132,12 @@ class IngestionJobService:
         return self._session_factory_override or get_async_db_session
 
     def _default_job_store(self) -> IngestionJobStore:
-        return SqlAlchemyIngestionJobStore(session_factory=self._session_factory())
+        return SqlAlchemyIngestionJobStore(
+            session_factory=self._session_factory(),
+            fingerprint_key_id=_SETTINGS.evidence_hmac.key_id,
+            fingerprint_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
+            fingerprint_previous_keys=_SETTINGS.evidence_hmac.previous_keys,
+        )
 
     def _default_replay_audit_store(self) -> ReplayAuditStore:
         return SqlAlchemyReplayAuditStore(session_factory=self._session_factory())
@@ -532,8 +537,8 @@ class IngestionJobService:
             lookback_minutes=lookback_minutes,
             limit=limit,
             session_factory=get_async_db_session,
-            reference_key_id=_SETTINGS.idempotency_reference.key_id,
-            reference_hmac_secret=_SETTINGS.idempotency_reference.hmac_secret,
+            reference_key_id=_SETTINGS.evidence_hmac.key_id,
+            reference_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
         )
 
     async def get_error_budget_status(
