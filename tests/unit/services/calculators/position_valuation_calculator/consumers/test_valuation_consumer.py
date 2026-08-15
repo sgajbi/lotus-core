@@ -301,6 +301,64 @@ async def test_unscoped_bond_fails_without_publishing_a_valued_snapshot(
 
 
 @pytest.mark.parametrize(
+    ("cost_basis", "cost_basis_local"),
+    [(Decimal("1"), Decimal("0")), (Decimal("0"), Decimal("1"))],
+)
+async def test_zero_quantity_bond_with_residual_cost_fails_without_quote_authority(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+    cost_basis: Decimal,
+    cost_basis_local: Decimal,
+) -> None:
+    repo = mock_dependencies["valuation_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("0"),
+        cost_basis=cost_basis,
+        cost_basis_local=cost_basis_local,
+    )
+    repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+        product_type="BOND",
+    )
+    repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("99.25"),
+        currency="USD",
+        price_date=mock_event.valuation_date,
+    )
+
+    def _persist(snapshot: DailyPositionSnapshot) -> DailyPositionSnapshot:
+        snapshot.id = 96
+        return snapshot
+
+    repo.upsert_daily_snapshot.side_effect = _persist
+
+    with patch(
+        "src.services.calculators.position_valuation_calculator.app."
+        "valuation_processor.VALUATION_JOBS_FAILED_TOTAL"
+    ) as failed_metric:
+        await mock_dependencies["processor"].process_valid_event(
+            mock_event,
+            "valuation.job.requested-0-96",
+            "processor-corr-id",
+            claim_token="a" * 32,
+        )
+
+    persisted_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
+    assert persisted_snapshot.valuation_status == "FAILED"
+    assert repo.update_job_status.await_args.kwargs["failure_reason"] == (
+        "bond valuation requires explicit quote-convention authority"
+    )
+    failed_metric.labels.assert_called_once_with(reason="missing_bond_quote_authority")
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
     "headers",
     [
         [(VALUATION_CLAIM_HEADER, b"not-a-token")],
@@ -695,6 +753,7 @@ async def test_valuation_processor_values_flat_position_without_quote_dependenci
     mock_valuation_repo.get_instrument.return_value = Instrument(
         currency=instrument_currency,
         security_id=mock_event.security_id,
+        product_type="BOND",
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
         base_currency=portfolio_currency,

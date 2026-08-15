@@ -533,6 +533,7 @@ class ReconciliationService:
                         quantity=snapshot.quantity,
                         market_price=snapshot.market_price,
                         market_value_local=snapshot.market_value_local,
+                        cost_basis_reporting=snapshot.cost_basis,
                         cost_basis_local=snapshot.cost_basis_local,
                         unrealized_gain_loss_local=snapshot.unrealized_gain_loss_local,
                         product_type=instrument.product_type,
