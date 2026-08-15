@@ -22,19 +22,36 @@ The core calculation is performed by the stateless `ValuationLogic` class. It de
 
 * If a required FX rate for a valuation is not found in the database, the valuation cannot be completed. The resulting `daily_position_snapshot` is marked with a status of `FAILED`, and the corresponding valuation job is marked `COMPLETE`. The system **does not** automatically retry this job; a manual reprocessing trigger is required if the missing data is later ingested.
 
-### Governed policy migration status
+### Governed quote-policy authority
 
-Issue #788 is replacing the quantity-price and legacy bond-quote heuristic with explicit valuation
-representations. The framework-independent policy, assignment, day-count, and segmented-accrual
-domains are implemented locally. Authoritative tenant/legal-book/instrument assignments can be
-submitted through `POST /ingest/instrument-valuation-policy-assignments`; ingestion validates an
-exact supported policy/version and serializes concurrent scope writes before comparing them with
-durable source-version history. The position-valuation service now owns an internal resolver that
-ranks durable source corrections before lifecycle/effective-date selection and binds the sole
-assignment to its exact registered policy. The production worker and financial reconciliation path
-are not wired to these policies yet because portfolio tenant/legal-book authority and the complete
-valuation-fact bundle are not available there; the endpoint and resolver are migration capability,
-not a claim that runtime valuation has migrated.
+Bond quote representation is never inferred from price, quantity, denomination, or average-cost
+magnitude. A non-flat bond can be valued successfully only through the authoritative path, where
+an exact tenant/legal-book/security scope resolves both an effective-dated valuation-policy
+assignment and a source-lineaged market-price fact. The assignment selects the quote convention;
+the price fact must declare the matching representation. Missing, overlapping, stale, wrong-book,
+or representation-inconsistent authority fails closed.
+
+Historical unscoped non-bond positions retain unit-price compatibility. Historical unscoped bond
+positions do not: their price may be a unit price or a percent-of-principal quote, and the number
+alone cannot prove which. Such a job is persisted as `FAILED` with the stable reason
+`bond valuation requires explicit quote-convention authority`; it does not receive a legacy
+valuation receipt. A flat bond with zero quantity and zero cost remains an exact, quote-independent
+zero valuation.
+
+Authoritative assignments can be submitted through
+`POST /ingest/instrument-valuation-policy-assignments`. Ingestion validates the exact supported
+policy/version and serializes concurrent scope writes before comparing them with durable
+source-version history. The position-valuation resolver ranks durable source corrections before
+lifecycle/effective-date selection and binds the sole assignment to its registered policy.
+Financial reconciliation consumes the persisted valuation receipt and the same framework-free
+economics kernel. A missing or `LEGACY_UNSCOPED` bond receipt creates the blocking finding
+`missing_bond_quote_authority`, owned by `VALUATION_OPERATIONS`, with repair recommendation
+`ASSIGN_VALUATION_QUOTE_POLICY`; reconciliation does not reconstruct the retired heuristic.
+
+Issue #788 continues the broader product-aware valuation programme. Factor-adjusted and supplied
+current principal, accrued-income source wiring, contract multipliers/deliverables, and wider
+mixed-product runtime certification remain outside this quote-interpretation slice and continue to
+fail closed where their source evidence is incomplete.
 
 The target policy never selects behavior from a broad product name or price magnitude. An exact,
 effective-dated instrument assignment selects a versioned composition of:
