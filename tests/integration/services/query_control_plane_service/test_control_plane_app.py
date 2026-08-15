@@ -191,6 +191,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/support/portfolios/{portfolio_id}/readiness" in paths
     assert "/support/portfolios/{portfolio_id}/corporate-action-events" in paths
+    assert "/support/security-audit/events" in paths
     assert "/simulation-sessions/{session_id}" in paths
     assert "/integration/advisory/proposals/simulate-execution" in paths
     analytics_input_routes = {
@@ -234,6 +235,23 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
 
     assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
     assert "/integration/positions/{portfolio_id}/timeseries" not in paths
+
+    security_audit = paths["/support/security-audit/events"]["get"]
+    parameter_names = {parameter["name"] for parameter in security_audit["parameters"]}
+    assert parameter_names == {
+        "occurred_from",
+        "occurred_to",
+        "page_size",
+        "cursor_occurred_at",
+        "cursor_event_id",
+        "component",
+        "decision",
+    }
+    assert "tenant_id" not in parameter_names
+    response_schema = response.json()["components"]["schemas"]["SecurityAuditEventResponse"]
+    assert {"payload", "headers", "request_path", "metadata"}.isdisjoint(
+        response_schema["properties"]
+    )
 
 
 async def test_openapi_excludes_core_read_plane_endpoints(async_test_client):

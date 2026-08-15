@@ -1,5 +1,8 @@
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
+from portfolio_common.infrastructure.persistence.security_audit_store import (
+    PostgresSecurityAuditStore,
+)
 from portfolio_common.page_tokens import PageTokenCodec
 from portfolio_common.runtime_providers import SystemClock, UuidIdGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +50,7 @@ from .application.portfolio_manager_book import PortfolioManagerBookService
 from .application.portfolio_party_roles import PortfolioPartyRoleAssignmentService
 from .application.reference_coverage import ReferenceCoverageService
 from .application.risk_free_series import RiskFreeSeriesService
+from .application.security_audit_query import SecurityAuditQueryService
 from .application.simulation import SimulationService
 from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from .application.transaction_economics.service import TransactionEconomicsService
@@ -103,6 +107,10 @@ from .infrastructure.transaction_economics_sources import (
     SqlAlchemyTransactionEconomicsReader,
 )
 from .settings import load_query_control_plane_settings
+
+
+def get_security_audit_query_service() -> SecurityAuditQueryService:
+    return SecurityAuditQueryService(store=PostgresSecurityAuditStore())
 
 
 def get_analytics_timeseries_service(

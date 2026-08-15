@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
 
 SECURITY_AUDIT_SCHEMA_VERSION = "1.0"
 OPERATIONAL_SECURITY_AUDIT_CLASSIFICATION = "operational_security_audit"
+MAX_SECURITY_AUDIT_QUERY_RANGE = timedelta(days=31)
 
 
 class SecurityAuditComponent(StrEnum):
@@ -103,6 +104,8 @@ class SecurityAuditQuery:
         _require_aware_time(self.occurred_to)
         if self.occurred_from > self.occurred_to:
             raise ValueError("security-audit time range is inverted")
+        if self.occurred_to - self.occurred_from > MAX_SECURITY_AUDIT_QUERY_RANGE:
+            raise ValueError("security-audit time range cannot exceed 31 days")
         if not 1 <= self.page_size <= 200:
             raise ValueError("security-audit page size must be between 1 and 200")
         if (self.cursor_occurred_at is None) != (self.cursor_event_id is None):

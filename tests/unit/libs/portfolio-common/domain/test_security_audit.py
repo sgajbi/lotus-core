@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.domain.security_audit import (
@@ -122,6 +122,7 @@ def test_security_audit_query_requires_bounded_tenant_keyset_scope() -> None:
         ({"page_size": 0}, "between 1 and 200"),
         ({"page_size": 201}, "between 1 and 200"),
         ({"occurred_from": datetime(2026, 8, 16, tzinfo=timezone.utc)}, "inverted"),
+        ({"occurred_to": EVENT_TIME + timedelta(days=31, seconds=1)}, "cannot exceed 31 days"),
         ({"cursor_event_id": EVENT_ID}, "must be supplied together"),
     ],
 )
