@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from portfolio_common.domain.security_audit import (
     SecurityAuditComponent,
     SecurityAuditDecision,
@@ -17,13 +17,47 @@ from ..contracts.security_audit import (
     SecurityAuditPageResponse,
 )
 from ..dependencies import get_security_audit_query_service
+from .response_helpers import problem_example, problem_response, raise_problem
 
 router = APIRouter(tags=["Security Audit Support"])
+
+VERIFIED_TENANT_REQUIRED = problem_example(
+    status_code=status.HTTP_403_FORBIDDEN,
+    title="Verified tenant context required",
+    detail="The request does not carry verified tenant authority.",
+    error_code="QCP_SECURITY_AUDIT_TENANT_CONTEXT_REQUIRED",
+    instance="/support/security-audit/events",
+)
+INVALID_QUERY = problem_example(
+    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+    title="Security-audit query invalid",
+    detail="The requested evidence window or cursor is outside governed bounds.",
+    error_code="QCP_SECURITY_AUDIT_QUERY_INVALID",
+    instance="/support/security-audit/events",
+)
+QUERY_UNAVAILABLE = problem_example(
+    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    title="Security-audit evidence unavailable",
+    detail="Durable security-audit evidence is temporarily unavailable.",
+    error_code="QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE",
+    instance="/support/security-audit/events",
+)
 
 
 @router.get(
     "/support/security-audit/events",
     response_model=SecurityAuditPageResponse,
+    responses={
+        status.HTTP_403_FORBIDDEN: problem_response(
+            "Verified tenant authority is missing.", VERIFIED_TENANT_REQUIRED
+        ),
+        status.HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Evidence query bounds or cursor are invalid.", INVALID_QUERY
+        ),
+        status.HTTP_503_SERVICE_UNAVAILABLE: problem_response(
+            "Durable evidence cannot currently be queried.", QUERY_UNAVAILABLE
+        ),
+    },
     summary="List tenant-bound durable access-decision evidence",
     description=(
         "Returns typed, append-only access-decision evidence for the verified request tenant. "
@@ -61,9 +95,11 @@ async def list_security_audit_events(
 ) -> SecurityAuditPageResponse:
     tenant_id = getattr(request.state, "enterprise_verified_tenant_id", None)
     if not isinstance(tenant_id, str) or not tenant_id:
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="verified_tenant_context_required",
+            title="Verified tenant context required",
+            detail="The request does not carry verified tenant authority.",
+            error_code="QCP_SECURITY_AUDIT_TENANT_CONTEXT_REQUIRED",
         )
     try:
         page = await service.list_events(
@@ -76,16 +112,20 @@ async def list_security_audit_events(
             component=component,
             decision=decision,
         )
-    except ValueError as exc:
-        raise HTTPException(
+    except ValueError:
+        raise_problem(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from None
+            title="Security-audit query invalid",
+            detail="The requested evidence window or cursor is outside governed bounds.",
+            error_code="QCP_SECURITY_AUDIT_QUERY_INVALID",
+        )
     except DatabaseUnavailable:
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="security_audit_query_unavailable",
-        ) from None
+            title="Security-audit evidence unavailable",
+            detail="Durable security-audit evidence is temporarily unavailable.",
+            error_code="QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE",
+        )
     return SecurityAuditPageResponse(
         events=[SecurityAuditEventResponse.model_validate(event) for event in page.events],
         next_cursor_occurred_at=page.next_cursor_occurred_at,
