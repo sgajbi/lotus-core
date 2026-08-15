@@ -45,6 +45,11 @@ budget.
 - The production-constructor guard covers SQLAlchemy engine factories, Alembic
   `engine_from_config`, and direct psycopg/asyncpg connections. The PostgreSQL runtime-profile proof
   is part of `critical-db-coverage`.
+- Fan-in `20260815T114717Z` completed exact reconciliation at `131.077s`; it is retained as a cold
+  diagnostic outlier. The immediate clean-source repeat `20260815T115201Z` completed at `70.803s`
+  versus the retained `80.814s` baseline (12.4% lower), with 1,000/1,000 snapshots and position
+  rows, attempts 2/2, zero repeated valuation processing, and pending/failed outbox 0/0. The repeat
+  satisfies the non-regression gate without erasing the first observation.
 
 ## Compatibility
 
