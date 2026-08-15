@@ -168,6 +168,14 @@ Use APIs before going directly to the database where possible:
 For event-publication drift, inspect outbox backlog and dispatcher health before assuming downstream
 consumer faults.
 
+For price-driven valuation replay, compare `instrument_reprocessing_triggers_pending` with
+`instrument_reprocessing_trigger_conversions_total{outcome}`. `created` means the conversion
+staged a new pending `RESET_WATERMARKS` generation; `coalesced_pending` means it merged an earlier
+date into existing pending work and avoided a duplicate job. A `PROCESSING` job is intentionally
+immutable, so a concurrent earlier price can coexist as one new pending generation. Do not delete
+trigger rows or mutate job payloads by hand: transaction rollback and the next scheduler poll are
+the governed recovery path.
+
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply
 the same tenant in `X-Tenant-Id` and the query, plus `core.support.read`. This is privileged
