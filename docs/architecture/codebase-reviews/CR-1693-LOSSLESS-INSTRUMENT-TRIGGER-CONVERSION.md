@@ -56,8 +56,14 @@ needed because product capability and external contracts are unchanged.
 
 ## Validation Evidence
 
-- focused repository/coordinator/monitoring tests: green;
-- PostgreSQL conversion suite: `5 passed`;
-- metric vocabulary guard: green;
-- concurrency duplicate-delivery guard: green;
-- final pre-merge, PR, CI, and exact-main evidence will be appended before issue closure.
+- exact clean local head `1c262913130cadeaa10b931842eeb4bc00469a62` passed independent
+  read-only review with no blockers;
+- full unit lane: `8,381 passed, 13 deselected`;
+- protected critical-DB lane: `72 passed`;
+- final exact-head PostgreSQL conversion suite: `5 passed`;
+- MyPy: 318 source files with no issues;
+- full lint/governance catalog, architecture, repository-transaction, metric-vocabulary,
+  concurrency/duplicate-delivery, no-alias, OpenAPI, API vocabulary/catalog, migration SQL smoke,
+  and docs/wiki guards: green; and
+- PR, CI, exact-main, wiki publication, and closure evidence remains durable on GitHub issue #488
+  rather than being copied into this architecture decision after merge.
