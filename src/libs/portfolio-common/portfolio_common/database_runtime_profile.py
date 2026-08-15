@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from enum import StrEnum
 
 from sqlalchemy.pool import NullPool
 
 from .database_runtime_identity import DATABASE_RUNTIME_IDENTITIES, database_runtime_identity
-from .runtime_settings import RuntimeConfigurationError
+from .runtime_settings import RuntimeConfigurationError, env_optional_str
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +117,7 @@ def _bounded_integer(
     maximum: int,
     disabled_value: int | None = None,
 ) -> int:
-    raw = os.getenv(name)
+    raw = env_optional_str(name)
     if raw is None:
         return default
     try:
@@ -145,7 +144,11 @@ def database_runtime_profile(
     identity = database_runtime_identity(explicit_identity=explicit_identity)
     if pool_mode is DatabasePoolMode.NULL:
         configured_queue_setting = next(
-            (name for name in sorted(_QUEUE_ONLY_ENVIRONMENTS) if os.getenv(name) is not None),
+            (
+                name
+                for name in sorted(_QUEUE_ONLY_ENVIRONMENTS)
+                if env_optional_str(name) is not None
+            ),
             None,
         )
         if configured_queue_setting is not None:
