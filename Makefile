@@ -2,7 +2,7 @@
 .PHONY: profile-derived-state-price-restatement profile-derived-state-fx-restatement
 .PHONY: ingestion-gateway-rate-limit-policy-guard generated-artifact-tracking-guard technology-governance-pilot-guard technology-governance-pilot-receipt-guard dependency-lock-replay-check dependency-technology-inventory dependency-technology-certify refresh-dependency-technology-inventory base-image-lifecycle-guard base-image-registry-evidence-check refresh-base-image-manifest-evidence outbox-capacity-profile-guard test-outbox-capacity-acceptance
 .PHONY: test-critical-lifecycle-db test-kafka-restart-recovery-gate
-.PHONY: calculated-output-policy-guard
+.PHONY: calculated-output-policy-guard bond-quote-authority-guard
 .PHONY: test-fixed-income-book-cost-recovery-gate
 .PHONY: test-import-root-guard
 .PHONY: transaction-release-rehearsal-plan transaction-release-rehearsal
@@ -86,6 +86,7 @@ lint: quality-ruff-gate quality-ruff-format-gate
 	$(MAKE) monetary-float-guard
 	$(MAKE) financial-numeric-persistence-guard
 	$(MAKE) calculated-output-policy-guard
+	$(MAKE) bond-quote-authority-guard
 	$(MAKE) ingestion-contract-gate
 	$(MAKE) ingestion-rate-limit-scope-guard
 	$(MAKE) ingestion-gateway-rate-limit-policy-guard
@@ -123,6 +124,9 @@ financial-numeric-persistence-guard:
 
 calculated-output-policy-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/calculated_output_policy_guard.py
+
+bond-quote-authority-guard:
+	$(REPOSITORY_PYTHON) scripts/quality/bond_quote_authority_guard.py
 
 qcp-problem-details-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/qcp_problem_details_guard.py
