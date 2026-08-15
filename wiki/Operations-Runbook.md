@@ -35,7 +35,11 @@ UTC `occurred_from`/`occurred_to` window of at most 31 days, and pages of at mos
 comes only from the verified signed request context. Continuations require both cursor fields.
 Responses contain safe route templates and typed identity posture, not request bodies, headers,
 queries, concrete URLs, secrets, arbitrary metadata, or raw exceptions. Alerting remains #501 and
-retention/purge/legal-hold behavior remains #708.
+retention/purge/legal-hold behavior remains #708. Treat 422 as invalid caller-supplied query bounds
+or cursor evidence. Treat source-safe 503 as database unavailability or persisted evidence that
+failed domain verification: preserve the row, keep its values out of tickets and ordinary logs,
+distinguish connectivity from integrity failure through controlled diagnostics, and escalate to the
+audit-data owner before repair.
 
 ## Useful commands
 
