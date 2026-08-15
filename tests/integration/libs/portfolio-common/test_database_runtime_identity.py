@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import socket
+import threading
 import time
+from contextlib import contextmanager
 
 import pytest
 from portfolio_common.database_runtime_profile import (
+    DATABASE_CONNECT_TIMEOUT_SECONDS_ENV,
     DATABASE_IDLE_TRANSACTION_TIMEOUT_MS_ENV,
     DATABASE_MAX_OVERFLOW_ENV,
     DATABASE_POOL_SIZE_ENV,
@@ -20,6 +24,31 @@ from sqlalchemy import text
 
 def _database_url(db_engine) -> str:
     return db_engine.url.render_as_string(hide_password=False)
+
+
+@contextmanager
+def _non_speaking_tcp_endpoint():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    release = threading.Event()
+
+    def _accept_without_postgres_handshake() -> None:
+        try:
+            connection, _ = server.accept()
+            with connection:
+                release.wait(timeout=5)
+        except OSError:
+            return
+
+    worker = threading.Thread(target=_accept_without_postgres_handshake, daemon=True)
+    worker.start()
+    try:
+        yield server.getsockname()[1]
+    finally:
+        release.set()
+        server.close()
+        worker.join(timeout=1)
 
 
 def test_sync_database_connection_publishes_governed_application_name(
@@ -59,6 +88,61 @@ async def test_async_database_connection_publishes_governed_application_name(
         await engine.dispose()
 
     assert application_name == "portfolio-derived-state"
+
+
+def test_sync_connection_establishment_timeout_is_bounded_and_database_recovers(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "1")
+    with _non_speaking_tcp_endpoint() as port:
+        engine = create_sync_database_engine(
+            runtime_identity="query-service",
+            database_url=(f"postgresql://timeout-user:timeout-secret@127.0.0.1:{port}/timeout-db"),
+        )
+        started = time.monotonic()
+        try:
+            with pytest.raises(sa_exc.OperationalError):
+                engine.connect()
+        finally:
+            engine.dispose()
+        elapsed = time.monotonic() - started
+
+    assert 0.8 <= elapsed <= 3.0
+    with db_engine.connect() as recovered:
+        assert recovered.scalar(text("SELECT 1")) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_connection_establishment_timeout_is_bounded_and_database_recovers(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "1")
+    with _non_speaking_tcp_endpoint() as port:
+        engine = create_async_database_engine(
+            runtime_identity="portfolio-derived-state",
+            database_url=(f"postgresql://timeout-user:timeout-secret@127.0.0.1:{port}/timeout-db"),
+        )
+        started = time.monotonic()
+        try:
+            with pytest.raises((sa_exc.DBAPIError, TimeoutError)):
+                async with engine.connect():
+                    pass
+        finally:
+            await engine.dispose()
+        elapsed = time.monotonic() - started
+
+    assert 0.8 <= elapsed <= 3.0
+    healthy_engine = create_async_database_engine(
+        runtime_identity="portfolio-derived-state",
+        database_url=_database_url(db_engine),
+    )
+    try:
+        async with healthy_engine.connect() as recovered:
+            assert await recovered.scalar(text("SELECT 1")) == 1
+    finally:
+        await healthy_engine.dispose()
 
 
 def test_sync_statement_timeout_cancels_and_connection_recovers(
