@@ -433,6 +433,73 @@ def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
     )
 
 
+def _database_constructor_calls(tree: ast.AST) -> list[tuple[str, int]]:
+    constructor_aliases: dict[str, str] = {}
+    sqlalchemy_module_aliases: set[str] = set()
+    dbapi_module_aliases: set[str] = set()
+    dbapi_connect_aliases: set[str] = set()
+    for node in getattr(tree, "body", []):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "sqlalchemy" or node.module.startswith("sqlalchemy."):
+                for alias in node.names:
+                    if alias.name in {
+                        "create_engine",
+                        "create_async_engine",
+                        "engine_from_config",
+                    }:
+                        constructor_aliases[alias.asname or alias.name] = alias.name
+            elif node.module in {"asyncpg", "psycopg", "psycopg2"}:
+                dbapi_connect_aliases.update(
+                    alias.asname or alias.name for alias in node.names if alias.name == "connect"
+                )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_name = alias.asname or alias.name.split(".")[0]
+                if alias.name.startswith("sqlalchemy"):
+                    sqlalchemy_module_aliases.add(imported_name)
+                if alias.name in {"asyncpg", "psycopg", "psycopg2"}:
+                    dbapi_module_aliases.add(imported_name)
+
+    calls: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            if node.func.id in dbapi_connect_aliases:
+                calls.append(("dbapi.connect", node.lineno))
+            elif node.func.id in constructor_aliases:
+                calls.append((constructor_aliases[node.func.id], node.lineno))
+        elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+            if node.func.value.id in dbapi_module_aliases and node.func.attr == "connect":
+                calls.append(("dbapi.connect", node.lineno))
+            elif node.func.value.id in sqlalchemy_module_aliases and node.func.attr in {
+                "create_engine",
+                "create_async_engine",
+                "engine_from_config",
+            }:
+                calls.append((node.func.attr, node.lineno))
+    return calls
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from psycopg import connect\nconnect('dsn')",
+        "from psycopg2 import connect as raw_connect\nraw_connect('dsn')",
+        "from asyncpg import connect as open_database\nopen_database('dsn')",
+        "import psycopg as pg\npg.connect('dsn')",
+    ],
+)
+def test_database_constructor_guard_detects_direct_dbapi_aliases(source):
+    assert _database_constructor_calls(ast.parse(source)) == [("dbapi.connect", 2)]
+
+
+def test_database_constructor_guard_detects_sqlalchemy_export_aliases():
+    source = "from sqlalchemy.engine import create_engine as ce\nce('url')"
+
+    assert _database_constructor_calls(ast.parse(source)) == [("create_engine", 2)]
+
+
 def test_database_engines_use_governed_factory():
     repo_root = Path(__file__).resolve().parents[4]
     expected_calls = {
@@ -448,55 +515,13 @@ def test_database_engines_use_governed_factory():
         for path in (repo_root / source_root).rglob("*.py"):
             relative_path = path.relative_to(repo_root)
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(relative_path))
-            constructor_aliases: dict[str, str] = {}
-            sqlalchemy_module_aliases: set[str] = set()
-            dbapi_module_aliases: set[str] = set()
-            for node in tree.body:
-                if isinstance(node, ast.ImportFrom) and node.module in {
-                    "sqlalchemy",
-                    "sqlalchemy.ext.asyncio",
-                }:
-                    for alias in node.names:
-                        if alias.name in {
-                            "create_engine",
-                            "create_async_engine",
-                            "engine_from_config",
-                        }:
-                            constructor_aliases[alias.asname or alias.name] = alias.name
-                elif isinstance(node, ast.Import):
-                    for alias in node.names:
-                        imported_name = alias.asname or alias.name.split(".")[0]
-                        if alias.name.startswith("sqlalchemy"):
-                            sqlalchemy_module_aliases.add(imported_name)
-                        if alias.name in {"asyncpg", "psycopg", "psycopg2"}:
-                            dbapi_module_aliases.add(imported_name)
-
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                function_name = ""
-                if isinstance(node.func, ast.Name):
-                    function_name = constructor_aliases.get(node.func.id, "")
-                elif (
-                    isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id in sqlalchemy_module_aliases
-                    and node.func.attr
-                    in {"create_engine", "create_async_engine", "engine_from_config"}
-                ):
-                    function_name = node.func.attr
-                is_direct_dbapi_connect = (
-                    isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id in dbapi_module_aliases
-                    and node.func.attr == "connect"
-                )
-                if is_direct_dbapi_connect:
-                    violations.append(f"{relative_path.as_posix()}:{node.lineno}")
-                elif function_name:
+            for function_name, line_number in _database_constructor_calls(tree):
+                if function_name == "dbapi.connect":
+                    violations.append(f"{relative_path.as_posix()}:{line_number}")
+                else:
                     observed_calls.setdefault(relative_path, Counter())[function_name] += 1
                     if relative_path not in expected_calls:
-                        violations.append(f"{relative_path.as_posix()}:{node.lineno}")
+                        violations.append(f"{relative_path.as_posix()}:{line_number}")
 
     assert violations == [], (
         "Database engines must use portfolio_common.db governed factories: " + ", ".join(violations)
