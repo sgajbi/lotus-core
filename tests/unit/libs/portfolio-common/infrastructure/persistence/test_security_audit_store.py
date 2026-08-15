@@ -23,6 +23,7 @@ from portfolio_common.infrastructure_errors import (
     DatabaseUnavailable,
     InfrastructureAuditWriteFailed,
 )
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import OperationalError
 
@@ -98,6 +99,18 @@ async def test_append_fails_closed_with_source_safe_error_and_rolls_back() -> No
     assert str(exc_info.value) == "Audit persistence failed."
     assert "secret" not in str(exc_info.value)
     session.rollback.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_append_maps_lazy_runtime_configuration_failure_source_safely() -> None:
+    factory = MagicMock(side_effect=RuntimeConfigurationError("secret database URL"))
+    store = PostgresSecurityAuditStore(factory)
+
+    with pytest.raises(InfrastructureAuditWriteFailed) as exc_info:
+        await store.append(_event())
+
+    assert str(exc_info.value) == "Audit persistence failed."
+    assert "secret database URL" not in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -181,3 +194,21 @@ async def test_query_failure_does_not_disclose_database_exception() -> None:
 
     assert str(exc_info.value) == "Security-audit evidence is unavailable."
     assert "postgres-host-secret" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_query_maps_lazy_runtime_configuration_failure_source_safely() -> None:
+    factory = MagicMock(side_effect=RuntimeConfigurationError("secret database URL"))
+    store = PostgresSecurityAuditStore(factory)
+    query = SecurityAuditQuery(
+        tenant_id="bank-sg",
+        occurred_from=NOW - timedelta(days=1),
+        occurred_to=NOW,
+        page_size=20,
+    )
+
+    with pytest.raises(DatabaseUnavailable) as exc_info:
+        await store.query(query)
+
+    assert str(exc_info.value) == "Security-audit evidence is unavailable."
+    assert "secret database URL" not in str(exc_info.value)

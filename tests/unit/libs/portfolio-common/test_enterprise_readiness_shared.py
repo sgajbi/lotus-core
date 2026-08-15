@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from time import time
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi import Request
@@ -17,7 +17,11 @@ from portfolio_common.enterprise_readiness import (
     _normalize_headers,
     build_enterprise_audit_middleware,
     create_default_enterprise_readiness_runtime,
+    create_runtime_security_audit_store,
     redact_sensitive,
+)
+from portfolio_common.infrastructure.persistence.security_audit_store import (
+    PostgresSecurityAuditStore,
 )
 from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFailed
 
@@ -111,14 +115,18 @@ def _signed_enterprise_headers(
     capabilities: str,
     *,
     service_identity: str = "lotus-gateway",
+    actor_id: str = "a1",
+    tenant_id: str = "t1",
+    role: str = "ops",
+    correlation_id: str = "c1",
     key_id: str = "primary",
     secret: str = "auth-context-secret",
 ) -> dict[str, str]:
     headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
+        "X-Actor-Id": actor_id,
+        "X-Tenant-Id": tenant_id,
+        "X-Role": role,
+        "X-Correlation-Id": correlation_id,
         "X-Service-Identity": service_identity,
         "X-Capabilities": capabilities,
         "X-Enterprise-Auth-Key-Id": key_id,
@@ -230,6 +238,40 @@ def test_default_enterprise_runtime_uses_production_security_profile(monkeypatch
     assert runtime.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") is True
     with pytest.raises(RuntimeError, match="missing_primary_key_id"):
         runtime.validate_enterprise_runtime_config()
+
+
+def test_promoted_profile_cannot_disable_strict_enterprise_validation(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", "false")
+    monkeypatch.delenv("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", raising=False)
+    runtime = create_default_enterprise_readiness_runtime(
+        service_name="test-service",
+        logger=Mock(),
+    )
+
+    with pytest.raises(RuntimeError, match="missing_policy_version"):
+        monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "")
+        runtime.validate_enterprise_runtime_config()
+
+
+def test_runtime_config_rejects_unbounded_policy_version(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    runtime = _runtime(settings=_Settings(enterprise_policy_version="v" * 65))
+
+    with pytest.raises(RuntimeError, match="policy_version_invalid"):
+        runtime.validate_enterprise_runtime_config()
+
+
+def test_security_audit_store_is_log_only_only_for_explicit_local_profiles(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    assert create_runtime_security_audit_store(service_name="query_service") is None
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", "false")
+    assert isinstance(
+        create_runtime_security_audit_store(service_name="query_service"),
+        PostgresSecurityAuditStore,
+    )
 
 
 def test_feature_flags_fail_closed_for_invalid_shapes() -> None:
@@ -498,11 +540,14 @@ def test_capability_rules_keep_only_actionable_method_path_mappings() -> None:
                 "TRACE /portfolios": "unsupported.method",
                 "POST /transactions": "",
                 "DELETE /orders": {"not": "a string"},
+                "GET /oversized-capability": "c" * 129,
+                f"GET /{'p' * 257}": "oversized.path",
             }
         )
     )
 
     assert runtime.load_capability_rules()["GET /portfolios/**"] == "portfolios.read"
+    assert "GET /oversized-capability" not in runtime.load_capability_rules()
     assert (
         runtime.load_capability_rules()[
             "POST /integration/portfolios/{portfolio_id}/analytics/reference"
@@ -847,7 +892,10 @@ async def test_durable_allow_is_written_before_protected_route_with_verified_ide
         ordering.append("route")
         return Response(status_code=200)
 
-    response = await middleware(request, _call_next)
+    with patch(
+        "portfolio_common.enterprise_readiness.observe_security_audit_delivery"
+    ) as delivery_metric:
+        response = await middleware(request, _call_next)
 
     assert response.status_code == 200
     assert ordering == ["audit", "route"]
@@ -866,6 +914,7 @@ async def test_durable_allow_is_written_before_protected_route_with_verified_ide
     )
     assert "PB-001" not in repr(event)
     assert "sensitive@example.com" not in repr(event)
+    delivery_metric.assert_called_once_with(service="query_service", outcome="delivered")
 
 
 @pytest.mark.asyncio
@@ -920,6 +969,53 @@ async def test_durable_denial_does_not_fabricate_unverified_identity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_oversized_signed_lineage_is_denied_and_recorded_without_raw_values() -> None:
+    runtime = _runtime(
+        authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"POST /portfolios/{portfolio_id}": "portfolio.write"}
+        ),
+    )
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    oversized_correlation = "c" * 129
+    headers = _signed_enterprise_headers("portfolio.write", correlation_id=oversized_correlation)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/portfolios/PB-001",
+            "headers": [
+                *[(key.lower().encode(), value.encode()) for key, value in headers.items()],
+                (b"x-trace-id", b"not-a-w3c-trace-id"),
+            ],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=200))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 403
+    call_next.assert_not_awaited()
+    event = store.append.await_args.args[0]
+    assert event.identity_posture is SecurityAuditIdentityPosture.UNVERIFIED
+    assert event.correlation_id is None
+    assert event.trace_id is None
+    assert oversized_correlation not in repr(event)
+
+
+@pytest.mark.asyncio
 async def test_production_audit_failure_returns_safe_503_before_route_execution() -> None:
     store = Mock()
     store.append = AsyncMock(side_effect=InfrastructureAuditWriteFailed())
@@ -944,10 +1040,46 @@ async def test_production_audit_failure_returns_safe_503_before_route_execution(
     )
     call_next = AsyncMock(return_value=Response(status_code=201))
 
-    response = await middleware(request, call_next)
+    with patch(
+        "portfolio_common.enterprise_readiness.observe_security_audit_delivery"
+    ) as delivery_metric:
+        response = await middleware(request, call_next)
 
     assert response.status_code == 503
     assert response.body == b'{"detail":"security_audit_unavailable"}'
+    call_next.assert_not_awaited()
+    delivery_metric.assert_called_once_with(service="ingestion_service", outcome="failed")
+
+
+@pytest.mark.asyncio
+async def test_production_profile_override_cannot_disable_fail_closed_audit(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", "false")
+    store = Mock()
+    store.append = AsyncMock(side_effect=InfrastructureAuditWriteFailed())
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.INGESTION,
+        audit_store=store,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/ingest/transactions",
+            "headers": [(b"content-length", b"0")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=201))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 503
     call_next.assert_not_awaited()
 
 

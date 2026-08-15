@@ -177,6 +177,16 @@ HEALTH_READINESS_STATE = Gauge(
 
 HEALTH_READINESS_STATES = ("ready", "not_ready")
 
+SECURITY_AUDIT_DELIVERY_TOTAL = Counter(
+    "security_audit_delivery_total",
+    "Durable enterprise security-audit delivery outcomes by bounded Core component.",
+    labelnames=("service", "outcome"),
+)
+
+
+def observe_security_audit_delivery(*, service: str, outcome: str) -> None:
+    SECURITY_AUDIT_DELIVERY_TOTAL.labels(service=service, outcome=outcome).inc()
+
 
 def observe_kafka_published(topic: str, count: int = 1) -> None:
     KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic).inc(count)
