@@ -9162,7 +9162,7 @@
         {
           "status_code": "503",
           "schema": "QueryControlPlaneProblemDetails",
-          "description": "Durable evidence cannot currently be queried."
+          "description": "Durable evidence cannot be queried or fails domain verification."
         }
       ],
       "pagination": [
