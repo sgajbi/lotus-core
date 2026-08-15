@@ -28,7 +28,9 @@ Audit persistence failure returns source-safe `503 security_audit_unavailable` b
 execution in staging, UAT, pre-production, and production profiles. Explicit local, development,
 and test profiles retain log-only behavior so app-local work does not claim durable certification.
 `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` cannot disable durable evidence or strict runtime
-validation outside those explicit local profiles. Lazy database/configuration failures are mapped
+validation outside those explicit local profiles. Non-local `ENTERPRISE_AUDIT_READS=false` is
+rejected during validation and cannot bypass defensive GET/HEAD persistence in middleware. Lazy
+database/configuration failures are mapped
 to the same safe failure contract. Delivery attempts increment `security_audit_delivery_total`
 using only the bounded `service` and `outcome` labels.
 Legacy structured logs remain compatibility diagnostics and now use governed templates or

@@ -263,6 +263,14 @@ def test_runtime_config_rejects_unbounded_policy_version(monkeypatch) -> None:
         runtime.validate_enterprise_runtime_config()
 
 
+def test_promoted_runtime_rejects_disabled_read_audit(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    runtime = _runtime(settings=_Settings(enterprise_audit_reads=False))
+
+    with pytest.raises(RuntimeError, match="promoted_read_audit_disabled"):
+        runtime.validate_enterprise_runtime_config()
+
+
 def test_security_audit_store_is_log_only_only_for_explicit_local_profiles(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "local")
     assert create_runtime_security_audit_store(service_name="query_service") is None
@@ -751,9 +759,13 @@ async def test_shared_enterprise_middleware_adds_policy_header_and_audits_write(
 async def test_shared_enterprise_middleware_does_not_audit_reads_by_default() -> None:
     runtime = _runtime()
     audit_emitter = Mock()
+    store = Mock()
+    store.append = AsyncMock()
     middleware = build_enterprise_audit_middleware(
         runtime=runtime,
         audit_emitter=audit_emitter,
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
     )
     request = Request(
         {
@@ -775,6 +787,45 @@ async def test_shared_enterprise_middleware_does_not_audit_reads_by_default() ->
 
     assert response.status_code == 200
     audit_emitter.assert_not_called()
+    store.append.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_promoted_middleware_forces_durable_read_audit_when_flag_is_false(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(settings=_Settings(enterprise_audit_reads=False)),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/portfolios",
+            "headers": [],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    response = await middleware(
+        request,
+        AsyncMock(return_value=Response(status_code=200)),
+    )
+
+    assert response.status_code == 200
+    event = store.append.await_args.args[0]
+    assert event.method.value == "GET"
+    assert event.decision is SecurityAuditDecision.ALLOW
 
 
 @pytest.mark.asyncio
