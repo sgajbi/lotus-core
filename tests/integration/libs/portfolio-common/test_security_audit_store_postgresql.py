@@ -7,9 +7,6 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from portfolio_common.database_models import EnterpriseSecurityAuditEvent
 from portfolio_common.domain.security_audit import (
     SecurityAuditComponent,
@@ -23,6 +20,8 @@ from portfolio_common.domain.security_audit import (
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
 )
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,12 +71,8 @@ async def test_postgresql_store_is_append_only_tenant_bound_and_keyset_stable() 
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     store = PostgresSecurityAuditStore(sessions)
     tenant_event = _verified_event(event_id=EVENT_IDS[0], tenant_id="ISSUE500_TENANT_A")
-    second_tenant_event = _verified_event(
-        event_id=EVENT_IDS[1], tenant_id="ISSUE500_TENANT_A"
-    )
-    other_tenant_event = _verified_event(
-        event_id=EVENT_IDS[2], tenant_id="ISSUE500_TENANT_B"
-    )
+    second_tenant_event = _verified_event(event_id=EVENT_IDS[1], tenant_id="ISSUE500_TENANT_A")
+    other_tenant_event = _verified_event(event_id=EVENT_IDS[2], tenant_id="ISSUE500_TENANT_B")
     unverified_denial = replace(
         tenant_event,
         event_id=EVENT_IDS[3],
