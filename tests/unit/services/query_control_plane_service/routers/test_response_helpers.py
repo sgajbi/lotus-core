@@ -5,6 +5,7 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
     problem_example,
     problem_or_validation_response,
     problem_response,
+    problem_with_alternate_json_response,
 )
 
 
@@ -57,4 +58,26 @@ def test_problem_or_validation_response_documents_both_422_media_types() -> None
     assert response["content"]["application/json"] == {
         "schema": FASTAPI_VALIDATION_ERROR_SCHEMA,
         "example": FASTAPI_VALIDATION_ERROR_EXAMPLE,
+    }
+
+
+def test_problem_with_alternate_json_response_documents_middleware_shape() -> None:
+    example = problem_example(
+        status_code=503,
+        title="Audit unavailable",
+        detail="Durable audit evidence is unavailable.",
+        error_code="QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE",
+    )
+
+    response = problem_with_alternate_json_response(
+        "Audit unavailable.",
+        example,
+        json_schema=LEGACY_DETAIL_RESPONSE_SCHEMA,
+        json_example={"detail": "security_audit_unavailable"},
+    )
+
+    assert set(response["content"]) == {"application/problem+json", "application/json"}
+    assert response["content"]["application/json"] == {
+        "schema": LEGACY_DETAIL_RESPONSE_SCHEMA,
+        "example": {"detail": "security_audit_unavailable"},
     }

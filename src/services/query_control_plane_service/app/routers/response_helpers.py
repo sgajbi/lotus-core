@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 from pydantic import BaseModel, Field
 
@@ -154,10 +154,29 @@ def problem_response(description: str, example: dict[str, Any]) -> dict[str, obj
 def problem_or_validation_response(description: str, example: dict[str, Any]) -> dict[str, object]:
     response = problem_response(description, example)
     if _is_problem_details_example(example):
-        response["content"]["application/json"] = {
+        content = cast(dict[str, Any], response["content"])
+        content["application/json"] = {
             "schema": FASTAPI_VALIDATION_ERROR_SCHEMA,
             "example": FASTAPI_VALIDATION_ERROR_EXAMPLE,
         }
+    return response
+
+
+def problem_with_alternate_json_response(
+    description: str,
+    example: dict[str, Any],
+    *,
+    json_schema: dict[str, Any],
+    json_example: dict[str, Any],
+) -> dict[str, object]:
+    """Document a governed problem plus an earlier middleware JSON response for one status."""
+
+    response = problem_response(description, example)
+    content = cast(dict[str, Any], response["content"])
+    content["application/json"] = {
+        "schema": json_schema,
+        "example": json_example,
+    }
     return response
 
 

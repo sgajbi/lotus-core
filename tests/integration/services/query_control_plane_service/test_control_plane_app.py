@@ -248,6 +248,16 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
         "decision",
     }
     assert "tenant_id" not in parameter_names
+    for status_code in ("403", "422", "503"):
+        assert set(security_audit["responses"][status_code]["content"]) == {
+            "application/problem+json",
+            "application/json",
+        }
+    validation_schema = security_audit["responses"]["422"]["content"]["application/json"]["schema"]
+    assert validation_schema == {"$ref": "#/components/schemas/HTTPValidationError"}
+    assert security_audit["responses"]["503"]["content"]["application/json"]["example"] == {
+        "detail": "security_audit_unavailable"
+    }
     response_schema = response.json()["components"]["schemas"]["SecurityAuditEventResponse"]
     assert {"payload", "headers", "request_path", "metadata"}.isdisjoint(
         response_schema["properties"]
