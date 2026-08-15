@@ -86,6 +86,15 @@ PostgreSQL non-client backends such as autovacuum remain in aggregate resource t
 reported under the fixed `postgres-background` cohort. They are not client sessions and must not be
 misclassified as an application that failed to publish `SERVICE_NAME`.
 
+Database engine startup emits one bounded runtime-profile record containing only runtime identity,
+cohort, driver, pool mode, numeric pool capacity, and timeout values. It must never include a
+database URL, host, database/user name, credential, SQL text, exception detail, or business
+identifier. Queue capacity is per process; multiply it by replicas and worker processes before
+comparing it with PostgreSQL `max_connections`. `pool_pre_ping` repairs a dead idle connection at
+checkout but does not recover an interrupted transaction, and recycle is also evaluated only at
+checkout. Statement or idle-transaction cancellation must be correlated with the owning service
+and handled through the existing rollback/recovery path.
+
 ## Current Gaps
 
 The initial quality baseline records observability as a documentation and gate gap. The shared

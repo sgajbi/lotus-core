@@ -109,6 +109,15 @@ Non-client PostgreSQL backends, including autovacuum, remain visible in the fixe
 `postgres-background` cohort. Blank client identities remain `__unattributed__` and fail
 certification; database-maintenance workers are not application-identity failures.
 
+Core database processes resolve an explicit runtime profile before creating an engine. Current
+production-shaped defaults preserve measured QueuePool behavior (`5` persistent plus `10`
+overflow, `30s` acquisition, recycle disabled) and keep PostgreSQL statement and
+idle-in-transaction cutoffs disabled until attributed duration and recovery evidence supports a
+tighter value. Psycopg and asyncpg both use a `60s` connection-establishment bound. Treat these as
+per-process limits: replica count and PostgreSQL's reserved capacity remain part of any scaling
+decision. A cancelled statement or terminated idle transaction requires rollback/fresh checkout;
+pool pre-ping is not transaction retry.
+
 Each workload artifact also records the emitting checkout's `source_revision` and a non-sensitive
 `source_tree_state` (`clean`, `dirty`, or `unavailable`). This makes retained evidence reproducible
 without persisting filenames or Git command output; it does not elevate local workload evidence to
