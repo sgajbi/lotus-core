@@ -245,6 +245,61 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     authority_path_metric.labels.assert_called_once_with("legacy", "unscoped_portfolio")
 
 
+async def test_unscoped_bond_fails_without_publishing_a_valued_snapshot(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+) -> None:
+    repo = mock_dependencies["valuation_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("10"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+        product_type="BOND",
+    )
+    repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("99.25"),
+        currency="USD",
+        price_date=mock_event.valuation_date,
+    )
+
+    def _persist(snapshot: DailyPositionSnapshot) -> DailyPositionSnapshot:
+        snapshot.id = 8
+        return snapshot
+
+    repo.upsert_daily_snapshot.side_effect = _persist
+
+    with patch(
+        "src.services.calculators.position_valuation_calculator.app."
+        "valuation_processor.VALUATION_JOBS_FAILED_TOTAL"
+    ) as failed_metric:
+        await mock_dependencies["processor"].process_valid_event(
+            mock_event,
+            "valuation.job.requested-0-92",
+            "processor-corr-id",
+            claim_token="a" * 32,
+        )
+
+    persisted_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
+    assert persisted_snapshot.valuation_status == "FAILED"
+    assert persisted_snapshot.market_value is None
+    assert persisted_snapshot.market_value_local is None
+    assert repo.update_job_status.await_args.kwargs["failure_reason"] == (
+        "bond valuation requires explicit quote-convention authority"
+    )
+    failed_metric.labels.assert_called_once_with(reason="missing_bond_quote_authority")
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
+    mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once_with(snapshot_id=8)
+
+
 @pytest.mark.parametrize(
     "headers",
     [
