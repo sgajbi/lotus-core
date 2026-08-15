@@ -29,7 +29,10 @@ financial reconciliation, and event replay write one typed access decision to
 `enterprise_security_audit_events` before protected route work executes. If that write is
 unavailable, the request stops with `503 security_audit_unavailable`; do not bypass the control or
 reconstruct evidence from logs. Explicit local/development/test profiles are log-only and are not
-durable certification evidence.
+durable certification evidence. Outside those explicit local profiles,
+`LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` does not disable durable audit persistence or strict
+runtime validation. Monitor `security_audit_delivery_total{service,outcome}`; a rising
+`outcome="failed"` series is the bounded source signal for #501 alerting.
 
 Authorized support callers with `core.security_audit.read` can use:
 
