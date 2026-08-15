@@ -1,4 +1,5 @@
 import portfolio_common.monitoring as monitoring
+import pytest
 from prometheus_client.metrics import MetricWrapperBase
 
 
@@ -52,6 +53,15 @@ def test_health_dependency_metrics_use_bounded_labels():
 
 def test_database_pool_metric_uses_bounded_labels():
     assert monitoring.DATABASE_POOL_CONNECTIONS._labelnames == ("pool", "state")
+
+
+def test_instrument_trigger_conversion_metric_uses_one_bounded_outcome_label():
+    assert monitoring.INSTRUMENT_REPROCESSING_TRIGGER_CONVERSIONS_TOTAL._labelnames == ("outcome",)
+
+
+def test_instrument_trigger_conversion_metric_rejects_unknown_outcome():
+    with pytest.raises(ValueError, match="Unsupported instrument trigger conversion outcome"):
+        monitoring.observe_instrument_reprocessing_trigger_conversion("security-specific")
 
 
 def test_kafka_consumer_metrics_use_bounded_labels():

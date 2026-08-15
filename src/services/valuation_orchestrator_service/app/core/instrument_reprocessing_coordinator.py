@@ -1,7 +1,10 @@
 import logging
 
 from portfolio_common.logging_utils import operation_log_extra
-from portfolio_common.monitoring import INSTRUMENT_REPROCESSING_TRIGGERS_PENDING
+from portfolio_common.monitoring import (
+    INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
+    observe_instrument_reprocessing_trigger_conversion,
+)
 
 from ..repositories.instrument_reprocessing_conversion_repository import (
     InstrumentReprocessingConversionRepository,
@@ -30,6 +33,11 @@ class InstrumentReprocessingCoordinator:
         result = await conversion_repository.convert_pending_triggers(batch_size=self._batch_size)
         if not result.claimed_count:
             return result
+
+        observe_instrument_reprocessing_trigger_conversion("created", result.created_count)
+        observe_instrument_reprocessing_trigger_conversion(
+            "coalesced_pending", result.coalesced_pending_count
+        )
 
         logger.info(
             "Instrument-level reprocessing triggers claimed.",
