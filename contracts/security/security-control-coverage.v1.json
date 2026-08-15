@@ -24,6 +24,7 @@
       "app_path": "src/services/event_replay_service/app/main.py",
       "app_kind": "operator_api",
       "auth_audit_control": "enterprise_middleware",
+      "durable_audit_control": "promoted_profile_postgresql_pre_execution",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -33,6 +34,7 @@
       "app_path": "src/services/financial_reconciliation_service/app/main.py",
       "app_kind": "operator_api",
       "auth_audit_control": "enterprise_middleware",
+      "durable_audit_control": "promoted_profile_postgresql_pre_execution",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -42,6 +44,7 @@
       "app_path": "src/services/ingestion_service/app/main.py",
       "app_kind": "business_api",
       "auth_audit_control": "enterprise_middleware",
+      "durable_audit_control": "promoted_profile_postgresql_pre_execution",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "ingestion_upload_resource_budgets",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -51,6 +54,7 @@
       "app_path": "src/services/persistence_service/app/web.py",
       "app_kind": "health_only_worker_api",
       "auth_audit_control": "health_only_no_business_routes",
+      "durable_audit_control": "not_applicable_health_only",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -60,6 +64,7 @@
       "app_path": "src/services/portfolio_derived_state_service/app/web.py",
       "app_kind": "health_only_worker_api",
       "auth_audit_control": "health_only_no_business_routes",
+      "durable_audit_control": "not_applicable_health_only",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -69,6 +74,7 @@
       "app_path": "src/services/portfolio_transaction_processing_service/app/web.py",
       "app_kind": "health_only_worker_api",
       "auth_audit_control": "health_only_no_business_routes",
+      "durable_audit_control": "not_applicable_health_only",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -78,6 +84,7 @@
       "app_path": "src/services/calculators/position_valuation_calculator/app/web.py",
       "app_kind": "health_only_worker_api",
       "auth_audit_control": "health_only_no_business_routes",
+      "durable_audit_control": "not_applicable_health_only",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -87,6 +94,7 @@
       "app_path": "src/services/query_control_plane_service/app/main.py",
       "app_kind": "business_api",
       "auth_audit_control": "enterprise_middleware",
+      "durable_audit_control": "promoted_profile_postgresql_pre_execution",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -96,6 +104,7 @@
       "app_path": "src/services/query_service/app/main.py",
       "app_kind": "business_api",
       "auth_audit_control": "enterprise_middleware",
+      "durable_audit_control": "promoted_profile_postgresql_pre_execution",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
@@ -105,6 +114,7 @@
       "app_path": "src/services/valuation_orchestrator_service/app/web.py",
       "app_kind": "health_only_worker_api",
       "auth_audit_control": "health_only_no_business_routes",
+      "durable_audit_control": "not_applicable_health_only",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]

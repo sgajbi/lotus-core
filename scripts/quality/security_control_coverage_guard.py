@@ -15,6 +15,17 @@ INGESTION_SETTINGS_PATH = Path("src/services/ingestion_service/app/settings.py")
 INGESTION_UPLOAD_VALIDATION_PATH = Path(
     "src/services/ingestion_service/app/services/upload_validation.py"
 )
+DURABLE_AUDIT_COMPOSITION_PATHS = {
+    "event_replay_service": SHARED_ENTERPRISE_PATH,
+    "financial_reconciliation_service": Path(
+        "src/services/financial_reconciliation_service/app/enterprise_readiness.py"
+    ),
+    "ingestion_service": Path("src/services/ingestion_service/app/enterprise_readiness.py"),
+    "query_control_plane_service": Path(
+        "src/services/query_control_plane_service/app/enterprise_readiness.py"
+    ),
+    "query_service": Path("src/services/query_service/app/enterprise_readiness.py"),
+}
 
 REQUIRED_SHARED_BOOTSTRAP_ANCHORS = {
     "secure_response_headers": "configure_secure_response_headers",
@@ -27,6 +38,11 @@ REQUIRED_SHARED_BOOTSTRAP_ANCHORS = {
 VALID_AUTH_AUDIT_CONTROLS = {
     "enterprise_middleware",
     "health_only_no_business_routes",
+}
+
+VALID_DURABLE_AUDIT_CONTROLS = {
+    "promoted_profile_postgresql_pre_execution",
+    "not_applicable_health_only",
 }
 
 VALID_PAYLOAD_CONTROLS = {
@@ -234,6 +250,23 @@ def _validate_app_entry(
             control="health_only_no_business_routes",
             anchor="create_standard_health_app",
         )
+
+    durable_audit_control = str(app.get("durable_audit_control", ""))
+    if durable_audit_control not in VALID_DURABLE_AUDIT_CONTROLS:
+        findings.append({"file": app_path, "invalid_durable_audit_control": durable_audit_control})
+    elif durable_audit_control == "promoted_profile_postgresql_pre_execution":
+        composition_path = DURABLE_AUDIT_COMPOSITION_PATHS.get(
+            str(app.get("service_name", "")), path
+        )
+        composition = _read_text(composition_path, repo_root=repo_root)
+        for anchor in ("create_runtime_security_audit_store", "SecurityAuditComponent"):
+            if anchor not in composition:
+                _append_missing_anchor(
+                    findings,
+                    file=composition_path.as_posix(),
+                    control="durable_enterprise_audit",
+                    anchor=anchor,
+                )
 
     payload_control = str(app.get("payload_limit_control", ""))
     if payload_control not in VALID_PAYLOAD_CONTROLS:
