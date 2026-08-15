@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,14 +23,30 @@ REQUIRED_CONSUMERS = {
 }
 
 
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
 def evaluate(repo_root: Path) -> tuple[str, ...]:
     findings: list[str] = []
     source_root = repo_root / "src"
     for path in sorted(source_root.rglob("*.py")):
         relative = path.relative_to(repo_root).as_posix()
-        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for identifier in FORBIDDEN_IDENTIFIERS:
-            if identifier in source:
+            if any(
+                (isinstance(node, ast.Name) and node.id == identifier)
+                or (isinstance(node, ast.Attribute) and node.attr == identifier)
+                or (
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == identifier
+                )
+                for node in ast.walk(tree)
+            ):
                 findings.append(f"{relative}: forbidden bond quote heuristic: {identifier}")
 
     for relative, required_identifier in REQUIRED_CONSUMERS.items():
@@ -37,8 +54,21 @@ def evaluate(repo_root: Path) -> tuple[str, ...]:
         if not path.is_file():
             findings.append(f"{relative.as_posix()}: required production consumer is missing")
             continue
-        if required_identifier not in path.read_text(encoding="utf-8"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and _call_name(node) == required_identifier
+        ]
+        if len(calls) != 1:
             findings.append(f"{relative.as_posix()}: missing explicit bond quote-authority guard")
+            continue
+        keyword_names = {keyword.arg for keyword in calls[0].keywords}
+        if keyword_names != {"product_type", "quantity"}:
+            findings.append(
+                f"{relative.as_posix()}: bond quote-authority guard must receive "
+                "product_type and quantity"
+            )
     return tuple(findings)
 
 
