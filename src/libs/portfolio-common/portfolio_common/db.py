@@ -13,11 +13,27 @@ from sqlalchemy.orm import sessionmaker
 
 from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER
 from .connection_security import validate_database_url_security
-from .database_runtime_identity import async_database_connect_args, sync_database_connect_args
+from .database_runtime_profile import (
+    DatabasePoolMode,
+    async_database_engine_options,
+    database_runtime_profile,
+    log_database_runtime_profile,
+    sync_database_engine_options,
+)
 
 _LEGACY_POSTGRES_SCHEME = "postgres://"
 _SYNC_POSTGRES_SCHEME = "postgresql://"
 _ASYNC_POSTGRES_SCHEME = "postgresql+asyncpg://"
+_GOVERNED_ENGINE_OPTIONS = frozenset(
+    {
+        "connect_args",
+        "max_overflow",
+        "pool_pre_ping",
+        "pool_recycle",
+        "pool_size",
+        "pool_timeout",
+    }
+)
 
 
 def _normalize_database_url_scheme(url: str, *, async_mode: bool) -> str:
@@ -75,11 +91,9 @@ _async_session_factory = None
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(
-            get_sync_database_url(),
-            pool_pre_ping=True,
-            connect_args=sync_database_connect_args(),
-        )
+        profile = database_runtime_profile()
+        log_database_runtime_profile(profile, driver="psycopg2")
+        _engine = create_engine(get_sync_database_url(), **sync_database_engine_options(profile))
     return _engine
 
 
@@ -87,6 +101,7 @@ def create_sync_database_engine(
     *,
     runtime_identity: str,
     database_url: str | None = None,
+    pool_mode: DatabasePoolMode = DatabasePoolMode.QUEUE,
     **engine_options: Any,
 ) -> Engine:
     """Create a standalone synchronous engine with governed connection attribution."""
@@ -96,10 +111,15 @@ def create_sync_database_engine(
         async_mode=False,
     )
     validate_database_url_security(normalized_url, service_name=runtime_identity)
+    _reject_governed_engine_overrides(engine_options)
+    profile = database_runtime_profile(
+        explicit_identity=runtime_identity,
+        pool_mode=pool_mode,
+    )
+    log_database_runtime_profile(profile, driver="psycopg2")
     return create_engine(
         normalized_url,
-        pool_pre_ping=True,
-        connect_args=sync_database_connect_args(explicit_identity=runtime_identity),
+        **sync_database_engine_options(profile),
         **engine_options,
     )
 
@@ -145,10 +165,10 @@ def get_async_database_url():
 def get_async_engine():
     global _async_engine
     if _async_engine is None:
+        profile = database_runtime_profile()
+        log_database_runtime_profile(profile, driver="asyncpg")
         _async_engine = create_async_engine(
-            get_async_database_url(),
-            pool_pre_ping=True,
-            connect_args=async_database_connect_args(),
+            get_async_database_url(), **async_database_engine_options(profile)
         )
     return _async_engine
 
@@ -157,6 +177,7 @@ def create_async_database_engine(
     *,
     runtime_identity: str,
     database_url: str | None = None,
+    pool_mode: DatabasePoolMode = DatabasePoolMode.QUEUE,
     **engine_options: Any,
 ) -> AsyncEngine:
     """Create a standalone asynchronous engine with governed connection attribution."""
@@ -166,12 +187,28 @@ def create_async_database_engine(
         async_mode=True,
     )
     validate_database_url_security(normalized_url, service_name=runtime_identity)
+    _reject_governed_engine_overrides(engine_options)
+    profile = database_runtime_profile(
+        explicit_identity=runtime_identity,
+        pool_mode=pool_mode,
+    )
+    log_database_runtime_profile(profile, driver="asyncpg")
     return create_async_engine(
         normalized_url,
-        pool_pre_ping=True,
-        connect_args=async_database_connect_args(explicit_identity=runtime_identity),
+        **async_database_engine_options(profile),
         **engine_options,
     )
+
+
+def _reject_governed_engine_overrides(engine_options: dict[str, Any]) -> None:
+    reserved = sorted(_GOVERNED_ENGINE_OPTIONS.intersection(engine_options))
+    if reserved:
+        from .database_runtime_profile import DatabaseRuntimeProfileError
+
+        raise DatabaseRuntimeProfileError(
+            setting=reserved[0],
+            reason="engine option is governed by the database runtime profile",
+        )
 
 
 def get_async_session_factory():

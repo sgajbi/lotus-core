@@ -11,6 +11,7 @@ from portfolio_common.database_runtime_identity import (
     database_runtime_identity,
     database_runtime_identity_scope,
 )
+from portfolio_common.database_runtime_profile import DatabaseRuntimeProfileError
 from portfolio_common.db import get_async_database_url, get_sync_database_url
 from portfolio_common.runtime_settings import RuntimeConfigurationError
 
@@ -84,8 +85,16 @@ def test_sessionlocal_creates_sync_engine_lazily(monkeypatch):
         (
             (reloaded.get_sync_database_url(),),
             {
+                "connect_args": {
+                    "application_name": "lotus-core-local",
+                    "connect_timeout": 60,
+                    "options": ("-c statement_timeout=0 -c idle_in_transaction_session_timeout=0"),
+                },
                 "pool_pre_ping": True,
-                "connect_args": {"application_name": "lotus-core-local"},
+                "pool_size": 5,
+                "max_overflow": 10,
+                "pool_timeout": 30,
+                "pool_recycle": -1,
             },
         )
     ]
@@ -170,8 +179,19 @@ async def test_asyncsessionlocal_creates_async_engine_lazily(monkeypatch):
         (
             (reloaded.get_async_database_url(),),
             {
+                "connect_args": {
+                    "timeout": 60,
+                    "server_settings": {
+                        "application_name": "lotus-core-local",
+                        "statement_timeout": "0ms",
+                        "idle_in_transaction_session_timeout": "0ms",
+                    },
+                },
                 "pool_pre_ping": True,
-                "connect_args": {"server_settings": {"application_name": "lotus-core-local"}},
+                "pool_size": 5,
+                "max_overflow": 10,
+                "pool_timeout": 30,
+                "pool_recycle": -1,
             },
         )
     ]
@@ -223,8 +243,16 @@ def test_standalone_sync_engine_uses_explicit_identity(monkeypatch):
         (
             ("postgresql://user:pass@host:5432/dbname",),
             {
+                "connect_args": {
+                    "application_name": "offline-integrity-auditor",
+                    "connect_timeout": 60,
+                    "options": ("-c statement_timeout=0 -c idle_in_transaction_session_timeout=0"),
+                },
                 "pool_pre_ping": True,
-                "connect_args": {"application_name": "offline-integrity-auditor"},
+                "pool_size": 5,
+                "max_overflow": 10,
+                "pool_timeout": 30,
+                "pool_recycle": -1,
             },
         )
     ]
@@ -250,10 +278,19 @@ def test_standalone_async_engine_uses_explicit_identity(monkeypatch):
         (
             ("postgresql+asyncpg://user:pass@host:5432/dbname",),
             {
-                "pool_pre_ping": True,
                 "connect_args": {
-                    "server_settings": {"application_name": "average-cost-reconciliation"}
+                    "timeout": 60,
+                    "server_settings": {
+                        "application_name": "average-cost-reconciliation",
+                        "statement_timeout": "0ms",
+                        "idle_in_transaction_session_timeout": "0ms",
+                    },
                 },
+                "pool_pre_ping": True,
+                "pool_size": 5,
+                "max_overflow": 10,
+                "pool_timeout": 30,
+                "pool_recycle": -1,
             },
         )
     ]
@@ -327,7 +364,24 @@ def test_governed_identity_overrides_database_url_application_name(monkeypatch):
     reloaded.get_engine()
 
     assert sync_calls[0][0][0].endswith("?application_name=untrusted")
-    assert sync_calls[0][1]["connect_args"] == {"application_name": "query-service"}
+    assert sync_calls[0][1]["connect_args"]["application_name"] == "query-service"
+
+
+@pytest.mark.parametrize(
+    "reserved_option",
+    ["connect_args", "pool_size", "max_overflow", "pool_timeout", "pool_recycle"],
+)
+def test_standalone_engine_rejects_governed_option_override(monkeypatch, reserved_option):
+    import portfolio_common.db as db_module
+
+    monkeypatch.setattr(db_module, "create_engine", lambda *args, **kwargs: object())
+
+    with pytest.raises(DatabaseRuntimeProfileError, match="governed"):
+        db_module.create_sync_database_engine(
+            runtime_identity="offline-integrity-auditor",
+            database_url="postgresql://user:pass@host:5432/dbname",
+            **{reserved_option: object()},
+        )
 
 
 def test_governed_environment_fails_before_engine_creation_without_identity(monkeypatch):
@@ -372,13 +426,16 @@ def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
 
 def test_production_database_engines_use_governed_factory():
     repo_root = Path(__file__).resolve().parents[4]
-    allowed_factory = Path("src/libs/portfolio-common/portfolio_common/db.py")
+    allowed_factories = {
+        Path("src/libs/portfolio-common/portfolio_common/db.py"),
+        Path("alembic/env.py"),
+    }
     violations: list[str] = []
 
-    for source_root in ("src", "scripts", "tools"):
+    for source_root in ("src", "scripts", "tools", "alembic"):
         for path in (repo_root / source_root).rglob("*.py"):
             relative_path = path.relative_to(repo_root)
-            if relative_path == allowed_factory:
+            if relative_path in allowed_factories:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(relative_path))
             for node in ast.walk(tree):
@@ -391,7 +448,21 @@ def test_production_database_engines_use_governed_factory():
                     if isinstance(node.func, ast.Attribute)
                     else ""
                 )
-                if function_name in {"create_engine", "create_async_engine"}:
+                is_direct_dbapi_connect = (
+                    function_name == "connect"
+                    and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id in {"asyncpg", "psycopg", "psycopg2"}
+                )
+                if (
+                    function_name
+                    in {
+                        "create_engine",
+                        "create_async_engine",
+                        "engine_from_config",
+                    }
+                    or is_direct_dbapi_connect
+                ):
                     violations.append(f"{relative_path.as_posix()}:{node.lineno}")
 
     assert violations == [], (

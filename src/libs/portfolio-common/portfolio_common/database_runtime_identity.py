@@ -104,21 +104,3 @@ def database_runtime_identity_scope(identity: str) -> Iterator[None]:
         yield
     finally:
         _database_runtime_identity_override.reset(token)
-
-
-def sync_database_connect_args(*, explicit_identity: str | None = None) -> dict[str, str]:
-    """Build psycopg connection metadata from the governed runtime identity."""
-
-    return {"application_name": database_runtime_identity(explicit_identity=explicit_identity)}
-
-
-def async_database_connect_args(
-    *, explicit_identity: str | None = None
-) -> dict[str, dict[str, str]]:
-    """Build asyncpg connection metadata from the governed runtime identity."""
-
-    return {
-        "server_settings": {
-            "application_name": database_runtime_identity(explicit_identity=explicit_identity)
-        }
-    }
