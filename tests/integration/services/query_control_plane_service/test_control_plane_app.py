@@ -258,6 +258,11 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert security_audit["responses"]["503"]["content"]["application/json"]["example"] == {
         "detail": "security_audit_unavailable"
     }
+    assert security_audit["responses"]["503"]["description"] == (
+        "Durable evidence cannot be queried or fails domain verification."
+    )
+    assert "Invalid caller query bounds return 422" in security_audit["description"]
+    assert "persisted evidence that fails domain verification" in security_audit["description"]
     response_schema = response.json()["components"]["schemas"]["SecurityAuditEventResponse"]
     assert {"payload", "headers", "request_path", "metadata"}.isdisjoint(
         response_schema["properties"]
