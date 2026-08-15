@@ -844,6 +844,10 @@ def build_enterprise_audit_middleware(
             ):
                 return _security_audit_unavailable_response()
 
+        if authorization.principal is not None:
+            verified_headers = _normalize_headers(dict(request.headers))
+            request.state.enterprise_verified_tenant_id = verified_headers["x-tenant-id"]
+
         response = await call_next(request)
         response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
         if normalized_method in WRITE_METHODS:

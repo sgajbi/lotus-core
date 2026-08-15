@@ -21,6 +21,7 @@ from .routers import (
     corporate_action_support,
     integration,
     operations,
+    security_audit,
     simulation,
 )
 
@@ -65,6 +66,7 @@ include_routers(
     app,
     health_router,
     operations.router,
+    security_audit.router,
     corporate_action_support.router,
     integration.router,
     advisory_simulation.router,

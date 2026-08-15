@@ -843,6 +843,7 @@ async def test_durable_allow_is_written_before_protected_route_with_verified_ide
     )
 
     async def _call_next(_: Request) -> Response:
+        assert request.state.enterprise_verified_tenant_id == "t1"
         ordering.append("route")
         return Response(status_code=200)
 
