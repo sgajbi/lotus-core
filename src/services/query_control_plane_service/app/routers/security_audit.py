@@ -78,7 +78,7 @@ AUTHORIZATION_DENIED_SCHEMA = {
             "Evidence query bounds or cursor are invalid.", INVALID_QUERY
         ),
         status.HTTP_503_SERVICE_UNAVAILABLE: problem_with_alternate_json_response(
-            "Durable evidence cannot currently be queried.",
+            "Durable evidence cannot be queried or fails domain verification.",
             QUERY_UNAVAILABLE,
             json_schema=LEGACY_DETAIL_RESPONSE_SCHEMA,
             json_example={"detail": "security_audit_unavailable"},
@@ -88,7 +88,9 @@ AUTHORIZATION_DENIED_SCHEMA = {
     description=(
         "Returns typed, append-only access-decision evidence for the verified request tenant. "
         "The query is limited to 31 days and descending keyset pagination. Request bodies, "
-        "headers, concrete URLs, secrets, and raw exceptions are never returned."
+        "headers, concrete URLs, secrets, and raw exceptions are never returned. Invalid caller "
+        "query bounds return 422; database unavailability or persisted evidence that fails domain "
+        "verification returns a source-safe 503."
     ),
 )
 async def list_security_audit_events(
