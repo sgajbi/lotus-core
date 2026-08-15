@@ -11,10 +11,8 @@ from portfolio_common.domain.financial.precision import DecimalPrecisionPolicy
 from portfolio_common.domain.market_data.market_price import (
     coerce_positive_market_price_or_none,
 )
-from portfolio_common.domain.market_data.valuation_unit_price import (
-    resolve_valuation_unit_price,
-)
 from portfolio_common.domain.valuation import (
+    BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
     PositionScaling,
     PositionValuationEconomicInputs,
     PrincipalBasis,
@@ -23,6 +21,7 @@ from portfolio_common.domain.valuation import (
     ValuationInputBasis,
     ValuationOutputMeasure,
     calculate_position_valuation_local_economics,
+    requires_bond_quote_authority,
     resolve_position_valuation_policy,
 )
 
@@ -43,6 +42,7 @@ _REPAIR_RECOMMENDATION_BY_FINDING_TYPE = {
     "cashflow_rule_mismatch": "REBUILD_CASHFLOW_FROM_GOVERNED_RULE",
     "invalid_market_price": "CORRECT_MARKET_PRICE_SOURCE",
     "market_value_local_mismatch": "REVALUE_POSITION",
+    "missing_bond_quote_authority": "ASSIGN_VALUATION_QUOTE_POLICY",
     "missing_cashflow": "REGENERATE_CASHFLOW",
     "missing_portfolio_timeseries": "REBUILD_DERIVED_TIMESERIES",
     "missing_position_timeseries": "REBUILD_DERIVED_TIMESERIES",
@@ -159,22 +159,6 @@ def build_reconciliation_summary(
     )
 
 
-def expected_market_value_local(
-    *,
-    quantity: Decimal,
-    market_price: Decimal,
-    cost_basis_local: Decimal,
-    product_type: str | None,
-) -> Decimal:
-    valuation_price_local = resolve_valuation_unit_price(
-        market_price=market_price,
-        quantity=quantity,
-        cost_basis_local=cost_basis_local,
-        product_type=product_type,
-    )
-    return quantity * cast(Decimal, valuation_price_local)
-
-
 def _authoritative_market_value_local(
     *,
     quantity: Decimal,
@@ -241,6 +225,30 @@ def _unsupported_authoritative_receipt_finding(
     )
 
 
+def _missing_bond_quote_authority_finding(
+    evidence: PositionValuationEvidence,
+) -> ReconciliationFinding:
+    return ReconciliationFinding(
+        reconciliation_type="position_valuation",
+        finding_type="missing_bond_quote_authority",
+        severity="ERROR",
+        portfolio_id=evidence.portfolio_id,
+        security_id=evidence.security_id,
+        transaction_id=None,
+        business_date=evidence.business_date,
+        epoch=evidence.epoch,
+        expected_value={"valuation_receipt_supportability": "SUPPORTED"},
+        observed_value={
+            "valuation_receipt_supportability": (
+                evidence.valuation_receipt.supportability
+                if evidence.valuation_receipt is not None
+                else None
+            )
+        },
+        detail={"reason": BOND_QUOTE_AUTHORITY_REQUIRED_REASON},
+    )
+
+
 def requires_authoritative_fx_rate(from_currency: str, to_currency: str) -> bool:
     return bool(from_currency and to_currency and from_currency != to_currency)
 
@@ -278,12 +286,12 @@ def position_valuation_reconciliation_findings(
 
     receipt = evidence.valuation_receipt
     if receipt is None or receipt.supportability == "LEGACY_UNSCOPED":
-        expected_market_value = expected_market_value_local(
-            quantity=quantity,
-            market_price=market_price,
-            cost_basis_local=cost_basis_local,
+        if requires_bond_quote_authority(
             product_type=evidence.product_type,
-        )
+            quantity=quantity,
+        ):
+            return [_missing_bond_quote_authority_finding(evidence)]
+        expected_market_value = quantity * market_price
     elif receipt.supportability == "SUPPORTED":
         authoritative_market_value = _authoritative_market_value_local(
             quantity=quantity,
