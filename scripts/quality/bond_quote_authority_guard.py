@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,7 @@ FORBIDDEN_IDENTIFIERS = (
 class RequiredConsumer:
     function_name: str
     keyword_expressions: dict[str, str]
+    required_branch_statements: tuple[str, ...]
 
 
 REQUIRED_CONSUMERS = {
@@ -33,6 +35,11 @@ REQUIRED_CONSUMERS = {
             "cost_basis_reporting": "snapshot.cost_basis",
             "cost_basis_local": "snapshot.cost_basis_local",
         },
+        required_branch_statements=(
+            "snapshot.valuation_status = VALUATION_FAILED",
+            "return ValuationSnapshotResult(snapshot=snapshot, "
+            "job_failure_reason=BOND_QUOTE_AUTHORITY_REQUIRED_REASON)",
+        ),
     ),
     Path(
         "src/services/financial_reconciliation_service/app/domain/reconciliation_policies.py"
@@ -44,6 +51,7 @@ REQUIRED_CONSUMERS = {
             "cost_basis_reporting": "cost_basis_reporting",
             "cost_basis_local": "cost_basis_local",
         },
+        required_branch_statements=("return [_missing_bond_quote_authority_finding(evidence)]",),
     ),
 }
 
@@ -54,6 +62,21 @@ def _call_name(node: ast.Call) -> str | None:
     if isinstance(node.func, ast.Attribute):
         return node.func.attr
     return None
+
+
+def _walk_function_scope(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Iterator[ast.AST]:
+    """Yield nodes in one function scope without accepting nested dead functions."""
+
+    pending: list[ast.AST] = list(reversed(function.body))
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        yield node
+        children = list(ast.iter_child_nodes(node))
+        pending.extend(reversed(children))
 
 
 def evaluate(repo_root: Path) -> tuple[str, ...]:
@@ -92,28 +115,39 @@ def evaluate(repo_root: Path) -> tuple[str, ...]:
                 f"{required_consumer.function_name} is missing or ambiguous"
             )
             continue
-        guarded_calls = [
-            node.test
-            for node in ast.walk(owning_functions[0])
+        guarded_branches = [
+            node
+            for node in _walk_function_scope(owning_functions[0])
             if isinstance(node, ast.If)
             and isinstance(node.test, ast.Call)
             and _call_name(node.test) == "requires_bond_quote_authority"
         ]
-        if len(guarded_calls) != 1:
+        if len(guarded_branches) != 1:
             findings.append(
                 f"{relative.as_posix()}: {required_consumer.function_name} must have exactly "
                 "one direct bond quote-authority fail-closed branch"
             )
             continue
+        guarded_branch = guarded_branches[0]
         actual_expressions = {
             keyword.arg: ast.unparse(keyword.value)
-            for keyword in guarded_calls[0].keywords
+            for keyword in guarded_branch.test.keywords
             if keyword.arg is not None
         }
         if actual_expressions != required_consumer.keyword_expressions:
             findings.append(
                 f"{relative.as_posix()}: {required_consumer.function_name} bond quote-authority "
                 "branch must use the governed product, quantity, and cost evidence"
+            )
+            continue
+        direct_statements = tuple(ast.unparse(statement) for statement in guarded_branch.body)
+        if not all(
+            required_statement in direct_statements
+            for required_statement in required_consumer.required_branch_statements
+        ):
+            findings.append(
+                f"{relative.as_posix()}: {required_consumer.function_name} bond quote-authority "
+                "branch must produce the governed fail-closed outcome"
             )
     return tuple(findings)
 
