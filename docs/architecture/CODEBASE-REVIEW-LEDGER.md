@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1691 explicit bond quote-authority cutover (2026-08-15): issue #451's final same-pattern
+audit found exactly two production consumers still interpreting unscoped bond prices from price and
+average-cost magnitude. The shared threshold helper and its 1/10/100 branches are deleted.
+Non-flat unscoped bond valuation now fails with stable supportability evidence; independent
+reconciliation emits `missing_bond_quote_authority`, routes it to valuation operations, and
+requires exact policy assignment instead of reproducing calculator inference. Scoped effective-dated
+policy/source authority, calculation receipts, unit-price collision behavior, and explicit
+percent-of-principal economics remain unchanged. A repository-native mutation guard prevents the
+heuristic or an unguarded consumer from returning. Wider accrued, factor/current-principal,
+contract-multiplier, and mixed-book certification stays under #788. Evidence and compatibility
+details: [CR-1691-EXPLICIT-BOND-QUOTE-AUTHORITY-CUTOVER.md](./codebase-reviews/CR-1691-EXPLICIT-BOND-QUOTE-AUTHORITY-CUTOVER.md).
+
 CR-1690 durable enterprise security-audit evidence (2026-08-15): issue #500 found that five
 protected Core HTTP apps relied on post-execution structured logs for allowed access decisions.
 Promoted profiles now append one typed, source-safe PostgreSQL decision before route execution and
