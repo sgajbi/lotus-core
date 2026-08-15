@@ -18,10 +18,10 @@ from src.services.valuation_orchestrator_service.app.core import (
     instrument_reprocessing_coordinator,
 )
 from src.services.valuation_orchestrator_service.app.repositories import (
-    instrument_reprocessing_state_repository,
+    instrument_reprocessing_conversion_repository as conversion_repository,
 )
-from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (
-    ValuationRepository,
+from src.services.valuation_orchestrator_service.app.repositories import (
+    instrument_reprocessing_state_repository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -32,8 +32,9 @@ async def _convert_pending_triggers(session: AsyncSession) -> None:
         batch_size=25
     )
     await coordinator.process_instrument_level_triggers(
-        repo=ValuationRepository(session),
-        reprocessing_job_repo=ReprocessingJobRepository(session),
+        conversion_repository=conversion_repository.InstrumentReprocessingConversionRepository(
+            session
+        ),
     )
 
 
@@ -75,19 +76,20 @@ async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_loc
     release_conversion = asyncio.Event()
 
     class PausingJobRepository(ReprocessingJobRepository):
-        async def create_job(self, *args, **kwargs):
+        async def stage_reset_watermarks_job(self, *args, **kwargs):
             trigger_claimed.set()
             await release_conversion.wait()
-            return await super().create_job(*args, **kwargs)
+            return await super().stage_reset_watermarks_job(*args, **kwargs)
 
     async def convert_later_trigger() -> None:
         async with session_factory() as session, session.begin():
             coordinator = instrument_reprocessing_coordinator.InstrumentReprocessingCoordinator(
                 batch_size=1
             )
+            repository = conversion_repository.InstrumentReprocessingConversionRepository(session)
+            repository._job_repository = PausingJobRepository(session)
             await coordinator.process_instrument_level_triggers(
-                repo=ValuationRepository(session),
-                reprocessing_job_repo=PausingJobRepository(session),
+                conversion_repository=repository,
             )
 
     conversion_task = asyncio.create_task(convert_later_trigger())
@@ -161,7 +163,7 @@ async def test_conversion_failure_rolls_trigger_deletion_back(
     await async_db_session.commit()
 
     class FailingJobRepository(ReprocessingJobRepository):
-        async def create_job(self, *args, **kwargs):
+        async def stage_reset_watermarks_job(self, *args, **kwargs):
             raise RuntimeError("injected reset-watermarks staging failure")
 
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
@@ -170,9 +172,10 @@ async def test_conversion_failure_rolls_trigger_deletion_back(
             coordinator = instrument_reprocessing_coordinator.InstrumentReprocessingCoordinator(
                 batch_size=1
             )
+            repository = conversion_repository.InstrumentReprocessingConversionRepository(session)
+            repository._job_repository = FailingJobRepository(session)
             await coordinator.process_instrument_level_triggers(
-                repo=ValuationRepository(session),
-                reprocessing_job_repo=FailingJobRepository(session),
+                conversion_repository=repository,
             )
 
     async with session_factory() as verification_session:

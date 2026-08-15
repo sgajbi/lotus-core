@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import (
-    InstrumentReprocessingState,
     PortfolioValuationJob,
     PositionState,
 )
@@ -16,7 +15,6 @@ from portfolio_common.monitoring import (
     POSITION_STATE_WATERMARK_LAG_DAYS,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_BUDGET_EXHAUSTED_PHASE,
     DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
@@ -54,6 +52,9 @@ from src.services.valuation_orchestrator_service.app.core.valuation_stale_job_re
 )
 from src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer import (
     ValuationWatermarkAdvancer,
+)
+from src.services.valuation_orchestrator_service.app.repositories import (
+    instrument_reprocessing_conversion_repository as conversion_repository,
 )
 from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (
     ValuationRepository,
@@ -93,7 +94,16 @@ def mock_dependencies():
     mock_job_repo = AsyncMock(spec=ValuationJobRepository)
     mock_job_repo.upsert_jobs.return_value = 0
     mock_state_repo = AsyncMock(spec=PositionStateRepository)
-    mock_repro_job_repo = AsyncMock(spec=ReprocessingJobRepository)
+    mock_conversion_repo = AsyncMock(
+        spec=conversion_repository.InstrumentReprocessingConversionRepository
+    )
+    mock_conversion_repo.convert_pending_triggers.return_value = (
+        conversion_repository.InstrumentTriggerConversionResult(
+            claimed_count=0,
+            created_count=0,
+            coalesced_pending_count=0,
+        )
+    )
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_db_session.begin.return_value = AsyncMock()
@@ -119,15 +129,15 @@ def mock_dependencies():
             return_value=mock_state_repo,
         ),
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ReprocessingJobRepository",
-            return_value=mock_repro_job_repo,
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.InstrumentReprocessingConversionRepository",
+            return_value=mock_conversion_repo,
         ),
     ):
         yield {
             "repo": mock_repo,
             "job_repo": mock_job_repo,
             "state_repo": mock_state_repo,
-            "repro_job_repo": mock_repro_job_repo,
+            "conversion_repo": mock_conversion_repo,
         }
 
 
@@ -737,7 +747,9 @@ async def test_scheduler_uses_injected_repository_factory_for_db_step_wrappers()
         valuation_repository_factory=lambda db: mock_repo,
         valuation_job_repository_factory=lambda db: AsyncMock(spec=ValuationJobRepository),
         position_state_repository_factory=lambda db: AsyncMock(spec=PositionStateRepository),
-        reprocessing_job_repository_factory=lambda db: AsyncMock(spec=ReprocessingJobRepository),
+        instrument_reprocessing_conversion_repository_factory=lambda db: AsyncMock(
+            spec=conversion_repository.InstrumentReprocessingConversionRepository
+        ),
     )
     scheduler = ValuationScheduler(
         valuation_job_publisher=MagicMock(),
@@ -776,7 +788,9 @@ async def test_scheduler_poll_once_uses_injected_dependencies_without_real_repos
         valuation_repository_factory=lambda db: mock_repo,
         valuation_job_repository_factory=lambda db: AsyncMock(spec=ValuationJobRepository),
         position_state_repository_factory=lambda db: AsyncMock(spec=PositionStateRepository),
-        reprocessing_job_repository_factory=lambda db: AsyncMock(spec=ReprocessingJobRepository),
+        instrument_reprocessing_conversion_repository_factory=lambda db: AsyncMock(
+            spec=conversion_repository.InstrumentReprocessingConversionRepository
+        ),
     )
     reprocessing_coordinator = MagicMock()
     reprocessing_coordinator.update_reprocessing_metrics = AsyncMock()
@@ -1632,54 +1646,42 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,
 ):
-    mock_repo = mock_dependencies["repo"]
-    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
-
-    triggers = [
-        InstrumentReprocessingState(
-            security_id="S1",
-            earliest_impacted_date=date(2025, 8, 5),
-            correlation_id="corr-trigger-1",
+    mock_conversion_repo = mock_dependencies["conversion_repo"]
+    mock_conversion_repo.convert_pending_triggers.return_value = (
+        conversion_repository.InstrumentTriggerConversionResult(
+            claimed_count=1,
+            created_count=1,
+            coalesced_pending_count=0,
         )
-    ]
-    mock_repo.claim_instrument_reprocessing_triggers.return_value = triggers
+    )
 
     await scheduler._process_instrument_level_triggers(AsyncMock())
 
-    mock_repro_job_repo.create_job.assert_awaited_once_with(
-        job_type="RESET_WATERMARKS",
-        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-05"},
-        correlation_id="corr-trigger-1",
+    mock_conversion_repo.convert_pending_triggers.assert_awaited_once_with(
+        batch_size=scheduler._batch_size
     )
-    mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(scheduler._batch_size)
 
 
 async def test_reprocessing_coordinator_creates_persistent_job_without_scheduler_loop():
     coordinator = instrument_reprocessing_coordinator.InstrumentReprocessingCoordinator(
         batch_size=25
     )
-    mock_repo = AsyncMock(spec=ValuationRepository)
-    mock_repro_job_repo = AsyncMock(spec=ReprocessingJobRepository)
-    triggers = [
-        InstrumentReprocessingState(
-            security_id="S1",
-            earliest_impacted_date=date(2025, 8, 5),
-            correlation_id="corr-trigger-1",
-        )
-    ]
-    mock_repo.claim_instrument_reprocessing_triggers.return_value = triggers
+    mock_conversion_repo = AsyncMock(
+        spec=conversion_repository.InstrumentReprocessingConversionRepository
+    )
+    expected = conversion_repository.InstrumentTriggerConversionResult(
+        claimed_count=1,
+        created_count=1,
+        coalesced_pending_count=0,
+    )
+    mock_conversion_repo.convert_pending_triggers.return_value = expected
 
-    await coordinator.process_instrument_level_triggers(
-        repo=mock_repo,
-        reprocessing_job_repo=mock_repro_job_repo,
+    result = await coordinator.process_instrument_level_triggers(
+        conversion_repository=mock_conversion_repo,
     )
 
-    mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(25)
-    mock_repro_job_repo.create_job.assert_awaited_once_with(
-        job_type="RESET_WATERMARKS",
-        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-05"},
-        correlation_id="corr-trigger-1",
-    )
+    assert result == expected
+    mock_conversion_repo.convert_pending_triggers.assert_awaited_once_with(batch_size=25)
 
 
 async def test_scheduler_stop_interrupts_poll_sleep(

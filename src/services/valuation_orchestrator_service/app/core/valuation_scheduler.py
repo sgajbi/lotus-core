@@ -17,12 +17,14 @@ from portfolio_common.monitoring import (
     set_control_queue_pending,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from portfolio_common.scheduler_dispatch_recovery import (
     SchedulerDispatchError,
 )
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 
+from ..repositories.instrument_reprocessing_conversion_repository import (
+    InstrumentReprocessingConversionRepository,
+)
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
 from .instrument_reprocessing_coordinator import InstrumentReprocessingCoordinator
@@ -89,7 +91,9 @@ class ValuationScheduler:
             valuation_repository_factory=lambda db: ValuationRepository(db),
             valuation_job_repository_factory=lambda db: ValuationJobRepository(db),
             position_state_repository_factory=lambda db: PositionStateRepository(db),
-            reprocessing_job_repository_factory=lambda db: ReprocessingJobRepository(db),
+            instrument_reprocessing_conversion_repository_factory=lambda db: (
+                InstrumentReprocessingConversionRepository(db)
+            ),
         )
         self._valuation_job_publisher = (
             valuation_job_publisher
@@ -189,11 +193,11 @@ class ValuationScheduler:
         Processes triggers from back-dated price events, creating persistent
         fan-out jobs instead of processing them in-memory.
         """
-        repo = self._repository_factory.valuation_repository(db)
-        repro_job_repo = self._repository_factory.reprocessing_job_repository(db)
+        conversion_repository = (
+            self._repository_factory.instrument_reprocessing_conversion_repository(db)
+        )
         await self._instrument_reprocessing_coordinator.process_instrument_level_triggers(
-            repo=repo,
-            reprocessing_job_repo=repro_job_repo,
+            conversion_repository=conversion_repository,
         )
 
     async def _advance_watermarks(self, db):
