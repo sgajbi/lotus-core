@@ -21,7 +21,10 @@ Persisted-row conversion now has its own adapter boundary. Rehydration failures 
 `InfrastructureAuditReadFailed`, a non-retryable typed database evidence error with bounded
 diagnostics and no row identity or value. The application service preserves that type, and the QCP
 router maps it with database unavailability to the documented source-safe 503 problem contract.
-Only construction of `SecurityAuditQuery` can produce the caller-attributable 422 path.
+The application boundary catches domain `ValueError` only while constructing
+`SecurityAuditQuery`, translates it to `InvalidSecurityAuditQuery`, and performs the store call
+outside that catch. The router catches only the typed caller error for 422, so a lower-layer
+`ValueError` cannot acquire caller-invalid semantics.
 
 The public success schema, filters, keyset cursor, table, migration head, and stored records remain
 unchanged. OpenAPI and operator guidance now state that invalid caller bounds return 422, while a
@@ -41,12 +44,16 @@ this evidence-specific correction.
 - Unit tests cover database-valid-shaped rows with invalid UUID, component enum, and normalized
   required-field evidence; every case returns the same typed safe error and leaks no value.
 - Application tests prove invalid cursors fail before store invocation while typed evidence-read
-  failure crosses the service unchanged.
-- Router and OpenAPI tests prove 422/503 attribution and stable RFC 9457/legacy response media.
+  failure crosses the service unchanged. Mutation tests prove a store-originated `ValueError`
+  crosses both application and router boundaries without becoming 422.
+- Router and OpenAPI tests prove typed 422/503 attribution and stable RFC 9457/legacy response
+  media.
 - Real PostgreSQL proof persists a row accepted by table constraints but rejected by the domain UUID
   contract, then verifies typed failure, no partial page, and cleanup.
 - Focused validation, full repository gates, PR evidence, and exact-main evidence are recorded on
   issue #954 as they complete.
+- Independent review passed at exact code head
+  `17ad6ebda87ed5c438a1445b7cd0abec53328cc0` with no remaining actionable finding.
 
 ## Compatibility
 
