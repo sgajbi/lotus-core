@@ -20,7 +20,10 @@ The core calculation is performed by the stateless `ValuationLogic` class. It de
 
 ### Current Behavior for Missing Data
 
-* If a required FX rate for a valuation is not found in the database, the valuation cannot be completed. The resulting `daily_position_snapshot` is marked with a status of `FAILED`, and the corresponding valuation job is marked `COMPLETE`. The system **does not** automatically retry this job; a manual reprocessing trigger is required if the missing data is later ingested.
+* If a required FX rate for a valuation is not found in the database, the valuation cannot be
+  completed. The resulting `daily_position_snapshot` and corresponding valuation job are marked
+  `FAILED`. The system **does not** automatically retry this job; a manual reprocessing trigger is
+  required if the missing data is later ingested.
 
 ### Governed quote-policy authority
 
