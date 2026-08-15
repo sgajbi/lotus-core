@@ -22,6 +22,7 @@ from portfolio_common.infrastructure_errors import (
 )
 
 from src.services.query_control_plane_service.app.application.security_audit_query import (
+    InvalidSecurityAuditQuery,
     SecurityAuditQueryService,
 )
 from src.services.query_control_plane_service.app.routers.response_helpers import (
@@ -136,9 +137,7 @@ async def test_endpoint_rejects_missing_verified_tenant_before_query() -> None:
 @pytest.mark.asyncio
 async def test_endpoint_maps_invalid_cursor_and_database_failure_source_safely() -> None:
     service = AsyncMock(spec=SecurityAuditQueryService)
-    service.list_events.side_effect = ValueError(
-        "security-audit cursor fields must be supplied together"
-    )
+    service.list_events.side_effect = InvalidSecurityAuditQuery()
     arguments = {
         "request": _request(tenant_id="bank-sg"),
         "occurred_from": NOW - timedelta(days=1),
@@ -178,3 +177,25 @@ async def test_endpoint_maps_invalid_cursor_and_database_failure_source_safely()
         "Durable security-audit evidence is temporarily unavailable."
     )
     assert "secret-corrupt-event-id" not in str(corrupt_evidence.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_endpoint_does_not_attribute_service_value_error_to_caller() -> None:
+    service = AsyncMock(spec=SecurityAuditQueryService)
+    service_failure = ValueError("lower-layer detail must not become a 422 response")
+    service.list_events.side_effect = service_failure
+
+    with pytest.raises(ValueError) as exc_info:
+        await list_security_audit_events(
+            request=_request(tenant_id="bank-sg"),
+            occurred_from=NOW - timedelta(days=1),
+            occurred_to=NOW,
+            page_size=50,
+            cursor_occurred_at=None,
+            cursor_event_id=None,
+            component=None,
+            decision=None,
+            service=service,
+        )
+
+    assert exc_info.value is service_failure

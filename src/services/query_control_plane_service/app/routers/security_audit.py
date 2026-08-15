@@ -14,7 +14,10 @@ from portfolio_common.infrastructure_errors import (
     InfrastructureAuditReadFailed,
 )
 
-from ..application.security_audit_query import SecurityAuditQueryService
+from ..application.security_audit_query import (
+    InvalidSecurityAuditQuery,
+    SecurityAuditQueryService,
+)
 from ..contracts.security_audit import (
     SecurityAuditEventResponse,
     SecurityAuditPageResponse,
@@ -140,7 +143,7 @@ async def list_security_audit_events(
             component=component,
             decision=decision,
         )
-    except ValueError:
+    except InvalidSecurityAuditQuery:
         raise_problem(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             title="Security-audit query invalid",

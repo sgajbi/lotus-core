@@ -13,6 +13,10 @@ from portfolio_common.domain.security_audit import (
 from portfolio_common.ports.security_audit import SecurityAuditStore
 
 
+class InvalidSecurityAuditQuery(ValueError):
+    """Caller-supplied security-audit query parameters violate domain bounds."""
+
+
 class SecurityAuditQueryService:
     def __init__(self, store: SecurityAuditStore) -> None:
         self._store = store
@@ -29,8 +33,8 @@ class SecurityAuditQueryService:
         component: SecurityAuditComponent | None,
         decision: SecurityAuditDecision | None,
     ) -> SecurityAuditPage:
-        page: SecurityAuditPage = await self._store.query(
-            SecurityAuditQuery(
+        try:
+            query = SecurityAuditQuery(
                 tenant_id=tenant_id,
                 occurred_from=occurred_from,
                 occurred_to=occurred_to,
@@ -40,5 +44,8 @@ class SecurityAuditQueryService:
                 component=component,
                 decision=decision,
             )
-        )
+        except ValueError as exc:
+            raise InvalidSecurityAuditQuery from exc
+
+        page: SecurityAuditPage = await self._store.query(query)
         return page
