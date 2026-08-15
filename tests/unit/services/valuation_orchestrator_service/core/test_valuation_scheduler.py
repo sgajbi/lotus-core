@@ -1683,6 +1683,8 @@ async def test_reprocessing_coordinator_creates_persistent_job_without_scheduler
         result = await coordinator.process_instrument_level_triggers(
             conversion_repository=mock_conversion_repo,
         )
+        observe_conversion.assert_not_called()
+        coordinator.observe_committed_conversion(result)
 
     assert result == expected
     mock_conversion_repo.convert_pending_triggers.assert_awaited_once_with(batch_size=25)
@@ -1690,6 +1692,72 @@ async def test_reprocessing_coordinator_creates_persistent_job_without_scheduler
         call("created", 1),
         call("coalesced_pending", 0),
     ]
+
+
+async def test_scheduler_observes_trigger_conversion_only_after_commit() -> None:
+    mock_db = MagicMock()
+    mock_db.begin.return_value = AsyncMock()
+
+    async def session_provider():
+        yield mock_db
+
+    scheduler = ValuationScheduler(
+        valuation_job_publisher=MagicMock(),
+        session_provider=session_provider,
+    )
+    result = conversion_repository.InstrumentTriggerConversionResult(1, 1, 0)
+
+    with (
+        patch.object(
+            scheduler,
+            "_process_instrument_level_triggers",
+            new=AsyncMock(return_value=result),
+        ),
+        patch.object(
+            scheduler._instrument_reprocessing_coordinator,
+            "observe_committed_conversion",
+        ) as observe_committed,
+    ):
+        await scheduler._convert_instrument_level_triggers()
+
+    observe_committed.assert_called_once_with(result)
+
+
+async def test_scheduler_does_not_observe_trigger_conversion_when_commit_fails() -> None:
+    class CommitFailingTransaction:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            raise RuntimeError("injected commit failure")
+
+    mock_db = MagicMock()
+    mock_db.begin.return_value = CommitFailingTransaction()
+
+    async def session_provider():
+        yield mock_db
+
+    scheduler = ValuationScheduler(
+        valuation_job_publisher=MagicMock(),
+        session_provider=session_provider,
+    )
+    result = conversion_repository.InstrumentTriggerConversionResult(1, 1, 0)
+
+    with (
+        patch.object(
+            scheduler,
+            "_process_instrument_level_triggers",
+            new=AsyncMock(return_value=result),
+        ),
+        patch.object(
+            scheduler._instrument_reprocessing_coordinator,
+            "observe_committed_conversion",
+        ) as observe_committed,
+        pytest.raises(RuntimeError, match="injected commit failure"),
+    ):
+        await scheduler._convert_instrument_level_triggers()
+
+    observe_committed.assert_not_called()
 
 
 async def test_scheduler_stop_interrupts_poll_sleep(

@@ -196,9 +196,15 @@ class ValuationScheduler:
         conversion_repository = (
             self._repository_factory.instrument_reprocessing_conversion_repository(db)
         )
-        await self._instrument_reprocessing_coordinator.process_instrument_level_triggers(
+        return await self._instrument_reprocessing_coordinator.process_instrument_level_triggers(
             conversion_repository=conversion_repository,
         )
+
+    async def _convert_instrument_level_triggers(self) -> None:
+        async for db in self._open_session():
+            async with db.begin():
+                result = await self._process_instrument_level_triggers(db)
+            self._instrument_reprocessing_coordinator.observe_committed_conversion(result)
 
     async def _advance_watermarks(self, db):
         """
@@ -262,7 +268,7 @@ class ValuationScheduler:
         poll_started_at = time.monotonic()
         try:
             await self._run_db_poll_step(self._update_reprocessing_and_queue_metrics)
-            await self._run_db_poll_step(self._process_instrument_level_triggers)
+            await self._convert_instrument_level_triggers()
             await self._run_db_poll_step(self._reset_stale_valuation_jobs)
             await self._run_db_poll_step(self._create_backfill_jobs)
             await self._claim_and_dispatch_ready_jobs()

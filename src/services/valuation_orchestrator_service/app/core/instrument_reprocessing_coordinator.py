@@ -30,37 +30,27 @@ class InstrumentReprocessingCoordinator:
         *,
         conversion_repository: InstrumentReprocessingConversionRepository,
     ) -> InstrumentTriggerConversionResult:
-        result = await conversion_repository.convert_pending_triggers(batch_size=self._batch_size)
-        if not result.claimed_count:
-            return result
+        return await conversion_repository.convert_pending_triggers(batch_size=self._batch_size)
 
+    @staticmethod
+    def observe_committed_conversion(result: InstrumentTriggerConversionResult) -> None:
+        """Publish durable evidence only after the caller commits the conversion."""
+        if not result.claimed_count:
+            return
         observe_instrument_reprocessing_trigger_conversion("created", result.created_count)
         observe_instrument_reprocessing_trigger_conversion(
             "coalesced_pending", result.coalesced_pending_count
         )
-
         logger.info(
-            "Instrument-level reprocessing triggers claimed.",
-            extra=operation_log_extra(
-                event_name="valuation.scheduler.instrument_triggers_claimed",
-                operation="valuation.scheduler.process_instrument_triggers",
-                status="started",
-                reason_code="triggers_claimed",
-                trigger_count=result.claimed_count,
-            ),
-        )
-
-        logger.info(
-            "Consumed %s instrument-level triggers into durable replay jobs.",
+            "Committed %s instrument-level triggers into durable replay jobs.",
             result.claimed_count,
             extra=operation_log_extra(
-                event_name="valuation.scheduler.instrument_triggers_consumed",
-                operation="valuation.scheduler.process_instrument_triggers",
+                event_name="valuation.scheduler.instrument_triggers_committed",
+                operation="valuation.scheduler.commit_instrument_triggers",
                 status="succeeded",
-                reason_code="jobs_staged",
+                reason_code="jobs_committed",
                 trigger_count=result.claimed_count,
                 jobs_created=result.created_count,
                 jobs_coalesced_pending=result.coalesced_pending_count,
             ),
         )
-        return result
