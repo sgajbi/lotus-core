@@ -160,7 +160,8 @@ Every SQLAlchemy process also resolves one typed database runtime profile before
 The compatibility profile makes QueuePool size `5`, overflow `10`, acquisition timeout `30s`,
 recycle disabled, and PostgreSQL statement/idle-in-transaction timeouts disabled explicit. Both
 psycopg and asyncpg use a `60s` connection-establishment bound. Alembic and governed test contexts
-use `NullPool` and reject QueuePool-only settings. Do not tighten server timeouts or resize pools
+use `NullPool`; ambient QueuePool settings are ignored and never passed to those engines. Do not
+tighten server timeouts or resize pools
 from a single sample: use attributed duration, contention, recovery, replica count, and total
 PostgreSQL connection-budget evidence. A server timeout aborts the current transaction; it does not
 authorize transparent retry.

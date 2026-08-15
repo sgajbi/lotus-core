@@ -3912,7 +3912,7 @@ Most relevant current governance:
      size 5, overflow 10, 30-second acquisition, recycle disabled, 60-second connection
      establishment, and disabled statement/idle-in-transaction server cutoffs. Both psycopg and
      asyncpg must receive equivalent server settings. Alembic and governed test contexts use
-     `NullPool` and must not receive QueuePool arguments. Invalid values, combined per-process
+     `NullPool`; they ignore and never emit ambient QueuePool arguments. Invalid values, combined per-process
      capacity above 32, unknown runtime identities, and attempts to override governed engine
      options fail before engine creation without logging raw values or connection details.
      Production pool or server-timeout changes require service-attributed workload, recovery,
