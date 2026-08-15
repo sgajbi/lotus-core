@@ -15,6 +15,7 @@ from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT
 from .connection_security import validate_database_url_security
 from .database_runtime_profile import (
     DatabasePoolMode,
+    DatabaseRuntimeProfileError,
     async_database_engine_options,
     database_runtime_profile,
     log_database_runtime_profile,
@@ -204,8 +205,6 @@ def create_async_database_engine(
 def _reject_governed_engine_overrides(engine_options: dict[str, Any]) -> None:
     reserved = sorted(_GOVERNED_ENGINE_OPTIONS.intersection(engine_options))
     if reserved:
-        from .database_runtime_profile import DatabaseRuntimeProfileError
-
         raise DatabaseRuntimeProfileError(
             setting=reserved[0],
             reason="engine option is governed by the database runtime profile",
