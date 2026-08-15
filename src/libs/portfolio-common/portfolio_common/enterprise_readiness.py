@@ -215,6 +215,12 @@ class EnterpriseReadinessRuntime:
         authz_enabled = self._authz_enforcement_enabled()
         _append_issue_if(
             issues,
+            "promoted_read_audit_disabled",
+            not explicit_local_config_profile_enabled()
+            and not self.env_enabled("ENTERPRISE_AUDIT_READS", "false"),
+        )
+        _append_issue_if(
+            issues,
             "missing_primary_key_id",
             authz_enabled and not self.load_settings().enterprise_primary_key_id.strip(),
         )
@@ -849,8 +855,7 @@ def build_enterprise_audit_middleware(
             )
 
         audit_allowed_request = normalized_method in WRITE_METHODS or (
-            normalized_method in READ_AUDIT_METHODS
-            and runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false")
+            normalized_method in READ_AUDIT_METHODS and _read_audit_required(runtime)
         )
         if audit_allowed_request:
             event = _security_audit_event(
@@ -887,9 +892,7 @@ def build_enterprise_audit_middleware(
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
             )
-        elif normalized_method in READ_AUDIT_METHODS and runtime.env_enabled(
-            "ENTERPRISE_AUDIT_READS", "false"
-        ):
+        elif normalized_method in READ_AUDIT_METHODS and _read_audit_required(runtime):
             read_correlation_id = _request_correlation_id(
                 request, response.headers.get("X-Correlation-ID")
             )
@@ -904,6 +907,13 @@ def build_enterprise_audit_middleware(
         return response
 
     return middleware
+
+
+def _read_audit_required(runtime: EnterpriseReadinessRuntime) -> bool:
+    return (
+        runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false")
+        or not explicit_local_config_profile_enabled()
+    )
 
 
 async def _persist_security_audit(

@@ -24,7 +24,8 @@ Promoted profiles persist one typed access decision before protected work across
 query control plane, financial reconciliation, and event replay. Audit write failure returns
 `503 security_audit_unavailable`; local/development/test profiles remain explicitly log-only.
 The legacy production-security-profile opt-out cannot disable this durable control outside an
-explicit local profile. Monitor `security_audit_delivery_total{service,outcome}` and treat
+explicit local profile, and non-local `ENTERPRISE_AUDIT_READS=false` cannot suppress GET/HEAD
+evidence. Monitor `security_audit_delivery_total{service,outcome}` and treat
 `outcome="failed"` as the source signal for #501 alerting.
 
 Use `GET /support/security-audit/events` with the `core.security_audit.read` capability, an inclusive

@@ -31,7 +31,9 @@ unavailable, the request stops with `503 security_audit_unavailable`; do not byp
 reconstruct evidence from logs. Explicit local/development/test profiles are log-only and are not
 durable certification evidence. Outside those explicit local profiles,
 `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` does not disable durable audit persistence or strict
-runtime validation. Monitor `security_audit_delivery_total{service,outcome}`; a rising
+runtime validation. Non-local `ENTERPRISE_AUDIT_READS=false` is invalid and middleware still
+persists GET/HEAD decisions if startup validation is bypassed. Monitor
+`security_audit_delivery_total{service,outcome}`; a rising
 `outcome="failed"` series is the bounded source signal for #501 alerting.
 
 Authorized support callers with `core.security_audit.read` can use:
