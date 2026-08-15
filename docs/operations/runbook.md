@@ -156,6 +156,15 @@ The fixed `postgres-background` cohort retains non-client PostgreSQL backends su
 the totals without treating them as missing Core client identity. Review that cohort as database
 maintenance pressure; `__unattributed__` remains reserved for blank client application identity.
 
+Every SQLAlchemy process also resolves one typed database runtime profile before engine creation.
+The compatibility profile makes QueuePool size `5`, overflow `10`, acquisition timeout `30s`,
+recycle disabled, and PostgreSQL statement/idle-in-transaction timeouts disabled explicit. Both
+psycopg and asyncpg use a `60s` connection-establishment bound. Alembic and governed test contexts
+use `NullPool` and reject QueuePool-only settings. Do not tighten server timeouts or resize pools
+from a single sample: use attributed duration, contention, recovery, replica count, and total
+PostgreSQL connection-budget evidence. A server timeout aborts the current transaction; it does not
+authorize transparent retry.
+
 The app-local `Lotus Core Transaction Processing` Grafana dashboard correlates separate live and
 replay partition lag with stage p95 duration, failed/rejected outcomes, async pool state, and outbox
 backlog. It is a pre-cutover diagnostic view. Do not treat its absence of thresholds as an SLO; add
@@ -612,6 +621,13 @@ Operational knobs:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `SERVICE_NAME` | `lotus-core-local` only in local/dev/test; required otherwise | Allowlisted stable runtime identity used by structured logs and PostgreSQL connection attribution. Unknown, blank, or overlong values fail before engine creation. |
+| `LOTUS_CORE_DB_POOL_SIZE` | `5` | QueuePool persistent connections per process; valid 1-32. |
+| `LOTUS_CORE_DB_MAX_OVERFLOW` | `10` | Temporary QueuePool overflow per process; valid 0-32, with combined capacity at most 32. |
+| `LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS` | `30` | Bounded QueuePool acquisition wait; valid 1-300 seconds. |
+| `LOTUS_CORE_DB_POOL_RECYCLE_SECONDS` | `-1` | Checkout-time connection recycle; `-1` disables it, otherwise valid 60-86,400 seconds. |
+| `LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS` | `60` | Equivalent psycopg/asyncpg connection-establishment bound; valid 1-60 seconds. |
+| `LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS` | `0` | PostgreSQL statement cutoff; `0` disables it, otherwise valid 100-3,600,000 ms. Requires workload/recovery evidence before promotion. |
+| `LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | `0` | PostgreSQL idle-transaction cutoff; `0` disables it, otherwise valid 1,000-900,000 ms. Requires transaction-recovery evidence before promotion. |
 | `LOTUS_HTTP_CORS_ALLOW_ORIGINS` | empty | Comma-separated browser origins allowed by the shared CORS middleware. Empty means browser cross-origin requests are denied. |
 | `LOTUS_HTTP_TRUSTED_HOSTS` | `*` in local/dev/test only | Comma-separated host allowlist enforced by the shared trusted-host middleware. Production-like profiles must set non-wildcard hosts. |
 | `LOTUS_METRICS_ACCESS_TOKEN` | empty | When set, `/metrics` requires `Authorization: Bearer <token>`. |
