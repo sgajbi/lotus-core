@@ -1,0 +1,38 @@
+"""Mutation tests for the bond quote authority guard."""
+
+from pathlib import Path
+
+from scripts.quality.bond_quote_authority_guard import REQUIRED_CONSUMERS, evaluate
+
+
+def _write_required_consumers(root: Path) -> None:
+    for relative, required_identifier in REQUIRED_CONSUMERS.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{required_identifier}(product_type=kind, quantity=units)\n")
+
+
+def test_repository_has_no_production_bond_quote_heuristic() -> None:
+    root = Path(__file__).resolve().parents[3]
+
+    assert evaluate(root) == ()
+
+
+def test_guard_rejects_deleted_heuristic_identifier(tmp_path: Path) -> None:
+    _write_required_consumers(tmp_path)
+    source = tmp_path / "src" / "pricing.py"
+    source.write_text("resolve_valuation_unit_price(price)\n", encoding="utf-8")
+
+    assert evaluate(tmp_path) == (
+        "src/pricing.py: forbidden bond quote heuristic: resolve_valuation_unit_price",
+    )
+
+
+def test_guard_requires_each_production_consumer_to_fail_closed(tmp_path: Path) -> None:
+    _write_required_consumers(tmp_path)
+    target = tmp_path / next(iter(REQUIRED_CONSUMERS))
+    target.write_text("value = quantity * price\n", encoding="utf-8")
+
+    assert evaluate(tmp_path) == (
+        f"{target.relative_to(tmp_path).as_posix()}: missing explicit bond quote-authority guard",
+    )
