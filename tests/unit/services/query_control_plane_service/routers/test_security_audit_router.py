@@ -16,7 +16,10 @@ from portfolio_common.domain.security_audit import (
     SecurityAuditPage,
     SecurityAuditReason,
 )
-from portfolio_common.infrastructure_errors import DatabaseUnavailable
+from portfolio_common.infrastructure_errors import (
+    DatabaseUnavailable,
+    InfrastructureAuditReadFailed,
+)
 
 from src.services.query_control_plane_service.app.application.security_audit_query import (
     SecurityAuditQueryService,
@@ -163,3 +166,15 @@ async def test_endpoint_maps_invalid_cursor_and_database_failure_source_safely()
     assert unavailable.value.error_code == "QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE"
     assert unavailable.value.detail == "Durable security-audit evidence is temporarily unavailable."
     assert "must-not-leak" not in str(unavailable.value.detail)
+
+    service.list_events.side_effect = InfrastructureAuditReadFailed(
+        safe_context={"persisted_value": "secret-corrupt-event-id"}
+    )
+    with pytest.raises(QueryControlPlaneProblem) as corrupt_evidence:
+        await list_security_audit_events(**arguments)
+    assert corrupt_evidence.value.status_code == 503
+    assert corrupt_evidence.value.error_code == "QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE"
+    assert corrupt_evidence.value.detail == (
+        "Durable security-audit evidence is temporarily unavailable."
+    )
+    assert "secret-corrupt-event-id" not in str(corrupt_evidence.value.detail)
