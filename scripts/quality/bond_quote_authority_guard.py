@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,13 +14,37 @@ FORBIDDEN_IDENTIFIERS = (
     "_bond_percent_quote_multiplier",
     "_bond_price_ratio_multiplier",
 )
+
+
+@dataclass(frozen=True)
+class RequiredConsumer:
+    function_name: str
+    keyword_expressions: dict[str, str]
+
+
 REQUIRED_CONSUMERS = {
     Path(
         "src/services/calculators/position_valuation_calculator/app/valuation_processor.py"
-    ): "requires_bond_quote_authority",
+    ): RequiredConsumer(
+        function_name="_value_legacy_snapshot",
+        keyword_expressions={
+            "product_type": "instrument.product_type",
+            "quantity": "snapshot.quantity",
+            "cost_basis_reporting": "snapshot.cost_basis",
+            "cost_basis_local": "snapshot.cost_basis_local",
+        },
+    ),
     Path(
         "src/services/financial_reconciliation_service/app/domain/reconciliation_policies.py"
-    ): "requires_bond_quote_authority",
+    ): RequiredConsumer(
+        function_name="position_valuation_reconciliation_findings",
+        keyword_expressions={
+            "product_type": "evidence.product_type",
+            "quantity": "quantity",
+            "cost_basis_reporting": "cost_basis_reporting",
+            "cost_basis_local": "cost_basis_local",
+        },
+    ),
 }
 
 
@@ -49,25 +74,46 @@ def evaluate(repo_root: Path) -> tuple[str, ...]:
             ):
                 findings.append(f"{relative}: forbidden bond quote heuristic: {identifier}")
 
-    for relative, required_identifier in REQUIRED_CONSUMERS.items():
+    for relative, required_consumer in REQUIRED_CONSUMERS.items():
         path = repo_root / relative
         if not path.is_file():
             findings.append(f"{relative.as_posix()}: required production consumer is missing")
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        calls = [
+        owning_functions = [
             node
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and _call_name(node) == required_identifier
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == required_consumer.function_name
         ]
-        if len(calls) != 1:
-            findings.append(f"{relative.as_posix()}: missing explicit bond quote-authority guard")
-            continue
-        keyword_names = {keyword.arg for keyword in calls[0].keywords}
-        if keyword_names != {"product_type", "quantity"}:
+        if len(owning_functions) != 1:
             findings.append(
-                f"{relative.as_posix()}: bond quote-authority guard must receive "
-                "product_type and quantity"
+                f"{relative.as_posix()}: required function "
+                f"{required_consumer.function_name} is missing or ambiguous"
+            )
+            continue
+        guarded_calls = [
+            node.test
+            for node in ast.walk(owning_functions[0])
+            if isinstance(node, ast.If)
+            and isinstance(node.test, ast.Call)
+            and _call_name(node.test) == "requires_bond_quote_authority"
+        ]
+        if len(guarded_calls) != 1:
+            findings.append(
+                f"{relative.as_posix()}: {required_consumer.function_name} must have exactly "
+                "one direct bond quote-authority fail-closed branch"
+            )
+            continue
+        actual_expressions = {
+            keyword.arg: ast.unparse(keyword.value)
+            for keyword in guarded_calls[0].keywords
+            if keyword.arg is not None
+        }
+        if actual_expressions != required_consumer.keyword_expressions:
+            findings.append(
+                f"{relative.as_posix()}: {required_consumer.function_name} bond quote-authority "
+                "branch must use the governed product, quantity, and cost evidence"
             )
     return tuple(findings)
 
