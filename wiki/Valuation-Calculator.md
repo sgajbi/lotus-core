@@ -73,6 +73,9 @@ That makes valuation supportability a first-class contract, not just a calculati
 - valuation produces canonical daily snapshot truth inside core
 - existing legacy receipts and flat quote-independent zero valuations may have null calculation
   lineage; absence remains explicit and is never backfilled by inference
+- a non-flat bond requires exact effective-dated quote-policy and market-price source authority;
+  unscoped bond prices fail closed because numeric magnitude cannot distinguish unit price from
+  percent of principal
 - downstream performance and risk conclusions still belong outside `lotus-core`
 
 ## Operational hints
@@ -82,6 +85,9 @@ Check this service when:
 - positions exist but `daily_position_snapshots` are stale or missing
 - support evidence shows pending, failed, or repeatedly reset valuation jobs
 - market data or FX completeness looks like the blocker to portfolio-day readiness
+- a bond job reports `bond valuation requires explicit quote-convention authority`; assign the
+  governed valuation policy and source representation for the exact tenant, legal book, security,
+  and effective date rather than changing the price or cost basis to influence interpretation
 
 Check beyond this service when:
 
