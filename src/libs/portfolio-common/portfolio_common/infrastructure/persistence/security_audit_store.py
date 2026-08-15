@@ -22,6 +22,7 @@ from portfolio_common.domain.security_audit import (
 )
 from portfolio_common.infrastructure_errors import (
     DatabaseUnavailable,
+    InfrastructureAuditReadFailed,
     InfrastructureAuditWriteFailed,
 )
 from portfolio_common.runtime_settings import RuntimeConfigurationError
@@ -94,7 +95,12 @@ class PostgresSecurityAuditStore:
 
         has_next_page = len(records) > query.page_size
         page_records = records[: query.page_size]
-        events = tuple(_to_domain(record) for record in page_records)
+        try:
+            events = tuple(_to_domain(record) for record in page_records)
+        except (AttributeError, TypeError, ValueError):
+            raise InfrastructureAuditReadFailed(
+                safe_context={"evidence_type": "security_audit"}
+            ) from None
         if not has_next_page or not events:
             return SecurityAuditPage(
                 events=events,

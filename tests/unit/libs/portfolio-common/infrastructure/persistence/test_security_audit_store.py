@@ -21,6 +21,7 @@ from portfolio_common.infrastructure.persistence.security_audit_store import (
 )
 from portfolio_common.infrastructure_errors import (
     DatabaseUnavailable,
+    InfrastructureAuditReadFailed,
     InfrastructureAuditWriteFailed,
 )
 from portfolio_common.runtime_settings import RuntimeConfigurationError
@@ -176,16 +177,27 @@ async def test_query_returns_terminal_page_without_cursor() -> None:
 
 
 @pytest.mark.asyncio
-async def test_query_currently_exposes_persisted_event_rehydration_failure() -> None:
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("event_id", "not-a-canonical-uuid-but-still-36-char"),
+        ("component", "secret-invalid-component"),
+        ("policy_version", " "),
+    ],
+)
+async def test_query_maps_persisted_event_rehydration_failure_source_safely(
+    field_name: str,
+    invalid_value: str,
+) -> None:
     record = _record(_event())
-    record.event_id = "not-a-canonical-uuid-but-still-36-char"
+    setattr(record, field_name, invalid_value)
     scalar_result = MagicMock()
     scalar_result.scalars.return_value.all.return_value = [record]
     session = MagicMock()
     session.execute = AsyncMock(return_value=scalar_result)
     store = PostgresSecurityAuditStore(_session_factory(session))
 
-    with pytest.raises(ValueError, match="security-audit event id must be a UUID"):
+    with pytest.raises(InfrastructureAuditReadFailed) as exc_info:
         await store.query(
             SecurityAuditQuery(
                 tenant_id="bank-sg",
@@ -194,6 +206,16 @@ async def test_query_currently_exposes_persisted_event_rehydration_failure() -> 
                 page_size=20,
             )
         )
+
+    assert str(exc_info.value) == "Audit evidence could not be read."
+    assert exc_info.value.safe_diagnostics() == {
+        "reason_code": "audit_evidence_read_failed",
+        "dependency": "database",
+        "retryable": False,
+        "message": "Audit evidence could not be read.",
+        "context": {"evidence_type": "security_audit"},
+    }
+    assert invalid_value not in str(exc_info.value.safe_diagnostics())
 
 
 @pytest.mark.asyncio
