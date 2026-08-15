@@ -438,7 +438,7 @@ def _database_constructor_calls(tree: ast.AST) -> list[tuple[str, int]]:
     sqlalchemy_module_aliases: set[str] = set()
     dbapi_module_aliases: set[str] = set()
     dbapi_connect_aliases: set[str] = set()
-    for node in getattr(tree, "body", []):
+    for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             if node.module == "sqlalchemy" or node.module.startswith("sqlalchemy."):
                 for alias in node.names:
@@ -488,16 +488,26 @@ def _database_constructor_calls(tree: ast.AST) -> list[tuple[str, int]]:
         "from psycopg2 import connect as raw_connect\nraw_connect('dsn')",
         "from asyncpg import connect as open_database\nopen_database('dsn')",
         "import psycopg as pg\npg.connect('dsn')",
+        "def bypass():\n from psycopg import connect as raw_connect\n raw_connect('dsn')",
     ],
 )
 def test_database_constructor_guard_detects_direct_dbapi_aliases(source):
-    assert _database_constructor_calls(ast.parse(source)) == [("dbapi.connect", 2)]
+    calls = _database_constructor_calls(ast.parse(source))
+
+    assert len(calls) == 1
+    assert calls[0][0] == "dbapi.connect"
 
 
 def test_database_constructor_guard_detects_sqlalchemy_export_aliases():
     source = "from sqlalchemy.engine import create_engine as ce\nce('url')"
 
     assert _database_constructor_calls(ast.parse(source)) == [("create_engine", 2)]
+
+
+def test_database_constructor_guard_detects_nested_sqlalchemy_aliases():
+    source = "def bypass():\n from sqlalchemy.engine import create_engine as ce\n ce('url')"
+
+    assert _database_constructor_calls(ast.parse(source)) == [("create_engine", 3)]
 
 
 def test_database_engines_use_governed_factory():
