@@ -22,6 +22,28 @@ The guarded playbook set covers `ingestion-stuck-failed`, `dlq-growth`, `replay-
 `readiness-failure`, `database-connectivity`, `kafka-connectivity`, and
 `security-audit-denial-spikes`.
 
+## Durable Enterprise Access Evidence
+
+In staging, UAT, pre-production, and production profiles, ingestion, query, query control plane,
+financial reconciliation, and event replay write one typed access decision to
+`enterprise_security_audit_events` before protected route work executes. If that write is
+unavailable, the request stops with `503 security_audit_unavailable`; do not bypass the control or
+reconstruct evidence from logs. Explicit local/development/test profiles are log-only and are not
+durable certification evidence.
+
+Authorized support callers with `core.security_audit.read` can use:
+
+```text
+GET /support/security-audit/events?occurred_from=<UTC>&occurred_to=<UTC>&page_size=100
+```
+
+The signed request tenant is mandatory and is not a query parameter. The maximum window is 31 days,
+the maximum page is 200, and continuation requires both `cursor_occurred_at` and `cursor_event_id`.
+Returned evidence contains governed route templates and typed identity posture, never bodies,
+headers, query strings, concrete URLs, secrets, arbitrary metadata, or raw database exceptions.
+Unverified denials remain durable with identity columns absent and do not appear in tenant-scoped
+queries. Alerting is owned by #501; retention, purge, and legal hold are owned by #708.
+
 ## Initial Quality Baseline Commands
 
 ```powershell
