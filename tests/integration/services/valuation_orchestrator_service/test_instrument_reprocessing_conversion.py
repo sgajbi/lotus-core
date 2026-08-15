@@ -71,6 +71,14 @@ async def _await_task_with_cleanup(task: asyncio.Task[None], *, timeout: float =
         raise
 
 
+async def _reap_task_if_needed(task: asyncio.Task[None]) -> None:
+    """Finish an active task or consume a completed task's terminal exception."""
+    if not task.done():
+        await _await_task_with_cleanup(task)
+    elif not task.cancelled():
+        task.exception()
+
+
 async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_locked(
     clean_db, async_db_session: AsyncSession
 ) -> None:
@@ -129,14 +137,14 @@ async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_loc
                 backend_pid=updater_pid,
             )
             release_conversion.set()
-            await conversion_task
-            await updater_task
+            await _await_task_with_cleanup(conversion_task)
+            await _await_task_with_cleanup(updater_task)
             await updater_session.commit()
     finally:
         release_conversion.set()
-        await _await_task_with_cleanup(conversion_task)
+        await _reap_task_if_needed(conversion_task)
         if updater_task is not None:
-            await _await_task_with_cleanup(updater_task)
+            await _reap_task_if_needed(updater_task)
 
     async with session_factory() as conversion_session, conversion_session.begin():
         await _convert_pending_triggers(conversion_session)
