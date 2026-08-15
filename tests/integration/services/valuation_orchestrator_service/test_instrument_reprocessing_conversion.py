@@ -95,31 +95,39 @@ async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_loc
             )
 
     conversion_task = asyncio.create_task(convert_later_trigger())
-    await trigger_claimed.wait()
+    updater_task: asyncio.Task[None] | None = None
+    try:
+        await asyncio.wait_for(trigger_claimed.wait(), timeout=5)
 
-    # Hold the updater's connection explicitly so its backend can be observed while blocked.
-    async with session_factory() as updater_session:
-        updater_pid = int(await updater_session.scalar(text("SELECT pg_backend_pid()")))
-        updater_repository = (
-            instrument_reprocessing_state_repository.InstrumentReprocessingStateRepository(
-                updater_session
+        # Hold the updater's connection explicitly so its backend can be observed while blocked.
+        async with session_factory() as updater_session:
+            updater_pid = int(await updater_session.scalar(text("SELECT pg_backend_pid()")))
+            updater_repository = (
+                instrument_reprocessing_state_repository.InstrumentReprocessingStateRepository(
+                    updater_session
+                )
             )
-        )
-        updater_task = asyncio.create_task(
-            updater_repository.upsert_state(
-                "S-CONVERSION-RACE",
-                date(2025, 8, 5),
-                correlation_id="corr-earlier",
+            updater_task = asyncio.create_task(
+                updater_repository.upsert_state(
+                    "S-CONVERSION-RACE",
+                    date(2025, 8, 5),
+                    correlation_id="corr-earlier",
+                )
             )
-        )
-        await _wait_for_backend_lock(
-            session_factory=session_factory,
-            backend_pid=updater_pid,
-        )
+            await _wait_for_backend_lock(
+                session_factory=session_factory,
+                backend_pid=updater_pid,
+            )
+            release_conversion.set()
+            await conversion_task
+            await updater_task
+            await updater_session.commit()
+    finally:
         release_conversion.set()
-        await conversion_task
-        await updater_task
-        await updater_session.commit()
+        if not conversion_task.done():
+            await conversion_task
+        if updater_task is not None and not updater_task.done():
+            await updater_task
 
     async with session_factory() as conversion_session, conversion_session.begin():
         await _convert_pending_triggers(conversion_session)
@@ -236,9 +244,8 @@ async def test_conversion_keeps_independent_securities_parallel(
             await repository.convert_pending_triggers(batch_size=1)
 
     first_conversion = asyncio.create_task(convert_locked_security())
-    await first_trigger_claimed.wait()
-
     try:
+        await asyncio.wait_for(first_trigger_claimed.wait(), timeout=5)
         async with session_factory() as parallel_session, parallel_session.begin():
             parallel_result = await asyncio.wait_for(
                 conversion_repository.InstrumentReprocessingConversionRepository(

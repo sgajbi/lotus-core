@@ -170,8 +170,9 @@ consumer faults.
 
 For price-driven valuation replay, compare `instrument_reprocessing_triggers_pending` with
 `instrument_reprocessing_trigger_conversions_total{outcome}`. `created` means the conversion
-staged a new pending `RESET_WATERMARKS` generation; `coalesced_pending` means it merged an earlier
-date into existing pending work and avoided a duplicate job. A `PROCESSING` job is intentionally
+staged a new pending `RESET_WATERMARKS` generation; `coalesced_pending` means it merged the request
+into existing pending work, where `LEAST` retains the earliest date and avoids a duplicate
+job. A `PROCESSING` job is intentionally
 immutable, so a concurrent earlier price can coexist as one new pending generation. Do not delete
 trigger rows or mutate job payloads by hand: transaction rollback and the next scheduler poll are
 the governed recovery path.
