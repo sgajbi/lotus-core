@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import Request
 from portfolio_common.domain.security_audit import (
     SecurityAuditComponent,
     SecurityAuditDecision,
@@ -20,6 +20,9 @@ from portfolio_common.infrastructure_errors import DatabaseUnavailable
 
 from src.services.query_control_plane_service.app.application.security_audit_query import (
     SecurityAuditQueryService,
+)
+from src.services.query_control_plane_service.app.routers.response_helpers import (
+    QueryControlPlaneProblem,
 )
 from src.services.query_control_plane_service.app.routers.security_audit import (
     list_security_audit_events,
@@ -108,7 +111,7 @@ async def test_endpoint_uses_only_verified_request_tenant_and_maps_typed_page() 
 async def test_endpoint_rejects_missing_verified_tenant_before_query() -> None:
     service = AsyncMock(spec=SecurityAuditQueryService)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await list_security_audit_events(
             request=_request(tenant_id=None),
             occurred_from=NOW - timedelta(days=1),
@@ -122,7 +125,8 @@ async def test_endpoint_rejects_missing_verified_tenant_before_query() -> None:
         )
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "verified_tenant_context_required"
+    assert exc_info.value.error_code == "QCP_SECURITY_AUDIT_TENANT_CONTEXT_REQUIRED"
+    assert exc_info.value.detail == "The request does not carry verified tenant authority."
     service.list_events.assert_not_awaited()
 
 
@@ -144,14 +148,18 @@ async def test_endpoint_maps_invalid_cursor_and_database_failure_source_safely()
         "service": service,
     }
 
-    with pytest.raises(HTTPException) as invalid:
+    with pytest.raises(QueryControlPlaneProblem) as invalid:
         await list_security_audit_events(**arguments)
     assert invalid.value.status_code == 422
-    assert invalid.value.detail == "security-audit cursor fields must be supplied together"
+    assert invalid.value.error_code == "QCP_SECURITY_AUDIT_QUERY_INVALID"
+    assert invalid.value.detail == (
+        "The requested evidence window or cursor is outside governed bounds."
+    )
 
     service.list_events.side_effect = DatabaseUnavailable(safe_context={"host": "must-not-leak"})
-    with pytest.raises(HTTPException) as unavailable:
+    with pytest.raises(QueryControlPlaneProblem) as unavailable:
         await list_security_audit_events(**arguments)
     assert unavailable.value.status_code == 503
-    assert unavailable.value.detail == "security_audit_query_unavailable"
+    assert unavailable.value.error_code == "QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE"
+    assert unavailable.value.detail == "Durable security-audit evidence is temporarily unavailable."
     assert "must-not-leak" not in str(unavailable.value.detail)

@@ -9150,9 +9150,19 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Verified tenant authority is missing."
+        },
+        {
           "status_code": "422",
-          "schema": "HTTPValidationError",
-          "description": "Validation Error"
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Evidence query bounds or cursor are invalid."
+        },
+        {
+          "status_code": "503",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Durable evidence cannot currently be queried."
         }
       ],
       "pagination": [

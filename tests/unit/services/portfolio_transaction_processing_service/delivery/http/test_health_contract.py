@@ -38,6 +38,7 @@ def test_transaction_worker_health_app_has_explicit_security_coverage() -> None:
         "app_path": "src/services/portfolio_transaction_processing_service/app/web.py",
         "app_kind": "health_only_worker_api",
         "auth_audit_control": "health_only_no_business_routes",
+        "durable_audit_control": "not_applicable_health_only",
         "payload_limit_control": "not_applicable_health_only",
         "upload_limit_control": "not_applicable",
         "unauthenticated_allowlist": [
