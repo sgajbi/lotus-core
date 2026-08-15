@@ -67,7 +67,8 @@ permitted.
 - Lazy runtime-configuration failures, a promoted-profile opt-out attempt, oversized signed
   lineage, and delivered/failed low-cardinality metric outcomes have focused regression proofs.
 - Focused Ruff and MyPy checks passed for the touched runtime, application, and contract modules.
-- Full repository-native, protected PR, and exact-main evidence remain required before #500 closes.
+- PR #953 merged at exact main `08d5a343c06a36e75c21ebb9aa11a403e441b784`; Main
+  Releasability run `31860387166` passed and the operations wiki was published with parity 0.
 
 ## Compatibility
 
