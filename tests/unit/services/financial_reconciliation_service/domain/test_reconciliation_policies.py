@@ -8,7 +8,6 @@ from src.services.financial_reconciliation_service.app.domain.reconciliation_pol
     PositionValuationEvidence,
     PositionValuationReceiptEvidence,
     build_reconciliation_summary,
-    expected_market_value_local,
     position_valuation_reconciliation_findings,
     requires_authoritative_fx_rate,
     resolve_value_tolerance,
@@ -57,13 +56,7 @@ def test_requires_authoritative_fx_rate_only_when_currency_pair_is_complete_and_
     assert requires_authoritative_fx_rate("EUR", "") is False
 
 
-def test_position_valuation_policy_respects_bond_percent_of_par_pricing() -> None:
-    market_value = expected_market_value_local(
-        quantity=Decimal("180"),
-        market_price=Decimal("101.35"),
-        cost_basis_local=Decimal("178704"),
-        product_type="BOND",
-    )
+def test_unscoped_bond_reconciliation_fails_without_quote_authority() -> None:
     findings = position_valuation_reconciliation_findings(
         evidence=PositionValuationEvidence(
             portfolio_id="PORT-BOND",
@@ -80,8 +73,40 @@ def test_position_valuation_policy_respects_bond_percent_of_par_pricing() -> Non
         tolerance=Decimal("0.0001"),
     )
 
-    assert market_value == Decimal("182430.0")
-    assert findings == []
+    assert [finding.finding_type for finding in findings] == ["missing_bond_quote_authority"]
+    assert findings[0].expected_value == {"valuation_receipt_supportability": "SUPPORTED"}
+    assert findings[0].observed_value == {"valuation_receipt_supportability": None}
+    assert findings[0].detail == {
+        "reason": "bond valuation requires explicit quote-convention authority"
+    }
+
+
+def test_legacy_unscoped_bond_receipt_does_not_authorize_quote_interpretation() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-LEGACY",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("10"),
+            market_price=Decimal("1013.5"),
+            market_value_local=Decimal("10135"),
+            cost_basis_local=Decimal("10000"),
+            unrealized_gain_loss_local=Decimal("135"),
+            product_type="BOND",
+            valuation_receipt=PositionValuationReceiptEvidence(
+                supportability="LEGACY_UNSCOPED",
+                policy_id=None,
+                policy_version=None,
+                quote_basis=None,
+                receipt_hash="e" * 64,
+            ),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert [finding.finding_type for finding in findings] == ["missing_bond_quote_authority"]
+    assert findings[0].observed_value == {"valuation_receipt_supportability": "LEGACY_UNSCOPED"}
 
 
 def test_authoritative_unit_price_receipt_bypasses_legacy_bond_heuristic() -> None:

@@ -167,7 +167,7 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
 
 
 @pytest.mark.asyncio
-async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
+async def test_run_position_valuation_flags_unscoped_bond_quote_authority():
     run = SimpleNamespace(run_id="recon-bond")
     snapshot = SimpleNamespace(
         portfolio_id="PORT-BOND",
@@ -201,9 +201,10 @@ async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
         )
 
     findings = repository.add_findings.await_args.args[0]
-    assert findings == []
+    assert [finding.finding_type for finding in findings] == ["missing_bond_quote_authority"]
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
-    assert summary["finding_count"] == 0
+    assert summary["finding_count"] == 1
+    assert summary["passed"] is False
 
 
 @pytest.mark.asyncio
