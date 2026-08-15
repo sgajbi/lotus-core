@@ -47,3 +47,31 @@ def test_reconciliation_finding_mapper_preserves_domain_payload_fields() -> None
     assert row.resolution_actor is None
     assert row.resolved_at is None
     assert row.repair_recommendation == "REVALUE_POSITION"
+
+
+def test_missing_bond_quote_authority_routes_to_policy_assignment() -> None:
+    finding = ReconciliationFinding(
+        reconciliation_type="position_valuation",
+        finding_type="missing_bond_quote_authority",
+        severity="ERROR",
+        portfolio_id="PORT-BOND",
+        security_id="BOND-1",
+        transaction_id=None,
+        business_date=date(2026, 8, 15),
+        epoch=1,
+        expected_value={"valuation_receipt_supportability": "SUPPORTED"},
+        observed_value={"valuation_receipt_supportability": "LEGACY_UNSCOPED"},
+        detail={
+            "reason": "bond valuation requires explicit quote-convention authority"
+        },
+    )
+
+    row = reconciliation_finding_to_orm(
+        finding,
+        run_id="recon-bond-authority",
+        finding_id="finding-bond-authority",
+    )
+
+    assert row.owner == "VALUATION_OPERATIONS"
+    assert row.repair_recommendation == "ASSIGN_VALUATION_QUOTE_POLICY"
+    assert row.resolution_state == "OPEN"
