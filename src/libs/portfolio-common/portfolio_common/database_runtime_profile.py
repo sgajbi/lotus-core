@@ -7,6 +7,8 @@ import os
 from dataclasses import dataclass
 from enum import StrEnum
 
+from sqlalchemy.pool import NullPool
+
 from .database_runtime_identity import DATABASE_RUNTIME_IDENTITIES, database_runtime_identity
 from .runtime_settings import RuntimeConfigurationError
 
@@ -253,6 +255,7 @@ def _with_pool_options(
     options: dict[str, object], profile: DatabaseRuntimeProfile
 ) -> dict[str, object]:
     if profile.pool_mode is DatabasePoolMode.NULL:
+        options["poolclass"] = NullPool
         return options
     options.update(
         {
