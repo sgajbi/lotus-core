@@ -29,6 +29,7 @@ _GOVERNED_ENGINE_OPTIONS = frozenset(
         "connect_args",
         "max_overflow",
         "pool_pre_ping",
+        "poolclass",
         "pool_recycle",
         "pool_size",
         "pool_timeout",

@@ -20,6 +20,7 @@ from portfolio_common.database_runtime_profile import (
     log_database_runtime_profile,
     sync_database_engine_options,
 )
+from sqlalchemy.pool import NullPool
 
 
 def test_every_runtime_identity_has_exactly_one_owned_profile() -> None:
@@ -119,7 +120,14 @@ def test_nullpool_omits_queue_options(monkeypatch) -> None:
     options = sync_database_engine_options(profile)
 
     assert profile.maximum_connections_per_process is None
-    assert set(options) == {"connect_args"}
+    assert options == {
+        "connect_args": {
+            "application_name": "migration-runner",
+            "connect_timeout": 60,
+            "options": "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0",
+        },
+        "poolclass": NullPool,
+    }
 
 
 def test_nullpool_rejects_explicit_queue_setting(monkeypatch) -> None:

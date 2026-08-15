@@ -17,6 +17,7 @@ from portfolio_common.alembic_numeric import render_financial_numeric
 from portfolio_common.financial_numeric import ExactNumeric
 from portfolio_common.runtime_settings import RuntimeConfigurationError
 from sqlalchemy import Column, Integer, MetaData, Table
+from sqlalchemy.pool import NullPool
 
 ALEMBIC_ENV = Path("alembic/env.py")
 
@@ -129,6 +130,7 @@ def test_alembic_environment_wires_renderer_for_online_migrations(
     }
     assert "pool_size" not in engine_from_config.call_args.kwargs
     assert "pool_timeout" not in engine_from_config.call_args.kwargs
+    assert engine_from_config.call_args.kwargs["poolclass"] is NullPool
     configure.assert_called_once_with(
         connection=connection,
         target_metadata=configure.call_args.kwargs["target_metadata"],
