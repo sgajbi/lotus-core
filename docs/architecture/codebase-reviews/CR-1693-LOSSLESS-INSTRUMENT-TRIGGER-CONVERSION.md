@@ -44,9 +44,12 @@ test pack.
 ## Compatibility Impact
 
 No API, OpenAPI, Kafka topic or event shape, reset-job payload, scheduler cadence, valuation
-formula, database schema, migration, dependency, container, or runtime topology changed. Existing
-pending jobs continue to coalesce. The only intentional internal change is explicit conversion
-ownership and truthful outcome telemetry.
+formula, database schema, migration, application/runtime dependency, container, or runtime
+topology changed. Existing pending jobs continue to coalesce. The intentional runtime change is
+explicit conversion ownership and truthful outcome telemetry. Feature-lane fix-forward also
+refreshed the Linux and Windows CI-tooling lock closure for transitive `charset-normalizer`
+`3.5.0` to `3.5.1` and regenerated its governed, non-certifying technology inventory; shared
+runtime locks and application behavior are unchanged.
 
 ## Documentation Decision
 
