@@ -36,7 +36,7 @@ if config.config_file_name:
 # Import the models module so SQLAlchemy model classes register with Base.metadata for Alembic.
 database_models = importlib.import_module("portfolio_common.database_models")
 alembic_numeric = importlib.import_module("portfolio_common.alembic_numeric")
-database_runtime_identity = importlib.import_module("portfolio_common.database_runtime_identity")
+database_runtime_profile = importlib.import_module("portfolio_common.database_runtime_profile")
 connection_security = importlib.import_module("portfolio_common.connection_security")
 
 target_metadata = database_models.Base.metadata
@@ -85,11 +85,19 @@ def run_migrations_online() -> None:
     engine_config = config.get_section(config.config_ini_section)
     engine_config["sqlalchemy.url"] = get_db_url()
 
+    runtime_profile = database_runtime_profile.database_runtime_profile(
+        explicit_identity="migration-runner",
+        pool_mode=database_runtime_profile.DatabasePoolMode.NULL,
+    )
+    database_runtime_profile.log_database_runtime_profile(
+        runtime_profile,
+        driver="psycopg2",
+    )
     connectable = engine_from_config(
         engine_config,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args=database_runtime_identity.sync_database_connect_args(),
+        **database_runtime_profile.sync_database_engine_options(runtime_profile),
     )
 
     with connectable.connect() as connection:
