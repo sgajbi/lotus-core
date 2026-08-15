@@ -28,12 +28,14 @@ _ASYNC_POSTGRES_SCHEME = "postgresql+asyncpg://"
 _GOVERNED_ENGINE_OPTIONS = frozenset(
     {
         "connect_args",
+        "creator",
         "max_overflow",
         "pool_pre_ping",
         "poolclass",
         "pool_recycle",
         "pool_size",
         "pool_timeout",
+        "async_creator",
     }
 )
 

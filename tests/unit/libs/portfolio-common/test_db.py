@@ -1,5 +1,6 @@
 import ast
 import importlib
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -369,7 +370,15 @@ def test_governed_identity_overrides_database_url_application_name(monkeypatch):
 
 @pytest.mark.parametrize(
     "reserved_option",
-    ["connect_args", "pool_size", "max_overflow", "pool_timeout", "pool_recycle"],
+    [
+        "connect_args",
+        "creator",
+        "async_creator",
+        "pool_size",
+        "max_overflow",
+        "pool_timeout",
+        "pool_recycle",
+    ],
 )
 def test_standalone_engine_rejects_governed_option_override(monkeypatch, reserved_option):
     import portfolio_common.db as db_module
@@ -426,45 +435,70 @@ def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
 
 def test_database_engines_use_governed_factory():
     repo_root = Path(__file__).resolve().parents[4]
-    allowed_factories = {
-        Path("src/libs/portfolio-common/portfolio_common/db.py"),
-        Path("alembic/env.py"),
+    expected_calls = {
+        Path("src/libs/portfolio-common/portfolio_common/db.py"): Counter(
+            {"create_engine": 2, "create_async_engine": 2}
+        ),
+        Path("alembic/env.py"): Counter({"engine_from_config": 1}),
     }
     violations: list[str] = []
+    observed_calls: dict[Path, Counter[str]] = {}
 
     for source_root in ("src", "scripts", "tools", "alembic", "tests"):
         for path in (repo_root / source_root).rglob("*.py"):
             relative_path = path.relative_to(repo_root)
-            if relative_path in allowed_factories:
-                continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(relative_path))
+            constructor_aliases: dict[str, str] = {}
+            sqlalchemy_module_aliases: set[str] = set()
+            dbapi_module_aliases: set[str] = set()
+            for node in tree.body:
+                if isinstance(node, ast.ImportFrom) and node.module in {
+                    "sqlalchemy",
+                    "sqlalchemy.ext.asyncio",
+                }:
+                    for alias in node.names:
+                        if alias.name in {
+                            "create_engine",
+                            "create_async_engine",
+                            "engine_from_config",
+                        }:
+                            constructor_aliases[alias.asname or alias.name] = alias.name
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imported_name = alias.asname or alias.name.split(".")[0]
+                        if alias.name.startswith("sqlalchemy"):
+                            sqlalchemy_module_aliases.add(imported_name)
+                        if alias.name in {"asyncpg", "psycopg", "psycopg2"}:
+                            dbapi_module_aliases.add(imported_name)
+
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
                     continue
-                function_name = (
-                    node.func.id
-                    if isinstance(node.func, ast.Name)
-                    else node.func.attr
-                    if isinstance(node.func, ast.Attribute)
-                    else ""
-                )
-                is_direct_dbapi_connect = (
-                    function_name == "connect"
-                    and isinstance(node.func, ast.Attribute)
+                function_name = ""
+                if isinstance(node.func, ast.Name):
+                    function_name = constructor_aliases.get(node.func.id, "")
+                elif (
+                    isinstance(node.func, ast.Attribute)
                     and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id in {"asyncpg", "psycopg", "psycopg2"}
-                )
-                if (
-                    function_name
-                    in {
-                        "create_engine",
-                        "create_async_engine",
-                        "engine_from_config",
-                    }
-                    or is_direct_dbapi_connect
+                    and node.func.value.id in sqlalchemy_module_aliases
+                    and node.func.attr
+                    in {"create_engine", "create_async_engine", "engine_from_config"}
                 ):
+                    function_name = node.func.attr
+                is_direct_dbapi_connect = (
+                    isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id in dbapi_module_aliases
+                    and node.func.attr == "connect"
+                )
+                if is_direct_dbapi_connect:
                     violations.append(f"{relative_path.as_posix()}:{node.lineno}")
+                elif function_name:
+                    observed_calls.setdefault(relative_path, Counter())[function_name] += 1
+                    if relative_path not in expected_calls:
+                        violations.append(f"{relative_path.as_posix()}:{node.lineno}")
 
     assert violations == [], (
         "Database engines must use portfolio_common.db governed factories: " + ", ".join(violations)
     )
+    assert observed_calls == expected_calls
