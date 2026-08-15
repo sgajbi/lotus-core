@@ -6,6 +6,17 @@ import yaml
 from portfolio_common.database_runtime_identity import DATABASE_RUNTIME_IDENTITIES
 
 ROOT = Path(__file__).resolve().parents[2]
+DATABASE_QUEUE_PROFILE = {
+    "LOTUS_CORE_DB_POOL_SIZE": "${LOTUS_CORE_DB_POOL_SIZE:-5}",
+    "LOTUS_CORE_DB_MAX_OVERFLOW": "${LOTUS_CORE_DB_MAX_OVERFLOW:-10}",
+    "LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS": "${LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS:-30}",
+    "LOTUS_CORE_DB_POOL_RECYCLE_SECONDS": "${LOTUS_CORE_DB_POOL_RECYCLE_SECONDS:--1}",
+    "LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS": "${LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS:-60}",
+    "LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS": "${LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS:-0}",
+    "LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS": (
+        "${LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS:-0}"
+    ),
+}
 
 
 def _read_yaml(path: Path) -> dict:
@@ -75,6 +86,47 @@ def test_database_capable_services_declare_stable_runtime_identities() -> None:
     postgres_healthcheck_identity = compose["services"]["postgres"]["environment"]["PGAPPNAME"]
     assert postgres_healthcheck_identity == "postgres-healthcheck"
     assert postgres_healthcheck_identity in DATABASE_RUNTIME_IDENTITIES
+
+
+def test_database_capable_services_declare_explicit_runtime_profiles() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    shared_environment = compose["x-shared-python-env"]
+
+    assert {
+        name: shared_environment[name] for name in DATABASE_QUEUE_PROFILE
+    } == DATABASE_QUEUE_PROFILE
+    migration_environment = compose["services"]["migration-runner"]["environment"]
+    assert {
+        name: migration_environment[name]
+        for name in (
+            "LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS",
+            "LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS",
+            "LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
+        )
+    } == {
+        name: DATABASE_QUEUE_PROFILE[name]
+        for name in (
+            "LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS",
+            "LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS",
+            "LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
+        )
+    }
+    assert not (
+        {"LOTUS_CORE_DB_POOL_SIZE", "LOTUS_CORE_DB_MAX_OVERFLOW"}
+        & set(migration_environment)
+    )
+
+
+def test_database_backed_ingestion_waits_for_migrations() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    ingestion = compose["services"]["ingestion_service"]
+
+    assert ingestion["environment"]["DATABASE_URL"] == (
+        "${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}"
+    )
+    assert ingestion["depends_on"]["migration-runner"] == {
+        "condition": "service_completed_successfully"
+    }
 
 
 def test_app_local_stack_declares_measured_outbox_capacity_profile() -> None:

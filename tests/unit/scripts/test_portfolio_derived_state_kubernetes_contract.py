@@ -95,6 +95,26 @@ def test_portfolio_derived_state_deployment_uses_external_runtime_configuration(
         "name": "lotus-core-database",
         "key": "database-url",
     }
+    assert {
+        name: environment[name]["value"]
+        for name in (
+            "LOTUS_CORE_DB_POOL_SIZE",
+            "LOTUS_CORE_DB_MAX_OVERFLOW",
+            "LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS",
+            "LOTUS_CORE_DB_POOL_RECYCLE_SECONDS",
+            "LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS",
+            "LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS",
+            "LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
+        )
+    } == {
+        "LOTUS_CORE_DB_POOL_SIZE": "5",
+        "LOTUS_CORE_DB_MAX_OVERFLOW": "10",
+        "LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS": "30",
+        "LOTUS_CORE_DB_POOL_RECYCLE_SECONDS": "-1",
+        "LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS": "60",
+        "LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS": "0",
+        "LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS": "0",
+    }
     assert environment["KAFKA_BOOTSTRAP_SERVERS"]["valueFrom"]["configMapKeyRef"] == {
         "name": "lotus-core-runtime",
         "key": "kafka-bootstrap-servers",
