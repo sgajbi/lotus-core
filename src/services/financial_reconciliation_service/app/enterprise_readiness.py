@@ -1,9 +1,11 @@
 import logging
 from typing import Any
 
+from portfolio_common.domain.security_audit import SecurityAuditComponent
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
     MiddlewareCallable,
+    create_runtime_security_audit_store,
     load_default_enterprise_settings,
 )
 from portfolio_common.enterprise_readiness import (
@@ -101,4 +103,6 @@ def build_enterprise_audit_middleware() -> MiddlewareCallable:
     return build_shared_enterprise_audit_middleware(
         runtime=_runtime,
         audit_emitter=lambda **kwargs: emit_audit_event(**kwargs),
+        component=SecurityAuditComponent.FINANCIAL_RECONCILIATION,
+        audit_store=create_runtime_security_audit_store(service_name=SERVICE_NAME),
     )

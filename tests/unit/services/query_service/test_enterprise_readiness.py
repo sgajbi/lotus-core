@@ -319,7 +319,7 @@ async def test_enterprise_middleware_denies_read_without_headers_when_enabled(mo
         response = await middleware(request, _call_next)
 
     assert response.status_code == 403
-    assert audit.call_args.kwargs["action"] == "DENY GET /api/v1/portfolios/PB1"
+    assert audit.call_args.kwargs["action"] == "DENY GET /unclassified"
     assert audit.call_args.kwargs["metadata"]["reason"].startswith("missing_headers:")
 
 
@@ -352,7 +352,7 @@ async def test_enterprise_middleware_emits_read_audit_when_enabled(monkeypatch):
         response = await middleware(request, _call_next)
 
     assert response.status_code == 200
-    assert audit.call_args.kwargs["action"] == "GET /api/v1/portfolios/PB1"
+    assert audit.call_args.kwargs["action"] == "GET /unclassified"
     assert audit.call_args.kwargs["metadata"] == {
         "status_code": 200,
         "access_type": "read",
