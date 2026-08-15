@@ -176,6 +176,27 @@ async def test_query_returns_terminal_page_without_cursor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_query_currently_exposes_persisted_event_rehydration_failure() -> None:
+    record = _record(_event())
+    record.event_id = "not-a-canonical-uuid-but-still-36-char"
+    scalar_result = MagicMock()
+    scalar_result.scalars.return_value.all.return_value = [record]
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=scalar_result)
+    store = PostgresSecurityAuditStore(_session_factory(session))
+
+    with pytest.raises(ValueError, match="security-audit event id must be a UUID"):
+        await store.query(
+            SecurityAuditQuery(
+                tenant_id="bank-sg",
+                occurred_from=NOW - timedelta(days=1),
+                occurred_to=NOW,
+                page_size=20,
+            )
+        )
+
+
+@pytest.mark.asyncio
 async def test_query_failure_does_not_disclose_database_exception() -> None:
     session = MagicMock()
     session.execute = AsyncMock(
