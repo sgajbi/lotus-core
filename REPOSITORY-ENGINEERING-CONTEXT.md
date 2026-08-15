@@ -3907,7 +3907,19 @@ Most relevant current governance:
      autovacuum or another database-owned worker as a blank Core client identity. Only a `client
      backend` with blank `application_name` belongs in `__unattributed__`.
 
-242. `docker-compose.yml` is an explicitly app-local development boundary. Every Python runtime in
+242. Every SQLAlchemy database engine must obtain its pool and PostgreSQL timeout behavior from
+     `portfolio_common.database_runtime_profile`. The compatibility profile is explicit at pool
+     size 5, overflow 10, 30-second acquisition, recycle disabled, 60-second connection
+     establishment, and disabled statement/idle-in-transaction server cutoffs. Both psycopg and
+     asyncpg must receive equivalent server settings. Alembic and governed test contexts use
+     `NullPool` and must not receive QueuePool arguments. Invalid values, combined per-process
+     capacity above 32, unknown runtime identities, and attempts to override governed engine
+     options fail before engine creation without logging raw values or connection details.
+     Production pool or server-timeout changes require service-attributed workload, recovery,
+     replica-count, and PostgreSQL connection-budget evidence. Pool pre-ping and checkout-time
+     recycle never imply transaction retry.
+
+243. `docker-compose.yml` is an explicitly app-local development boundary. Every Python runtime in
      that composition must declare `ENVIRONMENT=local`; every Kafka client must declare local-only
      `KAFKA_SECURITY_PROTOCOL=PLAINTEXT`. Outside explicit local/dev/development/test profiles,
      shared database and Kafka construction must fail before client creation on the local password,
