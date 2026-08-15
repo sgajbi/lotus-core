@@ -6,8 +6,10 @@ from typing import Any, Callable
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import create_engine, exc, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine, create_sync_database_engine
+from sqlalchemy import exc, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
 from tests.e2e.api_client import E2EApiClient
@@ -319,7 +321,11 @@ def db_engine(docker_services):
     )
 
     # Wait for the database to be connectable
-    engine = create_engine(db_url, pool_pre_ping=True)
+    engine = create_sync_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=db_url,
+        pool_mode=DatabasePoolMode.NULL,
+    )
     timeout = _env_int("LOTUS_TESTS_DB_CONNECT_TIMEOUT_SECONDS", 120)
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -533,7 +539,11 @@ async def async_db_session(db_engine):
         "postgresql://", "postgresql+asyncpg://"
     )
 
-    async_engine = create_async_engine(async_url)
+    async_engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=async_url,
+        pool_mode=DatabasePoolMode.NULL,
+    )
     AsyncSessionLocal = async_sessionmaker(
         bind=async_engine,
         class_=AsyncSession,
