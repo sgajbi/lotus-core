@@ -61,9 +61,7 @@ def test_missing_bond_quote_authority_routes_to_policy_assignment() -> None:
         epoch=1,
         expected_value={"valuation_receipt_supportability": "SUPPORTED"},
         observed_value={"valuation_receipt_supportability": "LEGACY_UNSCOPED"},
-        detail={
-            "reason": "bond valuation requires explicit quote-convention authority"
-        },
+        detail={"reason": "bond valuation requires explicit quote-convention authority"},
     )
 
     row = reconciliation_finding_to_orm(
