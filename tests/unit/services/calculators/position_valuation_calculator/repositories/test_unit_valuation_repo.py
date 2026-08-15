@@ -12,7 +12,9 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
 from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
@@ -458,7 +460,11 @@ async def session_factory(db_engine):
     async_url = sync_url.render_as_string(hide_password=False).replace(
         "postgresql://", "postgresql+asyncpg://"
     )
-    async_engine = create_async_engine(async_url)
+    async_engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=async_url,
+        pool_mode=DatabasePoolMode.NULL,
+    )
     factory = async_sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
     yield factory
     await async_engine.dispose()
