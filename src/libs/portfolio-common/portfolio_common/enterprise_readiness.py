@@ -29,14 +29,18 @@ from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFaile
 from portfolio_common.logging_utils import (
     correlation_id_var,
     normalize_lineage_value,
+    normalize_trace_id,
     redact_sensitive,
+    trace_id_from_traceparent,
 )
+from portfolio_common.monitoring import observe_security_audit_delivery
 from portfolio_common.ports.security_audit import SecurityAuditStore
 from portfolio_common.runtime_settings import (
     env_bool,
     env_int,
     env_json_map,
     env_str,
+    explicit_local_config_profile_enabled,
     production_security_profile_enabled,
 )
 from portfolio_common.source_data_security import source_data_capability_rules
@@ -63,6 +67,7 @@ ENTERPRISE_UNAUTHENTICATED_PATHS = frozenset(
         "/version",
     }
 )
+MAX_SECURITY_AUDIT_AUTHORITY_LENGTH = 128
 
 
 class EnterpriseSettings(Protocol):
@@ -182,10 +187,17 @@ class EnterpriseReadinessRuntime:
 
     def validate_enterprise_runtime_config(self) -> list[str]:
         issues: list[str] = []
+        policy_version = self.enterprise_policy_version()
         _append_issue_if(
             issues,
             "missing_policy_version",
-            not self.enterprise_policy_version().strip(),
+            not policy_version.strip(),
+        )
+        _append_issue_if(
+            issues,
+            "policy_version_invalid",
+            bool(policy_version.strip())
+            and (policy_version != policy_version.strip() or len(policy_version) > 64),
         )
         _append_issue_if(
             issues,
@@ -216,7 +228,10 @@ class EnterpriseReadinessRuntime:
             self._requires_capability_rules(authz_enabled) and not self.load_capability_rules(),
         )
 
-        if issues and self.env_enabled("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "false"):
+        if issues and (
+            self.env_enabled("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "false")
+            or not explicit_local_config_profile_enabled()
+        ):
             raise RuntimeError(f"enterprise_runtime_config_invalid:{','.join(issues)}")
         return issues
 
@@ -527,7 +542,8 @@ def build_default_enterprise_audit_middleware(
 def create_runtime_security_audit_store(*, service_name: str) -> SecurityAuditStore | None:
     """Use durable evidence in promoted profiles and explicit log-only local profiles."""
 
-    if not production_security_profile_enabled(service_name=service_name):
+    _ = service_name
+    if explicit_local_config_profile_enabled():
         return None
     return PostgresSecurityAuditStore()
 
@@ -586,6 +602,8 @@ def _verified_service_principal(
     service_identity = normalized_headers.get("x-service-identity", "").strip()
     if not service_identity:
         return "missing_service_identity"
+    if not _audit_authority_headers_are_bounded(normalized_headers):
+        return "invalid_auth_context_field"
 
     secret = settings.enterprise_auth_context_hmac_secret.strip()
     if not secret:
@@ -687,7 +705,13 @@ def _parse_capability_rule_key(key: str) -> tuple[str, str] | None:
 
 
 def _valid_capability_rule(method: str, path: str, capability: str) -> bool:
-    return method in CAPABILITY_RULE_METHODS and path.startswith("/") and bool(capability)
+    return (
+        method in CAPABILITY_RULE_METHODS
+        and path.startswith("/")
+        and len(path) <= 256
+        and bool(capability)
+        and len(capability) <= 128
+    )
 
 
 def _is_path_template(rule_path: str) -> bool:
@@ -892,14 +916,16 @@ async def _persist_security_audit(
         return True
     try:
         await store.append(event)
+        observe_security_audit_delivery(service=event.component.value, outcome="delivered")
         return True
     except InfrastructureAuditWriteFailed:
+        observe_security_audit_delivery(service=event.component.value, outcome="failed")
         runtime.logger.warning(
             "enterprise_security_audit_persistence_failed",
             extra={"reason_code": "audit_persistence_failed"},
         )
         should_fail = (
-            production_security_profile_enabled(service_name=runtime.service_name)
+            not explicit_local_config_profile_enabled()
             if failure_is_fatal is None
             else failure_is_fatal
         )
@@ -939,7 +965,7 @@ def _security_audit_event(
             else SecurityAuditIdentityPosture.UNVERIFIED
         ),
         correlation_id=_request_correlation_id(request),
-        trace_id=normalize_lineage_value(request.headers.get("X-Trace-ID")),
+        trace_id=_request_trace_id(request),
         policy_version=runtime.enterprise_policy_version(),
     )
 
@@ -972,4 +998,31 @@ def _request_correlation_id(
             or correlation_id_var.get(),
         )
     )
-    return normalized
+    return normalized if normalized is not None and len(normalized) <= 128 else None
+
+
+def _audit_authority_headers_are_bounded(normalized_headers: dict[str, str]) -> bool:
+    return all(
+        len(normalized_headers.get(name, "")) <= MAX_SECURITY_AUDIT_AUTHORITY_LENGTH
+        for name in (
+            "x-service-identity",
+            "x-actor-id",
+            "x-tenant-id",
+            "x-role",
+            "x-correlation-id",
+        )
+    )
+
+
+def _request_trace_id(request: Request) -> str | None:
+    traceparent = cast(str | None, request.headers.get("traceparent"))
+    trace_header = cast(str | None, request.headers.get("X-Trace-ID"))
+    context_trace_id = cast(str | None, correlation_id_var.get())
+    extracted_trace_id: str | None = trace_id_from_traceparent(traceparent)
+    if extracted_trace_id is not None:
+        return extracted_trace_id
+    normalized_header_trace_id: str | None = normalize_trace_id(trace_header)
+    if normalized_header_trace_id is not None:
+        return normalized_header_trace_id
+    normalized_context_trace_id: str | None = normalize_trace_id(context_trace_id)
+    return normalized_context_trace_id

@@ -24,6 +24,7 @@ from portfolio_common.infrastructure_errors import (
     DatabaseUnavailable,
     InfrastructureAuditWriteFailed,
 )
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 SessionFactory = Callable[[], AsyncSession]
 
@@ -38,13 +39,15 @@ class PostgresSecurityAuditStore:
         return self._session_factory or get_async_session_factory()
 
     async def append(self, event: SecurityAuditEvent) -> None:
-        session = self._sessions()()
+        session: AsyncSession | None = None
         try:
+            session = self._sessions()()
             async with session:
                 session.add(_to_record(event))
                 await session.commit()
-        except (OSError, SQLAlchemyError):
-            await _safe_rollback(session)
+        except (OSError, RuntimeConfigurationError, SQLAlchemyError):
+            if session is not None:
+                await _safe_rollback(session)
             raise InfrastructureAuditWriteFailed() from None
 
     async def query(self, query: SecurityAuditQuery) -> SecurityAuditPage:
@@ -83,7 +86,7 @@ class PostgresSecurityAuditStore:
         try:
             async with self._sessions()() as session:
                 records = list((await session.execute(statement)).scalars().all())
-        except (OSError, SQLAlchemyError):
+        except (OSError, RuntimeConfigurationError, SQLAlchemyError):
             raise DatabaseUnavailable(
                 message="Security-audit evidence is unavailable.",
                 reason_code="security_audit_query_unavailable",
