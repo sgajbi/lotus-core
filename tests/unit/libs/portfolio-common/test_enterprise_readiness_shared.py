@@ -155,6 +155,50 @@ def test_authorize_write_request_enforces_capability_rules() -> None:
     assert reason == "missing_capability:transactions.write"
 
 
+def test_authorize_capability_fails_closed_until_signed_authority_is_complete() -> None:
+    runtime = _runtime(settings=_settings_with_auth_context())
+    required_authority = {
+        "X-Actor-Id": "support-operator",
+        "X-Tenant-Id": "tenant-1",
+        "X-Role": "operations",
+        "X-Correlation-Id": "correlation-1",
+    }
+
+    assert runtime.authorize_capability({}, "core.security_audit.read") == (
+        False,
+        "missing_headers:x-actor-id,x-correlation-id,x-role,x-tenant-id",
+    )
+    assert runtime.authorize_capability(
+        required_authority,
+        "core.security_audit.read",
+    ) == (False, "missing_service_identity")
+    assert runtime.authorize_capability(
+        {**required_authority, "X-Service-Identity": "lotus-gateway"},
+        "core.security_audit.read",
+    ) == (False, "invalid_auth_context_key_id")
+    unsigned_runtime = _runtime()
+    assert unsigned_runtime.authorize_capability(
+        {**required_authority, "X-Service-Identity": "lotus-gateway"},
+        "core.security_audit.read",
+    ) == (False, "missing_verified_service_principal")
+    invalid_timestamp_headers = _signed_enterprise_headers("core.security_audit.read")
+    invalid_timestamp_headers["X-Enterprise-Auth-Timestamp"] = "not-a-timestamp"
+    assert runtime.authorize_capability(
+        invalid_timestamp_headers,
+        "core.security_audit.read",
+    ) == (False, "invalid_auth_context_timestamp")
+    stale_headers = _signed_enterprise_headers("core.security_audit.read")
+    stale_headers["X-Enterprise-Auth-Timestamp"] = "0"
+    assert runtime.authorize_capability(
+        stale_headers,
+        "core.security_audit.read",
+    ) == (False, "stale_auth_context")
+    assert runtime.authorize_capability(
+        _signed_enterprise_headers("core.security_audit.read"),
+        "core.security_audit.read",
+    ) == (True, None)
+
+
 def test_runtime_uses_typed_settings_for_enterprise_flags() -> None:
     settings = _Settings(
         enterprise_enforce_authz=True,
@@ -1148,6 +1192,126 @@ async def test_durable_event_preserves_canonical_runtime_trace_context() -> None
 
     assert response.status_code == 200
     assert store.append.await_args.args[0].trace_id == runtime_trace_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("trace_headers", "expected_trace_id"),
+    [
+        (
+            [
+                (
+                    b"traceparent",
+                    b"00-11111111111111111111111111111111-2222222222222222-01",
+                ),
+                (b"x-trace-id", b"33333333333333333333333333333333"),
+            ],
+            "11111111111111111111111111111111",
+        ),
+        (
+            [(b"x-trace-id", b"33333333333333333333333333333333")],
+            "33333333333333333333333333333333",
+        ),
+    ],
+)
+async def test_durable_event_uses_governed_trace_source_precedence(
+    trace_headers: list[tuple[bytes, bytes]],
+    expected_trace_id: str,
+) -> None:
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/portfolios/PB-001",
+            "headers": [(b"content-length", b"0"), *trace_headers],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    context_token = trace_id_var.set("44444444444444444444444444444444")
+    try:
+        response = await middleware(
+            request,
+            AsyncMock(return_value=Response(status_code=200)),
+        )
+    finally:
+        trace_id_var.reset(context_token)
+
+    assert response.status_code == 200
+    assert store.append.await_args.args[0].trace_id == expected_trace_id
+
+
+@pytest.mark.asyncio
+async def test_payload_denial_stops_when_durable_audit_is_unavailable() -> None:
+    store = Mock()
+    store.append = AsyncMock(side_effect=InfrastructureAuditWriteFailed())
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(max_payload_bytes=1),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.INGESTION,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/ingest/transactions",
+            "headers": [(b"content-length", b"2")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=201))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 503
+    call_next.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_authorization_denial_stops_when_durable_audit_is_unavailable() -> None:
+    store = Mock()
+    store.append = AsyncMock(side_effect=InfrastructureAuditWriteFailed())
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(authz_enabled=True),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/portfolios/PB-001",
+            "headers": [(b"content-length", b"0")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=200))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 503
+    call_next.assert_not_awaited()
 
 
 @pytest.mark.asyncio
