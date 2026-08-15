@@ -102,6 +102,9 @@ calculators it evaluates.
 - reconciliation service owns independent verification and finding persistence
 - reconciliation findings may trigger operational action, but they do not mutate calculator-owned
   data directly
+- bond valuation controls require a `SUPPORTED` valuation receipt; a missing or
+  `LEGACY_UNSCOPED` receipt creates `missing_bond_quote_authority` and never invokes magnitude-based
+  quote scaling
 - downstream analytics and reporting may consume the evidence, but core owns the control execution
 
 ## Operational hints
@@ -111,6 +114,8 @@ Check this service when:
 - core APIs look populated but operators need confidence that outputs are internally consistent
 - transaction-to-cashflow drift is suspected
 - valuation arithmetic looks implausible despite completed upstream jobs
+- `missing_bond_quote_authority` is open; route it to `VALUATION_OPERATIONS` and apply the
+  `ASSIGN_VALUATION_QUOTE_POLICY` repair for the exact book/security/effective date
 - portfolio timeseries appears partially aggregated or inconsistent with underlying positions
 - a Bundle A corporate action has a basis mismatch, insufficient source/target legs, or missing
   child-leg dependency references
