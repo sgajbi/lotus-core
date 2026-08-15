@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -94,10 +95,12 @@ async def test_postgresql_store_is_append_only_tenant_bound_and_keyset_stable() 
             )
             await session.commit()
 
-        await store.append(tenant_event)
-        await store.append(second_tenant_event)
-        await store.append(other_tenant_event)
-        await store.append(unverified_denial)
+        await asyncio.gather(
+            store.append(tenant_event),
+            store.append(second_tenant_event),
+            store.append(other_tenant_event),
+            store.append(unverified_denial),
+        )
 
         page = await store.query(
             SecurityAuditQuery(
