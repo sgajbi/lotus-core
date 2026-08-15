@@ -7,13 +7,15 @@ from datetime import UTC, date, datetime
 
 import pytest
 from portfolio_common.database_models import Portfolio, PortfolioPartyRoleAssignment
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine
 from portfolio_common.domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
     PortfolioPartyRoleScope,
     PortfolioPartyRoleType,
 )
 from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.services.ingestion_service.app.services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
@@ -80,7 +82,11 @@ def _assignment(*, version: int, quality_status: str) -> dict[str, object]:
 
 
 async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection() -> None:
-    engine = create_async_engine(_async_database_url())
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     portfolio_ids = (MIGRATED_PORTFOLIO, LEGACY_PORTFOLIO)
 

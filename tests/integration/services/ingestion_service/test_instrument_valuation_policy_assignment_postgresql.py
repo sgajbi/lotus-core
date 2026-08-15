@@ -11,11 +11,13 @@ from portfolio_common.database_models import (
     Instrument,
     InstrumentValuationPolicyAssignmentRecord,
 )
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine
 from portfolio_common.domain.valuation.assignments import (
     OverlappingValuationPolicyAssignmentError,
 )
 from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.services.ingestion_service.app.services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
@@ -68,7 +70,11 @@ def _assignment(
 
 
 async def test_assignment_write_guard_rejects_durable_overlap_and_accepts_retirement() -> None:
-    engine = create_async_engine(_async_database_url())
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
 
     try:
@@ -167,7 +173,11 @@ async def test_assignment_write_guard_rejects_durable_overlap_and_accepts_retire
 
 
 async def test_concurrent_assignment_writers_serialize_without_deadlock() -> None:
-    engine = create_async_engine(_async_database_url())
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
 
     try:

@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from portfolio_common.database_models import EnterpriseSecurityAuditEvent
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine
 from portfolio_common.domain.security_audit import (
     SecurityAuditComponent,
     SecurityAuditDecision,
@@ -23,7 +25,7 @@ from portfolio_common.infrastructure.persistence.security_audit_store import (
 )
 from portfolio_common.infrastructure_errors import InfrastructureAuditReadFailed
 from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 pytestmark = pytest.mark.asyncio
 
@@ -81,7 +83,11 @@ def _record(event: SecurityAuditEvent) -> EnterpriseSecurityAuditEvent:
 
 
 async def test_postgresql_store_is_append_only_tenant_bound_and_keyset_stable() -> None:
-    engine = create_async_engine(_async_database_url())
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     store = PostgresSecurityAuditStore(sessions)
     tenant_event = _verified_event(event_id=EVENT_IDS[0], tenant_id="ISSUE500_TENANT_A")
@@ -153,7 +159,11 @@ async def test_postgresql_store_is_append_only_tenant_bound_and_keyset_stable() 
 
 
 async def test_postgresql_store_fails_source_safely_for_db_valid_domain_invalid_row() -> None:
-    engine = create_async_engine(_async_database_url())
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     store = PostgresSecurityAuditStore(sessions)
     tenant_id = "ISSUE954_CORRUPT_EVIDENCE"
