@@ -483,6 +483,12 @@ INSTRUMENT_REPROCESSING_TRIGGERS_PENDING = Gauge(
     "Total number of pending instrument reprocessing triggers awaiting fan-out.",
 )
 
+INSTRUMENT_REPROCESSING_TRIGGER_CONVERSIONS_TOTAL = Counter(
+    "instrument_reprocessing_trigger_conversions_total",
+    "Instrument triggers converted into a created or coalesced pending reset job.",
+    labelnames=("outcome",),
+)
+
 EPOCH_MISMATCH_DROPPED_TOTAL = Counter(
     "epoch_mismatch_dropped_total",
     "Number of Kafka messages dropped due to a stale epoch.",
@@ -787,6 +793,14 @@ def reprocessing_worker_batch_timer():
 
 def observe_reprocessing_duplicates_normalized(scope: str, count: int = 1) -> None:
     REPROCESSING_DUPLICATES_NORMALIZED_TOTAL.labels(scope).inc(count)
+
+
+def observe_instrument_reprocessing_trigger_conversion(outcome: str, count: int = 1) -> None:
+    """Count one bounded trigger conversion outcome without business identifiers."""
+    if outcome not in {"created", "coalesced_pending"}:
+        raise ValueError(f"Unsupported instrument trigger conversion outcome: {outcome}")
+    if count > 0:
+        INSTRUMENT_REPROCESSING_TRIGGER_CONVERSIONS_TOTAL.labels(outcome).inc(count)
 
 
 def observe_reprocessing_stale_skips(stage: str, count: int = 1) -> None:

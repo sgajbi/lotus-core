@@ -1289,6 +1289,17 @@
           "expr": "sum by (stage) (rate(reprocessing_stale_skips_total[5m]))",
           "legendFormat": "stale skips {{stage}}",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (outcome) (rate(instrument_reprocessing_trigger_conversions_total[5m]))",
+          "legendFormat": "instrument trigger {{outcome}}",
+          "refId": "E"
         }
       ],
       "title": "Replay Pressure",

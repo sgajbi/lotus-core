@@ -1676,12 +1676,20 @@ async def test_reprocessing_coordinator_creates_persistent_job_without_scheduler
     )
     mock_conversion_repo.convert_pending_triggers.return_value = expected
 
-    result = await coordinator.process_instrument_level_triggers(
-        conversion_repository=mock_conversion_repo,
-    )
+    with patch.object(
+        instrument_reprocessing_coordinator,
+        "observe_instrument_reprocessing_trigger_conversion",
+    ) as observe_conversion:
+        result = await coordinator.process_instrument_level_triggers(
+            conversion_repository=mock_conversion_repo,
+        )
 
     assert result == expected
     mock_conversion_repo.convert_pending_triggers.assert_awaited_once_with(batch_size=25)
+    assert observe_conversion.call_args_list == [
+        call("created", 1),
+        call("coalesced_pending", 0),
+    ]
 
 
 async def test_scheduler_stop_interrupts_poll_sleep(
