@@ -93,6 +93,7 @@ def test_driver_options_apply_equivalent_governed_settings(monkeypatch) -> None:
         (DATABASE_MAX_OVERFLOW_ENV, "33"),
         (DATABASE_POOL_TIMEOUT_SECONDS_ENV, "0"),
         (DATABASE_POOL_RECYCLE_SECONDS_ENV, "59"),
+        (DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "1"),
         (DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "61"),
         (DATABASE_STATEMENT_TIMEOUT_MS_ENV, "99"),
         (DATABASE_IDLE_TRANSACTION_TIMEOUT_MS_ENV, "999"),

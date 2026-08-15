@@ -94,7 +94,7 @@ def test_sync_connection_establishment_timeout_is_bounded_and_database_recovers(
     db_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "1")
+    monkeypatch.setenv(DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "2")
     with _non_speaking_tcp_endpoint() as port:
         engine = create_sync_database_engine(
             runtime_identity="query-service",
@@ -108,7 +108,7 @@ def test_sync_connection_establishment_timeout_is_bounded_and_database_recovers(
             engine.dispose()
         elapsed = time.monotonic() - started
 
-    assert 0.8 <= elapsed <= 3.0
+    assert 1.8 <= elapsed <= 4.5
     with db_engine.connect() as recovered:
         assert recovered.scalar(text("SELECT 1")) == 1
 
@@ -118,7 +118,7 @@ async def test_async_connection_establishment_timeout_is_bounded_and_database_re
     db_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "1")
+    monkeypatch.setenv(DATABASE_CONNECT_TIMEOUT_SECONDS_ENV, "2")
     with _non_speaking_tcp_endpoint() as port:
         engine = create_async_database_engine(
             runtime_identity="portfolio-derived-state",
@@ -133,7 +133,7 @@ async def test_async_connection_establishment_timeout_is_bounded_and_database_re
             await engine.dispose()
         elapsed = time.monotonic() - started
 
-    assert 0.8 <= elapsed <= 3.0
+    assert 1.8 <= elapsed <= 4.5
     healthy_engine = create_async_database_engine(
         runtime_identity="portfolio-derived-state",
         database_url=_database_url(db_engine),

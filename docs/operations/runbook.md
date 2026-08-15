@@ -626,7 +626,7 @@ Operational knobs:
 | `LOTUS_CORE_DB_MAX_OVERFLOW` | `10` | Temporary QueuePool overflow per process; valid 0-32, with combined capacity at most 32. |
 | `LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS` | `30` | Bounded QueuePool acquisition wait; valid 1-300 seconds. |
 | `LOTUS_CORE_DB_POOL_RECYCLE_SECONDS` | `-1` | Checkout-time connection recycle; `-1` disables it, otherwise valid 60-86,400 seconds. |
-| `LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS` | `60` | Equivalent psycopg/asyncpg connection-establishment bound; valid 1-60 seconds. |
+| `LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS` | `60` | Equivalent psycopg/asyncpg connection-establishment bound; valid 2-60 seconds (libpq's effective minimum is two seconds). |
 | `LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS` | `0` | PostgreSQL statement cutoff; `0` disables it, otherwise valid 100-3,600,000 ms. Requires workload/recovery evidence before promotion. |
 | `LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS` | `0` | PostgreSQL idle-transaction cutoff; `0` disables it, otherwise valid 1,000-900,000 ms. Requires transaction-recovery evidence before promotion. |
 | `LOTUS_HTTP_CORS_ALLOW_ORIGINS` | empty | Comma-separated browser origins allowed by the shared CORS middleware. Empty means browser cross-origin requests are denied. |

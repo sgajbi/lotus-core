@@ -179,7 +179,7 @@ def database_runtime_profile(
         connect_timeout_seconds=_bounded_integer(
             DATABASE_CONNECT_TIMEOUT_SECONDS_ENV,
             60,
-            minimum=1,
+            minimum=2,
             maximum=60,
         ),
         statement_timeout_ms=_bounded_integer(
