@@ -13,8 +13,10 @@ from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_
 from portfolio_common.domain.market_data.market_price import (
     coerce_positive_market_price_or_none,
 )
-from portfolio_common.domain.market_data.valuation_unit_price import (
-    resolve_valuation_unit_price,
+from portfolio_common.domain.valuation import (
+    BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
+    UnsupportedValuationError,
+    requires_bond_quote_authority,
 )
 from portfolio_common.domain.valuation.numeric_policy import (
     POSITION_VALUATION_LEDGER_OUTPUT_V1,
@@ -182,6 +184,9 @@ class ValuationLogic:
             )
             return components
 
+        if requires_bond_quote_authority(product_type=product_type, quantity=quantity):
+            raise UnsupportedValuationError(BOND_QUOTE_AUTHORITY_REQUIRED_REASON)
+
         with POSITION_VALUATION_LEDGER_OUTPUT_V1.arithmetic_context():
             # 1. Determine the price in the instrument's currency.
             valuation_price_local = normalized_market_price
@@ -195,13 +200,6 @@ class ValuationLogic:
                     return None
                 price_alignment_fx_rate = normalized_price_fx_rate
                 valuation_price_local = normalized_market_price * normalized_price_fx_rate
-
-            valuation_price_local = resolve_valuation_unit_price(
-                market_price=valuation_price_local,
-                quantity=quantity,
-                cost_basis_local=cost_basis_local,
-                product_type=product_type,
-            )
 
             # 2. Calculate raw local/base values at governed working precision.
             raw_market_value_local = quantity * valuation_price_local

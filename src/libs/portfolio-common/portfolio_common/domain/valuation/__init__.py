@@ -62,6 +62,10 @@ from .position_valuation import (
     calculate_position_valuation,
     calculate_position_valuation_local_economics,
 )
+from .quote_authority import (
+    BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
+    requires_bond_quote_authority,
+)
 from .receipts import (
     ValuationCalculationReceipt,
     ValuationReceiptSupportability,
@@ -91,6 +95,7 @@ __all__ = [
     "AccruedIncomeTreatment",
     "AccruedIncomeResult",
     "BusinessDayCalendar",
+    "BOND_QUOTE_AUTHORITY_REQUIRED_REASON",
     "CalculationLineage",
     "DayCountConvention",
     "DayCountConventionDefinition",
@@ -145,6 +150,7 @@ __all__ = [
     "resolve_market_price_source_fact",
     "resolve_position_valuation_policy",
     "resolve_optional_valuation_book_scope",
+    "requires_bond_quote_authority",
     "revaluation_start_for_assignment_correction",
     "supported_position_valuation_policies",
     "supported_day_count_conventions",
