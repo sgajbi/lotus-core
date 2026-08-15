@@ -20,6 +20,7 @@ def _minimal_contract(app_path: str) -> dict[str, object]:
                 "app_path": app_path,
                 "app_kind": "business_api",
                 "auth_audit_control": "enterprise_middleware",
+                "durable_audit_control": "promoted_profile_postgresql_pre_execution",
                 "payload_limit_control": "enterprise_middleware",
                 "upload_limit_control": "not_applicable",
                 "unauthenticated_allowlist": [
@@ -90,6 +91,8 @@ def test_security_control_coverage_guard_accepts_service_local_enterprise_wrappe
             "from fastapi import FastAPI\n"
             "app = FastAPI()\n"
             "build_ingestion_enterprise_audit_middleware()\n"
+            "create_runtime_security_audit_store()\n"
+            "SecurityAuditComponent = object()\n"
             "validate_enterprise_runtime_config()\n"
             "configure_standard_http_app()\n"
         ),
@@ -105,6 +108,8 @@ def test_security_control_coverage_guard_rejects_unregistered_fastapi_app(tmp_pa
             "from fastapi import FastAPI\n"
             "app = FastAPI()\n"
             "build_enterprise_audit_middleware()\n"
+            "create_runtime_security_audit_store()\n"
+            "SecurityAuditComponent = object()\n"
             "validate_enterprise_runtime_config()\n"
             "configure_standard_http_app()\n"
         ),
@@ -140,4 +145,30 @@ def test_security_control_coverage_guard_rejects_missing_enterprise_middleware(
         "file": "src/services/demo_service/app/main.py",
         "control": "enterprise_middleware",
         "missing_anchor": "validate_enterprise_runtime_config",
+    } in findings
+
+
+def test_security_control_coverage_guard_rejects_log_only_business_app(tmp_path: Path) -> None:
+    repo_root = _write_minimal_guard_repo(
+        tmp_path,
+        app_source=(
+            "from fastapi import FastAPI\n"
+            "app = FastAPI()\n"
+            "build_enterprise_audit_middleware()\n"
+            "validate_enterprise_runtime_config()\n"
+            "configure_standard_http_app()\n"
+        ),
+    )
+
+    findings = guard.evaluate_security_control_coverage(repo_root=repo_root)
+
+    assert {
+        "file": "src/services/demo_service/app/main.py",
+        "control": "durable_enterprise_audit",
+        "missing_anchor": "create_runtime_security_audit_store",
+    } in findings
+    assert {
+        "file": "src/services/demo_service/app/main.py",
+        "control": "durable_enterprise_audit",
+        "missing_anchor": "SecurityAuditComponent",
     } in findings
