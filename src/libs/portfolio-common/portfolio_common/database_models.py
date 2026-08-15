@@ -4966,6 +4966,94 @@ class ConsumerDlqReplayAudit(Base):
     )
 
 
+class EnterpriseSecurityAuditEvent(Base):
+    """Append-only, source-safe enterprise HTTP access-decision evidence."""
+
+    __tablename__ = "enterprise_security_audit_events"
+
+    event_id = Column(String(36), primary_key=True, nullable=False)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    component = Column(String(64), nullable=False)
+    route_template = Column(String(256), nullable=False)
+    method = Column(String(8), nullable=False)
+    decision = Column(String(8), nullable=False)
+    reason = Column(String(64), nullable=False)
+    required_capability = Column(String(128), nullable=True)
+    service_identity = Column(String(128), nullable=True)
+    actor_id = Column(String(128), nullable=True)
+    tenant_id = Column(String(128), nullable=True)
+    role = Column(String(128), nullable=True)
+    identity_posture = Column(String(16), nullable=False)
+    correlation_id = Column(String(128), nullable=True)
+    trace_id = Column(String(128), nullable=True)
+    policy_version = Column(String(64), nullable=False)
+    schema_version = Column(String(16), nullable=False, server_default="1.0")
+    classification = Column(
+        String(64),
+        nullable=False,
+        server_default="operational_security_audit",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "component IN ('ingestion_service', 'query_service', "
+            "'query_control_plane_service', 'financial_reconciliation_service', "
+            "'event_replay_service')",
+            name="ck_enterprise_security_audit_component",
+        ),
+        CheckConstraint(
+            "method IN ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE')",
+            name="ck_enterprise_security_audit_method",
+        ),
+        CheckConstraint(
+            "decision IN ('ALLOW', 'DENY')",
+            name="ck_enterprise_security_audit_decision",
+        ),
+        CheckConstraint(
+            "reason IN ('authorized', 'authorization_policy_denied', 'payload_too_large')",
+            name="ck_enterprise_security_audit_reason",
+        ),
+        CheckConstraint(
+            "identity_posture IN ('verified', 'unverified')",
+            name="ck_enterprise_security_audit_identity_posture",
+        ),
+        CheckConstraint(
+            "(identity_posture = 'verified' AND service_identity IS NOT NULL "
+            "AND actor_id IS NOT NULL AND tenant_id IS NOT NULL AND role IS NOT NULL) OR "
+            "(identity_posture = 'unverified' AND service_identity IS NULL "
+            "AND actor_id IS NULL AND tenant_id IS NULL AND role IS NULL)",
+            name="ck_enterprise_security_audit_identity_authority",
+        ),
+        CheckConstraint(
+            "route_template LIKE '/%' AND route_template NOT LIKE '%?%' "
+            "AND route_template NOT LIKE '%#%' AND route_template NOT LIKE '%://%'",
+            name="ck_enterprise_security_audit_route_template",
+        ),
+        CheckConstraint(
+            "schema_version = '1.0'",
+            name="ck_enterprise_security_audit_schema_version",
+        ),
+        CheckConstraint(
+            "classification = 'operational_security_audit'",
+            name="ck_enterprise_security_audit_classification",
+        ),
+        Index(
+            "ix_enterprise_security_audit_tenant_time_event",
+            "tenant_id",
+            occurred_at.desc(),
+            event_id.desc(),
+        ),
+        Index(
+            "ix_enterprise_security_audit_tenant_filter_time_event",
+            "tenant_id",
+            "component",
+            "decision",
+            occurred_at.desc(),
+            event_id.desc(),
+        ),
+    )
+
+
 class PositionState(Base):
     """
     Tracks the current reprocessing state (epoch and watermark) for each portfolio-security key.
