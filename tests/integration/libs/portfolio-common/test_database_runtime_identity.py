@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import pytest
@@ -124,6 +125,33 @@ def test_idle_transaction_timeout_discards_dead_connection_and_recovers(
         engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_async_idle_transaction_timeout_discards_dead_connection_and_recovers(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_IDLE_TRANSACTION_TIMEOUT_MS_ENV, "1000")
+    engine = create_async_database_engine(
+        runtime_identity="portfolio-derived-state",
+        database_url=_database_url(db_engine),
+    )
+    try:
+        with pytest.raises(sa_exc.DBAPIError):
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SHOW idle_in_transaction_session_timeout"))
+                    == "1s"
+                )
+                await connection.execute(text("SELECT 1"))
+                await asyncio.sleep(1.25)
+                await connection.execute(text("SELECT 1"))
+
+        async with engine.connect() as recovered:
+            assert await recovered.scalar(text("SELECT 1")) == 1
+    finally:
+        await engine.dispose()
+
+
 def test_pool_acquisition_timeout_is_bounded(
     db_engine,
     monkeypatch: pytest.MonkeyPatch,
@@ -135,13 +163,15 @@ def test_pool_acquisition_timeout_is_bounded(
         runtime_identity="query-service",
         database_url=_database_url(db_engine),
     )
-    started = time.monotonic()
     try:
-        with engine.connect():
+        with engine.connect() as held_connection:
+            assert held_connection.scalar(text("SELECT 1")) == 1
+            started = time.monotonic()
             with pytest.raises(sa_exc.TimeoutError):
-                engine.connect()
+                unexpected_connection = engine.connect()
+                unexpected_connection.close()
+            elapsed = time.monotonic() - started
     finally:
         engine.dispose()
 
-    elapsed = time.monotonic() - started
     assert 0.8 <= elapsed <= 3.0
