@@ -29,6 +29,7 @@ def test_position_valuation_policy_records_market_and_unrealized_mismatches() ->
             quantity=Decimal("10"),
             market_price=Decimal("11"),
             market_value_local=Decimal("100"),
+            cost_basis_reporting=Decimal("90"),
             cost_basis_local=Decimal("90"),
             unrealized_gain_loss_local=Decimal("5"),
             product_type="EQUITY",
@@ -66,6 +67,7 @@ def test_unscoped_bond_reconciliation_fails_without_quote_authority() -> None:
             quantity=Decimal("180"),
             market_price=Decimal("101.35"),
             market_value_local=Decimal("182430"),
+            cost_basis_reporting=Decimal("178704"),
             cost_basis_local=Decimal("178704"),
             unrealized_gain_loss_local=Decimal("3726"),
             product_type="BOND",
@@ -81,6 +83,55 @@ def test_unscoped_bond_reconciliation_fails_without_quote_authority() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("cost_basis_reporting", "cost_basis_local"),
+    [(Decimal("100"), Decimal("0")), (Decimal("0"), Decimal("100"))],
+)
+def test_zero_quantity_bond_with_residual_cost_reports_missing_quote_authority(
+    cost_basis_reporting: Decimal,
+    cost_basis_local: Decimal,
+) -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-RESIDUAL-COST",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("0"),
+            market_price=Decimal("99.25"),
+            market_value_local=Decimal("0"),
+            cost_basis_reporting=cost_basis_reporting,
+            cost_basis_local=cost_basis_local,
+            unrealized_gain_loss_local=-cost_basis_local,
+            product_type="BOND",
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert [finding.finding_type for finding in findings] == ["missing_bond_quote_authority"]
+
+
+def test_flat_bond_reconciliation_remains_quote_independent() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-FLAT",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("0"),
+            market_price=Decimal("99.25"),
+            market_value_local=Decimal("0"),
+            cost_basis_reporting=Decimal("0"),
+            cost_basis_local=Decimal("0"),
+            unrealized_gain_loss_local=Decimal("0"),
+            product_type="BOND",
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert findings == []
+
+
 def test_legacy_unscoped_bond_receipt_does_not_authorize_quote_interpretation() -> None:
     findings = position_valuation_reconciliation_findings(
         evidence=PositionValuationEvidence(
@@ -91,6 +142,7 @@ def test_legacy_unscoped_bond_receipt_does_not_authorize_quote_interpretation() 
             quantity=Decimal("10"),
             market_price=Decimal("1013.5"),
             market_value_local=Decimal("10135"),
+            cost_basis_reporting=Decimal("10000"),
             cost_basis_local=Decimal("10000"),
             unrealized_gain_loss_local=Decimal("135"),
             product_type="BOND",
@@ -119,6 +171,7 @@ def test_authoritative_unit_price_receipt_bypasses_legacy_bond_heuristic() -> No
             quantity=Decimal("10"),
             market_price=Decimal("100"),
             market_value_local=Decimal("1000"),
+            cost_basis_reporting=Decimal("10000"),
             cost_basis_local=Decimal("10000"),
             unrealized_gain_loss_local=Decimal("-9000"),
             product_type="BOND",
@@ -159,6 +212,7 @@ def test_authoritative_face_principal_receipt_fails_closed_without_authoritative
             quantity=Decimal("1000000"),
             market_price=Decimal("99.25"),
             market_value_local=Decimal("992500"),
+            cost_basis_reporting=Decimal("990000"),
             cost_basis_local=Decimal("990000"),
             unrealized_gain_loss_local=Decimal("2500"),
             product_type="BOND",
@@ -188,6 +242,7 @@ def test_face_principal_receipt_with_unavailable_accrual_fails_closed() -> None:
             quantity=Decimal("1000000"),
             market_price=Decimal("99.25"),
             market_value_local=Decimal("992500"),
+            cost_basis_reporting=Decimal("990000"),
             cost_basis_local=Decimal("990000"),
             unrealized_gain_loss_local=Decimal("2500"),
             product_type="BOND",
@@ -217,6 +272,7 @@ def test_invalid_authoritative_receipt_fails_closed_without_legacy_heuristic() -
             quantity=Decimal("10"),
             market_price=Decimal("100"),
             market_value_local=Decimal("10000"),
+            cost_basis_reporting=Decimal("10000"),
             cost_basis_local=Decimal("10000"),
             unrealized_gain_loss_local=Decimal("0"),
             product_type="BOND",
@@ -247,6 +303,7 @@ def test_position_valuation_policy_records_invalid_market_price_without_derived_
             quantity=Decimal("10"),
             market_price=Decimal("-12.50"),
             market_value_local=Decimal("-125"),
+            cost_basis_reporting=Decimal("100"),
             cost_basis_local=Decimal("100"),
             unrealized_gain_loss_local=Decimal("-225"),
             product_type="EQUITY",
@@ -271,6 +328,7 @@ def test_reconciliation_summary_value_object_counts_error_and_warning_findings()
             quantity=Decimal("10"),
             market_price=Decimal("-1"),
             market_value_local=Decimal("100"),
+            cost_basis_reporting=Decimal("90"),
             cost_basis_local=Decimal("90"),
             unrealized_gain_loss_local=Decimal("5"),
             product_type="EQUITY",

@@ -64,6 +64,7 @@ from .position_valuation import (
 )
 from .quote_authority import (
     BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
+    is_quote_independent_flat_position,
     requires_bond_quote_authority,
 )
 from .receipts import (
@@ -96,6 +97,7 @@ __all__ = [
     "AccruedIncomeResult",
     "BusinessDayCalendar",
     "BOND_QUOTE_AUTHORITY_REQUIRED_REASON",
+    "is_quote_independent_flat_position",
     "CalculationLineage",
     "DayCountConvention",
     "DayCountConventionDefinition",

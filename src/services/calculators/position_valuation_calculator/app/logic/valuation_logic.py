@@ -146,6 +146,14 @@ class ValuationLogic:
 
         price_alignment_fx_rate: Decimal | None = None
         portfolio_fx_rate = Decimal(1)
+        if requires_bond_quote_authority(
+            product_type=product_type,
+            quantity=quantity,
+            cost_basis_reporting=cost_basis_base,
+            cost_basis_local=cost_basis_local,
+        ):
+            raise UnsupportedValuationError(BOND_QUOTE_AUTHORITY_REQUIRED_REASON)
+
         if quantity.is_zero():
             components = ValuationComponents(
                 market_value_base=Decimal(0),
@@ -183,9 +191,6 @@ class ValuationLogic:
                 ),
             )
             return components
-
-        if requires_bond_quote_authority(product_type=product_type, quantity=quantity):
-            raise UnsupportedValuationError(BOND_QUOTE_AUTHORITY_REQUIRED_REASON)
 
         with POSITION_VALUATION_LEDGER_OUTPUT_V1.arithmetic_context():
             # 1. Determine the price in the instrument's currency.

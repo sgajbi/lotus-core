@@ -62,6 +62,7 @@ def test_zero_position_has_zero_unrealized_pnl_components() -> None:
         price_currency="EUR",
         instrument_currency="EUR",
         portfolio_currency="SGD",
+        product_type="BOND",
         instrument_to_portfolio_fx_rate=Decimal("1.6"),
     )
 
@@ -69,6 +70,30 @@ def test_zero_position_has_zero_unrealized_pnl_components() -> None:
     assert components.unrealized_price_base == Decimal("0")
     assert components.unrealized_fx_base == Decimal("0")
     assert components.unrealized_total_base == Decimal("0")
+
+
+@pytest.mark.parametrize(
+    ("cost_basis_base", "cost_basis_local"),
+    [(Decimal("1"), Decimal("0")), (Decimal("0"), Decimal("1"))],
+)
+def test_zero_quantity_bond_with_residual_cost_requires_quote_authority(
+    cost_basis_base: Decimal,
+    cost_basis_local: Decimal,
+) -> None:
+    with pytest.raises(
+        UnsupportedValuationError,
+        match="bond valuation requires explicit quote-convention authority",
+    ):
+        ValuationLogic.calculate_valuation_components(
+            quantity=Decimal("0"),
+            market_price=Decimal("99.25"),
+            cost_basis_base=cost_basis_base,
+            cost_basis_local=cost_basis_local,
+            price_currency="USD",
+            instrument_currency="USD",
+            portfolio_currency="USD",
+            product_type="BOND",
+        )
 
 
 def test_calculate_valuation_with_gain_same_currency():

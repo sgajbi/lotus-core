@@ -126,6 +126,7 @@ class PositionValuationEvidence:
     quantity: object
     market_price: object
     market_value_local: object
+    cost_basis_reporting: object
     cost_basis_local: object
     unrealized_gain_loss_local: object
     product_type: str | None
@@ -263,6 +264,10 @@ def position_valuation_reconciliation_findings(
         evidence.cost_basis_local,
         field_name="snapshot.cost_basis_local",
     )
+    cost_basis_reporting = required_decimal(
+        evidence.cost_basis_reporting,
+        field_name="snapshot.cost_basis_reporting",
+    )
     market_price = coerce_positive_market_price_or_none(evidence.market_price)
     if market_price is None:
         return [
@@ -289,6 +294,8 @@ def position_valuation_reconciliation_findings(
         if requires_bond_quote_authority(
             product_type=evidence.product_type,
             quantity=quantity,
+            cost_basis_reporting=cost_basis_reporting,
+            cost_basis_local=cost_basis_local,
         ):
             return [_missing_bond_quote_authority_finding(evidence)]
         expected_market_value = quantity * market_price

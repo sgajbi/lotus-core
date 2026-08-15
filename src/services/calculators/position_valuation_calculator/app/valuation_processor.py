@@ -33,6 +33,7 @@ from portfolio_common.domain.valuation import (
     ValuationSnapshotIdentity,
     build_authoritative_valuation_receipt,
     build_legacy_valuation_receipt,
+    is_quote_independent_flat_position,
     requires_bond_quote_authority,
     resolve_optional_valuation_book_scope,
 )
@@ -459,6 +460,8 @@ class ValuationJobProcessor:
         if requires_bond_quote_authority(
             product_type=instrument.product_type,
             quantity=snapshot.quantity,
+            cost_basis_reporting=snapshot.cost_basis,
+            cost_basis_local=snapshot.cost_basis_local,
         ):
             snapshot.valuation_status = VALUATION_FAILED
             VALUATION_JOBS_FAILED_TOTAL.labels(
@@ -532,10 +535,10 @@ class ValuationJobProcessor:
     def _is_flat_position(snapshot: DailyPositionSnapshot) -> bool:
         """Return whether a quote-independent zero valuation is fully supported."""
 
-        return bool(
-            snapshot.quantity == ZERO
-            and snapshot.cost_basis == ZERO
-            and snapshot.cost_basis_local == ZERO
+        return is_quote_independent_flat_position(
+            quantity=snapshot.quantity,
+            cost_basis_reporting=snapshot.cost_basis,
+            cost_basis_local=snapshot.cost_basis_local,
         )
 
     @staticmethod
