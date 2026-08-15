@@ -19,6 +19,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.domain.valuation import (
+    BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
     MarketPriceSourceFact,
     MarketPriceSourceFactError,
     PositionValuationEvidence,
@@ -33,6 +34,7 @@ from portfolio_common.domain.valuation import (
     build_authoritative_valuation_receipt,
     build_legacy_valuation_receipt,
     resolve_optional_valuation_book_scope,
+    requires_bond_quote_authority,
 )
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
@@ -454,6 +456,27 @@ class ValuationJobProcessor:
         if not price:
             snapshot.valuation_status = VALUATION_UNVALUED
             return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=None)
+        if requires_bond_quote_authority(
+            product_type=instrument.product_type,
+            quantity=snapshot.quantity,
+        ):
+            snapshot.valuation_status = VALUATION_FAILED
+            VALUATION_JOBS_FAILED_TOTAL.labels(
+                reason="missing_bond_quote_authority",
+            ).inc()
+            logger.warning(
+                "Legacy bond valuation failed closed because quote authority is unavailable.",
+                extra={
+                    "portfolio_id": event.portfolio_id,
+                    "security_id": event.security_id,
+                    "valuation_date": event.valuation_date.isoformat(),
+                    "epoch": event.epoch,
+                },
+            )
+            return ValuationSnapshotResult(
+                snapshot=snapshot,
+                job_failure_reason=BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
+            )
 
         instrument_currency = _normalize_currency_code(instrument.currency)
         portfolio_currency = _normalize_currency_code(portfolio.base_currency)
