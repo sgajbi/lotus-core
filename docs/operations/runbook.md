@@ -48,7 +48,12 @@ the maximum page is 200, and continuation requires both `cursor_occurred_at` and
 Returned evidence contains governed route templates and typed identity posture, never bodies,
 headers, query strings, concrete URLs, secrets, arbitrary metadata, or raw database exceptions.
 Unverified denials remain durable with identity columns absent and do not appear in tenant-scoped
-queries. Alerting is owned by #501; retention, purge, and legal hold are owned by #708.
+queries. A 422 response means the caller's time window, page, or cursor is invalid. A source-safe
+503 means the database is unavailable or a persisted row failed domain verification; do not
+reinterpret it as a query correction or expose the failing row in tickets or logs. Preserve the
+evidence, distinguish connectivity from integrity failure through controlled operator diagnostics,
+and escalate to the audit-data owner before repair. Alerting is owned by #501; retention, purge,
+and legal hold are owned by #708.
 
 ## Initial Quality Baseline Commands
 
