@@ -8,16 +8,30 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable, Protocol, cast
+from uuid import uuid4
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from portfolio_common.domain.security_audit import (
+    SecurityAuditComponent,
+    SecurityAuditDecision,
+    SecurityAuditEvent,
+    SecurityAuditIdentityPosture,
+    SecurityAuditMethod,
+    SecurityAuditReason,
+)
+from portfolio_common.infrastructure.persistence.security_audit_store import (
+    PostgresSecurityAuditStore,
+)
+from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFailed
 from portfolio_common.logging_utils import (
     correlation_id_var,
     normalize_lineage_value,
     redact_sensitive,
 )
+from portfolio_common.ports.security_audit import SecurityAuditStore
 from portfolio_common.runtime_settings import (
     env_bool,
     env_int,
@@ -52,19 +66,44 @@ ENTERPRISE_UNAUTHENTICATED_PATHS = frozenset(
 
 
 class EnterpriseSettings(Protocol):
-    enterprise_policy_version: str
-    enterprise_primary_key_id: str
-    enterprise_enforce_authz: bool
-    enterprise_enforce_read_authz: bool
-    enterprise_audit_reads: bool
-    enterprise_require_capability_rules: bool
-    enterprise_enforce_runtime_config: bool
-    enterprise_secret_rotation_days: int
-    enterprise_max_write_payload_bytes: int
-    enterprise_auth_context_hmac_secret: str
-    enterprise_auth_context_max_age_seconds: int
-    enterprise_feature_flags: dict[str, Any]
-    enterprise_capability_rules: dict[str, Any]
+    @property
+    def enterprise_policy_version(self) -> str: ...
+
+    @property
+    def enterprise_primary_key_id(self) -> str: ...
+
+    @property
+    def enterprise_enforce_authz(self) -> bool: ...
+
+    @property
+    def enterprise_enforce_read_authz(self) -> bool: ...
+
+    @property
+    def enterprise_audit_reads(self) -> bool: ...
+
+    @property
+    def enterprise_require_capability_rules(self) -> bool: ...
+
+    @property
+    def enterprise_enforce_runtime_config(self) -> bool: ...
+
+    @property
+    def enterprise_secret_rotation_days(self) -> int: ...
+
+    @property
+    def enterprise_max_write_payload_bytes(self) -> int: ...
+
+    @property
+    def enterprise_auth_context_hmac_secret(self) -> str: ...
+
+    @property
+    def enterprise_auth_context_max_age_seconds(self) -> int: ...
+
+    @property
+    def enterprise_feature_flags(self) -> dict[str, Any]: ...
+
+    @property
+    def enterprise_capability_rules(self) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -88,6 +127,15 @@ class DefaultEnterpriseSettings:
 class VerifiedServicePrincipal:
     service_identity: str
     capabilities: set[str]
+
+
+@dataclass(frozen=True, slots=True)
+class EnterpriseAuthorizationDecision:
+    authorized: bool
+    reason: str | None
+    required_capability: str | None
+    route_template: str
+    principal: VerifiedServicePrincipal | None
 
 
 @dataclass(frozen=True)
@@ -236,24 +284,65 @@ class EnterpriseReadinessRuntime:
     def authorize_request(
         self, method: str, path: str, headers: dict[str, str]
     ) -> tuple[bool, str | None]:
+        decision = self.evaluate_request(method, path, headers)
+        return decision.authorized, decision.reason
+
+    def evaluate_request(
+        self, method: str, path: str, headers: dict[str, str]
+    ) -> EnterpriseAuthorizationDecision:
         normalized_method = method.strip().upper()
-        required_capability = self.required_capability(normalized_method, path)
+        matched_rule = self.matched_capability_rule(normalized_method, path)
+        route_template = matched_rule[0] if matched_rule is not None else "/unclassified"
+        required_capability = matched_rule[1] if matched_rule is not None else None
         if not self._request_requires_authorization(normalized_method, required_capability):
-            return True, None
+            return EnterpriseAuthorizationDecision(
+                authorized=True,
+                reason=None,
+                required_capability=required_capability,
+                route_template=route_template,
+                principal=None,
+            )
 
         normalized_headers = _normalize_headers(headers)
         missing_headers = _missing_required_headers(normalized_headers)
         if missing_headers:
-            return False, f"missing_headers:{','.join(missing_headers)}"
+            return EnterpriseAuthorizationDecision(
+                authorized=False,
+                reason=f"missing_headers:{','.join(missing_headers)}",
+                required_capability=required_capability,
+                route_template=route_template,
+                principal=None,
+            )
 
         if not _has_service_identity(normalized_headers):
-            return False, "missing_service_identity"
+            return EnterpriseAuthorizationDecision(
+                authorized=False,
+                reason="missing_service_identity",
+                required_capability=required_capability,
+                route_template=route_template,
+                principal=None,
+            )
 
         verified_principal = _verified_service_principal(normalized_headers, self.load_settings())
         if isinstance(verified_principal, str):
-            return False, verified_principal
+            return EnterpriseAuthorizationDecision(
+                authorized=False,
+                reason=verified_principal,
+                required_capability=required_capability,
+                route_template=route_template,
+                principal=None,
+            )
 
-        return self._authorize_required_capability(required_capability, verified_principal)
+        authorized, reason = self._authorize_required_capability(
+            required_capability, verified_principal
+        )
+        return EnterpriseAuthorizationDecision(
+            authorized=authorized,
+            reason=reason,
+            required_capability=required_capability,
+            route_template=route_template,
+            principal=verified_principal,
+        )
 
     def _request_requires_authorization(
         self,
@@ -288,11 +377,15 @@ class EnterpriseReadinessRuntime:
         return True, None
 
     def required_capability(self, method: str, path: str) -> str | None:
+        matched_rule = self.matched_capability_rule(method, path)
+        return matched_rule[1] if matched_rule is not None else None
+
+    def matched_capability_rule(self, method: str, path: str) -> tuple[str, str] | None:
         method = method.strip().upper()
         for key, capability in _rules_by_specificity(self.load_capability_rules()):
             prefix = f"{method} "
             if key.upper().startswith(prefix) and _path_matches_rule(path, key[len(prefix) :]):
-                return capability
+                return key[len(prefix) :], capability
         return None
 
     def emit_audit_event(
@@ -390,7 +483,10 @@ def create_default_enterprise_readiness_runtime(
 ) -> EnterpriseReadinessRuntime:
     return EnterpriseReadinessRuntime(
         service_name=service_name,
-        load_settings=lambda: load_default_enterprise_settings(service_name=service_name),
+        load_settings=lambda: cast(
+            EnterpriseSettings,
+            load_default_enterprise_settings(service_name=service_name),
+        ),
         env_bool=lambda name, default: env_bool(name, default, service_name=service_name),
         env_int=lambda name, default: env_int(name, default, service_name=service_name),
         logger=logger,
@@ -422,8 +518,18 @@ def build_default_enterprise_audit_middleware(
     return build_enterprise_audit_middleware(
         runtime=runtime,
         audit_emitter=runtime.emit_audit_event,
+        component=SecurityAuditComponent(service_name),
+        audit_store=create_runtime_security_audit_store(service_name=service_name),
         max_write_payload_bytes_resolver=max_write_payload_bytes_resolver,
     )
+
+
+def create_runtime_security_audit_store(*, service_name: str) -> SecurityAuditStore | None:
+    """Use durable evidence in promoted profiles and explicit log-only local profiles."""
+
+    if not production_security_profile_enabled(service_name=service_name):
+        return None
+    return PostgresSecurityAuditStore()
 
 
 def _dict_value(value: dict[str, Any], key: str) -> dict[str, Any]:
@@ -637,9 +743,18 @@ def build_enterprise_audit_middleware(
     *,
     runtime: EnterpriseReadinessRuntime,
     audit_emitter: AuditEmitter,
+    component: SecurityAuditComponent | None = None,
+    audit_store: SecurityAuditStore | None = None,
+    audit_failure_is_fatal: bool | None = None,
     max_write_payload_bytes_resolver: MaxWritePayloadBytesResolver | None = None,
 ) -> MiddlewareCallable:
     async def middleware(request: Request, call_next: MiddlewareNext) -> Response:
+        normalized_method = request.method.strip().upper()
+        authorization = runtime.evaluate_request(
+            normalized_method,
+            request.url.path,
+            dict(request.headers),
+        )
         max_write_payload_bytes = runtime.env_integer(
             "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576
         )
@@ -652,7 +767,22 @@ def build_enterprise_audit_middleware(
             content_length = int(request.headers.get("content-length", "0"))
         except ValueError:
             content_length = 0
-        if request.method in WRITE_METHODS and content_length > max_write_payload_bytes:
+        if normalized_method in WRITE_METHODS and content_length > max_write_payload_bytes:
+            event = _security_audit_event(
+                runtime=runtime,
+                component=component,
+                request=request,
+                authorization=authorization,
+                decision=SecurityAuditDecision.DENY,
+                reason=SecurityAuditReason.PAYLOAD_TOO_LARGE,
+            )
+            if not await _persist_security_audit(
+                runtime=runtime,
+                store=audit_store,
+                event=event,
+                failure_is_fatal=audit_failure_is_fatal,
+            ):
+                return _security_audit_unavailable_response()
             return JSONResponse(status_code=413, content={"detail": "payload_too_large"})
 
         if _is_unauthenticated_enterprise_path(request.url.path):
@@ -660,46 +790,82 @@ def build_enterprise_audit_middleware(
             response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
             return response
 
-        authorized, reason = runtime.authorize_request(
-            request.method, request.url.path, dict(request.headers)
-        )
-        if not authorized:
+        if not authorization.authorized:
+            event = _security_audit_event(
+                runtime=runtime,
+                component=component,
+                request=request,
+                authorization=authorization,
+                decision=SecurityAuditDecision.DENY,
+                reason=SecurityAuditReason.AUTHORIZATION_POLICY_DENIED,
+            )
+            if not await _persist_security_audit(
+                runtime=runtime,
+                store=audit_store,
+                event=event,
+                failure_is_fatal=audit_failure_is_fatal,
+            ):
+                return _security_audit_unavailable_response()
             deny_correlation_id = _request_correlation_id(request)
             audit_emitter(
-                action=f"DENY {request.method} {request.url.path}",
+                action=f"DENY {normalized_method} {authorization.route_template}",
                 actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
                 tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
                 role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=deny_correlation_id,
-                metadata={"reason": reason},
+                metadata={"reason": authorization.reason},
             )
             return JSONResponse(
                 status_code=403,
-                content={"detail": "authorization_policy_denied", "reason": reason},
+                content={
+                    "detail": "authorization_policy_denied",
+                    "reason": authorization.reason,
+                },
             )
+
+        audit_allowed_request = normalized_method in WRITE_METHODS or (
+            normalized_method in READ_AUDIT_METHODS
+            and runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false")
+        )
+        if audit_allowed_request:
+            event = _security_audit_event(
+                runtime=runtime,
+                component=component,
+                request=request,
+                authorization=authorization,
+                decision=SecurityAuditDecision.ALLOW,
+                reason=SecurityAuditReason.AUTHORIZED,
+            )
+            if not await _persist_security_audit(
+                runtime=runtime,
+                store=audit_store,
+                event=event,
+                failure_is_fatal=audit_failure_is_fatal,
+            ):
+                return _security_audit_unavailable_response()
 
         response = await call_next(request)
         response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
-        if request.method in WRITE_METHODS:
+        if normalized_method in WRITE_METHODS:
             write_correlation_id = _request_correlation_id(
                 request, response.headers.get("X-Correlation-ID")
             )
             audit_emitter(
-                action=f"{request.method} {request.url.path}",
+                action=f"{normalized_method} {authorization.route_template}",
                 actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
                 tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
                 role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
             )
-        elif request.method in READ_AUDIT_METHODS and runtime.env_enabled(
+        elif normalized_method in READ_AUDIT_METHODS and runtime.env_enabled(
             "ENTERPRISE_AUDIT_READS", "false"
         ):
             read_correlation_id = _request_correlation_id(
                 request, response.headers.get("X-Correlation-ID")
             )
             audit_emitter(
-                action=f"{request.method} {request.url.path}",
+                action=f"{normalized_method} {authorization.route_template}",
                 actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
                 tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
                 role=_request_header_value(request, "X-Role", "unknown"),
@@ -709,6 +875,73 @@ def build_enterprise_audit_middleware(
         return response
 
     return middleware
+
+
+async def _persist_security_audit(
+    *,
+    runtime: EnterpriseReadinessRuntime,
+    store: SecurityAuditStore | None,
+    event: SecurityAuditEvent | None,
+    failure_is_fatal: bool | None,
+) -> bool:
+    if store is None or event is None:
+        return True
+    try:
+        await store.append(event)
+        return True
+    except InfrastructureAuditWriteFailed:
+        runtime.logger.warning(
+            "enterprise_security_audit_persistence_failed",
+            extra={"reason_code": "audit_persistence_failed"},
+        )
+        should_fail = (
+            production_security_profile_enabled(service_name=runtime.service_name)
+            if failure_is_fatal is None
+            else failure_is_fatal
+        )
+        return not should_fail
+
+
+def _security_audit_event(
+    *,
+    runtime: EnterpriseReadinessRuntime,
+    component: SecurityAuditComponent | None,
+    request: Request,
+    authorization: EnterpriseAuthorizationDecision,
+    decision: SecurityAuditDecision,
+    reason: SecurityAuditReason,
+) -> SecurityAuditEvent | None:
+    if component is None:
+        return None
+    principal = authorization.principal
+    normalized_headers = _normalize_headers(dict(request.headers))
+    identity_verified = principal is not None
+    return SecurityAuditEvent(
+        event_id=str(uuid4()),
+        occurred_at=datetime.now(timezone.utc),
+        component=component,
+        route_template=authorization.route_template,
+        method=SecurityAuditMethod(request.method.strip().upper()),
+        decision=decision,
+        reason=reason,
+        required_capability=authorization.required_capability,
+        service_identity=principal.service_identity if principal is not None else None,
+        actor_id=normalized_headers.get("x-actor-id") if identity_verified else None,
+        tenant_id=normalized_headers.get("x-tenant-id") if identity_verified else None,
+        role=normalized_headers.get("x-role") if identity_verified else None,
+        identity_posture=(
+            SecurityAuditIdentityPosture.VERIFIED
+            if identity_verified
+            else SecurityAuditIdentityPosture.UNVERIFIED
+        ),
+        correlation_id=_request_correlation_id(request),
+        trace_id=normalize_lineage_value(request.headers.get("X-Trace-ID")),
+        policy_version=runtime.enterprise_policy_version(),
+    )
+
+
+def _security_audit_unavailable_response() -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": "security_audit_unavailable"})
 
 
 def _is_unauthenticated_enterprise_path(path: str) -> bool:
@@ -726,9 +959,13 @@ def _request_header_value(request: Request, name: str, default: str) -> str:
 def _request_correlation_id(
     request: Request, response_correlation_id: str | None = None
 ) -> str | None:
-    return normalize_lineage_value(
-        request.headers.get("X-Correlation-Id")
-        or request.headers.get("X-Correlation-ID")
-        or response_correlation_id
-        or correlation_id_var.get()
+    normalized: str | None = normalize_lineage_value(
+        cast(
+            str | None,
+            request.headers.get("X-Correlation-Id")
+            or request.headers.get("X-Correlation-ID")
+            or response_correlation_id
+            or correlation_id_var.get(),
+        )
     )
+    return normalized
