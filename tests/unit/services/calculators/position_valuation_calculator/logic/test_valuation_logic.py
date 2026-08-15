@@ -3,6 +3,7 @@ from decimal import Decimal, localcontext
 
 import pytest
 from portfolio_common.domain.financial.precision import BOUNDED_18_10_EXACT
+from portfolio_common.domain.valuation import UnsupportedValuationError
 
 # Corrected absolute import
 from src.services.calculators.position_valuation_calculator.app.logic.valuation_logic import (
@@ -370,45 +371,24 @@ def test_calculate_valuation_rejects_non_positive_market_price():
     assert result is None
 
 
-def test_calculate_valuation_scales_repo_bond_percentage_quotes_to_unit_prices():
-    result = ValuationLogic.calculate_valuation(
-        quantity=Decimal("75"),
-        market_price=Decimal("99.25"),
-        cost_basis_base=Decimal("80078.724225"),
-        cost_basis_local=Decimal("73912.5"),
-        price_currency="EUR",
-        instrument_currency="EUR",
-        portfolio_currency="USD",
-        product_type="Bond",
-        instrument_to_portfolio_fx_rate=Decimal("1.0816666667"),
-    )
-    assert result is not None
-    mv_base, mv_local, pnl_base, pnl_local = result
-
-    assert mv_local == Decimal("74437.50")
-    assert pnl_local == Decimal("525.00")
-    assert mv_base == Decimal("80516.5625024812")
-    assert pnl_base == Decimal("437.8382774812")
-
-
-def test_calculate_valuation_does_not_rescale_bond_price_when_already_in_unit_terms():
-    result = ValuationLogic.calculate_valuation(
-        quantity=Decimal("180"),
-        market_price=Decimal("1013.5"),
-        cost_basis_base=Decimal("178704"),
-        cost_basis_local=Decimal("178704"),
-        price_currency="USD",
-        instrument_currency="USD",
-        portfolio_currency="USD",
-        product_type="Bond",
-    )
-    assert result is not None
-    mv_base, mv_local, pnl_base, pnl_local = result
-
-    assert mv_local == Decimal("182430.0")
-    assert mv_base == Decimal("182430.0")
-    assert pnl_local == Decimal("3726.0")
-    assert pnl_base == Decimal("3726.0")
+@pytest.mark.parametrize("market_price", [Decimal("99.25"), Decimal("1013.5")])
+def test_calculate_valuation_rejects_unscoped_bond_quote_representation(
+    market_price: Decimal,
+) -> None:
+    with pytest.raises(
+        UnsupportedValuationError,
+        match="bond valuation requires explicit quote-convention authority",
+    ):
+        ValuationLogic.calculate_valuation(
+            quantity=Decimal("10"),
+            market_price=market_price,
+            cost_basis_base=Decimal("10000"),
+            cost_basis_local=Decimal("10000"),
+            price_currency="USD",
+            instrument_currency="USD",
+            portfolio_currency="USD",
+            product_type="Bond",
+        )
 
 
 def test_calculated_valuation_outputs_are_persistable_and_preserve_pnl_identity() -> None:
