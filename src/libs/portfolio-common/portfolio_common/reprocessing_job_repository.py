@@ -1,6 +1,8 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from enum import StrEnum
 from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import Date, String, bindparam, func, select, text, update
@@ -14,6 +16,21 @@ from .utils import async_timed
 logger = logging.getLogger(__name__)
 
 EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset({"RESET_WATERMARKS", "RESET_FX_WATERMARKS"})
+
+
+class ResetWatermarksStageOutcome(StrEnum):
+    """Bounded persistence outcome for one reset-watermarks staging request."""
+
+    CREATED = "created"
+    COALESCED_PENDING = "coalesced_pending"
+
+
+@dataclass(frozen=True)
+class ResetWatermarksStageResult:
+    """Durable job plus the exact pending-job upsert outcome."""
+
+    job: ReprocessingJob
+    outcome: ResetWatermarksStageOutcome
 
 
 def _claim_pending_jobs_query(job_type: str):
@@ -333,8 +350,52 @@ class ReprocessingJobRepository:
             and payload.get("security_id")
             and payload.get("earliest_impacted_date")
         ):
-            stmt = text(
-                """
+            return (
+                await self.stage_reset_watermarks_job(
+                    security_id=str(payload["security_id"]),
+                    earliest_impacted_date=date.fromisoformat(payload["earliest_impacted_date"]),
+                    correlation_id=correlation_id,
+                    attempt_count=attempt_count,
+                )
+            ).job
+
+        job = ReprocessingJob(
+            job_type=job_type,
+            payload=payload,
+            status="PENDING",
+            attempt_count=attempt_count,
+            correlation_id=correlation_id,
+            correlation_missing_reason=diagnostics.correlation_missing_reason,
+            alternate_lookup_key=diagnostics.alternate_lookup_key,
+        )
+        self.db.add(job)
+        await self.db.flush()
+        await self.db.refresh(job)
+        logger.info("Created new reprocessing job.", extra={"job_id": job.id, "job_type": job_type})
+        return job
+
+    @async_timed(repository="ReprocessingJobRepository", method="stage_reset_watermarks_job")
+    async def stage_reset_watermarks_job(
+        self,
+        *,
+        security_id: str,
+        earliest_impacted_date: date,
+        correlation_id: str | None,
+        attempt_count: int = 0,
+    ) -> ResetWatermarksStageResult:
+        """Create or coalesce one pending reset job without committing the caller's UoW."""
+        payload = {
+            "security_id": security_id,
+            "earliest_impacted_date": earliest_impacted_date.isoformat(),
+        }
+        diagnostics = _reprocessing_job_correlation_diagnostics(
+            job_type="RESET_WATERMARKS",
+            payload=payload,
+            correlation_id=correlation_id,
+        )
+        correlation_id = diagnostics.correlation_id
+        stmt = text(
+            """
                 INSERT INTO reprocessing_jobs (
                     job_type,
                     payload,
@@ -406,50 +467,43 @@ class ReprocessingJobRepository:
                         ELSE reprocessing_jobs.alternate_lookup_key
                     END,
                     updated_at = now()
-                RETURNING *;
+                RETURNING *, (xmax = 0) AS was_inserted;
                 """
-            ).bindparams(
-                bindparam("security_id", type_=String()),
-                bindparam("earliest_impacted_date", type_=Date()),
-                bindparam("correlation_id", type_=String()),
-                bindparam("correlation_missing_reason", type_=String()),
-                bindparam("alternate_lookup_key", type_=String()),
-            )
-            result = await self.db.execute(
-                stmt,
-                {
-                    "security_id": payload["security_id"],
-                    "earliest_impacted_date": date.fromisoformat(payload["earliest_impacted_date"]),
-                    "attempt_count": attempt_count,
-                    "correlation_id": correlation_id,
-                    "correlation_missing_reason": diagnostics.correlation_missing_reason,
-                    "alternate_lookup_key": diagnostics.alternate_lookup_key,
-                },
-            )
-            job = ReprocessingJob(**result.mappings().one())
-            logger.info(
-                "Coalesced reset-watermarks reprocessing job.",
-                extra={
-                    "job_id": job.id,
-                    "security_id": payload["security_id"],
-                },
-            )
-            return job
-
-        job = ReprocessingJob(
-            job_type=job_type,
-            payload=payload,
-            status="PENDING",
-            attempt_count=attempt_count,
-            correlation_id=correlation_id,
-            correlation_missing_reason=diagnostics.correlation_missing_reason,
-            alternate_lookup_key=diagnostics.alternate_lookup_key,
+        ).bindparams(
+            bindparam("security_id", type_=String()),
+            bindparam("earliest_impacted_date", type_=Date()),
+            bindparam("correlation_id", type_=String()),
+            bindparam("correlation_missing_reason", type_=String()),
+            bindparam("alternate_lookup_key", type_=String()),
         )
-        self.db.add(job)
-        await self.db.flush()
-        await self.db.refresh(job)
-        logger.info("Created new reprocessing job.", extra={"job_id": job.id, "job_type": job_type})
-        return job
+        result = await self.db.execute(
+            stmt,
+            {
+                "security_id": security_id,
+                "earliest_impacted_date": earliest_impacted_date,
+                "attempt_count": attempt_count,
+                "correlation_id": correlation_id,
+                "correlation_missing_reason": diagnostics.correlation_missing_reason,
+                "alternate_lookup_key": diagnostics.alternate_lookup_key,
+            },
+        )
+        row = dict(result.mappings().one())
+        was_inserted = bool(row.pop("was_inserted"))
+        job = ReprocessingJob(**row)
+        outcome = (
+            ResetWatermarksStageOutcome.CREATED
+            if was_inserted
+            else ResetWatermarksStageOutcome.COALESCED_PENDING
+        )
+        logger.info(
+            "Staged reset-watermarks reprocessing job.",
+            extra={
+                "job_id": job.id,
+                "security_id": security_id,
+                "outcome": outcome.value,
+            },
+        )
+        return ResetWatermarksStageResult(job=job, outcome=outcome)
 
     @async_timed(repository="ReprocessingJobRepository", method="find_and_claim_jobs")
     async def find_and_claim_jobs(self, job_type: str, batch_size: int) -> List[ReprocessingJob]:

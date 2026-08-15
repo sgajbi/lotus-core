@@ -1,7 +1,11 @@
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.reprocessing_job_repository import (
+    ReprocessingJobRepository,
+    ResetWatermarksStageOutcome,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
@@ -439,6 +443,7 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
         "failure_reason": None,
         "created_at": None,
         "updated_at": None,
+        "was_inserted": False,
     }
     mock_db_session.execute.return_value = upsert_result
 
@@ -471,6 +476,7 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
         "failure_reason": None,
         "created_at": None,
         "updated_at": None,
+        "was_inserted": False,
     }
     mock_db_session.execute.return_value = upsert_result
 
@@ -503,6 +509,7 @@ async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
         "failure_reason": None,
         "created_at": None,
         "updated_at": None,
+        "was_inserted": False,
     }
     mock_db_session.execute.return_value = upsert_result
 
@@ -513,6 +520,46 @@ async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
     )
 
     assert result.correlation_id == "corr-05"
+
+
+@pytest.mark.parametrize(
+    ("was_inserted", "expected_outcome"),
+    [
+        (True, ResetWatermarksStageOutcome.CREATED),
+        (False, ResetWatermarksStageOutcome.COALESCED_PENDING),
+    ],
+)
+async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+    was_inserted: bool,
+    expected_outcome: ResetWatermarksStageOutcome,
+) -> None:
+    upsert_result = MagicMock()
+    upsert_result.mappings.return_value.one.return_value = {
+        "id": 12,
+        "job_type": "RESET_WATERMARKS",
+        "payload": {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-05"},
+        "status": "PENDING",
+        "attempt_count": 0,
+        "last_attempted_at": None,
+        "failure_reason": None,
+        "created_at": None,
+        "updated_at": None,
+        "was_inserted": was_inserted,
+    }
+    mock_db_session.execute.return_value = upsert_result
+
+    result = await repository.stage_reset_watermarks_job(
+        security_id="BOND-1",
+        earliest_impacted_date=date(2025, 1, 5),
+        correlation_id="corr-bond-1",
+    )
+
+    assert result.job.id == 12
+    assert result.outcome is expected_outcome
+    statement = str(mock_db_session.execute.await_args.args[0])
+    assert "(xmax = 0) AS was_inserted" in statement
 
 
 async def test_create_job_sets_correlation_for_generic_jobs(
