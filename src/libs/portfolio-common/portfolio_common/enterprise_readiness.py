@@ -37,12 +37,14 @@ from portfolio_common.logging_utils import (
 from portfolio_common.monitoring import observe_security_audit_delivery
 from portfolio_common.ports.security_audit import SecurityAuditStore
 from portfolio_common.runtime_settings import (
+    LOCAL_CONFIG_ENVIRONMENTS,
     env_bool,
     env_int,
     env_json_map,
     env_str,
     explicit_local_config_profile_enabled,
     production_security_profile_enabled,
+    runtime_environment_name,
 )
 from portfolio_common.source_data_security import source_data_capability_rules
 
@@ -216,7 +218,7 @@ class EnterpriseReadinessRuntime:
         _append_issue_if(
             issues,
             "promoted_read_audit_disabled",
-            not explicit_local_config_profile_enabled()
+            runtime_environment_name() not in LOCAL_CONFIG_ENVIRONMENTS
             and not self.env_enabled("ENTERPRISE_AUDIT_READS", "false"),
         )
         _append_issue_if(
