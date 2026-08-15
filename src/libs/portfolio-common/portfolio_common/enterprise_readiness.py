@@ -32,6 +32,7 @@ from portfolio_common.logging_utils import (
     normalize_trace_id,
     redact_sensitive,
     trace_id_from_traceparent,
+    trace_id_var,
 )
 from portfolio_common.monitoring import observe_security_audit_delivery
 from portfolio_common.ports.security_audit import SecurityAuditStore
@@ -1017,7 +1018,7 @@ def _audit_authority_headers_are_bounded(normalized_headers: dict[str, str]) -> 
 def _request_trace_id(request: Request) -> str | None:
     traceparent = cast(str | None, request.headers.get("traceparent"))
     trace_header = cast(str | None, request.headers.get("X-Trace-ID"))
-    context_trace_id = cast(str | None, correlation_id_var.get())
+    context_trace_id = cast(str | None, trace_id_var.get())
     extracted_trace_id: str | None = trace_id_from_traceparent(traceparent)
     if extracted_trace_id is not None:
         return extracted_trace_id

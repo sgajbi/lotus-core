@@ -17,7 +17,13 @@ from ..contracts.security_audit import (
     SecurityAuditPageResponse,
 )
 from ..dependencies import get_security_audit_query_service
-from .response_helpers import problem_example, problem_response, raise_problem
+from .response_helpers import (
+    LEGACY_DETAIL_RESPONSE_SCHEMA,
+    problem_example,
+    problem_or_validation_response,
+    problem_with_alternate_json_response,
+    raise_problem,
+)
 
 router = APIRouter(tags=["Security Audit Support"])
 
@@ -42,20 +48,37 @@ QUERY_UNAVAILABLE = problem_example(
     error_code="QCP_SECURITY_AUDIT_QUERY_UNAVAILABLE",
     instance="/support/security-audit/events",
 )
+AUTHORIZATION_DENIED_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "detail": {"type": "string"},
+        "reason": {"type": "string"},
+    },
+    "required": ["detail", "reason"],
+}
 
 
 @router.get(
     "/support/security-audit/events",
     response_model=SecurityAuditPageResponse,
     responses={
-        status.HTTP_403_FORBIDDEN: problem_response(
-            "Verified tenant authority is missing.", VERIFIED_TENANT_REQUIRED
+        status.HTTP_403_FORBIDDEN: problem_with_alternate_json_response(
+            "Verified tenant authority is missing.",
+            VERIFIED_TENANT_REQUIRED,
+            json_schema=AUTHORIZATION_DENIED_SCHEMA,
+            json_example={
+                "detail": "authorization_policy_denied",
+                "reason": "missing_headers:x-tenant-id",
+            },
         ),
-        status.HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+        status.HTTP_422_UNPROCESSABLE_CONTENT: problem_or_validation_response(
             "Evidence query bounds or cursor are invalid.", INVALID_QUERY
         ),
-        status.HTTP_503_SERVICE_UNAVAILABLE: problem_response(
-            "Durable evidence cannot currently be queried.", QUERY_UNAVAILABLE
+        status.HTTP_503_SERVICE_UNAVAILABLE: problem_with_alternate_json_response(
+            "Durable evidence cannot currently be queried.",
+            QUERY_UNAVAILABLE,
+            json_schema=LEGACY_DETAIL_RESPONSE_SCHEMA,
+            json_example={"detail": "security_audit_unavailable"},
         ),
     },
     summary="List tenant-bound durable access-decision evidence",

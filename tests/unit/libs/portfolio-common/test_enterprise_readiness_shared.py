@@ -24,6 +24,7 @@ from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
 )
 from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFailed
+from portfolio_common.logging_utils import trace_id_var
 
 
 @dataclass(frozen=True)
@@ -1013,6 +1014,43 @@ async def test_oversized_signed_lineage_is_denied_and_recorded_without_raw_value
     assert event.correlation_id is None
     assert event.trace_id is None
     assert oversized_correlation not in repr(event)
+
+
+@pytest.mark.asyncio
+async def test_durable_event_preserves_canonical_runtime_trace_context() -> None:
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/portfolios/PB-001",
+            "headers": [(b"content-length", b"0")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    runtime_trace_id = "0123456789abcdef0123456789abcdef"
+    trace_token = trace_id_var.set(runtime_trace_id)
+    try:
+        response = await middleware(
+            request,
+            AsyncMock(return_value=Response(status_code=200)),
+        )
+    finally:
+        trace_id_var.reset(trace_token)
+
+    assert response.status_code == 200
+    assert store.append.await_args.args[0].trace_id == runtime_trace_id
 
 
 @pytest.mark.asyncio
