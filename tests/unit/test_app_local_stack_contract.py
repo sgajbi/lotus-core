@@ -112,8 +112,7 @@ def test_database_capable_services_declare_explicit_runtime_profiles() -> None:
         )
     }
     assert not (
-        {"LOTUS_CORE_DB_POOL_SIZE", "LOTUS_CORE_DB_MAX_OVERFLOW"}
-        & set(migration_environment)
+        {"LOTUS_CORE_DB_POOL_SIZE", "LOTUS_CORE_DB_MAX_OVERFLOW"} & set(migration_environment)
     )
 
 
