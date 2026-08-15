@@ -123,8 +123,12 @@ def test_alembic_environment_wires_renderer_for_online_migrations(
     engine_config = engine_from_config.call_args.args[0]
     assert engine_config["sqlalchemy.url"] == "postgresql://lotus:secret@postgres/lotus"
     assert engine_from_config.call_args.kwargs["connect_args"] == {
-        "application_name": "lotus-core-local"
+        "application_name": "migration-runner",
+        "connect_timeout": 60,
+        "options": "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0",
     }
+    assert "pool_size" not in engine_from_config.call_args.kwargs
+    assert "pool_timeout" not in engine_from_config.call_args.kwargs
     configure.assert_called_once_with(
         connection=connection,
         target_metadata=configure.call_args.kwargs["target_metadata"],
