@@ -2959,13 +2959,13 @@ Most relevant current governance:
      convenience.
 182. Framework-independent market-data policies shared by valuation, reconciliation, and
      aggregation belong under `portfolio_common.domain.market_data`, with singular domain modules
-     such as `fx_rate`, `market_price`, and `valuation_unit_price` and tests mirroring that package.
+     such as `fx_rate` and `market_price` and tests mirroring that package.
      Do not restore flat `portfolio_common.fx_rates`, `market_prices`, or `valuation_prices` roots.
      Product-specific quote conventions and valuation methodology require an explicit governed
      domain decision. Scoped position-valuation jobs resolve exact tenant/legal-book/instrument/date
      policy and market-price authority and persist a one-to-one calculation receipt; do not bypass
-     that path or generalize the explicitly metered unscoped legacy heuristic while #451 remains
-     open.
+     that path. Non-flat unscoped bonds fail closed because price magnitude cannot establish quote
+     representation; never restore the deleted valuation-unit-price heuristic.
 183. Timeseries instrument/FX records shared by generation and aggregation belong under
      `portfolio_common.domain.market_data.timeseries`. The SQL reader remains shared infrastructure
      because both service-owned repositories reuse it. `TimeseriesMarketDataPort` belongs under
@@ -3321,15 +3321,15 @@ Most relevant current governance:
      conflicting, and competing exact-scope authority. Do not widen only the legacy write key or
      route scoped authority through unscoped readers. A scoped position valuation must persist its
      supported receipt in the same unit of work as the snapshot and outbox event; a legacy unscoped
-     valuation must persist an explicitly unsupported receipt without invented authority evidence,
-     and a failed replacement must remove stale receipt evidence. Financial reconciliation reads
+     non-bond valuation may persist an explicitly unsupported receipt without invented authority
+     evidence, while a failed replacement must remove stale receipt evidence. Financial reconciliation reads
      the one-to-one receipt in the same set-based snapshot query: supported unit-price receipts
-     reconcile as explicit quantity-times-price and never enter the legacy bond magnitude
-     heuristic, while missing or explicitly legacy-unscoped receipts preserve historical
-     compatibility. Unknown, inconsistent, or not-yet-supported authoritative receipt policies
-     produce a blocking finding instead of falling back. Correction-triggered replay, principal
-     authority and reconciliation, Query exposure, mixed-book proof, production event batching,
-     and final heuristic deletion remain mandatory before #451 can close.
+     reconcile as explicit quantity-times-price. A missing or explicitly legacy-unscoped bond
+     receipt produces `missing_bond_quote_authority`, owned by valuation operations with an explicit
+     policy-assignment repair; it never preserves magnitude-based compatibility. Unknown,
+     inconsistent, or not-yet-supported authoritative receipt policies produce a blocking finding
+     instead of falling back. Correction-triggered replay, wider principal authority, Query
+     exposure, mixed-book proof, and production event batching remain under #788.
 205. Valuation day-count policy resolves an exact governed convention code and version; unknown
      conventions and versions fail closed. `ACT/365.FIXED` and `ACT/360` use actual elapsed calendar
      days with their fixed denominators. `BUS/252` requires a source-owned, versioned business-day
@@ -3461,10 +3461,10 @@ Most relevant current governance:
      to reject gaps/overlaps and the exact-version policy registry to reject unsupported authority.
      Do not move SQLAlchemy selection into `portfolio_common`, infer legal book from booking centre,
      revive an older ACTIVE row after a later suspension/retirement, or fall back to product type.
-     The current single-scope resolver is a migration primitive, not approval for per-position N+1
-     reads: production cutover requires authoritative portfolio scope, complete valuation facts,
-     bulk/cache invalidation proof, both valuation/reconciliation consumers, heuristic deletion, and
-     exact-SHA mixed-book capacity evidence under #788.
+     The current single-scope resolver is not approval for per-position N+1 reads: wider mixed-book
+     production work requires complete valuation facts, bulk/cache invalidation proof, and
+     exact-SHA capacity evidence under #788. Both quote-interpretation consumers are now cut over,
+     and the retired magnitude heuristic is protected by `bond-quote-authority-guard`.
 215. Portfolio aggregation claim generation is the authoritative processing sequence for
      reconciliation within one portfolio/business-date/epoch scope. Preserve the positive durable
      `portfolio_aggregation_jobs.attempt_count` as `aggregation_revision` through aggregation
