@@ -424,7 +424,7 @@ def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
     )
 
 
-def test_production_database_engines_use_governed_factory():
+def test_database_engines_use_governed_factory():
     repo_root = Path(__file__).resolve().parents[4]
     allowed_factories = {
         Path("src/libs/portfolio-common/portfolio_common/db.py"),
@@ -432,7 +432,7 @@ def test_production_database_engines_use_governed_factory():
     }
     violations: list[str] = []
 
-    for source_root in ("src", "scripts", "tools", "alembic"):
+    for source_root in ("src", "scripts", "tools", "alembic", "tests"):
         for path in (repo_root / source_root).rglob("*.py"):
             relative_path = path.relative_to(repo_root)
             if relative_path in allowed_factories:
@@ -466,6 +466,5 @@ def test_production_database_engines_use_governed_factory():
                     violations.append(f"{relative_path.as_posix()}:{node.lineno}")
 
     assert violations == [], (
-        "Production database engines must use portfolio_common.db governed factories: "
-        + ", ".join(violations)
+        "Database engines must use portfolio_common.db governed factories: " + ", ".join(violations)
     )
