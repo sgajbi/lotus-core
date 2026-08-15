@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from scripts.quality.bond_quote_authority_guard import REQUIRED_CONSUMERS, evaluate
 
 
@@ -13,10 +15,13 @@ def _write_required_consumers(root: Path) -> None:
             f"{name}={expression}"
             for name, expression in required_consumer.keyword_expressions.items()
         )
+        branch = "\n".join(
+            f"        {statement}" for statement in required_consumer.required_branch_statements
+        )
         path.write_text(
             f"def {required_consumer.function_name}():\n"
             f"    if requires_bond_quote_authority({arguments}):\n"
-            "        raise ValueError('missing authority')\n",
+            f"{branch}\n",
             encoding="utf-8",
         )
 
@@ -134,4 +139,75 @@ def test_guard_rejects_constant_authority_inputs(tmp_path: Path) -> None:
     assert evaluate(tmp_path) == (
         f"{relative.as_posix()}: {required_consumer.function_name} bond quote-authority "
         "branch must use the governed product, quantity, and cost evidence",
+    )
+
+
+@pytest.mark.parametrize("branch_statement", ["pass", "return successful_value"])
+def test_guard_rejects_non_failing_authority_branch(
+    tmp_path: Path,
+    branch_statement: str,
+) -> None:
+    _write_required_consumers(tmp_path)
+    relative = next(iter(REQUIRED_CONSUMERS))
+    required_consumer = REQUIRED_CONSUMERS[relative]
+    target = tmp_path / relative
+    arguments = ", ".join(
+        f"{name}={expression}" for name, expression in required_consumer.keyword_expressions.items()
+    )
+    target.write_text(
+        f"def {required_consumer.function_name}():\n"
+        f"    if requires_bond_quote_authority({arguments}):\n"
+        f"        {branch_statement}\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path) == (
+        f"{relative.as_posix()}: {required_consumer.function_name} bond quote-authority "
+        "branch must produce the governed fail-closed outcome",
+    )
+
+
+def test_guard_rejects_inverted_authority_branch(tmp_path: Path) -> None:
+    _write_required_consumers(tmp_path)
+    relative = next(iter(REQUIRED_CONSUMERS))
+    required_consumer = REQUIRED_CONSUMERS[relative]
+    target = tmp_path / relative
+    arguments = ", ".join(
+        f"{name}={expression}" for name, expression in required_consumer.keyword_expressions.items()
+    )
+    target.write_text(
+        f"def {required_consumer.function_name}():\n"
+        f"    if not requires_bond_quote_authority({arguments}):\n"
+        "        return successful_value\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path) == (
+        f"{relative.as_posix()}: {required_consumer.function_name} must have exactly one "
+        "direct bond quote-authority fail-closed branch",
+    )
+
+
+def test_guard_rejects_authority_branch_in_nested_dead_function(tmp_path: Path) -> None:
+    _write_required_consumers(tmp_path)
+    relative = next(iter(REQUIRED_CONSUMERS))
+    required_consumer = REQUIRED_CONSUMERS[relative]
+    target = tmp_path / relative
+    arguments = ", ".join(
+        f"{name}={expression}" for name, expression in required_consumer.keyword_expressions.items()
+    )
+    branch = "\n".join(
+        f"            {statement}" for statement in required_consumer.required_branch_statements
+    )
+    target.write_text(
+        f"def {required_consumer.function_name}():\n"
+        "    def dead():\n"
+        f"        if requires_bond_quote_authority({arguments}):\n"
+        f"{branch}\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path) == (
+        f"{relative.as_posix()}: {required_consumer.function_name} must have exactly one "
+        "direct bond quote-authority fail-closed branch",
     )
