@@ -21,6 +21,7 @@ from portfolio_common.domain.security_audit import (
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
 )
+from portfolio_common.infrastructure_errors import InfrastructureAuditReadFailed
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -32,6 +33,7 @@ EVENT_IDS = (
     "50000000-0000-4000-8000-000000000002",
     "50000000-0000-4000-8000-000000000003",
     "50000000-0000-4000-8000-000000000004",
+    "zzzzzzzz-zzzz-4zzz-8zzz-zzzzzzzzzzzz",
 )
 
 
@@ -64,6 +66,17 @@ def _verified_event(*, event_id: str, tenant_id: str) -> SecurityAuditEvent:
         correlation_id="QCP-SECURITY-AUDIT-1",
         trace_id=None,
         policy_version="1.0.0",
+    )
+
+
+def _record(event: SecurityAuditEvent) -> EnterpriseSecurityAuditEvent:
+    return EnterpriseSecurityAuditEvent(
+        **{
+            field: getattr(event, field).value
+            if hasattr(getattr(event, field), "value")
+            else getattr(event, field)
+            for field in EnterpriseSecurityAuditEvent.__table__.columns.keys()
+        }
     )
 
 
@@ -133,6 +146,47 @@ async def test_postgresql_store_is_append_only_tenant_bound_and_keyset_stable() 
             await session.execute(
                 delete(EnterpriseSecurityAuditEvent).where(
                     EnterpriseSecurityAuditEvent.event_id.in_(EVENT_IDS)
+                )
+            )
+            await session.commit()
+        await engine.dispose()
+
+
+async def test_postgresql_store_fails_source_safely_for_db_valid_domain_invalid_row() -> None:
+    engine = create_async_engine(_async_database_url())
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    store = PostgresSecurityAuditStore(sessions)
+    tenant_id = "ISSUE954_CORRUPT_EVIDENCE"
+    record = _record(_verified_event(event_id=EVENT_IDS[0], tenant_id=tenant_id))
+    record.event_id = EVENT_IDS[4]
+
+    try:
+        async with sessions() as session:
+            await session.execute(
+                delete(EnterpriseSecurityAuditEvent).where(
+                    EnterpriseSecurityAuditEvent.event_id == EVENT_IDS[4]
+                )
+            )
+            session.add(record)
+            await session.commit()
+
+        with pytest.raises(InfrastructureAuditReadFailed) as exc_info:
+            await store.query(
+                SecurityAuditQuery(
+                    tenant_id=tenant_id,
+                    occurred_from=NOW - timedelta(minutes=1),
+                    occurred_to=NOW + timedelta(minutes=1),
+                    page_size=20,
+                )
+            )
+
+        assert str(exc_info.value) == "Audit evidence could not be read."
+        assert EVENT_IDS[4] not in str(exc_info.value.safe_diagnostics())
+    finally:
+        async with sessions() as session:
+            await session.execute(
+                delete(EnterpriseSecurityAuditEvent).where(
+                    EnterpriseSecurityAuditEvent.event_id == EVENT_IDS[4]
                 )
             )
             await session.commit()
