@@ -9,7 +9,10 @@ from portfolio_common.domain.security_audit import (
     SecurityAuditComponent,
     SecurityAuditDecision,
 )
-from portfolio_common.infrastructure_errors import DatabaseUnavailable
+from portfolio_common.infrastructure_errors import (
+    DatabaseUnavailable,
+    InfrastructureAuditReadFailed,
+)
 
 from ..application.security_audit_query import SecurityAuditQueryService
 from ..contracts.security_audit import (
@@ -142,7 +145,7 @@ async def list_security_audit_events(
             detail="The requested evidence window or cursor is outside governed bounds.",
             error_code="QCP_SECURITY_AUDIT_QUERY_INVALID",
         )
-    except DatabaseUnavailable:
+    except (DatabaseUnavailable, InfrastructureAuditReadFailed):
         raise_problem(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             title="Security-audit evidence unavailable",
