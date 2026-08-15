@@ -198,6 +198,76 @@ async def test_conversion_failure_rolls_trigger_deletion_back(
     assert jobs == []
 
 
+async def test_conversion_keeps_independent_securities_parallel(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    async_db_session.add_all(
+        [
+            InstrumentReprocessingState(
+                security_id="S-CONVERSION-LOCKED",
+                earliest_impacted_date=date(2025, 8, 1),
+                correlation_id="corr-locked",
+            ),
+            InstrumentReprocessingState(
+                security_id="S-CONVERSION-PARALLEL",
+                earliest_impacted_date=date(2025, 8, 2),
+                correlation_id="corr-parallel",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    first_trigger_claimed = asyncio.Event()
+    release_first_conversion = asyncio.Event()
+
+    class PausingJobRepository(ReprocessingJobRepository):
+        async def stage_reset_watermarks_job(self, *args, **kwargs):
+            first_trigger_claimed.set()
+            await release_first_conversion.wait()
+            return await super().stage_reset_watermarks_job(*args, **kwargs)
+
+    async def convert_locked_security() -> None:
+        async with session_factory() as session, session.begin():
+            repository = conversion_repository.InstrumentReprocessingConversionRepository(session)
+            repository._job_repository = PausingJobRepository(session)
+            await repository.convert_pending_triggers(batch_size=1)
+
+    first_conversion = asyncio.create_task(convert_locked_security())
+    await first_trigger_claimed.wait()
+
+    try:
+        async with session_factory() as parallel_session, parallel_session.begin():
+            parallel_result = await asyncio.wait_for(
+                conversion_repository.InstrumentReprocessingConversionRepository(
+                    parallel_session
+                ).convert_pending_triggers(batch_size=1),
+                timeout=2,
+            )
+
+        assert parallel_result.claimed_count == 1
+        assert parallel_result.created_count == 1
+    finally:
+        release_first_conversion.set()
+        await first_conversion
+
+    async with session_factory() as verification_session:
+        jobs = list(
+            (
+                await verification_session.scalars(
+                    select(ReprocessingJob)
+                    .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                    .order_by(ReprocessingJob.payload["security_id"].as_string())
+                )
+            ).all()
+        )
+
+    assert [job.payload["security_id"] for job in jobs] == [
+        "S-CONVERSION-LOCKED",
+        "S-CONVERSION-PARALLEL",
+    ]
+
+
 async def test_conversion_coalesces_earlier_trigger_into_one_pending_job(
     clean_db, async_db_session: AsyncSession
 ) -> None:
