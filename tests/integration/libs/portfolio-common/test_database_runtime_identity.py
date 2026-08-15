@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
-from portfolio_common.database_runtime_identity import (
-    async_database_connect_args,
-    sync_database_connect_args,
+from portfolio_common.database_runtime_profile import (
+    DATABASE_IDLE_TRANSACTION_TIMEOUT_MS_ENV,
+    DATABASE_MAX_OVERFLOW_ENV,
+    DATABASE_POOL_SIZE_ENV,
+    DATABASE_POOL_TIMEOUT_SECONDS_ENV,
+    DATABASE_STATEMENT_TIMEOUT_MS_ENV,
 )
-from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import create_async_engine
+from portfolio_common.db import create_async_database_engine, create_sync_database_engine
+from sqlalchemy import exc as sa_exc
+from sqlalchemy import text
+
+
+def _database_url(db_engine) -> str:
+    return db_engine.url.render_as_string(hide_password=False)
 
 
 def test_sync_database_connection_publishes_governed_application_name(
@@ -16,9 +26,9 @@ def test_sync_database_connection_publishes_governed_application_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SERVICE_NAME", "query-service")
-    engine = create_engine(
-        db_engine.url,
-        connect_args=sync_database_connect_args(),
+    engine = create_sync_database_engine(
+        runtime_identity="query-service",
+        database_url=_database_url(db_engine),
     )
     try:
         with engine.connect() as connection:
@@ -35,10 +45,9 @@ async def test_async_database_connection_publishes_governed_application_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SERVICE_NAME", "portfolio-derived-state")
-    async_url = db_engine.url.set(drivername="postgresql+asyncpg")
-    engine = create_async_engine(
-        async_url,
-        connect_args=async_database_connect_args(),
+    engine = create_async_database_engine(
+        runtime_identity="portfolio-derived-state",
+        database_url=_database_url(db_engine),
     )
     try:
         async with engine.connect() as connection:
@@ -49,3 +58,90 @@ async def test_async_database_connection_publishes_governed_application_name(
         await engine.dispose()
 
     assert application_name == "portfolio-derived-state"
+
+
+def test_sync_statement_timeout_cancels_and_connection_recovers(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_STATEMENT_TIMEOUT_MS_ENV, "100")
+    engine = create_sync_database_engine(
+        runtime_identity="query-service",
+        database_url=_database_url(db_engine),
+    )
+    try:
+        with engine.connect() as connection:
+            assert connection.scalar(text("SHOW statement_timeout")) == "100ms"
+            with pytest.raises(sa_exc.DBAPIError):
+                connection.execute(text("SELECT pg_sleep(0.25)"))
+            connection.rollback()
+            assert connection.scalar(text("SELECT 1")) == 1
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_async_statement_timeout_cancels_and_connection_recovers(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_STATEMENT_TIMEOUT_MS_ENV, "100")
+    engine = create_async_database_engine(
+        runtime_identity="portfolio-derived-state",
+        database_url=_database_url(db_engine),
+    )
+    try:
+        async with engine.connect() as connection:
+            assert await connection.scalar(text("SHOW statement_timeout")) == "100ms"
+            with pytest.raises(sa_exc.DBAPIError):
+                await connection.execute(text("SELECT pg_sleep(0.25)"))
+            await connection.rollback()
+            assert await connection.scalar(text("SELECT 1")) == 1
+    finally:
+        await engine.dispose()
+
+
+def test_idle_transaction_timeout_discards_dead_connection_and_recovers(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_IDLE_TRANSACTION_TIMEOUT_MS_ENV, "1000")
+    engine = create_sync_database_engine(
+        runtime_identity="query-service",
+        database_url=_database_url(db_engine),
+    )
+    try:
+        with pytest.raises(sa_exc.DBAPIError):
+            with engine.connect() as connection:
+                assert connection.scalar(text("SHOW idle_in_transaction_session_timeout")) == "1s"
+                connection.execute(text("SELECT 1"))
+                time.sleep(1.25)
+                connection.execute(text("SELECT 1"))
+
+        with engine.connect() as recovered:
+            assert recovered.scalar(text("SELECT 1")) == 1
+    finally:
+        engine.dispose()
+
+
+def test_pool_acquisition_timeout_is_bounded(
+    db_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(DATABASE_POOL_SIZE_ENV, "1")
+    monkeypatch.setenv(DATABASE_MAX_OVERFLOW_ENV, "0")
+    monkeypatch.setenv(DATABASE_POOL_TIMEOUT_SECONDS_ENV, "1")
+    engine = create_sync_database_engine(
+        runtime_identity="query-service",
+        database_url=_database_url(db_engine),
+    )
+    started = time.monotonic()
+    try:
+        with engine.connect():
+            with pytest.raises(sa_exc.TimeoutError):
+                engine.connect()
+    finally:
+        engine.dispose()
+
+    elapsed = time.monotonic() - started
+    assert 0.8 <= elapsed <= 3.0
