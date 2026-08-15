@@ -61,6 +61,16 @@ async def _wait_for_backend_lock(
     raise AssertionError(f"backend {backend_pid} did not enter a lock wait")
 
 
+async def _await_task_with_cleanup(task: asyncio.Task[None], *, timeout: float = 5) -> None:
+    """Bound a spawned race task and always reap it after cancellation."""
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+    except TimeoutError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+
+
 async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_locked(
     clean_db, async_db_session: AsyncSession
 ) -> None:
@@ -124,10 +134,9 @@ async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_loc
             await updater_session.commit()
     finally:
         release_conversion.set()
-        if not conversion_task.done():
-            await conversion_task
-        if updater_task is not None and not updater_task.done():
-            await updater_task
+        await _await_task_with_cleanup(conversion_task)
+        if updater_task is not None:
+            await _await_task_with_cleanup(updater_task)
 
     async with session_factory() as conversion_session, conversion_session.begin():
         await _convert_pending_triggers(conversion_session)
@@ -258,7 +267,7 @@ async def test_conversion_keeps_independent_securities_parallel(
         assert parallel_result.created_count == 1
     finally:
         release_first_conversion.set()
-        await first_conversion
+        await _await_task_with_cleanup(first_conversion)
 
     async with session_factory() as verification_session:
         jobs = list(
