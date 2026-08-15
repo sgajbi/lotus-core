@@ -152,7 +152,7 @@ async def test_control_plane_enterprise_middleware_denies_read_without_headers_w
     assert response.status_code == 403
     assert (
         audit.call_args.kwargs["action"]
-        == "DENY GET /integration/portfolios/PB1/analytics/reference"
+        == "DENY GET /integration/portfolios/{portfolio_id}/analytics/reference"
     )
     assert audit.call_args.kwargs["metadata"]["reason"].startswith("missing_headers:")
 
@@ -189,7 +189,7 @@ async def test_control_plane_enterprise_middleware_emits_read_audit_when_enabled
 
     assert response.status_code == 200
     assert audit.call_args.kwargs["action"] == (
-        "GET /integration/portfolios/PB1/analytics/reference"
+        "GET /integration/portfolios/{portfolio_id}/analytics/reference"
     )
     assert audit.call_args.kwargs["metadata"] == {
         "status_code": 200,
