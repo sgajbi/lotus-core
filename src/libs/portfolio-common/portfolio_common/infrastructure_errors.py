@@ -127,3 +127,22 @@ class InfrastructureAuditWriteFailed(InfrastructureError):
             retryable=True,
             safe_context=safe_context or {},
         )
+
+
+class InfrastructureAuditReadFailed(InfrastructureError):
+    """Persisted audit evidence could not be rehydrated into its domain contract."""
+
+    def __init__(
+        self,
+        *,
+        message: str = "Audit evidence could not be read.",
+        reason_code: str = "audit_evidence_read_failed",
+        safe_context: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            reason_code=reason_code,
+            dependency="database",
+            retryable=False,
+            safe_context=safe_context or {},
+        )
