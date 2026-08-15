@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1693 lossless instrument trigger conversion (2026-08-15): issue #488 retained an unproved
+claim-to-job race even though trigger UPSERT, scheduler transaction, and pending-job uniqueness
+were individually hardened. `InstrumentReprocessingConversionRepository` now owns the bounded
+claim/delete/stage unit of work and returns exact created/coalesced-pending outcomes. Deterministic
+PostgreSQL tests prove an earlier concurrent update is retained, staging failure rolls back trigger
+deletion, pending work converges to the earliest date, processing work remains immutable with a
+durable follow-up generation, and independent securities remain parallel under `SKIP LOCKED`.
+Bounded telemetry and dashboard evidence expose conversion outcomes without business identifiers.
+Evidence and compatibility details:
+[CR-1693-LOSSLESS-INSTRUMENT-TRIGGER-CONVERSION.md](./codebase-reviews/CR-1693-LOSSLESS-INSTRUMENT-TRIGGER-CONVERSION.md).
+
 CR-1692 source-safe security-audit rehydration (2026-08-15): issue #954 found that strict domain
 rehydration ran outside the PostgreSQL adapter's typed failure boundary, so database-valid but
 domain-invalid evidence could escape as `ValueError` and be mislabeled as caller-invalid 422.

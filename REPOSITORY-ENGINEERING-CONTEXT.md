@@ -1950,9 +1950,13 @@ Most relevant current governance:
      `ValuationWatermarkAdvancer` now owns latest-date input loading, lagging and terminal
      reprocessing reads, first-open-date support lookups, active reprocessing gauges, terminal
      normalization, contiguous snapshot lookup, epoch-fenced watermark update construction, and
-     stale-skip warnings/metrics. `InstrumentReprocessingCoordinator` now owns pending trigger
-     metrics, bounded instrument trigger claiming, durable `RESET_WATERMARKS` replay-job creation,
-     trigger correlation propagation, and trigger consume logging. Keep publisher/Kafka flush
+     stale-skip warnings/metrics. `InstrumentReprocessingCoordinator` owns pending-trigger metrics
+     and delegates trigger conversion to `InstrumentReprocessingConversionRepository`, which owns
+     the atomic claim/delete plus durable `RESET_WATERMARKS` staging unit of work inside the
+     scheduler transaction. Pending reset jobs coalesce to the earliest impacted date; processing
+     jobs remain immutable and a concurrent earlier update becomes a durable pending generation.
+     Created and coalesced-pending conversion counts use bounded metrics without business IDs.
+     Keep publisher/Kafka flush
      logic, backfill planning, watermark policy, and instrument trigger coordination out of
      `ValuationScheduler`. `ValuationStaleJobResetter` owns expired valuation-claim recovery with
      the scheduler-configured maximum-attempt policy. `ValuationDispatchCoordinator`
