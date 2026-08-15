@@ -1,5 +1,10 @@
 # CR-1634: Explicit Valuation Policy Ownership
 
+> Closure update (2026-08-15): the remaining magnitude-based bond quote fallback is deleted and
+> both production consumers now require explicit authority or fail closed. Current evidence is in
+> [CR-1691](./CR-1691-EXPLICIT-BOND-QUOTE-AUTHORITY-CUTOVER.md); the historical sequence below is
+> retained to preserve review provenance.
+
 ## Objective
 
 Replace implicit position-valuation scaling with an explicit, framework-independent policy contract
