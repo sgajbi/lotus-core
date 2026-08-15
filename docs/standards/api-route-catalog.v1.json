@@ -9127,6 +9127,59 @@
     {
       "service_app": "query_control_plane_service",
       "method": "GET",
+      "path": "/support/security-audit/events",
+      "route_key": "GET /support/security-audit/events",
+      "operation_id": "list_security_audit_events_support_security_audit_events_get",
+      "summary": "List tenant-bound durable access-decision evidence",
+      "tags": [
+        "Security Audit Support"
+      ],
+      "route_family": "Control-Plane And Policy",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_control_plane_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "SecurityAuditPageResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [
+        "page_size",
+        "cursor_occurred_at",
+        "cursor_event_id"
+      ],
+      "filtering": [
+        "occurred_from",
+        "occurred_to"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-workbench",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_control_plane_service",
+      "method": "GET",
       "path": "/version",
       "route_key": "GET /version",
       "operation_id": "version_metadata_version_get",

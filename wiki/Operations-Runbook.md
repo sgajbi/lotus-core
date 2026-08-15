@@ -18,6 +18,19 @@ Guarded incident IDs: `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`, 
 `valuation-aggregation-lag`, `stale-source-data`, `reconciliation-failure`, `readiness-failure`,
 `database-connectivity`, `kafka-connectivity`, and `security-audit-denial-spikes`.
 
+## Durable Enterprise Access Evidence
+
+Promoted profiles persist one typed access decision before protected work across ingestion, query,
+query control plane, financial reconciliation, and event replay. Audit write failure returns
+`503 security_audit_unavailable`; local/development/test profiles remain explicitly log-only.
+
+Use `GET /support/security-audit/events` with the `core.security_audit.read` capability, an inclusive
+UTC `occurred_from`/`occurred_to` window of at most 31 days, and pages of at most 200. Tenant scope
+comes only from the verified signed request context. Continuations require both cursor fields.
+Responses contain safe route templates and typed identity posture, not request bodies, headers,
+queries, concrete URLs, secrets, arbitrary metadata, or raw exceptions. Alerting remains #501 and
+retention/purge/legal-hold behavior remains #708.
+
 ## Useful commands
 
 ```bash

@@ -35,11 +35,28 @@ async def list_security_audit_events(
     request: Request,
     occurred_from: datetime = Query(description="Inclusive UTC lower time boundary."),
     occurred_to: datetime = Query(description="Inclusive UTC upper time boundary."),
-    page_size: int = Query(default=100, ge=1, le=200),
-    cursor_occurred_at: datetime | None = Query(default=None),
-    cursor_event_id: str | None = Query(default=None),
-    component: SecurityAuditComponent | None = Query(default=None),
-    decision: SecurityAuditDecision | None = Query(default=None),
+    page_size: int = Query(
+        default=100,
+        ge=1,
+        le=200,
+        description="Maximum evidence records returned in this page.",
+    ),
+    cursor_occurred_at: datetime | None = Query(
+        default=None,
+        description="Prior page's UTC time cursor; requires cursor_event_id.",
+    ),
+    cursor_event_id: str | None = Query(
+        default=None,
+        description="Prior page's UUID tie-break cursor; requires cursor_occurred_at.",
+    ),
+    component: SecurityAuditComponent | None = Query(
+        default=None,
+        description="Optional governed Core component filter.",
+    ),
+    decision: SecurityAuditDecision | None = Query(
+        default=None,
+        description="Optional ALLOW or DENY decision filter.",
+    ),
     service: SecurityAuditQueryService = Depends(get_security_audit_query_service),
 ) -> SecurityAuditPageResponse:
     tenant_id = getattr(request.state, "enterprise_verified_tenant_id", None)
