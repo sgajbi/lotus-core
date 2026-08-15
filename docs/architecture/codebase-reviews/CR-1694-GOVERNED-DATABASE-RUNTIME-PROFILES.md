@@ -19,7 +19,9 @@ server-timeout settings. Every allowlisted runtime identity maps to one bounded 
 profile deliberately preserves measured behavior: QueuePool size 5, overflow 10, acquisition 30
 seconds, recycle disabled, and PostgreSQL statement and idle-in-transaction timeouts disabled.
 Connection establishment is explicitly bounded at 60 seconds for both psycopg and asyncpg,
-matching the former asyncpg default while removing libpq's unbounded wait.
+matching the former asyncpg default while removing libpq's unbounded wait. Overrides have a
+two-second minimum because libpq rounds a one-second value to two seconds; this keeps the accepted
+configuration semantics equivalent across drivers.
 
 Environment overrides are integer-only and bounded. Combined per-process pool capacity cannot
 exceed 32. `NullPool` safely ignores and never emits ambient QueuePool settings; governed engine
