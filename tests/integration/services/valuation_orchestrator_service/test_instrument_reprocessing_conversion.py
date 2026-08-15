@@ -27,11 +27,13 @@ from src.services.valuation_orchestrator_service.app.repositories import (
 pytestmark = pytest.mark.asyncio
 
 
-async def _convert_pending_triggers(session: AsyncSession) -> None:
+async def _convert_pending_triggers(
+    session: AsyncSession,
+) -> conversion_repository.InstrumentTriggerConversionResult:
     coordinator = instrument_reprocessing_coordinator.InstrumentReprocessingCoordinator(
         batch_size=25
     )
-    await coordinator.process_instrument_level_triggers(
+    return await coordinator.process_instrument_level_triggers(
         conversion_repository=conversion_repository.InstrumentReprocessingConversionRepository(
             session
         ),
@@ -272,6 +274,7 @@ async def test_conversion_coalesces_earlier_trigger_into_one_pending_job(
     clean_db, async_db_session: AsyncSession
 ) -> None:
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    conversion_results: list[conversion_repository.InstrumentTriggerConversionResult] = []
 
     for impacted_date, correlation_id in (
         (date(2025, 8, 10), "corr-later"),
@@ -286,7 +289,7 @@ async def test_conversion_coalesces_earlier_trigger_into_one_pending_job(
                 correlation_id=correlation_id,
             )
         async with session_factory() as session, session.begin():
-            await _convert_pending_triggers(session)
+            conversion_results.append(await _convert_pending_triggers(session))
 
     async with session_factory() as verification_session:
         jobs = list(
@@ -305,6 +308,8 @@ async def test_conversion_coalesces_earlier_trigger_into_one_pending_job(
     assert jobs[0].status == "PENDING"
     assert jobs[0].payload["earliest_impacted_date"] == "2025-08-04"
     assert jobs[0].correlation_id == "corr-earlier"
+    assert [result.created_count for result in conversion_results] == [1, 0]
+    assert [result.coalesced_pending_count for result in conversion_results] == [0, 1]
 
 
 async def test_conversion_preserves_follow_up_generation_after_job_is_processing(
