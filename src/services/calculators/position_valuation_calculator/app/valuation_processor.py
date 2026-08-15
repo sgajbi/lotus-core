@@ -33,8 +33,8 @@ from portfolio_common.domain.valuation import (
     ValuationSnapshotIdentity,
     build_authoritative_valuation_receipt,
     build_legacy_valuation_receipt,
-    resolve_optional_valuation_book_scope,
     requires_bond_quote_authority,
+    resolve_optional_valuation_book_scope,
 )
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
