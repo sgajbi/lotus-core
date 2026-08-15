@@ -182,7 +182,7 @@ async def test_query_returns_terminal_page_without_cursor() -> None:
     [
         ("event_id", "not-a-canonical-uuid-but-still-36-char"),
         ("component", "secret-invalid-component"),
-        ("policy_version", " "),
+        ("policy_version", "secret-invalid-policy-version "),
     ],
 )
 async def test_query_maps_persisted_event_rehydration_failure_source_safely(
