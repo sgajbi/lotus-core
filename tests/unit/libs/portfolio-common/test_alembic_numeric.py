@@ -118,6 +118,10 @@ def test_alembic_environment_wires_renderer_for_online_migrations(
     monkeypatch.setattr(sqlalchemy, "engine_from_config", engine_from_config)
     monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
     monkeypatch.setenv("DATABASE_URL", "postgresql://lotus:secret@postgres/lotus")
+    monkeypatch.setenv("LOTUS_CORE_DB_POOL_SIZE", "5")
+    monkeypatch.setenv("LOTUS_CORE_DB_MAX_OVERFLOW", "10")
+    monkeypatch.setenv("LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS", "30")
+    monkeypatch.setenv("LOTUS_CORE_DB_POOL_RECYCLE_SECONDS", "-1")
 
     runpy.run_path(str(ALEMBIC_ENV))
 

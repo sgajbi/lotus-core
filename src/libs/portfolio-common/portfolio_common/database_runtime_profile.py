@@ -50,9 +50,9 @@ _HTTP_IDENTITIES = {
     "query-service",
     "query-control-plane-service",
     "event-replay-service",
-    "financial-reconciliation-service",
 }
 _STREAM_IDENTITIES = {
+    "financial-reconciliation-service",
     "persistence-service",
     "portfolio-transaction-processing",
     "position-valuation-calculator",
@@ -78,15 +78,6 @@ DATABASE_RUNTIME_COHORT_BY_IDENTITY = {
     )
     for identity in DATABASE_RUNTIME_IDENTITIES
 }
-
-_QUEUE_ONLY_ENVIRONMENTS = frozenset(
-    {
-        DATABASE_POOL_SIZE_ENV,
-        DATABASE_MAX_OVERFLOW_ENV,
-        DATABASE_POOL_TIMEOUT_SECONDS_ENV,
-        DATABASE_POOL_RECYCLE_SECONDS_ENV,
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,21 +133,6 @@ def database_runtime_profile(
     """Load and validate the non-secret database profile before engine creation."""
 
     identity = database_runtime_identity(explicit_identity=explicit_identity)
-    if pool_mode is DatabasePoolMode.NULL:
-        configured_queue_setting = next(
-            (
-                name
-                for name in sorted(_QUEUE_ONLY_ENVIRONMENTS)
-                if env_optional_str(name) is not None
-            ),
-            None,
-        )
-        if configured_queue_setting is not None:
-            raise DatabaseRuntimeProfileError(
-                setting=configured_queue_setting,
-                reason="QueuePool setting is incompatible with NullPool",
-            )
-
     pool_size = (
         _bounded_integer(DATABASE_POOL_SIZE_ENV, 5, minimum=1, maximum=32)
         if pool_mode is DatabasePoolMode.QUEUE

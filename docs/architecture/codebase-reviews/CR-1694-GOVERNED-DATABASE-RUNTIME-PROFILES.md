@@ -1,7 +1,7 @@
 # CR-1694: Governed database runtime profiles
 
-Date: 2026-08-15  
-Issue: #502  
+Date: 2026-08-15
+Issue: #502
 Status: in progress
 
 ## Finding
@@ -22,8 +22,9 @@ Connection establishment is explicitly bounded at 60 seconds for both psycopg an
 matching the former asyncpg default while removing libpq's unbounded wait.
 
 Environment overrides are integer-only and bounded. Combined per-process pool capacity cannot
-exceed 32. Queue-only settings are rejected for `NullPool`; governed engine arguments cannot be
-overridden through standalone factory keyword arguments. Alembic uses the same source authority
+exceed 32. `NullPool` safely ignores and never emits ambient QueuePool settings; governed engine
+arguments and connection-creator hooks cannot be overridden through standalone factory keyword
+arguments. Alembic uses the same source authority
 with the explicit `migration-runner` identity and `NullPool`. The unreferenced, hard-coded
 `tools/db_reset_head.py` compatibility tool was removed.
 

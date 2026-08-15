@@ -25,6 +25,17 @@ from sqlalchemy.pool import NullPool
 
 def test_every_runtime_identity_has_exactly_one_owned_profile() -> None:
     assert set(DATABASE_RUNTIME_COHORT_BY_IDENTITY) == set(DATABASE_RUNTIME_IDENTITIES)
+    assert DATABASE_RUNTIME_COHORT_BY_IDENTITY["query-service"].value == "online-http"
+    assert (
+        DATABASE_RUNTIME_COHORT_BY_IDENTITY["financial-reconciliation-service"].value
+        == "online-stream"
+    )
+    assert DATABASE_RUNTIME_COHORT_BY_IDENTITY["valuation-orchestrator"].value == (
+        "online-scheduler"
+    )
+    assert DATABASE_RUNTIME_COHORT_BY_IDENTITY["migration-runner"].value == ("migration-nullpool")
+    assert DATABASE_RUNTIME_COHORT_BY_IDENTITY["lotus-core-test"].value == "test-nullpool"
+    assert DATABASE_RUNTIME_COHORT_BY_IDENTITY["offline-integrity-auditor"].value == "operator"
 
 
 def test_queue_profile_makes_existing_effective_defaults_explicit(monkeypatch) -> None:
@@ -130,14 +141,22 @@ def test_nullpool_omits_queue_options(monkeypatch) -> None:
     }
 
 
-def test_nullpool_rejects_explicit_queue_setting(monkeypatch) -> None:
-    monkeypatch.setenv(DATABASE_POOL_SIZE_ENV, "5")
+def test_nullpool_ignores_ambient_queue_settings(monkeypatch) -> None:
+    monkeypatch.setenv(DATABASE_POOL_SIZE_ENV, "31")
+    monkeypatch.setenv(DATABASE_MAX_OVERFLOW_ENV, "31")
+    monkeypatch.setenv(DATABASE_POOL_TIMEOUT_SECONDS_ENV, "299")
+    monkeypatch.setenv(DATABASE_POOL_RECYCLE_SECONDS_ENV, "900")
 
-    with pytest.raises(DatabaseRuntimeProfileError, match="incompatible with NullPool"):
-        database_runtime_profile(
-            explicit_identity="migration-runner",
-            pool_mode=DatabasePoolMode.NULL,
-        )
+    profile = database_runtime_profile(
+        explicit_identity="migration-runner",
+        pool_mode=DatabasePoolMode.NULL,
+    )
+
+    assert profile.pool_size is None
+    assert profile.max_overflow is None
+    assert profile.pool_timeout_seconds is None
+    assert profile.pool_recycle_seconds is None
+    assert set(sync_database_engine_options(profile)) == {"connect_args", "poolclass"}
 
 
 def test_startup_evidence_contains_only_bounded_non_secret_fields(monkeypatch, caplog) -> None:
