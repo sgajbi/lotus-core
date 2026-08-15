@@ -72,7 +72,10 @@ Current repository posture:
     `ENTERPRISE_AUDIT_READS=false`, and an unset environment remains schema-tooling compatible while
     still forcing durable reads at runtime. `security_audit_delivery_total{service,outcome}`
     publishes the bounded delivery signal. Alerting stays with #501 and retention/purge/legal hold
-    with #708,
+    with #708. Security-audit query construction errors are caller-attributable 422 responses;
+    persisted rows that fail strict domain rehydration must become source-safe
+    `InfrastructureAuditReadFailed` at the PostgreSQL adapter boundary and map to 503 without row
+    identities, values, partial pages, or raw exceptions,
 14. RFC-0083 Slice 10 now defines event family governance, schema governance requirements, operator supportability surface posture, operator-only security profile bindings for support evidence, a guarded runtime outbox event/type topic alignment check, direct Kafka publish-topic governance for source-ingestion, recovery, and job-command topics, explicit shared event-model envelope tolerance, and centralized outbox payload envelope metadata for `event_type`, `schema_version`, `correlation_id`, and `traceparent`,
 15. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
 16. RFC status governance now has a repository-wide machine-readable ledger at
@@ -1399,7 +1402,9 @@ Most relevant current governance:
     Kafka infrastructure errors on publish back-pressure, terminal publish failure, and uncertain
     delivery confirmation while preserving existing `EventPublishResult` status fields. Replay
     audit persistence continues to fail closed with `InfrastructureAuditWriteFailed`, now backed by
-    the shared taxonomy and source-safe diagnostics. Future repository, downstream HTTP, cache,
+    the shared taxonomy and source-safe diagnostics. Persisted security-audit rehydration uses
+    non-retryable `InfrastructureAuditReadFailed`; do not let evidence-integrity failures escape as
+    raw `ValueError` or become caller validation. Future repository, downstream HTTP, cache,
     storage, and configuration adapter slices should extend this taxonomy instead of raising raw
     `RuntimeError` or leaking concrete library exception classes into application workflows.
 68. Application services with governed port boundaries must not reintroduce direct infrastructure
