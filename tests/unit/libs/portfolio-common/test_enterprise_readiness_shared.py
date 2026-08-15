@@ -1,10 +1,16 @@
 from dataclasses import dataclass
 from time import time
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import Request
 from fastapi.responses import Response
+from portfolio_common.domain.security_audit import (
+    SecurityAuditComponent,
+    SecurityAuditDecision,
+    SecurityAuditIdentityPosture,
+    SecurityAuditReason,
+)
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
     _enterprise_auth_context_signature,
@@ -13,6 +19,7 @@ from portfolio_common.enterprise_readiness import (
     create_default_enterprise_readiness_runtime,
     redact_sensitive,
 )
+from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFailed
 
 
 @dataclass(frozen=True)
@@ -685,7 +692,7 @@ async def test_shared_enterprise_middleware_adds_policy_header_and_audits_write(
     assert response.status_code == 202
     assert response.headers["X-Enterprise-Policy-Version"] == "policy-v2"
     audit_emitter.assert_called_once_with(
-        action="POST /api/v1/integration",
+        action="POST /unclassified",
         actor_id="advisor-1",
         tenant_id="tenant-1",
         role="portfolio_ops",
@@ -757,7 +764,7 @@ async def test_shared_enterprise_middleware_audits_reads_when_enabled() -> None:
 
     assert response.status_code == 200
     audit_emitter.assert_called_once_with(
-        action="GET /api/v1/portfolios",
+        action="GET /unclassified",
         actor_id="advisor-1",
         tenant_id="tenant-1",
         role="portfolio_viewer",
@@ -794,5 +801,215 @@ async def test_shared_enterprise_middleware_denies_read_without_headers_when_ena
 
     assert response.status_code == 403
     audit_emitter.assert_called_once()
-    assert audit_emitter.call_args.kwargs["action"] == "DENY GET /api/v1/portfolios"
+    assert audit_emitter.call_args.kwargs["action"] == "DENY GET /unclassified"
     assert audit_emitter.call_args.kwargs["metadata"]["reason"].startswith("missing_headers:")
+
+
+@pytest.mark.asyncio
+async def test_durable_allow_is_written_before_protected_route_with_verified_identity() -> None:
+    runtime = _runtime(
+        authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"POST /portfolios/{portfolio_id}": "portfolio.write"}
+        ),
+    )
+    store = Mock()
+    ordering: list[str] = []
+
+    async def _append(event) -> None:
+        ordering.append("audit")
+        store.event = event
+
+    store.append = AsyncMock(side_effect=_append)
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    headers = _signed_enterprise_headers("portfolio.write")
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/portfolios/PB-001",
+            "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+            "query_string": b"client_email=sensitive@example.com",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    async def _call_next(_: Request) -> Response:
+        ordering.append("route")
+        return Response(status_code=200)
+
+    response = await middleware(request, _call_next)
+
+    assert response.status_code == 200
+    assert ordering == ["audit", "route"]
+    event = store.event
+    assert event.component is SecurityAuditComponent.QUERY
+    assert event.route_template == "/portfolios/{portfolio_id}"
+    assert event.decision is SecurityAuditDecision.ALLOW
+    assert event.reason is SecurityAuditReason.AUTHORIZED
+    assert event.required_capability == "portfolio.write"
+    assert event.identity_posture is SecurityAuditIdentityPosture.VERIFIED
+    assert (event.service_identity, event.actor_id, event.tenant_id, event.role) == (
+        "lotus-gateway",
+        "a1",
+        "t1",
+        "ops",
+    )
+    assert "PB-001" not in repr(event)
+    assert "sensitive@example.com" not in repr(event)
+
+
+@pytest.mark.asyncio
+async def test_durable_denial_does_not_fabricate_unverified_identity() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        require_capability_rules=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"GET /portfolios/{portfolio_id}": "portfolio.read"}
+        ),
+    )
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/portfolios/PB-SECRET",
+            "headers": [(b"x-actor-id", b"unverified-advisor")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=200))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 403
+    call_next.assert_not_awaited()
+    event = store.append.await_args.args[0]
+    assert event.route_template == "/portfolios/{portfolio_id}"
+    assert event.decision is SecurityAuditDecision.DENY
+    assert event.reason is SecurityAuditReason.AUTHORIZATION_POLICY_DENIED
+    assert event.identity_posture is SecurityAuditIdentityPosture.UNVERIFIED
+    assert (event.service_identity, event.actor_id, event.tenant_id, event.role) == (
+        None,
+        None,
+        None,
+        None,
+    )
+    assert "PB-SECRET" not in repr(event)
+    assert "unverified-advisor" not in repr(event)
+
+
+@pytest.mark.asyncio
+async def test_production_audit_failure_returns_safe_503_before_route_execution() -> None:
+    store = Mock()
+    store.append = AsyncMock(side_effect=InfrastructureAuditWriteFailed())
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.INGESTION,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/ingest/transactions/secret-id",
+            "headers": [(b"content-length", b"0")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=201))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 503
+    assert response.body == b'{"detail":"security_audit_unavailable"}'
+    call_next.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_local_audit_failure_can_continue_without_fabricating_evidence() -> None:
+    store = Mock()
+    store.append = AsyncMock(side_effect=InfrastructureAuditWriteFailed())
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.INGESTION,
+        audit_store=store,
+        audit_failure_is_fatal=False,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/ingest/transactions/secret-id",
+            "headers": [(b"content-length", b"0")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=201))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 201
+    call_next.assert_awaited_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_payload_limit_denial_is_durable_before_rejection() -> None:
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(max_payload_bytes=10),
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.INGESTION,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/ingest/transactions",
+            "headers": [(b"content-length", b"11")],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=201))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 413
+    call_next.assert_not_awaited()
+    event = store.append.await_args.args[0]
+    assert event.decision is SecurityAuditDecision.DENY
+    assert event.reason is SecurityAuditReason.PAYLOAD_TOO_LARGE

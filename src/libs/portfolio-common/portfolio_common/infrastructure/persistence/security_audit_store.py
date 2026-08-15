@@ -32,15 +32,18 @@ class PostgresSecurityAuditStore:
     """Append and query typed audit evidence without request payload material."""
 
     def __init__(self, session_factory: SessionFactory | None = None) -> None:
-        self._session_factory = session_factory or get_async_session_factory()
+        self._session_factory = session_factory
+
+    def _sessions(self) -> SessionFactory:
+        return self._session_factory or get_async_session_factory()
 
     async def append(self, event: SecurityAuditEvent) -> None:
-        session = self._session_factory()
+        session = self._sessions()()
         try:
             async with session:
                 session.add(_to_record(event))
                 await session.commit()
-        except SQLAlchemyError:
+        except (OSError, SQLAlchemyError):
             await _safe_rollback(session)
             raise InfrastructureAuditWriteFailed() from None
 
@@ -78,9 +81,9 @@ class PostgresSecurityAuditStore:
             )
 
         try:
-            async with self._session_factory() as session:
+            async with self._sessions()() as session:
                 records = list((await session.execute(statement)).scalars().all())
-        except SQLAlchemyError:
+        except (OSError, SQLAlchemyError):
             raise DatabaseUnavailable(
                 message="Security-audit evidence is unavailable.",
                 reason_code="security_audit_query_unavailable",
@@ -106,7 +109,7 @@ class PostgresSecurityAuditStore:
 async def _safe_rollback(session: AsyncSession) -> None:
     try:
         await session.rollback()
-    except SQLAlchemyError:
+    except (OSError, SQLAlchemyError):
         pass
 
 
