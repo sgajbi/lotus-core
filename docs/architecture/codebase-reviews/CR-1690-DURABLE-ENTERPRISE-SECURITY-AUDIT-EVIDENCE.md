@@ -27,6 +27,10 @@ the table and response contract.
 Audit persistence failure returns source-safe `503 security_audit_unavailable` before route
 execution in staging, UAT, pre-production, and production profiles. Explicit local, development,
 and test profiles retain log-only behavior so app-local work does not claim durable certification.
+`LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` cannot disable durable evidence or strict runtime
+validation outside those explicit local profiles. Lazy database/configuration failures are mapped
+to the same safe failure contract. Delivery attempts increment `security_audit_delivery_total`
+using only the bounded `service` and `outcome` labels.
 Legacy structured logs remain compatibility diagnostics and now use governed templates or
 `/unclassified`, not concrete paths.
 
@@ -35,6 +39,11 @@ verified signed request context; callers cannot supply a tenant query parameter.
 most 31 days and 200 records, use descending `(occurred_at, event_id)` keyset pagination, and map
 database failure to a source-safe 503. Unverified denial rows remain durable but cannot be assigned
 to a tenant without source authority.
+
+Incoming correlation values longer than 128 characters are omitted from durable lineage. Trace
+authority accepts only canonical W3C trace identifiers or a valid `traceparent`; malformed caller
+text is never persisted. Oversized signed authority fields cause an auditable unverified denial
+rather than an exception or truncated identity claim.
 
 ## Same-pattern review
 
@@ -50,7 +59,10 @@ permitted.
 - 100 shared middleware, adapter, and service-composition tests passed.
 - 103 domain, middleware, QCP router, and OpenAPI tests passed.
 - Real PostgreSQL migration advanced `c156b2c3d523` through `c158b2c3d525`; the adapter proof passed
-  append, tenant isolation, same-timestamp keyset pagination, authority absence, and cleanup.
+  four concurrent inserts, tenant isolation, same-timestamp keyset pagination, authority absence,
+  and cleanup.
+- Lazy runtime-configuration failures, a promoted-profile opt-out attempt, oversized signed
+  lineage, and delivered/failed low-cardinality metric outcomes have focused regression proofs.
 - Focused Ruff and MyPy checks passed for the touched runtime, application, and contract modules.
 - Full repository-native, protected PR, and exact-main evidence remain required before #500 closes.
 

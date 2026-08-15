@@ -67,7 +67,9 @@ Current repository posture:
     execution with a source-safe 503. Verified signed identity is retained, unverified authority
     remains absent, and QCP owns the `core.security_audit.read` tenant-bound 31-day/200-record
     keyset support query. Local/development/test profiles remain explicit log-only evidence;
-    alerting stays with #501 and retention/purge/legal hold with #708,
+    non-local profiles cannot use the legacy production-security-profile opt-out to disable the
+    store or strict validation, and `security_audit_delivery_total{service,outcome}` publishes the
+    bounded delivery signal. Alerting stays with #501 and retention/purge/legal hold with #708,
 14. RFC-0083 Slice 10 now defines event family governance, schema governance requirements, operator supportability surface posture, operator-only security profile bindings for support evidence, a guarded runtime outbox event/type topic alignment check, direct Kafka publish-topic governance for source-ingestion, recovery, and job-command topics, explicit shared event-model envelope tolerance, and centralized outbox payload envelope metadata for `event_type`, `schema_version`, `correlation_id`, and `traceparent`,
 15. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
 16. RFC status governance now has a repository-wide machine-readable ledger at
