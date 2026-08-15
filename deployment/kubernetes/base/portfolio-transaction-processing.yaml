@@ -78,6 +78,20 @@ spec:
                 secretKeyRef:
                   name: lotus-core-database
                   key: database-url
+            - name: LOTUS_CORE_DB_POOL_SIZE
+              value: "5"
+            - name: LOTUS_CORE_DB_MAX_OVERFLOW
+              value: "10"
+            - name: LOTUS_CORE_DB_POOL_TIMEOUT_SECONDS
+              value: "30"
+            - name: LOTUS_CORE_DB_POOL_RECYCLE_SECONDS
+              value: "-1"
+            - name: LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS
+              value: "60"
+            - name: LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS
+              value: "0"
+            - name: LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
+              value: "0"
             - name: KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
                 configMapKeyRef:
