@@ -36,3 +36,24 @@ def test_guard_requires_each_production_consumer_to_fail_closed(tmp_path: Path) 
     assert evaluate(tmp_path) == (
         f"{target.relative_to(tmp_path).as_posix()}: missing explicit bond quote-authority guard",
     )
+
+
+def test_guard_does_not_accept_authority_identifier_in_a_comment(tmp_path: Path) -> None:
+    _write_required_consumers(tmp_path)
+    target = tmp_path / next(iter(REQUIRED_CONSUMERS))
+    target.write_text("# requires_bond_quote_authority\nvalue = quantity * price\n")
+
+    assert evaluate(tmp_path) == (
+        f"{target.relative_to(tmp_path).as_posix()}: missing explicit bond quote-authority guard",
+    )
+
+
+def test_guard_requires_complete_authority_inputs(tmp_path: Path) -> None:
+    _write_required_consumers(tmp_path)
+    target = tmp_path / next(iter(REQUIRED_CONSUMERS))
+    target.write_text("requires_bond_quote_authority(product_type=kind)\n")
+
+    assert evaluate(tmp_path) == (
+        f"{target.relative_to(tmp_path).as_posix()}: bond quote-authority guard must receive "
+        "product_type and quantity",
+    )
