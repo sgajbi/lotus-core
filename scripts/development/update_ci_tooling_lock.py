@@ -188,34 +188,34 @@ def _compile_with_host_python(*, replay_lock: Path | None = None) -> str:
 
 def _compile_linux_in_exact_base(*, replay_lock: Path | None = None) -> str:
     temp_dir = Path(tempfile.mkdtemp(prefix="lotus-ci-tooling-linux-lock-"))
-    raw_lock = temp_dir / "ci-tooling.raw.txt"
-    _seed_replay_output(raw_lock, replay_lock)
-    root_mount = f"type=bind,source={REPO_ROOT.resolve()},target=/repo,readonly"
-    output_mount = f"type=bind,source={temp_dir.resolve()},target=/lock-output"
-    command = [
-        "docker",
-        "run",
-        "--rm",
-        "--platform",
-        "linux/amd64",
-        "--mount",
-        root_mount,
-        "--mount",
-        output_mount,
-        "--workdir",
-        "/repo",
-        LINUX_COMPILE_IMAGE,
-        "sh",
-        "-ec",
-        (
-            f"python -m pip install -q --disable-pip-version-check pip=={PIP_VERSION} "
-            f"pip-tools=={PIP_TOOLS_VERSION} && "
-            "python -m piptools compile --quiet --resolver=backtracking --strip-extras "
-            "--allow-unsafe --output-file=/lock-output/ci-tooling.raw.txt "
-            "requirements/ci-tooling.in"
-        ),
-    ]
     try:
+        raw_lock = temp_dir / "ci-tooling.raw.txt"
+        _seed_replay_output(raw_lock, replay_lock)
+        root_mount = f"type=bind,source={REPO_ROOT.resolve()},target=/repo,readonly"
+        output_mount = f"type=bind,source={temp_dir.resolve()},target=/lock-output"
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            "--platform",
+            "linux/amd64",
+            "--mount",
+            root_mount,
+            "--mount",
+            output_mount,
+            "--workdir",
+            "/repo",
+            LINUX_COMPILE_IMAGE,
+            "sh",
+            "-ec",
+            (
+                f"python -m pip install -q --disable-pip-version-check pip=={PIP_VERSION} "
+                f"pip-tools=={PIP_TOOLS_VERSION} && "
+                "python -m piptools compile --quiet --resolver=backtracking --strip-extras "
+                "--allow-unsafe --output-file=/lock-output/ci-tooling.raw.txt "
+                "requirements/ci-tooling.in"
+            ),
+        ]
         subprocess.run(command, check=True, capture_output=True, text=True)
         return raw_lock.read_text(encoding="utf-8")
     finally:

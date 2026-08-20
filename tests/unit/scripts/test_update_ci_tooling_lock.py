@@ -64,6 +64,20 @@ def test_replay_fails_closed_when_committed_lock_is_missing(tmp_path: Path) -> N
         lock._seed_replay_output(tmp_path / "output.txt", tmp_path / "missing.lock")
 
 
+def test_linux_replay_cleans_temporary_directory_when_seed_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    temp_dir = tmp_path / "linux-replay"
+    temp_dir.mkdir()
+    monkeypatch.setattr(lock.tempfile, "mkdtemp", lambda *, prefix: str(temp_dir))
+
+    with pytest.raises(lock.ToolingLockError, match="missing.lock is unavailable for replay"):
+        lock._compile_linux_in_exact_base(replay_lock=tmp_path / "missing.lock")
+
+    assert not temp_dir.exists()
+
+
 def test_windows_check_replays_committed_closure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
