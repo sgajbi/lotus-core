@@ -25,7 +25,8 @@ The health and progress of the reprocessing engine can be monitored via key Prom
 Valuation and reprocessing repositories split normalized caller-sized work into statements of no
 more than 1,000 rows and within the governed PostgreSQL bind budget. When one logical operation
 requires multiple statements, it emits one structured `database_statement_batch` event containing
-only `operation`, `item_count`, `chunk_count`, and `max_rows_per_statement`.
+bounded `operation`, `status`, and `reason_code` values plus `item_count`, `chunk_count`, and
+`max_rows_per_statement`.
 
 Use repeated multi-statement events to distinguish legitimate high-cardinality fan-out from a
 database parameter failure. Do not treat multiple statements as partial commits: all chunks remain

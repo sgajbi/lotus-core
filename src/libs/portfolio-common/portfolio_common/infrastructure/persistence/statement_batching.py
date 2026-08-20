@@ -87,8 +87,10 @@ def observe_multi_statement_batch(
     logger.info(
         "Bounded oversized repository operation across multiple statements.",
         extra={
-            "event": "database_statement_batch",
+            "event_name": "database_statement_batch",
             "operation": operation.value,
+            "status": "bounded",
+            "reason_code": "row_or_bind_budget",
             "item_count": item_count,
             "chunk_count": chunk_count,
             "max_rows_per_statement": chunk_size,

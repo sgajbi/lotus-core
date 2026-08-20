@@ -74,8 +74,10 @@ def test_multi_statement_batch_emits_one_bounded_identifier_free_event(caplog) -
 
     assert len(caplog.records) == 1
     record = caplog.records[0]
-    assert record.event == "database_statement_batch"
+    assert record.event_name == "database_statement_batch"
     assert record.operation == "position_state_bulk_update"
+    assert record.status == "bounded"
+    assert record.reason_code == "row_or_bind_budget"
     assert record.item_count == 1_001
     assert record.chunk_count == 2
     assert record.max_rows_per_statement == 1_000

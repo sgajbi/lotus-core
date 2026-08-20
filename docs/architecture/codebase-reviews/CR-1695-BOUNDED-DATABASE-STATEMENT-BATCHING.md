@@ -45,10 +45,11 @@ evidence that bounded statements are insufficient.
 
 ## Operability
 
-An oversized operation emits one structured `database_statement_batch` event with a governed
-`operation`, normalized item count, statement count, and maximum rows per statement. It is emitted
-once per logical operation, not once per chunk. Portfolio, security, job, claim, correlation, and
-other business identifiers are not fields or labels.
+An oversized operation emits one structured `database_statement_batch` event with governed
+`operation`, `status`, and `reason_code` values plus normalized item count, statement count, and
+maximum rows per statement. It is emitted once per logical operation, not once per chunk.
+Portfolio, security, job, claim, correlation, and other business identifiers are not fields or
+labels.
 
 ## Compatibility
 
