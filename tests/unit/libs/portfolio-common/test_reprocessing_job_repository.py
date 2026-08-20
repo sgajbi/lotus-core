@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -263,6 +263,60 @@ async def test_find_and_reset_stale_jobs_resets_processing_rows(
     assert "UPDATE reprocessing_jobs SET status=:status" in str(update_stmt)
     assert "reprocessing_jobs.status = :status_1" in str(update_stmt)
     assert "reprocessing_jobs.updated_at < :updated_at_1" in str(update_stmt)
+
+
+async def test_stale_reprocessing_recovery_bounds_selection_and_chunks_reset_updates(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    first_result = MagicMock(rowcount=1_000)
+    second_result = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [first_result, second_result]
+    stale_cutoff = datetime(2026, 8, 20, tzinfo=timezone.utc)
+
+    reset_count = await repository._reset_retryable_stale_jobs(
+        list(range(1_001, 0, -1)),
+        stale_cutoff,
+    )
+
+    assert reset_count == 1_001
+    assert mock_db_session.execute.await_count == 2
+    statement_lengths = [
+        len(call.args[0].compile().params["id_1"])
+        for call in mock_db_session.execute.await_args_list
+    ]
+    assert statement_lengths == [1_000, 1]
+    assert len(mock_db_session.execute.await_args_list[0].args[0].compile().params) == 4
+
+    select_result = MagicMock()
+    select_result.all.return_value = []
+    mock_db_session.reset_mock()
+    mock_db_session.execute.side_effect = None
+    mock_db_session.execute.return_value = select_result
+    await repository._find_stale_job_rows(stale_cutoff)
+    compiled_select = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "ORDER BY reprocessing_jobs.id ASC" in compiled_select
+    assert "LIMIT 1000" in compiled_select
+
+
+async def test_stale_reprocessing_recovery_logs_counts_without_identifier_collections(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock()
+
+    with patch("portfolio_common.reprocessing_job_repository.logger.warning") as warning:
+        await repository._mark_over_limit_stale_jobs_failed(
+            [3, 2, 2, 1],
+            datetime(2026, 8, 20, tzinfo=timezone.utc),
+            max_attempts=3,
+        )
+
+    extra = warning.call_args.kwargs["extra"]
+    assert extra["job_count"] == 3
+    assert "job_ids" not in extra
 
 
 async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
