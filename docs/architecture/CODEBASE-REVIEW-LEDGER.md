@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1687 deterministic tooling replay follow-through (2026-08-20): exact-main run `32387125286`
+failed minutes after an identical PR Windows replay passed because newly published compatible
+`stevedore==5.9.1` replaced reviewed `5.9.0`. Protected replay had been resolving unpinned
+transitives from mutable live package-index state, so byte identity could change without a
+repository change. Replay now seeds pip-tools from the committed platform lock; the explicit
+`make compile-ci-tooling-lock` update path still resolves fresh dependencies for review. Focused
+tests distinguish replay from update, both platform replays remain required, and no dependency or
+application/runtime contract changed. Evidence and superseded assumption:
+[CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md](./codebase-reviews/CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md#2026-08-20-deterministic-replay-authority-follow-through).
+
 CR-1687 cross-platform tooling-closure refresh (2026-08-20): scheduled Main Releasability runs
 failed closed after the Pygments transitive dependency selected by Pytest and Rich advanced from
 `2.20.0` to `2.21.0`. Issue #958 reproduced the same drift on Windows/amd64 and Linux/amd64,

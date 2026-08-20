@@ -157,8 +157,11 @@ Dependency consistency and vulnerability audit use one content-addressed environ
   Windows/amd64 locks;
 - Linux CI compilation executes inside the exact governed Python base image, while Windows local
   tooling uses the Windows closure so platform markers remain truthful; and
-- `make compile-ci-tooling-lock` regenerates the closures; committed locks are generated evidence,
-  never hand-edited inputs.
+- replay checks seed pip-tools' existing-output resolution from each committed platform lock, so
+  compatible releases published after review cannot silently move the closure between Feature, PR,
+  and Main runs; and
+- `make compile-ci-tooling-lock` deliberately resolves fresh closures for review; committed locks
+  remain generated authority and are never hand edited.
 
 This platform split is intentional. The runtime lock includes Linux `uvloop` and excludes
 Windows-only `colorama`; the Windows CI/build/test tooling closure carries Windows marker packages.

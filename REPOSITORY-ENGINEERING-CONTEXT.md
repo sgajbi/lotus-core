@@ -1171,9 +1171,12 @@ Most relevant current governance:
     separate `linux/amd64` and `windows/amd64` closures; Linux compilation runs in the exact pinned
     Python base image so Windows marker packages cannot contaminate CI. `ci-tooling.lock.txt` is the
     Linux CI authority and `ci-tooling-windows.lock.txt` is the local Windows authority. Bootstrap,
-    quality-tool dispatch, and dependency-health checks select by execution platform. Regenerate
-    both with `make compile-ci-tooling-lock`; do not hand-edit either lock or generate license/
-    supportability evidence from a shared global environment.
+    quality-tool dispatch, and dependency-health checks select by execution platform. Replay checks
+    seed pip-tools from the committed platform lock, so a newly published compatible transitive
+    release cannot change mainline truth between otherwise identical runs. Regenerate both with
+    `make compile-ci-tooling-lock`; that explicit update path resolves fresh authority for review.
+    Do not hand-edit either lock or generate license/supportability evidence from a shared global
+    environment.
     Dependency inventory provenance combines a reachable `origin/main` source baseline with exact
     governed lock/policy digests and distinguishes both from the exact execution SHA in the receipt.
     This avoids self-referential feature SHAs that the approved rebase merge rewrites. Fixed repository, issue,
