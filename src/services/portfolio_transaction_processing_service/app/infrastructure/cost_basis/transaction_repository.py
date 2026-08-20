@@ -30,7 +30,7 @@ from portfolio_common.utils import async_timed
 from sqlalchemy import delete, func, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, joinedload
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
@@ -160,13 +160,18 @@ def _booked_transaction_payload(
     return payload
 
 
-def _to_persisted_booked_transaction(transaction: DBTransaction) -> BookedTransaction:
+def _to_persisted_booked_transaction(
+    transaction: DBTransaction,
+    *,
+    fee_components: dict[str, Decimal] | None = None,
+) -> BookedTransaction:
     """Rehydrate the internal calculation receipt excluded from the public event contract."""
 
     booked = to_booked_transaction(TransactionEvent.model_validate(transaction))
     return replace(
         booked,
         calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),
+        **(fee_components or {}),
     )
 
 
@@ -177,6 +182,36 @@ FEE_COMPONENT_FIELDS = (
     "gst",
     "other_fees",
 )
+FEE_COMPONENT_FIELD_SET = frozenset(FEE_COMPONENT_FIELDS)
+
+
+def _rehydrate_transaction_fee_components(
+    transaction: DBTransaction,
+) -> dict[str, Decimal]:
+    """Return lossless named fee authority from eagerly loaded canonical rows."""
+
+    if not transaction.costs:
+        return {}
+
+    expected_currency = normalize_currency_code(transaction.trade_currency or transaction.currency)
+    components = dict.fromkeys(FEE_COMPONENT_FIELDS, Decimal(0))
+    observed_types: set[str] = set()
+    for cost in transaction.costs:
+        fee_type = str(cost.fee_type).strip().lower()
+        if fee_type not in FEE_COMPONENT_FIELD_SET:
+            raise ValueError("Persisted transaction cost has an unsupported fee type.")
+        if fee_type in observed_types:
+            raise ValueError("Persisted transaction cost has duplicate fee-type authority.")
+        if normalize_currency_code(cost.currency) != expected_currency:
+            raise ValueError(
+                "Persisted transaction cost currency conflicts with the trade currency."
+            )
+        amount = Decimal(cost.amount)
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("Persisted transaction cost amount must be finite and positive.")
+        observed_types.add(fee_type)
+        components[fee_type] = amount
+    return components
 
 
 def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
@@ -241,9 +276,13 @@ class SqlAlchemyCostBasisTransactionRepository:
         """
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
-        stmt = select(DBTransaction).where(
-            func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
-            func.trim(DBTransaction.security_id) == normalized_security_id,
+        stmt = (
+            select(DBTransaction)
+            .options(joinedload(DBTransaction.costs))
+            .where(
+                func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
+                func.trim(DBTransaction.security_id) == normalized_security_id,
+            )
         )
 
         if exclude_id:
@@ -256,7 +295,13 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
 
         result = await self.db.execute(stmt)
-        return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
+        return [
+            _to_persisted_booked_transaction(
+                row,
+                fee_components=_rehydrate_transaction_fee_components(row),
+            )
+            for row in result.unique().scalars().all()
+        ]
 
     @async_timed(repository="CostBasisTransactionRepository", method="get_linked_transaction_group")
     async def get_linked_transaction_group(
