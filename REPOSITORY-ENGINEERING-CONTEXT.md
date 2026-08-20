@@ -2520,10 +2520,20 @@ Most relevant current governance:
      indexed normalized portfolio/security/epoch/transaction existence query before compare-and-set
      epoch advancement. Record `coalesced/already_materialized`, do not read full history, advance
      epoch, delete/reinsert positions, or publish replay events, and keep normal ordered processing
-     free of this extra query. This is safe because combined semantic idempotency rejects materially
-     changed content outside the explicit correction workflow; an accepted correction has its own
-     immutable identity and executes the governed rebuild. The cost-basis key lock serializes the
-     caller-owned units of work. Any change requires concurrent committed backdated-trigger proof,
+     free of this extra query. This is safe only because a full cost-basis rebuild persists its
+     affected suffix plus any calculated prefix row that lacks durable base/local costs or Core
+     calculation lineage
+     before position history consumes the timeline in the same caller-owned transaction. Persisting
+     only the incoming/affected suffix can let an unfavorable concurrent lock order materialize
+     correct quantity with stale cumulative cost; source-supplied cost values without Core lineage
+     are not authority. Rewriting already-governed prefix rows makes
+     statement count grow with history depth and is also prohibited. Combined semantic idempotency
+     still rejects materially changed content outside
+     the explicit correction workflow; an accepted correction has its own immutable identity and
+     executes the governed rebuild. The cost-basis key lock serializes the caller-owned units of
+     work. Any change requires both economic-date lock permutations, canonical transaction-to-
+     position economics reconciliation, history-depth-independent statement-count proof,
+     concurrent committed backdated-trigger proof,
      exact current-epoch quantities/cost, one-winner epoch evidence, zero active-runtime replay
      fan-out, bounded recalculation work-volume metrics, and migration/index validation.
 146. Position balance and deterministic history policy are owned by

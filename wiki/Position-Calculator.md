@@ -81,7 +81,13 @@ work. After a winning rebuild commits, a later trigger whose transaction lineage
 in the current epoch is recorded as `coalesced/already_materialized`; it does not advance another
 epoch or reread and rewrite history. The lookup uses the normalized
 portfolio/security/epoch/transaction index and runs only for events already classified as
-backdated.
+backdated. Before staging that winning rebuild, cost processing persists its affected suffix plus
+any calculated prefix row missing durable local/base economics or Core calculation lineage in the
+same database transaction.
+Already-governed prefix rows are not rewritten, so statement count does not grow with history
+depth. This makes zero-work coalescing safe even when a later economic-date transaction acquires
+the cost lock first; operators must treat a quantity/cost-basis divergence as a correctness
+incident, not an acceptable coalescing outcome.
 
 Operators use the transaction-processing dashboard's position lock-wait p95, coordination rate,
 and recalculation-work p95 panels with database pool and consumer-lag signals. The work histogram
