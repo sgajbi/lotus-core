@@ -3,11 +3,13 @@ from datetime import date
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    POSTGRES_STATEMENT_ROW_LIMIT,
+)
 from portfolio_common.valuation_job_contracts import (
     ValuationJobUpsert as ContractValuationJobUpsert,
 )
 from portfolio_common.valuation_job_repository import (
-    VALUATION_JOB_STATEMENT_CHUNK_SIZE,
     ValuationJobRepository,
     ValuationJobUpsert,
     _valuation_job_upsert_stmt,
@@ -399,7 +401,7 @@ async def test_high_fanout_upserts_use_bind_safe_ordered_statement_chunks(
     returning_statement = MagicMock()
     mock_upsert_statement.return_value.returning.return_value = returning_statement
     first_result = MagicMock()
-    first_result.all.return_value = [()] * VALUATION_JOB_STATEMENT_CHUNK_SIZE
+    first_result.all.return_value = [()] * POSTGRES_STATEMENT_ROW_LIMIT
     second_result = MagicMock()
     second_result.all.return_value = [()]
     mock_db_session.execute.side_effect = [first_result, second_result]
@@ -411,7 +413,7 @@ async def test_high_fanout_upserts_use_bind_safe_ordered_statement_chunks(
             1,
             "corr-high-fanout",
         )
-        for index in range(VALUATION_JOB_STATEMENT_CHUNK_SIZE + 1)
+        for index in range(POSTGRES_STATEMENT_ROW_LIMIT + 1)
     ]
 
     staged_count = await repository._execute_upsert_jobs(
@@ -420,9 +422,9 @@ async def test_high_fanout_upserts_use_bind_safe_ordered_statement_chunks(
         requeue_if_processing=True,
     )
 
-    assert staged_count == VALUATION_JOB_STATEMENT_CHUNK_SIZE + 1
+    assert staged_count == POSTGRES_STATEMENT_ROW_LIMIT + 1
     assert [len(call.args[0]) for call in mock_upsert_statement.call_args_list] == [
-        VALUATION_JOB_STATEMENT_CHUNK_SIZE,
+        POSTGRES_STATEMENT_ROW_LIMIT,
         1,
     ]
     assert all(
@@ -447,7 +449,7 @@ async def test_high_fanout_epoch_lookup_uses_bind_safe_statement_chunks(
     second_result.all.return_value = [
         (
             "P-HIGH-FANOUT",
-            f"S-{VALUATION_JOB_STATEMENT_CHUNK_SIZE:05d}",
+            f"S-{POSTGRES_STATEMENT_ROW_LIMIT:05d}",
             date(2025, 8, 12),
             4,
         )
@@ -461,7 +463,7 @@ async def test_high_fanout_epoch_lookup_uses_bind_safe_statement_chunks(
             1,
             "corr-high-fanout",
         )
-        for index in range(VALUATION_JOB_STATEMENT_CHUNK_SIZE + 1)
+        for index in range(POSTGRES_STATEMENT_ROW_LIMIT + 1)
     ]
 
     latest_epochs = await repository.get_latest_epochs_for_scopes(jobs)
@@ -470,7 +472,7 @@ async def test_high_fanout_epoch_lookup_uses_bind_safe_statement_chunks(
         ("P-HIGH-FANOUT", "S-00000", date(2025, 8, 12)): 3,
         (
             "P-HIGH-FANOUT",
-            f"S-{VALUATION_JOB_STATEMENT_CHUNK_SIZE:05d}",
+            f"S-{POSTGRES_STATEMENT_ROW_LIMIT:05d}",
             date(2025, 8, 12),
         ): 4,
     }
