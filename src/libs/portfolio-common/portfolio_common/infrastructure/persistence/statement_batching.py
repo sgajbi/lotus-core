@@ -1,12 +1,28 @@
 """Bound caller-sized PostgreSQL statements by rows and bind parameters."""
 
+import logging
 from collections.abc import Iterator, Sequence
+from enum import StrEnum
+from math import ceil
 from typing import TypeVar
 
 POSTGRES_STATEMENT_ROW_LIMIT = 1_000
 POSTGRES_BIND_PARAMETER_BUDGET = 32_000
 
 _T = TypeVar("_T")
+logger = logging.getLogger(__name__)
+
+
+class StatementBatchOperation(StrEnum):
+    """Governed low-cardinality operation labels for oversized statements."""
+
+    POSITION_STATE_BULK_UPDATE = "position_state_bulk_update"
+    POSITION_WATERMARK_UPDATE = "position_watermark_update"
+    VALUATION_JOB_UPSERT = "valuation_job_upsert"
+    VALUATION_JOB_EPOCH_LOOKUP = "valuation_job_epoch_lookup"
+    CONTIGUOUS_SNAPSHOT_LOOKUP = "contiguous_snapshot_lookup"
+    FIRST_OPEN_DATE_LOOKUP = "first_open_date_lookup"
+    DISPATCH_RECOVERY_UPDATE = "dispatch_recovery_update"
 
 
 def statement_chunk_size(
@@ -50,3 +66,31 @@ def iter_statement_chunks(
     )
     for start in range(0, len(values), chunk_size):
         yield values[start : start + chunk_size]
+
+
+def observe_multi_statement_batch(
+    *,
+    operation: StatementBatchOperation,
+    item_count: int,
+    binds_per_row: int,
+    reserved_binds: int = 0,
+) -> None:
+    """Emit one identifier-free support event when an operation needs many statements."""
+
+    chunk_size = statement_chunk_size(
+        binds_per_row=binds_per_row,
+        reserved_binds=reserved_binds,
+    )
+    chunk_count = ceil(item_count / chunk_size) if item_count else 0
+    if chunk_count <= 1:
+        return
+    logger.info(
+        "Bounded oversized repository operation across multiple statements.",
+        extra={
+            "event": "database_statement_batch",
+            "operation": operation.value,
+            "item_count": item_count,
+            "chunk_count": chunk_count,
+            "max_rows_per_statement": chunk_size,
+        },
+    )

@@ -1,8 +1,12 @@
+import logging
+
 import pytest
 from portfolio_common.infrastructure.persistence.statement_batching import (
     POSTGRES_BIND_PARAMETER_BUDGET,
     POSTGRES_STATEMENT_ROW_LIMIT,
+    StatementBatchOperation,
     iter_statement_chunks,
+    observe_multi_statement_batch,
     statement_chunk_size,
 )
 
@@ -58,3 +62,33 @@ def test_statement_chunk_size_accounts_for_reserved_bind_parameters() -> None:
 def test_statement_chunk_size_rejects_invalid_budgets(kwargs: dict[str, int], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         statement_chunk_size(**kwargs)
+
+
+def test_multi_statement_batch_emits_one_bounded_identifier_free_event(caplog) -> None:
+    with caplog.at_level(logging.INFO):
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.POSITION_STATE_BULK_UPDATE,
+            item_count=1_001,
+            binds_per_row=5,
+        )
+
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.event == "database_statement_batch"
+    assert record.operation == "position_state_bulk_update"
+    assert record.item_count == 1_001
+    assert record.chunk_count == 2
+    assert record.max_rows_per_statement == 1_000
+    assert not hasattr(record, "portfolio_id")
+    assert not hasattr(record, "security_id")
+
+
+def test_single_statement_batch_does_not_emit_event(caplog) -> None:
+    with caplog.at_level(logging.INFO):
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.FIRST_OPEN_DATE_LOOKUP,
+            item_count=1_000,
+            binds_per_row=3,
+        )
+
+    assert caplog.records == []

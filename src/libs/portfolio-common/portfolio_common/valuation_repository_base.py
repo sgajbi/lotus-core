@@ -24,7 +24,11 @@ from .database_models import (
 )
 from .domain.currency import normalize_currency_code
 from .identifiers import normalize_lookup_identifier
-from .infrastructure.persistence.statement_batching import iter_statement_chunks
+from .infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from .utils import async_timed
 from .valuation_job_contracts import ValuationJobTransitionOutcome
 from .valuation_snapshot_contiguity import (
@@ -321,6 +325,12 @@ class ValuationRepositoryBase:
         normalized_states = [states_by_key[key] for key in sorted(states_by_key)]
         all_first_open_dates = first_open_dates or {}
         contiguous_dates: Dict[Tuple[str, str], date] = {}
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.CONTIGUOUS_SNAPSHOT_LOOKUP,
+            item_count=len(normalized_states),
+            binds_per_row=7,
+            reserved_binds=10,
+        )
         for state_chunk in iter_statement_chunks(
             normalized_states,
             binds_per_row=7,
@@ -521,6 +531,12 @@ class ValuationRepositoryBase:
 
         failed_count = 0
         pending_count = 0
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.DISPATCH_RECOVERY_UPDATE,
+            item_count=len(ordered_claims),
+            binds_per_row=2,
+            reserved_binds=8,
+        )
         for claim_chunk in iter_statement_chunks(
             ordered_claims,
             binds_per_row=2,
@@ -881,6 +897,11 @@ class ValuationRepositoryBase:
             return {}
 
         first_open_dates: Dict[Tuple[str, str, int], date] = {}
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.FIRST_OPEN_DATE_LOOKUP,
+            item_count=len(normalized_keys),
+            binds_per_row=3,
+        )
         for key_chunk in iter_statement_chunks(normalized_keys, binds_per_row=3):
             stmt = (
                 select(

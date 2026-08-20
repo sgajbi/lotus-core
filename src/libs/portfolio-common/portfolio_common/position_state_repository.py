@@ -8,7 +8,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PositionState
-from .infrastructure.persistence.statement_batching import iter_statement_chunks
+from .infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
@@ -61,6 +65,11 @@ class PositionStateRepository:
         normalized_updates = _normalize_state_updates(updates)
         if not normalized_updates:
             return 0
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.POSITION_STATE_BULK_UPDATE,
+            item_count=len(normalized_updates),
+            binds_per_row=5,
+        )
 
         updated_count = 0
         for update_chunk in iter_statement_chunks(normalized_updates, binds_per_row=5):
@@ -190,6 +199,12 @@ class PositionStateRepository:
         normalized_keys = sorted(set(keys))
         if not normalized_keys:
             return 0
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.POSITION_WATERMARK_UPDATE,
+            item_count=len(normalized_keys),
+            binds_per_row=2,
+            reserved_binds=3,
+        )
 
         watermark_value = (
             case(
