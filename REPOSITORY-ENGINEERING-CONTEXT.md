@@ -3932,6 +3932,20 @@ Most relevant current governance:
      `make test-kafka-restart-recovery-gate` owns the isolated behavioral proof, including exact
      container ownership, topic creation, two clean restart cycles, and a dependent service.
 
+244. Caller-sized PostgreSQL `VALUES`, scalar `IN`, and tuple `IN` operations in valuation and
+     reprocessing persistence must use
+     `portfolio_common.infrastructure.persistence.statement_batching`. Normalize, validate,
+     globally deduplicate, and sort the complete logical input before splitting it; reject
+     conflicting duplicate authority before database I/O. Each physical statement is limited to
+     1,000 rows and the calculated 32,000-bind budget, including reserved scalar binds. Repositories
+     stage every chunk on the injected session and never commit, roll back, open a nested
+     transaction, or acquire a separate connection, so a later-chunk failure remains atomic at the
+     caller's unit-of-work boundary. Multi-statement work emits one identifier-free
+     `database_statement_batch` event with governed operation/status/reason values and bounded
+     counts. Do not add per-chunk INFO logs, business identifiers, or a database-batch config knob;
+     use temp tables or `COPY` only after plan/row-count evidence proves bounded statements are
+     inadequate.
+
 ## Context Maintenance Rule
 
 Update this document when:
