@@ -61,3 +61,11 @@ def transaction_event_fee_component_values(
         for field_name in TRANSACTION_FEE_COMPONENT_FIELDS
         if (amount := getattr(event, field_name)) is not None and amount > 0
     ]
+
+
+def transaction_event_has_named_fee_authority(event: TransactionEvent) -> bool:
+    """Return whether the event explicitly supplies the named-fee authority surface."""
+
+    return any(
+        getattr(event, field_name) is not None for field_name in TRANSACTION_FEE_COMPONENT_FIELDS
+    )

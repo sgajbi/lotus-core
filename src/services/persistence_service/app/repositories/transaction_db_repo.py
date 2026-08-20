@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..adapters.event_record_mapper import (
     transaction_event_fee_component_values,
+    transaction_event_has_named_fee_authority,
     transaction_event_to_record_values,
 )
 
@@ -135,13 +136,11 @@ class TransactionDBRepository:
             if persisted_id is None:
                 raise GeneratedTransactionIdentityCollisionError(ownership.transaction_id)
             fee_components = transaction_event_fee_component_values(event)
-            if fee_components:
+            if transaction_event_has_named_fee_authority(event):
                 await self.db.execute(
                     delete(TransactionCost).where(TransactionCost.transaction_id == persisted_id)
                 )
-                self.db.add_all(
-                    [TransactionCost(**component) for component in fee_components]
-                )
+                self.db.add_all([TransactionCost(**component) for component in fee_components])
             logger.debug(
                 "Transaction upsert staged.",
                 extra={"transaction_id": ownership.transaction_id},
