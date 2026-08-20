@@ -1189,15 +1189,34 @@ async def test_thousand_member_release_drains_with_bounded_progress_validation(
         token_factory=lambda: "1" * 64,
     )
 
+    statements: list[str] = []
+
+    def record_statement(
+        _connection,
+        _cursor,
+        statement: str,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        statements.append(statement)
+
+    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", record_statement)
     started = perf_counter()
-    result = await worker.execute()
-    elapsed_seconds = perf_counter() - started
+    try:
+        result = await asyncio.wait_for(worker.execute(), timeout=600)
+    finally:
+        elapsed_seconds = perf_counter() - started
+        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", record_statement)
 
     assert result.status is CorporateActionReleaseWorkerStatus.COMPLETE
     assert result.release_id == release.release_id
     assert result.processed_member_count == 1_000
     assert process.execute.await_count == 1_000
-    assert elapsed_seconds < 120
+    assert len(statements) <= 7 * result.processed_member_count + 10
+    assert (
+        sum("corporate_action_readiness_evaluations" in statement for statement in statements) == 1
+    )
     persisted_release = await async_db_session.get(
         CorporateActionExecutionReleaseRecord,
         release.release_id,
