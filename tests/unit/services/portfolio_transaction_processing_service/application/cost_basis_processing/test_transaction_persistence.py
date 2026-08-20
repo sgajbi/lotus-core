@@ -9,6 +9,9 @@ import pytest
 from src.services.portfolio_transaction_processing_service.app.application import (
     cost_basis_processing,
 )
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.persistence_scope import (  # noqa: E501
+    CostBasisTransactionPersistenceScope,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisProcessingCheckpoint,
     CostBasisTransaction,
@@ -109,6 +112,37 @@ async def test_backdated_persistence_updates_affected_suffix_and_returns_incomin
         call(incoming),
         call(later),
     ]
+
+
+async def test_full_rebuild_persists_complete_economics_without_replaying_prefix_children() -> None:
+    prior = _calculated_transaction("BUY-PRIOR")
+    incoming = _calculated_transaction("BUY-BACKDATED")
+    later = _calculated_transaction("SELL-LATER", transaction_type="SELL")
+    repository, lot_states, income_offsets, observer = _ports()
+    repository.apply_transaction_costs_and_replace_breakdown.side_effect = [
+        _booked_transaction(prior),
+        _booked_transaction(incoming),
+        _booked_transaction(later),
+    ]
+
+    persisted = await persist_cost_basis_transactions(
+        processed=[prior, incoming, later],
+        incoming_transaction_ids={incoming.transaction_id},
+        transactions=repository,
+        lot_states=lot_states,
+        income_offsets=income_offsets,
+        observer=observer,
+        persistence_scope=CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE,
+    )
+
+    assert [transaction.transaction_id for transaction in persisted] == [incoming.transaction_id]
+    assert repository.apply_transaction_costs_and_replace_breakdown.await_args_list == [
+        call(prior),
+        call(incoming),
+        call(later),
+    ]
+    lot_states.upsert_buy_lot_state.assert_awaited_once_with(incoming)
+    income_offsets.upsert_accrued_income_offset.assert_awaited_once_with(incoming)
 
 
 async def test_persistence_rejects_timeline_without_incoming_transaction_before_writes() -> None:

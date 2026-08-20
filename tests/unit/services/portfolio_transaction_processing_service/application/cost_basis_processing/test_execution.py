@@ -17,6 +17,9 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
     execution as execution_module,
 )
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.persistence_scope import (  # noqa: E501
+    CostBasisTransactionPersistenceScope,
+)
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostCalculationError,
@@ -107,8 +110,17 @@ def _dependencies() -> dict[str, object]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("incremental", "expected_persistence_scope"),
+    [
+        (True, CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX),
+        (False, CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE),
+    ],
+)
 async def test_cost_basis_execution_acquires_key_lock_before_calculation(
     monkeypatch: pytest.MonkeyPatch,
+    incremental: bool,
+    expected_persistence_scope: CostBasisTransactionPersistenceScope,
 ) -> None:
     prepared = _prepared(route=CostProcessingRoute.COST_BASIS)
     transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
@@ -117,7 +129,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         processed=[],
         errored=[],
         open_lot_states={},
-        incremental=True,
+        incremental=incremental,
         open_lot_persistence_scope=MagicMock(),
         average_cost_pool_transition=None,
         disposals=(),
@@ -134,12 +146,13 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
     )
     persisted = (prepared.transaction,)
     persistence_order: list[str] = []
+    persist_transactions = AsyncMock(
+        side_effect=lambda **_kwargs: persistence_order.append("transactions") or persisted
+    )
     monkeypatch.setattr(
         execution_module,
         "persist_cost_basis_transactions",
-        AsyncMock(
-            side_effect=lambda **_kwargs: persistence_order.append("transactions") or persisted
-        ),
+        persist_transactions,
     )
     monkeypatch.setattr(
         execution_module,
@@ -212,6 +225,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         profiles=amortized_cost_profiles,
     )
     amortized_cost_profiles.effective_as_of_many.assert_not_awaited()
+    assert persist_transactions.await_args.kwargs["persistence_scope"] is expected_persistence_scope
     assert persistence_order == [
         "transactions",
         "disposal-receipts",
