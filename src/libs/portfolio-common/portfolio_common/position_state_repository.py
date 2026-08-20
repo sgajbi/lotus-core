@@ -201,11 +201,12 @@ class PositionStateRepository:
         normalized_keys = sorted(set(keys))
         if not normalized_keys:
             return 0
+        reserved_binds = 4 if expected_epoch is not None else 3
         observe_multi_statement_batch(
             operation=StatementBatchOperation.POSITION_WATERMARK_UPDATE,
             item_count=len(normalized_keys),
             binds_per_row=2,
-            reserved_binds=3,
+            reserved_binds=reserved_binds,
         )
 
         watermark_value = (
@@ -224,7 +225,7 @@ class PositionStateRepository:
         for key_chunk in iter_statement_chunks(
             normalized_keys,
             binds_per_row=2,
-            reserved_binds=3,
+            reserved_binds=reserved_binds,
         ):
             stmt = (
                 update(PositionState)
