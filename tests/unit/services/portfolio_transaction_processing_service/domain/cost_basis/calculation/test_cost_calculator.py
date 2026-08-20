@@ -936,6 +936,23 @@ def test_cash_consideration_strategy_rejects_incomplete_or_invalid_product_leg(
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
+def test_cash_consideration_strategy_rejects_malformed_persisted_price(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+) -> None:
+    transaction = _cash_consideration()
+    transaction.price = "not-a-decimal"
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert error_reporter.has_errors_for(transaction.transaction_id)
+    assert "invalid decimal for price" in error_reporter.get_errors()[0].error_reason
+    assert transaction.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "component_type", "extra_fields"),
     [
@@ -1349,6 +1366,37 @@ def test_sell_strategy_rejects_non_positive_consumed_quantity(
     cost_calculator.calculate_transaction_costs(sell_transaction)
 
     assert error_reporter.has_errors_for("SELL001")
+
+
+@pytest.mark.parametrize(
+    ("disposition_result", "expected_error"),
+    [
+        (
+            (Decimal("0"), Decimal("0"), Decimal("0"), "lot authority unavailable"),
+            "lot authority unavailable",
+        ),
+        (
+            (Decimal("-1"), Decimal("1"), Decimal("5"), None),
+            "disposed cost basis must be non-negative",
+        ),
+    ],
+)
+def test_sell_strategy_fails_closed_on_invalid_disposition_authority(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+    sell_transaction,
+    disposition_result: tuple[Decimal, Decimal, Decimal, str | None],
+    expected_error: str,
+) -> None:
+    mock_disposition_engine.consume_sell_quantity.return_value = disposition_result
+
+    cost_calculator.calculate_transaction_costs(sell_transaction)
+
+    assert error_reporter.has_errors_for(sell_transaction.transaction_id)
+    assert expected_error in error_reporter.get_errors()[0].error_reason
+    assert sell_transaction.net_cost is None
+    assert sell_transaction.net_cost_local is None
 
 
 def test_sell_strategy_rejects_dirty_non_positive_quantity_before_lot_consumption(

@@ -110,6 +110,12 @@ statement cardinality remain unchanged.
   `148 passed in 979.34s`.
 - Independent read-only review at that exact SHA found no code, test, documentation,
   compatibility, or scope-boundary blocker.
+- PR #971 run `32425106451` passed every functional shard, including the complete transaction
+  processing contract, but its combined gate rejected changed-file branch coverage at `84.18%`
+  against the governed `85%` floor. Fix-forward tests now prove malformed persisted price,
+  disposition-source failure, and negative disposed-basis paths fail closed without lot or
+  calculated-cost side effects; the focused warning-strict calculator suite passes `110` tests
+  and covers `134/158` branches (`84.81%`) before the additional combined-suite coverage is added.
 - PR #971 protected lanes and exact-main Main Releasability remain pending.
 
 ## Documentation Decision
