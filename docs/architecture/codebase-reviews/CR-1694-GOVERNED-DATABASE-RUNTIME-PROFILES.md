@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 Issue: #502
-Status: in progress
+Status: fixed locally; protected PR and exact-main proof pending
 
 ## Finding
 
@@ -40,19 +40,29 @@ budget.
 - Unit tests cover the complete identity/cohort registry, defaults, bounds, combined capacity,
   secret-safe errors and startup evidence, exact sync/async driver arguments, reserved overrides,
   lazy engine creation, URL normalization, and QueuePool/NullPool separation.
-- Real PostgreSQL tests prove both driver identities and settings, statement cancellation followed
-  by rollback recovery, idle-transaction termination followed by fresh checkout, and bounded pool
-  acquisition failure.
+- Nine real PostgreSQL tests prove both driver identities and settings, statement cancellation
+  followed by rollback recovery, idle-transaction termination followed by fresh checkout, bounded
+  connection establishment for both drivers, and bounded pool acquisition failure.
 - Compose and Kubernetes contracts publish explicit compatibility values. Ingestion now receives
   `DATABASE_URL` and waits for successful migrations.
 - The production-constructor guard covers SQLAlchemy engine factories, Alembic
   `engine_from_config`, and direct psycopg/asyncpg connections. The PostgreSQL runtime-profile proof
   is part of `critical-db-coverage`.
 - Fan-in `20260815T114717Z` completed exact reconciliation at `131.077s`; it is retained as a cold
-  diagnostic outlier. The immediate clean-source repeat `20260815T115201Z` completed at `70.803s`
-  versus the retained `80.814s` baseline (12.4% lower), with 1,000/1,000 snapshots and position
+  diagnostic outlier. The final clean-source repeat `20260815T122529Z` completed at `70.970s`
+  versus the retained `80.814s` baseline (12.2% lower), with 1,000/1,000 snapshots and position
   rows, attempts 2/2, zero repeated valuation processing, and pending/failed outbox 0/0. The repeat
-  satisfies the non-regression gate without erasing the first observation.
+  satisfies the #502 non-regression gate without erasing the first observation.
+- Exact-head daily artifact `20260820T094647Z-bank-day-load.json` is valid certifying evidence for
+  the wider derived-state campaign, but not a capacity pass: all 100,000 transactions were durable,
+  74,975 position snapshots materialized, 806 of 1,000 portfolios completed, attempts remained 2/2,
+  failed outbox and DLQ counts remained zero, and database cohorts reconciled 951/951 with no
+  unattributed client sessions. Peak database connections were 64, the largest service cohort was
+  15 (the governed per-process ceiling), and the run reported no configured statement, idle,
+  acquisition, or connection timeout and no service restart. The remaining 24 valuation jobs,
+  13 aggregation jobs, and eight pending outbox rows keep #795 open as a capacity/convergence
+  failure; they do not falsify #502's explicit configuration, boundedness, or non-regression
+  acceptance.
 
 ## Compatibility
 
@@ -67,4 +77,5 @@ their existing rollback/recovery responsibility.
 Operator configuration and failure semantics changed, so the runbook, observability guidance,
 repository context, and authored Timeseries wiki are updated. README, RFC, OpenAPI, migration
 documentation, and central platform context do not change because no public product or cross-repo
-contract changed.
+contract changed. The existing delivery, CI, pre-merge, issue-resolution, and review-ledger skills
+already govern this failure classification and require no skill or routing change.
