@@ -361,6 +361,87 @@ async def test_get_first_open_dates_skips_database_for_empty_keys(
     mock_db_session.execute.assert_not_awaited()
 
 
+async def test_get_first_open_dates_chunks_and_deduplicates_large_key_sets(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    first_rows = [
+        MagicMock(
+            portfolio_id=f"P-{index:05d}",
+            security_id=f"S-{index:05d}",
+            epoch=1,
+            first_open_date=date(2026, 1, 1),
+        )
+        for index in range(1_000)
+    ]
+    second_rows = [
+        MagicMock(
+            portfolio_id="P-01000",
+            security_id="S-01000",
+            epoch=1,
+            first_open_date=date(2026, 1, 2),
+        )
+    ]
+    first_result = MagicMock()
+    first_result.__iter__.return_value = iter(first_rows)
+    second_result = MagicMock()
+    second_result.__iter__.return_value = iter(second_rows)
+    mock_db_session.execute.side_effect = [first_result, second_result]
+    keys = [(row.portfolio_id, row.security_id, row.epoch) for row in reversed(first_rows)]
+    keys.extend([("P-01000", "S-01000", 1), keys[0]])
+
+    first_open_dates = await repo.get_first_open_dates_for_keys(keys)
+
+    assert len(first_open_dates) == 1_001
+    assert first_open_dates[("P-01000", "S-01000", 1)] == date(2026, 1, 2)
+    assert mock_db_session.execute.await_count == 2
+
+
+async def test_find_contiguous_snapshot_dates_chunks_large_state_sets(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    states = [
+        MagicMock(
+            portfolio_id=f"P-{index:05d}",
+            security_id=f"S-{index:05d}",
+            epoch=1,
+        )
+        for index in reversed(range(1_001))
+    ]
+    first_result = MagicMock()
+    first_result.__iter__.return_value = iter(
+        [
+            MagicMock(
+                portfolio_id=f"P-{index:05d}",
+                security_id=f"S-{index:05d}",
+                contiguous_date=date(2026, 8, 19),
+            )
+            for index in range(1_000)
+        ]
+    )
+    second_result = MagicMock()
+    second_result.__iter__.return_value = iter(
+        [
+            MagicMock(
+                portfolio_id="P-01000",
+                security_id="S-01000",
+                contiguous_date=date(2026, 8, 20),
+            )
+        ]
+    )
+    mock_db_session.execute.side_effect = [first_result, second_result]
+
+    contiguous_dates = await repo.find_contiguous_snapshot_dates(
+        states,
+        latest_valuation_date=date(2026, 8, 20),
+    )
+
+    assert len(contiguous_dates) == 1_001
+    assert contiguous_dates[("P-01000", "S-01000")] == date(2026, 8, 20)
+    assert mock_db_session.execute.await_count == 2
+
+
 async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
     mock_db_session: AsyncMock,
 ) -> None:
