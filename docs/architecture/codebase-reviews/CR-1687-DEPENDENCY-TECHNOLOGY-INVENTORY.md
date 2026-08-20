@@ -56,3 +56,24 @@ release-evidence truth. No supported-feature or platform-wide context change is 
 - online deterministic refresh of all 104 components from exact PyPI release endpoints; and
 - report-only guard result: structurally valid, 104 components, 120 blocking findings, zero
   production-ready or bank-buyable claim.
+
+## 2026-08-20 cross-platform tooling-closure refresh
+
+Scheduled mainline replay detected that the unconstrained Pygments dependency selected through
+Pytest and Rich had advanced from `2.20.0` to `2.21.0` after the latter was published on
+2026-08-17. The same deterministic replay failure was reproduced for both Linux/amd64 and
+Windows/amd64; Windows merely failed first in the workflow. Issue #958 owns this review event.
+
+The governed generators now retain `pygments==2.21.0` in both CI/build/test locks and refresh the
+inventory from exact PyPI release evidence. Pygments remains a non-prerelease, non-yanked,
+BSD-2-Clause CI-only component requiring Python 3.9 or newer. The inventory remains 104 unique
+components with 88 approved license classifications, and all 104 components remain blocked or
+supportability-review-required. The refresh also retains changed canonical metadata digests for
+nine unchanged exact releases; it does not infer a package-version change or approval from mutable
+upstream metadata.
+
+This is the intended fail-closed review path for a newly selected transitive tooling release, not
+resolver nondeterminism. Repeated clean platform replay must remain byte-identical after the
+reviewed refresh. No application/runtime dependency, API/OpenAPI, database, migration, event,
+calculation, Kafka, image, datastore, or topology contract changes. No README, supported-feature,
+operator-runbook, wiki, central-context, or skill change is required.

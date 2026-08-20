@@ -150,7 +150,7 @@ py==1.11.0
     # via interrogate
 py-serializable==2.1.0
     # via cyclonedx-python-lib
-pygments==2.20.0
+pygments==2.21.0
     # via
     #   pytest
     #   rich
