@@ -1,11 +1,13 @@
 """Verify deterministic cost-basis calculation coordination through application ports."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 
@@ -256,7 +258,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
         event=sell_event,
         event_transaction_type=sell_type,
         portfolio_base_currency="USD",
-        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+        instrument=None,
         repo=repo,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
@@ -550,9 +552,18 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
             later_buy, cost_basis_method=CostBasisMethod.FIFO
         )
     )
-    repo.get_transaction_history.return_value = [
-        _history_transaction(_persisted_buy("BUY-LATER", later_date))
-    ]
+    prior_with_lineage_but_missing_base_cost = replace(
+        _history_transaction(_persisted_buy("BUY-LATER", later_date)),
+        net_cost=None,
+        calculation_lineage=build_calculation_lineage(
+            algorithm_id="prior-booked-transaction",
+            algorithm_version=1,
+            intermediate_precision=28,
+            input_payload={"transaction_id": "BUY-LATER"},
+            output_payload={"net_cost_local": "100"},
+        ),
+    )
+    repo.get_transaction_history.return_value = [prior_with_lineage_but_missing_base_cost]
 
     calculation = await _calculate_cost_basis(
         event=_event(
