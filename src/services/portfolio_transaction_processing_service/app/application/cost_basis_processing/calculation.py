@@ -18,6 +18,7 @@ from ...domain.cost_basis import (
     CostBasisTransaction,
     OpenLotState,
     build_cost_basis_engine_input,
+    has_governed_transaction_cost_authority,
     transaction_lot_behavior,
 )
 from ...domain.transaction import BookedTransaction
@@ -226,11 +227,7 @@ class CostBasisCalculationCoordinator:
         missing_economics_authority_transaction_ids = frozenset(
             str(transaction["transaction_id"])
             for transaction in all_transactions_raw
-            if (
-                transaction.get("calculation_lineage") is None
-                or transaction.get("net_cost") is None
-                or transaction.get("net_cost_local") is None
-            )
+            if not has_governed_transaction_cost_authority(transaction)
         )
         timeline_result = build_cost_basis_timeline_processor(
             cost_basis_method,

@@ -5,8 +5,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import OutboxEvent, PositionHistory, PositionState
+from portfolio_common.database_models import (
+    OutboxEvent,
+    PositionHistory,
+    PositionState,
+    TransactionCost,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,6 +71,9 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         quantity="5",
         price="10",
         gross_amount="50",
+        trade_fee="99",
+        brokerage=Decimal("1.25"),
+        stamp_duty=Decimal("0.75"),
     )
     middle_buy = booked_transaction_event(
         transaction_id="BUY-BACKDATED-COALESCE-02",
@@ -97,12 +106,18 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         correlation_id="corr-backdated-coalesce-current",
     )
 
-    async_db_session.add_all(
-        [
-            canonical_transaction_record(earliest_buy),
-            canonical_transaction_record(middle_buy),
-        ]
-    )
+    earliest_record = canonical_transaction_record(earliest_buy)
+    earliest_record.trade_fee = Decimal("99")
+    earliest_record.net_cost = Decimal("999")
+    earliest_record.net_cost_local = Decimal("999")
+    earliest_record.calculation_lineage = build_calculation_lineage(
+        algorithm_id="foreign-transaction-cost-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"transaction_id": earliest_buy.transaction_id},
+        output_payload={"net_cost": Decimal("999")},
+    ).lineage_payload()
+    async_db_session.add_all([earliest_record, canonical_transaction_record(middle_buy)])
     await async_db_session.commit()
 
     first_lock_acquired = asyncio.Event()
@@ -246,6 +261,15 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
                 )
             ).all()
         )
+        transaction_costs = list(
+            (
+                await verification_session.scalars(
+                    select(TransactionCost)
+                    .where(TransactionCost.transaction_id == earliest_buy.transaction_id)
+                    .order_by(TransactionCost.fee_type)
+                )
+            ).all()
+        )
 
     assert state.epoch == 1
     assert [position.transaction_id for position in current_positions] == [
@@ -259,19 +283,23 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         Decimal("18"),
     ]
     assert [position.cost_basis for position in current_positions] == [
-        Decimal("50"),
-        Decimal("80"),
-        Decimal("180"),
+        Decimal("52"),
+        Decimal("82"),
+        Decimal("182"),
     ]
     assert [transaction.net_cost for transaction in canonical_transactions] == [
-        Decimal("50"),
+        Decimal("52"),
         Decimal("30"),
         Decimal("100"),
     ]
     assert [transaction.net_cost_local for transaction in canonical_transactions] == [
-        Decimal("50"),
+        Decimal("52"),
         Decimal("30"),
         Decimal("100"),
+    ]
+    assert [(row.fee_type, row.amount, row.currency) for row in transaction_costs] == [
+        ("brokerage", Decimal("1.25"), "USD"),
+        ("stamp_duty", Decimal("0.75"), "USD"),
     ]
     assert all(
         transaction.calculation_lineage is not None for transaction in canonical_transactions

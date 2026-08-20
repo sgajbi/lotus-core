@@ -1,5 +1,6 @@
 """Verify canonical cost-basis calculation policy across transaction families."""
 
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
@@ -17,6 +18,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     LotBasisTransferResult,
     LotDispositionEngine,
     SourceLotBasisTransferAllocation,
+    has_governed_transaction_cost_authority,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.calculation import (  # noqa: E501
     cost_basis_calculator as calculator_module,
@@ -186,6 +188,41 @@ def test_transaction_cost_lineage_is_deterministic_and_material_input_sensitive(
     )
     assert baseline.calculation_lineage.output_content_hash != (
         changed.calculation_lineage.output_content_hash
+    )
+
+
+def test_transaction_cost_authority_requires_current_output_bound_lineage(
+    cost_calculator,
+    buy_transaction,
+) -> None:
+    cost_calculator.calculate_transaction_costs(buy_transaction)
+    payload = buy_transaction.model_dump()
+    lineage = buy_transaction.calculation_lineage
+
+    assert has_governed_transaction_cost_authority(payload)
+    assert not has_governed_transaction_cost_authority({**payload, "net_cost": None})
+    assert not has_governed_transaction_cost_authority({**payload, "net_cost_local": None})
+    assert not has_governed_transaction_cost_authority({**payload, "calculation_lineage": None})
+    assert not has_governed_transaction_cost_authority(
+        {
+            **payload,
+            "calculation_lineage": replace(lineage, algorithm_id="foreign-calculation"),
+        }
+    )
+    assert not has_governed_transaction_cost_authority(
+        {
+            **payload,
+            "calculation_lineage": replace(lineage, algorithm_version=1),
+        }
+    )
+    assert not has_governed_transaction_cost_authority(
+        {**payload, "net_cost": payload["net_cost"] + Decimal("1")}
+    )
+    assert not has_governed_transaction_cost_authority(
+        {
+            **payload,
+            "fees": {**payload["fees"], "stamp_duty": Decimal("1")},
+        }
     )
 
 
