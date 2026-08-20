@@ -1,6 +1,7 @@
 # tests/unit/libs/portfolio-common/test_position_state_repository.py
 import asyncio
 from datetime import date
+from time import perf_counter
 
 import pytest
 from portfolio_common.database_models import PositionState
@@ -579,3 +580,46 @@ async def test_bulk_update_states_orders_overlapping_transactions_consistently(
         {(date(2026, 8, 19), "CURRENT")},
         {(date(2026, 8, 20), "REPROCESSING")},
     )
+
+
+async def test_bulk_update_states_scales_to_ten_thousand_rows_with_bounded_statements(
+    clean_db,
+    async_db_session: AsyncSession,
+    record_property,
+) -> None:
+    prefix = "SCALE"
+    cohort_size = 10_000
+    async_db_session.add_all(_large_position_state_cohort(prefix, cohort_size))
+    await async_db_session.commit()
+    update_statement_count = 0
+
+    def capture_update(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        nonlocal update_statement_count
+        if statement.lstrip().startswith("UPDATE position_state"):
+            update_statement_count += 1
+
+    sync_engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_update)
+    started_at = perf_counter()
+    try:
+        updated_count = await PositionStateRepository(async_db_session).bulk_update_states(
+            _large_position_state_updates(
+                prefix,
+                date(2026, 8, 20),
+                "CURRENT",
+                cohort_size,
+            )
+        )
+        await async_db_session.commit()
+    finally:
+        elapsed_seconds = perf_counter() - started_at
+        sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_update)
+
+    record_property("cohort_size", cohort_size)
+    record_property("statement_count", update_statement_count)
+    record_property("elapsed_seconds", round(elapsed_seconds, 3))
+    assert updated_count == cohort_size
+    assert update_statement_count == 10
+    assert elapsed_seconds > 0
