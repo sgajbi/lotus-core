@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1696 backdated position economics coalescing (2026-08-21): exact-main run `32392872624`
+proved that a later economic-date transaction could win the same-key cost lock, persist only its
+affected suffix, and let position history consume an earlier durable row without calculated
+`net_cost`. Quantity remained correct while cumulative basis became `0/30/130` instead of
+`50/80/180`; identity-only coalescing then froze the incomplete epoch. Full cost rebuilds now
+persist the affected suffix plus calculated prefix rows missing durable base/local economics or
+Core calculation lineage before
+position staging. Already-governed history, incremental processing, and incoming-only effect
+publication remain unchanged. Deterministic PostgreSQL proof forces both lock orders and retains
+one epoch, one three-row rebuild, one zero-work coalesced result, zero replay events, and constant
+statement count for governed two-row versus 200-row AVCO history. Evidence and compatibility details:
+[CR-1696-BACKDATED-POSITION-ECONOMICS-COALESCING.md](./codebase-reviews/CR-1696-BACKDATED-POSITION-ECONOMICS-COALESCING.md).
+
 CR-1687 deterministic tooling replay follow-through (2026-08-20): exact-main run `32387125286`
 failed minutes after an identical PR Windows replay passed because newly published compatible
 `stevedore==5.9.1` replaced reviewed `5.9.0`. Protected replay had been resolving unpinned
