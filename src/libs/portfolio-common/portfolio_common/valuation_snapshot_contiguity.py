@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Protocol, Sequence, Tuple
 
 from sqlalchemy import Integer, String, case, cast, column, exists, func, select, tuple_, values
 from sqlalchemy.orm import aliased
@@ -14,8 +14,19 @@ from .database_models import (
 )
 
 
+class PositionStateKey(Protocol):
+    @property
+    def portfolio_id(self) -> str: ...
+
+    @property
+    def security_id(self) -> str: ...
+
+    @property
+    def epoch(self) -> int: ...
+
+
 def build_contiguous_snapshot_dates_stmt(
-    states: List[PositionState],
+    states: Sequence[PositionStateKey],
     first_open_dates: Dict[Tuple[str, str, int], date],
     latest_valuation_date: date,
 ):
@@ -53,7 +64,7 @@ def contiguous_snapshot_dates_by_key(result) -> Dict[Tuple[str, str], date]:
     return {(row.portfolio_id, row.security_id): row.contiguous_date for row in result}
 
 
-def _position_state_keys(states: List[PositionState]) -> tuple[tuple[str, str, int], ...]:
+def _position_state_keys(states: Sequence[PositionStateKey]) -> tuple[tuple[str, str, int], ...]:
     return tuple((state.portfolio_id, state.security_id, state.epoch) for state in states)
 
 

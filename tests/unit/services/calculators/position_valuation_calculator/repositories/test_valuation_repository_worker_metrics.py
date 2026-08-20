@@ -480,6 +480,24 @@ async def test_find_contiguous_snapshot_dates_chunks_large_state_sets(
     assert mock_db_session.execute.await_count == 2
 
 
+async def test_find_contiguous_snapshot_dates_rejects_conflicting_epochs_before_io(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    states = [
+        MagicMock(portfolio_id="P-1", security_id="S-1", epoch=1),
+        MagicMock(portfolio_id="P-1", security_id="S-1", epoch=2),
+    ]
+
+    with pytest.raises(ValueError, match="conflicting position-state epochs"):
+        await repo.find_contiguous_snapshot_dates(
+            states,
+            latest_valuation_date=date(2026, 8, 20),
+        )
+
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
     mock_db_session: AsyncMock,
 ) -> None:
