@@ -3,7 +3,12 @@ import logging
 from dataclasses import dataclass
 from datetime import date
 
-from portfolio_common.database_models import CashAccountMaster, Instrument, Portfolio
+from portfolio_common.database_models import (
+    CashAccountMaster,
+    Instrument,
+    Portfolio,
+    TransactionCost,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.transaction import (
     canonical_transaction_identity_record_values,
@@ -14,11 +19,14 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     GeneratedTransactionIdentityCollisionError,
     transaction_identity_update_allowed,
 )
-from sqlalchemy import exists, func, literal, or_, select
+from sqlalchemy import delete, exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..adapters.event_record_mapper import transaction_event_to_record_values
+from ..adapters.event_record_mapper import (
+    transaction_event_fee_component_values,
+    transaction_event_to_record_values,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +134,14 @@ class TransactionDBRepository:
             persisted_id = (await self.db.execute(final_stmt)).scalar_one_or_none()
             if persisted_id is None:
                 raise GeneratedTransactionIdentityCollisionError(ownership.transaction_id)
+            fee_components = transaction_event_fee_component_values(event)
+            if fee_components:
+                await self.db.execute(
+                    delete(TransactionCost).where(TransactionCost.transaction_id == persisted_id)
+                )
+                self.db.add_all(
+                    [TransactionCost(**component) for component in fee_components]
+                )
             logger.debug(
                 "Transaction upsert staged.",
                 extra={"transaction_id": ownership.transaction_id},
