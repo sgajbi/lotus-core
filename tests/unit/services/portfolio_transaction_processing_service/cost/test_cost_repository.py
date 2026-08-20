@@ -7,6 +7,7 @@ import pytest
 from portfolio_common.database_models import (
     AverageCostPoolState,
     PositionLotState,
+    TransactionCost,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
@@ -155,7 +156,9 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
         currency="USD",
         calculation_lineage=calculation_lineage.lineage_payload(),
     )
-    execute_result.scalars.return_value.all.return_value = [persisted_transaction]
+    execute_result.unique.return_value.scalars.return_value.all.return_value = [
+        persisted_transaction
+    ]
     db_session.execute.return_value = execute_result
 
     transactions = await repository.get_transaction_history(
@@ -191,6 +194,102 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     assert "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC" in (
         compiled_query
     )
+    assert "LEFT OUTER JOIN transaction_costs" in compiled_query
+
+
+async def test_get_transaction_history_rehydrates_lossless_named_fee_authority() -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    persisted_transaction = DBTransaction(
+        transaction_id="BUY-FEES-01",
+        portfolio_id="P1",
+        instrument_id="S1",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="usd",
+        currency="USD",
+        trade_fee=Decimal("99"),
+        costs=[
+            TransactionCost(fee_type="brokerage", amount=Decimal("1.25"), currency="USD"),
+            TransactionCost(fee_type="stamp_duty", amount=Decimal("0.75"), currency="usd"),
+            TransactionCost(fee_type="exchange_fee", amount=Decimal("0.50"), currency="USD"),
+            TransactionCost(fee_type="gst", amount=Decimal("0.25"), currency="USD"),
+            TransactionCost(fee_type="other_fees", amount=Decimal("0.10"), currency="USD"),
+        ],
+    )
+    execute_result = MagicMock()
+    execute_result.unique.return_value.scalars.return_value.all.return_value = [
+        persisted_transaction
+    ]
+    db_session.execute.return_value = execute_result
+
+    transactions = await repository.get_transaction_history("P1", "S1")
+
+    assert transactions[0].trade_fee == Decimal("99")
+    assert {
+        field_name: getattr(transactions[0], field_name)
+        for field_name in transaction_repository_module.FEE_COMPONENT_FIELDS
+    } == {
+        "brokerage": Decimal("1.25"),
+        "stamp_duty": Decimal("0.75"),
+        "exchange_fee": Decimal("0.50"),
+        "gst": Decimal("0.25"),
+        "other_fees": Decimal("0.10"),
+    }
+    db_session.execute.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("costs", "expected_message"),
+    [
+        (
+            [TransactionCost(fee_type="custody_fee", amount=Decimal("1"), currency="USD")],
+            "unsupported fee type",
+        ),
+        (
+            [
+                TransactionCost(fee_type="gst", amount=Decimal("1"), currency="USD"),
+                TransactionCost(fee_type=" GST ", amount=Decimal("2"), currency="USD"),
+            ],
+            "duplicate fee-type authority",
+        ),
+        (
+            [TransactionCost(fee_type="gst", amount=Decimal("1"), currency="EUR")],
+            "currency conflicts",
+        ),
+    ],
+)
+async def test_get_transaction_history_rejects_invalid_named_fee_authority(
+    costs: list[TransactionCost], expected_message: str
+) -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    persisted_transaction = DBTransaction(
+        transaction_id="BUY-FEES-INVALID",
+        portfolio_id="P1",
+        instrument_id="S1",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        costs=costs,
+    )
+    execute_result = MagicMock()
+    execute_result.unique.return_value.scalars.return_value.all.return_value = [
+        persisted_transaction
+    ]
+    db_session.execute.return_value = execute_result
+
+    with pytest.raises(ValueError, match=expected_message):
+        await repository.get_transaction_history("P1", "S1")
 
 
 async def test_get_linked_transaction_group_scopes_portfolio_without_security_filter() -> None:
