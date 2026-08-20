@@ -64,6 +64,18 @@ budget.
   failure; they do not falsify #502's explicit configuration, boundedness, or non-regression
   acceptance.
 
+## Delivery evidence
+
+PR #960 merged by governed rebase at exact main SHA
+`80fc930002922909b76141ee97aaff353f4fa1f9`. Its protected PR Merge Gate passed, the authored
+Timeseries wiki was published at `dd06098`, and strict publication parity is zero. Main
+Releasability run `32376957044` passed every database-profile, static, contract, security, lock,
+and completed test lane. Its sole failure was the unrelated 1,000-member corporate-action test's
+host-speed assertion after all members completed correctly in 130.703 seconds. #963 owns the
+replacement deterministic-work gate on the next branch. Final exact-main green certification is
+therefore pending that fix-forward merge; the failed wall-clock assertion is not presented as a
+#502 runtime-profile defect or as passing mainline evidence.
+
 ## Compatibility
 
 No API, OpenAPI, event, Kafka key/partition, calculation, database schema/migration, dependency,
