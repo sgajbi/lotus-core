@@ -84,9 +84,13 @@ statement cardinality remain unchanged.
 
 - Focused persistence/calculation/repository unit suite: `164 passed`.
 - Deterministic PostgreSQL named-fee lock permutations plus raw-persistence correction/rollback:
-  refresh pending at the final fix-forward head.
+  `3 passed in 74.38s`.
 - Touched-source Ruff and MyPy: passed.
-- Full transaction-processing contract: `148 passed in 869.65s`.
+- Full transaction-processing contract at the production-code head: `147 passed`; one query-shape
+  guard misclassified the new joined history query as a duplicate point read after `942.55s`.
+  The corrected guard proves zero point reads and exactly one joined fee-authority history read;
+  its focused PostgreSQL rerun passed in `76.24s`. The protected PR lane remains the final complete
+  contract rerun authority.
 - Protected PR lanes and exact-main Main Releasability: pending.
 
 ## Documentation Decision
