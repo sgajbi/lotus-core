@@ -42,6 +42,30 @@ _VALUATION_JOB_CLAIM_LOCK_ID = 7_611_901
 _VALUATION_LEASE_OWNER_MAX_LENGTH = 128
 
 
+@dataclass(frozen=True, slots=True)
+class _ContiguousStateKey:
+    portfolio_id: str
+    security_id: str
+    epoch: int
+
+
+def _normalize_contiguous_states(states: List[PositionState]) -> List[_ContiguousStateKey]:
+    """Collapse duplicate state objects and reject ambiguous output-key epochs."""
+
+    normalized: dict[tuple[str, str], _ContiguousStateKey] = {}
+    for state in states:
+        output_key = (state.portfolio_id, state.security_id)
+        existing = normalized.get(output_key)
+        if existing is not None and existing.epoch != state.epoch:
+            raise ValueError("conflicting position-state epochs for one contiguous-date key")
+        normalized[output_key] = _ContiguousStateKey(
+            portfolio_id=state.portfolio_id,
+            security_id=state.security_id,
+            epoch=state.epoch,
+        )
+    return [normalized[key] for key in sorted(normalized)]
+
+
 def _latest_readiness_outbox_id_for_job():
     """Return the latest committed readiness sequence for the exact valuation scope."""
 
@@ -319,10 +343,7 @@ class ValuationRepositoryBase:
         if latest_valuation_date is None:
             return {}
 
-        states_by_key = {
-            (state.portfolio_id, state.security_id, state.epoch): state for state in states
-        }
-        normalized_states = [states_by_key[key] for key in sorted(states_by_key)]
+        normalized_states = _normalize_contiguous_states(states)
         all_first_open_dates = first_open_dates or {}
         contiguous_dates: Dict[Tuple[str, str], date] = {}
         observe_multi_statement_batch(
