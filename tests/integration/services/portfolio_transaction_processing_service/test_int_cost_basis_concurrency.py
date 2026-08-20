@@ -637,16 +637,24 @@ async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_read
         if statement.startswith("WITH updated_transaction AS")
         and "UPDATE transactions SET" in statement
     ]
-    canonical_transaction_reads = [
+    canonical_transaction_point_reads = [
         statement
         for statement in statements
         if statement.startswith("SELECT transactions.id")
-        and "transactions.transaction_id =" in statement
+        and "WHERE transactions.transaction_id =" in statement
+    ]
+    canonical_history_reads = [
+        statement
+        for statement in statements
+        if statement.startswith("SELECT transactions.id")
+        and "LEFT OUTER JOIN transaction_costs" in statement
+        and "trim(transactions.transaction_id) !=" in statement
     ]
     assert len(canonical_transaction_writes) == 1
     assert "RETURNING transactions.id" in canonical_transaction_writes[0]
     assert "DELETE FROM transaction_costs" in canonical_transaction_writes[0]
-    assert canonical_transaction_reads == []
+    assert canonical_transaction_point_reads == []
+    assert len(canonical_history_reads) == 1
     opening_lot_snapshot_reads = [
         statement
         for statement in statements
