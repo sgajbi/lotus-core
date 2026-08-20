@@ -23,6 +23,11 @@ class StatementBatchOperation(StrEnum):
     CONTIGUOUS_SNAPSHOT_LOOKUP = "contiguous_snapshot_lookup"
     FIRST_OPEN_DATE_LOOKUP = "first_open_date_lookup"
     DISPATCH_RECOVERY_UPDATE = "dispatch_recovery_update"
+    VALUATION_STALE_SUPERSEDED_UPDATE = "valuation_stale_superseded_update"
+    VALUATION_STALE_FAILED_UPDATE = "valuation_stale_failed_update"
+    VALUATION_STALE_RESET_UPDATE = "valuation_stale_reset_update"
+    REPROCESSING_STALE_FAILED_UPDATE = "reprocessing_stale_failed_update"
+    REPROCESSING_STALE_RESET_UPDATE = "reprocessing_stale_reset_update"
 
 
 def statement_chunk_size(

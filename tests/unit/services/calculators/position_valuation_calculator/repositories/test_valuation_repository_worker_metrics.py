@@ -97,6 +97,57 @@ async def test_find_and_reset_stale_jobs_emits_reset_metric(
     reset_metric.assert_called_once_with(3)
 
 
+async def test_stale_valuation_recovery_bounds_selection_and_chunks_reset_updates(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    first_result = MagicMock()
+    first_result.fetchall.return_value = [(job_id,) for job_id in range(1, 1_001)]
+    second_result = MagicMock()
+    second_result.fetchall.return_value = [(1_001,)]
+    mock_db_session.execute.side_effect = [first_result, second_result]
+
+    reset_count = await repo._reset_retryable_stale_jobs(list(range(1_001, 0, -1)))
+
+    assert reset_count == 1_001
+    assert mock_db_session.execute.await_count == 2
+    statement_lengths = [
+        len(call.args[0].compile().params["id_1"])
+        for call in mock_db_session.execute.await_args_list
+    ]
+    assert statement_lengths == [1_000, 1]
+    assert len(mock_db_session.execute.await_args_list[0].args[0].compile().params) == 7
+
+    select_result = MagicMock()
+    select_result.all.return_value = []
+    mock_db_session.reset_mock()
+    mock_db_session.execute.side_effect = None
+    mock_db_session.execute.return_value = select_result
+    await repo._find_stale_job_rows()
+    compiled_select = str(
+        mock_db_session.execute.await_args.args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "ORDER BY portfolio_valuation_jobs.valuation_lease_expires_at ASC" in compiled_select
+    assert "LIMIT 1000" in compiled_select
+
+
+async def test_stale_valuation_recovery_logs_counts_without_identifier_collections(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    mock_db_session.execute.return_value = MagicMock()
+
+    with patch("portfolio_common.valuation_repository_base.logger.warning") as warning:
+        await repo._mark_over_limit_stale_jobs_failed([3, 2, 2, 1], max_attempts=3)
+
+    extra = warning.call_args.kwargs["extra"]
+    assert extra["job_count"] == 3
+    assert "job_ids" not in extra
+
+
 async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     mock_db_session: AsyncMock,
 ) -> None:

@@ -25,6 +25,7 @@ from .database_models import (
 from .domain.currency import normalize_currency_code
 from .identifiers import normalize_lookup_identifier
 from .infrastructure.persistence.statement_batching import (
+    POSTGRES_STATEMENT_ROW_LIMIT,
     StatementBatchOperation,
     iter_statement_chunks,
     observe_multi_statement_batch,
@@ -40,6 +41,9 @@ logger = logging.getLogger(__name__)
 
 _VALUATION_JOB_CLAIM_LOCK_ID = 7_611_901
 _VALUATION_LEASE_OWNER_MAX_LENGTH = 128
+_STALE_SUPERSEDED_RESERVED_BINDS = 7
+_STALE_FAILED_RESERVED_BINDS = 7
+_STALE_RESET_RESERVED_BINDS = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -827,12 +831,30 @@ class ValuationRepositoryBase:
         self,
         superseded_job_ids: list[int],
     ) -> None:
-        if not superseded_job_ids:
+        normalized_job_ids = sorted(set(superseded_job_ids))
+        if not normalized_job_ids:
             return
-        await self.db.execute(_superseded_stale_jobs_update_stmt(superseded_job_ids))
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.VALUATION_STALE_SUPERSEDED_UPDATE,
+            item_count=len(normalized_job_ids),
+            binds_per_row=1,
+            reserved_binds=_STALE_SUPERSEDED_RESERVED_BINDS,
+        )
+        for job_id_chunk in iter_statement_chunks(
+            normalized_job_ids,
+            binds_per_row=1,
+            reserved_binds=_STALE_SUPERSEDED_RESERVED_BINDS,
+        ):
+            await self.db.execute(_superseded_stale_jobs_update_stmt(list(job_id_chunk)))
         logger.warning(
             "Marked stale superseded valuation jobs as SKIPPED_SUPERSEDED.",
-            extra={"job_ids": superseded_job_ids},
+            extra={
+                "event_name": "valuation_stale_recovery",
+                "operation": "skip_superseded",
+                "status": "staged",
+                "reason_code": "newer_epoch_exists",
+                "job_count": len(normalized_job_ids),
+            },
         )
 
     async def _mark_over_limit_stale_jobs_failed(
@@ -840,23 +862,54 @@ class ValuationRepositoryBase:
         failed_job_ids: list[int],
         max_attempts: int,
     ) -> None:
-        if not failed_job_ids:
+        normalized_job_ids = sorted(set(failed_job_ids))
+        if not normalized_job_ids:
             return
-        await self.db.execute(_failed_stale_jobs_update_stmt(failed_job_ids))
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.VALUATION_STALE_FAILED_UPDATE,
+            item_count=len(normalized_job_ids),
+            binds_per_row=1,
+            reserved_binds=_STALE_FAILED_RESERVED_BINDS,
+        )
+        for job_id_chunk in iter_statement_chunks(
+            normalized_job_ids,
+            binds_per_row=1,
+            reserved_binds=_STALE_FAILED_RESERVED_BINDS,
+        ):
+            await self.db.execute(_failed_stale_jobs_update_stmt(list(job_id_chunk)))
         logger.warning(
             "Marked stale valuation jobs as FAILED after max attempts.",
-            extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+            extra={
+                "event_name": "valuation_stale_recovery",
+                "operation": "fail_over_limit",
+                "status": "staged",
+                "reason_code": "max_attempts_exceeded",
+                "job_count": len(normalized_job_ids),
+                "max_attempts": max_attempts,
+            },
         )
 
     async def _reset_retryable_stale_jobs(
         self,
         reset_job_ids: list[int],
     ) -> int:
-        if not reset_job_ids:
+        normalized_job_ids = sorted(set(reset_job_ids))
+        if not normalized_job_ids:
             return 0
-        result = await self.db.execute(_reset_stale_jobs_update_stmt(reset_job_ids))
-        reset_ids = result.fetchall()
-        reset_count = len(reset_ids)
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.VALUATION_STALE_RESET_UPDATE,
+            item_count=len(normalized_job_ids),
+            binds_per_row=1,
+            reserved_binds=_STALE_RESET_RESERVED_BINDS,
+        )
+        reset_count = 0
+        for job_id_chunk in iter_statement_chunks(
+            normalized_job_ids,
+            binds_per_row=1,
+            reserved_binds=_STALE_RESET_RESERVED_BINDS,
+        ):
+            result = await self.db.execute(_reset_stale_jobs_update_stmt(list(job_id_chunk)))
+            reset_count += len(result.fetchall())
         if reset_count > 0:
             logger.warning(
                 "Reset %s stale valuation jobs from 'PROCESSING' to 'PENDING'.",
@@ -1007,15 +1060,25 @@ def _requeue_requested(stale_row: Any) -> bool:
 
 def _stale_valuation_jobs_stmt(repository: ValuationRepositoryBase):
     newer_epoch = aliased(PortfolioValuationJob)
-    return select(
-        PortfolioValuationJob.id,
-        PortfolioValuationJob.attempt_count,
-        PortfolioValuationJob.requeue_requested,
-        PortfolioValuationJob.valuation_claim_token,
-        repository._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
-    ).where(
-        PortfolioValuationJob.status == "PROCESSING",
-        PortfolioValuationJob.valuation_lease_expires_at <= func.clock_timestamp(),
+    return (
+        select(
+            PortfolioValuationJob.id,
+            PortfolioValuationJob.attempt_count,
+            PortfolioValuationJob.requeue_requested,
+            PortfolioValuationJob.valuation_claim_token,
+            repository._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label(
+                "has_newer_epoch"
+            ),
+        )
+        .where(
+            PortfolioValuationJob.status == "PROCESSING",
+            PortfolioValuationJob.valuation_lease_expires_at <= func.clock_timestamp(),
+        )
+        .order_by(
+            PortfolioValuationJob.valuation_lease_expires_at.asc(),
+            PortfolioValuationJob.id.asc(),
+        )
+        .limit(POSTGRES_STATEMENT_ROW_LIMIT)
     )
 
 

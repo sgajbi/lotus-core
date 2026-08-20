@@ -10,12 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
 from .durable_correlation import durable_correlation_diagnostics
+from .infrastructure.persistence.statement_batching import (
+    POSTGRES_STATEMENT_ROW_LIMIT,
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
 EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset({"RESET_WATERMARKS", "RESET_FX_WATERMARKS"})
+_STALE_FAILED_RESERVED_BINDS = 4
+_STALE_RESET_RESERVED_BINDS = 3
 
 
 class ResetWatermarksStageOutcome(StrEnum):
@@ -612,7 +620,13 @@ class ReprocessingJobRepository:
             except (KeyError, TypeError, ValueError):
                 logger.warning(
                     "Skipped malformed stale replay during identity coalescing.",
-                    extra={"job_id": row.id, "job_type": row.job_type},
+                    extra={
+                        "event_name": "reprocessing_stale_recovery",
+                        "operation": "fail_malformed",
+                        "status": "staged",
+                        "reason_code": "malformed_effective_dated_payload",
+                        "job_type": row.job_type,
+                    },
                 )
                 result = await self.db.execute(
                     _stale_jobs_update_stmt([row.id], stale_cutoff).values(
@@ -643,12 +657,31 @@ class ReprocessingJobRepository:
         stale_cutoff: datetime,
         max_attempts: int,
     ) -> None:
-        if not failed_job_ids:
+        normalized_job_ids = sorted(set(failed_job_ids))
+        if not normalized_job_ids:
             return
-        await self.db.execute(_failed_stale_jobs_update_stmt(failed_job_ids, stale_cutoff))
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.REPROCESSING_STALE_FAILED_UPDATE,
+            item_count=len(normalized_job_ids),
+            binds_per_row=1,
+            reserved_binds=_STALE_FAILED_RESERVED_BINDS,
+        )
+        for job_id_chunk in iter_statement_chunks(
+            normalized_job_ids,
+            binds_per_row=1,
+            reserved_binds=_STALE_FAILED_RESERVED_BINDS,
+        ):
+            await self.db.execute(_failed_stale_jobs_update_stmt(list(job_id_chunk), stale_cutoff))
         logger.warning(
             "Marked stale reprocessing jobs as FAILED after max attempts.",
-            extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+            extra={
+                "event_name": "reprocessing_stale_recovery",
+                "operation": "fail_over_limit",
+                "status": "staged",
+                "reason_code": "max_attempts_exceeded",
+                "job_count": len(normalized_job_ids),
+                "max_attempts": max_attempts,
+            },
         )
 
     async def _reset_retryable_stale_jobs(
@@ -656,10 +689,26 @@ class ReprocessingJobRepository:
         reset_job_ids: list[int],
         stale_cutoff: datetime,
     ) -> int:
-        if not reset_job_ids:
+        normalized_job_ids = sorted(set(reset_job_ids))
+        if not normalized_job_ids:
             return 0
-        result = await self.db.execute(_reset_stale_jobs_update_stmt(reset_job_ids, stale_cutoff))
-        return result.rowcount
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.REPROCESSING_STALE_RESET_UPDATE,
+            item_count=len(normalized_job_ids),
+            binds_per_row=1,
+            reserved_binds=_STALE_RESET_RESERVED_BINDS,
+        )
+        reset_count = 0
+        for job_id_chunk in iter_statement_chunks(
+            normalized_job_ids,
+            binds_per_row=1,
+            reserved_binds=_STALE_RESET_RESERVED_BINDS,
+        ):
+            result = await self.db.execute(
+                _reset_stale_jobs_update_stmt(list(job_id_chunk), stale_cutoff)
+            )
+            reset_count += int(result.rowcount or 0)
+        return reset_count
 
     @async_timed(repository="ReprocessingJobRepository", method="get_queue_stats")
     async def get_queue_stats(self, job_type: str | None = None) -> Dict[str, Any]:
@@ -735,6 +784,7 @@ def _stale_reprocessing_jobs_stmt(stale_cutoff: datetime):
             ReprocessingJob.updated_at < stale_cutoff,
         )
         .order_by(ReprocessingJob.id.asc())
+        .limit(POSTGRES_STATEMENT_ROW_LIMIT)
     )
 
 
