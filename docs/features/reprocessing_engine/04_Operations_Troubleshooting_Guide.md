@@ -20,6 +20,19 @@ The health and progress of the reprocessing engine can be monitored via key Prom
     * **What it is:** A counter that increments every time a consumer discards a Kafka message because its epoch is stale.
     * **What to watch for:** A consistently high rate of dropped messages can indicate a "split-brain" scenario or a misbehaving producer that is still publishing events with an old epoch.
 
+### Oversized repository batches
+
+Valuation and reprocessing repositories split normalized caller-sized work into statements of no
+more than 1,000 rows and within the governed PostgreSQL bind budget. When one logical operation
+requires multiple statements, it emits one structured `database_statement_batch` event containing
+only `operation`, `item_count`, `chunk_count`, and `max_rows_per_statement`.
+
+Use repeated multi-statement events to distinguish legitimate high-cardinality fan-out from a
+database parameter failure. Do not treat multiple statements as partial commits: all chunks remain
+inside the caller-owned transaction, and a later failure rolls back the logical operation. The
+event deliberately omits portfolio, security, job, claim, and correlation identifiers; use support
+and lineage APIs for drill-down.
+
 ## 2. API-First Monitoring
 
 Use the API-first operational runbook:
