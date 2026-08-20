@@ -191,9 +191,14 @@ class ValuationJobRepository:
         observe_multi_statement_batch(
             operation=StatementBatchOperation.VALUATION_JOB_UPSERT,
             item_count=len(eligible_jobs),
-            binds_per_row=7,
+            binds_per_row=11,
+            reserved_binds=16,
         )
-        for job_chunk in iter_statement_chunks(eligible_jobs, binds_per_row=7):
+        for job_chunk in iter_statement_chunks(
+            eligible_jobs,
+            binds_per_row=11,
+            reserved_binds=16,
+        ):
             result = await self.db.execute(
                 _valuation_job_upsert_stmt(
                     job_chunk,
