@@ -36,7 +36,9 @@ def _normalize_state_updates(updates: List[_PositionStateUpdate]) -> List[_Posit
             or existing["status"] != update_item["status"]
         ):
             raise ValueError("conflicting position-state updates for the same epoch")
-        normalized[identity] = update_item
+        # Snapshot the scalar command before the first awaited database call so a
+        # caller cannot mutate a later chunk after conflict validation completed.
+        normalized[identity] = dict(update_item)
     return [normalized[identity] for identity in sorted(normalized)]
 
 

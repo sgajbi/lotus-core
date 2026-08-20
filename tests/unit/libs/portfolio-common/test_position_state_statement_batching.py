@@ -2,7 +2,10 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.position_state_repository import PositionStateRepository
+from portfolio_common.position_state_repository import (
+    PositionStateRepository,
+    _normalize_state_updates,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -51,6 +54,15 @@ async def test_bulk_update_states_rejects_conflicting_duplicates_before_io() -> 
         await PositionStateRepository(db).bulk_update_states([first, conflicting])
 
     db.execute.assert_not_awaited()
+
+
+async def test_normalized_state_updates_snapshot_caller_owned_commands() -> None:
+    update = _state_update(1)
+
+    normalized = _normalize_state_updates([update])
+    update["status"] = "MUTATED_AFTER_VALIDATION"
+
+    assert normalized[0]["status"] == "CURRENT"
 
 
 async def test_update_watermarks_chunks_unique_keys() -> None:
