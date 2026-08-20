@@ -86,7 +86,9 @@ any calculated prefix row missing current, input-and-output-bound Core transacti
 database transaction. Raw ingestion preserves positive named fee components, and the canonical
 history read rehydrates the governed component breakdown in one query; prefix repair therefore
 cannot silently turn stamp duty, exchange fees, GST, or other fees into brokerage. Foreign,
-stale, or output-mismatched calculation receipts are not authority.
+stale, or output-mismatched calculation receipts are not authority. Input lineage binds the
+normalized named components rather than the redundant aggregate fee string, so PostgreSQL decimal
+scale expansion cannot make an identical fee observation appear changed.
 Already-governed prefix rows are not rewritten, so statement count does not grow with history
 depth. This makes zero-work coalescing safe even when a later economic-date transaction acquires
 the cost lock first; operators must treat a quantity/cost-basis divergence as a correctness

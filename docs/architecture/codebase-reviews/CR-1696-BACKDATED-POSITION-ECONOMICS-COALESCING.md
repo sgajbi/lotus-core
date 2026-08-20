@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 Issue: #486
-Status: Correctness fix-forward in progress after PR #968; protected PR and exact-main proof pending
+Status: Correctness fix-forward in progress after PR #970; protected PR and exact-main proof pending
 
 ## Objective
 
@@ -38,6 +38,10 @@ wall-clock or runner flake. A favorable earliest-first schedule concealed it.
   reclassifying stamp duty, exchange fees, GST, or other fees as brokerage. Explicit all-zero named
   authority removes prior positive component rows and remains idempotently zero; all-`None` sparse
   events do not invent a component correction.
+- Transaction-cost input lineage binds the normalized named fee components, not the mapper's
+  redundant aggregate `trade_fee` string. PostgreSQL scale expansion such as `2.00` to
+  `2.0000000000` therefore preserves replay identity, while a component or amount change still
+  changes the input hash.
 - Already-governed prefix rows are not rewritten. The two-row and 200-row AVCO replay fixtures
   retain equal statement count, preventing history-depth amplification.
 - Incremental calculations retain the existing affected-suffix write boundary.
@@ -90,12 +94,20 @@ statement cardinality remain unchanged.
   application calculation suites; full-repository MyPy passed across `318` source files. The
   regression proves quantity and gross-amount corrections invalidate an otherwise intact prior
   output receipt.
+- PR #970 merged as `05476fae8a86e750434298ad2f7e41a2c761c165` before PR Merge Gate run
+  `32419579664` became terminal. Its transaction-processing shard then failed with `3 failed,
+  145 passed`; downstream coverage/runtime lanes were skipped. This merge is not certification.
+  The failure exposed scale-sensitive hashing of the redundant named-fee aggregate.
+- Signed fix-forward commit `da2620de3987c3fad2747f4ed65f248d4c52a535`: `114 passed` across
+  warning-strict calculator and engine-input tests; both deterministic PostgreSQL lock
+  permutations passed in `67.71s` with current input-and-output authority for every canonical row.
 - Full transaction-processing contract at the production-code head: `147 passed`; one query-shape
   guard misclassified the new joined history query as a duplicate point read after `942.55s`.
   The corrected guard proves zero point reads and exactly one joined fee-authority history read;
   its focused PostgreSQL rerun passed in `76.24s`. The protected PR lane remains the final complete
   contract rerun authority.
-- Protected PR lanes and exact-main Main Releasability: pending.
+- A new protected PR lane, the complete transaction-processing shard, and exact-main Main
+  Releasability remain pending.
 
 ## Documentation Decision
 
