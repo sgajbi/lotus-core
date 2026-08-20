@@ -1,7 +1,7 @@
 # src/libs/portfolio-common/portfolio_common/valuation_job_repository.py
 import logging
 from datetime import date
-from typing import Iterable, Iterator, Optional, TypeVar
+from typing import Iterable, Optional
 
 from sqlalchemy import and_, case, func, literal, not_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -9,20 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PortfolioValuationJob
 from .durable_correlation import durable_correlation_diagnostics
+from .infrastructure.persistence.statement_batching import iter_statement_chunks
 from .logging_utils import normalize_lineage_value
 from .valuation_job_contracts import ValuationJobUpsert
 
 logger = logging.getLogger(__name__)
-
-VALUATION_JOB_STATEMENT_CHUNK_SIZE = 1000
-_ChunkValue = TypeVar("_ChunkValue")
-
-
-def _iter_statement_chunks(values: list[_ChunkValue]) -> Iterator[list[_ChunkValue]]:
-    """Yield bind-safe, order-preserving chunks for valuation-job statements."""
-
-    for start in range(0, len(values), VALUATION_JOB_STATEMENT_CHUNK_SIZE):
-        yield values[start : start + VALUATION_JOB_STATEMENT_CHUNK_SIZE]
 
 
 class ValuationJobRepository:
@@ -193,7 +184,7 @@ class ValuationJobRepository:
         fence_by_readiness_sequence: bool = False,
     ) -> int:
         staged_count = 0
-        for job_chunk in _iter_statement_chunks(eligible_jobs):
+        for job_chunk in iter_statement_chunks(eligible_jobs, binds_per_row=7):
             result = await self.db.execute(
                 _valuation_job_upsert_stmt(
                     job_chunk,
@@ -282,7 +273,7 @@ class ValuationJobRepository:
             return {}
 
         latest_epochs: dict[tuple[str, str, date], int] = {}
-        for scope_chunk in _iter_statement_chunks(scopes):
+        for scope_chunk in iter_statement_chunks(scopes, binds_per_row=3):
             result = await self.db.execute(
                 select(
                     PortfolioValuationJob.portfolio_id,
