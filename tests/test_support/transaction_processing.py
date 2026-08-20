@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from portfolio_common.database_models import Instrument, Portfolio
+from portfolio_common.database_models import Instrument, Portfolio, TransactionCost
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.persistence_service.app.adapters.event_record_mapper import (
+    transaction_event_fee_component_values,
     transaction_event_to_record_values,
 )
 from src.services.portfolio_transaction_processing_service.app.application import (
@@ -114,7 +115,10 @@ def booked_transaction_event(
 
 
 def canonical_transaction_record(event: TransactionEvent) -> DBTransaction:
-    return DBTransaction(**transaction_event_to_record_values(event))
+    return DBTransaction(
+        **transaction_event_to_record_values(event),
+        costs=[TransactionCost(**row) for row in transaction_event_fee_component_values(event)],
+    )
 
 
 async def persist_and_process_booked_transaction(

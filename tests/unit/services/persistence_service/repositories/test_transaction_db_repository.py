@@ -53,6 +53,7 @@ async def test_create_or_update_transaction_uses_canonical_currency_codes() -> N
     assert persisted.sell_currency == "EUR"
     assert persisted.synthetic_flow_currency == "SGD"
     db.execute.assert_awaited_once()
+    db.add_all.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -86,7 +87,17 @@ async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> N
 
     assert persisted.trade_fee == Decimal("5.00")
     assert not hasattr(persisted, "brokerage")
-    db.execute.assert_awaited_once()
+    assert db.execute.await_count == 2
+    persisted_components = db.add_all.call_args.args[0]
+    assert [
+        (row.transaction_id, row.fee_type, row.amount, row.currency) for row in persisted_components
+    ] == [
+        ("TX_FEE_COMPONENTS_001", "brokerage", Decimal("2.50"), "USD"),
+        ("TX_FEE_COMPONENTS_001", "stamp_duty", Decimal("1.20"), "USD"),
+        ("TX_FEE_COMPONENTS_001", "exchange_fee", Decimal("0.70"), "USD"),
+        ("TX_FEE_COMPONENTS_001", "gst", Decimal("0.45"), "USD"),
+        ("TX_FEE_COMPONENTS_001", "other_fees", Decimal("0.15"), "USD"),
+    ]
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import CashAccountMaster, Portfolio
+from portfolio_common.database_models import CashAccountMaster, Portfolio, TransactionCost
 from portfolio_common.database_models import Instrument as DBInstrument
 from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -425,6 +425,58 @@ async def test_transaction_repository_is_idempotent(clean_db, async_db_session: 
     )
     count2 = (await async_db_session.execute(stmt2)).scalar()
     assert count2 == 1
+
+
+async def test_transaction_repository_persists_named_fee_source_authority(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    repo = TransactionDBRepository(async_db_session)
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_FEE_SOURCE_01",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="High",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_FEE_SOURCE_01",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+    event = TransactionEvent(
+        transaction_id="FEE_SOURCE_01",
+        portfolio_id="PORT_FEE_SOURCE_01",
+        instrument_id="INST_FEE_SOURCE_01",
+        security_id="SEC_FEE_SOURCE_01",
+        transaction_date=datetime(2026, 8, 21, 10, 0, tzinfo=UTC),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="usd",
+        currency="usd",
+        brokerage=Decimal("1.25"),
+        stamp_duty=Decimal("0.75"),
+    )
+
+    await repo.create_or_update_transaction(event)
+    await async_db_session.commit()
+
+    costs = list(
+        (
+            await async_db_session.scalars(
+                select(TransactionCost)
+                .where(TransactionCost.transaction_id == event.transaction_id)
+                .order_by(TransactionCost.fee_type)
+            )
+        ).all()
+    )
+    assert [(row.fee_type, row.amount, row.currency) for row in costs] == [
+        ("brokerage", Decimal("1.25"), "USD"),
+        ("stamp_duty", Decimal("0.75"), "USD"),
+    ]
 
 
 async def test_transaction_repository_persists_linkage_and_policy_metadata(
