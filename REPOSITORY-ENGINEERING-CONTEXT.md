@@ -2521,7 +2521,7 @@ Most relevant current governance:
      epoch advancement. Record `coalesced/already_materialized`, do not read full history, advance
      epoch, delete/reinsert positions, or publish replay events, and keep normal ordered processing
      free of this extra query. This is safe only because a full cost-basis rebuild persists its
-     affected suffix plus any calculated prefix row that lacks current, output-bound Core
+     affected suffix plus any calculated prefix row that lacks current, input-and-output-bound Core
      transaction-cost authority
      before position history consumes the timeline in the same caller-owned transaction. Persisting
      only the incoming/affected suffix can let an unfavorable concurrent lock order materialize
