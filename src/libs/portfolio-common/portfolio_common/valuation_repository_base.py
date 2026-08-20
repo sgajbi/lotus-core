@@ -338,24 +338,24 @@ class ValuationRepositoryBase:
         if not states:
             return {}
 
+        normalized_states = _normalize_contiguous_states(states)
+        all_first_open_dates = dict(first_open_dates or {})
         if latest_valuation_date is None:
             latest_valuation_date = await self.get_latest_business_date()
         if latest_valuation_date is None:
             return {}
 
-        normalized_states = _normalize_contiguous_states(states)
-        all_first_open_dates = first_open_dates or {}
         contiguous_dates: Dict[Tuple[str, str], date] = {}
         observe_multi_statement_batch(
             operation=StatementBatchOperation.CONTIGUOUS_SNAPSHOT_LOOKUP,
             item_count=len(normalized_states),
             binds_per_row=7,
-            reserved_binds=10,
+            reserved_binds=11,
         )
         for state_chunk in iter_statement_chunks(
             normalized_states,
             binds_per_row=7,
-            reserved_binds=10,
+            reserved_binds=11,
         ):
             chunk_keys = {
                 (state.portfolio_id, state.security_id, state.epoch) for state in state_chunk

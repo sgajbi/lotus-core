@@ -2,10 +2,14 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    POSTGRES_BIND_PARAMETER_BUDGET,
+)
 from portfolio_common.position_state_repository import (
     PositionStateRepository,
     _normalize_state_updates,
 )
+from sqlalchemy.dialects import postgresql
 
 pytestmark = pytest.mark.asyncio
 
@@ -82,3 +86,33 @@ async def test_update_watermarks_chunks_unique_keys() -> None:
 
     assert updated == 1_001
     assert db.execute.await_count == 2
+
+
+async def test_epoch_fenced_watermark_chunks_account_for_all_bind_parameters() -> None:
+    db = AsyncMock()
+    first_result = MagicMock()
+    first_result.fetchall.return_value = []
+    second_result = MagicMock()
+    second_result.fetchall.return_value = []
+    db.execute.side_effect = [first_result, second_result]
+    keys = [(f"P-{index:05d}", f"S-{index:05d}") for index in range(1_001)]
+
+    await PositionStateRepository(db).update_watermarks_if_older(
+        keys,
+        date(2026, 8, 20),
+        expected_epoch=3,
+    )
+
+    parameter_counts = [
+        len(
+            call.args[0]
+            .compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"render_postcompile": True},
+            )
+            .params
+        )
+        for call in db.execute.await_args_list
+    ]
+    assert parameter_counts == [2_004, 6]
+    assert max(parameter_counts) <= POSTGRES_BIND_PARAMETER_BUDGET

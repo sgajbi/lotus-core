@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
@@ -469,21 +470,38 @@ async def test_find_contiguous_snapshot_dates_chunks_large_state_sets(
         ]
     )
     mock_db_session.execute.side_effect = [first_result, second_result]
+    first_open_dates = {
+        (state.portfolio_id, state.security_id, state.epoch): date(2026, 1, 1) for state in states
+    }
 
     contiguous_dates = await repo.find_contiguous_snapshot_dates(
         states,
+        first_open_dates,
         latest_valuation_date=date(2026, 8, 20),
     )
 
     assert len(contiguous_dates) == 1_001
     assert contiguous_dates[("P-01000", "S-01000")] == date(2026, 8, 20)
     assert mock_db_session.execute.await_count == 2
+    parameter_counts = [
+        len(
+            call.args[0]
+            .compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"render_postcompile": True},
+            )
+            .params
+        )
+        for call in mock_db_session.execute.await_args_list
+    ]
+    assert parameter_counts == [7_011, 18]
 
 
 async def test_find_contiguous_snapshot_dates_rejects_conflicting_epochs_before_io(
     mock_db_session: AsyncMock,
 ) -> None:
     repo = ValuationRepository(mock_db_session)
+    repo.get_latest_business_date = AsyncMock()
     states = [
         MagicMock(portfolio_id="P-1", security_id="S-1", epoch=1),
         MagicMock(portfolio_id="P-1", security_id="S-1", epoch=2),
@@ -492,10 +510,48 @@ async def test_find_contiguous_snapshot_dates_rejects_conflicting_epochs_before_
     with pytest.raises(ValueError, match="conflicting position-state epochs"):
         await repo.find_contiguous_snapshot_dates(
             states,
+        )
+
+    repo.get_latest_business_date.assert_not_awaited()
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_find_contiguous_snapshot_dates_snapshots_first_open_authority_before_await(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    states = [
+        MagicMock(
+            portfolio_id=f"P-{index:05d}",
+            security_id=f"S-{index:05d}",
+            epoch=1,
+        )
+        for index in range(1_001)
+    ]
+    final_key = ("P-01000", "S-01000", 1)
+    first_open_dates = {final_key: date(2026, 1, 2)}
+
+    async def mutate_after_first_statement(_statement):
+        if mock_db_session.execute.await_count == 1:
+            first_open_dates.clear()
+        result = MagicMock()
+        result.__iter__.return_value = iter([])
+        return result
+
+    mock_db_session.execute.side_effect = mutate_after_first_statement
+
+    with patch(
+        "portfolio_common.valuation_repository_base.build_contiguous_snapshot_dates_stmt",
+        return_value=MagicMock(),
+    ) as build_statement:
+        await repo.find_contiguous_snapshot_dates(
+            states,
+            first_open_dates,
             latest_valuation_date=date(2026, 8, 20),
         )
 
-    mock_db_session.execute.assert_not_awaited()
+    assert mock_db_session.execute.await_count == 2
+    assert build_statement.call_args_list[1].args[1] == {final_key: date(2026, 1, 2)}
 
 
 async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
