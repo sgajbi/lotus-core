@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PortfolioValuationJob
 from .durable_correlation import durable_correlation_diagnostics
-from .infrastructure.persistence.statement_batching import iter_statement_chunks
+from .infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from .logging_utils import normalize_lineage_value
 from .valuation_job_contracts import ValuationJobUpsert
 
@@ -184,6 +188,11 @@ class ValuationJobRepository:
         fence_by_readiness_sequence: bool = False,
     ) -> int:
         staged_count = 0
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.VALUATION_JOB_UPSERT,
+            item_count=len(eligible_jobs),
+            binds_per_row=7,
+        )
         for job_chunk in iter_statement_chunks(eligible_jobs, binds_per_row=7):
             result = await self.db.execute(
                 _valuation_job_upsert_stmt(
@@ -273,6 +282,11 @@ class ValuationJobRepository:
             return {}
 
         latest_epochs: dict[tuple[str, str, date], int] = {}
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.VALUATION_JOB_EPOCH_LOOKUP,
+            item_count=len(scopes),
+            binds_per_row=3,
+        )
         for scope_chunk in iter_statement_chunks(scopes, binds_per_row=3):
             result = await self.db.execute(
                 select(
