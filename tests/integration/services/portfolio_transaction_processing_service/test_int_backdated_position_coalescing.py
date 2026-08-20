@@ -13,11 +13,19 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    build_cost_basis_engine_input,
+    has_governed_transaction_cost_authority,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisProcessingStateRepository,
+    SqlAlchemyCostBasisTransactionRepository,
 )
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
@@ -26,7 +34,6 @@ from tests.test_support.async_task_coordination import (
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
-    canonical_transaction_record,
     instrument_record,
     persist_and_process_booked_transaction,
     portfolio_record,
@@ -106,18 +113,27 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         correlation_id="corr-backdated-coalesce-current",
     )
 
-    earliest_record = canonical_transaction_record(earliest_buy)
-    earliest_record.trade_fee = Decimal("99")
-    earliest_record.net_cost = Decimal("999")
-    earliest_record.net_cost_local = Decimal("999")
-    earliest_record.calculation_lineage = build_calculation_lineage(
+    raw_transactions = TransactionDBRepository(async_db_session)
+    await raw_transactions.create_or_update_transaction(earliest_buy)
+    await raw_transactions.create_or_update_transaction(middle_buy)
+    await async_db_session.flush()
+    stale_lineage = build_calculation_lineage(
         algorithm_id="foreign-transaction-cost-calculation",
         algorithm_version=1,
         intermediate_precision=28,
         input_payload={"transaction_id": earliest_buy.transaction_id},
         output_payload={"net_cost": Decimal("999")},
     ).lineage_payload()
-    async_db_session.add_all([earliest_record, canonical_transaction_record(middle_buy)])
+    await async_db_session.execute(
+        update(DBTransaction)
+        .where(DBTransaction.transaction_id == earliest_buy.transaction_id)
+        .values(
+            trade_fee=Decimal("99"),
+            net_cost=Decimal("999"),
+            net_cost_local=Decimal("999"),
+            calculation_lineage=stale_lineage,
+        )
+    )
     await async_db_session.commit()
 
     first_lock_acquired = asyncio.Event()
@@ -270,6 +286,9 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
                 )
             ).all()
         )
+        governed_history = await SqlAlchemyCostBasisTransactionRepository(
+            verification_session
+        ).get_transaction_history(portfolio_id, security_id)
 
     assert state.epoch == 1
     assert [position.transaction_id for position in current_positions] == [
@@ -303,6 +322,15 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     ]
     assert all(
         transaction.calculation_lineage is not None for transaction in canonical_transactions
+    )
+    assert all(
+        has_governed_transaction_cost_authority(
+            {
+                **build_cost_basis_engine_input(transaction),
+                "portfolio_base_currency": "USD",
+            }
+        )
+        for transaction in governed_history
     )
     assert all(position.calculation_lineage is not None for position in current_positions)
     assert processed_event_count == 3

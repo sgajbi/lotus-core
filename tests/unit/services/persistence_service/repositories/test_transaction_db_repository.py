@@ -101,6 +101,39 @@ async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> N
 
 
 @pytest.mark.asyncio
+async def test_create_or_update_transaction_clears_explicit_zero_named_fee_authority() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = "TX_ZERO_FEE_COMPONENTS_001"
+    db.execute.return_value = execute_result
+    repo = TransactionDBRepository(db)
+    event = TransactionEvent(
+        transaction_id="TX_ZERO_FEE_COMPONENTS_001",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date="2026-05-28T10:00:00Z",
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        brokerage=Decimal(0),
+        stamp_duty=Decimal(0),
+        exchange_fee=Decimal(0),
+        gst=Decimal(0),
+        other_fees=Decimal(0),
+    )
+
+    persisted = await repo.create_or_update_transaction(event)
+
+    assert persisted.trade_fee == Decimal(0)
+    assert db.execute.await_count == 2
+    db.add_all.assert_called_once_with([])
+
+
+@pytest.mark.asyncio
 async def test_create_or_update_transaction_rejects_existing_foreign_identity() -> None:
     db = AsyncMock(spec=AsyncSession)
     execute_result = MagicMock()

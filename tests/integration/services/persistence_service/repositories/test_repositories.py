@@ -478,6 +478,44 @@ async def test_transaction_repository_persists_named_fee_source_authority(
         ("stamp_duty", Decimal("0.75"), "USD"),
     ]
 
+    zero_named_fees = TransactionEvent.model_validate(
+        {
+            **event.model_dump(mode="python"),
+            "brokerage": Decimal(0),
+            "stamp_duty": Decimal(0),
+            "exchange_fee": Decimal(0),
+            "gst": Decimal(0),
+            "other_fees": Decimal(0),
+        }
+    )
+    await repo.create_or_update_transaction(zero_named_fees)
+    await async_db_session.commit()
+    await repo.create_or_update_transaction(zero_named_fees)
+    await async_db_session.commit()
+
+    assert (
+        await async_db_session.scalar(
+            select(func.count(TransactionCost.id)).where(
+                TransactionCost.transaction_id == event.transaction_id
+            )
+        )
+        == 0
+    )
+    assert await async_db_session.scalar(
+        select(DBTransaction.trade_fee).where(DBTransaction.transaction_id == event.transaction_id)
+    ) == Decimal(0)
+
+    await repo.create_or_update_transaction(event)
+    await async_db_session.rollback()
+    assert (
+        await async_db_session.scalar(
+            select(func.count(TransactionCost.id)).where(
+                TransactionCost.transaction_id == event.transaction_id
+            )
+        )
+        == 0
+    )
+
 
 async def test_transaction_repository_persists_linkage_and_policy_metadata(
     clean_db, async_db_session: AsyncSession
