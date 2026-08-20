@@ -552,18 +552,31 @@ async def test_bulk_update_states_orders_overlapping_transactions_consistently(
     await async_db_session.commit()
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
 
-    async def apply_batch(watermark_date: date, status: str) -> None:
+    async def apply_batch(updates: list[dict[str, object]]) -> None:
         async with session_factory() as session:
             async with session.begin():
-                updated_count = await PositionStateRepository(session).bulk_update_states(
-                    _large_position_state_updates(prefix, watermark_date, status)
-                )
+                updated_count = await PositionStateRepository(session).bulk_update_states(updates)
                 assert updated_count == 1_001
+
+    descending_updates = _large_position_state_updates(
+        prefix,
+        date(2026, 8, 19),
+        "CURRENT",
+    )
+    ascending_updates = list(
+        reversed(
+            _large_position_state_updates(
+                prefix,
+                date(2026, 8, 20),
+                "REPROCESSING",
+            )
+        )
+    )
 
     await asyncio.wait_for(
         asyncio.gather(
-            apply_batch(date(2026, 8, 19), "CURRENT"),
-            apply_batch(date(2026, 8, 20), "REPROCESSING"),
+            apply_batch(descending_updates),
+            apply_batch(ascending_updates),
         ),
         timeout=60,
     )
