@@ -168,10 +168,19 @@ def _to_persisted_booked_transaction(
     """Rehydrate the internal calculation receipt excluded from the public event contract."""
 
     booked = to_booked_transaction(TransactionEvent.model_validate(transaction))
-    return replace(
+    booked = replace(
         booked,
         calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),
-        **(fee_components or {}),
+    )
+    if fee_components is None:
+        return booked
+    return replace(
+        booked,
+        brokerage=fee_components["brokerage"],
+        stamp_duty=fee_components["stamp_duty"],
+        exchange_fee=fee_components["exchange_fee"],
+        gst=fee_components["gst"],
+        other_fees=fee_components["other_fees"],
     )
 
 
@@ -187,11 +196,11 @@ FEE_COMPONENT_FIELD_SET = frozenset(FEE_COMPONENT_FIELDS)
 
 def _rehydrate_transaction_fee_components(
     transaction: DBTransaction,
-) -> dict[str, Decimal]:
+) -> dict[str, Decimal] | None:
     """Return lossless named fee authority from eagerly loaded canonical rows."""
 
     if not transaction.costs:
-        return {}
+        return None
 
     expected_currency = normalize_currency_code(transaction.trade_currency or transaction.currency)
     components = dict.fromkeys(FEE_COMPONENT_FIELDS, Decimal(0))
