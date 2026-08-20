@@ -30,6 +30,7 @@ from .calculation.basis_transfer_allocation import (
 from .calculation.calculation_errors import CostCalculationErrorCollector
 from .calculation.cost_basis_calculator import (
     CostBasisCalculator,
+    has_governed_transaction_cost_authority,
     transaction_cost_output_payload,
 )
 from .calculation.cost_basis_strategies import (
@@ -125,6 +126,7 @@ __all__ = [
     "CorporateActionLegLinkageFinding",
     "CorporateActionLegLinkageFindingType",
     "CostBasisCalculator",
+    "has_governed_transaction_cost_authority",
     "build_cost_basis_engine_input",
     "COST_BASIS_STATE_VERSION",
     "CostBasisProcessingCheckpoint",

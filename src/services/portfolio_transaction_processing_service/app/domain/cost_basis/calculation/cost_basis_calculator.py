@@ -1,9 +1,14 @@
 """Apply transaction-specific cost-basis and realized-P&L policies."""
 
+from collections.abc import Mapping
 from decimal import Decimal
-from typing import Callable, Protocol, cast
+from typing import Any, Callable, Protocol, cast
 
-from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+    calculation_lineage_binds_output,
+)
 from portfolio_common.domain.cost_basis_receipt_integrity import (
     canonical_cost_basis_output_payload,
 )
@@ -38,6 +43,9 @@ from ..corporate_action_cash_economics import (
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .calculation_errors import CostCalculationErrorCollector
 from .lot_disposition import LotDispositionEngine
+
+TRANSACTION_COST_CALCULATION_ALGORITHM_ID = "transaction-cost-basis-calculation"
+TRANSACTION_COST_CALCULATION_ALGORITHM_VERSION = 2
 
 
 class TransactionCostStrategy(Protocol):
@@ -1360,8 +1368,8 @@ class CostBasisCalculator:
             transaction.set_calculated_field(
                 "calculation_lineage",
                 build_calculation_lineage(
-                    algorithm_id="transaction-cost-basis-calculation",
-                    algorithm_version=2,
+                    algorithm_id=TRANSACTION_COST_CALCULATION_ALGORITHM_ID,
+                    algorithm_version=TRANSACTION_COST_CALCULATION_ALGORITHM_VERSION,
                     intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
                     input_payload=canonical_cost_basis_output_payload(lineage_input),
                     output_payload=canonical_cost_basis_output_payload(
@@ -1447,6 +1455,34 @@ def transaction_cost_output_payload(transaction: CostBasisTransaction) -> dict[s
         "transaction_fx_rate": transaction.transaction_fx_rate,
         "transaction_id": transaction.transaction_id,
     }
+
+
+def has_governed_transaction_cost_authority(transaction: Mapping[str, Any]) -> bool:
+    """Return whether persisted economics carry current, output-bound Core authority."""
+
+    if transaction.get("net_cost") is None or transaction.get("net_cost_local") is None:
+        return False
+    lineage = transaction.get("calculation_lineage")
+    if not isinstance(lineage, CalculationLineage):
+        return False
+    if (
+        lineage.algorithm_id != TRANSACTION_COST_CALCULATION_ALGORITHM_ID
+        or lineage.algorithm_version != TRANSACTION_COST_CALCULATION_ALGORITHM_VERSION
+        or lineage.numeric_output_policy != TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity()
+    ):
+        return False
+    try:
+        persisted_transaction = CostBasisTransaction(**dict(transaction))
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        calculation_lineage_binds_output(
+            lineage,
+            output_payload=canonical_cost_basis_output_payload(
+                transaction_cost_output_payload(persisted_transaction)
+            ),
+        )
+    )
 
 
 def _transaction_cost_input(transaction: CostBasisTransaction) -> dict[str, object]:
