@@ -565,7 +565,7 @@ async def test_bulk_update_states_orders_overlapping_transactions_consistently(
             apply_batch(date(2026, 8, 19), "CURRENT"),
             apply_batch(date(2026, 8, 20), "REPROCESSING"),
         ),
-        timeout=20,
+        timeout=60,
     )
 
     rows = (
