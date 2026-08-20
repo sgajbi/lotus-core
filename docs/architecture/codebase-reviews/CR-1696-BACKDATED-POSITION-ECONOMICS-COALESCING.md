@@ -35,7 +35,9 @@ wall-clock or runner flake. A favorable earliest-first schedule concealed it.
   canonical full-history reader eagerly rehydrates the five governed component types in one query,
   rejects unsupported, duplicate, or currency-conflicting evidence, and lets named authority win
   over a disagreeing aggregate `trade_fee`. Prefix repair can therefore replace economics without
-  reclassifying stamp duty, exchange fees, GST, or other fees as brokerage.
+  reclassifying stamp duty, exchange fees, GST, or other fees as brokerage. Explicit all-zero named
+  authority removes prior positive component rows and remains idempotently zero; all-`None` sparse
+  events do not invent a component correction.
 - Already-governed prefix rows are not rewritten. The two-row and 200-row AVCO replay fixtures
   retain equal statement count, preventing history-depth amplification.
 - Incremental calculations retain the existing affected-suffix write boundary.
@@ -80,8 +82,9 @@ statement cardinality remain unchanged.
 
 ## Validation
 
-- Focused persistence/calculation/repository unit suite: `163 passed`.
-- Deterministic PostgreSQL named-fee lock permutations: `2 passed in 64.13s`.
+- Focused persistence/calculation/repository unit suite: `164 passed`.
+- Deterministic PostgreSQL named-fee lock permutations plus raw-persistence correction/rollback:
+  refresh pending at the final fix-forward head.
 - Touched-source Ruff and MyPy: passed.
 - Full transaction-processing contract: `148 passed in 869.65s`.
 - Protected PR lanes and exact-main Main Releasability: pending.
