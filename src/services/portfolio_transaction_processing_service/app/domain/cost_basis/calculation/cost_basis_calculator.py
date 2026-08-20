@@ -1512,6 +1512,12 @@ def _transaction_cost_input(transaction: CostBasisTransaction) -> dict[str, obje
                 "linked_transaction_group_id",
                 "net_cost",
                 "net_cost_local",
+                # ``fees`` is the normalized component authority. The mapper also carries its
+                # aggregate as a string for calculation compatibility, but database scale can
+                # change that redundant representation (for example 2.00 -> 2.0000000000).
+                # Excluding the duplicate keeps identical financial inputs replay-stable while
+                # component or amount changes remain bound through ``fees``.
+                "trade_fee",
                 "realized_gain_loss",
                 "realized_gain_loss_local",
                 "realized_capital_pnl_base",

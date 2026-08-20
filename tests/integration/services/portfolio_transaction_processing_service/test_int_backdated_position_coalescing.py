@@ -323,15 +323,18 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     assert all(
         transaction.calculation_lineage is not None for transaction in canonical_transactions
     )
-    assert all(
-        has_governed_transaction_cost_authority(
+    governed_authority_by_transaction = {
+        transaction.transaction_id: has_governed_transaction_cost_authority(
             {
                 **build_cost_basis_engine_input(transaction),
                 "portfolio_base_currency": "USD",
+                "product_type": "EQUITY",
+                "asset_class": "Equity",
             }
         )
         for transaction in governed_history
-    )
+    }
+    assert all(governed_authority_by_transaction.values()), governed_authority_by_transaction
     assert all(position.calculation_lineage is not None for position in current_positions)
     assert processed_event_count == 3
     assert replay_event_count == 0
