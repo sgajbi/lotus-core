@@ -114,7 +114,7 @@ def _dependencies() -> dict[str, object]:
     ("incremental", "expected_persistence_scope"),
     [
         (True, CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX),
-        (False, CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE),
+        (False, CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY),
     ],
 )
 async def test_cost_basis_execution_acquires_key_lock_before_calculation(
@@ -134,6 +134,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         average_cost_pool_transition=None,
         disposals=(),
         basis_transfers=(),
+        missing_economics_authority_transaction_ids=frozenset({"BUY-PRIOR"}),
     )
     coordinator = MagicMock()
     coordinator.return_value.calculate = AsyncMock(return_value=calculation)
@@ -226,6 +227,9 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
     )
     amortized_cost_profiles.effective_as_of_many.assert_not_awaited()
     assert persist_transactions.await_args.kwargs["persistence_scope"] is expected_persistence_scope
+    assert persist_transactions.await_args.kwargs["missing_authority_transaction_ids"] == {
+        "BUY-PRIOR"
+    }
     assert persistence_order == [
         "transactions",
         "disposal-receipts",

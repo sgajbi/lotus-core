@@ -8,6 +8,7 @@ from portfolio_common.database_models import (
     AverageCostPoolState,
     PositionLotState,
 )
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -15,6 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.timeline import (  # noqa: E501
+    build_cost_basis_timeline_processor,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisProcessingCheckpoint,
@@ -219,10 +223,43 @@ async def _seed_ordered_avco_key(
             quantity="1",
             price="10",
             gross_amount="10",
+            gross_cost=Decimal("10"),
+            net_cost=Decimal("10"),
+            transaction_fx_rate=Decimal("1"),
+            net_cost_local=Decimal("10"),
         )
         for sequence in range(source_count)
     ]
-    session.add_all(canonical_transaction_record(buy) for buy in buys)
+    calculation_inputs = []
+    for buy in buys:
+        transaction_input = build_cost_basis_engine_input(
+            booked_transaction.to_booked_transaction(buy)
+        )
+        transaction_input["portfolio_base_currency"] = "USD"
+        calculation_inputs.append(transaction_input)
+    calculation = build_cost_basis_timeline_processor(CostBasisMethod.AVCO).process_transactions(
+        existing_transactions_raw=[],
+        new_transactions_raw=calculation_inputs,
+    )
+    assert calculation.errored == []
+    calculated_by_id = {
+        transaction.transaction_id: transaction for transaction in calculation.processed
+    }
+    canonical_records = []
+    for buy in buys:
+        calculated = calculated_by_id[buy.transaction_id]
+        record = canonical_transaction_record(buy)
+        record.gross_cost = calculated.gross_cost
+        record.net_cost = calculated.net_cost
+        record.realized_gain_loss = calculated.realized_gain_loss
+        record.transaction_fx_rate = calculated.transaction_fx_rate
+        record.net_cost_local = calculated.net_cost_local
+        record.realized_gain_loss_local = calculated.realized_gain_loss_local
+        lineage = calculated.calculation_lineage
+        assert lineage is not None
+        record.calculation_lineage = lineage.lineage_payload()
+        canonical_records.append(record)
+    session.add_all(canonical_records)
     await session.commit()
     session.add_all(
         PositionLotState(

@@ -41,6 +41,7 @@ async def persist_cost_basis_transactions(
     persistence_scope: CostBasisTransactionPersistenceScope = (
         CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX
     ),
+    missing_authority_transaction_ids: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[BookedTransaction, ...]:
     """Persist governed timeline economics and return newly processed transactions."""
 
@@ -50,6 +51,7 @@ async def persist_cost_basis_transactions(
         processed=processed,
         incoming_transaction_ids=incoming_transaction_ids,
         scope=persistence_scope,
+        missing_authority_transaction_ids=missing_authority_transaction_ids,
     )
     affected_transaction_ids = {
         transaction.transaction_id for transaction in persistence_plan.child_state_transactions

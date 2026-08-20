@@ -57,7 +57,7 @@ def test_affected_transaction_suffix_fails_closed_when_incoming_is_absent() -> N
         )
 
 
-def test_complete_timeline_scope_includes_calculated_prefix_authority() -> None:
+def test_rebuild_authority_scope_includes_only_ungoverned_calculated_prefix() -> None:
     earlier = _transaction("BUY-EARLIER", 1)
     incoming = _transaction("BUY-BACKDATED", 2)
     later = _transaction("SELL-LATER", 3)
@@ -65,10 +65,26 @@ def test_complete_timeline_scope_includes_calculated_prefix_authority() -> None:
     plan = build_cost_basis_persistence_plan(
         processed=[earlier, incoming, later],
         incoming_transaction_ids={incoming.transaction_id},
-        scope=CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE,
+        scope=CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY,
+        missing_authority_transaction_ids={earlier.transaction_id},
     )
 
     assert plan.economics_transactions == (earlier, incoming, later)
+    assert plan.child_state_transactions == (incoming, later)
+
+
+def test_rebuild_authority_scope_does_not_rewrite_governed_prefix() -> None:
+    earlier = _transaction("BUY-EARLIER", 1)
+    incoming = _transaction("BUY-BACKDATED", 2)
+    later = _transaction("SELL-LATER", 3)
+
+    plan = build_cost_basis_persistence_plan(
+        processed=[earlier, incoming, later],
+        incoming_transaction_ids={incoming.transaction_id},
+        scope=CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY,
+    )
+
+    assert plan.economics_transactions == (incoming, later)
     assert plan.child_state_transactions == (incoming, later)
 
 

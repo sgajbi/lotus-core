@@ -7,12 +7,15 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import OutboxEvent, PositionHistory, PositionState
 from portfolio_common.database_models import Transaction as DBTransaction
-from sqlalchemy import event as sqlalchemy_event
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyCostBasisProcessingStateRepository,
+)
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
+    wait_for_postgres_advisory_lock_wait,
     wait_for_task_signal,
 )
 from tests.test_support.transaction_processing import (
@@ -39,6 +42,7 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     clean_db,
     async_db_session: AsyncSession,
     first_cost_lock_transaction: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     portfolio_id = "PORT-BACKDATED-COALESCE-01"
     security_id = "SEC-BACKDATED-COALESCE-01"
@@ -101,21 +105,39 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     )
     await async_db_session.commit()
 
-    cost_lock_acquired = asyncio.Event()
+    first_lock_acquired = asyncio.Event()
+    release_first_lock = asyncio.Event()
+    second_lock_attempted = asyncio.Event()
+    second_lock_acquired = asyncio.Event()
+    second_backend_pid: list[int] = []
+    first_task: asyncio.Task | None = None
+    original_acquire_lock = (
+        SqlAlchemyCostBasisProcessingStateRepository.acquire_cost_basis_processing_lock
+    )
 
-    def observe_cost_lock(
-        _connection,
-        _cursor,
-        statement: str,
-        _parameters,
-        _context,
-        _executemany: bool,
+    async def acquire_cost_basis_processing_lock(
+        repository: SqlAlchemyCostBasisProcessingStateRepository,
+        portfolio_id: str,
+        security_id: str,
     ) -> None:
-        if "pg_advisory_xact_lock" in statement:
-            cost_lock_acquired.set()
+        if asyncio.current_task() is first_task:
+            await original_acquire_lock(repository, portfolio_id, security_id)
+            first_lock_acquired.set()
+            await release_first_lock.wait()
+            return
 
-    engine = async_db_session.bind.sync_engine
-    sqlalchemy_event.listen(engine, "after_cursor_execute", observe_cost_lock)
+        backend_pid = await repository._session.scalar(text("SELECT pg_backend_pid()"))
+        assert backend_pid is not None
+        second_backend_pid.append(backend_pid)
+        second_lock_attempted.set()
+        await original_acquire_lock(repository, portfolio_id, security_id)
+        second_lock_acquired.set()
+
+    monkeypatch.setattr(
+        SqlAlchemyCostBasisProcessingStateRepository,
+        "acquire_cost_basis_processing_lock",
+        acquire_cost_basis_processing_lock,
+    )
     event_by_order = {
         "earliest": (
             earliest_buy,
@@ -145,8 +167,7 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     )
     second_task: asyncio.Task | None = None
     try:
-        await wait_for_task_signal(first_task, cost_lock_acquired, timeout=2)
-        sqlalchemy_event.remove(engine, "after_cursor_execute", observe_cost_lock)
+        await wait_for_task_signal(first_task, first_lock_acquired, timeout=5)
         second_task = asyncio.create_task(
             process_booked_transaction(
                 context=context,
@@ -155,17 +176,30 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
                 correlation_id=second_correlation_id,
             )
         )
+        await wait_for_task_signal(second_task, second_lock_attempted, timeout=5)
+        assert len(second_backend_pid) == 1
+        await wait_for_postgres_advisory_lock_wait(
+            second_task,
+            context.session_factory,
+            backend_pid=second_backend_pid[0],
+            timeout=5,
+        )
+        assert second_lock_acquired.is_set() is False
+        release_first_lock.set()
         results = await asyncio.wait_for(
             asyncio.gather(first_task, second_task),
-            timeout=10,
+            timeout=15,
         )
+        assert second_lock_acquired.is_set() is True
     finally:
-        if sqlalchemy_event.contains(engine, "after_cursor_execute", observe_cost_lock):
-            sqlalchemy_event.remove(engine, "after_cursor_execute", observe_cost_lock)
+        release_first_lock.set()
         await cancel_pending_tasks(first_task, second_task)
 
     assert sorted(result.position_record_count for result in results) == [0, 3]
     assert all(result.replay_queued_count == 0 for result in results)
+    assert sorted(result.processed_transaction_ids for result in results) == sorted(
+        [(earliest_buy.transaction_id,), (middle_buy.transaction_id,)]
+    )
 
     async with context.session_factory() as verification_session:
         state = (
@@ -192,6 +226,12 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         replay_event_count = await verification_session.scalar(
             select(func.count(OutboxEvent.id)).where(
                 OutboxEvent.event_type == "ReprocessTransactionReplay",
+            )
+        )
+        processed_event_count = await verification_session.scalar(
+            select(func.count(OutboxEvent.id)).where(
+                OutboxEvent.aggregate_id == portfolio_id,
+                OutboxEvent.event_type == "ProcessedTransactionPersisted",
             )
         )
         canonical_transactions = list(
@@ -233,4 +273,9 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         Decimal("30"),
         Decimal("100"),
     ]
+    assert all(
+        transaction.calculation_lineage is not None for transaction in canonical_transactions
+    )
+    assert all(position.calculation_lineage is not None for position in current_positions)
+    assert processed_event_count == 3
     assert replay_event_count == 0

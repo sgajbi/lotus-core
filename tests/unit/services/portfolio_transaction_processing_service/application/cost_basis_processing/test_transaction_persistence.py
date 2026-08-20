@@ -114,7 +114,7 @@ async def test_backdated_persistence_updates_affected_suffix_and_returns_incomin
     ]
 
 
-async def test_full_rebuild_persists_complete_economics_without_replaying_prefix_children() -> None:
+async def test_full_rebuild_persists_missing_prefix_economics_without_replaying_children() -> None:
     prior = _calculated_transaction("BUY-PRIOR")
     incoming = _calculated_transaction("BUY-BACKDATED")
     later = _calculated_transaction("SELL-LATER", transaction_type="SELL")
@@ -132,7 +132,8 @@ async def test_full_rebuild_persists_complete_economics_without_replaying_prefix
         lot_states=lot_states,
         income_offsets=income_offsets,
         observer=observer,
-        persistence_scope=CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE,
+        persistence_scope=CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY,
+        missing_authority_transaction_ids={prior.transaction_id},
     )
 
     assert [transaction.transaction_id for transaction in persisted] == [incoming.transaction_id]
