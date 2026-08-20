@@ -1214,9 +1214,12 @@ async def test_thousand_member_release_drains_with_bounded_progress_validation(
     assert result.processed_member_count == 1_000
     assert process.execute.await_count == 1_000
     assert len(statements) <= 7 * result.processed_member_count + 10
-    assert (
-        sum("corporate_action_readiness_evaluations" in statement for statement in statements) == 1
+    readiness_authority_statement_count = sum(
+        "corporate_action_readiness_evaluations" in statement for statement in statements
     )
+    # Claiming performs one stale-readiness supersession and one candidate lookup.
+    # Neither statement may be repeated for each release member.
+    assert readiness_authority_statement_count == 2
     persisted_release = await async_db_session.get(
         CorporateActionExecutionReleaseRecord,
         release.release_id,
