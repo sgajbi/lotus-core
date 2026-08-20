@@ -77,3 +77,24 @@ resolver nondeterminism. Repeated clean platform replay must remain byte-identic
 reviewed refresh. No application/runtime dependency, API/OpenAPI, database, migration, event,
 calculation, Kafka, image, datastore, or topology contract changes. No README, supported-feature,
 operator-runbook, wiki, central-context, or skill change is required.
+
+## 2026-08-20 deterministic replay authority follow-through
+
+Exact-main run `32387125286` failed after PR #965's identical Windows job had passed on the same
+runner image and Python 3.11.9. The only generated difference was the newly published compatible
+transitive `stevedore==5.9.1` replacing reviewed `5.9.0`. This falsified the earlier assumption that
+pinning each observed drift individually made repeated replay deterministic: the generator still
+resolved every unlisted transitive against mutable live package-index state.
+
+Replay now uses pip-tools' documented existing-output behavior by seeding the temporary compiler
+output from the committed platform lock. Fresh compilation remains unconstrained and is invoked
+explicitly by `make compile-ci-tooling-lock`. The split keeps protected checks byte-stable while
+retaining a deliberate dependency-update path whose full lock and technology-inventory diff must
+be reviewed. Missing, stale, incompatible, or surplus committed pins still fail because pip-tools
+reconstructs the closure from governed inputs before the byte comparison.
+
+The fix preserves `stevedore==5.9.0`; no dependency or application/runtime contract changes. Unit
+tests distinguish replay seeding from fresh update resolution, and repeated Windows plus Linux
+replay checks provide platform evidence. The authored CI wiki changes because developer-facing
+replay/update semantics changed; README, supported features, OpenAPI, migrations, and central
+platform context remain unchanged.

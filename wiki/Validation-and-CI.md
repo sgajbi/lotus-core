@@ -34,6 +34,12 @@ scheduled releasability always run `make verify-dependencies-clean`. Machine-rea
 reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the separate
 mainline clean-install report.
 
+Protected dependency-lock replay seeds pip-tools from the committed Linux or Windows tooling lock.
+This proves that the reviewed closure still satisfies governed inputs without allowing a newly
+published compatible transitive release to change the result between Feature, PR, and Main runs.
+`make compile-ci-tooling-lock` is the explicit fresh-resolution path; its complete lock and
+technology-evidence diff must be reviewed before merge.
+
 Feature, PR, and main lanes also upload
 `output/dependency-technology/inventory-receipt.json`, bound to the executing Git SHA and committed
 inventory digest. A structurally valid but blocked classification is retained as evidence in the
