@@ -126,7 +126,16 @@ def normalize_compiled_lock(content: str, *, platform: str, root: Path = REPO_RO
     return "\n".join(header) + body.rstrip() + "\n"
 
 
-def _compile_with_host_python() -> str:
+def _seed_replay_output(output_path: Path, replay_lock: Path | None) -> None:
+    """Seed pip-tools' documented stable-output resolver path for replay checks."""
+
+    if replay_lock is not None:
+        if not replay_lock.is_file():
+            raise ToolingLockError(f"{replay_lock.name} is unavailable for replay")
+        shutil.copyfile(replay_lock, output_path)
+
+
+def _compile_with_host_python(*, replay_lock: Path | None = None) -> str:
     temp_dir = Path(tempfile.mkdtemp(prefix="lotus-ci-tooling-lock-"))
     try:
         venv_dir = temp_dir / "venv"
@@ -152,6 +161,7 @@ def _compile_with_host_python() -> str:
             encoding="utf-8",
         )
         raw_lock = temp_dir / "ci-tooling.raw.txt"
+        _seed_replay_output(raw_lock, replay_lock)
         _run(
             [
                 str(python_bin),
@@ -176,8 +186,12 @@ def _compile_with_host_python() -> str:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def _compile_linux_in_exact_base() -> str:
+def _compile_linux_in_exact_base(*, replay_lock: Path | None = None) -> str:
+    temp_dir = Path(tempfile.mkdtemp(prefix="lotus-ci-tooling-linux-lock-"))
+    raw_lock = temp_dir / "ci-tooling.raw.txt"
+    _seed_replay_output(raw_lock, replay_lock)
     root_mount = f"type=bind,source={REPO_ROOT.resolve()},target=/repo,readonly"
+    output_mount = f"type=bind,source={temp_dir.resolve()},target=/lock-output"
     command = [
         "docker",
         "run",
@@ -186,6 +200,8 @@ def _compile_linux_in_exact_base() -> str:
         "linux/amd64",
         "--mount",
         root_mount,
+        "--mount",
+        output_mount,
         "--workdir",
         "/repo",
         LINUX_COMPILE_IMAGE,
@@ -195,11 +211,15 @@ def _compile_linux_in_exact_base() -> str:
             f"python -m pip install -q --disable-pip-version-check pip=={PIP_VERSION} "
             f"pip-tools=={PIP_TOOLS_VERSION} && "
             "python -m piptools compile --quiet --resolver=backtracking --strip-extras "
-            "--allow-unsafe --output-file=- requirements/ci-tooling.in"
+            "--allow-unsafe --output-file=/lock-output/ci-tooling.raw.txt "
+            "requirements/ci-tooling.in"
         ),
     ]
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
-    return result.stdout
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        return raw_lock.read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def _write_or_check(path: Path, content: str, *, check: bool) -> None:
@@ -217,11 +237,19 @@ def compile_locks(*, check: bool = False) -> None:
 def compile_locks_for_platform(*, check: bool = False, platform: str) -> None:
     validate_inputs()
     if platform in {"all", "linux"}:
-        linux_lock = normalize_compiled_lock(_compile_linux_in_exact_base(), platform="linux/amd64")
+        linux_lock = normalize_compiled_lock(
+            _compile_linux_in_exact_base(
+                replay_lock=LINUX_TOOLING_LOCK if check else None,
+            ),
+            platform="linux/amd64",
+        )
         _write_or_check(LINUX_TOOLING_LOCK, linux_lock, check=check)
     if platform in {"all", "windows"} and sys.platform == "win32":
         windows_lock = normalize_compiled_lock(
-            _compile_with_host_python(), platform="windows/amd64"
+            _compile_with_host_python(
+                replay_lock=WINDOWS_TOOLING_LOCK if check else None,
+            ),
+            platform="windows/amd64",
         )
         _write_or_check(WINDOWS_TOOLING_LOCK, windows_lock, check=check)
     elif platform == "windows":

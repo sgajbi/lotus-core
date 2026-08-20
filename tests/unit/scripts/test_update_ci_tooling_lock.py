@@ -42,3 +42,77 @@ def test_input_requirements_accept_pinned_extras_and_includes(tmp_path: Path) ->
 def test_platform_runtime_constraints_are_distinct() -> None:
     assert lock.WINDOWS_RUNTIME_LOCK.name == "shared-runtime-windows.lock.txt"
     assert lock.LINUX_TOOLING_LOCK.name == "ci-tooling.lock.txt"
+
+
+def test_replay_seeds_existing_output_but_update_resolves_fresh(
+    tmp_path: Path,
+) -> None:
+    committed_lock = tmp_path / "ci-tooling-windows.lock.txt"
+    committed_lock.write_text("stable==1.0.0\n", encoding="utf-8")
+    replay_output = tmp_path / "replay.txt"
+    update_output = tmp_path / "update.txt"
+
+    lock._seed_replay_output(replay_output, committed_lock)
+    lock._seed_replay_output(update_output, None)
+
+    assert replay_output.read_text(encoding="utf-8") == "stable==1.0.0\n"
+    assert not update_output.exists()
+
+
+def test_replay_fails_closed_when_committed_lock_is_missing(tmp_path: Path) -> None:
+    with pytest.raises(lock.ToolingLockError, match="missing.lock is unavailable for replay"):
+        lock._seed_replay_output(tmp_path / "output.txt", tmp_path / "missing.lock")
+
+
+def test_windows_check_replays_committed_closure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    committed_lock = tmp_path / "ci-tooling-windows.lock.txt"
+    committed_lock.write_text("compiled\n", encoding="utf-8")
+    observed: list[Path | None] = []
+
+    monkeypatch.setattr(lock, "WINDOWS_TOOLING_LOCK", committed_lock)
+    monkeypatch.setattr(lock, "validate_inputs", lambda: None)
+    monkeypatch.setattr(lock.sys, "platform", "win32")
+    monkeypatch.setattr(
+        lock,
+        "_compile_with_host_python",
+        lambda *, replay_lock=None: observed.append(replay_lock) or "raw",
+    )
+    monkeypatch.setattr(
+        lock,
+        "normalize_compiled_lock",
+        lambda _content, *, platform: "compiled\n",
+    )
+
+    lock.compile_locks_for_platform(check=True, platform="windows")
+
+    assert observed == [committed_lock]
+
+
+def test_windows_update_resolves_without_replay_seed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_lock = tmp_path / "ci-tooling-windows.lock.txt"
+    observed: list[Path | None] = []
+
+    monkeypatch.setattr(lock, "WINDOWS_TOOLING_LOCK", output_lock)
+    monkeypatch.setattr(lock, "validate_inputs", lambda: None)
+    monkeypatch.setattr(lock.sys, "platform", "win32")
+    monkeypatch.setattr(
+        lock,
+        "_compile_with_host_python",
+        lambda *, replay_lock=None: observed.append(replay_lock) or "raw",
+    )
+    monkeypatch.setattr(
+        lock,
+        "normalize_compiled_lock",
+        lambda _content, *, platform: "updated\n",
+    )
+
+    lock.compile_locks_for_platform(check=False, platform="windows")
+
+    assert observed == [None]
+    assert output_lock.read_text(encoding="utf-8") == "updated\n"
