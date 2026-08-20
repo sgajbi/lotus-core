@@ -1,11 +1,13 @@
 # tests/unit/libs/portfolio-common/test_position_state_repository.py
+import asyncio
 from datetime import date
 
 import pytest
 from portfolio_common.database_models import PositionState
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import event as sqlalchemy_event
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
@@ -440,3 +442,140 @@ async def test_bulk_update_states_updates_updated_at_for_all_mutated_rows(
     p4_state = await async_db_session.get(PositionState, ("P4", "S4"))
     assert p3_state.updated_at is not None
     assert p4_state.updated_at is not None
+
+
+def _large_position_state_cohort(prefix: str, size: int = 1_001) -> list[PositionState]:
+    return [
+        PositionState(
+            portfolio_id=f"{prefix}-P-{index:05d}",
+            security_id=f"{prefix}-S-{index:05d}",
+            watermark_date=date(2026, 1, 1),
+            epoch=1,
+            status="REPROCESSING",
+        )
+        for index in range(size)
+    ]
+
+
+def _large_position_state_updates(
+    prefix: str,
+    watermark_date: date,
+    status: str,
+    size: int = 1_001,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "portfolio_id": f"{prefix}-P-{index:05d}",
+            "security_id": f"{prefix}-S-{index:05d}",
+            "expected_epoch": 1,
+            "watermark_date": watermark_date,
+            "status": status,
+        }
+        for index in reversed(range(size))
+    ]
+
+
+async def test_bulk_update_states_executes_threshold_plus_one_in_two_statements(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    prefix = "BOUNDARY"
+    async_db_session.add_all(_large_position_state_cohort(prefix))
+    await async_db_session.commit()
+    update_statements: list[str] = []
+
+    def capture_update(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        if statement.lstrip().startswith("UPDATE position_state"):
+            update_statements.append(statement)
+
+    sync_engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_update)
+    try:
+        updated_count = await PositionStateRepository(async_db_session).bulk_update_states(
+            _large_position_state_updates(prefix, date(2026, 8, 20), "CURRENT")
+        )
+        await async_db_session.commit()
+    finally:
+        sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_update)
+
+    assert updated_count == 1_001
+    assert len(update_statements) == 2
+
+
+async def test_bulk_update_states_later_chunk_failure_rolls_back_all_chunks(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    prefix = "ROLLBACK"
+    async_db_session.add_all(_large_position_state_cohort(prefix))
+    await async_db_session.commit()
+    update_count = 0
+
+    def fail_second_update(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        nonlocal update_count
+        if not statement.lstrip().startswith("UPDATE position_state"):
+            return
+        update_count += 1
+        if update_count == 2:
+            raise RuntimeError("injected second-chunk failure")
+
+    sync_engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(sync_engine, "before_cursor_execute", fail_second_update)
+    try:
+        with pytest.raises(RuntimeError, match="second-chunk failure"):
+            await PositionStateRepository(async_db_session).bulk_update_states(
+                _large_position_state_updates(prefix, date(2026, 8, 20), "CURRENT")
+            )
+    finally:
+        sqlalchemy_event.remove(sync_engine, "before_cursor_execute", fail_second_update)
+        await async_db_session.rollback()
+
+    rows = (
+        await async_db_session.execute(
+            select(PositionState.watermark_date, PositionState.status).where(
+                PositionState.portfolio_id.like(f"{prefix}-%")
+            )
+        )
+    ).all()
+    assert len(rows) == 1_001
+    assert set(rows) == {(date(2026, 1, 1), "REPROCESSING")}
+
+
+async def test_bulk_update_states_orders_overlapping_transactions_consistently(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    prefix = "CONCURRENT"
+    async_db_session.add_all(_large_position_state_cohort(prefix))
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def apply_batch(watermark_date: date, status: str) -> None:
+        async with session_factory() as session:
+            async with session.begin():
+                updated_count = await PositionStateRepository(session).bulk_update_states(
+                    _large_position_state_updates(prefix, watermark_date, status)
+                )
+                assert updated_count == 1_001
+
+    await asyncio.wait_for(
+        asyncio.gather(
+            apply_batch(date(2026, 8, 19), "CURRENT"),
+            apply_batch(date(2026, 8, 20), "REPROCESSING"),
+        ),
+        timeout=20,
+    )
+
+    rows = (
+        await async_db_session.execute(
+            select(PositionState.watermark_date, PositionState.status).where(
+                PositionState.portfolio_id.like(f"{prefix}-%")
+            )
+        )
+    ).all()
+    assert len(rows) == 1_001
+    assert set(rows) in (
+        {(date(2026, 8, 19), "CURRENT")},
+        {(date(2026, 8, 20), "REPROCESSING")},
+    )
