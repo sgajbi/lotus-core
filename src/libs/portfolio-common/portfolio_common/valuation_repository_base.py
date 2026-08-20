@@ -509,30 +509,44 @@ class ValuationRepositoryBase:
         max_attempts: int,
         failure_reason: str,
     ) -> dict[str, int]:
-        if not job_claims:
+        normalized_claims: dict[int, str] = {}
+        for job_id, claim_token in job_claims:
+            existing_token = normalized_claims.get(job_id)
+            if existing_token is not None and existing_token != claim_token:
+                raise ValueError("conflicting valuation claim tokens for the same job")
+            normalized_claims[job_id] = claim_token
+        ordered_claims = sorted(normalized_claims.items())
+        if not ordered_claims:
             return {"pending_count": 0, "failed_count": 0}
 
-        failed_result = await self.db.execute(
-            _dispatch_failed_valuation_jobs_update_stmt(
-                job_claims=job_claims,
-                max_attempts=max_attempts,
-                failure_reason=failure_reason,
+        failed_count = 0
+        pending_count = 0
+        for claim_chunk in iter_statement_chunks(
+            ordered_claims,
+            binds_per_row=2,
+            reserved_binds=8,
+        ):
+            failed_result = await self.db.execute(
+                _dispatch_failed_valuation_jobs_update_stmt(
+                    job_claims=list(claim_chunk),
+                    max_attempts=max_attempts,
+                    failure_reason=failure_reason,
+                )
             )
-        )
-        pending_result = await self.db.execute(
-            _dispatch_retryable_valuation_jobs_update_stmt(
-                job_claims=job_claims,
-                max_attempts=max_attempts,
-                failure_reason=failure_reason,
+            pending_result = await self.db.execute(
+                _dispatch_retryable_valuation_jobs_update_stmt(
+                    job_claims=list(claim_chunk),
+                    max_attempts=max_attempts,
+                    failure_reason=failure_reason,
+                )
             )
-        )
-        failed_count = int(failed_result.rowcount or 0)
-        pending_count = int(pending_result.rowcount or 0)
+            failed_count += int(failed_result.rowcount or 0)
+            pending_count += int(pending_result.rowcount or 0)
         if failed_count or pending_count:
             logger.warning(
                 "Recovered valuation scheduler dispatch failure.",
                 extra={
-                    "job_count": len(job_claims),
+                    "job_count": len(ordered_claims),
                     "pending_count": pending_count,
                     "failed_count": failed_count,
                     "max_attempts": max_attempts,

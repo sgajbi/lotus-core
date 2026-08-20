@@ -229,6 +229,44 @@ async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhaust
     assert "requeue_requested=false" in pending_sql
 
 
+async def test_recover_dispatch_failed_jobs_chunks_and_aggregates_unique_claims(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    results = []
+    for rowcount in (10, 990, 1, 0):
+        result = MagicMock()
+        result.rowcount = rowcount
+        results.append(result)
+    mock_db_session.execute.side_effect = results
+    claims = [(job_id, f"token-{job_id:05d}") for job_id in reversed(range(1_001))]
+    claims.append(claims[0])
+
+    recovered = await repo.recover_dispatch_failed_jobs(
+        claims,
+        max_attempts=3,
+        failure_reason="Dispatch failed.",
+    )
+
+    assert recovered == {"pending_count": 990, "failed_count": 11}
+    assert mock_db_session.execute.await_count == 4
+
+
+async def test_recover_dispatch_failed_jobs_rejects_conflicting_claim_tokens_before_io(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    with pytest.raises(ValueError, match="conflicting valuation claim tokens"):
+        await repo.recover_dispatch_failed_jobs(
+            [(101, "first-token"), (101, "different-token")],
+            max_attempts=3,
+            failure_reason="Dispatch failed.",
+        )
+
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
     mock_db_session: AsyncMock,
 ) -> None:
