@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1687 cross-platform tooling-closure refresh (2026-08-20): scheduled Main Releasability runs
+failed closed after the Pygments transitive dependency selected by Pytest and Rich advanced from
+`2.20.0` to `2.21.0`. Issue #958 reproduced the same drift on Windows/amd64 and Linux/amd64,
+reviewed the release as non-prerelease, non-yanked, BSD-2-Clause, Python 3.9+, and CI-only, and
+refreshed both governed locks plus the exact-metadata technology inventory. The inventory remains
+non-certifying at 104 unique components, 88 approved license classifications, and 104 blocked or
+supportability-review-required components. No application/runtime dependency or product contract
+changed. Evidence and compatibility details:
+[CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md](./codebase-reviews/CR-1687-DEPENDENCY-TECHNOLOGY-INVENTORY.md#2026-08-20-cross-platform-tooling-closure-refresh).
+
 CR-1693 lossless instrument trigger conversion (2026-08-15): issue #488 retained an unproved
 claim-to-job race even though trigger UPSERT, scheduler transaction, and pending-job uniqueness
 were individually hardened. `InstrumentReprocessingConversionRepository` now owns the bounded
