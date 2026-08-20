@@ -2528,8 +2528,10 @@ Most relevant current governance:
      correct quantity with stale cumulative cost; source-supplied values, foreign/stale lineage, and
      receipts that do not bind the complete output are not authority. Raw ingestion must preserve
      positive named fee components atomically, and the canonical full-history reader must rehydrate
-     and validate those components in one query before reconstruction. Rewriting already-governed
-     prefix rows makes
+     and validate those components in one query before reconstruction. Fee authority must compare
+     normalized named components; never bind the redundant aggregate
+     `trade_fee` string because persistence scale expansion must not change financial input identity.
+     Rewriting already-governed prefix rows makes
      statement count grow with history depth and is also prohibited. Combined semantic idempotency
      still rejects materially changed content outside
      the explicit correction workflow; an accepted correction has its own immutable identity and

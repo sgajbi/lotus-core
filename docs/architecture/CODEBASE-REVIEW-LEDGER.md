@@ -11,7 +11,9 @@ position staging. Already-governed history, incremental processing, and incoming
 publication remain unchanged. Raw persistence now preserves named fee evidence, and the one-query
 history reader rehydrates and validates it so prefix repair cannot reclassify governed fees.
 Exact authority requires the current algorithm/version/numeric policy and a receipt bound to the
-current normalized inputs and complete persisted output.
+current normalized inputs and complete persisted output. Named fee lineage binds normalized fee
+components rather than the scale-sensitive redundant aggregate string, so an identical database
+round trip remains authoritative while an actual fee change does not.
 Deterministic PostgreSQL proof forces both lock orders and retains
 one epoch, one three-row rebuild, one zero-work coalesced result, zero replay events, and constant
 statement count for governed two-row versus 200-row AVCO history. Evidence and compatibility details:
