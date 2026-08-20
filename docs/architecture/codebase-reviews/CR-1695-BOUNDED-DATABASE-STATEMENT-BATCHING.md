@@ -37,7 +37,14 @@ The bounded contract applies to:
 3. valuation-job upsert and latest-epoch lookup;
 4. first-open-position-date lookup;
 5. contiguous-snapshot-date evaluation, including its `VALUES` source table; and
-6. scheduler dispatch-failure recovery updates.
+6. scheduler dispatch-failure recovery updates;
+7. expired valuation-claim classification and supersede/fail/reset updates; and
+8. stale reprocessing-job classification and fail/reset updates.
+
+Both stale-recovery readers select at most 1,000 rows in deterministic order per invocation. A
+remaining backlog is drained by later scheduler polls. Update helpers also normalize and chunk
+defensively, so direct reuse cannot bypass the statement policy. Effective-dated replay identity
+coalescing remains per job inside the same caller transaction; only its input cohort is bounded.
 
 The prior valuation-job-only 1,000-row helper was removed and folded into the shared persistence
 authority. Staging tables or `COPY` are intentionally excluded until #510 provides plan and row-count
@@ -49,7 +56,8 @@ An oversized operation emits one structured `database_statement_batch` event wit
 `operation`, `status`, and `reason_code` values plus normalized item count, statement count, and
 maximum rows per statement. It is emitted once per logical operation, not once per chunk.
 Portfolio, security, job, claim, correlation, and other business identifiers are not fields or
-labels.
+labels. Stale-recovery warnings likewise publish bounded counts and reason codes rather than job-ID
+collections.
 
 ## Compatibility
 
@@ -66,7 +74,8 @@ valuation-policy assignments. Distinct unbounded families were durably routed ra
 
 - transaction-economics persistence and receipt reconstruction remain owned by #719;
 - estate-wide reconciliation reads remain owned by #503; and
-- public DPM market-data coverage cardinality and adapter batching are owned by #961.
+- public DPM market-data coverage cardinality and adapter batching are owned by #961; and
+- aggregation-owned expired-lease recovery batching is owned by #962.
 
 This review does not claim repository-wide elimination of every tuple predicate.
 

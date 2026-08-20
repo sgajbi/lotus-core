@@ -183,7 +183,10 @@ statements, inspect the single structured `database_statement_batch` event: its 
 `operation`, `status`, and `reason_code`, accompanied by `item_count`, `chunk_count`, and
 `max_rows_per_statement`. It contains no portfolio, security, job, claim, or correlation identity.
 Multiple statements do not mean partial persistence; they share the caller's transaction, so any
-later-chunk failure rolls back the complete logical operation. Use the support APIs above for
+later-chunk failure rolls back the complete logical operation.
+Expired valuation claims and stale reprocessing jobs are recovered in deterministic cohorts of at
+most 1,000 per scheduler poll; subsequent polls drain any remaining backlog. Recovery evidence uses
+bounded counts and reason codes and never emits job-ID collections. Use the support APIs above for
 business-key drill-down.
 
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
