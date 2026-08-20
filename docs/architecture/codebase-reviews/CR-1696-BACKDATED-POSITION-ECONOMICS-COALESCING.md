@@ -27,10 +27,10 @@ wall-clock or runner flake. A favorable earliest-first schedule concealed it.
 ## Change
 
 - Full cost-basis rebuilds now persist the affected suffix plus calculated prefix rows that lack
-  current, output-bound Core cost authority before position history is staged in the same
+  current, input-and-output-bound Core cost authority before position history is staged in the same
   caller-owned transaction. Authority requires durable base/local economics, the exact v2
-  transaction-cost algorithm and numeric policy, and a receipt bound to the complete persisted
-  output.
+  transaction-cost algorithm and numeric policy, and a receipt bound to the current normalized
+  inputs and complete persisted output.
 - Raw persistence stages positive named fee components atomically with the transaction. The
   canonical full-history reader eagerly rehydrates the five governed component types in one query,
   rejects unsupported, duplicate, or currency-conflicting evidence, and lets named authority win
@@ -57,7 +57,7 @@ change Kafka concurrency. Those rejected experiments remain excluded.
 ## Same-Pattern Decision
 
 The audited `list_all_transactions` backdated rebuild is repaired because any row without current,
-output-bound Core transaction-cost authority receives the full calculation's authority in the
+input-and-output-bound Core transaction-cost authority receives the full calculation's authority in the
 same unit of work. The ordinary
 `load_replay_window` path remains protected by same-key cost serialization and later event
 processing; broader separation of complete internal calculation authority from incoming-only
@@ -74,7 +74,7 @@ large-history capacity work; CR-1696 does not claim those program-level outcomes
 No API, OpenAPI, event schema, Kafka key/partition, database schema/migration, dependency, image,
 or topology changes. Transaction calculation formulas, numeric policy, epoch numbering,
 idempotency, replay-event behavior, and caller-owned rollback remain unchanged. Full rebuilds can
-write additional calculated prefix transaction economics only when current output-bound Core
+write additional calculated prefix transaction economics only when current input-and-output-bound Core
 authority is absent; this is the intentional correctness change. Named-fee raw ingestion adds one
 bounded delete/replace operation only when named components are present; ordinary aggregate-only
 transactions keep their existing statement count. Incremental and governed-history calculation
@@ -86,6 +86,10 @@ statement cardinality remain unchanged.
 - Deterministic PostgreSQL named-fee lock permutations plus raw-persistence correction/rollback:
   `3 passed in 74.38s`.
 - Touched-source Ruff and MyPy: passed.
+- Late-review input-authority fix: `118 passed` across the warning-strict calculator and
+  application calculation suites; full-repository MyPy passed across `318` source files. The
+  regression proves quantity and gross-amount corrections invalidate an otherwise intact prior
+  output receipt.
 - Full transaction-processing contract at the production-code head: `147 passed`; one query-shape
   guard misclassified the new joined history query as a duplicate point read after `942.55s`.
   The corrected guard proves zero point reads and exactly one joined fee-authority history read;

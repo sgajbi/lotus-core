@@ -191,7 +191,7 @@ def test_transaction_cost_lineage_is_deterministic_and_material_input_sensitive(
     )
 
 
-def test_transaction_cost_authority_requires_current_output_bound_lineage(
+def test_transaction_cost_authority_requires_current_input_and_output_bound_lineage(
     cost_calculator,
     buy_transaction,
 ) -> None:
@@ -217,6 +217,15 @@ def test_transaction_cost_authority_requires_current_output_bound_lineage(
     )
     assert not has_governed_transaction_cost_authority(
         {**payload, "net_cost": payload["net_cost"] + Decimal("1")}
+    )
+    assert not has_governed_transaction_cost_authority(
+        {**payload, "quantity": payload["quantity"] + Decimal("1")}
+    )
+    assert not has_governed_transaction_cost_authority(
+        {
+            **payload,
+            "gross_transaction_amount": payload["gross_transaction_amount"] + Decimal("1"),
+        }
     )
     assert not has_governed_transaction_cost_authority(
         {

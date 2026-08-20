@@ -82,7 +82,7 @@ in the current epoch is recorded as `coalesced/already_materialized`; it does no
 epoch or reread and rewrite history. The lookup uses the normalized
 portfolio/security/epoch/transaction index and runs only for events already classified as
 backdated. Before staging that winning rebuild, cost processing persists its affected suffix plus
-any calculated prefix row missing current, output-bound Core transaction-cost authority in the same
+any calculated prefix row missing current, input-and-output-bound Core transaction-cost authority in the same
 database transaction. Raw ingestion preserves positive named fee components, and the canonical
 history read rehydrates the governed component breakdown in one query; prefix repair therefore
 cannot silently turn stamp duty, exchange fees, GST, or other fees into brokerage. Foreign,

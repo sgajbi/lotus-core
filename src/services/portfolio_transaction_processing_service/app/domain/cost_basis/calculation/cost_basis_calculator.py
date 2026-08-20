@@ -8,6 +8,7 @@ from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
     calculation_lineage_binds_output,
+    canonical_content_hash,
 )
 from portfolio_common.domain.cost_basis_receipt_integrity import (
     canonical_cost_basis_output_payload,
@@ -1458,7 +1459,7 @@ def transaction_cost_output_payload(transaction: CostBasisTransaction) -> dict[s
 
 
 def has_governed_transaction_cost_authority(transaction: Mapping[str, Any]) -> bool:
-    """Return whether persisted economics carry current, output-bound Core authority."""
+    """Return whether persisted economics bind current inputs and outputs to Core authority."""
 
     if transaction.get("net_cost") is None or transaction.get("net_cost_local") is None:
         return False
@@ -1474,6 +1475,10 @@ def has_governed_transaction_cost_authority(transaction: Mapping[str, Any]) -> b
     try:
         persisted_transaction = CostBasisTransaction(**dict(transaction))
     except (TypeError, ValueError):
+        return False
+    if lineage.input_content_hash != canonical_content_hash(
+        canonical_cost_basis_output_payload(_transaction_cost_input(persisted_transaction))
+    ):
         return False
     return bool(
         calculation_lineage_binds_output(

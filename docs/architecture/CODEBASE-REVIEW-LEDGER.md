@@ -5,12 +5,13 @@ proved that a later economic-date transaction could win the same-key cost lock, 
 affected suffix, and let position history consume an earlier durable row without calculated
 `net_cost`. Quantity remained correct while cumulative basis became `0/30/130` instead of
 `50/80/180`; identity-only coalescing then froze the incomplete epoch. Full cost rebuilds now
-persist the affected suffix plus calculated prefix rows missing current, output-bound Core
+persist the affected suffix plus calculated prefix rows missing current, input-and-output-bound Core
 transaction-cost authority before
 position staging. Already-governed history, incremental processing, and incoming-only effect
 publication remain unchanged. Raw persistence now preserves named fee evidence, and the one-query
 history reader rehydrates and validates it so prefix repair cannot reclassify governed fees.
-Exact authority requires the current algorithm/version/numeric policy and an output-bound receipt.
+Exact authority requires the current algorithm/version/numeric policy and a receipt bound to the
+current normalized inputs and complete persisted output.
 Deterministic PostgreSQL proof forces both lock orders and retains
 one epoch, one three-row rebuild, one zero-work coalesced result, zero replay events, and constant
 statement count for governed two-row versus 200-row AVCO history. Evidence and compatibility details:
