@@ -6,7 +6,9 @@ from decimal import Decimal
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.persistence_scope import (  # noqa: E501
+    CostBasisTransactionPersistenceScope,
     affected_transaction_suffix,
+    build_cost_basis_persistence_plan,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction,
@@ -53,3 +55,33 @@ def test_affected_transaction_suffix_fails_closed_when_incoming_is_absent() -> N
             processed=[_transaction("BUY-EXISTING", 1)],
             incoming_transaction_ids={"BUY-MISSING"},
         )
+
+
+def test_complete_timeline_scope_includes_calculated_prefix_authority() -> None:
+    earlier = _transaction("BUY-EARLIER", 1)
+    incoming = _transaction("BUY-BACKDATED", 2)
+    later = _transaction("SELL-LATER", 3)
+
+    plan = build_cost_basis_persistence_plan(
+        processed=[earlier, incoming, later],
+        incoming_transaction_ids={incoming.transaction_id},
+        scope=CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE,
+    )
+
+    assert plan.economics_transactions == (earlier, incoming, later)
+    assert plan.child_state_transactions == (incoming, later)
+
+
+def test_affected_suffix_scope_preserves_incremental_write_boundary() -> None:
+    earlier = _transaction("BUY-EARLIER", 1)
+    incoming = _transaction("BUY-BACKDATED", 2)
+    later = _transaction("SELL-LATER", 3)
+
+    plan = build_cost_basis_persistence_plan(
+        processed=[earlier, incoming, later],
+        incoming_transaction_ids={incoming.transaction_id},
+        scope=CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX,
+    )
+
+    assert plan.economics_transactions == (incoming, later)
+    assert plan.child_state_transactions == (incoming, later)

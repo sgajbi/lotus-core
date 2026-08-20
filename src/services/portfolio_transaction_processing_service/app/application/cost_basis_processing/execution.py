@@ -43,6 +43,7 @@ from .calculation import CostBasisCalculationCoordinator
 from .disposal_persistence import persist_current_lot_disposals
 from .effect_coordination import coordinate_cost_processing_effects
 from .lot_state_persistence import OpenLotPersistenceScope, persist_open_lot_state
+from .persistence_scope import CostBasisTransactionPersistenceScope
 from .preparation import CostProcessingRoute, PreparedCostTransaction
 from .transaction_persistence import persist_cost_basis_transactions
 
@@ -216,6 +217,11 @@ class PreparedCostProcessingUseCase:
             initial_opening_state=initial_opening_state,
             initial_opening_checkpoint=initial_opening_checkpoint,
             observer=self._persistence_observer,
+            persistence_scope=(
+                CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX
+                if calculation.incremental
+                else CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE
+            ),
         )
         await persist_current_lot_disposals(
             processed=calculation.processed,

@@ -22,7 +22,10 @@ from ...ports import (
     CostBasisTransactionStatePort,
     InitialOpeningCostStatePort,
 )
-from .persistence_scope import affected_transaction_suffix
+from .persistence_scope import (
+    CostBasisTransactionPersistenceScope,
+    build_cost_basis_persistence_plan,
+)
 
 
 async def persist_cost_basis_transactions(
@@ -35,16 +38,23 @@ async def persist_cost_basis_transactions(
     initial_opening_state: InitialOpeningCostStatePort | None = None,
     initial_opening_checkpoint: CostBasisProcessingCheckpoint | None = None,
     observer: CostBasisPersistenceObserver | None = None,
+    persistence_scope: CostBasisTransactionPersistenceScope = (
+        CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX
+    ),
 ) -> tuple[BookedTransaction, ...]:
-    """Persist the affected timeline suffix and return newly processed transactions."""
+    """Persist governed timeline economics and return newly processed transactions."""
 
     persistence_observer = observer or _NullCostBasisPersistenceObserver()
     newly_persisted: list[BookedTransaction] = []
-    affected_transactions = affected_transaction_suffix(
+    persistence_plan = build_cost_basis_persistence_plan(
         processed=processed,
         incoming_transaction_ids=incoming_transaction_ids,
+        scope=persistence_scope,
     )
-    for transaction in affected_transactions:
+    affected_transaction_ids = {
+        transaction.transaction_id for transaction in persistence_plan.child_state_transactions
+    }
+    for transaction in persistence_plan.economics_transactions:
         persisted = await _persist_cost_basis_transaction(
             transaction=transaction,
             transactions=transactions,
@@ -56,6 +66,7 @@ async def persist_cost_basis_transactions(
                 if transaction.transaction_id in incoming_transaction_ids
                 else None
             ),
+            persist_child_state=transaction.transaction_id in affected_transaction_ids,
             observer=persistence_observer,
         )
         if transaction.transaction_id in incoming_transaction_ids:
@@ -71,6 +82,7 @@ async def _persist_cost_basis_transaction(
     income_offsets: AccruedIncomeOffsetStatePort,
     initial_opening_state: InitialOpeningCostStatePort | None,
     initial_opening_checkpoint: CostBasisProcessingCheckpoint | None,
+    persist_child_state: bool,
     observer: CostBasisPersistenceObserver,
 ) -> BookedTransaction:
     _observe(
@@ -91,6 +103,9 @@ async def _persist_cost_basis_transaction(
         stage=CostBasisPersistenceStage.TRANSACTION_COSTS,
         status=CostBasisPersistenceStatus.SUCCESS,
     )
+
+    if not persist_child_state:
+        return persisted
 
     if initial_opening_checkpoint is not None:
         await _persist_initial_opening_state(
