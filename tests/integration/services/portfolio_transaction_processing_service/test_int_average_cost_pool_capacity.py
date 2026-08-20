@@ -236,6 +236,11 @@ async def _seed_ordered_avco_key(
             booked_transaction.to_booked_transaction(buy)
         )
         transaction_input["portfolio_base_currency"] = "USD"
+        # Match the production full-history enrichment boundary. Product metadata is a material
+        # lineage input, so a capacity fixture without it represents stale authority and correctly
+        # triggers one-time prefix repair instead of the governed-history fast path under test.
+        transaction_input["product_type"] = "EQUITY"
+        transaction_input["asset_class"] = "Equity"
         calculation_inputs.append(transaction_input)
     calculation = build_cost_basis_timeline_processor(CostBasisMethod.AVCO).process_transactions(
         existing_transactions_raw=[],
