@@ -11,7 +11,7 @@ class CostBasisTransactionPersistenceScope(StrEnum):
     """Select which calculated transaction economics require durable refresh."""
 
     AFFECTED_SUFFIX = "affected_suffix"
-    COMPLETE_TIMELINE = "complete_timeline"
+    REBUILD_AUTHORITY = "rebuild_authority"
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,23 +52,28 @@ def build_cost_basis_persistence_plan(
     processed: Sequence[CostBasisTransaction],
     incoming_transaction_ids: Set[str],
     scope: CostBasisTransactionPersistenceScope,
+    missing_authority_transaction_ids: Set[str] = frozenset(),
 ) -> CostBasisPersistencePlan:
     """Return calculated rows for canonical economics and child-state persistence.
 
-    A full rebuild must persist the complete calculated timeline because another
-    transaction can exist durably without its derived cost authority while a
-    concurrent command is still in flight. Position history consumes those canonical
-    rows later in the same unit of work.
+    A full rebuild must refresh any calculated prefix row that lacks durable cost
+    authority because a concurrent command can still be in flight. Already governed
+    prefix rows remain untouched so statement count does not grow with history depth.
     """
 
     affected = affected_transaction_suffix(
         processed=processed,
         incoming_transaction_ids=incoming_transaction_ids,
     )
-    economics = (
-        tuple(processed)
-        if scope is CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE
-        else affected
+    affected_ids = {transaction.transaction_id for transaction in affected}
+    economics = tuple(
+        transaction
+        for transaction in processed
+        if transaction.transaction_id in affected_ids
+        or (
+            scope is CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY
+            and transaction.transaction_id in missing_authority_transaction_ids
+        )
     )
     return CostBasisPersistencePlan(
         economics_transactions=economics,

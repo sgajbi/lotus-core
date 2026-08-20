@@ -580,6 +580,9 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         "BUY-EARLIER",
         "BUY-LATER",
     ]
+    assert calculation.missing_economics_authority_transaction_ids == frozenset(
+        {"BUY-EARLIER", "BUY-LATER"}
+    )
     repo.get_transaction_history.assert_awaited_once()
     observer.record_execution.assert_called_once_with(CostBasisExecutionMode.FULL_REBUILD, "FIFO")
 

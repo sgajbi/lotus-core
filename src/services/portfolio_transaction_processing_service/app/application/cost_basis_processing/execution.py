@@ -220,7 +220,10 @@ class PreparedCostProcessingUseCase:
             persistence_scope=(
                 CostBasisTransactionPersistenceScope.AFFECTED_SUFFIX
                 if calculation.incremental
-                else CostBasisTransactionPersistenceScope.COMPLETE_TIMELINE
+                else CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY
+            ),
+            missing_authority_transaction_ids=(
+                calculation.missing_economics_authority_transaction_ids
             ),
         )
         await persist_current_lot_disposals(

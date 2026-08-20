@@ -223,6 +223,15 @@ class CostBasisCalculationCoordinator:
             instrument=instrument,
             preloaded_transaction_history=preloaded_transaction_history,
         )
+        missing_economics_authority_transaction_ids = frozenset(
+            str(transaction["transaction_id"])
+            for transaction in all_transactions_raw
+            if (
+                transaction.get("calculation_lineage") is None
+                or transaction.get("net_cost") is None
+                or transaction.get("net_cost_local") is None
+            )
+        )
         timeline_result = build_cost_basis_timeline_processor(
             cost_basis_method,
             observer=self._observer,
@@ -247,6 +256,9 @@ class CostBasisCalculationCoordinator:
             disposals=timeline_result.disposals,
             basis_transfers=timeline_result.basis_transfers,
             source_transactions=timeline_result.source_transactions,
+            missing_economics_authority_transaction_ids=(
+                missing_economics_authority_transaction_ids
+            ),
         )
 
     async def _load_incoming_transaction(

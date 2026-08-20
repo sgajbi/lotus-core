@@ -26,3 +26,4 @@ class CostBasisCalculationResult:
     disposals: tuple[TransactionLotDisposal, ...]
     source_transactions: dict[str, CostBasisTransaction]
     basis_transfers: tuple[TransactionLotBasisTransfer, ...] = field(default_factory=tuple)
+    missing_economics_authority_transaction_ids: frozenset[str] = field(default_factory=frozenset)
