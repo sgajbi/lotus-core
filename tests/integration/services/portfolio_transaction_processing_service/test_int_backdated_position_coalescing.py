@@ -6,9 +6,15 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import OutboxEvent, PositionHistory, PositionState
+from portfolio_common.database_models import Transaction as DBTransaction
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tests.test_support.async_task_coordination import (
+    cancel_pending_tasks,
+    wait_for_task_signal,
+)
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
@@ -28,9 +34,11 @@ pytestmark = [
 ]
 
 
+@pytest.mark.parametrize("first_cost_lock_transaction", ["middle", "earliest"])
 async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_rebuild(
     clean_db,
     async_db_session: AsyncSession,
+    first_cost_lock_transaction: str,
 ) -> None:
     portfolio_id = "PORT-BACKDATED-COALESCE-01"
     security_id = "SEC-BACKDATED-COALESCE-01"
@@ -93,23 +101,68 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     )
     await async_db_session.commit()
 
-    results = await asyncio.wait_for(
-        asyncio.gather(
-            process_booked_transaction(
-                context=context,
-                event=earliest_buy,
-                event_id="transactions.persisted-0-4861",
-                correlation_id="corr-backdated-coalesce-earliest",
-            ),
-            process_booked_transaction(
-                context=context,
-                event=middle_buy,
-                event_id="transactions.persisted-0-4862",
-                correlation_id="corr-backdated-coalesce-middle",
-            ),
+    cost_lock_acquired = asyncio.Event()
+
+    def observe_cost_lock(
+        _connection,
+        _cursor,
+        statement: str,
+        _parameters,
+        _context,
+        _executemany: bool,
+    ) -> None:
+        if "pg_advisory_xact_lock" in statement:
+            cost_lock_acquired.set()
+
+    engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(engine, "after_cursor_execute", observe_cost_lock)
+    event_by_order = {
+        "earliest": (
+            earliest_buy,
+            "transactions.persisted-0-4861",
+            "corr-backdated-coalesce-earliest",
         ),
-        timeout=10,
+        "middle": (
+            middle_buy,
+            "transactions.persisted-0-4862",
+            "corr-backdated-coalesce-middle",
+        ),
+    }
+    second_cost_lock_transaction = (
+        "earliest" if first_cost_lock_transaction == "middle" else "middle"
     )
+    first_event, first_event_id, first_correlation_id = event_by_order[first_cost_lock_transaction]
+    second_event, second_event_id, second_correlation_id = event_by_order[
+        second_cost_lock_transaction
+    ]
+    first_task = asyncio.create_task(
+        process_booked_transaction(
+            context=context,
+            event=first_event,
+            event_id=first_event_id,
+            correlation_id=first_correlation_id,
+        )
+    )
+    second_task: asyncio.Task | None = None
+    try:
+        await wait_for_task_signal(first_task, cost_lock_acquired, timeout=2)
+        sqlalchemy_event.remove(engine, "after_cursor_execute", observe_cost_lock)
+        second_task = asyncio.create_task(
+            process_booked_transaction(
+                context=context,
+                event=second_event,
+                event_id=second_event_id,
+                correlation_id=second_correlation_id,
+            )
+        )
+        results = await asyncio.wait_for(
+            asyncio.gather(first_task, second_task),
+            timeout=10,
+        )
+    finally:
+        if sqlalchemy_event.contains(engine, "after_cursor_execute", observe_cost_lock):
+            sqlalchemy_event.remove(engine, "after_cursor_execute", observe_cost_lock)
+        await cancel_pending_tasks(first_task, second_task)
 
     assert sorted(result.position_record_count for result in results) == [0, 3]
     assert all(result.replay_queued_count == 0 for result in results)
@@ -141,6 +194,18 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
                 OutboxEvent.event_type == "ReprocessTransactionReplay",
             )
         )
+        canonical_transactions = list(
+            (
+                await verification_session.scalars(
+                    select(DBTransaction)
+                    .where(
+                        DBTransaction.portfolio_id == portfolio_id,
+                        DBTransaction.security_id == security_id,
+                    )
+                    .order_by(DBTransaction.transaction_date, DBTransaction.transaction_id)
+                )
+            ).all()
+        )
 
     assert state.epoch == 1
     assert [position.transaction_id for position in current_positions] == [
@@ -157,5 +222,15 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         Decimal("50"),
         Decimal("80"),
         Decimal("180"),
+    ]
+    assert [transaction.net_cost for transaction in canonical_transactions] == [
+        Decimal("50"),
+        Decimal("30"),
+        Decimal("100"),
+    ]
+    assert [transaction.net_cost_local for transaction in canonical_transactions] == [
+        Decimal("50"),
+        Decimal("30"),
+        Decimal("100"),
     ]
     assert replay_event_count == 0
