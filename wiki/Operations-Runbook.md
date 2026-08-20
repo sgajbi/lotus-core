@@ -177,6 +177,14 @@ immutable, so a concurrent earlier price can coexist as one new pending generati
 trigger rows or mutate job payloads by hand: transaction rollback and the next scheduler poll are
 the governed recovery path.
 
+High-cardinality valuation and reprocessing operations are physically bounded to 1,000 rows and
+the governed PostgreSQL bind budget per statement. When one logical operation needs multiple
+statements, inspect the single structured `database_statement_batch` event: its bounded fields are
+`operation`, `item_count`, `chunk_count`, and `max_rows_per_statement`. It contains no portfolio,
+security, job, claim, or correlation identity. Multiple statements do not mean partial persistence;
+they share the caller's transaction, so any later-chunk failure rolls back the complete logical
+operation. Use the support APIs above for business-key drill-down.
+
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply
 the same tenant in `X-Tenant-Id` and the query, plus `core.support.read`. This is privileged
