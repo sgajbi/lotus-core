@@ -24,6 +24,7 @@ from .database_models import (
 )
 from .domain.currency import normalize_currency_code
 from .identifiers import normalize_lookup_identifier
+from .infrastructure.persistence.statement_batching import iter_statement_chunks
 from .utils import async_timed
 from .valuation_job_contracts import ValuationJobTransitionOutcome
 from .valuation_snapshot_contiguity import (
@@ -314,14 +315,34 @@ class ValuationRepositoryBase:
         if latest_valuation_date is None:
             return {}
 
-        result = await self.db.execute(
-            build_contiguous_snapshot_dates_stmt(
-                states,
-                first_open_dates or {},
-                latest_valuation_date,
+        states_by_key = {
+            (state.portfolio_id, state.security_id, state.epoch): state for state in states
+        }
+        normalized_states = [states_by_key[key] for key in sorted(states_by_key)]
+        all_first_open_dates = first_open_dates or {}
+        contiguous_dates: Dict[Tuple[str, str], date] = {}
+        for state_chunk in iter_statement_chunks(
+            normalized_states,
+            binds_per_row=7,
+            reserved_binds=10,
+        ):
+            chunk_keys = {
+                (state.portfolio_id, state.security_id, state.epoch) for state in state_chunk
+            }
+            chunk_first_open_dates = {
+                key: first_open_date
+                for key, first_open_date in all_first_open_dates.items()
+                if key in chunk_keys
+            }
+            result = await self.db.execute(
+                build_contiguous_snapshot_dates_stmt(
+                    list(state_chunk),
+                    chunk_first_open_dates,
+                    latest_valuation_date,
+                )
             )
-        )
-        return contiguous_snapshot_dates_by_key(result)
+            contiguous_dates.update(contiguous_snapshot_dates_by_key(result))
+        return contiguous_dates
 
     @async_timed(repository="ValuationRepository", method="get_valuation_dates_between")
     async def get_valuation_dates_between(
@@ -841,30 +862,41 @@ class ValuationRepositoryBase:
     async def get_first_open_dates_for_keys(
         self, keys: List[Tuple[str, str, int]]
     ) -> Dict[Tuple[str, str, int], date]:
-        if not keys:
+        normalized_keys = sorted(set(keys))
+        if not normalized_keys:
             return {}
 
-        stmt = (
-            select(
-                PositionHistory.portfolio_id,
-                PositionHistory.security_id,
-                PositionHistory.epoch,
-                func.min(PositionHistory.position_date).label("first_open_date"),
+        first_open_dates: Dict[Tuple[str, str, int], date] = {}
+        for key_chunk in iter_statement_chunks(normalized_keys, binds_per_row=3):
+            stmt = (
+                select(
+                    PositionHistory.portfolio_id,
+                    PositionHistory.security_id,
+                    PositionHistory.epoch,
+                    func.min(PositionHistory.position_date).label("first_open_date"),
+                )
+                .where(
+                    tuple_(
+                        PositionHistory.portfolio_id,
+                        PositionHistory.security_id,
+                        PositionHistory.epoch,
+                    ).in_(key_chunk)
+                )
+                .group_by(
+                    PositionHistory.portfolio_id,
+                    PositionHistory.security_id,
+                    PositionHistory.epoch,
+                )
             )
-            .where(
-                tuple_(
-                    PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
-                ).in_(keys)
-            )
-            .group_by(
-                PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
-            )
-        )
 
-        result = await self.db.execute(stmt)
-        return {
-            (row.portfolio_id, row.security_id, row.epoch): row.first_open_date for row in result
-        }
+            result = await self.db.execute(stmt)
+            first_open_dates.update(
+                {
+                    (row.portfolio_id, row.security_id, row.epoch): row.first_open_date
+                    for row in result
+                }
+            )
+        return first_open_dates
 
 
 @dataclass(frozen=True)
