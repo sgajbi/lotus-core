@@ -3944,7 +3944,10 @@ Most relevant current governance:
      `database_statement_batch` event with governed operation/status/reason values and bounded
      counts. Do not add per-chunk INFO logs, business identifiers, or a database-batch config knob;
      use temp tables or `COPY` only after plan/row-count evidence proves bounded statements are
-     inadequate.
+     inadequate. Expired valuation-claim and stale reprocessing-job recovery must also select a
+     deterministic bounded cohort per scheduler poll, defensively chunk any identifier update set,
+     and publish bounded counts/reasons rather than job-ID collections. Aggregation-owned expired
+     lease recovery remains separately tracked by #962.
 
 ## Context Maintenance Rule
 
