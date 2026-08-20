@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 Issue: #486
-Status: Correctness fix-forward in progress after PR #970; protected PR and exact-main proof pending
+Status: PR #971 validation in progress; exact-main proof pending
 
 ## Objective
 
@@ -101,13 +101,16 @@ statement cardinality remain unchanged.
 - Signed fix-forward commit `da2620de3987c3fad2747f4ed65f248d4c52a535`: `114 passed` across
   warning-strict calculator and engine-input tests; both deterministic PostgreSQL lock
   permutations passed in `67.71s` with current input-and-output authority for every canonical row.
-- Full transaction-processing contract at the production-code head: `147 passed`; one query-shape
-  guard misclassified the new joined history query as a duplicate point read after `942.55s`.
-  The corrected guard proves zero point reads and exactly one joined fee-authority history read;
-  its focused PostgreSQL rerun passed in `76.24s`. The protected PR lane remains the final complete
-  contract rerun authority.
-- A new protected PR lane, the complete transaction-processing shard, and exact-main Main
-  Releasability remain pending.
+- The first full fix-forward transaction-processing run reached `147 passed` and one failure in
+  `923.17s`. Its AVCO capacity fixture omitted material product type and asset class, so it
+  truthfully exercised stale-authority repair rather than the intended governed-history fast path.
+  Signed fixture correction `6d6116a78048a96dfeff3002403688d7da72038d` passed the focused
+  PostgreSQL 2-versus-200 history proof in `74.93s` with equal statement counts.
+- Complete local transaction-processing contract at signed code/test head `6d6116a78048a96dfeff3002403688d7da72038d`:
+  `148 passed in 979.34s`.
+- Independent read-only review at that exact SHA found no code, test, documentation,
+  compatibility, or scope-boundary blocker.
+- PR #971 protected lanes and exact-main Main Releasability remain pending.
 
 ## Documentation Decision
 
