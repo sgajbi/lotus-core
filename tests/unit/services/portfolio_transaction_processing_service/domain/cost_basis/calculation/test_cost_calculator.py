@@ -228,6 +228,9 @@ def test_transaction_cost_authority_requires_current_input_and_output_bound_line
         }
     )
     assert not has_governed_transaction_cost_authority(
+        {**payload, "product_type": "BOND", "asset_class": "Fixed Income"}
+    )
+    assert not has_governed_transaction_cost_authority(
         {
             **payload,
             "fees": {**payload["fees"], "stamp_duty": Decimal("1")},
@@ -262,6 +265,43 @@ def test_transaction_cost_lineage_is_stable_across_database_decimal_scale(
 
     assert source_event.calculation_lineage == database_round_trip.calculation_lineage
     assert source_event.calculation_lineage.algorithm_version == 2
+
+
+def test_transaction_cost_lineage_ignores_redundant_trade_fee_scale(
+    cost_calculator,
+) -> None:
+    def transaction(*, brokerage: str, trade_fee: str) -> CostBasisTransaction:
+        return CostBasisTransaction(
+            transaction_id="BUY-LINEAGE-NAMED-FEE-001",
+            portfolio_id="P1",
+            instrument_id="AAPL",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 8, 1),
+            quantity=Decimal("10"),
+            gross_transaction_amount=Decimal("1500"),
+            trade_currency="USD",
+            fees=Fees(brokerage=Decimal(brokerage)),
+            trade_fee=trade_fee,
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal("1"),
+        )
+
+    source_event = transaction(brokerage="2.00", trade_fee="2.00")
+    database_round_trip = transaction(
+        brokerage="2.0000000000",
+        trade_fee="2.0000000000",
+    )
+    changed_fee = transaction(brokerage="2.01", trade_fee="2.01")
+
+    cost_calculator.calculate_transaction_costs(source_event)
+    cost_calculator.calculate_transaction_costs(database_round_trip)
+    cost_calculator.calculate_transaction_costs(changed_fee)
+
+    assert source_event.calculation_lineage == database_round_trip.calculation_lineage
+    assert source_event.calculation_lineage.input_content_hash != (
+        changed_fee.calculation_lineage.input_content_hash
+    )
 
 
 def test_transaction_cost_lineage_excludes_settlement_owned_generated_linkage(
