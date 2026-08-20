@@ -8,9 +8,32 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PositionState
+from .infrastructure.persistence.statement_batching import iter_statement_chunks
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
+
+_PositionStateUpdate = Dict[str, Any]
+
+
+def _normalize_state_updates(updates: List[_PositionStateUpdate]) -> List[_PositionStateUpdate]:
+    """Deduplicate state updates and reject ambiguous duplicate authority."""
+
+    normalized: dict[tuple[str, str, int], _PositionStateUpdate] = {}
+    for update_item in updates:
+        identity = (
+            update_item["portfolio_id"],
+            update_item["security_id"],
+            update_item["expected_epoch"],
+        )
+        existing = normalized.get(identity)
+        if existing is not None and (
+            existing["watermark_date"] != update_item["watermark_date"]
+            or existing["status"] != update_item["status"]
+        ):
+            raise ValueError("conflicting position-state updates for the same epoch")
+        normalized[identity] = update_item
+    return [normalized[identity] for identity in sorted(normalized)]
 
 
 class PositionStateRepository:
@@ -35,49 +58,53 @@ class PositionStateRepository:
             'status': str,
         }
         """
-        if not updates:
+        normalized_updates = _normalize_state_updates(updates)
+        if not normalized_updates:
             return 0
 
-        updates_table = (
-            values(
-                column("portfolio_id", String),
-                column("security_id", String),
-                column("expected_epoch", Integer),
-                column("watermark_date", Date),
-                column("status", String),
-                name="position_state_updates",
+        updated_count = 0
+        for update_chunk in iter_statement_chunks(normalized_updates, binds_per_row=5):
+            updates_table = (
+                values(
+                    column("portfolio_id", String),
+                    column("security_id", String),
+                    column("expected_epoch", Integer),
+                    column("watermark_date", Date),
+                    column("status", String),
+                    name="position_state_updates",
+                )
+                .data(
+                    [
+                        (
+                            update_item["portfolio_id"],
+                            update_item["security_id"],
+                            update_item["expected_epoch"],
+                            update_item["watermark_date"],
+                            update_item["status"],
+                        )
+                        for update_item in update_chunk
+                    ]
+                )
+                .alias("position_state_updates")
             )
-            .data(
-                [
-                    (
-                        update_item["portfolio_id"],
-                        update_item["security_id"],
-                        update_item["expected_epoch"],
-                        update_item["watermark_date"],
-                        update_item["status"],
-                    )
-                    for update_item in updates
-                ]
-            )
-            .alias("position_state_updates")
-        )
 
-        stmt = (
-            update(PositionState)
-            .where(
-                PositionState.portfolio_id == updates_table.c.portfolio_id,
-                PositionState.security_id == updates_table.c.security_id,
-                PositionState.epoch == updates_table.c.expected_epoch,
+            stmt = (
+                update(PositionState)
+                .where(
+                    PositionState.portfolio_id == updates_table.c.portfolio_id,
+                    PositionState.security_id == updates_table.c.security_id,
+                    PositionState.epoch == updates_table.c.expected_epoch,
+                )
+                .values(
+                    watermark_date=updates_table.c.watermark_date,
+                    status=updates_table.c.status,
+                    updated_at=func.now(),
+                )
+                .execution_options(synchronize_session=False)
             )
-            .values(
-                watermark_date=updates_table.c.watermark_date,
-                status=updates_table.c.status,
-                updated_at=func.now(),
-            )
-            .execution_options(synchronize_session=False)
-        )
-        result = await self.db.execute(stmt)
-        return result.rowcount or 0
+            result = await self.db.execute(stmt)
+            updated_count += result.rowcount or 0
+        return updated_count
 
     @async_timed(repository="PositionStateRepository", method="get_or_create_state")
     async def get_or_create_state(self, portfolio_id: str, security_id: str) -> PositionState:
@@ -160,7 +187,8 @@ class PositionStateRepository:
         the position-state row lock for that exact epoch.
         Returns the number of rows that were updated.
         """
-        if not keys:
+        normalized_keys = sorted(set(keys))
+        if not normalized_keys:
             return 0
 
         watermark_value = (
@@ -175,23 +203,29 @@ class PositionStateRepository:
             else new_watermark_date
         )
 
-        stmt = (
-            update(PositionState)
-            .where(
-                tuple_(PositionState.portfolio_id, PositionState.security_id).in_(keys),
+        updated_count = 0
+        for key_chunk in iter_statement_chunks(
+            normalized_keys,
+            binds_per_row=2,
+            reserved_binds=3,
+        ):
+            stmt = (
+                update(PositionState)
+                .where(
+                    tuple_(PositionState.portfolio_id, PositionState.security_id).in_(key_chunk),
+                )
+                .values(
+                    watermark_date=watermark_value,
+                    status="REPROCESSING",
+                    updated_at=func.now(),
+                )
+                .returning(PositionState.portfolio_id)
             )
-            .values(
-                watermark_date=watermark_value,
-                status="REPROCESSING",  # A watermark reset always implies reprocessing is needed
-                updated_at=func.now(),
-            )
-            .returning(PositionState.portfolio_id)
-        )
-        if not touch_if_already_lagging:
-            stmt = stmt.where(PositionState.watermark_date > new_watermark_date)
-        if expected_epoch is not None:
-            stmt = stmt.where(PositionState.epoch == expected_epoch)
+            if not touch_if_already_lagging:
+                stmt = stmt.where(PositionState.watermark_date > new_watermark_date)
+            if expected_epoch is not None:
+                stmt = stmt.where(PositionState.epoch == expected_epoch)
 
-        result = await self.db.execute(stmt)
-        updated_rows = result.fetchall()
-        return len(updated_rows)
+            result = await self.db.execute(stmt)
+            updated_count += len(result.fetchall())
+        return updated_count
