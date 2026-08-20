@@ -2521,12 +2521,15 @@ Most relevant current governance:
      epoch advancement. Record `coalesced/already_materialized`, do not read full history, advance
      epoch, delete/reinsert positions, or publish replay events, and keep normal ordered processing
      free of this extra query. This is safe only because a full cost-basis rebuild persists its
-     affected suffix plus any calculated prefix row that lacks durable base/local costs or Core
-     calculation lineage
+     affected suffix plus any calculated prefix row that lacks current, output-bound Core
+     transaction-cost authority
      before position history consumes the timeline in the same caller-owned transaction. Persisting
      only the incoming/affected suffix can let an unfavorable concurrent lock order materialize
-     correct quantity with stale cumulative cost; source-supplied cost values without Core lineage
-     are not authority. Rewriting already-governed prefix rows makes
+     correct quantity with stale cumulative cost; source-supplied values, foreign/stale lineage, and
+     receipts that do not bind the complete output are not authority. Raw ingestion must preserve
+     positive named fee components atomically, and the canonical full-history reader must rehydrate
+     and validate those components in one query before reconstruction. Rewriting already-governed
+     prefix rows makes
      statement count grow with history depth and is also prohibited. Combined semantic idempotency
      still rejects materially changed content outside
      the explicit correction workflow; an accepted correction has its own immutable identity and

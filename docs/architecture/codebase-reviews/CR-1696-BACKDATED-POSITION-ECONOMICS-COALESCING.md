@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 Issue: #486
-Status: Fixed locally; protected PR and exact-main proof pending
+Status: Correctness fix-forward in progress after PR #968; protected PR and exact-main proof pending
 
 ## Objective
 
@@ -27,9 +27,15 @@ wall-clock or runner flake. A favorable earliest-first schedule concealed it.
 ## Change
 
 - Full cost-basis rebuilds now persist the affected suffix plus calculated prefix rows that lack
-  durable base/local economics or Core calculation lineage before position history is staged in
-  the same caller-owned transaction. Non-null source-supplied cost values are not treated as
-  calculated authority without that lineage.
+  current, output-bound Core cost authority before position history is staged in the same
+  caller-owned transaction. Authority requires durable base/local economics, the exact v2
+  transaction-cost algorithm and numeric policy, and a receipt bound to the complete persisted
+  output.
+- Raw persistence stages positive named fee components atomically with the transaction. The
+  canonical full-history reader eagerly rehydrates the five governed component types in one query,
+  rejects unsupported, duplicate, or currency-conflicting evidence, and lets named authority win
+  over a disagreeing aggregate `trade_fee`. Prefix repair can therefore replace economics without
+  reclassifying stamp duty, exchange fees, GST, or other fees as brokerage.
 - Already-governed prefix rows are not rewritten. The two-row and 200-row AVCO replay fixtures
   retain equal statement count, preventing history-depth amplification.
 - Incremental calculations retain the existing affected-suffix write boundary.
@@ -48,34 +54,34 @@ change Kafka concurrency. Those rejected experiments remain excluded.
 
 ## Same-Pattern Decision
 
-The audited `list_all_transactions` backdated rebuild is repaired because any row without durable
-base/local economics or Core calculation lineage receives the full calculation's authority in the
+The audited `list_all_transactions` backdated rebuild is repaired because any row without current,
+output-bound Core transaction-cost authority receives the full calculation's authority in the
 same unit of work. The ordinary
 `load_replay_window` path remains protected by same-key cost serialization and later event
 processing; broader separation of complete internal calculation authority from incoming-only
 effect publication remains owned by #719. No duplicate issue is required. #795 remains the
 separate ordered-delivery and capacity owner.
 
-The audit also proved that named fee components stored in `transaction_costs` are not rehydrated by
-the canonical full-history reader. A later rebuild can therefore reconstruct fee inputs from a raw
-aggregate `trade_fee` instead of the governed component breakdown. This pre-existing, distinct
-fee-authority defect is durably routed to #719 in
-[`issuecomment-5359603950`](https://github.com/sgajbi/lotus-core/issues/719#issuecomment-5359603950);
-it is not claimed fixed by CR-1696.
+The bounded canonical history and raw-persistence fee gap is fixed here because selective prefix
+repair newly reaches those rows. #719 retains alternate/replay reader hydration, historical
+aggregate-versus-component migration and reconciliation, transaction ordering, and broader
+large-history capacity work; CR-1696 does not claim those program-level outcomes.
 
 ## Compatibility
 
 No API, OpenAPI, event schema, Kafka key/partition, database schema/migration, dependency, image,
 or topology changes. Transaction calculation formulas, numeric policy, epoch numbering,
 idempotency, replay-event behavior, and caller-owned rollback remain unchanged. Full rebuilds can
-write additional calculated prefix transaction economics only when base/local costs or Core
-calculation lineage are absent; this is the intentional correctness change. Incremental and
-governed-history statement cardinality remain unchanged.
+write additional calculated prefix transaction economics only when current output-bound Core
+authority is absent; this is the intentional correctness change. Named-fee raw ingestion adds one
+bounded delete/replace operation only when named components are present; ordinary aggregate-only
+transactions keep their existing statement count. Incremental and governed-history calculation
+statement cardinality remain unchanged.
 
 ## Validation
 
-- Focused persistence/calculation/execution unit suite: `38 passed`.
-- Deterministic PostgreSQL lock-permutation plus AVCO capacity proof: `3 passed in 43.48s`.
+- Focused persistence/calculation/repository unit suite: `163 passed`.
+- Deterministic PostgreSQL named-fee lock permutations: `2 passed in 64.13s`.
 - Touched-source Ruff and MyPy: passed.
 - Full transaction-processing contract: `148 passed in 869.65s`.
 - Protected PR lanes and exact-main Main Releasability: pending.
