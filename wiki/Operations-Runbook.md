@@ -428,12 +428,15 @@ make database-hot-path-evidence
 
 The command writes a source-safe local artifact under
 `output/database-hot-path-evidence/database-hot-path-evidence.json`. It retains plan node types,
-index names, bounded row metrics, violations, exact source SHA, and content identity; it never
+index names, bounded row metrics (including emitted and executor-discarded rows across loops),
+violations, exact source SHA, and content identity; it never
 retains SQL, bind values, database URLs, credentials, or portfolio/security identifiers. The
 posture is `report_only`, so a complete artifact may have `status: failed` while the command exits
 successfully. Treat each failed scenario as an issue-backed query finding. The command itself fails
-closed for test failure, dirty or changing source, stale catalog, missing/extra/malformed fragments,
-or unsafe artifact content. Do not present this report as production capacity certification.
+closed for test failure, dirty or changing source, stale catalog,
+missing/extra/malformed/contradictory fragments, or unsafe artifact content. Claim and stale-recovery
+mutation plans are analyzed only behind mandatory rollback and fresh-session authority checks. Do
+not present this report as production capacity certification.
 
 Prefer API diagnostics first, but go to the database when:
 

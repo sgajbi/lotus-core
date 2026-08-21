@@ -4025,8 +4025,12 @@ Most relevant current governance:
      `make database-hot-path-evidence`. Capture the exact statement emitted by the production
      repository method and retain only evaluated plan metrics; never publish SQL, bind values,
      connection details, or business identifiers. Read plans use PostgreSQL JSON `EXPLAIN
-     ANALYZE`; mutating plans must execute inside an explicitly rolled-back savepoint and prove
-     durable state is unchanged. Evidence generation requires a clean worktree and must recheck
+     ANALYZE`; count both emitted rows and rows discarded by filter, index recheck, or join filter
+     across actual loops. Mutating SQL must be intercepted before production execution, analyzed
+     only inside an explicitly rolled-back connection transaction, and prove every mutable durable
+     authority field is unchanged through a fresh session. Re-derive fragment status and violations
+     from the catalog rather than trusting producer claims. Evidence generation requires a clean
+     worktree and must recheck
      the exact source SHA after execution so concurrent edits cannot be attributed to the run.
      Accept PostgreSQL optimizer alternatives when indexed access and row ceilings remain true;
      do not force one index name. Keep the command report-only until repeated exact-main evidence
