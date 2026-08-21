@@ -59,6 +59,17 @@ SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
 }
 
 
+def _openapi_array_schema(property_schema: dict) -> dict:
+    return next(
+        (
+            candidate
+            for candidate in property_schema.get("anyOf", [])
+            if candidate.get("type") == "array"
+        ),
+        property_schema,
+    )
+
+
 @pytest_asyncio.fixture
 async def async_test_client():
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -2294,6 +2305,8 @@ async def test_openapi_fully_documents_dpm_instrument_eligibility_schema_family(
         schema,
         DPM_INSTRUMENT_ELIGIBILITY_SCHEMA_ROOTS,
     )
+    request_schema = schema["components"]["schemas"]["InstrumentEligibilityBulkRequest"]
+    assert request_schema["properties"]["security_ids"]["maxItems"] == 1_000
 
 
 async def test_openapi_describes_portfolio_source_evidence_problem_details(
@@ -2401,6 +2414,8 @@ async def test_openapi_fully_documents_dpm_portfolio_tax_lot_schema_family(
         schema,
         DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS,
     )
+    request_schema = schema["components"]["schemas"]["PortfolioTaxLotWindowRequest"]
+    assert _openapi_array_schema(request_schema["properties"]["security_ids"])["maxItems"] == 1_000
 
 
 async def test_openapi_fully_documents_dpm_transaction_cost_curve_schema_family(
