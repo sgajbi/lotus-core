@@ -196,9 +196,7 @@ async def test_eligibility_reader_chunks_oversized_inputs_and_globally_orders_re
     session = MagicMock()
     session.execute = AsyncMock(side_effect=[first_result, second_result])
 
-    records = await SqlAlchemyDpmReferenceDataReader(
-        session
-    ).list_instrument_eligibility_profiles(
+    records = await SqlAlchemyDpmReferenceDataReader(session).list_instrument_eligibility_profiles(
         security_ids=[f"SEC_{index:04d}" for index in reversed(range(1_001))],
         as_of_date=date(2026, 4, 10),
     )

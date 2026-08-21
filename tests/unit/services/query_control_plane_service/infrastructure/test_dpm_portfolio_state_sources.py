@@ -157,9 +157,7 @@ async def test_instrument_reference_read_chunks_oversized_internal_filter() -> N
 
     known = await dpm_portfolio_state_sources.SqlAlchemyDpmPortfolioStateReader(
         session
-    ).list_known_instrument_security_ids(
-        [f"SEC_{index:04d}" for index in reversed(range(1_001))]
-    )
+    ).list_known_instrument_security_ids([f"SEC_{index:04d}" for index in reversed(range(1_001))])
 
     assert known == {"SEC_0000", "SEC_1000"}
     assert session.execute.await_count == 2
