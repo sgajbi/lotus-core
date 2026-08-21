@@ -32,6 +32,7 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-db-coverage": [
         "tests/integration/libs/portfolio-common/test_database_runtime_identity.py",
+        "tests/integration/libs/portfolio-common/test_latest_position_query_plans.py",
         "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
