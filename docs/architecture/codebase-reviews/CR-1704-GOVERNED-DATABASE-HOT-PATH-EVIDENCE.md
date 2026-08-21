@@ -1,7 +1,7 @@
 # CR-1704 - Governed Database Hot-Path Evidence
 
 Date: 2026-08-22
-Status: Fixed locally; protected PR, exact-main validation, wiki publication, and issue closure pending
+Status: Merged and exact-main validated; closure evidence reconciled
 Issue: #510
 
 ## Finding
@@ -77,7 +77,18 @@ sequential-scan or `WindowAgg` prohibition.
 - Focused rollback-boundary regression: valuation claim and valuation stale recovery both passed
   against PostgreSQL; the final clean command repeated both proofs in the complete family set.
 - Scoped Ruff, formatting, MyPy, and diff hygiene passed.
-- Protected PR, exact-main, wiki publication/parity, and final #510 QA evidence remain pending.
+- PR #986 merged the twelve signed implementation commits by rebase as exact main
+  `b14bdbab0912d79f3889386190701e85399b86fe`.
+- Remote Feature Lane `32519169401` passed at exact PR head `04d7b6753`; Pull Request Merge Gate
+  `32519174610` passed all 23 jobs with zero failures or cancellations.
+- Main Releasability `32522648711` passed at exact main `b14bdbab0`: 24 jobs succeeded, the two
+  institutional lanes were intentionally skipped, and no job failed or was cancelled. Full
+  integration, coverage, exact-source images, Docker smoke, E2E, fast/full performance, latency,
+  and deterministic failure recovery all passed.
+- Authored Operations Runbook wiki publication is at
+  `de4847085b34b891c6b3aa593f4cd14da96c4c67`; strict publication parity is `DiffCount 0`.
+- Independent review and the exact-head Codex review found no remaining merge blocker. Both review
+  findings were resolved with direct current-head evidence.
 
 ## Same-Pattern And Governance Decision
 
@@ -92,5 +103,5 @@ the report framework.
 The durable lesson is repository-local: representative plan evidence must be exact-source,
 production-method based, source-safe, optimizer-flexible, and initially non-certifying. Existing
 Lotus backend, CI, review-ledger, and issue-discovery skills already require those behaviors, so no
-central skill or platform-context change is needed. The operator wiki changes because the new
-command and interpretation are support-visible; publication and strict parity remain post-merge.
+central skill or platform-context change is needed. The operator wiki changed because the new
+command and interpretation are support-visible; authored source is published with strict parity.
