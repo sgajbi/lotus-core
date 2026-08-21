@@ -153,7 +153,7 @@ Dependency consistency and vulnerability audit use one content-addressed environ
   Python 3.12 GitHub execution proves forward compatibility against the Linux authority rather
   than resolving a second mutable graph;
 - CI/build/test dependencies come from `requirements/ci-tooling.in`, compiled with pinned
-  `pip==26.1.2`, `pip-tools==7.5.3`, and Python 3.11 into platform-specific Linux/amd64 and
+  `pip==26.2.1`, `pip-tools==7.6.1`, and Python 3.11 into platform-specific Linux/amd64 and
   Windows/amd64 locks;
 - Linux CI compilation executes inside the exact governed Python base image, while Windows local
   tooling uses the Windows closure so platform markers remain truthful; and
