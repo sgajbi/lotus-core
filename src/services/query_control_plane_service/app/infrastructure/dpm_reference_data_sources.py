@@ -157,36 +157,22 @@ class SqlAlchemyDpmReferenceDataReader:
         normalized_ids = _normalized_security_ids(security_ids)
         if not normalized_ids:
             return []
-        security_id = func.trim(InstrumentEligibilityProfile.security_id)
-        predicates = [
-            security_id.in_(normalized_ids),
-            effective_on(
-                InstrumentEligibilityProfile.effective_from,
-                InstrumentEligibilityProfile.effective_to,
-                as_of_date,
-            ),
-        ]
-        ranked = ranked_latest_ids(
-            InstrumentEligibilityProfile,
-            security_id,
-            predicates=predicates,
-            order_by=(
-                InstrumentEligibilityProfile.effective_from.desc(),
-                InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
-                InstrumentEligibilityProfile.eligibility_version.desc(),
-                InstrumentEligibilityProfile.updated_at.desc(),
-                InstrumentEligibilityProfile.created_at.desc(),
-                InstrumentEligibilityProfile.id.desc(),
-            ),
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.DPM_INSTRUMENT_ELIGIBILITY_LOOKUP,
+            item_count=len(normalized_ids),
+            binds_per_row=1,
+            reserved_binds=2,
         )
-        statement = (
-            select(InstrumentEligibilityProfile)
-            .join(ranked, InstrumentEligibilityProfile.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(security_id.asc())
-        )
-        rows = (await self._session.execute(statement)).scalars().all()
-        return [_instrument_eligibility(row) for row in rows]
+        records: list[InstrumentEligibilityEvidence] = []
+        for chunk in iter_statement_chunks(
+            normalized_ids,
+            binds_per_row=1,
+            reserved_binds=2,
+        ):
+            statement = _instrument_eligibility_statement(list(chunk), as_of_date)
+            rows = (await self._session.execute(statement)).scalars().all()
+            records.extend(_instrument_eligibility(row) for row in rows)
+        return sorted(records, key=lambda record: record.security_id)
 
     async def list_latest_market_prices(
         self,
@@ -248,6 +234,37 @@ def _normalized_security_ids(values: list[str]) -> list[str]:
 def _normalized_currency_pairs(values: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return sorted(
         {(normalize_currency_code(base), normalize_currency_code(quote)) for base, quote in values}
+    )
+
+
+def _instrument_eligibility_statement(security_ids: list[str], as_of_date: date):
+    security_id = func.trim(InstrumentEligibilityProfile.security_id)
+    predicates = [
+        security_id.in_(security_ids),
+        effective_on(
+            InstrumentEligibilityProfile.effective_from,
+            InstrumentEligibilityProfile.effective_to,
+            as_of_date,
+        ),
+    ]
+    ranked = ranked_latest_ids(
+        InstrumentEligibilityProfile,
+        security_id,
+        predicates=predicates,
+        order_by=(
+            InstrumentEligibilityProfile.effective_from.desc(),
+            InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
+            InstrumentEligibilityProfile.eligibility_version.desc(),
+            InstrumentEligibilityProfile.updated_at.desc(),
+            InstrumentEligibilityProfile.created_at.desc(),
+            InstrumentEligibilityProfile.id.desc(),
+        ),
+    )
+    return (
+        select(InstrumentEligibilityProfile)
+        .join(ranked, InstrumentEligibilityProfile.id == ranked.c.id)
+        .where(ranked.c.rn == 1)
+        .order_by(security_id.asc())
     )
 
 
