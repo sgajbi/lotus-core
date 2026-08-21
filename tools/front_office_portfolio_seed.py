@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 from tools.demo_data_pack import (  # noqa: E402
     DEFAULT_DEMO_BENCHMARK_ID,
     _build_benchmark_reference_data,
+    _canonical_payload_fingerprint,
     _request_json,
     _wait_ready,
     build_risk_free_reference_data,
@@ -41,6 +42,9 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
 )
 DEFAULT_DPM_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
 DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
+FRONT_OFFICE_VALUATION_TENANT_ID = "LOTUS_PB_SG"
+FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID = "SG_PRIVATE_BANK_BOOK"
+FRONT_OFFICE_VALUATION_SOURCE_SYSTEM = "LOTUS_FRONT_OFFICE_SEED"
 DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
     {
         "portfolio_id": "PB_SG_GLOBAL_INC_002",
@@ -352,6 +356,89 @@ def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
     )
 
 
+def _valuation_policy_for_instrument(instrument: dict[str, Any]) -> tuple[str, str]:
+    product_type = str(instrument["product_type"]).strip().lower()
+    if product_type == "bond":
+        return (
+            "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL",
+            "PERCENT_OF_PRINCIPAL_CLEAN",
+        )
+    return ("UNIT_PRICE_MARKET_VALUE", "UNIT_PRICE")
+
+
+def _build_market_price_source_fact(
+    *,
+    market_price: dict[str, Any],
+    instrument: dict[str, Any],
+    observed_at: str,
+) -> dict[str, Any]:
+    _, quote_basis = _valuation_policy_for_instrument(instrument)
+    price_date = str(market_price["price_date"])
+    security_id = str(market_price["security_id"])
+    source_record_id = f"front-office-price:{security_id}:{price_date}"
+    source_content = {
+        "currency": str(market_price["currency"]),
+        "fact_status": "ACTIVE",
+        "fact_version": 1,
+        "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
+        "observed_at": observed_at,
+        "price": str(market_price["price"]),
+        "price_date": price_date,
+        "quote_basis": quote_basis,
+        "security_id": security_id,
+        "source_record_id": source_record_id,
+        "source_revision": "v1",
+        "source_system": FRONT_OFFICE_VALUATION_SOURCE_SYSTEM,
+        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+    }
+    return {
+        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
+        "security_id": security_id,
+        "price_date": price_date,
+        "price": str(market_price["price"]),
+        "currency": str(market_price["currency"]),
+        "quote_basis": quote_basis,
+        "fact_status": "ACTIVE",
+        "fact_version": 1,
+        "source_system": FRONT_OFFICE_VALUATION_SOURCE_SYSTEM,
+        "source_record_id": source_record_id,
+        "source_revision": "v1",
+        "source_content_hash": _canonical_payload_fingerprint(source_content),
+        "observed_at": observed_at,
+    }
+
+
+def _build_valuation_policy_assignment(
+    *,
+    instrument: dict[str, Any],
+    valid_from: date,
+    observed_at: str,
+) -> dict[str, Any]:
+    policy_id, _ = _valuation_policy_for_instrument(instrument)
+    security_id = str(instrument["security_id"])
+    return {
+        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
+        "security_id": security_id,
+        "policy_id": policy_id,
+        "policy_version": 1,
+        "valid_from": valid_from.isoformat(),
+        "valid_to": None,
+        "assignment_status": "ACTIVE",
+        "assignment_version": 1,
+        "source_system": FRONT_OFFICE_VALUATION_SOURCE_SYSTEM,
+        "source_record_id": f"front-office-valuation-policy:{security_id}",
+        "source_revision": "v1",
+        "observed_at": observed_at,
+        "assignment_reason": (
+            "Canonical fixed-income quote represented as clean percent of face principal."
+            if policy_id == "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
+            else "Canonical source value represented as a price per position unit."
+        ),
+    }
+
+
 def _interpolate_prices(
     *,
     dates: list[str],
@@ -656,6 +743,8 @@ def build_front_office_portfolio_bundle(
     portfolios = [
         {
             "portfolio_id": portfolio_id,
+            "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+            "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
             "base_currency": "USD",
             "open_date": "2025-01-06",
             "risk_exposure": "balanced",
@@ -1833,6 +1922,23 @@ def build_front_office_portfolio_bundle(
             "quality_status": FRONT_OFFICE_SEED_CONTRACT.advisor_book_quality_status,
         }
     ]
+    instruments_by_security = {row["security_id"]: row for row in instruments}
+    valuation_policy_assignments = [
+        _build_valuation_policy_assignment(
+            instrument=instrument,
+            valid_from=start_date,
+            observed_at=_iso_utc_timestamp(end_date, hour=9),
+        )
+        for instrument in instruments
+    ]
+    market_price_source_facts = [
+        _build_market_price_source_fact(
+            market_price=market_price,
+            instrument=instruments_by_security[market_price["security_id"]],
+            observed_at=_iso_utc_timestamp(date.fromisoformat(market_price["price_date"]), hour=21),
+        )
+        for market_price in market_prices
+    ]
 
     return {
         "source_system": "LOTUS_FRONT_OFFICE_SEED",
@@ -1843,6 +1949,8 @@ def build_front_office_portfolio_bundle(
         "cash_accounts": cash_accounts,
         "transactions": transactions,
         "market_prices": market_prices,
+        "market_price_source_facts": market_price_source_facts,
+        "valuation_policy_assignments": valuation_policy_assignments,
         "fx_rates": fx_rates,
         "as_of_date": as_of_date,
         "model_portfolios": model_portfolios,
@@ -2226,6 +2334,25 @@ def _wait_for_required_market_price_readiness(
     raise RuntimeError(f"Timed out waiting for market-price readiness: {outstanding}")
 
 
+def _ingest_valuation_authority(
+    *,
+    ingestion_base_url: str,
+    bundle: dict[str, Any],
+) -> None:
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/ingest/instrument-valuation-policy-assignments",
+        payload={"valuation_policy_assignments": bundle["valuation_policy_assignments"]},
+    )
+    source_facts = bundle["market_price_source_facts"]
+    for offset in range(0, len(source_facts), 500):
+        _request_json(
+            "POST",
+            f"{ingestion_base_url}/ingest/authoritative-market-price-source-facts",
+            payload={"market_price_source_facts": source_facts[offset : offset + 500]},
+        )
+
+
 def _ingest_front_office_core_data(
     *,
     ingestion_base_url: str,
@@ -2284,6 +2411,10 @@ def _ingest_front_office_core_data(
                 bundle=bundle,
                 wait_seconds=wait_seconds,
                 poll_interval_seconds=poll_interval_seconds,
+            )
+            _ingest_valuation_authority(
+                ingestion_base_url=ingestion_base_url,
+                bundle=bundle,
             )
 
 

@@ -67,6 +67,8 @@ def test_front_office_bundle_uses_real_business_names_and_context():
     assert portfolio["advisor_id"] == FRONT_OFFICE_SEED_CONTRACT.advisor_id
     assert portfolio["portfolio_type"] == "discretionary"
     assert portfolio["booking_center_code"] == "Singapore"
+    assert portfolio["tenant_id"] == "LOTUS_PB_SG"
+    assert portfolio["legal_book_id"] == "SG_PRIVATE_BANK_BOOK"
 
     instrument_names = {instrument["name"] for instrument in bundle["instruments"]}
     assert "Apple Inc." in instrument_names
@@ -74,6 +76,66 @@ def test_front_office_bundle_uses_real_business_names_and_context():
     assert "Siemens Financieringsmaatschappij NV 2.500% 2031" in instrument_names
     assert "Private Credit Opportunities Fund A" in instrument_names
     assert all("MANUAL_" not in instrument["name"] for instrument in bundle["instruments"])
+
+
+def test_front_office_bundle_carries_complete_deterministic_valuation_authority():
+    bundle = _build_bundle()
+    replay = _build_bundle()
+
+    facts = bundle["market_price_source_facts"]
+    assignments = bundle["valuation_policy_assignments"]
+    instruments = {row["security_id"]: row for row in bundle["instruments"]}
+
+    assert facts == replay["market_price_source_facts"]
+    assert assignments == replay["valuation_policy_assignments"]
+    assert len(facts) == len(bundle["market_prices"])
+    assert {row["security_id"] for row in assignments} == set(instruments)
+    assert all(row["tenant_id"] == "LOTUS_PB_SG" for row in facts)
+    assert all(row["legal_book_id"] == "SG_PRIVATE_BANK_BOOK" for row in facts)
+    assert all(len(row["source_content_hash"]) == 64 for row in facts)
+
+    assignment_by_security = {row["security_id"]: row for row in assignments}
+    for security_id, instrument in instruments.items():
+        assignment = assignment_by_security[security_id]
+        if instrument["product_type"].strip().lower() == "bond":
+            assert assignment["policy_id"] == "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
+        else:
+            assert assignment["policy_id"] == "UNIT_PRICE_MARKET_VALUE"
+
+    ust_facts = [row for row in facts if row["security_id"] == "FO_BOND_UST_2030"]
+    assert ust_facts
+    assert {row["quote_basis"] for row in ust_facts} == {"PERCENT_OF_PRINCIPAL_CLEAN"}
+    assert max(row["price_date"] for row in ust_facts) == "2026-04-10"
+
+
+def test_front_office_market_price_authority_hash_changes_with_source_value():
+    bundle = _build_bundle()
+    facts = {
+        (row["security_id"], row["price_date"]): row for row in bundle["market_price_source_facts"]
+    }
+    source_row = next(
+        row
+        for row in bundle["market_prices"]
+        if row["security_id"] == "FO_BOND_UST_2030" and row["price_date"] == "2026-04-10"
+    )
+    original = facts[("FO_BOND_UST_2030", "2026-04-10")]
+
+    changed_bundle = _build_bundle()
+    changed_source = next(
+        row
+        for row in changed_bundle["market_prices"]
+        if row["security_id"] == "FO_BOND_UST_2030" and row["price_date"] == "2026-04-10"
+    )
+    changed_source["price"] = format(Decimal(source_row["price"]) + Decimal("0.01"), "f")
+    changed_instruments = {row["security_id"]: row for row in changed_bundle["instruments"]}
+    changed = front_office_seed_module._build_market_price_source_fact(
+        market_price=changed_source,
+        instrument=changed_instruments["FO_BOND_UST_2030"],
+        observed_at="2026-04-10T09:00:00Z",
+    )
+
+    assert changed["source_record_id"] == original["source_record_id"]
+    assert changed["source_content_hash"] != original["source_content_hash"]
 
 
 def test_front_office_bundle_includes_governed_advisor_book_assignment():
@@ -994,12 +1056,18 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
         poll_interval_seconds=3,
     )
 
+    authority_fact_batch_count = (len(bundle["market_price_source_facts"]) + 499) // 500
     assert [call[1] for call in calls] == [
         "http://ingestion.dev.lotus/ingest/portfolios",
         "http://ingestion.dev.lotus/ingest/instruments",
         "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
         "http://ingestion.dev.lotus/ingest/fx-rates",
         "http://ingestion.dev.lotus/ingest/market-prices",
+        "http://ingestion.dev.lotus/ingest/instrument-valuation-policy-assignments",
+        *(
+            ["http://ingestion.dev.lotus/ingest/authoritative-market-price-source-facts"]
+            * authority_fact_batch_count
+        ),
         "http://ingestion.dev.lotus/ingest/business-dates",
         "http://ingestion.dev.lotus/ingest/transactions",
     ]
@@ -1014,9 +1082,21 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
         "fx_ready",
         "http://ingestion.dev.lotus/ingest/market-prices",
         "prices_ready",
+        "http://ingestion.dev.lotus/ingest/instrument-valuation-policy-assignments",
+        *(
+            ["http://ingestion.dev.lotus/ingest/authoritative-market-price-source-facts"]
+            * authority_fact_batch_count
+        ),
         "http://ingestion.dev.lotus/ingest/business-dates",
         "http://ingestion.dev.lotus/ingest/transactions",
     ]
+    fact_batches = [
+        call[2]["market_price_source_facts"]
+        for call in calls
+        if call[1].endswith("/ingest/authoritative-market-price-source-facts")
+    ]
+    assert all(1 <= len(batch) <= 500 for batch in fact_batches)
+    assert [row for batch in fact_batches for row in batch] == bundle["market_price_source_facts"]
     assert waits == [
         {
             "query_base_url": "http://query.dev.lotus",
