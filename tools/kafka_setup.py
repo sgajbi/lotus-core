@@ -7,8 +7,8 @@ import time
 from confluent_kafka import KafkaError, KafkaException
 from confluent_kafka.admin import AdminClient, NewTopic
 from portfolio_common.config import (
-    KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_TOPIC_PARTITION_COUNTS,
+    load_kafka_bootstrap_servers,
 )
 from portfolio_common.connection_security import build_kafka_connection_config
 from portfolio_common.logging_utils import setup_logging
@@ -129,12 +129,15 @@ def main():
     logger.info("Kafka topic setup complete.")
 
 
-def build_topic_admin_client() -> AdminClient:
+def build_topic_admin_client(bootstrap_servers: str | None = None) -> AdminClient:
     """Construct the topic administrator through the shared transport-security boundary."""
 
+    resolved_bootstrap_servers = (
+        load_kafka_bootstrap_servers() if bootstrap_servers is None else bootstrap_servers
+    )
     return AdminClient(
         build_kafka_connection_config(
-            KAFKA_BOOTSTRAP_SERVERS,
+            resolved_bootstrap_servers,
             service_name="Kafka topic provisioning",
         )
     )

@@ -21,15 +21,42 @@ def test_topic_admin_client_uses_shared_local_transport_policy(monkeypatch) -> N
     monkeypatch.setattr(kafka_setup_module, "AdminClient", admin_client)
     monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:39092")
+    monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS_HOST", raising=False)
 
     build_topic_admin_client()
 
     admin_client.assert_called_once_with(
         {
-            "bootstrap.servers": kafka_setup_module.KAFKA_BOOTSTRAP_SERVERS,
+            "bootstrap.servers": "localhost:39092",
             "security.protocol": "PLAINTEXT",
         }
     )
+
+
+def test_topic_admin_client_resolves_environment_after_module_import(monkeypatch) -> None:
+    admin_client = MagicMock()
+    monkeypatch.setattr(kafka_setup_module, "AdminClient", admin_client)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:39093")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS_HOST", "localhost:39094")
+
+    build_topic_admin_client()
+
+    assert admin_client.call_args.args[0]["bootstrap.servers"] == "localhost:39094"
+
+
+def test_topic_admin_client_accepts_explicit_runtime_authority(monkeypatch) -> None:
+    admin_client = MagicMock()
+    monkeypatch.setattr(kafka_setup_module, "AdminClient", admin_client)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "stale-broker:9093")
+
+    build_topic_admin_client("runtime-broker:19092")
+
+    assert admin_client.call_args.args[0]["bootstrap.servers"] == "runtime-broker:19092"
 
 
 def test_topic_admin_client_rejects_plaintext_production_before_construction(monkeypatch) -> None:
