@@ -42,6 +42,7 @@ def test_catalog_is_versioned_complete_and_deterministically_ordered() -> None:
         "latest_position_snapshot",
         "operations_support_page",
         "reconciliation_estate_scan",
+        "reprocessing_claim_normalization",
         "reprocessing_job_claim",
         "reprocessing_stale_reset",
         "reprocessing_stale_scan",

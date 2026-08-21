@@ -45,6 +45,20 @@
       "seed_cardinality": 10000
     },
     {
+      "max_root_actual_rows": 1,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Reset-watermarks claim normalization must remain index-backed and bounded across retained pending work.",
+      "repository_method": "find_and_claim_jobs.normalize_pending_reset_watermarks_duplicates",
+      "repository_owner": "ReprocessingJobRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "reprocessing_claim_normalization",
+      "seed_cardinality": 10000
+    },
+    {
       "max_root_actual_rows": 1000,
       "max_rows_examined": 30000,
       "prohibited_node_types": [

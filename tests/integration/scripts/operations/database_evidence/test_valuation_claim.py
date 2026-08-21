@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from portfolio_common.database_models import PortfolioValuationJob
-from sqlalchemy import func, insert, select, text
+from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scripts.operations.database_evidence.contract import load_hot_path_scenario_catalog
@@ -74,12 +74,8 @@ async def test_valuation_claim_plan_is_bounded_indexed_and_rollback_safe(
     )
     async with verification_sessions() as verification_session:
         authority_after = await _claim_authority_snapshot(verification_session)
-    pending_count = await async_db_session.scalar(
-        select(func.count()).where(PortfolioValuationJob.status == "PENDING")
-    )
-    processing_count = await async_db_session.scalar(
-        select(func.count()).where(PortfolioValuationJob.status == "PROCESSING")
-    )
+    assert authority_after == authority_before
+    pending_count = sum(row[1] == "PENDING" for row in authority_after)
+    processing_count = sum(row[1] == "PROCESSING" for row in authority_after)
     assert pending_count == scenario.seed_cardinality
     assert processing_count == 0
-    assert authority_after == authority_before

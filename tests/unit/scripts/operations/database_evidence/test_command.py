@@ -123,6 +123,8 @@ def test_evidence_test_runner_uses_exact_nodes_and_isolated_fragment_directory(
     assert command[:4] == [command[0], "-m", "pytest", "-q"]
     assert tuple(command[4:]) == plan.pytest_nodes
     assert kwargs["env"][FRAGMENT_DIRECTORY_ENV] == str(tmp_path.resolve())
+    assert kwargs["env"]["VALUATION_SCHEDULER_POLL_INTERVAL"] == "3600"
+    assert kwargs["env"]["REPROCESSING_WORKER_POLL_INTERVAL_SECONDS"] == "3600"
     assert "shell" not in kwargs
 
 
