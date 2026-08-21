@@ -16,8 +16,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_INPUT = REPO_ROOT / "requirements" / "shared-runtime.in"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime.lock.txt"
 WINDOWS_RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime-windows.lock.txt"
-PIP_TOOLS_VERSION = "7.5.3"
-PIP_VERSION = "26.1.2"
+PIP_TOOLS_VERSION = "7.6.1"
+PIP_VERSION = "26.2.1"
 LINUX_COMPILE_IMAGE = (
     "python:3.11-slim-bookworm@"
     "sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6"

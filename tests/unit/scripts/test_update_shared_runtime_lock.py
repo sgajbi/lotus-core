@@ -92,7 +92,7 @@ def test_normalized_runtime_lock_is_replay_stable() -> None:
     first = lock_module._normalize_compiled_lock(raw, platform="linux/amd64")
     second = lock_module._normalize_compiled_lock(raw, platform="linux/amd64")
     assert first == second
-    assert "pip==26.1.2; pip-tools==7.5.3" in first
+    assert "pip==26.2.1; pip-tools==7.6.1" in first
 
 
 def test_compile_runtime_lock_rejects_shell_control_in_upgrade_name() -> None:

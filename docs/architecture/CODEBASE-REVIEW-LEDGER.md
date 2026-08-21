@@ -1,5 +1,14 @@
 # Codebase Review Ledger
 
+CR-1702 governed pip vulnerability remediation (2026-08-21): exact-main and PR gates failed closed
+when `pip-audit` reported `PYSEC-2026-3721` against governed `pip==26.1.2`. Core now pins the fixed
+`pip==26.2.1` installer and compatible `pip-tools==7.6.1` compiler, regenerates Linux/Windows
+CI-tooling closures and truthful shared-runtime provenance, and refreshes the dependency technology
+inventory without overstating its deliberately blocked certification posture. This is CI/build/test
+tooling only; application/runtime dependencies and product contracts are unchanged. Status: fixed
+locally; protected PR, exact-main validation, issue closure, and branch cleanup remain pending.
+Evidence: [CR-1702-GOVERNED-PIP-VULNERABILITY-REMEDIATION.md](./codebase-reviews/CR-1702-GOVERNED-PIP-VULNERABILITY-REMEDIATION.md).
+
 CR-1701 set-based reconciliation FX evidence (2026-08-21): timeseries integrity reconciliation
 resolved the latest FX row inside its authoritative-position loop, so database query count grew
 with distinct currency-pair/date keys. The application now collects one normalized unique key set;
