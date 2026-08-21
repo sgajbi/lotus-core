@@ -568,7 +568,8 @@ async def test_authoritative_portfolio_metrics_skip_non_positive_fx_rates():
     repository.fetch_authoritative_position_timeseries_rows.return_value = [
         (position_row, instrument, portfolio)
     ]
-    repository.fetch_latest_fx_rate.return_value = SimpleNamespace(rate=Decimal("-1.08"))
+    fx_key = reconciliation_repository_ports.FxRateLookupKey("EUR", "USD", date(2026, 3, 8))
+    repository.fetch_latest_fx_rates.return_value = {fx_key: Decimal("-1.08")}
 
     service = ReconciliationService(repository)
     metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
@@ -585,6 +586,48 @@ async def test_authoritative_portfolio_metrics_skip_non_positive_fx_rates():
         "eod_market_value": Decimal("0"),
         "fees": Decimal("0"),
     }
+
+
+@pytest.mark.asyncio
+async def test_authoritative_portfolio_metrics_batch_unique_fx_keys_once_for_many_positions():
+    position_date = date(2026, 3, 8)
+
+    def position_row() -> SimpleNamespace:
+        return SimpleNamespace(
+            date=position_date,
+            bod_market_value=Decimal("10"),
+            bod_cashflow_portfolio=Decimal("1"),
+            eod_cashflow_portfolio=Decimal("2"),
+            eod_market_value=Decimal("12"),
+            fees=Decimal("0.5"),
+        )
+
+    portfolio = SimpleNamespace(base_currency="USD")
+    authoritative_rows = [
+        (position_row(), SimpleNamespace(currency="EUR"), portfolio) for _ in range(100)
+    ] + [(position_row(), SimpleNamespace(currency="GBP"), portfolio) for _ in range(100)]
+    eur_key = reconciliation_repository_ports.FxRateLookupKey("EUR", "USD", position_date)
+    gbp_key = reconciliation_repository_ports.FxRateLookupKey("GBP", "USD", position_date)
+    repository = AsyncMock()
+    repository.fetch_authoritative_position_timeseries_rows.return_value = authoritative_rows
+    repository.fetch_latest_fx_rates.return_value = {eur_key: Decimal("1.2"), gbp_key: None}
+
+    service = ReconciliationService(repository)
+    metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
+        portfolio_id="PORT-TS-BATCH-FX",
+        business_date=position_date,
+        epoch=1,
+    )
+
+    assert row_count == 200
+    assert metrics == {
+        "bod_market_value": Decimal("1200"),
+        "bod_cashflow": Decimal("120"),
+        "eod_cashflow": Decimal("240"),
+        "eod_market_value": Decimal("1440"),
+        "fees": Decimal("60.0"),
+    }
+    repository.fetch_latest_fx_rates.assert_awaited_once_with(keys=[eur_key, gbp_key])
 
 
 @pytest.mark.asyncio
@@ -619,7 +662,7 @@ async def test_authoritative_portfolio_metrics_zero_default_sparse_amounts():
         "eod_market_value": Decimal("120.5"),
         "fees": Decimal("0"),
     }
-    repository.fetch_latest_fx_rate.assert_not_awaited()
+    repository.fetch_latest_fx_rates.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -685,7 +728,8 @@ async def test_run_timeseries_integrity_uses_authoritative_asof_rows_when_portfo
     repository.fetch_snapshot_counts.return_value = []
     repository.fetch_authoritative_position_timeseries_rows.return_value = authoritative_rows
     repository.fetch_authoritative_snapshot_count.return_value = 2
-    repository.fetch_latest_fx_rate.return_value = SimpleNamespace(rate=Decimal("1.2"))
+    fx_key = reconciliation_repository_ports.FxRateLookupKey("EUR", "USD", date(2026, 3, 7))
+    repository.fetch_latest_fx_rates.return_value = {fx_key: Decimal("1.2")}
 
     service = ReconciliationService(repository)
     await service.run_timeseries_integrity(
@@ -704,8 +748,4 @@ async def test_run_timeseries_integrity_uses_authoritative_asof_rows_when_portfo
         business_date=date(2026, 3, 8),
         epoch=13,
     )
-    repository.fetch_latest_fx_rate.assert_awaited_once_with(
-        from_currency="EUR",
-        to_currency="USD",
-        business_date=date(2026, 3, 7),
-    )
+    repository.fetch_latest_fx_rates.assert_awaited_once_with(keys=[fx_key])
