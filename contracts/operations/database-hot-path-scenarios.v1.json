@@ -45,6 +45,20 @@
       "seed_cardinality": 10000
     },
     {
+      "max_root_actual_rows": 1,
+      "max_rows_examined": 20000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Ledger counts must use the same governed portfolio scope without scanning unrelated transaction history.",
+      "repository_method": "get_transactions_count",
+      "repository_owner": "QueryService.TransactionRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "transaction_ledger_count",
+      "seed_cardinality": 10000
+    },
+    {
       "max_root_actual_rows": 100,
       "max_rows_examined": 20000,
       "prohibited_node_types": [

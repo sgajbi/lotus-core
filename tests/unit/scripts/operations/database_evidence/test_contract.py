@@ -42,6 +42,7 @@ def test_catalog_is_versioned_complete_and_deterministically_ordered() -> None:
         "latest_position_snapshot",
         "operations_support_page",
         "reconciliation_estate_scan",
+        "transaction_ledger_count",
         "transaction_ledger_page",
         "valuation_job_claim",
     ]
@@ -133,6 +134,7 @@ def test_artifact_identity_is_stable_and_omits_execution_secrets() -> None:
             rows_examined=1,
             node_types=("Index Scan",),
             index_names=("ix_governed_hot_path",),
+            sequential_scan_relations=(),
             violations=(),
         )
         for scenario in catalog.scenarios
@@ -167,6 +169,7 @@ def test_artifact_requires_every_catalog_scenario_once_and_in_order() -> None:
         rows_examined=1,
         node_types=("Index Scan",),
         index_names=("ix_governed_hot_path",),
+        sequential_scan_relations=(),
         violations=(),
     )
 

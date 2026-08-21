@@ -89,6 +89,7 @@ class HotPathPlanResult:
     rows_examined: int
     node_types: tuple[str, ...]
     index_names: tuple[str, ...]
+    sequential_scan_relations: tuple[str, ...]
     violations: tuple[str, ...]
 
 
@@ -190,6 +191,17 @@ def evaluate_hot_path_plan(
             }
         )
     )
+    sequential_scan_relations = tuple(
+        sorted(
+            {
+                value
+                for node in nodes
+                if node.get("Node Type") == "Seq Scan"
+                and isinstance((value := node.get("Relation Name")), str)
+                and value.strip()
+            }
+        )
+    )
     root_actual_rows = _non_negative_plan_integer(root, "Actual Rows")
     rows_examined = sum(
         _non_negative_plan_integer(node, "Actual Rows")
@@ -213,6 +225,7 @@ def evaluate_hot_path_plan(
         rows_examined=rows_examined,
         node_types=node_types,
         index_names=index_names,
+        sequential_scan_relations=sequential_scan_relations,
         violations=tuple(violations),
     )
 
