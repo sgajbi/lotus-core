@@ -793,6 +793,12 @@ Important validation expectations:
    `make incident-playbook-guard`. Every runtime failure family must include symptoms, metrics,
    API checks, read-only database checks, expected fields, containment, escalation, and
    post-incident evidence. Do not add destructive commands to operator playbooks.
+10. PR metadata and code authority have separate workflow ownership. The `automerge` label belongs
+    only to `.github/workflows/pr-auto-merge.yml` and must not start or cancel the full PR Merge
+    Gate for an unchanged head SHA. A `synchronize` event represents new code authority and must
+    continue to cancel stale PR-ref work and validate the new immutable head. Do not reintroduce
+    `labeled` as a full-gate trigger; broader lifecycle-event or artifact reuse remains under the
+    change-aware CI program.
 
 ## Standards And RFCs That Govern This Repository
 

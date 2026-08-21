@@ -24,6 +24,13 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
    Removing the label prevents this workflow from issuing a new queue request; it does not disable
    GitHub auto-merge after it has already been enabled. Use `gh pr merge --disable-auto <pr>` or
    the GitHub UI to cancel an already-enabled auto-merge request.
+5. The `automerge` label is metadata for `.github/workflows/pr-auto-merge.yml` only. Adding it while
+   the protected PR Merge Gate is running must not start or cancel that full gate for the unchanged
+   head SHA. Apply it whenever the PR is ready to queue; existing exact-head checks remain valid.
+6. A `synchronize` event is different: it means the PR head changed. The PR Merge Gate must validate
+   the new head and may cancel stale work for the prior PR ref. Opened, reopened, and
+   ready-for-review events continue to enter the full gate; broader same-head evidence reuse for
+   those lifecycle events remains separately governed.
 
 ## CI Gate Tiers
 
