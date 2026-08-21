@@ -12,7 +12,12 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .market_data_coverage import MarketDataCurrencyPair
+from .market_data_coverage import (
+    MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT,
+    MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT,
+    MarketDataCurrencyPair,
+    validate_market_data_currency_pairs,
+)
 
 DpmSourceFamilyState = Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"]
 
@@ -52,6 +57,7 @@ class DpmSourceReadinessRequest(BaseModel):
     )
     instrument_ids: list[str] = Field(
         default_factory=list,
+        max_length=MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT,
         description=(
             "Optional held or caller-known instrument identifiers. Readiness unions these with "
             "model target instruments before checking eligibility, tax lots, and market data."
@@ -60,6 +66,7 @@ class DpmSourceReadinessRequest(BaseModel):
     )
     currency_pairs: list[MarketDataCurrencyPair] = Field(
         default_factory=list,
+        max_length=MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT,
         description="FX conversion pairs required for stateful DPM source assembly.",
         examples=[[{"from_currency": "EUR", "to_currency": "USD"}]],
     )
@@ -81,6 +88,7 @@ class DpmSourceReadinessRequest(BaseModel):
     @model_validator(mode="after")
     def normalize_request(self) -> "DpmSourceReadinessRequest":
         self.instrument_ids = _normalize_dpm_source_readiness_instrument_ids(self.instrument_ids)
+        validate_market_data_currency_pairs(self.currency_pairs)
         if self.valuation_currency is not None:
             self.valuation_currency = self.valuation_currency.strip().upper()
         return self
