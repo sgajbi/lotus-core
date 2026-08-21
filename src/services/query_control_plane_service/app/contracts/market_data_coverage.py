@@ -6,12 +6,16 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT = 1_000
+MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT = 1_000
 
 
 class MarketDataCurrencyPair(BaseModel):
@@ -32,10 +36,8 @@ class MarketDataCurrencyPair(BaseModel):
 
     @model_validator(mode="after")
     def normalize_pair(self) -> "MarketDataCurrencyPair":
-        self.from_currency = self.from_currency.strip().upper()
-        self.to_currency = self.to_currency.strip().upper()
-        if len(self.from_currency) != 3 or len(self.to_currency) != 3:
-            raise ValueError("currency pair members must be ISO currency codes")
+        self.from_currency = normalize_currency_code(self.from_currency)
+        self.to_currency = normalize_currency_code(self.to_currency)
         if self.from_currency == self.to_currency:
             raise ValueError("currency pair members must be different")
         return self
@@ -52,7 +54,7 @@ def _normalize_market_data_instrument_ids(instrument_ids: list[str]) -> list[str
     return normalized_instruments
 
 
-def _validate_currency_pairs(currency_pairs: list[MarketDataCurrencyPair]) -> None:
+def validate_market_data_currency_pairs(currency_pairs: list[MarketDataCurrencyPair]) -> None:
     normalized_pairs = [(pair.from_currency, pair.to_currency) for pair in currency_pairs]
     if len(normalized_pairs) != len(set(normalized_pairs)):
         raise ValueError("currency_pairs must not contain duplicates")
@@ -66,11 +68,13 @@ class MarketDataCoverageRequest(BaseModel):
     )
     instrument_ids: list[str] = Field(
         default_factory=list,
+        max_length=MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT,
         description="Held and target instrument identifiers requiring latest price coverage.",
         examples=[["EQ_US_AAPL", "FI_US_TREASURY_10Y"]],
     )
     currency_pairs: list[MarketDataCurrencyPair] = Field(
         default_factory=list,
+        max_length=MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT,
         description="FX conversion pairs required for valuation and rebalance sizing.",
         examples=[[{"from_currency": "USD", "to_currency": "SGD"}]],
     )
@@ -99,7 +103,7 @@ class MarketDataCoverageRequest(BaseModel):
     @model_validator(mode="after")
     def validate_request(self) -> "MarketDataCoverageRequest":
         self.instrument_ids = _normalize_market_data_instrument_ids(self.instrument_ids)
-        _validate_currency_pairs(self.currency_pairs)
+        validate_market_data_currency_pairs(self.currency_pairs)
         if self.valuation_currency is not None:
             self.valuation_currency = self.valuation_currency.strip().upper()
         return self

@@ -33,6 +33,8 @@ from src.services.query_control_plane_service.app.contracts.instrument_enrichmen
     InstrumentEnrichmentBulkResponse,
 )
 from src.services.query_control_plane_service.app.contracts.market_data_coverage import (
+    MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT,
+    MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT,
     MarketDataCoverageRequest,
     MarketDataCurrencyPair,
 )
@@ -166,6 +168,83 @@ def test_dpm_source_readiness_request_normalizes_valuation_currency() -> None:
 
     assert request.instrument_ids == ["EQ_US_AAPL"]
     assert request.valuation_currency == "USD"
+
+
+@pytest.mark.parametrize("request_model", [MarketDataCoverageRequest, DpmSourceReadinessRequest])
+def test_dpm_market_data_requests_publish_and_enforce_instrument_capacity(
+    request_model,
+) -> None:
+    schema = request_model.model_json_schema()
+    assert (
+        schema["properties"]["instrument_ids"]["maxItems"]
+        == MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT
+    )
+    request_model(
+        as_of_date=date(2026, 5, 3),
+        instrument_ids=[
+            f"SEC_{index:04d}" for index in range(MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT)
+        ],
+    )
+
+    with pytest.raises(ValidationError, match="at most 1000 items"):
+        request_model(
+            as_of_date=date(2026, 5, 3),
+            instrument_ids=[
+                f"SEC_{index:04d}" for index in range(MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT + 1)
+            ],
+        )
+
+
+@pytest.mark.parametrize("request_model", [MarketDataCoverageRequest, DpmSourceReadinessRequest])
+def test_dpm_market_data_requests_publish_and_enforce_currency_pair_capacity(
+    request_model,
+) -> None:
+    schema = request_model.model_json_schema()
+    assert (
+        schema["properties"]["currency_pairs"]["maxItems"]
+        == MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT
+    )
+    pairs = [
+        MarketDataCurrencyPair(
+            from_currency="".join(
+                (
+                    chr(65 + (index // (26 * 26)) % 26),
+                    chr(65 + (index // 26) % 26),
+                    chr(65 + index % 26),
+                )
+            ),
+            to_currency="ZZZ",
+        )
+        for index in range(MARKET_DATA_COVERAGE_MAX_CURRENCY_PAIR_COUNT)
+    ]
+    request_model(as_of_date=date(2026, 5, 3), currency_pairs=pairs)
+
+    with pytest.raises(ValidationError, match="at most 1000 items"):
+        request_model(
+            as_of_date=date(2026, 5, 3),
+            currency_pairs=[
+                *pairs,
+                MarketDataCurrencyPair(from_currency="ZZY", to_currency="ZZZ"),
+            ],
+        )
+
+
+@pytest.mark.parametrize("request_model", [MarketDataCoverageRequest, DpmSourceReadinessRequest])
+def test_dpm_market_data_requests_reject_duplicate_and_non_iso_currency_pairs(
+    request_model,
+) -> None:
+    duplicate = MarketDataCurrencyPair(from_currency="USD", to_currency="SGD")
+    with pytest.raises(ValidationError, match="must not contain duplicates"):
+        request_model(
+            as_of_date=date(2026, 5, 3),
+            currency_pairs=[duplicate, duplicate.model_copy()],
+        )
+
+    with pytest.raises(ValidationError, match="three-letter ISO 4217"):
+        request_model(
+            as_of_date=date(2026, 5, 3),
+            currency_pairs=[{"from_currency": "123", "to_currency": "SGD"}],
+        )
 
 
 @pytest.mark.parametrize(
