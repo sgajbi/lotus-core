@@ -21,6 +21,7 @@ from ...contracts.instrument_eligibility import (
     InstrumentEligibilityBulkResponse,
 )
 from ...contracts.market_data_coverage import (
+    MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT,
     MarketDataCoverageRequest,
     MarketDataCoverageWindowResponse,
 )
@@ -156,6 +157,23 @@ class DpmSourceReadinessService:
                 *(target.instrument_id for target in (model.targets if model is not None else [])),
             }
         )
+        if len(evaluated_instrument_ids) > MARKET_DATA_COVERAGE_MAX_INSTRUMENT_COUNT:
+            families = [
+                _mandate_family(mandate),
+                _model_target_family(identity.model_portfolio_id, model),
+                _evaluated_instrument_limit_family("eligibility", "InstrumentEligibilityProfile"),
+                _evaluated_instrument_limit_family("tax_lots", "PortfolioTaxLotWindow"),
+                _evaluated_instrument_limit_family("market_data", "MarketDataCoverageWindow"),
+            ]
+            return build_dpm_source_readiness_response(
+                portfolio_id=portfolio_id,
+                request=request,
+                identity=identity,
+                evaluated_instrument_ids=[],
+                families=families,
+                source_responses=(mandate, model, None, None, None),
+                generated_at=self.clock(),
+            )
         eligibility = (
             await _read_or_none(
                 self.eligibility.resolve(_eligibility_request(request, evaluated_instrument_ids))
@@ -359,6 +377,18 @@ def _eligibility_family(
         reason=response.supportability.reason,
         missing_items=response.supportability.missing_security_ids,
         evidence_count=response.supportability.resolved_count,
+    )
+
+
+def _evaluated_instrument_limit_family(
+    family: Literal["eligibility", "tax_lots", "market_data"],
+    product_name: str,
+) -> DpmSourceFamilyReadiness:
+    return _unavailable(
+        family,
+        product_name,
+        "DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED",
+        ["evaluated_instrument_ids"],
     )
 
 
