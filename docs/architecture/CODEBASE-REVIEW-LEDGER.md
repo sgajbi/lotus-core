@@ -7,7 +7,8 @@ mainline evidence for CR-1687/#958, CR-1694/#502 and #963, CR-1695/#511, CR-1696
 CR-1697/#973 after their governed rebase merges. Integration Full, combined coverage, exact-source
 images, full E2E, fast/full performance, latency, and failure recovery all passed. Authored wiki
 head `9fa7545271bd490a6ac55aa6023f5a150b8e6229` has strict parity zero. Patch-equivalence checks
-preceded merged-branch removal; Core is reconciled to one clean worktree on exact `main`. No API,
+preceded removal of every merged implementation branch; at the post-#974 checkpoint, before this
+evidence-only reconciliation branch was created, Core had one clean worktree on exact `main`. No API,
 OpenAPI, schema, migration, event, Kafka topology, dependency, image-family, datastore, or runtime
 topology contract changes arise from this evidence-only reconciliation.
 
