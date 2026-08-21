@@ -28,6 +28,9 @@ cluster topology, disaster recovery, or downstream front-office readiness.
    authoritative target epoch and material-source revision.
 4. The aggregation scheduler recovers expired claims and leases eligible jobs in deterministic
    portfolio/date order using `FOR UPDATE SKIP LOCKED`.
+   Expired recovery is separately bounded to 1,000 jobs ordered by lease expiry and durable job id;
+   failed and requeued identifiers are disjoint, sorted, and updated through the shared bind-safe
+   statement policy. Larger stale backlogs drain across later polls within caller-owned transactions.
 5. Bounded workers invoke `MaterializePortfolioTimeseries` and write `portfolio_timeseries`.
 6. Successful work atomically stages `portfolio_day.aggregation.completed` and
    `portfolio_day.reconciliation.requested` through the outbox.
