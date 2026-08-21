@@ -4014,8 +4014,10 @@ Most relevant current governance:
      When a query newly requires `PositionState` or another control row for facts that can predate
      that control model, treat upgrade compatibility as part of the query change. Add an
      idempotent, source-derived backfill that preserves existing live authority and starts missing
-     keys from a conservative replay posture; current-data fixtures alone do not prove upgraded
-     books remain complete.
+     keys from a posture their available source evidence can actually complete. Do not place a
+     snapshot-only key into a history-driven replay backlog that can never advance; terminate it at
+     its latest actual snapshot instead. Current-data fixtures alone do not prove upgraded books
+     remain complete.
 
 ## Context Maintenance Rule
 

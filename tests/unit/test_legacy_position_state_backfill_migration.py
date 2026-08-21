@@ -30,10 +30,12 @@ def test_position_state_backfill_is_conservative_idempotent_and_irreversible(mon
     assert "FROM POSITION_HISTORY" in sql
     assert "FROM DAILY_POSITION_SNAPSHOTS" in sql
     assert "MAX(EPOCH) AS EPOCH" in sql
-    assert "MIN(EVIDENCE.EVIDENCE_DATE) - 1" in sql
+    assert "FILTER (WHERE EVIDENCE.EVIDENCE_KIND = 'HISTORY') - 1" in sql
+    assert "FILTER (WHERE EVIDENCE.EVIDENCE_KIND = 'SNAPSHOT')" in sql
+    assert "WHEN BOOL_OR(EVIDENCE.EVIDENCE_KIND = 'HISTORY') THEN 'REPROCESSING'" in sql
+    assert "ELSE 'CURRENT'" in sql
     assert "NOT EXISTS" in sql
     assert "BTRIM(EXISTING.SECURITY_ID) = EVIDENCE.SECURITY_ID" in sql
-    assert "'REPROCESSING'" in sql
     assert "ON CONFLICT (PORTFOLIO_ID, SECURITY_ID) DO NOTHING" in sql
     assert "UPDATE POSITION_STATE" not in sql
     assert "DELETE FROM POSITION_STATE" not in sql
