@@ -2440,6 +2440,9 @@ async def test_openapi_fully_documents_dpm_market_data_coverage_schema_family(
         schema,
         DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS,
     )
+    request_schema = schema["components"]["schemas"]["MarketDataCoverageRequest"]
+    assert request_schema["properties"]["instrument_ids"]["maxItems"] == 1_000
+    assert request_schema["properties"]["currency_pairs"]["maxItems"] == 1_000
 
 
 async def test_openapi_fully_documents_dpm_source_readiness_schema_family(async_test_client):
@@ -2451,6 +2454,9 @@ async def test_openapi_fully_documents_dpm_source_readiness_schema_family(async_
         schema,
         DPM_SOURCE_READINESS_SCHEMA_ROOTS,
     )
+    request_schema = schema["components"]["schemas"]["DpmSourceReadinessRequest"]
+    assert request_schema["properties"]["instrument_ids"]["maxItems"] == 1_000
+    assert request_schema["properties"]["currency_pairs"]["maxItems"] == 1_000
 
 
 async def test_openapi_fully_documents_dpm_portfolio_universe_candidate_schema_family(
