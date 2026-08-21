@@ -47,6 +47,14 @@ def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> Non
     )
 
 
+def test_critical_db_coverage_includes_financial_reconciliation_repository() -> None:
+    assert (
+        "tests/integration/services/financial_reconciliation_service/"
+        "test_int_reconciliation_repository.py"
+        in get_suite("critical-db-coverage")
+    )
+
+
 def test_critical_lifecycle_suite_is_marker_selected_and_db_direct() -> None:
     assert get_suite("critical-lifecycle-db") == ["tests/integration"]
     assert SUITE_PYTEST_ARGS["critical-lifecycle-db"] == ["-m", "lifecycle"]
