@@ -23,6 +23,7 @@ from .database_models import (
     PositionState,
 )
 from .domain.currency import normalize_currency_code
+from .domain.valuation.position_state import SCHEDULABLE_POSITION_STATE_STATUSES
 from .identifiers import normalize_lookup_identifier
 from .infrastructure.persistence.statement_batching import (
     POSTGRES_STATEMENT_ROW_LIMIT,
@@ -301,7 +302,10 @@ class ValuationRepositoryBase:
     ) -> List[PositionState]:
         stmt = (
             select(PositionState)
-            .where(PositionState.watermark_date < latest_business_date)
+            .where(
+                PositionState.watermark_date < latest_business_date,
+                PositionState.status.in_(SCHEDULABLE_POSITION_STATE_STATUSES),
+            )
             .order_by(
                 PositionState.updated_at.asc(),
                 PositionState.portfolio_id.asc(),
@@ -417,7 +421,10 @@ class ValuationRepositoryBase:
                 Instrument,
                 func.trim(Instrument.security_id) == func.trim(PositionState.security_id),
             )
-            .where(PositionState.watermark_date < latest_business_date)
+            .where(
+                PositionState.watermark_date < latest_business_date,
+                PositionState.status.in_(SCHEDULABLE_POSITION_STATE_STATUSES),
+            )
             .order_by(
                 PositionState.updated_at.asc(),
                 PositionState.portfolio_id.asc(),

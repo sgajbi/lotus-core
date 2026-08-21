@@ -67,7 +67,7 @@ LEGACY_POSITION_STATE_BACKFILL = sa.text(
             END AS watermark_date,
             CASE
                 WHEN bool_or(evidence.evidence_kind = 'history') THEN 'REPROCESSING'
-                ELSE 'CURRENT'
+                ELSE 'SNAPSHOT_ONLY'
             END AS status
         FROM legacy_position_evidence AS evidence
         JOIN latest_evidence_epoch AS latest

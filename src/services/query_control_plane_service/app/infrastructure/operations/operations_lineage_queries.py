@@ -48,11 +48,12 @@ def lineage_artifact_gap_case(
 def lineage_priority_case(*, has_artifact_gap, latest_valuation_job_status):
     return case(
         (PositionState.status == "REPROCESSING", 0),
+        (PositionState.status == "SNAPSHOT_ONLY", 1),
         (
             and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
-            1,
+            2,
         ),
-        (has_artifact_gap.is_(True), 2),
+        (has_artifact_gap.is_(True), 3),
         else_=9,
     )
 

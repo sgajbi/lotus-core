@@ -4015,9 +4015,11 @@ Most relevant current governance:
      that control model, treat upgrade compatibility as part of the query change. Add an
      idempotent, source-derived backfill that preserves existing live authority and starts missing
      keys from a posture their available source evidence can actually complete. Do not place a
-     snapshot-only key into a history-driven replay backlog that can never advance; terminate it at
-     its latest actual snapshot instead. Current-data fixtures alone do not prove upgraded books
-     remain complete.
+     snapshot-only key into a history-driven replay backlog that can never advance. Register it at
+     its latest actual snapshot with explicit `SNAPSHOT_ONLY` posture, exclude that posture from
+     scheduler selection and defensive planner normalization, and expose it truthfully on support
+     surfaces. Do not advance its watermark beyond persisted evidence. Current-data fixtures alone
+     do not prove upgraded books remain complete.
 
 ## Context Maintenance Rule
 

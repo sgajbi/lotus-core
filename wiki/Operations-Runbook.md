@@ -177,6 +177,14 @@ immutable, so a concurrent earlier price can coexist as one new pending generati
 trigger rows or mutate job payloads by hand: transaction rollback and the next scheduler poll are
 the governed recovery path.
 
+Position support listings may report `operational_state=SNAPSHOT_ONLY` for legacy keys that have a
+durable daily snapshot but no replayable position history. This is a truthful terminal source
+posture, not current calculation authority: Core preserves the latest actual snapshot watermark,
+keeps the position visible, and excludes the key from history-driven backfill and automatic
+watermark advancement. If authoritative position history is later ingested, the normal epoch and
+reprocessing path supersedes this posture. Operators must not relabel or manually advance these
+keys to `CURRENT`; reconcile or ingest the missing history authority instead.
+
 High-cardinality valuation and reprocessing operations are physically bounded to 1,000 rows and
 the governed PostgreSQL bind budget per statement. When one logical operation needs multiple
 statements, inspect the single structured `database_statement_batch` event: its bounded fields are

@@ -1309,6 +1309,8 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     lineage_key_record = components["LineageKeyRecord"]
     lineage_key_schema = components["LineageKeyListResponse"]
 
+    assert "SNAPSHOT_ONLY" in reprocessing_key_record["properties"]["operational_state"]["enum"]
+
     assert reconciliation_run_schema["properties"]["items"]["description"] == (
         "Durable reconciliation runs for support workflows."
     )
@@ -1423,7 +1425,8 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         "True when the key is still marked REPROCESSING"
     )
     assert reprocessing_key_record["properties"]["operational_state"]["description"] == (
-        "Derived operator-facing lifecycle state used for support triage ordering."
+        "Derived operator-facing lifecycle state used for support triage ordering. SNAPSHOT_ONLY "
+        "identifies visible legacy snapshot evidence without replayable position history."
     )
     assert lineage_key_record["properties"]["latest_position_history_date"]["description"] == (
         "Latest position-history date for the current epoch of this key."

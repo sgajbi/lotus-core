@@ -1076,6 +1076,7 @@ async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "CASE WHEN (position_state.status = 'REPROCESSING') THEN 0" in compiled
+    assert "WHEN (position_state.status = 'SNAPSHOT_ONLY') THEN 1" in compiled
     assert "upper(trim(position_state.status))" not in compiled
     assert "max(position_history.position_date)" in compiled
     assert "DESC NULLS LAST" in compiled
@@ -2114,6 +2115,7 @@ async def test_get_reprocessing_keys_query(
     assert "trim(position_state.security_id) = 'SEC-US-IBM'" in compiled
     assert "position_state.watermark_date = '2025-08-01'" in compiled
     assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
+    assert "WHEN (position_state.status = 'SNAPSHOT_ONLY') THEN 2" in compiled
     assert "upper(trim(position_state.status))" not in compiled
     assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "position_state.updated_at ASC" in compiled

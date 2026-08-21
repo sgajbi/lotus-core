@@ -656,6 +656,14 @@ async def test_operations_service_reconciliation_and_lineage_helpers_cover_block
     assert (
         OperationsService._get_reprocessing_key_operational_state("CURRENT", now, now) == "CURRENT"
     )
+    assert (
+        OperationsService._get_reprocessing_key_operational_state(" snapshot_only ", now, now)
+        == "SNAPSHOT_ONLY"
+    )
+    assert (
+        OperationsService._get_lineage_key_operational_state("snapshot_only", True, "FAILED")
+        == "SNAPSHOT_ONLY"
+    )
     assert OperationsService._has_lineage_artifact_gap(None, None, None, None) is False
     assert (
         OperationsService._has_lineage_artifact_gap(

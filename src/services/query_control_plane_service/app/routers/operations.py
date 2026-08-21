@@ -525,7 +525,9 @@ async def get_reprocessing_keys(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     status_filter: Optional[str] = Query(
         None,
-        description="Optional replay key status filter (e.g., CURRENT, REPROCESSING).",
+        description=(
+            "Optional replay key status filter (e.g., CURRENT, REPROCESSING, SNAPSHOT_ONLY)."
+        ),
         examples=["REPROCESSING"],
     ),
     security_id: Optional[str] = Query(
@@ -1188,7 +1190,9 @@ async def get_lineage_keys(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     reprocessing_status: Optional[str] = Query(
         None,
-        description="Optional status filter for lineage keys (e.g., CURRENT, REPROCESSING).",
+        description=(
+            "Optional status filter for lineage keys (e.g., CURRENT, REPROCESSING, SNAPSHOT_ONLY)."
+        ),
         examples=["CURRENT"],
     ),
     security_id: Optional[str] = Query(
