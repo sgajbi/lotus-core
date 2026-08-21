@@ -13,6 +13,9 @@ The health of this service is critical for the availability of all performance a
   `timeseries_generator_group_positions` group.
 * **Durable Queue:** Monitor pending, processing, failed, and expired
   `portfolio_aggregation_jobs`, oldest eligible age, claim throughput, and stale-claim recovery.
+  Recovery locks at most 1,000 expired jobs per transaction in lease-expiry/id order; larger
+  backlogs drain over subsequent scheduler cycles. A cycle count of 1,000 therefore means bounded
+  backlog remains, not that Core silently discarded work.
 * **Queue outcomes:** `control_queue_operations_total{queue="aggregation"}` counts bounded claim,
   lease-recovery, complete, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
   Alert on sustained `lost_ownership`, `failed`, or `execution_error` rates rather than parsing logs.
