@@ -253,6 +253,18 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_party_role_assignments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
+            (
+                "delete from market_price_source_facts "
+                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
+                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
+                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}';"
+            ),
+            (
+                "delete from instrument_valuation_policy_assignments "
+                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
+                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
+                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}';"
+            ),
             "delete from sustainability_preference_profiles "
             f"where portfolio_id = '{portfolio_id}';",
             f"delete from client_restriction_profiles where portfolio_id = '{portfolio_id}';",
