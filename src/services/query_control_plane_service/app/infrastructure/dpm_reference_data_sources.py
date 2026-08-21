@@ -13,6 +13,11 @@ from portfolio_common.database_models import (
     PortfolioMandateBinding,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from portfolio_common.source_lifecycle_predicates import (
     DISCRETIONARY_MANDATE_TYPE,
     MODEL_PORTFOLIO_TARGET_ACTIVE,
@@ -192,29 +197,22 @@ class SqlAlchemyDpmReferenceDataReader:
         normalized_ids = _normalized_security_ids(security_ids)
         if not normalized_ids:
             return []
-        security_id = func.trim(MarketPrice.security_id)
-        latest_dates = (
-            select(
-                security_id.label("security_id"),
-                func.max(MarketPrice.price_date).label("latest_price_date"),
-            )
-            .where(security_id.in_(normalized_ids), MarketPrice.price_date <= as_of_date)
-            .group_by(security_id)
-            .subquery()
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.DPM_MARKET_PRICE_LOOKUP,
+            item_count=len(normalized_ids),
+            binds_per_row=1,
+            reserved_binds=1,
         )
-        statement = (
-            select(MarketPrice)
-            .join(
-                latest_dates,
-                and_(
-                    security_id == latest_dates.c.security_id,
-                    MarketPrice.price_date == latest_dates.c.latest_price_date,
-                ),
-            )
-            .order_by(security_id.asc())
-        )
-        rows = (await self._session.execute(statement)).scalars().all()
-        return [_market_price(row) for row in rows]
+        records: list[MarketPriceEvidence] = []
+        for chunk in iter_statement_chunks(
+            normalized_ids,
+            binds_per_row=1,
+            reserved_binds=1,
+        ):
+            statement = _latest_market_prices_statement(list(chunk), as_of_date)
+            rows = (await self._session.execute(statement)).scalars().all()
+            records.extend(_market_price(row) for row in rows)
+        return sorted(records, key=lambda record: record.security_id)
 
     async def list_latest_fx_rates(
         self,
@@ -225,47 +223,85 @@ class SqlAlchemyDpmReferenceDataReader:
         normalized_pairs = _normalized_currency_pairs(currency_pairs)
         if not normalized_pairs:
             return []
-        from_currency = func.upper(func.trim(FxRate.from_currency))
-        to_currency = func.upper(func.trim(FxRate.to_currency))
-        latest_dates = (
-            select(
-                from_currency.label("from_currency"),
-                to_currency.label("to_currency"),
-                func.max(FxRate.rate_date).label("latest_rate_date"),
-            )
-            .where(
-                tuple_(from_currency, to_currency).in_(normalized_pairs),
-                FxRate.rate_date <= as_of_date,
-            )
-            .group_by(from_currency, to_currency)
-            .subquery()
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.DPM_FX_RATE_LOOKUP,
+            item_count=len(normalized_pairs),
+            binds_per_row=2,
+            reserved_binds=1,
         )
-        statement = (
-            select(FxRate)
-            .join(
-                latest_dates,
-                and_(
-                    from_currency == latest_dates.c.from_currency,
-                    to_currency == latest_dates.c.to_currency,
-                    FxRate.rate_date == latest_dates.c.latest_rate_date,
-                ),
-            )
-            .order_by(from_currency.asc(), to_currency.asc())
-        )
-        rows = (await self._session.execute(statement)).scalars().all()
-        return [_fx_rate(row) for row in rows]
+        records: list[FxRateEvidence] = []
+        for chunk in iter_statement_chunks(
+            normalized_pairs,
+            binds_per_row=2,
+            reserved_binds=1,
+        ):
+            statement = _latest_fx_rates_statement(list(chunk), as_of_date)
+            rows = (await self._session.execute(statement)).scalars().all()
+            records.extend(_fx_rate(row) for row in rows)
+        return sorted(records, key=lambda record: (record.from_currency, record.to_currency))
 
 
 def _normalized_security_ids(values: list[str]) -> list[str]:
-    return list(dict.fromkeys(value.strip() for value in values if value.strip()))
+    return sorted({value.strip() for value in values if value.strip()})
 
 
 def _normalized_currency_pairs(values: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    return list(
-        dict.fromkeys(
-            (normalize_currency_code(base), normalize_currency_code(quote))
-            for base, quote in values
+    return sorted(
+        {(normalize_currency_code(base), normalize_currency_code(quote)) for base, quote in values}
+    )
+
+
+def _latest_market_prices_statement(security_ids: list[str], as_of_date: date):
+    security_id = func.trim(MarketPrice.security_id)
+    latest_dates = (
+        select(
+            security_id.label("security_id"),
+            func.max(MarketPrice.price_date).label("latest_price_date"),
         )
+        .where(security_id.in_(security_ids), MarketPrice.price_date <= as_of_date)
+        .group_by(security_id)
+        .subquery()
+    )
+    return (
+        select(MarketPrice)
+        .join(
+            latest_dates,
+            and_(
+                security_id == latest_dates.c.security_id,
+                MarketPrice.price_date == latest_dates.c.latest_price_date,
+            ),
+        )
+        .order_by(security_id.asc())
+    )
+
+
+def _latest_fx_rates_statement(currency_pairs: list[tuple[str, str]], as_of_date: date):
+    from_currency = func.upper(func.trim(FxRate.from_currency))
+    to_currency = func.upper(func.trim(FxRate.to_currency))
+    latest_dates = (
+        select(
+            from_currency.label("from_currency"),
+            to_currency.label("to_currency"),
+            func.max(FxRate.rate_date).label("latest_rate_date"),
+        )
+        .where(
+            tuple_(from_currency, to_currency).in_(currency_pairs),
+            FxRate.rate_date <= as_of_date,
+        )
+        .group_by(from_currency, to_currency)
+        .subquery()
+    )
+    return (
+        select(FxRate)
+        .join(
+            latest_dates,
+            and_(
+                from_currency == latest_dates.c.from_currency,
+                to_currency == latest_dates.c.to_currency,
+                FxRate.rate_date == latest_dates.c.latest_rate_date,
+            ),
+        )
+        .order_by(from_currency.asc(), to_currency.asc())
     )
 
 
