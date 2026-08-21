@@ -103,12 +103,13 @@ def test_kafka_recovery_override_exhausts_former_budget_before_real_probe() -> N
     healthcheck = override["services"]["kafka"]["healthcheck"]
     command = healthcheck["test"][1]
 
-    assert healthcheck["interval"] == "5s"
-    assert healthcheck["timeout"] == "5s"
+    assert healthcheck["interval"] == "1s"
+    assert healthcheck["timeout"] == "50s"
     assert healthcheck["start_period"] == "0s"
     assert "retries" not in healthcheck
     assert '"$$attempt" -le 10' in command
-    assert "kafka-topics --bootstrap-server kafka:9093 --list || exit 1" in command
+    assert "remaining=45" in command
+    assert command.count("kafka-topics --bootstrap-server kafka:9093 --list") == 2
 
 
 def test_direct_kafka_clients_cannot_bypass_shared_transport_security() -> None:
