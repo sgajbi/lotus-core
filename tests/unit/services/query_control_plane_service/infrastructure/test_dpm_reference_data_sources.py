@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from src.services.query_control_plane_service.app.infrastructure.dpm_reference_data_sources import (
     SqlAlchemyDpmReferenceDataReader,
@@ -157,3 +158,59 @@ async def test_latest_fx_rates_normalize_and_deduplicate_pairs() -> None:
     sql = str(statement)
     assert "max(fx_rates.rate_date)" in sql
     assert "fx_rates.rate_date <=" in sql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "argument_name", "values"),
+    [
+        (
+            "list_latest_market_prices",
+            "security_ids",
+            [f"SEC_{index:04d}" for index in range(1_001)],
+        ),
+        (
+            "list_latest_fx_rates",
+            "currency_pairs",
+            [
+                (
+                    "".join(
+                        (
+                            chr(65 + (index // (26 * 26)) % 26),
+                            chr(65 + (index // 26) % 26),
+                            chr(65 + index % 26),
+                        )
+                    ),
+                    "ZZZ",
+                )
+                for index in range(1_001)
+            ],
+        ),
+    ],
+)
+async def test_market_data_readers_chunk_oversized_internal_inputs(
+    method_name: str,
+    argument_name: str,
+    values: list[object],
+) -> None:
+    session = _session_returning()
+    reader = SqlAlchemyDpmReferenceDataReader(session)
+
+    await getattr(reader, method_name)(**{argument_name: values, "as_of_date": date(2026, 4, 10)})
+
+    assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_market_data_readers_sort_normalized_inputs_before_chunking() -> None:
+    session = _session_returning()
+    reader = SqlAlchemyDpmReferenceDataReader(session)
+
+    await reader.list_latest_market_prices(
+        security_ids=[" SEC_2 ", "SEC_1", "SEC_2"],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    compiled = session.execute.await_args.args[0].compile(dialect=postgresql.dialect())
+    expanding_values = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert expanding_values == ["SEC_1", "SEC_2"]
