@@ -1536,7 +1536,10 @@ Most relevant current governance:
     repository, metrics-sink, clock, token-generator, and batch-processor contracts;
     `app.infrastructure.aggregation_scheduler_adapters` owns SQLAlchemy, Prometheus, and system-clock
     adapters. `app.application.aggregation_jobs` owns expiry recovery, leased claims, and bounded
-    processing. The database queue is the command boundary; do not restore the same-owner
+    processing. Expired recovery locks at most 1,000 jobs in lease-expiry/id order and uses
+    disjoint, sorted, bind-safe failed/requeue updates inside the scheduler provider transaction;
+    larger backlogs drain across later polls without truncation. The database queue is the command
+    boundary; do not restore the same-owner
     `portfolio_day.aggregation.job.requested` Kafka hop. `make architecture-guard` runs
     `scripts/quality/aggregation_scheduler_boundary_guard.py` so DB session factories, concrete
     repositories, Kafka producers/consumers, direct publish/flush calls, and raw metric functions do
@@ -2760,7 +2763,11 @@ Most relevant current governance:
      aggregate `CURRENT` requires all five source families to be `READY` and durable constituent
      evidence time. Preserve fail-closed precedence and keep mandate approval, suitability,
      valuation, tax advice, liquidity analysis, execution quality, best execution, and OMS
-     acknowledgement outside this readiness product.
+     acknowledgement outside this readiness product. Public market-data and readiness requests
+     accept at most 1,000 instruments and 1,000 FX pairs. If model-target expansion exceeds the
+     evaluated-instrument ceiling, skip eligibility, tax-lot, and market-data reads and publish
+     `DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED`; never truncate source authority. Price and FX
+     adapters normalize globally and use the shared statement row/bind budget.
 170. Dependency-health proof uses a content-addressed ignored environment under
      `.cache/dependency-health`. Its SHA-256 identity covers Python implementation/version,
      platform, invoking pip version, root/service packaging manifests, dependency/test/tooling
