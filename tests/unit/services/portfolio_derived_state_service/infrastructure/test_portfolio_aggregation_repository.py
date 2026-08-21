@@ -1,5 +1,6 @@
 """Characterize portfolio aggregation persistence and queue SQL contracts."""
 
+import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -766,15 +767,18 @@ async def test_recover_expired_job_leases_uses_disjoint_failed_and_requeue_updat
 async def test_requeue_expired_job_leases_chunks_and_aggregates_counts(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     first = MagicMock(rowcount=1_000)
     second = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [first, second]
 
-    count = await repository._requeue_expired_job_leases(
-        [*range(1_001), 1_000, 0],
-        datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
-    )
+    sentinel_job_id = 1_000
+    with caplog.at_level(logging.INFO):
+        count = await repository._requeue_expired_job_leases(
+            [*range(1_001), sentinel_job_id, 0],
+            datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
+        )
 
     assert count == 1_001
     assert mock_db_session.execute.await_count == 2
@@ -787,3 +791,17 @@ async def test_requeue_expired_job_leases_chunks_and_aggregates_counts(
         for call in mock_db_session.execute.await_args_list
     ]
     assert chunk_sizes == [1_000, 1]
+    batch_records = [
+        record
+        for record in caplog.records
+        if getattr(record, "event_name", None) == "database_statement_batch"
+    ]
+    assert len(batch_records) == 1
+    record = batch_records[0]
+    assert record.operation == "aggregation_stale_requeue_update"
+    assert record.item_count == 1_001
+    assert record.chunk_count == 2
+    assert record.max_rows_per_statement == 1_000
+    for attribute in ("job_id", "job_ids", "portfolio_id", "security_id"):
+        assert not hasattr(record, attribute)
+    assert str(sentinel_job_id) not in record.getMessage()
