@@ -5,9 +5,10 @@ readers ranked retained position history with broad `row_number()` windows befor
 latest row. Core now uses deterministic PostgreSQL `DISTINCT ON` over normalized financial
 identity, current `PositionState` epoch, business date, and stable row id. The latest-row quantity
 predicate remains outside latest-history selection so closed or stale-epoch history cannot be
-resurrected. Representative 7,500-row snapshot and history plans use indexed access with no
-sequential scan or `WindowAgg`; existing covering indexes remain the storage authority and no
-migration/materialized state was introduced. Status: fixed locally; protected PR, exact-main
+resurrected. The plan gate captures and explains the complete production latest-position and
+security/date reprocessing statements against 7,500-row snapshot and history cohorts; both use
+indexed access with no sequential scan or `WindowAgg`. Existing covering indexes remain the
+storage authority and no migration/materialized state was introduced. Status: fixed locally; protected PR, exact-main
 validation, issue closure, and branch cleanup are pending. Evidence:
 [CR-1703-INDEXED-LATEST-POSITION-QUERIES.md](./codebase-reviews/CR-1703-INDEXED-LATEST-POSITION-QUERIES.md).
 
