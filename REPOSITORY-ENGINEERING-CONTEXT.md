@@ -3967,6 +3967,15 @@ Most relevant current governance:
      and publish bounded counts/reasons rather than job-ID collections. Aggregation-owned expired
      lease recovery remains separately tracked by #962.
 
+245. Kafka bootstrap-server authority for topic provisioning and shared administration must be
+     resolved when the administration client is constructed, not frozen only when a Python module
+     is imported. Test/runtime bootstrap and host tools may export an isolated host endpoint after
+     module collection, while app-local Compose retains `kafka:9093`. Use
+     `portfolio_common.config.load_kafka_bootstrap_servers`, preserve host-override precedence,
+     and keep transport-security validation in `portfolio_common.connection_security`. Do not
+     repair endpoint-authority failures with broad Docker cleanup, broker metadata deletion, or
+     relaxed retry assertions.
+
 ## Context Maintenance Rule
 
 Update this document when:
