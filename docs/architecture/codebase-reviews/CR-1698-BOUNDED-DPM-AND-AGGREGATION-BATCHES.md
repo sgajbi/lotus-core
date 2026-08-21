@@ -35,6 +35,8 @@ otherwise valid readiness request exceed the leaf market-data contract after man
   all 1,000 records in deterministic order.
 - Real PostgreSQL aggregation evidence drains a 1,001-row backlog as 1,000 then 1 and proves an
   injected second-chunk failure rolls back all 1,001 staged updates: 3 passed in 78.33 seconds.
+- A deterministic two-session PostgreSQL proof holds the first 1,000-row cohort transaction open
+  while a second recovery skips those locks and recovers the remaining row: 1 passed in 60.11 seconds.
 - Focused Ruff/format and diff hygiene pass. Repository-native type, architecture, contract,
   protected PR, exact-main, and wiki gates remain pending.
 
