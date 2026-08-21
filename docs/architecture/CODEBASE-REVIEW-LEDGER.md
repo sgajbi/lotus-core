@@ -5,8 +5,10 @@ exhaust Kafka's former ten health probes immediately before the broker became he
 the unchanged real broker probe and bounded restart policy while adding two measured health-probe
 attempts. The repository recovery gate exercises the actual topic-creator `service_healthy`
 dependency after an interrupted session and requires topic provisioning, clean restart,
-and dependent-service evidence. Persistent failure remains fail-closed and destructive recovery is
-still prohibited by default. No API, schema, event, calculation, dependency, image, promoted
+and dependent-service evidence. Exact signed `c28423349` passed the real gate with `20.749s`
+recovery, restart count `1`, topic creator exit `0`, two clean cycles, and healthy ingestion.
+Persistent failure remains fail-closed and destructive recovery is still prohibited by default.
+No API, schema, event, calculation, dependency, image, promoted
 security, or topology contract changes. Status: fixed locally; protected PR, exact-main, canonical
 Workbench, wiki publication/parity, issue closure, and hygiene remain pending. Evidence:
 [CR-1705-BOUNDED-KAFKA-STARTUP-RECOVERY.md](./codebase-reviews/CR-1705-BOUNDED-KAFKA-STARTUP-RECOVERY.md).

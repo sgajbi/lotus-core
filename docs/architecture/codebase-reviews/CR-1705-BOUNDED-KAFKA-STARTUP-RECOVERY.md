@@ -38,9 +38,11 @@ authority remains separate under #990.
 - Compose contract unit tests pin the unchanged probe and the bounded 30s/10s/5s/12 posture.
 - Recovery-driver and Compose contract tests bind the unique project, unchanged probe, bounded
   health policy, source-safe failure diagnostic, and exact topic-creator dependency path.
-- Real managed Compose, canonical Workbench startup, protected PR, exact-main, wiki publication,
-  strict parity, issue closure, and branch/worktree hygiene remain pending at this fixed-local
-  checkpoint.
+- Real managed Compose passed at exact signed `c28423349`: the interrupted broker recovered in
+  `20.749s` with restart count `1`, topic creator exit code `0`, two clean restart cycles, and
+  `ingestion_service=healthy`. Canonical Workbench startup, protected PR, exact-main, wiki
+  publication, strict parity, issue closure, and branch/worktree hygiene remain pending at this
+  fixed-local checkpoint.
 
 ## Documentation decision
 
