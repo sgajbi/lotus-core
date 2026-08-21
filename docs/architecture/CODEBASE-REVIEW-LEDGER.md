@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1697 runtime Kafka topic bootstrap authority (2026-08-21): exact-main run `32430339688`
+failed Integration Full after 1,130 passing tests because the isolated runtime exported a
+host-accessible Kafka endpoint after `tools.kafka_setup` had imported the Compose default
+`kafka:9093`. Core topic-provisioning and shared administration clients now resolve broker
+authority at client-construction time while retaining centralized transport-security validation.
+Unit and formerly failing isolated integration proofs cover current-environment precedence,
+explicit injection, Compose fallback, and topic-creation idempotency. No topic, partition,
+security, topology, API, schema, migration, dependency, or operator-command contract changed.
+Evidence and compatibility details:
+[CR-1697-RUNTIME-KAFKA-TOPIC-BOOTSTRAP-AUTHORITY.md](./codebase-reviews/CR-1697-RUNTIME-KAFKA-TOPIC-BOOTSTRAP-AUTHORITY.md).
+
 CR-1696 backdated position economics coalescing (2026-08-21): exact-main run `32392872624`
 proved that a later economic-date transaction could win the same-key cost lock, persist only its
 affected suffix, and let position history consume an earlier durable row without calculated
