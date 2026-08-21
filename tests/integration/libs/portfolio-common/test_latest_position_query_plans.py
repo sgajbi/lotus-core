@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Awaitable, Callable
 
 import pytest
-from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scripts.operations.database_evidence.plan_capture import (
+    capture_single_production_statement,
+    explain_captured_statement,
+)
 from src.services.calculators.position_valuation_calculator.app.repositories import (
     valuation_repository,
 )
@@ -151,48 +153,6 @@ async def _seed_representative_latest_row_history(session: AsyncSession) -> None
     await session.execute(text("ANALYZE position_state"))
 
 
-async def _capture_production_select(
-    session: AsyncSession,
-    operation: Callable[[], Awaitable[object]],
-) -> tuple[str, object]:
-    captured: list[tuple[str, object]] = []
-    bind = session.bind
-    assert bind is not None
-
-    def capture_statement(
-        _connection,
-        _cursor,
-        statement: str,
-        parameters: object,
-        _context,
-        _executemany: bool,
-    ) -> None:
-        if statement.lstrip().upper().startswith("SELECT"):
-            captured.append((statement, parameters))
-
-    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", capture_statement)
-    try:
-        await operation()
-    finally:
-        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", capture_statement)
-
-    assert len(captured) == 1
-    return captured[0]
-
-
-async def _explain_captured_select(
-    session: AsyncSession,
-    captured: tuple[str, object],
-) -> Any:
-    statement, parameters = captured
-    connection = await session.connection()
-    result = await connection.exec_driver_sql(
-        f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {statement}",
-        parameters,
-    )
-    return result.scalar_one()
-
-
 async def test_latest_snapshot_and_history_queries_use_covering_indexes(
     clean_db,
     async_db_session: AsyncSession,
@@ -201,19 +161,19 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
 
     position_repository = PositionRepository(async_db_session)
     valuation_repo = valuation_repository.ValuationRepository(async_db_session)
-    snapshot_statement = await _capture_production_select(
+    snapshot_statement = await capture_single_production_statement(
         async_db_session,
         lambda: position_repository.get_latest_positions_by_portfolio(_TARGET_PORTFOLIO),
     )
-    history_statement = await _capture_production_select(
+    history_statement = await capture_single_production_statement(
         async_db_session,
         lambda: valuation_repo.find_portfolios_holding_security_on_date(
             "LATEST-SEC-1",
             date(2026, 8, 21),
         ),
     )
-    snapshot_plan = await _explain_captured_select(async_db_session, snapshot_statement)
-    history_plan = await _explain_captured_select(async_db_session, history_statement)
+    snapshot_plan = await explain_captured_statement(async_db_session, snapshot_statement)
+    history_plan = await explain_captured_statement(async_db_session, history_statement)
     governed_indexes = set(
         (
             await async_db_session.scalars(
