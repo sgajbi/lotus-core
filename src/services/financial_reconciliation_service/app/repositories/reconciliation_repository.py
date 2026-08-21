@@ -20,12 +20,52 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from portfolio_common.logging_utils import normalize_lineage_value
-from sqlalchemy import and_, func, select
+from sqlalchemy import Date, String, and_, column, func, select, true, values
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.reconciliation_run_lifecycle_policy import initial_reconciliation_run_status
+from ..ports.reconciliation_repository_ports import FxRateLookupKey
+
+
+def _latest_fx_rates_statement(keys: Sequence[FxRateLookupKey]):
+    lookup_rows = values(
+        column("from_currency", String(3)),
+        column("to_currency", String(3)),
+        column("business_date", Date()),
+        name="fx_lookup",
+    ).data([(key.from_currency, key.to_currency, key.business_date) for key in keys])
+    latest_rate = (
+        select(FxRate.rate.label("rate"))
+        .where(
+            func.upper(func.trim(FxRate.from_currency)) == lookup_rows.c.from_currency,
+            func.upper(func.trim(FxRate.to_currency)) == lookup_rows.c.to_currency,
+            FxRate.rate_date <= lookup_rows.c.business_date,
+        )
+        .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
+        .limit(1)
+        .lateral("latest_fx_rate")
+    )
+    return (
+        select(
+            lookup_rows.c.from_currency,
+            lookup_rows.c.to_currency,
+            lookup_rows.c.business_date,
+            latest_rate.c.rate,
+        )
+        .select_from(lookup_rows.outerjoin(latest_rate, true()))
+        .order_by(
+            lookup_rows.c.from_currency,
+            lookup_rows.c.to_currency,
+            lookup_rows.c.business_date,
+        )
+    )
 
 
 class ReconciliationRepository:
@@ -409,26 +449,42 @@ class ReconciliationRepository:
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
 
-    async def fetch_latest_fx_rate(
+    async def fetch_latest_fx_rates(
         self,
         *,
-        from_currency: str,
-        to_currency: str,
-        business_date: date,
-    ) -> FxRate | None:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
-        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
-        stmt = (
-            select(FxRate)
-            .where(
-                from_currency_expr == normalized_from_currency,
-                to_currency_expr == normalized_to_currency,
-                FxRate.rate_date <= business_date,
-            )
-            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
-            .limit(1)
+        keys: Sequence[FxRateLookupKey],
+    ) -> dict[FxRateLookupKey, Decimal | None]:
+        normalized_keys = sorted(
+            {
+                FxRateLookupKey(
+                    from_currency=normalize_currency_code(key.from_currency),
+                    to_currency=normalize_currency_code(key.to_currency),
+                    business_date=key.business_date,
+                )
+                for key in keys
+            }
         )
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        if not normalized_keys:
+            return {}
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.FINANCIAL_RECONCILIATION_FX_LOOKUP,
+            item_count=len(normalized_keys),
+            binds_per_row=3,
+            reserved_binds=1,
+        )
+        rates: dict[FxRateLookupKey, Decimal | None] = {}
+        for chunk in iter_statement_chunks(
+            normalized_keys,
+            binds_per_row=3,
+            reserved_binds=1,
+        ):
+            result = await self.db.execute(_latest_fx_rates_statement(chunk))
+            for from_currency, to_currency, business_date, rate in result.all():
+                rates[
+                    FxRateLookupKey(
+                        from_currency=from_currency,
+                        to_currency=to_currency,
+                        business_date=business_date,
+                    )
+                ] = rate
+        return rates

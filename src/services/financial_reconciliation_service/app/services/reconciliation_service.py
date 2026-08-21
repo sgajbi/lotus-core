@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import FinancialReconciliationFinding
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_none, required_decimal
 from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
@@ -36,7 +37,7 @@ from ..domain.reconciliation_run_lifecycle_policy import (
     determine_automatic_bundle_outcome,
 )
 from ..dtos import ReconciliationRunRequest
-from ..ports.reconciliation_repository_ports import ReconciliationRepositoryPort
+from ..ports.reconciliation_repository_ports import FxRateLookupKey, ReconciliationRepositoryPort
 
 ZERO = Decimal("0")
 AUTHORITATIVE_PORTFOLIO_METRIC_NAMES = (
@@ -61,6 +62,21 @@ def _authoritative_metric_currencies(instrument: object, portfolio: object) -> t
     from_currency = (getattr(instrument, "currency", None) or "").strip()
     to_currency = (getattr(portfolio, "base_currency", None) or "").strip()
     return from_currency, to_currency
+
+
+def _authoritative_fx_lookup_key(
+    position_row: object,
+    instrument: object,
+    portfolio: object,
+) -> FxRateLookupKey | None:
+    from_currency, to_currency = _authoritative_metric_currencies(instrument, portfolio)
+    if not requires_authoritative_fx_rate(from_currency, to_currency):
+        return None
+    return FxRateLookupKey(
+        from_currency=normalize_currency_code(from_currency),
+        to_currency=normalize_currency_code(to_currency),
+        business_date=getattr(position_row, "date"),
+    )
 
 
 def _add_authoritative_position_metrics(
@@ -238,45 +254,28 @@ class ReconciliationService:
             epoch=epoch,
         )
         metrics = _empty_authoritative_portfolio_metrics()
-        fx_cache: dict[tuple[str, str, date], Decimal] = {}
-
-        for position_row, instrument, portfolio in authoritative_rows:
-            rate = await self._authoritative_portfolio_fx_rate(
-                position_row=position_row,
-                instrument=instrument,
-                portfolio=portfolio,
-                fx_cache=fx_cache,
+        rows_with_fx_keys = [
+            (
+                position_row,
+                _authoritative_fx_lookup_key(position_row, instrument, portfolio),
             )
+            for position_row, instrument, portfolio in authoritative_rows
+        ]
+        lookup_keys = sorted({key for _row, key in rows_with_fx_keys if key is not None})
+        raw_fx_rates = (
+            await self.repository.fetch_latest_fx_rates(keys=lookup_keys) if lookup_keys else {}
+        )
+        fx_rates = {
+            key: coerce_positive_fx_rate_or_none(rate) or ZERO for key, rate in raw_fx_rates.items()
+        }
+
+        for position_row, fx_key in rows_with_fx_keys:
+            rate = Decimal("1") if fx_key is None else fx_rates.get(fx_key, ZERO)
             if rate == ZERO:
                 continue
             _add_authoritative_position_metrics(metrics, position_row=position_row, rate=rate)
 
         return metrics, len(authoritative_rows)
-
-    async def _authoritative_portfolio_fx_rate(
-        self,
-        *,
-        position_row: object,
-        instrument: object,
-        portfolio: object,
-        fx_cache: dict[tuple[str, str, date], Decimal],
-    ) -> Decimal:
-        from_currency, to_currency = _authoritative_metric_currencies(instrument, portfolio)
-        if not requires_authoritative_fx_rate(from_currency, to_currency):
-            return Decimal("1")
-
-        position_date = getattr(position_row, "date")
-        cache_key = (from_currency, to_currency, position_date)
-        if cache_key not in fx_cache:
-            fx_rate = await self.repository.fetch_latest_fx_rate(
-                from_currency=from_currency,
-                to_currency=to_currency,
-                business_date=position_date,
-            )
-            fx_cache[cache_key] = (
-                coerce_positive_fx_rate_or_none(fx_rate.rate) if fx_rate else None
-            ) or ZERO
-        return fx_cache[cache_key]
 
     @staticmethod
     def _automatic_dedupe_key(

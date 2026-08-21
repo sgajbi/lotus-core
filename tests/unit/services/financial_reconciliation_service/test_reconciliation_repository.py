@@ -1,10 +1,13 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from src.services.financial_reconciliation_service.app.ports import (
+    reconciliation_repository_ports,
+)
 from src.services.financial_reconciliation_service.app.repositories import (
     reconciliation_repository as reconciliation_repo,
 )
@@ -190,30 +193,74 @@ async def test_run_lookup_and_mutations_delegate_to_the_session(mock_db_session:
     mock_db_session.refresh.assert_awaited_once_with(stored_run)
 
 
-async def test_fetch_latest_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
+async def test_fetch_latest_fx_rates_normalizes_keys_and_uses_lateral_latest_rate_lookup(
     mock_db_session: AsyncMock,
 ):
     repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
 
     result = MagicMock()
-    result.scalar_one_or_none.return_value = None
+    result.all.return_value = [("EUR", "USD", date(2026, 5, 28), Decimal("1.08"))]
     mock_db_session.execute.return_value = result
 
-    fx_rate = await repository.fetch_latest_fx_rate(
-        from_currency=" eur ",
-        to_currency=" usd ",
-        business_date=date(2026, 5, 28),
+    fx_rates = await repository.fetch_latest_fx_rates(
+        keys=[
+            reconciliation_repository_ports.FxRateLookupKey(
+                from_currency=" eur ",
+                to_currency=" usd ",
+                business_date=date(2026, 5, 28),
+            )
+        ]
     )
 
-    assert fx_rate is None
+    assert fx_rates == {
+        reconciliation_repository_ports.FxRateLookupKey("EUR", "USD", date(2026, 5, 28)): Decimal(
+            "1.08"
+        )
+    }
     compiled_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     ).lower()
-    assert "upper(trim(fx_rates.from_currency)) = 'eur'" in compiled_query
-    assert "upper(trim(fx_rates.to_currency)) = 'usd'" in compiled_query
-    assert "fx_rates.rate_date <= '2026-05-28'" in compiled_query
+    assert "values ('eur', 'usd', '2026-05-28')" in compiled_query
+    assert "left outer join lateral" in compiled_query
+    assert "upper(trim(fx_rates.from_currency)) = fx_lookup.from_currency" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = fx_lookup.to_currency" in compiled_query
+    assert "fx_rates.rate_date <= fx_lookup.business_date" in compiled_query
     assert "order by fx_rates.rate_date desc, fx_rates.id desc" in compiled_query
     assert "limit 1" in compiled_query
+
+
+async def test_fetch_latest_fx_rates_deduplicates_and_bounds_oversized_requests(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+    keys = [
+        reconciliation_repository_ports.FxRateLookupKey(
+            "EUR", "USD", date(2020, 1, 1) + timedelta(days=offset)
+        )
+        for offset in range(1_001)
+    ]
+    keys.append(reconciliation_repository_ports.FxRateLookupKey(" eur ", " usd ", date(2020, 1, 1)))
+
+    assert await repository.fetch_latest_fx_rates(keys=keys) == {}
+
+    assert mock_db_session.execute.await_count == 2
+    bind_counts = [
+        len(call.args[0].compile().params) for call in mock_db_session.execute.await_args_list
+    ]
+    assert bind_counts == [3_001, 4]
+
+
+async def test_fetch_latest_fx_rates_empty_input_avoids_database_io(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+
+    assert await repository.fetch_latest_fx_rates(keys=[]) == {}
+
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any, Protocol
@@ -8,9 +9,17 @@ from typing import Any, Protocol
 from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
-    FxRate,
     PortfolioTimeseries,
 )
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class FxRateLookupKey:
+    """Normalized point-in-time FX evidence requested by reconciliation."""
+
+    from_currency: str
+    to_currency: str
+    business_date: date
 
 
 class ReconciliationRunWriter(Protocol):
@@ -103,13 +112,11 @@ class TimeseriesIntegrityEvidenceReader(Protocol):
         epoch: int,
     ) -> int: ...
 
-    async def fetch_latest_fx_rate(
+    async def fetch_latest_fx_rates(
         self,
         *,
-        from_currency: str,
-        to_currency: str,
-        business_date: date,
-    ) -> FxRate | None: ...
+        keys: Sequence[FxRateLookupKey],
+    ) -> dict[FxRateLookupKey, Decimal | None]: ...
 
 
 class ReconciliationRepositoryPort(
