@@ -378,6 +378,40 @@ async def test_expired_aggregation_backlog_drains_in_bounded_cohorts(
 
 
 @pytest.mark.lifecycle
+async def test_concurrent_aggregation_recovery_claims_disjoint_stale_cohorts(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_expired_aggregation_jobs(
+        async_db_session,
+        count=1_001,
+        prefix="P-AGG-STALE-CONCURRENT",
+    )
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    now = datetime.now(UTC)
+
+    async with session_factory() as first_session, session_factory() as second_session:
+        async with first_session.begin():
+            first = await PortfolioAggregationRepository(first_session).recover_expired_job_leases(
+                now=now, max_attempts=3
+            )
+            async with second_session.begin():
+                second = await PortfolioAggregationRepository(
+                    second_session
+                ).recover_expired_job_leases(now=now, max_attempts=3)
+
+    assert first == ExpiredAggregationJobRecovery(requeued_count=1_000, failed_count=0)
+    assert second == ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
+    pending_count = await async_db_session.scalar(
+        select(func.count()).where(
+            PortfolioAggregationJob.portfolio_id.like("P-AGG-STALE-CONCURRENT-%"),
+            PortfolioAggregationJob.status == "PENDING",
+        )
+    )
+    assert pending_count == 1_001
+
+
+@pytest.mark.lifecycle
 async def test_later_aggregation_recovery_chunk_failure_rolls_back_all_updates(
     clean_db,
     async_db_session: AsyncSession,
