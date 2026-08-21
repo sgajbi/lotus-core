@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1700 automerge label event isolation (2026-08-21): adding the governed `automerge` label at an
+unchanged PR head started the small queue workflow and also restarted the complete Pull Request
+Merge Gate, whose PR-ref concurrency then cancelled valid same-head evidence. The full gate now
+routes only opened, synchronize, reopened, and ready-for-review code/lifecycle events; PR Auto Merge
+alone retains the metadata-only labeled event. Exact parsed-workflow tests preserve new-head
+synchronize invalidation while rejecting label-triggered full-gate churn. Required checks,
+thresholds, rebase policy, and exact-main validation are unchanged; broader event/artifact reuse
+remains under #749. Evidence:
+[CR-1700-AUTOMERGE-LABEL-EVENT-ISOLATION.md](./codebase-reviews/CR-1700-AUTOMERGE-LABEL-EVENT-ISOLATION.md).
+
 CR-1699 bounded DPM source cardinality (2026-08-21): standalone eligibility and tax-lot filters
 accepted caller-sized collections, and model-target readiness materialized the full effective source
 before the composed ceiling could fail closed. Core now publishes 1,000-item public limits, uses the
