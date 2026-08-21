@@ -73,3 +73,37 @@ async def explain_captured_statement(
     if plan is None:
         raise DatabaseEvidenceContractError("explain_plan_missing")
     return plan
+
+
+async def capture_and_explain_rolled_back_mutation(
+    session: AsyncSession,
+    operation: Callable[[], Awaitable[object]],
+) -> object:
+    """Explain exact production UPDATE SQL while rolling back both executions."""
+
+    if session.in_transaction():
+        raise DatabaseEvidenceContractError("mutation_capture_requires_clean_session")
+    async with session.begin():
+        capture_savepoint = await session.begin_nested()
+        try:
+            captured = await capture_single_production_statement(
+                session,
+                operation,
+                statement_prefix="UPDATE",
+            )
+        finally:
+            await capture_savepoint.rollback()
+
+        explain_savepoint = await session.begin_nested()
+        try:
+            connection = await session.connection()
+            result = await connection.exec_driver_sql(
+                f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {captured.sql}",
+                captured.parameters,
+            )
+            plan = result.scalar_one_or_none()
+            if plan is None:
+                raise DatabaseEvidenceContractError("explain_plan_missing")
+        finally:
+            await explain_savepoint.rollback()
+    return plan
