@@ -88,7 +88,9 @@ services:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9093 --list || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      # Twelve real probes retain the existing check while allowing two bounded attempts after
+      # the longest measured app-local cold-start recovery exhausted the former ten-attempt budget.
+      retries: 12
       start_period: 30s
     networks:
       - app_network
