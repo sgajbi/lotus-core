@@ -24,9 +24,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py:create_run": (
         "FinancialReconciliationRun",
     ),
-    "src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py:fetch_latest_fx_rate": (
-        "FxRate",
-    ),
     "src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py:fetch_portfolio_timeseries_rows": (
         "PortfolioTimeseries",
     ),

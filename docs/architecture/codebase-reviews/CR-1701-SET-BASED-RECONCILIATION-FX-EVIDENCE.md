@@ -25,6 +25,9 @@ instead of independent financial verification.
 4. Missing and non-positive FX evidence still contributes no converted amount; same-currency and
    incomplete-currency rows still use the established no-conversion path. Financial formulas,
    tolerance, finding shape, and completion posture are unchanged.
+5. The superseded single-row ORM-output guard exception was removed. The batched reader publishes
+   an explicit immutable-key-to-decimal mapping and no longer crosses the repository boundary with
+   `FxRate` ORM rows.
 
 ## Validation Evidence
 
