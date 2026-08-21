@@ -1,14 +1,15 @@
 # Codebase Review Ledger
 
 CR-1704 governed database hot-path evidence (2026-08-22): Core now has one versioned,
-repository-native, report-only PostgreSQL plan command spanning eleven production repository
+repository-native, report-only PostgreSQL plan command spanning twelve production repository
 scenarios. It captures exact emitted SQL but retains only source-safe plan metrics, re-derives
 fragment status from catalog budgets, accounts for emitted and discarded rows, rejects
 incomplete/malformed/contradictory/mixed evidence, fences clean source identity across the run,
 and proves full claim/recovery authority unchanged across mandatory rollback boundaries. Exact
-local evidence at signed `c5b0d22eb` produced eight passing scenarios and three truthful failed
+local evidence at signed `e6190f904` produced eight passing scenarios and four truthful failed
 findings: transaction ledger page scan routed to #506, valuation-job claim scan routed to #985,
-and valuation stale-selection scan routed to new deduplicated #987. Runtime SQL,
+valuation stale-selection scan routed to #987, and reprocessing claim-normalization window scan
+routed to new deduplicated #988. Runtime SQL,
 APIs, schema, events, calculations, and deployment are unchanged. Status: fixed locally; protected
 PR, exact-main validation, wiki publication/parity, and #510 closure pending. Evidence:
 [CR-1704-GOVERNED-DATABASE-HOT-PATH-EVIDENCE.md](./codebase-reviews/CR-1704-GOVERNED-DATABASE-HOT-PATH-EVIDENCE.md).
