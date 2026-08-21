@@ -5,6 +5,11 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import Instrument, Portfolio, PositionLotState, Transaction
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,50 +43,110 @@ class SqlAlchemyDpmPortfolioStateReader:
         normalized_ids = _normalized_security_ids(security_ids)
         if security_ids and not normalized_ids:
             return []
-        predicates = [
-            PositionLotState.portfolio_id == portfolio_id,
-            PositionLotState.acquisition_date <= as_of_date,
-        ]
         if normalized_ids:
-            predicates.append(func.trim(PositionLotState.security_id).in_(normalized_ids))
-        status_predicate = _tax_lot_status_predicate(
-            include_closed_lots=include_closed_lots,
-            lot_status_filter=lot_status_filter,
-        )
-        if status_predicate is not None:
-            predicates.append(status_predicate)
-        if after_sort_key is not None:
-            predicates.append(_tax_lot_keyset_predicate(after_sort_key))
+            observe_multi_statement_batch(
+                operation=StatementBatchOperation.DPM_TAX_LOT_LOOKUP,
+                item_count=len(normalized_ids),
+                binds_per_row=1,
+                reserved_binds=8,
+            )
+            records: list[PortfolioTaxLotEvidence] = []
+            for chunk in iter_statement_chunks(
+                normalized_ids,
+                binds_per_row=1,
+                reserved_binds=8,
+            ):
+                rows = (
+                    await self._session.execute(
+                        _tax_lot_statement(
+                            portfolio_id=portfolio_id,
+                            as_of_date=as_of_date,
+                            security_ids=list(chunk),
+                            include_closed_lots=include_closed_lots,
+                            lot_status_filter=lot_status_filter,
+                            after_sort_key=after_sort_key,
+                            limit=limit,
+                        )
+                    )
+                ).all()
+                records.extend(_tax_lot_evidence(lot, currency) for lot, currency in rows)
+            return sorted(records, key=lambda row: (row.acquisition_date, row.lot_id))[:limit]
 
-        statement = (
-            select(PositionLotState, Transaction.trade_currency)
-            .outerjoin(
-                Transaction,
-                Transaction.transaction_id == PositionLotState.source_transaction_id,
+        rows = (
+            await self._session.execute(
+                _tax_lot_statement(
+                    portfolio_id=portfolio_id,
+                    as_of_date=as_of_date,
+                    security_ids=None,
+                    include_closed_lots=include_closed_lots,
+                    lot_status_filter=lot_status_filter,
+                    after_sort_key=after_sort_key,
+                    limit=limit,
+                )
             )
-            .where(*predicates)
-            .order_by(
-                PositionLotState.acquisition_date.asc(),
-                PositionLotState.lot_id.asc(),
-            )
-            .limit(limit)
-        )
-        rows = (await self._session.execute(statement)).all()
+        ).all()
         return [_tax_lot_evidence(lot, currency) for lot, currency in rows]
 
     async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
         normalized_ids = _normalized_security_ids(security_ids)
         if not normalized_ids:
             return set()
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.DPM_INSTRUMENT_REFERENCE_LOOKUP,
+            item_count=len(normalized_ids),
+            binds_per_row=1,
+        )
         security_id = func.trim(Instrument.security_id)
-        statement = select(security_id).where(security_id.in_(normalized_ids))
-        return set((await self._session.execute(statement)).scalars().all())
+        known_ids: set[str] = set()
+        for chunk in iter_statement_chunks(normalized_ids, binds_per_row=1):
+            statement = select(security_id).where(security_id.in_(list(chunk)))
+            known_ids.update((await self._session.execute(statement)).scalars().all())
+        return known_ids
 
 
 def _normalized_security_ids(values: list[str] | None) -> list[str] | None:
     if not values:
         return None
-    return list(dict.fromkeys(value.strip() for value in values if value.strip()))
+    return sorted({value.strip() for value in values if value.strip()})
+
+
+def _tax_lot_statement(
+    *,
+    portfolio_id: str,
+    as_of_date: date,
+    security_ids: list[str] | None,
+    include_closed_lots: bool,
+    lot_status_filter: str | None,
+    after_sort_key: DpmTaxLotPageKey | None,
+    limit: int,
+):
+    predicates = [
+        PositionLotState.portfolio_id == portfolio_id,
+        PositionLotState.acquisition_date <= as_of_date,
+    ]
+    if security_ids:
+        predicates.append(func.trim(PositionLotState.security_id).in_(security_ids))
+    status_predicate = _tax_lot_status_predicate(
+        include_closed_lots=include_closed_lots,
+        lot_status_filter=lot_status_filter,
+    )
+    if status_predicate is not None:
+        predicates.append(status_predicate)
+    if after_sort_key is not None:
+        predicates.append(_tax_lot_keyset_predicate(after_sort_key))
+    return (
+        select(PositionLotState, Transaction.trade_currency)
+        .outerjoin(
+            Transaction,
+            Transaction.transaction_id == PositionLotState.source_transaction_id,
+        )
+        .where(*predicates)
+        .order_by(
+            PositionLotState.acquisition_date.asc(),
+            PositionLotState.lot_id.asc(),
+        )
+        .limit(limit)
+    )
 
 
 def _tax_lot_status_predicate(*, include_closed_lots: bool, lot_status_filter: str | None) -> Any:
