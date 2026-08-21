@@ -8,17 +8,77 @@ import pytest
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FinancialReconciliationRun,
+    FxRate,
     Instrument,
     Portfolio,
 )
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.financial_reconciliation_service.app.ports import (
+    reconciliation_repository_ports,
+)
 from src.services.financial_reconciliation_service.app.repositories import (
     reconciliation_repository as reconciliation_repo,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_latest_fx_rates_resolve_all_point_in_time_keys_in_one_statement(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add_all(
+        [
+            FxRate(
+                from_currency="EUR",
+                to_currency="USD",
+                rate_date=date(2026, 4, 1),
+                rate=Decimal("1.10"),
+            ),
+            FxRate(
+                from_currency="EUR",
+                to_currency="USD",
+                rate_date=date(2026, 4, 5),
+                rate=Decimal("1.20"),
+            ),
+            FxRate(
+                from_currency="GBP",
+                to_currency="USD",
+                rate_date=date(2026, 4, 2),
+                rate=Decimal("1.30"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    keys = [
+        reconciliation_repository_ports.FxRateLookupKey("EUR", "USD", date(2026, 4, 3)),
+        reconciliation_repository_ports.FxRateLookupKey("EUR", "USD", date(2026, 4, 5)),
+        reconciliation_repository_ports.FxRateLookupKey("GBP", "USD", date(2026, 4, 1)),
+    ]
+    statements: list[str] = []
+    bind = async_db_session.bind
+    assert bind is not None
+
+    def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+        if "fx_lookup" in statement.lower():
+            statements.append(statement)
+
+    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        rates = await reconciliation_repo.ReconciliationRepository(
+            async_db_session
+        ).fetch_latest_fx_rates(keys=list(reversed(keys)) + [keys[0]])
+    finally:
+        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", capture_statement)
+
+    assert rates == {
+        keys[0]: Decimal("1.1000000000"),
+        keys[1]: Decimal("1.2000000000"),
+        keys[2]: None,
+    }
+    assert len(statements) == 1
 
 
 async def test_position_valuation_rows_select_latest_security_state_through_target_epoch(
