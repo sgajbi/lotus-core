@@ -355,6 +355,41 @@ def test_pr_auto_merge_does_not_emit_skipped_checks_for_label_removal() -> None:
     assert "Skipping auto-merge queue because the automerge label is absent." in workflow_text
 
 
+def test_automerge_label_event_does_not_restart_the_full_pr_merge_gate() -> None:
+    merge_gate = yaml.safe_load(
+        Path(".github/workflows/pr-merge-gate.yml").read_text(encoding="utf-8")
+    )
+    auto_merge = yaml.safe_load(
+        Path(".github/workflows/pr-auto-merge.yml").read_text(encoding="utf-8")
+    )
+
+    assert merge_gate[True]["pull_request"]["types"] == [
+        "opened",
+        "synchronize",
+        "reopened",
+        "ready_for_review",
+    ]
+    assert auto_merge[True]["pull_request_target"]["types"] == [
+        "opened",
+        "reopened",
+        "synchronize",
+        "ready_for_review",
+        "labeled",
+    ]
+
+
+def test_pr_merge_gate_cancels_only_stale_work_for_a_new_pr_head() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/pr-merge-gate.yml").read_text(encoding="utf-8")
+    )
+
+    assert "synchronize" in workflow[True]["pull_request"]["types"]
+    assert workflow["concurrency"] == {
+        "group": "${{ github.workflow }}-${{ github.ref }}",
+        "cancel-in-progress": True,
+    }
+
+
 def test_all_workflow_jobs_have_bounded_timeouts() -> None:
     missing_or_invalid_timeouts: list[str] = []
 
