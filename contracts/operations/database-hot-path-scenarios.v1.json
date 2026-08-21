@@ -1,0 +1,77 @@
+{
+  "evidence_posture": "report_only",
+  "owning_repository": "lotus-core",
+  "scenarios": [
+    {
+      "max_root_actual_rows": 500,
+      "max_rows_examined": 20000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Latest current positions must scale with the requested portfolio rather than retained cross-book history.",
+      "repository_method": "get_latest_positions_by_portfolio",
+      "repository_owner": "QueryService.PositionRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "latest_position_snapshot",
+      "seed_cardinality": 7500
+    },
+    {
+      "max_root_actual_rows": 100,
+      "max_rows_examined": 20000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Operations support paging must remain index-backed and bounded independently of retained job history.",
+      "repository_method": "get_valuation_jobs",
+      "repository_owner": "QueryControlPlane.OperationsRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "operations_support_page",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Estate reconciliation source reads must remain bounded while #503 owns broader streaming and checkpoint work.",
+      "repository_method": "get_holdings_reconciliation_controls",
+      "repository_owner": "QueryService.PositionRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "reconciliation_estate_scan",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 100,
+      "max_rows_examined": 20000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Ledger pages must remain bounded and index-backed independently of full transaction history.",
+      "repository_method": "get_transactions",
+      "repository_owner": "QueryService.TransactionRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "transaction_ledger_page",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Valuation job claiming must remain deterministic, bounded, and index-backed across retained scheduler history.",
+      "repository_method": "find_and_claim_eligible_jobs",
+      "repository_owner": "PositionValuation.ValuationRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "valuation_job_claim",
+      "seed_cardinality": 10000
+    }
+  ],
+  "schema_version": "lotus-core.database-hot-path-scenarios.v1"
+}
