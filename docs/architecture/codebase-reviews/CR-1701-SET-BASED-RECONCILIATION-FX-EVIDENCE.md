@@ -38,11 +38,14 @@ instead of independent financial verification.
   stable latest-rate ordering, lateral joining, empty-input zero I/O, duplicate collapse, and the
   1,000/1 boundary with exact bind counts.
 - A real-PostgreSQL proof resolves multiple pairs and as-of dates, including missing evidence, in
-  exactly one statement and returns the expected historical rates.
+  exactly one statement and returns the expected historical rates. The complete repository file
+  passes (`3 passed`), and the route-level timeseries-integrity pack preserves all four established
+  success/finding postures (`4 passed`).
 - The reconciliation repository PostgreSQL suite is now part of the protected
   `critical-db-coverage` manifest; its manifest contract and the full financial-reconciliation unit
-  pack pass (`118 passed`).
-- Full MyPy passes across 318 source files; focused Ruff and diff hygiene pass.
+  pack pass (`118 passed`). The complete protected manifest passes (`87 passed`).
+- Full MyPy passes across 318 source files; repository-wide lint, strict architecture, focused
+  Ruff, and diff hygiene pass.
 
 ## Compatibility And Scope
 
