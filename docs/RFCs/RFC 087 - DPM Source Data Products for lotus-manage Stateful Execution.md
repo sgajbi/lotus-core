@@ -477,8 +477,8 @@ Proposed APIs:
 Request fields:
 
 1. `as_of_date`,
-2. `instrument_ids[]` for prices,
-3. `currency_pairs[]` for FX,
+2. `instrument_ids[]` for prices, with a governed maximum of 1,000 unique identifiers,
+3. `currency_pairs[]` for FX, with a governed maximum of 1,000 unique ISO 4217 pairs,
 4. `valuation_currency`,
 5. `freshness_policy`,
 6. paging fields when needed.
@@ -534,8 +534,8 @@ evidence.
 | Governed discretionary mandate binding source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned discretionary mandate binding to `MODEL_PB_SG_GLOBAL_BAL_DPM`. |
 | Governed instrument eligibility and settlement profile source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned READY eligibility including a restricted private-credit buy block and sell allowance. |
 | Bulk portfolio tax-lot source product | Implemented and live-proven | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly; API, catalog, OpenAPI, paging, supportability, contract evidence, and live READY tax-lot proof exist. |
-| Bulk market-data and FX coverage products | Implemented and live-proven | Held and target universe prices/FX coverage can be fetched with one bounded call; API, catalog, OpenAPI, supportability, stale/missing diagnostics, and live READY coverage proof exist. |
-| DPM source readiness and supportability | Implemented and live-proven | `DpmSourceReadiness:v1` exposes operator-grade source-family supportability for mandate, model target, eligibility, tax-lot, and market-data readiness; live proof returned READY across all five families. |
+| Bulk market-data and FX coverage products | Implemented and live-proven | Held and target universe prices/FX coverage can be fetched with one bounded call; public collections are capped at 1,000 and source reads use the shared row/bind budget; API, catalog, OpenAPI, supportability, stale/missing diagnostics, and live READY coverage proof exist. |
+| DPM source readiness and supportability | Implemented and live-proven | `DpmSourceReadiness:v1` exposes operator-grade source-family supportability for mandate, model target, eligibility, tax-lot, and market-data readiness; model expansion above 1,000 instruments fails closed before those three universe reads rather than truncating; live proof returned READY across all five families. |
 | Canonical seeded managed mandate portfolio | Implemented and live-proven | Front-office seed includes model target, mandate binding, eligibility, tax-lot, market-price, and FX inputs for `PB_SG_GLOBAL_BAL_001`; live core and manage proof both passed on 2026-05-02. |
 | API certification and Swagger quality for all DPM source APIs | Implemented for RFC-087 scope | Each endpoint is certified through route metadata, OpenAPI publication, examples, tests, source-data product metadata, and live route proof. |
 | Wiki and demo-ready product material | Implemented and published | Repo-local wiki source describes implemented DPM source products with diagrams, current proof posture, and audience-specific guidance; GitHub wiki publication from repo-local source has completed. |

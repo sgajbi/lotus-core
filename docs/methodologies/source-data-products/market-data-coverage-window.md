@@ -27,8 +27,8 @@ OMS acknowledgement.
 | Input | Source | Required | Meaning |
 | --- | --- | --- | --- |
 | `as_of_date` | Request body | Yes | Date used as the upper bound for latest price and FX observation lookup. |
-| `instrument_ids` | Request body | No | Held and target instrument identifiers requiring price coverage. |
-| `currency_pairs` | Request body | No | Explicit FX conversion pairs requiring rate coverage. |
+| `instrument_ids` | Request body | No | Held and target instrument identifiers requiring price coverage; maximum 1,000 unique identifiers. |
+| `currency_pairs` | Request body | No | Explicit FX conversion pairs requiring rate coverage; maximum 1,000 unique ISO 4217 pairs. |
 | `valuation_currency` | Request body | No | Optional valuation-currency context carried into response lineage. |
 | `max_staleness_days` | Request body | No, default `5` | Maximum accepted calendar age before a found observation is marked stale. |
 | `tenant_id` | Request body | No | Optional lineage and future policy context. |
@@ -102,14 +102,16 @@ Batch supportability is derived in priority order:
 ## Step-by-Step Computation
 
 1. Normalize request currency codes and reject duplicate instruments or duplicate currency pairs.
-2. Query latest market prices for all requested instruments with `price_date <= as_of_date`.
-3. Query latest FX rates for all requested currency pairs with `rate_date <= as_of_date`.
-4. Emit one price coverage row per requested instrument, preserving request order.
-5. Emit one FX coverage row per requested currency pair, preserving request order.
-6. Classify each found row as `READY` or `STALE` from calendar-day age and `max_staleness_days`.
-7. Classify missing rows as `MISSING`.
-8. Build batch supportability from missing and stale sets.
-9. Populate runtime metadata from the latest available price or FX `updated_at` timestamp.
+2. Reject either public collection above 1,000 items with the governed validation response.
+3. Globally sort and deduplicate adapter inputs, then query latest market prices within the shared
+   1,000-row/32,000-bind PostgreSQL statement budget.
+4. Query latest FX rates within the same statement budget.
+5. Emit one price coverage row per requested instrument, preserving request order.
+6. Emit one FX coverage row per requested currency pair, preserving request order.
+7. Classify each found row as `READY` or `STALE` from calendar-day age and `max_staleness_days`.
+8. Classify missing rows as `MISSING`.
+9. Build batch supportability from missing and stale sets.
+10. Populate runtime metadata from the latest available price or FX `updated_at` timestamp.
 
 ## Validation and Failure Behavior
 
@@ -117,6 +119,8 @@ Batch supportability is derived in priority order:
 | --- | --- |
 | Duplicate `instrument_ids` | Request validation fails. |
 | Duplicate `currency_pairs` | Request validation fails. |
+| More than 1,000 instruments or currency pairs | Request validation fails with the standard typed validation response; Core does not truncate the source request. |
+| Non-alphabetic or non-three-letter currency member | Request validation fails before source lookup. |
 | Instrument price not found | Price row has `found=false`, `quality_status=MISSING`, and the instrument id appears in `missing_instrument_ids`. |
 | FX rate not found | FX row has `found=false`, `quality_status=MISSING`, and the pair label appears in `missing_currency_pairs`. |
 | Found price older than `max_staleness_days` | Price row has `quality_status=STALE`, and the instrument id appears in `stale_instrument_ids`. |
