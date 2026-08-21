@@ -29,16 +29,23 @@ otherwise valid readiness request exceed the leaf market-data contract after man
 
 ## Evidence
 
-- 67 focused request, policy, adapter, and aggregation unit tests pass.
+- 74 focused request, policy, adapter, and aggregation unit tests pass; the final changed adapter
+  and recovery files contribute 36 passing tests.
 - OpenAPI assertions prove `maxItems=1000` on both collections in both public requests.
 - Real PostgreSQL maximum-input price and FX reads execute exactly one statement each and return
   all 1,000 records in deterministic order.
-- Real PostgreSQL aggregation evidence drains a 1,001-row backlog as 1,000 then 1 and proves an
-  injected second-chunk failure rolls back all 1,001 staged updates: 3 passed in 78.33 seconds.
+- The complete changed DPM and aggregation PostgreSQL pack passes 14 tests in 115.88 seconds. It
+  includes maximum-input price/FX reads, 1,001-row backlog draining as 1,000 then 1, and rollback of
+  all 1,001 staged updates after an injected second-chunk failure.
 - A deterministic two-session PostgreSQL proof holds the first 1,000-row cohort transaction open
   while a second recovery skips those locks and recovers the remaining row: 1 passed in 60.11 seconds.
-- Focused Ruff/format and diff hygiene pass. Repository-native type, architecture, contract,
-  protected PR, exact-main, and wiki gates remain pending.
+- A terminal-writer row-lock regression proves recovery uses `SKIP LOCKED`, reports zero work,
+  preserves `COMPLETE`, and fails within a 15-second fence if the lock contract regresses: 1 passed
+  in 67.98 seconds.
+- `make test-unit-db` passes 18 tests in 100.70 seconds. Repository-native lint, type, architecture,
+  OpenAPI, API vocabulary, wiki-source, and documentation-evidence gates pass. Independent review
+  signed off exact `5edaa7c3925e8df658fbdb43592eaf9ac356d04e` with no blocker. Protected PR,
+  exact-main, and wiki publication evidence remain pending.
 
 ## Compatibility and Boundaries
 
@@ -48,7 +55,8 @@ model expansion fails as readiness `UNAVAILABLE` rather than blaming the caller 
 Aggregation changes only internal recovery query shape and per-cycle counts. There is no database
 schema/migration, event/Kafka, calculation, dependency, image, datastore, or topology change.
 
-#972 owns standalone eligibility/tax-lot filters, #503 owns reconciliation reads, #719 owns
+#972 owns standalone eligibility/tax-lot filters; #976 owns the distinct unbounded model-target
+source read before composed readiness can enforce its ceiling. #503 owns reconciliation reads, #719 owns
 transaction economics, and #714 owns broader derived-state topology/capacity. Existing platform
 governance already mandates contract-owned capacity and repository-owned bind safety, so no central
 skill or platform-context change is required.

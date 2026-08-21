@@ -7,7 +7,8 @@ aggregation recovery selected every expired lease before caller-sized identifier
 enforces contract-owned 1,000-item limits and ISO/duplicate validation, shared bind-safe
 deterministic price/FX reads, fail-closed pre-read evaluated-universe enforcement, and ordered
 locked 1,000-row aggregation cohorts with disjoint chunked failed/requeue updates in the caller
-transaction. Keep #972/#503/#719/#714 in their existing ownership boundaries. Protected PR,
+transaction. Keep #972/#976/#503/#719/#714 in their existing ownership boundaries; #976 owns the
+model-target source read that precedes the composed ceiling. Protected PR,
 exact-main, wiki publication/parity, issue closure, and hygiene remain pending. Evidence:
 [CR-1698-BOUNDED-DPM-AND-AGGREGATION-BATCHES.md](./codebase-reviews/CR-1698-BOUNDED-DPM-AND-AGGREGATION-BATCHES.md).
 
