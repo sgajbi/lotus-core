@@ -27,6 +27,7 @@ CATALOG_PATH = REPO_ROOT / "contracts/operations/database-hot-path-scenarios.v1.
 DEFAULT_OUTPUT_PATH = (
     REPO_ROOT / "output/database-hot-path-evidence/database-hot-path-evidence.json"
 )
+_EVIDENCE_RUNTIME_POLL_INTERVAL_SECONDS = "3600"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,13 @@ def execute_evidence_tests(
 
     environment = os.environ.copy()
     environment[FRAGMENT_DIRECTORY_ENV] = str(fragment_directory.resolve())
+    # The integration stack polls once at startup before the fixture exists. Keep later
+    # scheduler polls outside this bounded evidence run so only the test-owned repository
+    # operations can mutate the committed representative rows.
+    environment["VALUATION_SCHEDULER_POLL_INTERVAL"] = _EVIDENCE_RUNTIME_POLL_INTERVAL_SECONDS
+    environment["REPROCESSING_WORKER_POLL_INTERVAL_SECONDS"] = (
+        _EVIDENCE_RUNTIME_POLL_INTERVAL_SECONDS
+    )
     result = command_runner(
         [sys.executable, "-m", "pytest", "-q", *plan.pytest_nodes],
         cwd=REPO_ROOT,

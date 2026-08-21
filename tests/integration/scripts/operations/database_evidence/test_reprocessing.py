@@ -78,6 +78,7 @@ async def test_reprocessing_claim_and_stale_recovery_publish_rollback_safe_evide
     scenarios = load_hot_path_scenario_catalog(CATALOG_PATH).by_id()
     seed_cardinality = scenarios["reprocessing_job_claim"].seed_cardinality
     assert {
+        scenarios["reprocessing_claim_normalization"].seed_cardinality,
         scenarios["reprocessing_stale_scan"].seed_cardinality,
         scenarios["reprocessing_stale_reset"].seed_cardinality,
     } == {seed_cardinality}
@@ -88,9 +89,10 @@ async def test_reprocessing_claim_and_stale_recovery_publish_rollback_safe_evide
     ]
     await async_db_session.rollback()
 
-    claim_result = await measure_reprocessing_job_claim(
+    normalization_result, claim_result = await measure_reprocessing_job_claim(
         async_db_session,
-        scenario=scenarios["reprocessing_job_claim"],
+        normalization_scenario=scenarios["reprocessing_claim_normalization"],
+        claim_scenario=scenarios["reprocessing_job_claim"],
     )
     stale_scan_result, stale_reset_result = await measure_reprocessing_stale_recovery(
         async_db_session,
@@ -98,7 +100,9 @@ async def test_reprocessing_claim_and_stale_recovery_publish_rollback_safe_evide
         reset_scenario=scenarios["reprocessing_stale_reset"],
         reset_job_ids=stale_job_ids,
     )
-    publish_requested_fragments((claim_result, stale_reset_result, stale_scan_result))
+    publish_requested_fragments(
+        (normalization_result, claim_result, stale_reset_result, stale_scan_result)
+    )
 
     verification_sessions = async_sessionmaker(
         bind=async_db_session.bind,

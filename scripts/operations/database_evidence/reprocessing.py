@@ -14,19 +14,30 @@ from .plan_capture import capture_and_explain_rolled_back_statement
 async def measure_reprocessing_job_claim(
     session: AsyncSession,
     *,
-    scenario: HotPathScenario,
-) -> HotPathPlanResult:
-    """Measure the exact RESET_WATERMARKS claim UPDATE without retaining it."""
+    normalization_scenario: HotPathScenario,
+    claim_scenario: HotPathScenario,
+) -> tuple[HotPathPlanResult, HotPathPlanResult]:
+    """Measure both RESET_WATERMARKS claim statements without retaining them."""
 
-    plan = await capture_and_explain_rolled_back_statement(
+    normalization_plan = await capture_and_explain_rolled_back_statement(
+        session,
+        lambda evidence_session: ReprocessingJobRepository(
+            evidence_session
+        ).normalize_pending_reset_watermarks_duplicates(),
+        statement_prefix="WITH",
+    )
+    claim_plan = await capture_and_explain_rolled_back_statement(
         session,
         lambda evidence_session: ReprocessingJobRepository(evidence_session).find_and_claim_jobs(
             "RESET_WATERMARKS",
-            batch_size=scenario.max_root_actual_rows,
+            batch_size=claim_scenario.max_root_actual_rows,
         ),
         statement_prefix="UPDATE",
     )
-    return evaluate_hot_path_plan(scenario, plan)
+    return (
+        evaluate_hot_path_plan(normalization_scenario, normalization_plan),
+        evaluate_hot_path_plan(claim_scenario, claim_plan),
+    )
 
 
 async def measure_reprocessing_stale_recovery(
