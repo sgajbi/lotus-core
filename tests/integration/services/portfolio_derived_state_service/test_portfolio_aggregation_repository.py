@@ -454,10 +454,10 @@ async def test_later_aggregation_recovery_chunk_failure_rolls_back_all_updates(
 
 
 @pytest.mark.lifecycle
-async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
+async def test_recovery_skips_row_locked_by_terminal_writer_transaction(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
-    """Skip a stale row while its worker completion owns the row lock."""
+    """Skip a stale row while a terminal writer transaction owns the row lock."""
 
     job_id = (
         (
@@ -478,11 +478,12 @@ async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
             .where(PortfolioAggregationJob.id == job_id)
             .values(status="COMPLETE", updated_at=datetime.now(UTC))
         )
-        recovery = await PortfolioAggregationRepository(
-            async_db_session
-        ).recover_expired_job_leases(
-            now=datetime.now(UTC),
-            max_attempts=3,
+        recovery = await asyncio.wait_for(
+            PortfolioAggregationRepository(async_db_session).recover_expired_job_leases(
+                now=datetime.now(UTC),
+                max_attempts=3,
+            ),
+            timeout=15,
         )
         await async_db_session.commit()
         completing_session.commit()
