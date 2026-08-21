@@ -17,11 +17,11 @@ from portfolio_common.database_models import (
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_control_plane_service.app.infrastructure import (
+    dpm_portfolio_state_sources,
+)
 from src.services.query_control_plane_service.app.infrastructure.dpm_reference_data_sources import (
     SqlAlchemyDpmReferenceDataReader,
-)
-from src.services.query_control_plane_service.app.infrastructure.dpm_portfolio_state_sources import (
-    SqlAlchemyDpmPortfolioStateReader,
 )
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.db_direct]
@@ -204,7 +204,9 @@ async def test_maximum_supported_eligibility_and_tax_lot_filters_remain_one_stat
     sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", capture_statement)
     try:
         reference_reader = SqlAlchemyDpmReferenceDataReader(async_db_session)
-        state_reader = SqlAlchemyDpmPortfolioStateReader(async_db_session)
+        state_reader = dpm_portfolio_state_sources.SqlAlchemyDpmPortfolioStateReader(
+            async_db_session
+        )
         eligibility = await reference_reader.list_instrument_eligibility_profiles(
             security_ids=list(reversed(security_ids)),
             as_of_date=as_of_date,
