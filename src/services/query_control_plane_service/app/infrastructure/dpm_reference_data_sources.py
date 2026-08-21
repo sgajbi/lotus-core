@@ -25,6 +25,7 @@ from portfolio_common.source_lifecycle_predicates import (
 from sqlalchemy import and_, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..contracts.model_portfolio_targets import MODEL_PORTFOLIO_TARGET_MAX_COUNT
 from ..domain.dpm_source_readiness import (
     DiscretionaryMandateBindingEvidence,
     FxRateEvidence,
@@ -33,6 +34,7 @@ from ..domain.dpm_source_readiness import (
     ModelPortfolioDefinitionEvidence,
     ModelPortfolioTargetEvidence,
 )
+from ..ports.dpm_source_readiness import ModelPortfolioTargetReadResult
 from .effective_profile_queries import effective_on, ranked_latest_ids
 
 
@@ -76,7 +78,7 @@ class SqlAlchemyDpmReferenceDataReader:
         model_portfolio_version: str,
         as_of_date: date,
         include_inactive_targets: bool,
-    ) -> list[ModelPortfolioTargetEvidence]:
+    ) -> ModelPortfolioTargetReadResult:
         predicates = [
             ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
             ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
@@ -108,9 +110,12 @@ class SqlAlchemyDpmReferenceDataReader:
             .join(ranked, ModelPortfolioTarget.id == ranked.c.id)
             .where(ranked.c.rn == 1)
             .order_by(ModelPortfolioTarget.instrument_id.asc())
+            .limit(MODEL_PORTFOLIO_TARGET_MAX_COUNT + 1)
         )
         rows = (await self._session.execute(statement)).scalars().all()
-        return [_model_target(row) for row in rows]
+        if len(rows) > MODEL_PORTFOLIO_TARGET_MAX_COUNT:
+            return ModelPortfolioTargetReadResult(records=(), limit_exceeded=True)
+        return ModelPortfolioTargetReadResult(records=tuple(_model_target(row) for row in rows))
 
     async def resolve_discretionary_mandate_binding(
         self,

@@ -273,3 +273,58 @@ async def test_model_expansion_over_capacity_fails_closed_before_universe_reads(
     eligibility.resolve.assert_not_awaited()
     tax_lots.resolve.assert_not_awaited()
     market_data.resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_source_owned_model_target_overflow_skips_composed_universe_reads() -> None:
+    mandates = SimpleNamespace(
+        resolve=AsyncMock(
+            return_value=SimpleNamespace(
+                mandate_id="MANDATE_1",
+                model_portfolio_id="MODEL_1",
+                latest_evidence_timestamp=EARLIER_EVIDENCE,
+                supportability=SimpleNamespace(
+                    state="READY",
+                    reason="MANDATE_BINDING_READY",
+                    missing_data_families=[],
+                ),
+            )
+        )
+    )
+    models = SimpleNamespace(
+        resolve=AsyncMock(
+            return_value=SimpleNamespace(
+                targets=[],
+                latest_evidence_timestamp=LATEST_EVIDENCE,
+                supportability=SimpleNamespace(
+                    state="UNAVAILABLE",
+                    reason="MODEL_TARGET_LIMIT_EXCEEDED",
+                    target_count=0,
+                ),
+            )
+        )
+    )
+    eligibility = SimpleNamespace(resolve=AsyncMock())
+    tax_lots = SimpleNamespace(resolve=AsyncMock())
+    market_data = SimpleNamespace(resolve=AsyncMock())
+
+    response = await readiness.DpmSourceReadinessService(
+        mandates=mandates,  # type: ignore[arg-type]
+        model_targets=models,  # type: ignore[arg-type]
+        eligibility=eligibility,  # type: ignore[arg-type]
+        tax_lots=tax_lots,  # type: ignore[arg-type]
+        market_data=market_data,  # type: ignore[arg-type]
+        clock=lambda: GENERATED_AT,
+    ).resolve(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+
+    assert response.evaluated_instrument_ids == []
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.families[1].reason == "MODEL_TARGET_LIMIT_EXCEEDED"
+    assert [family.reason for family in response.families[2:]] == [
+        "DPM_MODEL_TARGET_LIMIT_EXCEEDED",
+        "DPM_MODEL_TARGET_LIMIT_EXCEEDED",
+        "DPM_MODEL_TARGET_LIMIT_EXCEEDED",
+    ]
+    eligibility.resolve.assert_not_awaited()
+    tax_lots.resolve.assert_not_awaited()
+    market_data.resolve.assert_not_awaited()

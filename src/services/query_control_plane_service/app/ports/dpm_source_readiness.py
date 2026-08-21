@@ -1,5 +1,6 @@
 """Source-read ports for DPM readiness evidence."""
 
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, Protocol
 
@@ -14,6 +15,14 @@ from ..domain.dpm_source_readiness import (
 )
 
 DpmTaxLotPageKey = tuple[date, str]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelPortfolioTargetReadResult:
+    """Bounded effective-target evidence or an explicit source-overflow posture."""
+
+    records: tuple[ModelPortfolioTargetEvidence, ...]
+    limit_exceeded: bool = False
 
 
 class DpmReferenceDataReader(Protocol):
@@ -33,7 +42,7 @@ class DpmReferenceDataReader(Protocol):
         model_portfolio_version: str,
         as_of_date: date,
         include_inactive_targets: bool,
-    ) -> list[ModelPortfolioTargetEvidence]: ...
+    ) -> ModelPortfolioTargetReadResult: ...
 
     async def resolve_discretionary_mandate_binding(
         self,

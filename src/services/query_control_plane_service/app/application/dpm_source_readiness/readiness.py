@@ -37,7 +37,7 @@ from .discretionary_mandate_binding import DiscretionaryMandateBindingService
 from .instrument_eligibility import InstrumentEligibilityService
 from .market_data_coverage import MarketDataCoverageService
 from .metadata import dpm_source_runtime_metadata
-from .model_portfolio_targets import ModelPortfolioTargetService
+from .model_portfolio_targets import MODEL_TARGET_LIMIT_EXCEEDED, ModelPortfolioTargetService
 from .portfolio_tax_lots import PortfolioTaxLotService
 
 DpmSourceFamilyName = Literal["mandate", "model_targets", "eligibility", "tax_lots", "market_data"]
@@ -151,6 +151,23 @@ class DpmSourceReadinessService:
             if identity.model_portfolio_id is not None
             else None
         )
+        if model is not None and model.supportability.reason == MODEL_TARGET_LIMIT_EXCEEDED:
+            families = [
+                _mandate_family(mandate),
+                _model_target_family(identity.model_portfolio_id, model),
+                _model_target_limit_family("eligibility", "InstrumentEligibilityProfile"),
+                _model_target_limit_family("tax_lots", "PortfolioTaxLotWindow"),
+                _model_target_limit_family("market_data", "MarketDataCoverageWindow"),
+            ]
+            return build_dpm_source_readiness_response(
+                portfolio_id=portfolio_id,
+                request=request,
+                identity=identity,
+                evaluated_instrument_ids=[],
+                families=families,
+                source_responses=(mandate, model, None, None, None),
+                generated_at=self.clock(),
+            )
         evaluated_instrument_ids = sorted(
             {
                 *request.instrument_ids,
@@ -389,6 +406,18 @@ def _evaluated_instrument_limit_family(
         product_name,
         "DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED",
         ["evaluated_instrument_ids"],
+    )
+
+
+def _model_target_limit_family(
+    family: Literal["eligibility", "tax_lots", "market_data"],
+    product_name: str,
+) -> DpmSourceFamilyReadiness:
+    return _unavailable(
+        family,
+        product_name,
+        "DPM_MODEL_TARGET_LIMIT_EXCEEDED",
+        ["model_portfolio_targets"],
     )
 
 
