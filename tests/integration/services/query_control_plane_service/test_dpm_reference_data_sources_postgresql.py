@@ -232,7 +232,7 @@ async def test_maximum_supported_eligibility_and_tax_lot_filters_remain_one_stat
     assert len(statements) == 3
 
 
-async def test_model_target_source_overflow_is_detected_by_one_bounded_statement(
+async def test_model_target_source_threshold_and_overflow_are_bounded(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
@@ -251,7 +251,7 @@ async def test_model_target_source_overflow_is_detected_by_one_bounded_statement
                 source_record_id=f"target:{index:04d}",
                 quality_status="accepted",
             )
-            for index in range(1_001)
+            for index in range(1_000)
         ]
     )
     await async_db_session.commit()
@@ -267,9 +267,30 @@ async def test_model_target_source_overflow_is_detected_by_one_bounded_statement
 
     sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", capture_statement)
     try:
-        result = await SqlAlchemyDpmReferenceDataReader(
-            async_db_session
-        ).list_model_portfolio_targets(
+        reader = SqlAlchemyDpmReferenceDataReader(async_db_session)
+        supported = await reader.list_model_portfolio_targets(
+            model_portfolio_id="MODEL_DPM_CAPACITY",
+            model_portfolio_version="2026.04",
+            as_of_date=date(2026, 4, 10),
+            include_inactive_targets=False,
+        )
+        async_db_session.add(
+            ModelPortfolioTarget(
+                model_portfolio_id="MODEL_DPM_CAPACITY",
+                model_portfolio_version="2026.04",
+                instrument_id="MODEL_TARGET_1000",
+                target_weight=Decimal("0"),
+                min_weight=Decimal("0"),
+                max_weight=Decimal("1"),
+                target_status="active",
+                effective_from=date(2026, 1, 1),
+                source_system="capacity-test",
+                source_record_id="target:1000",
+                quality_status="accepted",
+            )
+        )
+        await async_db_session.commit()
+        overflow = await reader.list_model_portfolio_targets(
             model_portfolio_id="MODEL_DPM_CAPACITY",
             model_portfolio_version="2026.04",
             as_of_date=date(2026, 4, 10),
@@ -278,6 +299,10 @@ async def test_model_target_source_overflow_is_detected_by_one_bounded_statement
     finally:
         sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", capture_statement)
 
-    assert result.limit_exceeded is True
-    assert result.records == ()
-    assert len(statements) == 1
+    assert supported.limit_exceeded is False
+    assert len(supported.records) == 1_000
+    assert supported.records[0].instrument_id == "MODEL_TARGET_0000"
+    assert supported.records[-1].instrument_id == "MODEL_TARGET_0999"
+    assert overflow.limit_exceeded is True
+    assert overflow.records == ()
+    assert len(statements) == 2
