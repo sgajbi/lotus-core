@@ -4,6 +4,13 @@
 
 `lotus-core` is a maturity-wave producer in the Lotus enterprise data mesh.
 
+## Current scope and evidence
+
+This page summarizes implementation-backed Core source products and names pending evidence beside
+the affected capability. It does not certify every product as production-ready. DPM source
+cardinality limits described below are fixed locally under CR-1699; protected PR, exact-main, and
+wiki publication evidence remain pending until that delivery loop completes.
+
 ## Governed product
 
 - Product ID: `lotus-core:PortfolioStateSnapshot:v1`
@@ -158,6 +165,12 @@ Both public request collections are capped at 1,000 unique items and the source 
 shared PostgreSQL row/bind budget. DPM readiness applies the same caller limit; when model targets
 expand the evaluated universe above it, Core performs no eligibility, tax-lot, or market-data read
 and publishes `DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED` instead of truncating source authority.
+The standalone eligibility and tax-lot security filters are also capped at 1,000 unique identifiers;
+their adapters retain bind-safe direct/internal reads and deterministic response or page ordering.
+Model-target source evaluation reads at most 1,001 effective rows to detect overflow. Above the
+1,000-target source limit, Core publishes `MODEL_TARGET_LIMIT_EXCEEDED`, no target rows, and
+`DPM_MODEL_TARGET_LIMIT_EXCEEDED` for the skipped downstream families rather than truncating or
+attributing a source-owned overflow to the caller.
 It is not a valuation engine, FX attribution method, liquidity ladder, cash forecast,
 market-impact model, execution-quality assessment, best-execution certification, venue-routing
 model, or OMS acknowledgement.
