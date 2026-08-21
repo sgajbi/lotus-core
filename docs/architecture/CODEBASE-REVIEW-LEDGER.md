@@ -8,8 +8,13 @@ enforces contract-owned 1,000-item limits and ISO/duplicate validation, shared b
 deterministic price/FX reads, fail-closed pre-read evaluated-universe enforcement, and ordered
 locked 1,000-row aggregation cohorts with disjoint chunked failed/requeue updates in the caller
 transaction. Keep #972/#976/#503/#719/#714 in their existing ownership boundaries; #976 owns the
-model-target source read that precedes the composed ceiling. Protected PR,
-exact-main, wiki publication/parity, issue closure, and hygiene remain pending. Evidence:
+model-target source read that precedes the composed ceiling. PR #977 passed Remote Feature Lane
+`32448860218` and all 23 Pull Request Merge Gate jobs in `32449699217`, then merged by rebase as
+exact main `b9732c56415141b4184a11e18210a66145cf62ef`. Main Releasability `32452388447` passed all
+24 executable jobs at that exact SHA; two institutional jobs were expected skips and no job failed
+or was cancelled. Authored wiki publication `8f82f6a` has strict parity zero. Patch-equivalence
+preceded removal of the merged feature branch, and Core returned to one clean worktree on exact
+main. Issues #961 and #962 are QA-passed for completed closure. Evidence:
 [CR-1698-BOUNDED-DPM-AND-AGGREGATION-BATCHES.md](./codebase-reviews/CR-1698-BOUNDED-DPM-AND-AGGREGATION-BATCHES.md).
 
 Exact-main closure reconciliation (2026-08-21): Main Releasability run `32436643792` passed all
