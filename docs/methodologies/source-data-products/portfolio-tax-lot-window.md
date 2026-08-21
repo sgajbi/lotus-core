@@ -17,7 +17,7 @@ methodology.
 | --- | --- |
 | `portfolio_id` path parameter | Selects the portfolio whose tax-lot state is requested. |
 | `as_of_date` | Includes lots acquired on or before the as-of date. |
-| optional `security_ids` | Restricts evidence to requested securities and reports missing requested securities as supportability gaps. |
+| optional `security_ids` | Restricts evidence to at most 1,000 requested securities and reports missing requested securities as supportability gaps. |
 | optional `lot_status_filter=OPEN` | Returns lots with positive open quantity. |
 | optional `lot_status_filter=CLOSED` | Returns lots with zero or negative open quantity. |
 | `include_closed_lots=false` with no status filter | Returns open lots by default. |
@@ -131,14 +131,17 @@ adjustment, or optimal disposal sequence.
 3. Decode and validate the optional page token against the request-scope fingerprint.
 4. Build the source query over `position_lot_state` where `portfolio_id=P` and
    `acquisition_date <= A`.
-5. Apply `security_ids` when supplied.
+5. Apply `security_ids` when supplied. Public callers are limited to 1,000 unique identifiers;
+   direct/internal inputs are globally normalized and split through the shared row/bind budget.
 6. Apply lot status: `OPEN` filters to `open_quantity > 0`; `CLOSED` filters to
    `open_quantity <= 0`; omitted status with `include_closed_lots=false` returns open lots by
    default; omitted status with `include_closed_lots=true` returns both open and closed lots.
 7. Apply cursor continuation by `(acquisition_date, lot_id)` when a valid page token is supplied.
 8. Outer join `transactions` by `source_transaction_id` to obtain local currency when available.
-9. Sort by `acquisition_date` ascending, then `lot_id` ascending.
-10. Fetch `page_size + 1` rows to detect whether the page is partial.
+9. Sort each bounded result by `acquisition_date` ascending, then `lot_id` ascending; merge all
+   chunks in that same global order before applying the page limit.
+10. Fetch at most `page_size + 1` rows from each bounded chunk, then retain the global first
+    `page_size + 1` rows to detect whether the page is partial.
 11. Resolve distinct returned lot security ids against `instruments.security_id` and retain any
     missing ids as `supportability.missing_instrument_security_ids`.
 12. Map each returned lot into `PortfolioTaxLotRecord`, preserving source transaction and
@@ -154,6 +157,7 @@ written by transaction cost processing.
 | --- | --- |
 | Portfolio id does not exist | Service raises `LookupError`; the API maps it to HTTP `404`. |
 | Blank or duplicate `security_ids` | Request validation rejects the request. |
+| More than 1,000 `security_ids` | Request validation rejects the request with the standard validation response. |
 | Page token scope does not match the request | Service raises `ValueError`; the API maps it to HTTP `400`. |
 | More rows exist than the page size | Response carries supportability `DEGRADED` and reason `TAX_LOTS_PAGE_PARTIAL`. |
 | Requested securities have no matching lots in the complete page scope | Response carries supportability `INCOMPLETE` and reason `TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES`. |
@@ -171,6 +175,7 @@ tax-lot evidence availability only, not tax advice or tax optimization.
 | --- | --- |
 | Default page size | `250` tax lots |
 | Maximum page size | `1000` tax lots |
+| Maximum security filter | `1000` unique security identifiers |
 | Default status behavior | Open lots only |
 | Sort order | `acquisition_date:asc,lot_id:asc` |
 | Product identity | `PortfolioTaxLotWindow:v1` |

@@ -110,20 +110,24 @@ Overall state precedence is fail-closed:
 5. If `MP` is unavailable, append an `UNAVAILABLE` `MODEL_PORTFOLIO_ID_UNAVAILABLE` family row.
 6. If `MP` is available, resolve active model targets; append the source product state and target
    count, or append `MODEL_TARGETS_UNAVAILABLE` on lookup/validation failure.
-7. Build `I_eval` from request instruments and resolved target instruments.
-8. If model-target expansion makes `I_eval` exceed 1,000 instruments, perform none of the
+7. Resolve at most 1,001 effective target rows in deterministic instrument order. If the source has
+   more than the governed 1,000-target maximum, publish model targets as `UNAVAILABLE` with reason
+   `MODEL_TARGET_LIMIT_EXCEEDED`, publish no truncated target rows, perform none of the downstream
+   universe reads, and mark those families `DPM_MODEL_TARGET_LIMIT_EXCEEDED`.
+8. Build `I_eval` from request instruments and resolved target instruments.
+9. If model-target expansion makes `I_eval` exceed 1,000 instruments, perform none of the
    eligibility, tax-lot, or market-data reads; publish those three families as `UNAVAILABLE` with
    reason `DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED`, and publish no truncated evaluated universe.
-9. If `I_eval` is empty, append an `UNAVAILABLE` `DPM_INSTRUMENT_UNIVERSE_EMPTY` eligibility row.
-10. If `I_eval` is not empty, resolve instrument eligibility; append source supportability and
+10. If `I_eval` is empty, append an `UNAVAILABLE` `DPM_INSTRUMENT_UNIVERSE_EMPTY` eligibility row.
+11. If `I_eval` is not empty, resolve instrument eligibility; append source supportability and
    resolved count, or append `INSTRUMENT_ELIGIBILITY_UNAVAILABLE` on lookup/validation failure.
-11. Resolve portfolio tax lots for `P`, `A`, `T`, and `I_eval` when present; append source
-    supportability and returned lot count, or append `PORTFOLIO_TAX_LOTS_UNAVAILABLE` on
-    lookup/validation failure.
-12. Resolve market-data coverage for `I_eval`, `C`, `A`, `V`, `S`, and `T`; append source
-    supportability, missing items, stale items, and resolved observation count, or append
-    `MARKET_DATA_COVERAGE_UNAVAILABLE` on lookup/validation failure.
-13. Apply the fail-closed state precedence and return runtime source-data metadata.
+12. Resolve portfolio tax lots for `P`, `A`, `T`, and `I_eval` when present; append source
+   supportability and returned lot count, or append `PORTFOLIO_TAX_LOTS_UNAVAILABLE` on
+   lookup/validation failure.
+13. Resolve market-data coverage for `I_eval`, `C`, `A`, `V`, `S`, and `T`; append source
+   supportability, missing items, stale items, and resolved observation count, or append
+   `MARKET_DATA_COVERAGE_UNAVAILABLE` on lookup/validation failure.
+14. Apply the fail-closed state precedence and return runtime source-data metadata.
 
 ## Validation And Failure Behavior
 
@@ -132,6 +136,7 @@ Overall state precedence is fail-closed:
 | Mandate binding missing or invalid | `UNAVAILABLE` | `MANDATE_BINDING_UNAVAILABLE` | Overall `UNAVAILABLE`. |
 | Model portfolio cannot be resolved | `UNAVAILABLE` | `MODEL_PORTFOLIO_ID_UNAVAILABLE` | Overall `UNAVAILABLE`. |
 | Model targets missing or invalid | `UNAVAILABLE` | `MODEL_TARGETS_UNAVAILABLE` | Overall `UNAVAILABLE`. |
+| Model target source exceeds 1,000 effective rows | `UNAVAILABLE` | `MODEL_TARGET_LIMIT_EXCEEDED` | No targets or downstream universe reads are published; overall `UNAVAILABLE`. |
 | Model targets have non-`COMPLETE` source quality | `DEGRADED` | `MODEL_TARGET_QUALITY_NOT_COMPLETE` | Overall `DEGRADED` unless a stronger unavailable or incomplete condition exists. |
 | Evaluated instrument universe is empty | `UNAVAILABLE` | `DPM_INSTRUMENT_UNIVERSE_EMPTY` | Overall `UNAVAILABLE`. |
 | Eligibility source unavailable | `UNAVAILABLE` | `INSTRUMENT_ELIGIBILITY_UNAVAILABLE` | Overall `UNAVAILABLE`. |
@@ -145,8 +150,9 @@ Response `data_quality_status` is `COMPLETE` only when the overall supportabilit
 otherwise it is `PARTIAL`.
 
 Runtime evidence metadata is source-owned. Each constituent hashes stable response evidence with
-SHA-256 and publishes the same value as `content_hash`, `source_digest`, and
-`source_batch_fingerprint`; `generated_at` is excluded from that hash. Aggregate
+SHA-256 and publishes the same value as `content_hash` and `source_digest`; a
+`source_batch_fingerprint` is published only when persisted upstream batch authority exists, and
+`generated_at` is excluded from content identity. Aggregate
 `latest_evidence_timestamp` is the maximum durable constituent evidence timestamp. Aggregate
 `source_evidence_current=true` and `freshness_status=CURRENT` require all five families to be
 `READY` and at least one durable constituent evidence timestamp. Any non-ready family forces
