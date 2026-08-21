@@ -1,7 +1,7 @@
 # CR-1699 - Bounded DPM Source Cardinality
 
 Date: 2026-08-21
-Status: Merged to main; exact-main validation in progress
+Status: Merged and exact-main validated; issue closure reconciliation pending
 Issues: #972 and #976
 
 ## Finding
@@ -52,9 +52,12 @@ change.
   including Remote Feature Lane `32464430564` and Pull Request Merge Gate `32464451357`, then
   merged by rebase as exact main `21a2c59183ffd74bcfa2467415de807e374ddaf0`.
 - Authored wiki publication `1f858768f598e2ae7225c365b0227c13cd88645f` includes the DPM
-  source-cardinality truth and strict parity is zero. Main Releasability run `32467907834` is
-  validating the exact merge SHA; issue-loop closure remains gated on its terminal result and this
-  reconciliation reaching validated main.
+  source-cardinality truth and strict parity is zero.
+- Main Releasability run `32467907834` completed successfully at exact merge SHA
+  `21a2c59183ffd74bcfa2467415de807e374ddaf0`. Cumulative Main Releasability
+  `32480746388` also passed at `80be01753f86b1c6774d856f6d32efe5182056ee` after the
+  subsequent CI and reconciliation changes. Issue-loop closure remains gated only on this durable
+  reconciliation reaching validated main and final branch/worktree hygiene.
 
 ## Same-Pattern And Governance Decision
 

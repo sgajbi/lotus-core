@@ -25,8 +25,9 @@ when `pip-audit` reported `PYSEC-2026-3721` against governed `pip==26.1.2`. Core
 `pip==26.2.1` installer and compatible `pip-tools==7.6.1` compiler, regenerates Linux/Windows
 CI-tooling closures and truthful shared-runtime provenance, and refreshes the dependency technology
 inventory without overstating its deliberately blocked certification posture. This is CI/build/test
-tooling only; application/runtime dependencies and product contracts are unchanged. Status: fixed
-locally; protected PR, exact-main validation, issue closure, and branch cleanup remain pending.
+tooling only; application/runtime dependencies and product contracts are unchanged. PR #981 merged
+as exact main `80be01753f`; Main Releasability `32480746388` passed at that exact SHA. Status:
+merged and exact-main validated; durable issue closure reconciliation remains pending.
 Evidence: [CR-1702-GOVERNED-PIP-VULNERABILITY-REMEDIATION.md](./codebase-reviews/CR-1702-GOVERNED-PIP-VULNERABILITY-REMEDIATION.md).
 
 CR-1701 set-based reconciliation FX evidence (2026-08-21): timeseries integrity reconciliation
@@ -35,8 +36,9 @@ with distinct currency-pair/date keys. The application now collects one normaliz
 the repository resolves it through a deterministic PostgreSQL `VALUES` plus lateral latest-rate
 query and uses the shared 1,000-row/32,000-bind authority for defensive oversized inputs. Existing
 point-in-time selection, missing/non-positive posture, formulas, findings, and public contracts are
-unchanged. #503 retains the separate per-scope reconciliation-read boundary. Status: fixed locally;
-protected PR, exact-main validation, issue closure, and branch cleanup remain pending. Evidence:
+unchanged. #503 retains the separate per-scope reconciliation-read boundary. PR #981 merged as exact
+main `80be01753f`; Main Releasability `32480746388` passed at that exact SHA. Status: merged and
+exact-main validated; durable issue closure reconciliation remains pending. Evidence:
 [CR-1701-SET-BASED-RECONCILIATION-FX-EVIDENCE.md](./codebase-reviews/CR-1701-SET-BASED-RECONCILIATION-FX-EVIDENCE.md).
 
 CR-1700 automerge label event isolation (2026-08-21): adding the governed `automerge` label at an
@@ -46,7 +48,9 @@ routes only opened, synchronize, reopened, and ready-for-review code/lifecycle e
 alone retains the metadata-only labeled event. Exact parsed-workflow tests preserve new-head
 synchronize invalidation while rejecting label-triggered full-gate churn. Required checks,
 thresholds, rebase policy, and exact-main validation are unchanged; broader event/artifact reuse
-remains under #749. Evidence:
+remains under #749. PR #980 merged as `d75da061c`; its final protected runs passed at
+`faff89eb6`, and cumulative Main Releasability `32480746388` passed at exact main `80be01753f`.
+Current wiki publication/parity and durable issue closure reconciliation remain pending. Evidence:
 [CR-1700-AUTOMERGE-LABEL-EVENT-ISOLATION.md](./codebase-reviews/CR-1700-AUTOMERGE-LABEL-EVENT-ISOLATION.md).
 
 CR-1699 bounded DPM source cardinality (2026-08-21): standalone eligibility and tax-lot filters
@@ -58,9 +62,9 @@ publishes no truncated targets and skips downstream universe reads with source-o
 Supported contracts, paging, lineage, and calculations remain compatible. PR #979 passed all 45
 checks at exact head `e657dac02`, including Remote Feature Lane `32464430564` and Pull Request
 Merge Gate `32464451357`, then merged by rebase as exact main `21a2c59183`. Authored wiki
-publication `1f85876` has strict parity zero. Main Releasability `32467907834` is validating that
-exact merge SHA; issue closure and implementation-branch cleanup remain gated on terminal mainline
-evidence and this reconciliation reaching validated main.
+publication `1f85876` has strict parity zero. Main Releasability `32467907834` passed at that exact
+merge SHA, and cumulative run `32480746388` passed at exact main `80be01753f`. Status: merged and
+exact-main validated; durable issue closure reconciliation remains pending.
 Evidence: [CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md](./codebase-reviews/CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md).
 
 CR-1698 bounded DPM market-data and aggregation recovery batches (2026-08-21): DPM

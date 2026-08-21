@@ -1,7 +1,7 @@
 # CR-1701 - Set-Based Reconciliation FX Evidence
 
 Date: 2026-08-21
-Status: Fixed locally; protected PR, exact-main validation, and issue closure pending
+Status: Merged and exact-main validated; issue closure reconciliation pending
 Issue: #504
 
 ## Finding
@@ -46,6 +46,10 @@ instead of independent financial verification.
   pack pass (`118 passed`). The complete protected manifest passes (`87 passed`).
 - Full MyPy passes across 318 source files; repository-wide lint, strict architecture, focused
   Ruff, and diff hygiene pass.
+- PR #981 passed its protected checks at exact head
+  `b5d676fd477cddf8d86cbbce213fb26b4a6dfde3`, then merged by rebase as exact main
+  `80be01753f86b1c6774d856f6d32efe5182056ee`. Main Releasability `32480746388`
+  completed successfully at that exact SHA with zero failed or cancelled jobs.
 
 ## Compatibility And Scope
 
@@ -56,6 +60,9 @@ separately governed CI-only installer remediation recorded in CR-1702; it does n
 dependency closure. The existing Financial Reconciliation wiki already describes the
 operator-visible control and no command, response, or operating procedure changed, so no wiki
 source change is required.
+
+The implementation branch was patch-equivalent to main before removal. Issue-loop closure remains
+gated on this durable evidence reaching validated main and final repository hygiene.
 
 The same-pattern scan found that timeseries integrity still loads authoritative rows and snapshot
 counts per reconciliation scope key. That broader high-cardinality reconciliation read boundary is
