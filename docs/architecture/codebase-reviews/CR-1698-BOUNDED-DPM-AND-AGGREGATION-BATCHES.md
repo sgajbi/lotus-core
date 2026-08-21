@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 Issues: #961, #962
-Status: Fixed locally; protected PR, exact-main, and wiki publication evidence pending
+Status: Merged and exact-main validated
 
 ## Finding
 
@@ -44,8 +44,17 @@ otherwise valid readiness request exceed the leaf market-data contract after man
   in 67.98 seconds.
 - `make test-unit-db` passes 18 tests in 100.70 seconds. Repository-native lint, type, architecture,
   OpenAPI, API vocabulary, wiki-source, and documentation-evidence gates pass. Independent review
-  signed off exact `5edaa7c3925e8df658fbdb43592eaf9ac356d04e` with no blocker. Protected PR,
-  exact-main, and wiki publication evidence remain pending.
+  signed off exact `5edaa7c3925e8df658fbdb43592eaf9ac356d04e` with no blocker.
+- PR #977 passed Remote Feature Lane `32448860218` and all 23 Pull Request Merge Gate jobs in
+  `32449699217`, then merged by rebase as exact main
+  `b9732c56415141b4184a11e18210a66145cf62ef`.
+- Main Releasability run `32452388447` passed at that exact main SHA: 24 executable jobs passed,
+  the two institutional jobs were expected policy skips, and no job failed or was cancelled.
+  Integration Full, combined coverage, exact-source images, Docker smoke, full E2E, fast/full
+  performance, latency, and failure recovery all passed.
+- Authored wiki publication `8f82f6a` includes the DPM and aggregation updates and strict parity is
+  zero. The merged feature branch was tree-equivalent to main before local/remote deletion; Core
+  returned to one clean worktree on exact main.
 
 ## Compatibility and Boundaries
 
