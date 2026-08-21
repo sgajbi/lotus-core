@@ -1,16 +1,26 @@
 services:
   kafka:
-    # Validation-only fault injection: force the former ten-probe budget to expire, then execute
-    # the unchanged real broker probe. The base Compose file remains the authority for retries.
+    # Validation-only fault injection: first observe real readiness within one bounded probe, then
+    # report ten successful real probes as failures. The base file remains retry-count authority.
     healthcheck:
       test:
         - CMD-SHELL
         - >-
+          if [ ! -f /tmp/lotus-kafka-readiness-waited ]; then
+            touch /tmp/lotus-kafka-readiness-waited;
+            remaining=45;
+            until kafka-topics --bootstrap-server kafka:9093 --list >/dev/null 2>&1; do
+              remaining=$$((remaining - 1));
+              if [ "$$remaining" -le 0 ]; then exit 1; fi;
+              sleep 1;
+            done;
+          fi;
+          kafka-topics --bootstrap-server kafka:9093 --list >/dev/null 2>&1 || exit 1;
           attempt=$$(cat /tmp/lotus-kafka-health-attempt 2>/dev/null || echo 0);
           attempt=$$((attempt + 1));
           echo "$$attempt" > /tmp/lotus-kafka-health-attempt;
           if [ "$$attempt" -le 10 ]; then exit 1; fi;
-          kafka-topics --bootstrap-server kafka:9093 --list || exit 1
-      interval: 5s
-      timeout: 5s
+          exit 0
+      interval: 1s
+      timeout: 50s
       start_period: 0s
