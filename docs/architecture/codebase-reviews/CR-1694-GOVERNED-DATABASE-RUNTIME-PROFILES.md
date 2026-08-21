@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 Issue: #502
-Status: fixed locally; protected PR and exact-main proof pending
+Status: merged and exact-main validated
 
 ## Finding
 
@@ -73,8 +73,12 @@ Releasability run `32376957044` passed every database-profile, static, contract,
 and completed test lane. Its sole failure was the unrelated 1,000-member corporate-action test's
 host-speed assertion after all members completed correctly in 130.703 seconds. #963 owns the
 replacement deterministic-work gate on the next branch. Final exact-main green certification is
-therefore pending that fix-forward merge; the failed wall-clock assertion is not presented as a
-#502 runtime-profile defect or as passing mainline evidence.
+provided by Main Releasability run `32436643792` at exact main
+`577dba8ea08182355a262004937dd693fe46ac04`, after PR #965 merged the deterministic-work oracle at
+`5aeb6b5e11bfeb7ed81670e0e38f5a09d642f472`. The run passed all executable database, contract,
+integration, image, performance, latency, and recovery jobs. Current authored wiki publication is
+`9fa7545271bd490a6ac55aa6023f5a150b8e6229` with strict parity zero. The earlier failed wall-clock
+assertion remains correctly classified as unrelated to #502 and is not reused as passing evidence.
 
 ## Compatibility
 

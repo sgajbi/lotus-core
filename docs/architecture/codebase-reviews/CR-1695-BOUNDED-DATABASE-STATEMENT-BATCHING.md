@@ -1,5 +1,7 @@
 # CR-1695 Bounded Database Statement Batching
 
+Status: merged and exact-main validated
+
 ## Objective
 
 Close GitHub issue #511 by ensuring that caller-sized valuation and reprocessing collections never
@@ -87,5 +89,12 @@ This review does not claim repository-wide elimination of every tuple predicate.
   transactions, and a 10,000-row/ten-statement cohort;
 - existing PostgreSQL semantics tests continue to cover epoch fencing, earliest watermark, first
   open date, contiguous snapshots, and dispatch recovery; and
-- PR, exact-main, wiki-publication, and closure evidence will remain on GitHub issue #511 rather
-  than being copied into this decision after merge.
+- PR #964 merged by governed rebase at exact main
+  `5b51f6e1387e2881c0c25a1d48040aa519b8f5a1`; companion PR #965 corrected the deterministic
+  readiness-query oracle at `5aeb6b5e11bfeb7ed81670e0e38f5a09d642f472`.
+- Main Releasability run `32436643792` passed at exact main
+  `577dba8ea08182355a262004937dd693fe46ac04`, including combined coverage, complete integration,
+  exact-source images, full E2E, performance, latency, and failure recovery.
+- The authored Operations wiki is published through
+  `9fa7545271bd490a6ac55aa6023f5a150b8e6229` with strict parity zero. Branch/worktree reconciliation
+  left one clean Core worktree on `main` and no merged feature branch.
