@@ -3999,6 +3999,19 @@ Most relevant current governance:
      repair endpoint-authority failures with broad Docker cleanup, broker metadata deletion, or
      relaxed retry assertions.
 
+246. Latest position, position-history, and valuation-snapshot reads on PostgreSQL must use
+     deterministic latest-row selection over normalized portfolio/security identity, current
+     `PositionState` epoch where applicable, business date, and stable row id. Prefer PostgreSQL
+     `DISTINCT ON` with matching order to broad `row_number()` ranking when only one latest row per
+     identity is required. When a reader derives open/closed posture from history, apply the
+     open/non-zero quantity predicate after latest-history selection so an older open row cannot
+     resurrect a later closed position. Fence current reads to the registered epoch before
+     selection so a stale epoch cannot hide current authority. Preserve
+     executable SQL-shape and real-PostgreSQL `EXPLAIN` evidence that rejects sequential scans and
+     `WindowAgg`, but do not force or claim a particular covering index when the optimizer selects
+     another indexed plan. Add materialized latest state only when measured plans prove existing
+     normalized indexes inadequate.
+
 ## Context Maintenance Rule
 
 Update this document when:
