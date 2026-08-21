@@ -3,9 +3,8 @@
 CR-1705 bounded Kafka startup recovery (2026-08-22): canonical dependency-gated Core startup could
 exhaust Kafka's former ten health probes immediately before the broker became healthy. Core keeps
 the unchanged real broker probe and bounded restart policy while adding two measured health-probe
-attempts. The repository recovery gate first observes real readiness, then reports ten successful
-probes as failures and exercises the
-actual topic-creator `service_healthy` dependency, and requires topic provisioning, clean restart,
+attempts. The repository recovery gate exercises the actual topic-creator `service_healthy`
+dependency after an interrupted session and requires topic provisioning, clean restart,
 and dependent-service evidence. Persistent failure remains fail-closed and destructive recovery is
 still prohibited by default. No API, schema, event, calculation, dependency, image, promoted
 security, or topology contract changes. Status: fixed locally; protected PR, exact-main, canonical
