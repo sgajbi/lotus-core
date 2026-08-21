@@ -21,8 +21,11 @@ That work grew with retained history rather than the requested current portfolio
    latest-history selection, so an older open row cannot resurrect a later closed position.
 3. The valuation repository applies the same shape to open-position, price-revaluation, and
    security-on-date readers. Inputs and final results remain globally deterministic.
-4. Existing normalized portfolio/security/date/id indexes remain the storage authority. No new
-   table, materialized current-state projection, migration, or dependency was needed.
+4. Existing normalized portfolio/security/date/id indexes remain the storage authority. An
+   additive, idempotent data migration restores missing `PositionState` rows for evidence created
+   before epoch control existed. It derives the latest persisted epoch from history and snapshots,
+   preserves every existing live state row, and starts repaired keys in `REPROCESSING` from the
+   day before their earliest evidence instead of fabricating a completed watermark.
 5. PostgreSQL plan tests invoke the real Query Service latest-position and valuation-reprocessing
    repository methods, capture the exact SQL sent to PostgreSQL, and explain those complete query
    shapes. They reject `WindowAgg` and sequential scans, verify the governed covering indexes
@@ -32,9 +35,11 @@ That work grew with retained history rather than the requested current portfolio
 ## Compatibility
 
 Method signatures, public API/OpenAPI contracts, response order, current-epoch behavior,
-as-of-date selection, quantity semantics, and valuation calculations are unchanged. There is no
-schema/migration, event, Kafka, dependency, image, datastore, or topology change. The change is an
-internal PostgreSQL query-shape improvement.
+as-of-date selection, quantity semantics, and valuation calculations are unchanged. The additive
+data migration changes no table shape and is intentionally irreversible because a repaired row may
+be advanced by a live processor after upgrade. Existing state is never overwritten. There is no
+schema-DDL, event, Kafka, dependency, image, datastore, or topology change. The runtime change
+remains an internal PostgreSQL query-shape improvement.
 
 ## Validation Evidence
 
@@ -49,6 +54,11 @@ internal PostgreSQL query-shape improvement.
   and security/date reprocessing statements, including current-epoch, instrument, reconciliation,
   quantity, and outer-join predicates. Both plans used indexed access and contained neither
   `Seq Scan` nor `WindowAgg`; the normalized covering indexes were present and valid.
+- The legacy-state migration contract proves both history and snapshot evidence sources, latest
+  epoch selection, conservative watermark derivation, normalized-key idempotency, preservation of
+  existing state, and irreversible downgrade posture. Real PostgreSQL proof runs the migration
+  twice, preserves a live epoch-3 state, and verifies that a formerly unregistered epoch-0 snapshot
+  remains visible through the production open-position reader.
 - The protected critical-database suite passed all 85 tests in 340.78 seconds.
 - Ruff check and formatting, MyPy across 318 source files, architecture/security/governance gates,
   documentation evidence, wiki/docs validation, and diff hygiene passed locally. Protected PR
@@ -59,6 +69,8 @@ internal PostgreSQL query-shape improvement.
 The same-pattern scope includes the adjacent valuation/reprocessing readers in the two modified
 repository owners. Broad reconciliation streaming remains under #503 and transaction economics
 under #719. Measured indexed plans do not justify a materialized latest-state table in this slice.
+Any future query that newly requires control-state authority for facts predating that authority must
+ship upgrade-path backfill proof in the same change; current-data fixtures alone are insufficient.
 No wiki change is required because no public contract, operator command, recovery procedure, or
 runtime configuration changed. No central skill or platform context change is needed; this
 repository-local rule makes the existing bounded-query and current-epoch governance precise.
