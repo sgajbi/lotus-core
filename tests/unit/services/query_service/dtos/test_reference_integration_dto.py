@@ -27,6 +27,7 @@ from src.services.query_control_plane_service.app.contracts.index_series import 
     IndexReturnSeriesResponse,
 )
 from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
+    INSTRUMENT_ELIGIBILITY_MAX_SECURITY_COUNT,
     InstrumentEligibilityBulkRequest,
 )
 from src.services.query_control_plane_service.app.contracts.instrument_enrichment import (
@@ -39,6 +40,7 @@ from src.services.query_control_plane_service.app.contracts.market_data_coverage
     MarketDataCurrencyPair,
 )
 from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
+    PORTFOLIO_TAX_LOT_MAX_SECURITY_COUNT,
     PortfolioTaxLotWindowRequest,
 )
 
@@ -168,6 +170,40 @@ def test_dpm_source_readiness_request_normalizes_valuation_currency() -> None:
 
     assert request.instrument_ids == ["EQ_US_AAPL"]
     assert request.valuation_currency == "USD"
+
+
+@pytest.mark.parametrize(
+    ("request_model", "limit"),
+    [
+        (InstrumentEligibilityBulkRequest, INSTRUMENT_ELIGIBILITY_MAX_SECURITY_COUNT),
+        (PortfolioTaxLotWindowRequest, PORTFOLIO_TAX_LOT_MAX_SECURITY_COUNT),
+    ],
+)
+def test_standalone_dpm_security_filters_publish_and_enforce_capacity(
+    request_model,
+    limit: int,
+) -> None:
+    schema = request_model.model_json_schema()
+    security_ids_schema = schema["properties"]["security_ids"]
+    array_schema = next(
+        (
+            candidate
+            for candidate in security_ids_schema.get("anyOf", [])
+            if candidate.get("type") == "array"
+        ),
+        security_ids_schema,
+    )
+    assert array_schema["maxItems"] == limit
+    request_model(
+        as_of_date=date(2026, 5, 3),
+        security_ids=[f"SEC_{index:04d}" for index in range(limit)],
+    )
+
+    with pytest.raises(ValidationError, match="at most 1000 items"):
+        request_model(
+            as_of_date=date(2026, 5, 3),
+            security_ids=[f"SEC_{index:04d}" for index in range(limit + 1)],
+        )
 
 
 @pytest.mark.parametrize("request_model", [MarketDataCoverageRequest, DpmSourceReadinessRequest])

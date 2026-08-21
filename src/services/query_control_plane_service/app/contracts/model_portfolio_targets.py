@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .common import SourceObservationEvidence
 
+MODEL_PORTFOLIO_TARGET_MAX_COUNT = 1_000
+
 
 class ModelPortfolioTargetRequest(BaseModel):
     as_of_date: date = Field(

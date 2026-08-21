@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .common import SourceObservationEvidence
 
+INSTRUMENT_ELIGIBILITY_MAX_SECURITY_COUNT = 1_000
+
 
 def _normalize_instrument_eligibility_security_ids(security_ids: list[str]) -> list[str]:
     normalized = [security_id.strip() for security_id in security_ids]
@@ -34,9 +36,11 @@ class InstrumentEligibilityBulkRequest(BaseModel):
         ...,
         description=(
             "Canonical security identifiers to resolve in one deterministic batch. Request order "
-            "is preserved and unknown securities are returned explicitly."
+            "is preserved, unknown securities are returned explicitly, and at most 1,000 "
+            "identifiers are accepted."
         ),
         min_length=1,
+        max_length=INSTRUMENT_ELIGIBILITY_MAX_SECURITY_COUNT,
         examples=[["AAPL", "MSFT", "PRIVCREDIT-A"]],
     )
     tenant_id: str | None = Field(
