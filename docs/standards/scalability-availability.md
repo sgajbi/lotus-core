@@ -22,7 +22,8 @@ This repository adopts the platform-wide standard defined in lotus-platform/Scal
 - Run `make database-hot-path-evidence` for the governed representative PostgreSQL plan set. The
   command requires clean exact source, emits a source-safe artifact under
   `output/database-hot-path-evidence/`, and is report-only: scenario failures must be routed to
-  their owning issues, while missing, malformed, unsafe, or mixed-source evidence fails closed.
+  their owning issues, while missing, malformed, contradictory, unsafe, or mixed-source evidence
+  fails closed. Rows-examined budgets include both emitted and executor-discarded rows across loops.
 - Index strategy is mandatory for high-volume transaction, valuation, and time-series access patterns.
 - Data growth assumptions are maintained per domain table and reviewed before capacity changes.
 - Retention and archival policies are defined for high-volume historical and supportability data.
