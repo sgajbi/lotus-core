@@ -19,6 +19,25 @@ def _session_returning_rows(*rows: object) -> MagicMock:
     return session
 
 
+def _lot(*, security_id: str, lot_id: str, acquisition_date: date) -> SimpleNamespace:
+    return SimpleNamespace(
+        portfolio_id="PB_1",
+        security_id=security_id,
+        instrument_id=security_id,
+        lot_id=lot_id,
+        open_quantity="1.0000000000",
+        original_quantity="1.0000000000",
+        acquisition_date=acquisition_date,
+        lot_cost_base="100.0000000000",
+        lot_cost_local="100.0000000000",
+        source_transaction_id=f"TX_{lot_id}",
+        source_system="position_lot_state",
+        calculation_policy_id="average_cost",
+        calculation_policy_version="v1",
+        updated_at=datetime(2026, 4, 10, tzinfo=UTC),
+    )
+
+
 @pytest.mark.asyncio
 async def test_tax_lot_read_is_bounded_ordered_and_keyset_paginated() -> None:
     lot = SimpleNamespace(
@@ -98,3 +117,49 @@ async def test_empty_normalized_security_filter_avoids_database_query() -> None:
 
     assert records == []
     session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_tax_lot_read_chunks_internal_filter_and_applies_global_page_order() -> None:
+    later = _lot(security_id="SEC_1000", lot_id="LOT_1000", acquisition_date=date(2026, 4, 2))
+    earlier = _lot(security_id="SEC_0000", lot_id="LOT_0000", acquisition_date=date(2026, 4, 1))
+    first_result = MagicMock()
+    first_result.all.return_value = [(later, "USD")]
+    second_result = MagicMock()
+    second_result.all.return_value = [(earlier, "USD")]
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[first_result, second_result])
+
+    records = await dpm_portfolio_state_sources.SqlAlchemyDpmPortfolioStateReader(
+        session
+    ).list_portfolio_tax_lots(
+        portfolio_id="PB_1",
+        as_of_date=date(2026, 4, 10),
+        security_ids=[f"SEC_{index:04d}" for index in reversed(range(1_001))],
+        include_closed_lots=False,
+        lot_status_filter=None,
+        after_sort_key=None,
+        limit=1,
+    )
+
+    assert [record.lot_id for record in records] == ["LOT_0000"]
+    assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_instrument_reference_read_chunks_oversized_internal_filter() -> None:
+    first_result = MagicMock()
+    first_result.scalars.return_value.all.return_value = ["SEC_0000"]
+    second_result = MagicMock()
+    second_result.scalars.return_value.all.return_value = ["SEC_1000"]
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[first_result, second_result])
+
+    known = await dpm_portfolio_state_sources.SqlAlchemyDpmPortfolioStateReader(
+        session
+    ).list_known_instrument_security_ids(
+        [f"SEC_{index:04d}" for index in reversed(range(1_001))]
+    )
+
+    assert known == {"SEC_0000", "SEC_1000"}
+    assert session.execute.await_count == 2
