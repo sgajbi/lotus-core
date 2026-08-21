@@ -43,6 +43,12 @@ authority remains separate under #990.
   `ingestion_service=healthy`. Canonical Workbench startup, protected PR, exact-main, wiki
   publication, strict parity, issue closure, and branch/worktree hygiene remain pending at this
   fixed-local checkpoint.
+- Focused runtime/Compose tests passed `10`; `docker compose config --quiet`, full `make lint`,
+  `make typecheck` (`318` source files), `make quality-wiki-docs-gate`, and
+  `make docs-evidence-pack` passed. The repo-native wiki guard passed. The central pre-merge wiki
+  helper inspected the clean primary-main checkout rather than this separate worktree, so its
+  expected unpublished `Operations-Runbook.md` drift must be rechecked from the PR branch or by the
+  protected wiki source gate before merge.
 
 ## Documentation decision
 
