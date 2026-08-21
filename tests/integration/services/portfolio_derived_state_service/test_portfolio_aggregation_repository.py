@@ -457,7 +457,7 @@ async def test_later_aggregation_recovery_chunk_failure_rolls_back_all_updates(
 async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
-    """Do not overwrite a terminal state won by a concurrent worker."""
+    """Skip a stale row while its worker completion owns the row lock."""
 
     job_id = (
         (
@@ -470,30 +470,22 @@ async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
         .scalars()
         .one()
     )
-
-    repo = PortfolioAggregationRepository(async_db_session)
-    original_execute = async_db_session.execute
-    execute_count = 0
-
-    async def execute_with_concurrent_completion(*args, **kwargs):
-        nonlocal execute_count
-        execute_count += 1
-        if execute_count == 2:
-            with Session(db_engine) as session:
-                session.execute(
-                    update(PortfolioAggregationJob)
-                    .where(PortfolioAggregationJob.id == job_id)
-                    .values(status="COMPLETE", updated_at=datetime.now(UTC))
-                )
-                session.commit()
-        return await original_execute(*args, **kwargs)
-
-    async_db_session.execute = execute_with_concurrent_completion
-    recovery = await repo.recover_expired_job_leases(
-        now=datetime.now(UTC),
-        max_attempts=3,
-    )
     await async_db_session.commit()
+
+    with Session(db_engine) as completing_session:
+        completing_session.execute(
+            update(PortfolioAggregationJob)
+            .where(PortfolioAggregationJob.id == job_id)
+            .values(status="COMPLETE", updated_at=datetime.now(UTC))
+        )
+        recovery = await PortfolioAggregationRepository(
+            async_db_session
+        ).recover_expired_job_leases(
+            now=datetime.now(UTC),
+            max_attempts=3,
+        )
+        await async_db_session.commit()
+        completing_session.commit()
 
     assert recovery.requeued_count == 0
     assert recovery.failed_count == 0
