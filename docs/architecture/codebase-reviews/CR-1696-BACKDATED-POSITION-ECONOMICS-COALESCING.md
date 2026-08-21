@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 Issue: #486
-Status: PR #971 validation in progress; exact-main proof pending
+Status: merged and exact-main validated
 
 ## Objective
 
@@ -116,7 +116,16 @@ statement cardinality remain unchanged.
   disposition-source failure, and negative disposed-basis paths fail closed without lot or
   calculated-cost side effects; the focused warning-strict calculator suite passes `110` tests
   and covers `134/158` branches (`84.81%`) before the additional combined-suite coverage is added.
-- PR #971 protected lanes and exact-main Main Releasability remain pending.
+- PR #971 merged by governed rebase at exact main
+  `47511d8df4e819d5229e6d518e54145205cb972c`. Its exact feature lanes were green; the first
+  exact-main run then exposed the independent Kafka bootstrap-authority defect tracked by #973.
+  PR #974 fixed that CI runtime boundary without changing transaction behavior. Main Releasability
+  run `32436643792` subsequently passed all executable jobs at exact main
+  `577dba8ea08182355a262004937dd693fe46ac04`, including the complete transaction-processing,
+  Integration Full, E2E, coverage, performance, and failure-recovery gates.
+- The Position Calculator wiki is published through
+  `9fa7545271bd490a6ac55aa6023f5a150b8e6229` with strict parity zero, and merged feature branches
+  and worktrees were reconciled safely after patch-equivalence proof.
 
 ## Documentation Decision
 
