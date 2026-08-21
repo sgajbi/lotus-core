@@ -77,7 +77,7 @@ sequential-scan or `WindowAgg` prohibition.
 - Focused rollback-boundary regression: valuation claim and valuation stale recovery both passed
   against PostgreSQL; the final clean command repeated both proofs in the complete family set.
 - Scoped Ruff, formatting, MyPy, and diff hygiene passed.
-- PR #986 merged the twelve signed implementation commits by rebase as exact main
+- PR #986 contained twelve signed implementation commits and was rebase-merged as exact main
   `b14bdbab0912d79f3889386190701e85399b86fe`.
 - Remote Feature Lane `32519169401` passed at exact PR head `04d7b6753`; Pull Request Merge Gate
   `32519174610` passed all 23 jobs with zero failures or cancellations.

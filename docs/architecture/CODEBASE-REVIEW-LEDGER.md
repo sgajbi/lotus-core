@@ -10,8 +10,8 @@ local evidence at signed `e6190f904` produced eight passing scenarios and four t
 findings: transaction ledger page scan routed to #506, valuation-job claim scan routed to #985,
 valuation stale-selection scan routed to #987, and reprocessing claim-normalization window scan
 routed to new deduplicated #988. Runtime SQL,
-APIs, schema, events, calculations, and deployment are unchanged. PR #986 merged the twelve signed
-commits by rebase as exact main `b14bdbab0912d79f3889386190701e85399b86fe`; Remote Feature Lane
+APIs, schema, events, calculations, and deployment are unchanged. PR #986 contained twelve signed
+commits and was rebase-merged as exact main `b14bdbab0912d79f3889386190701e85399b86fe`; Remote Feature Lane
 `32519169401` and the 23-job Pull Request Merge Gate `32519174610` passed at exact PR head
 `04d7b6753`. Main Releasability `32522648711` then passed at exact main with 24 successful jobs,
 two intentional institutional skips, and zero failures or cancellations. Authored Operations
