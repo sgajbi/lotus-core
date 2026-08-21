@@ -39,8 +39,8 @@ change.
 
 - 68 focused QCP contract, adapter, and application tests passed.
 - Two focused OpenAPI schema tests passed and publish both new request limits.
-- The exact-limit eligibility/tax-lot/instrument-reference PostgreSQL proof passed in 78.72 seconds;
-  the complete final PostgreSQL capacity file remains pending after this evidence commit.
+- The complete real-PostgreSQL source-capacity file passed: 3 tests in 66.37 seconds, covering
+  exact-limit eligibility/tax-lot/instrument-reference reads and model-target ceiling overflow.
 - `make typecheck` passed with no issues across 318 source files.
 - Ruff, format, diff hygiene, repository-native gates, wiki premerge check, protected PR, exact-main,
   wiki publication/parity, and issue-loop closure remain pending and must be reconciled here before
