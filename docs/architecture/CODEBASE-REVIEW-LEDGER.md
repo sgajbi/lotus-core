@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1699 bounded DPM source cardinality (2026-08-21): standalone eligibility and tax-lot filters
+accepted caller-sized collections, and model-target readiness materialized the full effective source
+before the composed ceiling could fail closed. Core now publishes 1,000-item public limits, uses the
+shared row/bind authority for deterministic eligibility, tax-lot, and instrument-reference reads,
+and detects source-owned model-target overflow with an ordered 1,001-row sentinel query. Overflow
+publishes no truncated targets and skips downstream universe reads with source-owned reason codes.
+Supported contracts, paging, lineage, and calculations remain compatible. Status: fixed locally;
+protected PR, exact-main, wiki publication/parity, issue closure, and branch cleanup are pending.
+Evidence: [CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md](./codebase-reviews/CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md).
+
 CR-1698 bounded DPM market-data and aggregation recovery batches (2026-08-21): DPM
 coverage/readiness accepted caller-sized instrument and FX collections, adapters built unbounded
 predicates, model-target expansion could exceed the leaf capacity after partial source reads, and

@@ -2764,7 +2764,13 @@ Most relevant current governance:
      evidence time. Preserve fail-closed precedence and keep mandate approval, suitability,
      valuation, tax advice, liquidity analysis, execution quality, best execution, and OMS
      acknowledgement outside this readiness product. Public market-data and readiness requests
-     accept at most 1,000 instruments and 1,000 FX pairs. If model-target expansion exceeds the
+     accept at most 1,000 instruments and 1,000 FX pairs; standalone eligibility and tax-lot
+     security filters also accept at most 1,000 unique identifiers. Their repositories normalize,
+     order, and chunk direct/internal inputs through the shared statement budget while preserving
+     request and global keyset order. Model-target source reads use deterministic 1,001-row
+     ceiling detection; source overflow publishes `MODEL_TARGET_LIMIT_EXCEEDED`, no truncated
+     target authority, and skips the three downstream universe reads. If supported model targets
+     combined with caller instruments exceed the
      evaluated-instrument ceiling, skip eligibility, tax-lot, and market-data reads and publish
      `DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED`; never truncate source authority. Price and FX
      adapters normalize globally and use the shared statement row/bind budget.
