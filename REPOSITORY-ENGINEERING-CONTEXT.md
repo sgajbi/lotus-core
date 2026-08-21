@@ -4021,6 +4021,19 @@ Most relevant current governance:
      surfaces. Do not advance its watermark beyond persisted evidence. Current-data fixtures alone
      do not prove upgraded books remain complete.
 
+247. Critical database hot-path evidence must use the versioned scenario catalog and
+     `make database-hot-path-evidence`. Capture the exact statement emitted by the production
+     repository method and retain only evaluated plan metrics; never publish SQL, bind values,
+     connection details, or business identifiers. Read plans use PostgreSQL JSON `EXPLAIN
+     ANALYZE`; mutating plans must execute inside an explicitly rolled-back savepoint and prove
+     durable state is unchanged. Evidence generation requires a clean worktree and must recheck
+     the exact source SHA after execution so concurrent edits cannot be attributed to the run.
+     Accept PostgreSQL optimizer alternatives when indexed access and row ceilings remain true;
+     do not force one index name. Keep the command report-only until repeated exact-main evidence
+     supports a separate promotion decision. A complete failed scenario is a durable finding to
+     route to its owning issue, not a reason to weaken the catalog or change runtime SQL inside the
+     evidence slice.
+
 ## Context Maintenance Rule
 
 Update this document when:
