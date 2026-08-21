@@ -14,6 +14,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+PORTFOLIO_TAX_LOT_MAX_SECURITY_COUNT = 1_000
+
 
 def _normalize_tax_lot_security_ids(security_ids: list[str] | None) -> list[str] | None:
     if security_ids is None:
@@ -53,8 +55,9 @@ class PortfolioTaxLotWindowRequest(BaseModel):
         None,
         description=(
             "Optional security filter. Omit to return tax lots for all securities in the portfolio "
-            "window."
+            "window; when supplied, at most 1,000 identifiers are accepted."
         ),
+        max_length=PORTFOLIO_TAX_LOT_MAX_SECURITY_COUNT,
         examples=[["EQ_US_AAPL", "FI_US_TREASURY_10Y"]],
     )
     lot_status_filter: Literal["OPEN", "CLOSED"] | None = Field(
