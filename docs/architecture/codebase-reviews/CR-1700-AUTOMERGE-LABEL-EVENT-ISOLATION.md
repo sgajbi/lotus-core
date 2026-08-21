@@ -36,8 +36,9 @@ event, dependency, image, domain, or calculation change.
 - `make lint`, scoped Ruff formatting, diff hygiene, and the dedicated workflow-governance gate
   passed; the latter ran all 29 workflow contract tests.
 - `make quality-wiki-docs-gate` and the changed-page wiki quality audit passed. The governed
-  publication-source comparison will run from the canonical worktree after merge because the
-  repository-name-based publisher intentionally does not select alternate worktree paths.
+  premerge source comparison also passed at exact head `7afb476f6` from a detached worktree with
+  canonical repository naming; it reported the one intentional unpublished
+  `Validation-and-CI.md` source delta and no incompatible publication state.
 - The implementation PR must add `automerge` while its original full-gate run is active and record
   that only PR Auto Merge is triggered, the full-gate run ID remains unchanged, and all existing
   exact-head checks continue.
