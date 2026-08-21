@@ -41,6 +41,8 @@ SUITES: dict[str, list[str]] = {
         "test_int_valuation_repo_empty_open_dates.py",
         "tests/integration/services/valuation_orchestrator_service/"
         "test_instrument_reprocessing_conversion.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_dpm_reference_data_sources_postgresql.py",
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "integration-lite": _discover_integration_lite(),
