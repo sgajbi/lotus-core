@@ -15,9 +15,12 @@ start from a conservative replay watermark; snapshot-only keys receive an explic
 `SNAPSHOT_ONLY` posture at their latest actual snapshot because the history-driven scheduler cannot
 reconstruct them. Scheduler repository and planner defenses prevent fabricated watermark
 advancement, while support contracts expose the truthful posture. No table shape or materialized
-state was introduced; support ordering keeps the source-authority gap ahead of healthy keys.
-Status: fixed
-locally; protected PR, exact-main validation, issue closure, and branch cleanup are pending. Evidence:
+state was introduced; support ordering keeps the source-authority gap ahead of healthy keys. PR
+#983 passed Remote Feature Lane `32488658955`, Quality Baseline `32488663340`, and Pull Request
+Merge Gate `32488663272` at exact signed head `37bf4fb3b`; it merged as exact main `f095fc1149`.
+Main Releasability `32492773295` passed at that exact SHA with 24 successful jobs, two expected
+institutional skips, and zero failed or cancelled jobs. Status: merged and exact-main validated;
+closure evidence reconciled. Evidence:
 [CR-1703-INDEXED-LATEST-POSITION-QUERIES.md](./codebase-reviews/CR-1703-INDEXED-LATEST-POSITION-QUERIES.md).
 
 CR-1702 governed pip vulnerability remediation (2026-08-21): exact-main and PR gates failed closed
@@ -27,7 +30,7 @@ CI-tooling closures and truthful shared-runtime provenance, and refreshes the de
 inventory without overstating its deliberately blocked certification posture. This is CI/build/test
 tooling only; application/runtime dependencies and product contracts are unchanged. PR #981 merged
 as exact main `80be01753f`; Main Releasability `32480746388` passed at that exact SHA. Status:
-merged and exact-main validated; durable issue closure reconciliation remains pending.
+merged and exact-main validated; closure evidence reconciled.
 Evidence: [CR-1702-GOVERNED-PIP-VULNERABILITY-REMEDIATION.md](./codebase-reviews/CR-1702-GOVERNED-PIP-VULNERABILITY-REMEDIATION.md).
 
 CR-1701 set-based reconciliation FX evidence (2026-08-21): timeseries integrity reconciliation
@@ -38,7 +41,7 @@ query and uses the shared 1,000-row/32,000-bind authority for defensive oversize
 point-in-time selection, missing/non-positive posture, formulas, findings, and public contracts are
 unchanged. #503 retains the separate per-scope reconciliation-read boundary. PR #981 merged as exact
 main `80be01753f`; Main Releasability `32480746388` passed at that exact SHA. Status: merged and
-exact-main validated; durable issue closure reconciliation remains pending. Evidence:
+exact-main validated; closure evidence reconciled. Evidence:
 [CR-1701-SET-BASED-RECONCILIATION-FX-EVIDENCE.md](./codebase-reviews/CR-1701-SET-BASED-RECONCILIATION-FX-EVIDENCE.md).
 
 CR-1700 automerge label event isolation (2026-08-21): adding the governed `automerge` label at an
@@ -50,7 +53,8 @@ synchronize invalidation while rejecting label-triggered full-gate churn. Requir
 thresholds, rebase policy, and exact-main validation are unchanged; broader event/artifact reuse
 remains under #749. PR #980 merged as `d75da061c`; its final protected runs passed at
 `faff89eb6`, and cumulative Main Releasability `32480746388` passed at exact main `80be01753f`.
-Current wiki publication/parity and durable issue closure reconciliation remain pending. Evidence:
+Authored wiki truth is ready for post-merge publication and strict parity; closure evidence is
+reconciled. Evidence:
 [CR-1700-AUTOMERGE-LABEL-EVENT-ISOLATION.md](./codebase-reviews/CR-1700-AUTOMERGE-LABEL-EVENT-ISOLATION.md).
 
 CR-1699 bounded DPM source cardinality (2026-08-21): standalone eligibility and tax-lot filters
@@ -64,7 +68,7 @@ checks at exact head `e657dac02`, including Remote Feature Lane `32464430564` an
 Merge Gate `32464451357`, then merged by rebase as exact main `21a2c59183`. Authored wiki
 publication `1f85876` has strict parity zero. Main Releasability `32467907834` passed at that exact
 merge SHA, and cumulative run `32480746388` passed at exact main `80be01753f`. Status: merged and
-exact-main validated; durable issue closure reconciliation remains pending.
+exact-main validated; closure evidence reconciled.
 Evidence: [CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md](./codebase-reviews/CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md).
 
 CR-1698 bounded DPM market-data and aggregation recovery batches (2026-08-21): DPM

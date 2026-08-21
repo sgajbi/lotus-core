@@ -1,7 +1,7 @@
 # CR-1699 - Bounded DPM Source Cardinality
 
 Date: 2026-08-21
-Status: Merged and exact-main validated; issue closure reconciliation pending
+Status: Merged and exact-main validated; closure evidence reconciled
 Issues: #972 and #976
 
 ## Finding
@@ -56,8 +56,9 @@ change.
 - Main Releasability run `32467907834` completed successfully at exact merge SHA
   `21a2c59183ffd74bcfa2467415de807e374ddaf0`. Cumulative Main Releasability
   `32480746388` also passed at `80be01753f86b1c6774d856f6d32efe5182056ee` after the
-  subsequent CI and reconciliation changes. Issue-loop closure remains gated only on this durable
-  reconciliation reaching validated main and final branch/worktree hygiene.
+  subsequent CI and reconciliation changes. The implementation evidence is complete; final issue
+  closure follows this durable reconciliation reaching validated main, wiki parity verification,
+  and branch/worktree hygiene.
 
 ## Same-Pattern And Governance Decision
 
