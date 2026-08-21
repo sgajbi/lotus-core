@@ -9,6 +9,7 @@ from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scripts.operations.database_evidence.contract import load_hot_path_scenario_catalog
+from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
 from scripts.operations.database_evidence.transaction_ledger import (
     measure_transaction_ledger_reads,
 )
@@ -119,6 +120,7 @@ async def test_transaction_ledger_page_and_count_are_bounded_and_index_backed(
         count_scenario=scenarios["transaction_ledger_count"],
         page_scenario=scenarios["transaction_ledger_page"],
     )
+    publish_requested_fragments((count_result, page_result))
 
     assert count_result.status == "passed", count_result
     assert count_result.root_actual_rows == 1

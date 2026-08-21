@@ -51,6 +51,16 @@ _SENSITIVE_VALUE_MARKERS = (
     "password=",
     "database_url",
 )
+_RESULT_KEYS = {
+    "scenario_id",
+    "status",
+    "root_actual_rows",
+    "rows_examined",
+    "node_types",
+    "index_names",
+    "sequential_scan_relations",
+    "violations",
+}
 
 
 class DatabaseEvidenceContractError(ValueError):
@@ -320,6 +330,89 @@ def write_hot_path_evidence_artifact(path: Path, artifact: Mapping[str, object])
     _assert_source_safe(artifact)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_hot_path_plan_fragment(directory: Path, result: HotPathPlanResult) -> None:
+    """Write one source-safe ephemeral result for command-level assembly."""
+
+    payload = asdict(result)
+    _assert_source_safe(payload)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{result.scenario_id}.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def load_hot_path_plan_fragments(
+    directory: Path,
+    *,
+    catalog: HotPathScenarioCatalog,
+) -> tuple[HotPathPlanResult, ...]:
+    """Load exactly one strict result fragment for every catalog scenario."""
+
+    expected_paths = {
+        f"{scenario.scenario_id}.json": scenario.scenario_id for scenario in catalog.scenarios
+    }
+    try:
+        observed_paths = {path.name: path for path in directory.iterdir() if path.is_file()}
+    except OSError as exc:
+        raise DatabaseEvidenceContractError("fragment_directory_unavailable") from exc
+    if set(observed_paths) != set(expected_paths):
+        raise DatabaseEvidenceContractError("fragment_scenario_set_invalid")
+    return tuple(
+        _load_plan_result(observed_paths[f"{scenario.scenario_id}.json"], scenario.scenario_id)
+        for scenario in catalog.scenarios
+    )
+
+
+def _load_plan_result(path: Path, expected_scenario_id: str) -> HotPathPlanResult:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DatabaseEvidenceContractError("fragment_unavailable_or_invalid") from exc
+    if not isinstance(payload, dict) or set(payload) != _RESULT_KEYS:
+        raise DatabaseEvidenceContractError("fragment_shape_invalid")
+    if payload["scenario_id"] != expected_scenario_id:
+        raise DatabaseEvidenceContractError("fragment_scenario_identity_invalid")
+    status = payload["status"]
+    if status not in {"passed", "failed"}:
+        raise DatabaseEvidenceContractError("fragment_status_invalid")
+    root_actual_rows = payload["root_actual_rows"]
+    rows_examined = payload["rows_examined"]
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in (root_actual_rows, rows_examined)
+    ):
+        raise DatabaseEvidenceContractError("fragment_runtime_metric_invalid")
+    collections = {
+        key: _strict_string_tuple(payload[key])
+        for key in (
+            "node_types",
+            "index_names",
+            "sequential_scan_relations",
+            "violations",
+        )
+    }
+    result = HotPathPlanResult(
+        scenario_id=expected_scenario_id,
+        status=status,
+        root_actual_rows=root_actual_rows,
+        rows_examined=rows_examined,
+        **collections,
+    )
+    _assert_source_safe(asdict(result))
+    return result
+
+
+def _strict_string_tuple(value: object) -> tuple[str, ...]:
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+        or value != sorted(set(value))
+    ):
+        raise DatabaseEvidenceContractError("fragment_string_collection_invalid")
+    return tuple(value)
 
 
 def _assert_source_safe(value: object, *, path: tuple[str, ...] = ()) -> None:

@@ -9,6 +9,7 @@ from sqlalchemy import func, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scripts.operations.database_evidence.contract import load_hot_path_scenario_catalog
+from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
 from scripts.operations.database_evidence.valuation_claim import measure_valuation_job_claim
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
@@ -47,6 +48,7 @@ async def test_valuation_claim_plan_is_bounded_indexed_and_rollback_safe(
     await _seed_valuation_claims(async_db_session, count=scenario.seed_cardinality)
 
     result = await measure_valuation_job_claim(async_db_session, scenario=scenario)
+    publish_requested_fragments((result,))
 
     assert result.status == "failed", result
     assert result.root_actual_rows == scenario.max_root_actual_rows

@@ -96,7 +96,7 @@ def test_plan_evaluator_accepts_indexed_bounded_optimizer_alternative() -> None:
         (_plan(node_type="WindowAgg", index_name=None), "prohibited_node_type:WindowAgg"),
         (_plan(node_type="Sort", index_name=None), "indexed_access_missing"),
         (_plan(actual_rows=501), "root_actual_rows_exceeded"),
-        (_plan(actual_rows=500, actual_loops=41), "rows_examined_exceeded"),
+        (_plan(actual_rows=500, actual_loops=61), "rows_examined_exceeded"),
     ],
 )
 def test_plan_evaluator_rejects_governed_regressions(plan, violation: str) -> None:

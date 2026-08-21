@@ -12,6 +12,7 @@ from scripts.operations.database_evidence.contract import load_hot_path_scenario
 from scripts.operations.database_evidence.reconciliation import (
     measure_reconciliation_estate_scan,
 )
+from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
 from src.services.query_service.app.application.holdings_reconciliation import (
     HoldingsReconciliationScope,
 )
@@ -70,6 +71,7 @@ async def test_reconciliation_control_scan_is_bounded_and_index_backed(
         scopes=scopes,
         scenario=scenario,
     )
+    publish_requested_fragments((result,))
 
     assert result.status == "passed", result
     assert result.root_actual_rows == scenario.max_root_actual_rows

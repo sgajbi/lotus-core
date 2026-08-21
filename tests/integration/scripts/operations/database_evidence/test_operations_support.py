@@ -12,6 +12,7 @@ from scripts.operations.database_evidence.contract import load_hot_path_scenario
 from scripts.operations.database_evidence.operations_support import (
     measure_operations_support_page,
 )
+from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
@@ -60,6 +61,7 @@ async def test_operations_support_page_reports_bounded_plan_posture(
         reference_now=REFERENCE_NOW,
         scenario=scenario,
     )
+    publish_requested_fragments((result,))
 
     assert result.status == "passed", result
     assert result.root_actual_rows == scenario.max_root_actual_rows

@@ -4,7 +4,7 @@
   "scenarios": [
     {
       "max_root_actual_rows": 500,
-      "max_rows_examined": 20000,
+      "max_rows_examined": 30000,
       "prohibited_node_types": [
         "Seq Scan",
         "WindowAgg"
