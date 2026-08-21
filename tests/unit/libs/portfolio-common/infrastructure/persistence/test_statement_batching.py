@@ -94,3 +94,25 @@ def test_single_statement_batch_does_not_emit_event(caplog) -> None:
         )
 
     assert caplog.records == []
+
+
+def test_dpm_multi_statement_batch_event_does_not_disclose_source_identifiers(caplog) -> None:
+    sentinel_security_id = "PRIVATE_SECURITY_SENTINEL_001"
+
+    with caplog.at_level(logging.INFO):
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.DPM_TAX_LOT_LOOKUP,
+            item_count=1_001,
+            binds_per_row=1,
+            reserved_binds=8,
+        )
+
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.operation == "dpm_tax_lot_lookup"
+    assert record.item_count == 1_001
+    assert record.chunk_count == 2
+    assert record.max_rows_per_statement == 1_000
+    for attribute in ("job_id", "portfolio_id", "security_id", "security_ids"):
+        assert not hasattr(record, attribute)
+    assert sentinel_security_id not in record.getMessage()

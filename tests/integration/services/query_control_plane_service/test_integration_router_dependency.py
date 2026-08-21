@@ -1137,6 +1137,44 @@ async def test_portfolio_tax_lot_window_not_found_maps_to_problem_details(async_
     }
 
 
+@pytest.mark.parametrize(
+    ("path", "payload", "field_name"),
+    [
+        (
+            "/integration/instruments/eligibility-bulk",
+            {
+                "as_of_date": "2026-04-10",
+                "security_ids": [f"SEC_{index:04d}" for index in range(1_001)],
+            },
+            "security_ids",
+        ),
+        (
+            "/integration/portfolios/PB_SG_GLOBAL_BAL_001/tax-lots",
+            {
+                "as_of_date": "2026-04-10",
+                "security_ids": [f"SEC_{index:04d}" for index in range(1_001)],
+            },
+            "security_ids",
+        ),
+    ],
+)
+async def test_dpm_security_filters_reject_oversized_requests_before_service_dispatch(
+    async_test_client,
+    path: str,
+    payload: dict[str, object],
+    field_name: str,
+):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(path, json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert any(error["loc"][-1] == field_name for error in body["detail"])
+    mock_integration_service.resolve_instrument_eligibility_bulk.assert_not_called()
+    mock_integration_service.get_portfolio_tax_lot_window.assert_not_called()
+
+
 async def test_transaction_cost_curve_bad_request_maps_to_problem_details(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
     mock_integration_service.get_transaction_cost_curve = AsyncMock(
