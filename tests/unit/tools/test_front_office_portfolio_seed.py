@@ -958,6 +958,11 @@ def test_front_office_seed_cleanup_sql_bounds_demo_business_dates():
 def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     sql = build_portfolio_seed_cleanup_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
 
+    assert "delete from market_price_source_facts" in sql
+    assert "delete from instrument_valuation_policy_assignments" in sql
+    assert "tenant_id = 'LOTUS_PB_SG'" in sql
+    assert "legal_book_id = 'SG_PRIVATE_BANK_BOOK'" in sql
+    assert "source_system = 'LOTUS_FRONT_OFFICE_SEED'" in sql
     assert "delete from processed_events where service_name in" in sql
     assert "'persistence-business-dates'" in sql
     assert "'persistence-fx-rates'" in sql
