@@ -22,6 +22,7 @@ KAFKA_SERVICE = "kafka"
 ZOOKEEPER_SERVICE = "zookeeper"
 TOPIC_CREATOR_SERVICE = "kafka-topic-creator"
 DEPENDENT_SERVICE = "ingestion_service"
+FORMER_HEALTH_PROBE_BUDGET = 10
 
 
 class KafkaRestartRecoveryError(RuntimeError):
@@ -42,6 +43,7 @@ class KafkaRestartRecoveryEvidence:
     recovered_container_id: str
     recovery_restart_count: int
     recovery_elapsed_seconds: float
+    recovery_health_probe_attempts: int
     clean_restart_cycles: int
     topic_creator_exit_code: int
     dependent_service_status: str
@@ -81,6 +83,7 @@ def recovery_failure_diagnostic(state: BrokerState, *, timeout_seconds: float) -
 
 def run_recovery_gate(args: argparse.Namespace) -> KafkaRestartRecoveryEvidence:
     compose_file = Path(args.compose_file).resolve()
+    recovery_override_file = Path(args.recovery_compose_override_file).resolve()
     log_path = Path(args.log_path).resolve()
     managed = prepare_managed_compose_run(
         profile="kafka-restart",
@@ -116,25 +119,33 @@ def run_recovery_gate(args: argparse.Namespace) -> KafkaRestartRecoveryEvidence:
         _run(["docker", "kill", interrupted_container_id], environment=environment)
         _run(["docker", "rm", interrupted_container_id], environment=environment)
 
+        recovery_command = recovery_compose_command(
+            compose_file=compose_file,
+            override_file=recovery_override_file,
+            compose_project=managed.runtime.endpoints.compose_project_name,
+        )
         recovery_started = time.monotonic()
-        _run(managed.compose_command("up", "-d", KAFKA_SERVICE), environment=environment)
+        _run(
+            recovery_command("up", "-d", "--force-recreate", TOPIC_CREATOR_SERVICE),
+            environment=environment,
+        )
         recovered = wait_for_healthy_broker(
-            lambda: _read_broker_state(managed.compose_command, environment=environment),
+            lambda: _read_broker_state(recovery_command, environment=environment),
             timeout_seconds=args.recovery_timeout_seconds,
         )
         recovery_elapsed = round(time.monotonic() - recovery_started, 3)
         if recovered.container_id == interrupted_container_id:
             raise KafkaRestartRecoveryError("Kafka interruption did not create a new container.")
-
-        _run(
-            managed.compose_command(
-                "up",
-                "-d",
-                "--force-recreate",
-                TOPIC_CREATOR_SERVICE,
-            ),
+        recovery_health_probe_attempts = _read_health_probe_attempts(
+            recovered.container_id,
             environment=environment,
         )
+        if recovery_health_probe_attempts <= FORMER_HEALTH_PROBE_BUDGET:
+            raise KafkaRestartRecoveryError(
+                "Kafka recovery did not exercise the former health-probe exhaustion boundary "
+                f"(attempts={recovery_health_probe_attempts}, "
+                f"required>{FORMER_HEALTH_PROBE_BUDGET})."
+            )
         wait_for_compose_service_success(
             managed.compose_file,
             TOPIC_CREATOR_SERVICE,
@@ -176,10 +187,50 @@ def run_recovery_gate(args: argparse.Namespace) -> KafkaRestartRecoveryEvidence:
             recovered_container_id=recovered.container_id,
             recovery_restart_count=recovered.restart_count,
             recovery_elapsed_seconds=recovery_elapsed,
+            recovery_health_probe_attempts=recovery_health_probe_attempts,
             clean_restart_cycles=args.clean_restart_cycles,
             topic_creator_exit_code=topic_creator_exit_code,
             dependent_service_status=dependent.status,
         )
+
+
+def recovery_compose_command(
+    *, compose_file: Path, override_file: Path, compose_project: str
+) -> Callable[..., list[str]]:
+    """Build the exact dependency-gated recovery command with deterministic fault injection."""
+
+    if not override_file.is_file():
+        raise KafkaRestartRecoveryError(
+            "Kafka recovery Compose override is unavailable at the governed path."
+        )
+
+    def command(*args: str) -> list[str]:
+        return [
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "-f",
+            str(override_file),
+            "-p",
+            compose_project,
+            *args,
+        ]
+
+    return command
+
+
+def _read_health_probe_attempts(container_id: str, *, environment: dict[str, str]) -> int:
+    raw = _capture(
+        ["docker", "exec", container_id, "cat", "/tmp/lotus-kafka-health-attempt"],
+        environment=environment,
+    )
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise KafkaRestartRecoveryError(
+            "Kafka recovery health-probe evidence was not a bounded integer."
+        ) from exc
 
 
 def _wait_for_service_health(
@@ -313,6 +364,10 @@ def _execute(command: Sequence[str], *, environment: dict[str, str], capture: bo
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compose-file", default=str(REPO_ROOT / "docker-compose.yml"))
+    parser.add_argument(
+        "--recovery-compose-override-file",
+        default=str(REPO_ROOT / "contracts" / "operations" / "kafka-restart-recovery.compose.yml"),
+    )
     parser.add_argument("--compose-project")
     parser.add_argument(
         "--log-path",
