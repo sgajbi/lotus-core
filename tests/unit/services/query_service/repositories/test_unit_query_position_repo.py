@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.application.holdings_reconciliation import (
@@ -12,6 +13,15 @@ from src.services.query_service.app.application.holdings_reconciliation import (
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 
 pytestmark = pytest.mark.asyncio
+
+
+def _compile_postgresql(statement: object) -> str:
+    return str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
 
 
 @pytest.fixture
@@ -101,7 +111,7 @@ async def test_get_position_history_with_filters(
 
     # ASSERT
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
 
     assert "FROM position_history JOIN position_state" in compiled_query
     assert "position_history.epoch = position_state.epoch" in compiled_query
@@ -122,17 +132,16 @@ async def test_get_latest_positions_by_portfolio(
 
     # ASSERT
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
 
     # Check for key components of the new complex query
     assert "FROM daily_position_snapshots" in compiled_query
     assert "JOIN position_state ON" in compiled_query
     assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled_query
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled_query
-    # Assert that it ranks reconciled snapshots by business date and id per security.
     assert (
-        "row_number() OVER (PARTITION BY daily_position_snapshots.portfolio_id, "
-        "trim(daily_position_snapshots.security_id)" in compiled_query
+        "SELECT DISTINCT ON (daily_position_snapshots.portfolio_id, "
+        "trim(daily_position_snapshots.security_id))" in compiled_query
     )
     assert "trim(daily_position_snapshots.security_id) = anon_2.security_id" in compiled_query
     assert (
@@ -144,11 +153,12 @@ async def test_get_latest_positions_by_portfolio(
         in compiled_query
     )
     assert (
-        "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.id DESC"
-        in compiled_query
+        "ORDER BY daily_position_snapshots.portfolio_id, "
+        "trim(daily_position_snapshots.security_id), daily_position_snapshots.date DESC, "
+        "daily_position_snapshots.id DESC" in compiled_query
     )
-    # Assert the final query selects only the top-ranked snapshot per security.
-    assert "ON daily_position_snapshots.id = anon_1.snapshot_id AND anon_1.rn = 1" in compiled_query
+    assert "ON daily_position_snapshots.id = anon_1.snapshot_id" in compiled_query
+    assert "row_number()" not in compiled_query
 
 
 async def test_get_held_since_date_uses_last_zero_cte(
@@ -162,7 +172,7 @@ async def test_get_held_since_date_uses_last_zero_cte(
 
     assert held_since == date(2025, 1, 10)
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "WITH last_zero_date AS" in compiled_query
     assert "coalesce(last_zero_date.last_zero_date" in compiled_query.lower()
     assert "trim(position_history.security_id) = 'S1'" in compiled_query
@@ -175,7 +185,7 @@ async def test_get_position_history_without_date_filters(
     await repository.get_position_history_by_security(portfolio_id="P1", security_id="S1")
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "position_history.position_date >=" not in compiled_query
     assert "position_history.position_date <=" not in compiled_query
 
@@ -186,17 +196,19 @@ async def test_get_latest_position_history_by_portfolio_builds_ranked_query(
     await repository.get_latest_position_history_by_portfolio(portfolio_id="P1")
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "FROM position_history" in compiled_query
     assert "JOIN position_state ON" in compiled_query
     assert "position_history.epoch = position_state.epoch" in compiled_query
-    assert "row_number() OVER (PARTITION BY trim(position_history.security_id)" in compiled_query
+    assert "SELECT DISTINCT ON (trim(position_history.security_id))" in compiled_query
     assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled_query
     assert "trim(instruments.security_id) = trim(position_history.security_id)" in compiled_query
     assert (
-        "ORDER BY position_history.position_date DESC, position_history.id DESC" in compiled_query
+        "ORDER BY trim(position_history.security_id), position_history.position_date DESC, "
+        "position_history.id DESC" in compiled_query
     )
-    assert "ON position_history.id = anon_1.position_history_id AND anon_1.rn = 1" in compiled_query
+    assert "ON position_history.id = anon_1.position_history_id" in compiled_query
+    assert "row_number()" not in compiled_query
 
 
 async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
@@ -243,12 +255,13 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
         }
     }
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "FROM (" in compiled_query
     assert "trim(daily_position_snapshots.security_id) AS security_id" in compiled_query
     assert "trim(daily_position_snapshots.security_id) IN ('SEC_A', 'SEC_B')" in compiled_query
     assert "('SEC_A', 'SEC_A'" not in compiled_query
-    assert "PARTITION BY trim(daily_position_snapshots.security_id)" in compiled_query
+    assert "SELECT DISTINCT ON (trim(daily_position_snapshots.security_id))" in compiled_query
+    assert "row_number()" not in compiled_query
     assert "daily_position_snapshots.unrealized_price_gain_loss" in compiled_query
     assert "daily_position_snapshots.unrealized_fx_gain_loss" in compiled_query
 
@@ -299,19 +312,17 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
         }
     }
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
     assert "trim(daily_position_snapshots.security_id) IN ('SEC_A', 'SEC_B')" in compiled_query
     assert "('SEC_A', 'SEC_A'" not in compiled_query
     assert "daily_position_snapshots.unrealized_price_gain_loss" in compiled_query
     assert "daily_position_snapshots.unrealized_fx_gain_loss" in compiled_query
+    assert "SELECT DISTINCT ON (trim(daily_position_snapshots.security_id))" in compiled_query
+    assert "row_number()" not in compiled_query
     assert (
-        "row_number() OVER (PARTITION BY trim(daily_position_snapshots.security_id)"
-        in compiled_query
-    )
-    assert (
-        "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.id DESC"
-        in compiled_query
+        "ORDER BY trim(daily_position_snapshots.security_id), "
+        "daily_position_snapshots.date DESC, daily_position_snapshots.id DESC" in compiled_query
     )
 
 
@@ -344,7 +355,7 @@ async def test_get_latest_business_date(repository: PositionRepository, mock_db_
 
     assert latest == date(2026, 3, 1)
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "from business_dates" in compiled_query.lower()
 
 
@@ -368,7 +379,7 @@ async def test_get_held_since_dates_non_empty_input_returns_keyed_map(
 
     assert held_since_map == {("S1", 3): date(2025, 1, 10)}
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "FROM position_history" in compiled_query
     assert "trim(position_history.security_id) IN ('S1')" in compiled_query
     assert "GROUP BY trim(position_history.security_id), position_history.epoch" in compiled_query
@@ -404,11 +415,11 @@ async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_quer
     await repository.get_latest_positions_by_portfolio_as_of_date("P1", date(2025, 1, 31))
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
     assert (
-        "row_number() OVER (PARTITION BY daily_position_snapshots.portfolio_id, "
-        "trim(daily_position_snapshots.security_id)" in compiled_query
+        "SELECT DISTINCT ON (daily_position_snapshots.portfolio_id, "
+        "trim(daily_position_snapshots.security_id))" in compiled_query
     )
     assert "trim(daily_position_snapshots.security_id) = anon_2.security_id" in compiled_query
     assert (
@@ -422,6 +433,7 @@ async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_quer
     assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled_query
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled_query
     assert "daily_position_snapshots.quantity != 0" in compiled_query
+    assert "row_number()" not in compiled_query
 
 
 async def test_get_latest_position_history_by_portfolio_as_of_date_builds_expected_query(
@@ -430,10 +442,11 @@ async def test_get_latest_position_history_by_portfolio_as_of_date_builds_expect
     await repository.get_latest_position_history_by_portfolio_as_of_date("P1", date(2025, 1, 31))
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = _compile_postgresql(executed_stmt)
     assert "position_history.position_date <= '2025-01-31'" in compiled_query
-    assert "row_number() OVER (PARTITION BY trim(position_history.security_id)" in compiled_query
+    assert "SELECT DISTINCT ON (trim(position_history.security_id))" in compiled_query
     assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled_query
     assert "trim(instruments.security_id) = trim(position_history.security_id)" in compiled_query
     assert "position_history.epoch = position_state.epoch" in compiled_query
     assert "position_history.quantity != 0" in compiled_query
+    assert "row_number()" not in compiled_query

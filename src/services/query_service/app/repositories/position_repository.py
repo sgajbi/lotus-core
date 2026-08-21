@@ -267,21 +267,9 @@ class PositionRepository:
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         instrument_security_id = func.trim(Instrument.security_id)
         state_security_id = func.trim(PositionState.security_id)
-        ranked_snapshot_subq = (
+        latest_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        DailyPositionSnapshot.portfolio_id,
-                        snapshot_security_id,
-                    ),
-                    order_by=(
-                        DailyPositionSnapshot.date.desc(),
-                        DailyPositionSnapshot.id.desc(),
-                    ),
-                )
-                .label("rn"),
             )
             .join(
                 latest_history_subq,
@@ -296,17 +284,21 @@ class PositionRepository:
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
                 DailyPositionSnapshot.quantity != 0,
             )
+            .distinct(DailyPositionSnapshot.portfolio_id, snapshot_security_id)
+            .order_by(
+                DailyPositionSnapshot.portfolio_id,
+                snapshot_security_id,
+                DailyPositionSnapshot.date.desc(),
+                DailyPositionSnapshot.id.desc(),
+            )
             .subquery()
         )
 
         stmt = (
             select(DailyPositionSnapshot, Instrument, PositionState)
             .join(
-                ranked_snapshot_subq,
-                and_(
-                    DailyPositionSnapshot.id == ranked_snapshot_subq.c.snapshot_id,
-                    ranked_snapshot_subq.c.rn == 1,
-                ),
+                latest_snapshot_subq,
+                DailyPositionSnapshot.id == latest_snapshot_subq.c.snapshot_id,
             )
             .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(
@@ -340,15 +332,9 @@ class PositionRepository:
         history_security_id = func.trim(PositionHistory.security_id)
         instrument_security_id = func.trim(Instrument.security_id)
         state_security_id = func.trim(PositionState.security_id)
-        ranked_history_subq = (
+        latest_history_subq = (
             select(
                 PositionHistory.id.label("position_history_id"),
-                func.row_number()
-                .over(
-                    partition_by=history_security_id,
-                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
-                )
-                .label("rn"),
             )
             .join(
                 PositionState,
@@ -359,17 +345,20 @@ class PositionRepository:
                 ),
             )
             .where(PositionHistory.portfolio_id == portfolio_id)
+            .distinct(history_security_id)
+            .order_by(
+                history_security_id,
+                PositionHistory.position_date.desc(),
+                PositionHistory.id.desc(),
+            )
             .subquery()
         )
 
         stmt = (
             select(PositionHistory, Instrument, PositionState)
             .join(
-                ranked_history_subq,
-                and_(
-                    PositionHistory.id == ranked_history_subq.c.position_history_id,
-                    ranked_history_subq.c.rn == 1,
-                ),
+                latest_history_subq,
+                PositionHistory.id == latest_history_subq.c.position_history_id,
             )
             .join(Instrument, instrument_security_id == history_security_id)
             .join(
@@ -409,18 +398,9 @@ class PositionRepository:
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         instrument_security_id = func.trim(Instrument.security_id)
         state_security_id = func.trim(PositionState.security_id)
-        ranked_snapshot_subq = (
+        latest_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        DailyPositionSnapshot.portfolio_id,
-                        snapshot_security_id,
-                    ),
-                    order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
-                )
-                .label("rn"),
             )
             .join(
                 latest_history_subq,
@@ -436,17 +416,21 @@ class PositionRepository:
                 DailyPositionSnapshot.date <= as_of_date,
                 DailyPositionSnapshot.quantity != 0,
             )
+            .distinct(DailyPositionSnapshot.portfolio_id, snapshot_security_id)
+            .order_by(
+                DailyPositionSnapshot.portfolio_id,
+                snapshot_security_id,
+                DailyPositionSnapshot.date.desc(),
+                DailyPositionSnapshot.id.desc(),
+            )
             .subquery()
         )
 
         stmt = (
             select(DailyPositionSnapshot, Instrument, PositionState)
             .join(
-                ranked_snapshot_subq,
-                and_(
-                    DailyPositionSnapshot.id == ranked_snapshot_subq.c.snapshot_id,
-                    ranked_snapshot_subq.c.rn == 1,
-                ),
+                latest_snapshot_subq,
+                DailyPositionSnapshot.id == latest_snapshot_subq.c.snapshot_id,
             )
             .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(
@@ -483,21 +467,12 @@ class PositionRepository:
     ):
         history_security_id = func.trim(PositionHistory.security_id)
         state_security_id = func.trim(PositionState.security_id)
-        ranked_history_subq = (
+        latest_history_subq = (
             select(
                 PositionHistory.portfolio_id.label("portfolio_id"),
                 history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        PositionHistory.portfolio_id,
-                        history_security_id,
-                    ),
-                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
-                )
-                .label("rn"),
             )
             .join(
                 PositionState,
@@ -510,16 +485,24 @@ class PositionRepository:
             .where(PositionHistory.portfolio_id == portfolio_id)
         )
         if as_of_date is not None:
-            ranked_history_subq = ranked_history_subq.where(
+            latest_history_subq = latest_history_subq.where(
                 PositionHistory.position_date <= as_of_date
             )
 
-        ranked_history_subq = ranked_history_subq.subquery()
+        latest_history_subq = (
+            latest_history_subq.distinct(PositionHistory.portfolio_id, history_security_id)
+            .order_by(
+                PositionHistory.portfolio_id,
+                history_security_id,
+                PositionHistory.position_date.desc(),
+                PositionHistory.id.desc(),
+            )
+            .subquery()
+        )
         return (
-            select(ranked_history_subq)
+            select(latest_history_subq)
             .where(
-                ranked_history_subq.c.rn == 1,
-                ranked_history_subq.c.quantity != 0,
+                latest_history_subq.c.quantity != 0,
             )
             .subquery()
         )
@@ -534,15 +517,9 @@ class PositionRepository:
         history_security_id = func.trim(PositionHistory.security_id)
         instrument_security_id = func.trim(Instrument.security_id)
         state_security_id = func.trim(PositionState.security_id)
-        ranked_history_subq = (
+        latest_history_subq = (
             select(
                 PositionHistory.id.label("position_history_id"),
-                func.row_number()
-                .over(
-                    partition_by=history_security_id,
-                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
-                )
-                .label("rn"),
             )
             .join(
                 PositionState,
@@ -556,17 +533,20 @@ class PositionRepository:
                 PositionHistory.portfolio_id == portfolio_id,
                 PositionHistory.position_date <= as_of_date,
             )
+            .distinct(history_security_id)
+            .order_by(
+                history_security_id,
+                PositionHistory.position_date.desc(),
+                PositionHistory.id.desc(),
+            )
             .subquery()
         )
 
         stmt = (
             select(PositionHistory, Instrument, PositionState)
             .join(
-                ranked_history_subq,
-                and_(
-                    PositionHistory.id == ranked_history_subq.c.position_history_id,
-                    ranked_history_subq.c.rn == 1,
-                ),
+                latest_history_subq,
+                PositionHistory.id == latest_history_subq.c.position_history_id,
             )
             .join(Instrument, instrument_security_id == history_security_id)
             .join(
@@ -612,7 +592,7 @@ class PositionRepository:
                 return {}
             predicates.append(snapshot_security_id.in_(normalized_security_ids))
 
-        ranked_snapshot_subq = (
+        latest_snapshot_subq = (
             select(
                 snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.market_price.label("market_price"),
@@ -626,18 +606,18 @@ class PositionRepository:
                 DailyPositionSnapshot.unrealized_gain_loss_local.label(
                     "unrealized_gain_loss_local"
                 ),
-                func.row_number()
-                .over(
-                    partition_by=snapshot_security_id,
-                    order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
-                )
-                .label("rn"),
             )
             .where(*predicates)
+            .distinct(snapshot_security_id)
+            .order_by(
+                snapshot_security_id,
+                DailyPositionSnapshot.date.desc(),
+                DailyPositionSnapshot.id.desc(),
+            )
             .subquery()
         )
 
-        stmt = select(ranked_snapshot_subq).where(ranked_snapshot_subq.c.rn == 1)
+        stmt = select(latest_snapshot_subq)
         results = await self.db.execute(stmt)
         rows = results.mappings().all()
         valuation_map: dict[str, dict[str, float | None]] = {}
@@ -678,7 +658,7 @@ class PositionRepository:
                 return {}
             predicates.append(snapshot_security_id.in_(normalized_security_ids))
 
-        ranked_snapshot_subq = (
+        latest_snapshot_subq = (
             select(
                 snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.market_price.label("market_price"),
@@ -692,18 +672,18 @@ class PositionRepository:
                 DailyPositionSnapshot.unrealized_gain_loss_local.label(
                     "unrealized_gain_loss_local"
                 ),
-                func.row_number()
-                .over(
-                    partition_by=snapshot_security_id,
-                    order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
-                )
-                .label("rn"),
             )
             .where(*predicates)
+            .distinct(snapshot_security_id)
+            .order_by(
+                snapshot_security_id,
+                DailyPositionSnapshot.date.desc(),
+                DailyPositionSnapshot.id.desc(),
+            )
             .subquery()
         )
 
-        stmt = select(ranked_snapshot_subq).where(ranked_snapshot_subq.c.rn == 1)
+        stmt = select(latest_snapshot_subq)
         results = await self.db.execute(stmt)
         rows = results.mappings().all()
         valuation_map: dict[str, dict[str, float | None]] = {}
