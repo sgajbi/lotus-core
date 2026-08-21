@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1701 set-based reconciliation FX evidence (2026-08-21): timeseries integrity reconciliation
+resolved the latest FX row inside its authoritative-position loop, so database query count grew
+with distinct currency-pair/date keys. The application now collects one normalized unique key set;
+the repository resolves it through a deterministic PostgreSQL `VALUES` plus lateral latest-rate
+query and uses the shared 1,000-row/32,000-bind authority for defensive oversized inputs. Existing
+point-in-time selection, missing/non-positive posture, formulas, findings, and public contracts are
+unchanged. #503 retains the separate per-scope reconciliation-read boundary. Status: fixed locally;
+protected PR, exact-main validation, issue closure, and branch cleanup remain pending. Evidence:
+[CR-1701-SET-BASED-RECONCILIATION-FX-EVIDENCE.md](./codebase-reviews/CR-1701-SET-BASED-RECONCILIATION-FX-EVIDENCE.md).
+
 CR-1700 automerge label event isolation (2026-08-21): adding the governed `automerge` label at an
 unchanged PR head started the small queue workflow and also restarted the complete Pull Request
 Merge Gate, whose PR-ref concurrency then cancelled valid same-head evidence. The full gate now
