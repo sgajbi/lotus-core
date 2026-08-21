@@ -10,6 +10,7 @@ from portfolio_common.config import (
     _sanitize_consumer_override_map,
     _validate_consumer_override_relationships,
     get_kafka_consumer_runtime_overrides,
+    load_kafka_bootstrap_servers,
 )
 from portfolio_common.kafka_consumer_execution import (
     KafkaConsumerExecutionProfile,
@@ -32,6 +33,22 @@ def test_shared_config_does_not_publish_unused_mongodb_credentials() -> None:
 
     assert "MONGO_INITDB_ROOT_PASSWORD" not in source
     assert "MONGO_URL" not in source
+
+
+def test_kafka_bootstrap_loader_prefers_host_runtime_authority() -> None:
+    assert (
+        load_kafka_bootstrap_servers(
+            {
+                "KAFKA_BOOTSTRAP_SERVERS": "kafka:9093",
+                "KAFKA_BOOTSTRAP_SERVERS_HOST": "localhost:39092",
+            }
+        )
+        == "localhost:39092"
+    )
+
+
+def test_kafka_bootstrap_loader_preserves_compose_default() -> None:
+    assert load_kafka_bootstrap_servers({}) == "kafka:9093"
 
 
 def test_rejects_invalid_auto_offset_reset_value():

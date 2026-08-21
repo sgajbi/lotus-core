@@ -2,7 +2,7 @@
 import logging
 import os
 from dataclasses import dataclass
-from typing import cast
+from typing import Mapping, cast
 
 from dotenv import load_dotenv
 
@@ -66,6 +66,15 @@ def load_health_probe_bind_host() -> str:
     return configured_host or DEFAULT_HEALTH_PROBE_BIND_HOST
 
 
+def load_kafka_bootstrap_servers(environment: Mapping[str, str] | None = None) -> str:
+    """Resolve Kafka bootstrap authority from the current runtime environment."""
+
+    runtime_environment = os.environ if environment is None else environment
+    return runtime_environment.get("KAFKA_BOOTSTRAP_SERVERS_HOST") or runtime_environment.get(
+        "KAFKA_BOOTSTRAP_SERVERS", "kafka:9093"
+    )
+
+
 # Database Configurations
 POSTGRES_USER = os.getenv("POSTGRES_USER", "user")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
@@ -74,9 +83,7 @@ POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 
 # Kafka Configurations
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS_HOST") or os.getenv(
-    "KAFKA_BOOTSTRAP_SERVERS", "kafka:9093"
-)
+KAFKA_BOOTSTRAP_SERVERS = load_kafka_bootstrap_servers()
 KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC = os.getenv(
     "KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC", "portfolios.raw.received"
 )
