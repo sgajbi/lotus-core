@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1703 indexed latest position queries (2026-08-21): Query Service and valuation-reprocessing
+readers ranked retained position history with broad `row_number()` windows before selecting the
+latest row. Core now uses deterministic PostgreSQL `DISTINCT ON` over normalized financial
+identity, current `PositionState` epoch, business date, and stable row id. The latest-row quantity
+predicate remains outside latest-history selection so closed or stale-epoch history cannot be
+resurrected. Representative 7,500-row snapshot and history plans use indexed access with no
+sequential scan or `WindowAgg`; existing covering indexes remain the storage authority and no
+migration/materialized state was introduced. Status: fixed locally; protected PR, exact-main
+validation, issue closure, and branch cleanup are pending. Evidence:
+[CR-1703-INDEXED-LATEST-POSITION-QUERIES.md](./codebase-reviews/CR-1703-INDEXED-LATEST-POSITION-QUERIES.md).
+
 CR-1702 governed pip vulnerability remediation (2026-08-21): exact-main and PR gates failed closed
 when `pip-audit` reported `PYSEC-2026-3721` against governed `pip==26.1.2`. Core now pins the fixed
 `pip==26.2.1` installer and compatible `pip-tools==7.6.1` compiler, regenerates Linux/Windows
