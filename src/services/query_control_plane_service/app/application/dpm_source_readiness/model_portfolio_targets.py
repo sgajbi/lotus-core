@@ -24,6 +24,8 @@ from ...domain.dpm_source_readiness import (
 from ...ports.dpm_source_readiness import DpmReferenceDataReader
 from .metadata import dpm_source_runtime_metadata
 
+MODEL_TARGET_LIMIT_EXCEEDED = "MODEL_TARGET_LIMIT_EXCEEDED"
+
 
 @dataclass(slots=True)
 class ModelPortfolioTargetService:
@@ -44,7 +46,7 @@ class ModelPortfolioTargetService:
         )
         if definition is None:
             return None
-        evidence = await self.reader.list_model_portfolio_targets(
+        read_result = await self.reader.list_model_portfolio_targets(
             model_portfolio_id=model_portfolio_id,
             model_portfolio_version=definition.model_portfolio_version,
             as_of_date=request.as_of_date,
@@ -53,7 +55,8 @@ class ModelPortfolioTargetService:
         return build_model_portfolio_target_response(
             definition=definition,
             request=request,
-            evidence=evidence,
+            evidence=list(read_result.records),
+            source_limit_exceeded=read_result.limit_exceeded,
             generated_at=self.clock(),
         )
 
@@ -63,6 +66,7 @@ def build_model_portfolio_target_response(
     definition: ModelPortfolioDefinitionEvidence,
     request: ModelPortfolioTargetRequest,
     evidence: list[ModelPortfolioTargetEvidence],
+    source_limit_exceeded: bool = False,
     generated_at: datetime,
 ) -> ModelPortfolioTargetResponse:
     """Map source evidence and derive target-weight supportability."""
@@ -77,6 +81,7 @@ def build_model_portfolio_target_response(
         target_count=len(targets),
         total_weight=total_weight,
         data_quality_status=data_quality_status,
+        source_limit_exceeded=source_limit_exceeded,
     )
     lineage = {
         "source_system": definition.source_system or "unknown",
@@ -134,8 +139,11 @@ def _supportability(
     target_count: int,
     total_weight: Decimal,
     data_quality_status: str,
+    source_limit_exceeded: bool = False,
 ) -> ModelPortfolioSupportability:
-    if target_count == 0:
+    if source_limit_exceeded:
+        state, reason = "UNAVAILABLE", MODEL_TARGET_LIMIT_EXCEEDED
+    elif target_count == 0:
         state, reason = "INCOMPLETE", "MODEL_TARGETS_EMPTY"
     elif total_weight != Decimal("1.0000000000"):
         state, reason = "DEGRADED", "MODEL_TARGET_WEIGHTS_NOT_ONE"

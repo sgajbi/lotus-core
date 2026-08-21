@@ -17,6 +17,9 @@ from src.services.query_control_plane_service.app.domain.dpm_source_readiness im
     ModelPortfolioDefinitionEvidence,
     ModelPortfolioTargetEvidence,
 )
+from src.services.query_control_plane_service.app.ports.dpm_source_readiness import (
+    ModelPortfolioTargetReadResult,
+)
 
 GENERATED_AT = datetime(2026, 4, 10, 12, tzinfo=UTC)
 EVIDENCE_AT = datetime(2026, 4, 10, 10, tzinfo=UTC)
@@ -65,7 +68,9 @@ def _target(instrument_id: str, weight: str) -> ModelPortfolioTargetEvidence:
 def _reader(*targets: ModelPortfolioTargetEvidence) -> AsyncMock:
     reader = AsyncMock()
     reader.resolve_model_portfolio_definition.return_value = _definition()
-    reader.list_model_portfolio_targets.return_value = list(targets)
+    reader.list_model_portfolio_targets.return_value = ModelPortfolioTargetReadResult(
+        records=tuple(targets)
+    )
     return reader
 
 
@@ -193,3 +198,27 @@ async def test_missing_model_definition_returns_not_found_without_target_query()
 
     assert response is None
     reader.list_model_portfolio_targets.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_source_target_overflow_is_unavailable_without_truncated_authority() -> None:
+    reader = _reader()
+    reader.list_model_portfolio_targets.return_value = ModelPortfolioTargetReadResult(
+        records=(),
+        limit_exceeded=True,
+    )
+
+    response = await model_portfolio_targets.ModelPortfolioTargetService(
+        reader=reader,
+        clock=lambda: GENERATED_AT,
+    ).resolve(
+        model_portfolio_id="MODEL_1",
+        request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.targets == []
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "MODEL_TARGET_LIMIT_EXCEEDED"
+    assert response.supportability.target_count == 0
+    assert response.source_evidence_current is False

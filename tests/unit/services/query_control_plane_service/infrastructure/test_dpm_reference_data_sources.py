@@ -7,6 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from src.services.query_control_plane_service.app.contracts.model_portfolio_targets import (
+    MODEL_PORTFOLIO_TARGET_MAX_COUNT,
+)
 from src.services.query_control_plane_service.app.infrastructure.dpm_reference_data_sources import (
     SqlAlchemyDpmReferenceDataReader,
 )
@@ -46,19 +49,41 @@ async def test_model_targets_use_effective_rank_and_map_decimal_evidence() -> No
     )
     session = _session_returning(row)
 
-    records = await SqlAlchemyDpmReferenceDataReader(session).list_model_portfolio_targets(
+    result = await SqlAlchemyDpmReferenceDataReader(session).list_model_portfolio_targets(
         model_portfolio_id="MODEL_1",
         model_portfolio_version="2026.04",
         as_of_date=date(2026, 4, 10),
         include_inactive_targets=False,
     )
 
-    assert str(records[0].target_weight) == "0.6000000000"
+    assert str(result.records[0].target_weight) == "0.6000000000"
+    assert result.limit_exceeded is False
     statement = session.execute.await_args.args[0]
     sql = str(statement)
     assert "row_number() OVER" in sql
     assert "model_portfolio_targets.target_status" in sql
     assert "ORDER BY model_portfolio_targets.instrument_id ASC" in sql
+    assert statement._limit_clause.value == MODEL_PORTFOLIO_TARGET_MAX_COUNT + 1
+
+
+@pytest.mark.asyncio
+async def test_model_target_reader_discards_ceiling_sentinel_on_source_overflow() -> None:
+    session = _session_returning(
+        *[
+            SimpleNamespace(instrument_id=f"SEC_{index:04d}")
+            for index in range(MODEL_PORTFOLIO_TARGET_MAX_COUNT + 1)
+        ]
+    )
+
+    result = await SqlAlchemyDpmReferenceDataReader(session).list_model_portfolio_targets(
+        model_portfolio_id="MODEL_1",
+        model_portfolio_version="2026.04",
+        as_of_date=date(2026, 4, 10),
+        include_inactive_targets=False,
+    )
+
+    assert result.limit_exceeded is True
+    assert result.records == ()
 
 
 @pytest.mark.asyncio
