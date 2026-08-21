@@ -33,8 +33,11 @@ event, dependency, image, domain, or calculation change.
 ## Validation Evidence
 
 - 29 workflow-governance tests passed, including exact event-routing and concurrency contracts.
-- Scoped Ruff lint and formatting plus diff hygiene passed.
-- `make quality-wiki-docs-gate` and the changed-page wiki quality audit passed.
+- `make lint`, scoped Ruff formatting, diff hygiene, and the dedicated workflow-governance gate
+  passed; the latter ran all 29 workflow contract tests.
+- `make quality-wiki-docs-gate` and the changed-page wiki quality audit passed. The governed
+  publication-source comparison will run from the canonical worktree after merge because the
+  repository-name-based publisher intentionally does not select alternate worktree paths.
 - The implementation PR must add `automerge` while its original full-gate run is active and record
   that only PR Auto Merge is triggered, the full-gate run ID remains unchanged, and all existing
   exact-head checks continue.
