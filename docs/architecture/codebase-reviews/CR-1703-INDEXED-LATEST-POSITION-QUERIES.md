@@ -23,9 +23,11 @@ That work grew with retained history rather than the requested current portfolio
    security-on-date readers. Inputs and final results remain globally deterministic.
 4. Existing normalized portfolio/security/date/id indexes remain the storage authority. No new
    table, materialized current-state projection, migration, or dependency was needed.
-5. PostgreSQL plan tests reject `WindowAgg` and sequential scans, verify the governed covering
-   indexes exist, and accept PostgreSQL's cost-based choice among suitable indexes. They do not
-   force or overstate one exact index choice.
+5. PostgreSQL plan tests invoke the real Query Service latest-position and valuation-reprocessing
+   repository methods, capture the exact SQL sent to PostgreSQL, and explain those complete query
+   shapes. They reject `WindowAgg` and sequential scans, verify the governed covering indexes
+   exist, and accept PostgreSQL's cost-based choice among suitable indexes without forcing or
+   overstating one exact index choice.
 
 ## Compatibility
 
@@ -42,9 +44,11 @@ internal PostgreSQL query-shape improvement.
 - The complete Query Service position-repository PostgreSQL file passed: 6 tests in 97.29 seconds.
 - Focused valuation-repository PostgreSQL behavior passed: 2 tests in 75.23 seconds, including a
   later stale-epoch row that cannot hide the current open position.
-- The representative PostgreSQL plan proof passed in 74.54 seconds against 7,500 snapshot rows and
-  7,500 history rows. Both plans used indexed access and contained neither `Seq Scan` nor
-  `WindowAgg`; the normalized covering indexes were present and valid.
+- The final representative PostgreSQL plan proof passed in 81.84 seconds against 7,500 snapshot
+  rows and 7,500 history rows. It captured and explained the complete production latest-position
+  and security/date reprocessing statements, including current-epoch, instrument, reconciliation,
+  quantity, and outer-join predicates. Both plans used indexed access and contained neither
+  `Seq Scan` nor `WindowAgg`; the normalized covering indexes were present and valid.
 - The protected critical-database suite passed all 85 tests in 340.78 seconds.
 - Ruff check and formatting, MyPy across 318 source files, architecture/security/governance gates,
   documentation evidence, wiki/docs validation, and diff hygiene passed locally. Protected PR

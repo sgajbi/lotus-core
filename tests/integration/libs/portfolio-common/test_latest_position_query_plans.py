@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from datetime import date
+from typing import Any, Awaitable, Callable
+
 import pytest
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.calculators.position_valuation_calculator.app.repositories import (
+    valuation_repository,
+)
+from src.services.query_service.app.repositories.position_repository import PositionRepository
 from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
@@ -28,6 +36,28 @@ async def _seed_representative_latest_row_history(session: AsyncSession) -> None
             """
         ),
         {"target": _TARGET_PORTFOLIO, "noise": _NOISE_PORTFOLIO},
+    )
+    await session.execute(
+        text(
+            """
+            INSERT INTO instruments (
+                security_id, name, isin, currency, product_type, asset_class
+            )
+            SELECT
+                'LATEST-SEC-' || security_no::text,
+                'Latest target ' || security_no::text,
+                'LATEST-TARGET-ISIN-' || security_no::text,
+                'USD', 'Stock', 'Equity'
+            FROM generate_series(1, 500) AS security_no
+            UNION ALL
+            SELECT
+                'LATEST-NOISE-' || security_no::text,
+                'Latest noise ' || security_no::text,
+                'LATEST-NOISE-ISIN-' || security_no::text,
+                'USD', 'Stock', 'Equity'
+            FROM generate_series(1, 5000) AS security_no
+            """
+        )
     )
     await session.execute(
         text(
@@ -101,9 +131,66 @@ async def _seed_representative_latest_row_history(session: AsyncSession) -> None
             """
         )
     )
+    await session.execute(
+        text(
+            """
+            INSERT INTO position_state (
+                portfolio_id, security_id, epoch, watermark_date, status
+            )
+            SELECT DISTINCT
+                portfolio_id, security_id, epoch, DATE '2026-08-21', 'CURRENT'
+            FROM daily_position_snapshots
+            WHERE portfolio_id IN (:target, :noise)
+            """
+        ),
+        {"target": _TARGET_PORTFOLIO, "noise": _NOISE_PORTFOLIO},
+    )
     await session.commit()
     await session.execute(text("ANALYZE daily_position_snapshots"))
     await session.execute(text("ANALYZE position_history"))
+    await session.execute(text("ANALYZE position_state"))
+
+
+async def _capture_production_select(
+    session: AsyncSession,
+    operation: Callable[[], Awaitable[object]],
+) -> tuple[str, object]:
+    captured: list[tuple[str, object]] = []
+    bind = session.bind
+    assert bind is not None
+
+    def capture_statement(
+        _connection,
+        _cursor,
+        statement: str,
+        parameters: object,
+        _context,
+        _executemany: bool,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            captured.append((statement, parameters))
+
+    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        await operation()
+    finally:
+        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", capture_statement)
+
+    assert len(captured) == 1
+    return captured[0]
+
+
+async def _explain_captured_select(
+    session: AsyncSession,
+    captured: tuple[str, object],
+) -> Any:
+    statement, parameters = captured
+    connection = await session.connection()
+    result = await connection.exec_driver_sql(
+        f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {statement}",
+        parameters,
+    )
+    return result.scalar_one()
 
 
 async def test_latest_snapshot_and_history_queries_use_covering_indexes(
@@ -112,30 +199,21 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
 ) -> None:
     await _seed_representative_latest_row_history(async_db_session)
 
-    snapshot_plan = await async_db_session.scalar(
-        text(
-            """
-            EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-            SELECT DISTINCT ON (portfolio_id, trim(security_id)) id
-            FROM daily_position_snapshots
-            WHERE portfolio_id = :portfolio_id
-            ORDER BY portfolio_id, trim(security_id), date DESC, id DESC
-            """
-        ),
-        {"portfolio_id": _TARGET_PORTFOLIO},
+    position_repository = PositionRepository(async_db_session)
+    valuation_repo = valuation_repository.ValuationRepository(async_db_session)
+    snapshot_statement = await _capture_production_select(
+        async_db_session,
+        lambda: position_repository.get_latest_positions_by_portfolio(_TARGET_PORTFOLIO),
     )
-    history_plan = await async_db_session.scalar(
-        text(
-            """
-            EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-            SELECT DISTINCT ON (trim(security_id)) id
-            FROM position_history
-            WHERE portfolio_id = :portfolio_id
-            ORDER BY trim(security_id), position_date DESC, id DESC
-            """
+    history_statement = await _capture_production_select(
+        async_db_session,
+        lambda: valuation_repo.find_portfolios_holding_security_on_date(
+            "LATEST-SEC-1",
+            date(2026, 8, 21),
         ),
-        {"portfolio_id": _TARGET_PORTFOLIO},
     )
+    snapshot_plan = await _explain_captured_select(async_db_session, snapshot_statement)
+    history_plan = await _explain_captured_select(async_db_session, history_statement)
     governed_indexes = set(
         (
             await async_db_session.scalars(
