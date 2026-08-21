@@ -55,8 +55,12 @@ before the composed ceiling could fail closed. Core now publishes 1,000-item pub
 shared row/bind authority for deterministic eligibility, tax-lot, and instrument-reference reads,
 and detects source-owned model-target overflow with an ordered 1,001-row sentinel query. Overflow
 publishes no truncated targets and skips downstream universe reads with source-owned reason codes.
-Supported contracts, paging, lineage, and calculations remain compatible. Status: fixed locally;
-protected PR, exact-main, wiki publication/parity, issue closure, and branch cleanup are pending.
+Supported contracts, paging, lineage, and calculations remain compatible. PR #979 passed all 45
+checks at exact head `e657dac02`, including Remote Feature Lane `32464430564` and Pull Request
+Merge Gate `32464451357`, then merged by rebase as exact main `21a2c59183`. Authored wiki
+publication `1f85876` has strict parity zero. Main Releasability `32467907834` is validating that
+exact merge SHA; issue closure and implementation-branch cleanup remain gated on terminal mainline
+evidence and this reconciliation reaching validated main.
 Evidence: [CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md](./codebase-reviews/CR-1699-BOUNDED-DPM-SOURCE-CARDINALITY.md).
 
 CR-1698 bounded DPM market-data and aggregation recovery batches (2026-08-21): DPM
