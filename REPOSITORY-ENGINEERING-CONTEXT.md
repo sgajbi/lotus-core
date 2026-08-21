@@ -3985,6 +3985,10 @@ Most relevant current governance:
      deterministic bounded cohort per scheduler poll, defensively chunk any identifier update set,
      and publish bounded counts/reasons rather than job-ID collections. Aggregation-owned expired
      lease recovery remains separately tracked by #962.
+     Financial reconciliation must collect normalized point-in-time FX pair/date keys before
+     authoritative metric aggregation and resolve them through the repository's set-based lateral
+     lookup; never restore per-position FX database access. Missing and non-positive evidence keeps
+     the established fail-closed calculation posture.
 
 245. Kafka bootstrap-server authority for topic provisioning and shared administration must be
      resolved when the administration client is constructed, not frozen only when a Python module
