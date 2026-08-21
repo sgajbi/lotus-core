@@ -603,13 +603,11 @@ dependency unhealthy and blocks dependent services. Certify this behavior with:
 make test-kafka-restart-recovery-gate
 ```
 
-The gate owns a unique Compose project, verifies container ownership before interruption, first
-observes genuine broker readiness within a bounded validation probe, then reports ten successful
-real probes as failures in a validation-only Compose override. The next unchanged real probe must
-pass. It exercises topic creation through the actual
-`service_healthy` dependency edge, performs two clean stop/start cycles, starts a Kafka-dependent
-Core service, and emits machine-readable evidence including the observed probe count. It tears down
-only its exact project and does not remove volumes.
+The gate owns a unique Compose project, verifies container ownership before interruption, recreates
+the topic creator through the actual `service_healthy` dependency edge, and requires the real broker
+probe to recover within the Compose budget. It then performs two clean stop/start cycles, starts a
+Kafka-dependent Core service, and emits machine-readable evidence. It tears down only its exact
+project and does not remove volumes.
 
 If the broker exhausts all five attempts, inspect the exact project first:
 

@@ -19,10 +19,8 @@ Keep the existing broker command, `on-failure:5` restart policy, ZooKeeper state
 30-second start period, 10-second interval, and five-second probe timeout remain unchanged.
 
 The repository-native recovery gate now recreates `kafka-topic-creator` through its actual
-`service_healthy` dependency. A validation-only Compose override first observes genuine broker
-readiness within one bounded probe, then reports exactly ten successful real probes as failures
-before permitting the next unchanged real probe. The gate rejects evidence unless the
-recovered broker reports more than ten attempts, topic creation succeeds, two clean restart cycles
+`service_healthy` dependency after interrupting the broker. The gate rejects evidence unless the
+real probe recovers within the Compose budget, topic creation succeeds, two clean restart cycles
 remain healthy, and the dependent ingestion service becomes healthy. Failure diagnostics remain
 bounded and explicitly reject destructive default remediation.
 
@@ -38,10 +36,8 @@ authority remains separate under #990.
 ## Evidence
 
 - Compose contract unit tests pin the unchanged probe and the bounded 30s/10s/5s/12 posture.
-- Recovery-driver unit tests bind both Compose files, the unique project, and the exact topic
-  creator dependency path; missing governed override evidence fails closed.
-- Validation-only override tests prove the former ten-attempt boundary precedes the real probe and
-  inherits the production retry count.
+- Recovery-driver and Compose contract tests bind the unique project, unchanged probe, bounded
+  health policy, source-safe failure diagnostic, and exact topic-creator dependency path.
 - Real managed Compose, canonical Workbench startup, protected PR, exact-main, wiki publication,
   strict parity, issue closure, and branch/worktree hygiene remain pending at this fixed-local
   checkpoint.
