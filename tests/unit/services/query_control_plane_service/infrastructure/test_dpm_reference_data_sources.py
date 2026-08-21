@@ -202,6 +202,40 @@ async def test_market_data_readers_chunk_oversized_internal_inputs(
 
 
 @pytest.mark.asyncio
+async def test_market_price_reader_globally_orders_populated_chunk_results() -> None:
+    later_record = SimpleNamespace(
+        security_id="SEC_1000",
+        price_date=date(2026, 4, 10),
+        price="102.0000000000",
+        currency="SGD",
+        created_at=_timestamps()["created_at"],
+        updated_at=_timestamps()["updated_at"],
+    )
+    earlier_record = SimpleNamespace(
+        security_id="SEC_0000",
+        price_date=date(2026, 4, 10),
+        price="101.0000000000",
+        currency="SGD",
+        created_at=_timestamps()["created_at"],
+        updated_at=_timestamps()["updated_at"],
+    )
+    first_result = MagicMock()
+    first_result.scalars.return_value.all.return_value = [later_record]
+    second_result = MagicMock()
+    second_result.scalars.return_value.all.return_value = [earlier_record]
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[first_result, second_result])
+
+    records = await SqlAlchemyDpmReferenceDataReader(session).list_latest_market_prices(
+        security_ids=[f"SEC_{index:04d}" for index in range(1_001)],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    assert [record.security_id for record in records] == ["SEC_0000", "SEC_1000"]
+    assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_market_data_readers_sort_normalized_inputs_before_chunking() -> None:
     session = _session_returning()
     reader = SqlAlchemyDpmReferenceDataReader(session)
