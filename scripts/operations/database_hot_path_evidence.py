@@ -41,7 +41,7 @@ def build_evidence_plan() -> DatabaseHotPathEvidencePlan:
         pytest_nodes=(
             "tests/integration/libs/portfolio-common/"
             "test_latest_position_query_plans.py::"
-            "test_latest_snapshot_and_history_queries_use_covering_indexes",
+            "test_latest_snapshot_publishes_report_only_plan_evidence",
             "tests/integration/scripts/operations/database_evidence/"
             "test_operations_support.py::"
             "test_operations_support_page_reports_bounded_plan_posture",
@@ -49,11 +49,17 @@ def build_evidence_plan() -> DatabaseHotPathEvidencePlan:
             "test_reconciliation.py::"
             "test_reconciliation_control_scan_is_bounded_and_index_backed",
             "tests/integration/scripts/operations/database_evidence/"
+            "test_reprocessing.py::"
+            "test_reprocessing_claim_and_stale_recovery_publish_rollback_safe_evidence",
+            "tests/integration/scripts/operations/database_evidence/"
             "test_transaction_ledger.py::"
             "test_transaction_ledger_page_and_count_are_bounded_and_index_backed",
             "tests/integration/scripts/operations/database_evidence/"
             "test_valuation_claim.py::"
             "test_valuation_claim_plan_is_bounded_indexed_and_rollback_safe",
+            "tests/integration/scripts/operations/database_evidence/"
+            "test_valuation_stale_recovery.py::"
+            "test_valuation_stale_recovery_publishes_rollback_safe_evidence",
         )
     )
 

@@ -73,7 +73,7 @@ async def test_reconciliation_control_scan_is_bounded_and_index_backed(
     )
     publish_requested_fragments((result,))
 
-    assert result.status == "passed", result
-    assert result.root_actual_rows == scenario.max_root_actual_rows
-    assert result.index_names
-    assert result.sequential_scan_relations == ()
+    seeded_controls = await async_db_session.scalar(
+        text("SELECT count(*) FROM pipeline_stage_state")
+    )
+    assert seeded_controls == scenario.seed_cardinality

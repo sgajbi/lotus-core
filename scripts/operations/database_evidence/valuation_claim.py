@@ -19,10 +19,9 @@ async def measure_valuation_job_claim(
 ) -> HotPathPlanResult:
     """Measure exact claim SQL without retaining either mutation execution."""
 
-    repository = ValuationRepository(session)
     plan = await capture_and_explain_rolled_back_mutation(
         session,
-        lambda: repository.find_and_claim_eligible_jobs(
+        lambda evidence_session: ValuationRepository(evidence_session).find_and_claim_eligible_jobs(
             batch_size=scenario.max_root_actual_rows,
             lease_owner="database-hot-path-evidence",
         ),

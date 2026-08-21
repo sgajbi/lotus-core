@@ -24,9 +24,17 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 _TARGET_PORTFOLIO = "LATEST-PLAN-TARGET"
 _NOISE_PORTFOLIO = "LATEST-PLAN-NOISE"
 _CATALOG_PATH = Path("contracts/operations/database-hot-path-scenarios.v1.json")
+_TARGET_HISTORY_CARDINALITY = 2_500
 
 
-async def _seed_representative_latest_row_history(session: AsyncSession) -> None:
+async def _seed_representative_latest_row_history(
+    session: AsyncSession,
+    *,
+    seed_cardinality: int,
+) -> None:
+    if seed_cardinality < _TARGET_HISTORY_CARDINALITY:
+        raise ValueError("latest-position seed cardinality cannot omit target history")
+    noise_cardinality = seed_cardinality - _TARGET_HISTORY_CARDINALITY
     await session.execute(
         text(
             """
@@ -61,9 +69,10 @@ async def _seed_representative_latest_row_history(session: AsyncSession) -> None
                 'Latest noise ' || security_no::text,
                 'LATEST-NOISE-ISIN-' || security_no::text,
                 'USD', 'Stock', 'Equity'
-            FROM generate_series(1, 5000) AS security_no
+            FROM generate_series(1, :noise_cardinality) AS security_no
             """
-        )
+        ),
+        {"noise_cardinality": noise_cardinality},
     )
     await session.execute(
         text(
@@ -88,10 +97,14 @@ async def _seed_representative_latest_row_history(session: AsyncSession) -> None
                 0,
                 100,
                 1000
-            FROM generate_series(1, 5000) AS security_no
+            FROM generate_series(1, :noise_cardinality) AS security_no
             """
         ),
-        {"target": _TARGET_PORTFOLIO, "noise": _NOISE_PORTFOLIO},
+        {
+            "target": _TARGET_PORTFOLIO,
+            "noise": _NOISE_PORTFOLIO,
+            "noise_cardinality": noise_cardinality,
+        },
     )
     await session.execute(
         text(
@@ -117,10 +130,14 @@ async def _seed_representative_latest_row_history(session: AsyncSession) -> None
                 'BUY', 100, 10, 1000, 'USD', 'USD',
                 TIMESTAMPTZ '2026-08-21 00:00:00+00'
                     - ((row_no - 1) % 5) * INTERVAL '1 day'
-            FROM generate_series(1, 7500) AS row_no
+            FROM generate_series(1, :seed_cardinality) AS row_no
             """
         ),
-        {"target": _TARGET_PORTFOLIO, "noise": _NOISE_PORTFOLIO},
+        {
+            "target": _TARGET_PORTFOLIO,
+            "noise": _NOISE_PORTFOLIO,
+            "seed_cardinality": seed_cardinality,
+        },
     )
     await session.execute(
         text(
@@ -161,7 +178,11 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
-    await _seed_representative_latest_row_history(async_db_session)
+    scenario = load_hot_path_scenario_catalog(_CATALOG_PATH).by_id()["latest_position_snapshot"]
+    await _seed_representative_latest_row_history(
+        async_db_session,
+        seed_cardinality=scenario.seed_cardinality,
+    )
 
     valuation_repo = valuation_repository.ValuationRepository(async_db_session)
     history_statement = await capture_single_production_statement(
@@ -175,9 +196,8 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
     snapshot_result = await measure_latest_position_snapshot(
         async_db_session,
         portfolio_id=_TARGET_PORTFOLIO,
-        scenario=load_hot_path_scenario_catalog(_CATALOG_PATH).by_id()["latest_position_snapshot"],
+        scenario=scenario,
     )
-    publish_requested_fragments((snapshot_result,))
     governed_indexes = set(
         (
             await async_db_session.scalars(
@@ -207,3 +227,27 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
     assert "Seq Scan" not in plan_node_types(history_plan)
     assert "WindowAgg" not in snapshot_result.node_types
     assert "WindowAgg" not in plan_node_types(history_plan)
+
+
+async def test_latest_snapshot_publishes_report_only_plan_evidence(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    del clean_db
+    scenario = load_hot_path_scenario_catalog(_CATALOG_PATH).by_id()["latest_position_snapshot"]
+    await _seed_representative_latest_row_history(
+        async_db_session,
+        seed_cardinality=scenario.seed_cardinality,
+    )
+
+    seeded_transactions = await async_db_session.scalar(
+        text("SELECT count(*) FROM transactions WHERE transaction_id LIKE 'LATEST-TXN-%'")
+    )
+    result = await measure_latest_position_snapshot(
+        async_db_session,
+        portfolio_id=_TARGET_PORTFOLIO,
+        scenario=scenario,
+    )
+    publish_requested_fragments((result,))
+
+    assert seeded_transactions == scenario.seed_cardinality

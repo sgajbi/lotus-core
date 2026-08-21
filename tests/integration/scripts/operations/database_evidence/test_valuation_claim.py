@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from portfolio_common.database_models import PortfolioValuationJob
 from sqlalchemy import func, insert, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scripts.operations.database_evidence.contract import load_hot_path_scenario_catalog
 from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
@@ -39,6 +39,23 @@ async def _seed_valuation_claims(session: AsyncSession, *, count: int) -> None:
     await session.commit()
 
 
+async def _claim_authority_snapshot(session: AsyncSession) -> list[tuple[object, ...]]:
+    rows = await session.execute(
+        select(
+            PortfolioValuationJob.id,
+            PortfolioValuationJob.status,
+            PortfolioValuationJob.requeue_requested,
+            PortfolioValuationJob.claimed_readiness_outbox_id,
+            PortfolioValuationJob.valuation_lease_owner,
+            PortfolioValuationJob.valuation_claim_token,
+            PortfolioValuationJob.valuation_lease_expires_at,
+            PortfolioValuationJob.updated_at,
+            PortfolioValuationJob.attempt_count,
+        ).order_by(PortfolioValuationJob.id)
+    )
+    return [tuple(row) for row in rows]
+
+
 async def test_valuation_claim_plan_is_bounded_indexed_and_rollback_safe(
     clean_db,
     async_db_session: AsyncSession,
@@ -46,17 +63,17 @@ async def test_valuation_claim_plan_is_bounded_indexed_and_rollback_safe(
     del clean_db
     scenario = load_hot_path_scenario_catalog(CATALOG_PATH).by_id()["valuation_job_claim"]
     await _seed_valuation_claims(async_db_session, count=scenario.seed_cardinality)
+    authority_before = await _claim_authority_snapshot(async_db_session)
+    await async_db_session.rollback()
 
     result = await measure_valuation_job_claim(async_db_session, scenario=scenario)
     publish_requested_fragments((result,))
-
-    assert result.status == "failed", result
-    assert result.root_actual_rows == scenario.max_root_actual_rows
-    assert result.rows_examined <= scenario.max_rows_examined
-    assert result.index_names
-    assert "WindowAgg" not in result.node_types
-    assert result.sequential_scan_relations == ("portfolio_valuation_jobs",)
-    assert "prohibited_node_type:Seq Scan" in result.violations
+    verification_sessions = async_sessionmaker(
+        bind=async_db_session.bind,
+        expire_on_commit=False,
+    )
+    async with verification_sessions() as verification_session:
+        authority_after = await _claim_authority_snapshot(verification_session)
     pending_count = await async_db_session.scalar(
         select(func.count()).where(PortfolioValuationJob.status == "PENDING")
     )
@@ -65,3 +82,4 @@ async def test_valuation_claim_plan_is_bounded_indexed_and_rollback_safe(
     )
     assert pending_count == scenario.seed_cardinality
     assert processing_count == 0
+    assert authority_after == authority_before

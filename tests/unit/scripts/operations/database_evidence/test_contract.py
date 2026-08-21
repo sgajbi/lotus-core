@@ -42,9 +42,14 @@ def test_catalog_is_versioned_complete_and_deterministically_ordered() -> None:
         "latest_position_snapshot",
         "operations_support_page",
         "reconciliation_estate_scan",
+        "reprocessing_job_claim",
+        "reprocessing_stale_reset",
+        "reprocessing_stale_scan",
         "transaction_ledger_count",
         "transaction_ledger_page",
         "valuation_job_claim",
+        "valuation_stale_reset",
+        "valuation_stale_scan",
     ]
 
 
@@ -90,6 +95,28 @@ def test_plan_evaluator_accepts_indexed_bounded_optimizer_alternative() -> None:
 
 
 @pytest.mark.parametrize(
+    "removed_metric",
+    [
+        "Rows Removed by Filter",
+        "Rows Removed by Index Recheck",
+        "Rows Removed by Join Filter",
+    ],
+)
+def test_plan_evaluator_counts_rows_discarded_by_runtime_filters(
+    removed_metric: str,
+) -> None:
+    scenario = load_hot_path_scenario_catalog(CATALOG_PATH).scenarios[0]
+    plan = _plan(actual_rows=1, actual_loops=2)
+    plan[0]["Plan"][removed_metric] = 15_000
+
+    result = evaluate_hot_path_plan(scenario, plan)
+
+    assert result.rows_examined == 30_002
+    assert result.status == "failed"
+    assert "rows_examined_exceeded" in result.violations
+
+
+@pytest.mark.parametrize(
     ("plan", "violation"),
     [
         (_plan(node_type="Seq Scan", index_name=None), "prohibited_node_type:Seq Scan"),
@@ -114,6 +141,16 @@ def test_plan_evaluator_rejects_governed_regressions(plan, violation: str) -> No
         {},
         [{"Plan": {"Node Type": "Index Scan", "Actual Rows": 1}}],
         [{"Plan": {"Node Type": "Index Scan", "Actual Rows": 1, "Actual Loops": -1}}],
+        [
+            {
+                "Plan": {
+                    "Node Type": "Index Scan",
+                    "Actual Rows": 1,
+                    "Actual Loops": 1,
+                    "Rows Removed by Filter": "1",
+                }
+            }
+        ],
         [{"Plan": {"Node Type": "Index Scan", "Actual Rows": 1, "Actual Loops": 1, "Plans": {}}}],
     ],
 )

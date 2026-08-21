@@ -34,6 +34,11 @@ _SCENARIO_KEYS = {
 _SCENARIO_ID = re.compile(r"^[a-z][a-z0-9_]*$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _INDEX_NODE_TYPES = {"Index Scan", "Index Only Scan", "Bitmap Index Scan"}
+_ROWS_REMOVED_METRICS = (
+    "Rows Removed by Filter",
+    "Rows Removed by Index Recheck",
+    "Rows Removed by Join Filter",
+)
 _SENSITIVE_KEY_PARTS = {
     "dsn",
     "host",
@@ -213,11 +218,33 @@ def evaluate_hot_path_plan(
         )
     )
     root_actual_rows = _non_negative_plan_integer(root, "Actual Rows")
-    rows_examined = sum(
-        _non_negative_plan_integer(node, "Actual Rows")
-        * _non_negative_plan_integer(node, "Actual Loops")
-        for node in nodes
+    rows_examined = sum(_rows_examined_by_node(node) for node in nodes)
+    violations = _plan_violations(
+        scenario,
+        node_types=node_types,
+        root_actual_rows=root_actual_rows,
+        rows_examined=rows_examined,
     )
+
+    return HotPathPlanResult(
+        scenario_id=scenario.scenario_id,
+        status="passed" if not violations else "failed",
+        root_actual_rows=root_actual_rows,
+        rows_examined=rows_examined,
+        node_types=node_types,
+        index_names=index_names,
+        sequential_scan_relations=sequential_scan_relations,
+        violations=violations,
+    )
+
+
+def _plan_violations(
+    scenario: HotPathScenario,
+    *,
+    node_types: tuple[str, ...],
+    root_actual_rows: int,
+    rows_examined: int,
+) -> tuple[str, ...]:
     violations: list[str] = []
     prohibited = sorted(set(node_types).intersection(scenario.prohibited_node_types))
     if prohibited:
@@ -228,16 +255,7 @@ def evaluate_hot_path_plan(
         violations.append("root_actual_rows_exceeded")
     if rows_examined > scenario.max_rows_examined:
         violations.append("rows_examined_exceeded")
-    return HotPathPlanResult(
-        scenario_id=scenario.scenario_id,
-        status="passed" if not violations else "failed",
-        root_actual_rows=root_actual_rows,
-        rows_examined=rows_examined,
-        node_types=node_types,
-        index_names=index_names,
-        sequential_scan_relations=sequential_scan_relations,
-        violations=tuple(violations),
-    )
+    return tuple(violations)
 
 
 def _plan_root(payload: object) -> Mapping[str, object]:
@@ -277,6 +295,20 @@ def _non_negative_plan_integer(node: Mapping[str, object], field: str) -> int:
     if int(value) != value:
         raise DatabaseEvidenceContractError("plan_runtime_metric_invalid")
     return int(value)
+
+
+def _optional_non_negative_plan_integer(node: Mapping[str, object], field: str) -> int:
+    if field not in node:
+        return 0
+    return _non_negative_plan_integer(node, field)
+
+
+def _rows_examined_by_node(node: Mapping[str, object]) -> int:
+    loops = _non_negative_plan_integer(node, "Actual Loops")
+    emitted_and_discarded_rows = _non_negative_plan_integer(node, "Actual Rows") + sum(
+        _optional_non_negative_plan_integer(node, field) for field in _ROWS_REMOVED_METRICS
+    )
+    return emitted_and_discarded_rows * loops
 
 
 def build_hot_path_evidence_artifact(
@@ -361,19 +393,19 @@ def load_hot_path_plan_fragments(
     if set(observed_paths) != set(expected_paths):
         raise DatabaseEvidenceContractError("fragment_scenario_set_invalid")
     return tuple(
-        _load_plan_result(observed_paths[f"{scenario.scenario_id}.json"], scenario.scenario_id)
+        _load_plan_result(observed_paths[f"{scenario.scenario_id}.json"], scenario)
         for scenario in catalog.scenarios
     )
 
 
-def _load_plan_result(path: Path, expected_scenario_id: str) -> HotPathPlanResult:
+def _load_plan_result(path: Path, scenario: HotPathScenario) -> HotPathPlanResult:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise DatabaseEvidenceContractError("fragment_unavailable_or_invalid") from exc
     if not isinstance(payload, dict) or set(payload) != _RESULT_KEYS:
         raise DatabaseEvidenceContractError("fragment_shape_invalid")
-    if payload["scenario_id"] != expected_scenario_id:
+    if payload["scenario_id"] != scenario.scenario_id:
         raise DatabaseEvidenceContractError("fragment_scenario_identity_invalid")
     status = payload["status"]
     if status not in {"passed", "failed"}:
@@ -385,21 +417,28 @@ def _load_plan_result(path: Path, expected_scenario_id: str) -> HotPathPlanResul
         for value in (root_actual_rows, rows_examined)
     ):
         raise DatabaseEvidenceContractError("fragment_runtime_metric_invalid")
-    collections = {
-        key: _strict_string_tuple(payload[key])
-        for key in (
-            "node_types",
-            "index_names",
-            "sequential_scan_relations",
-            "violations",
-        )
-    }
+    node_types = _strict_string_tuple(payload["node_types"])
+    index_names = _strict_string_tuple(payload["index_names"])
+    sequential_scan_relations = _strict_string_tuple(payload["sequential_scan_relations"])
+    violations = _strict_unique_string_tuple(payload["violations"])
+    expected_violations = _plan_violations(
+        scenario,
+        node_types=node_types,
+        root_actual_rows=root_actual_rows,
+        rows_examined=rows_examined,
+    )
+    expected_status = "passed" if not expected_violations else "failed"
+    if status != expected_status or violations != expected_violations:
+        raise DatabaseEvidenceContractError("fragment_semantics_invalid")
     result = HotPathPlanResult(
-        scenario_id=expected_scenario_id,
+        scenario_id=scenario.scenario_id,
         status=status,
         root_actual_rows=root_actual_rows,
         rows_examined=rows_examined,
-        **collections,
+        node_types=node_types,
+        index_names=index_names,
+        sequential_scan_relations=sequential_scan_relations,
+        violations=violations,
     )
     _assert_source_safe(asdict(result))
     return result
@@ -410,6 +449,16 @@ def _strict_string_tuple(value: object) -> tuple[str, ...]:
         not isinstance(value, list)
         or any(not isinstance(item, str) or not item.strip() for item in value)
         or value != sorted(set(value))
+    ):
+        raise DatabaseEvidenceContractError("fragment_string_collection_invalid")
+    return tuple(value)
+
+
+def _strict_unique_string_tuple(value: object) -> tuple[str, ...]:
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+        or len(value) != len(set(value))
     ):
         raise DatabaseEvidenceContractError("fragment_string_collection_invalid")
     return tuple(value)
