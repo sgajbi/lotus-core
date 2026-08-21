@@ -374,7 +374,7 @@ Request fields:
 3. `booking_center_code`,
 4. optional `mandate_id`,
 5. optional `policy_pack_id`,
-6. `instrument_ids[]`.
+6. `instrument_ids[]`, with a governed maximum of 1,000 unique identifiers.
 
 Response fields:
 
@@ -424,7 +424,7 @@ Proposed API:
 Request fields:
 
 1. `as_of_date`,
-2. optional `security_ids[]`,
+2. optional `security_ids[]`, with a governed maximum of 1,000 unique identifiers,
 3. optional `lot_status_filter`,
 4. optional `include_closed_lots=false`,
 5. `page_size`,
@@ -530,10 +530,10 @@ evidence.
 | --- | --- | --- |
 | Composed DPM source-data architecture with no monolithic context endpoint | Implemented and live-proven | RFC-0036 and core docs reference composed products, no route or doc claims one all-in-one source endpoint, and manage live proof confirms composition across product-specific core routes. |
 | DPM source-data governance scaffold | Implemented | Planned products, domain-product declarations, source-security profiles, route-family posture, and validation evidence exist for the runtime routes. |
-| Governed model portfolio target source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned READY with nine targets totaling 1.0000000000. |
+| Governed model portfolio target source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned READY with nine targets totaling 1.0000000000. Effective target reads use ordered ceiling-plus-one detection and fail closed above 1,000 without truncated authority. |
 | Governed discretionary mandate binding source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned discretionary mandate binding to `MODEL_PB_SG_GLOBAL_BAL_DPM`. |
-| Governed instrument eligibility and settlement profile source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned READY eligibility including a restricted private-credit buy block and sell allowance. |
-| Bulk portfolio tax-lot source product | Implemented and live-proven | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly; API, catalog, OpenAPI, paging, supportability, contract evidence, and live READY tax-lot proof exist. |
+| Governed instrument eligibility and settlement profile source product | Implemented and live-proven | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and live evidence exist; canonical proof returned READY eligibility including a restricted private-credit buy block and sell allowance. Public filters are capped at 1,000 and internal reads remain bind-safe. |
+| Bulk portfolio tax-lot source product | Implemented and live-proven | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly; API, catalog, OpenAPI, paging, supportability, contract evidence, and live READY tax-lot proof exist. Public security filters are capped at 1,000 and chunked internal reads preserve global keyset order. |
 | Bulk market-data and FX coverage products | Implemented and live-proven | Held and target universe prices/FX coverage can be fetched with one bounded call; public collections are capped at 1,000 and source reads use the shared row/bind budget; API, catalog, OpenAPI, supportability, stale/missing diagnostics, and live READY coverage proof exist. |
 | DPM source readiness and supportability | Implemented and live-proven | `DpmSourceReadiness:v1` exposes operator-grade source-family supportability for mandate, model target, eligibility, tax-lot, and market-data readiness; model expansion above 1,000 instruments fails closed before those three universe reads rather than truncating; live proof returned READY across all five families. |
 | Canonical seeded managed mandate portfolio | Implemented and live-proven | Front-office seed includes model target, mandate binding, eligibility, tax-lot, market-price, and FX inputs for `PB_SG_GLOBAL_BAL_001`; live core and manage proof both passed on 2026-05-02. |

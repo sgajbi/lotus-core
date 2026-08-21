@@ -16,6 +16,9 @@ assembly. The slice covers:
 The bulk API resolves eligibility for a caller-provided security list and preserves request order.
 Missing source records are returned explicitly as `UNKNOWN` with
 `ELIGIBILITY_PROFILE_MISSING`; `lotus-manage` must not infer eligibility locally.
+The public request accepts at most 1,000 unique security identifiers. The repository independently
+normalizes, deduplicates, orders, and chunks direct/internal inputs through the shared PostgreSQL
+row/bind budget, then globally orders evidence before the application restores request order.
 
 Returned records include:
 

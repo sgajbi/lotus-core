@@ -37,6 +37,9 @@ Slice 4 implemented the first active DPM source-data product in `lotus-core`:
 8. OpenAPI exposes source-data product and source-security metadata for the active route,
 9. canonical front-office seed includes `MODEL_PB_SG_GLOBAL_BAL_DPM` version `2026.04` with
    target weights summing to `1.0000000000`.
+10. effective target selection is ordered and capped at 1,001 rows to detect a governed maximum of
+    1,000 without unbounded materialization; overflow publishes `MODEL_TARGET_LIMIT_EXCEEDED`, no
+    target rows, and no truncated source authority.
 
 ## Validation Evidence
 

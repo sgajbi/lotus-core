@@ -16,6 +16,11 @@ Implemented scope:
 6. source-data product catalog, source-security profile, route-family registry, domain-product
    declaration, OpenAPI schema, and endpoint tests.
 
+The optional public security filter accepts at most 1,000 unique identifiers. Repository defense
+normalizes and chunks direct/internal oversized filters; each chunk retains the same as-of, status,
+and cursor predicates, and Core globally orders the combined evidence before applying the page
+limit. Instrument-reference checks use the same bind-safe policy.
+
 This slice deliberately does not introduce a new tax-lot ingestion endpoint. Existing core BUY and
 lot-state processing remain the current authority. A separate ingestion product should be added
 only if a custody or tax-lot engine feed becomes the enterprise source of record.
@@ -93,6 +98,8 @@ Tests cover:
 7. OpenAPI schema documentation completeness for request, record, supportability, response, and
    pagination models,
 8. active source-data catalog, source-security, route-family, and domain-product declarations.
+9. exact-limit public filtering, oversized validation, bind-safe direct reads, and global page
+   ordering across statement chunks.
 
 ## Current Evidence Status
 
