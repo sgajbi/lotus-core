@@ -10,9 +10,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
-KAFKA_RECOVERY_OVERRIDE_PATH = (
-    REPO_ROOT / "contracts" / "operations" / "kafka-restart-recovery.compose.yml"
-)
 PYTHON_RUNTIME_SERVICES = frozenset(
     {
         "kafka-topic-creator",
@@ -96,20 +93,6 @@ def test_kafka_retries_bounded_startup_without_mutating_zookeeper_state() -> Non
     assert "entrypoint" not in kafka
     assert "command" not in kafka
     assert "volumes" not in kafka
-
-
-def test_kafka_recovery_override_exhausts_former_budget_before_real_probe() -> None:
-    override = yaml.safe_load(KAFKA_RECOVERY_OVERRIDE_PATH.read_text(encoding="utf-8"))
-    healthcheck = override["services"]["kafka"]["healthcheck"]
-    command = healthcheck["test"][1]
-
-    assert healthcheck["interval"] == "1s"
-    assert healthcheck["timeout"] == "50s"
-    assert healthcheck["start_period"] == "0s"
-    assert "retries" not in healthcheck
-    assert '"$$attempt" -le 10' in command
-    assert "remaining=45" in command
-    assert command.count("kafka-topics --bootstrap-server kafka:9093 --list") == 2
 
 
 def test_direct_kafka_clients_cannot_bypass_shared_transport_security() -> None:

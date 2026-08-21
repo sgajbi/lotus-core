@@ -7,7 +7,7 @@ import pytest
 from scripts.validation.kafka_restart_recovery import (
     BrokerState,
     KafkaRestartRecoveryError,
-    recovery_compose_command,
+    dependency_gated_recovery_command,
     recovery_failure_diagnostic,
     wait_for_healthy_broker,
 )
@@ -66,38 +66,19 @@ def test_recovery_diagnostic_contains_no_destructive_instruction() -> None:
     assert "down -v" not in message
 
 
-def test_recovery_command_exercises_dependency_gated_compose_path(tmp_path) -> None:
-    compose_file = tmp_path / "docker-compose.yml"
-    override_file = tmp_path / "recovery.compose.yml"
-    compose_file.touch()
-    override_file.touch()
-
-    command = recovery_compose_command(
-        compose_file=compose_file,
-        override_file=override_file,
-        compose_project="lotus-core-kafka-proof",
+def test_recovery_starts_through_topic_creator_dependency() -> None:
+    command = dependency_gated_recovery_command(
+        lambda *args: ["docker", "compose", "-p", "isolated", *args]
     )
 
-    assert command("up", "-d", "--force-recreate", "kafka-topic-creator") == [
+    assert command == [
         "docker",
         "compose",
-        "-f",
-        str(compose_file),
-        "-f",
-        str(override_file),
         "-p",
-        "lotus-core-kafka-proof",
+        "isolated",
         "up",
         "-d",
         "--force-recreate",
         "kafka-topic-creator",
     ]
-
-
-def test_recovery_command_fails_closed_without_governed_override(tmp_path) -> None:
-    with pytest.raises(KafkaRestartRecoveryError, match="governed path"):
-        recovery_compose_command(
-            compose_file=tmp_path / "docker-compose.yml",
-            override_file=tmp_path / "missing.compose.yml",
-            compose_project="lotus-core-kafka-proof",
-        )
+    assert command[-1] != "kafka"
