@@ -14,6 +14,11 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from portfolio_common.infrastructure.persistence.timeseries_market_data_reader import (
     TimeseriesMarketDataReader,
 )
@@ -40,6 +45,7 @@ from ..domain.position_timeseries.models import PositionTimeseriesRecord
 logger = logging.getLogger(__name__)
 
 AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
+AGGREGATION_STALE_RECOVERY_COHORT_LIMIT = 1_000
 
 
 @dataclass(frozen=True)
@@ -364,47 +370,76 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             if row.attempt_count >= max_attempts
             and row.failure_reason != AGGREGATION_REPROCESS_REQUESTED
         ]
+        failed_job_id_set = set(failed_job_ids)
+        requeue_job_ids = sorted(row.id for row in expired_rows if row.id not in failed_job_id_set)
         failed_count = await self._fail_expired_job_leases(failed_job_ids, now)
-        requeued_count = await self._requeue_expired_job_leases(
-            [row.id for row in expired_rows],
-            now,
-        )
+        requeued_count = await self._requeue_expired_job_leases(requeue_job_ids, now)
         return ExpiredAggregationJobRecovery(
             requeued_count=requeued_count,
             failed_count=failed_count,
         )
 
     async def _fail_expired_job_leases(self, job_ids: list[int], now: datetime) -> int:
-        if not job_ids:
+        normalized_ids = sorted(set(job_ids))
+        if not normalized_ids:
             return 0
-        result = await self.db.execute(
-            _expired_job_leases_update(job_ids, now)
-            .where(
-                func.coalesce(PortfolioAggregationJob.failure_reason, "")
-                != AGGREGATION_REPROCESS_REQUESTED
-            )
-            .values(
-                status="FAILED",
-                failure_reason="Aggregation job lease expired after max attempts",
-                updated_at=func.now(),
-                **_cleared_lease_values(),
-            )
-            .execution_options(synchronize_session=False)
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.AGGREGATION_STALE_FAILED_UPDATE,
+            item_count=len(normalized_ids),
+            binds_per_row=1,
+            reserved_binds=9,
         )
-        return int(result.rowcount or 0)
+        failed_count = 0
+        for chunk in iter_statement_chunks(
+            normalized_ids,
+            binds_per_row=1,
+            reserved_binds=9,
+        ):
+            result = await self.db.execute(
+                _expired_job_leases_update(list(chunk), now)
+                .where(
+                    func.coalesce(PortfolioAggregationJob.failure_reason, "")
+                    != AGGREGATION_REPROCESS_REQUESTED
+                )
+                .values(
+                    status="FAILED",
+                    failure_reason="Aggregation job lease expired after max attempts",
+                    updated_at=func.now(),
+                    **_cleared_lease_values(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            failed_count += int(result.rowcount or 0)
+        return failed_count
 
     async def _requeue_expired_job_leases(self, job_ids: list[int], now: datetime) -> int:
-        if not job_ids:
+        normalized_ids = sorted(set(job_ids))
+        if not normalized_ids:
             return 0
-        result = await self.db.execute(
-            _expired_job_leases_update(job_ids, now).values(
-                status="PENDING",
-                failure_reason=None,
-                updated_at=func.now(),
-                **_cleared_lease_values(),
-            )
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.AGGREGATION_STALE_REQUEUE_UPDATE,
+            item_count=len(normalized_ids),
+            binds_per_row=1,
+            reserved_binds=7,
         )
-        return int(result.rowcount or 0)
+        requeued_count = 0
+        for chunk in iter_statement_chunks(
+            normalized_ids,
+            binds_per_row=1,
+            reserved_binds=7,
+        ):
+            result = await self.db.execute(
+                _expired_job_leases_update(list(chunk), now)
+                .values(
+                    status="PENDING",
+                    failure_reason=None,
+                    updated_at=func.now(),
+                    **_cleared_lease_values(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            requeued_count += int(result.rowcount or 0)
+        return requeued_count
 
     @async_timed(repository="TimeseriesRepository", method="get_job_queue_stats")
     async def get_job_queue_stats(self) -> dict[str, Any]:
@@ -543,13 +578,22 @@ def _missing_position_timeseries_exists(
 
 
 def _expired_job_leases_statement(now: datetime):
-    return select(
-        PortfolioAggregationJob.id,
-        PortfolioAggregationJob.attempt_count,
-        PortfolioAggregationJob.failure_reason,
-    ).where(
-        PortfolioAggregationJob.status == "PROCESSING",
-        PortfolioAggregationJob.lease_expires_at <= now,
+    return (
+        select(
+            PortfolioAggregationJob.id,
+            PortfolioAggregationJob.attempt_count,
+            PortfolioAggregationJob.failure_reason,
+        )
+        .where(
+            PortfolioAggregationJob.status == "PROCESSING",
+            PortfolioAggregationJob.lease_expires_at <= now,
+        )
+        .order_by(
+            PortfolioAggregationJob.lease_expires_at.asc(),
+            PortfolioAggregationJob.id.asc(),
+        )
+        .limit(AGGREGATION_STALE_RECOVERY_COHORT_LIMIT)
+        .with_for_update(skip_locked=True)
     )
 
 

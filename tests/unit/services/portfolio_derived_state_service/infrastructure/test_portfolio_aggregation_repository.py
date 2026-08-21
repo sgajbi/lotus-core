@@ -666,6 +666,10 @@ async def test_recover_expired_job_leases_requeues_retryable_claim_and_clears_le
     assert "lease_token=NULL" in reset_sql
     assert "lease_expires_at=NULL" in reset_sql
     assert "failure_reason=NULL" in reset_sql
+    assert "ORDER BY portfolio_aggregation_jobs.lease_expires_at ASC" in select_sql
+    assert "portfolio_aggregation_jobs.id ASC" in select_sql
+    assert "LIMIT 1000" in select_sql
+    assert "FOR UPDATE SKIP LOCKED" in select_sql
 
 
 async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
@@ -695,6 +699,7 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     assert "coalesce(portfolio_aggregation_jobs.failure_reason, '') !=" in failed_sql
     assert "lease_expires_at <= '2026-07-15 08:30:00+00:00'" in failed_sql
     assert "lease_owner=NULL" in failed_sql
+    assert mock_db_session.execute.await_count == 2
 
 
 async def test_recover_expired_job_leases_requeues_unattempted_superseded_revision(
@@ -726,3 +731,59 @@ async def test_recover_expired_job_leases_requeues_unattempted_superseded_revisi
     )
     assert "status='PENDING'" in reset_sql
     assert "failure_reason=NULL" in reset_sql
+
+
+async def test_recover_expired_job_leases_uses_disjoint_failed_and_requeue_updates(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
+    expired_result = MagicMock()
+    expired_result.all.return_value = [
+        MagicMock(id=9, attempt_count=3, failure_reason=None),
+        MagicMock(id=7, attempt_count=1, failure_reason=None),
+        MagicMock(id=8, attempt_count=3, failure_reason="REPROCESS_REQUESTED"),
+    ]
+    failed_result = MagicMock(rowcount=1)
+    reset_result = MagicMock(rowcount=2)
+    mock_db_session.execute.side_effect = [expired_result, failed_result, reset_result]
+
+    result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
+
+    assert result == ExpiredAggregationJobRecovery(requeued_count=2, failed_count=1)
+    failed_statement = mock_db_session.execute.await_args_list[1].args[0]
+    reset_statement = mock_db_session.execute.await_args_list[2].args[0]
+    failed_ids = next(
+        value for value in failed_statement.compile().params.values() if isinstance(value, list)
+    )
+    reset_ids = next(
+        value for value in reset_statement.compile().params.values() if isinstance(value, list)
+    )
+    assert failed_ids == [9]
+    assert reset_ids == [7, 8]
+
+
+async def test_requeue_expired_job_leases_chunks_and_aggregates_counts(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    first = MagicMock(rowcount=1_000)
+    second = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [first, second]
+
+    count = await repository._requeue_expired_job_leases(
+        [*range(1_001), 1_000, 0],
+        datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
+    )
+
+    assert count == 1_001
+    assert mock_db_session.execute.await_count == 2
+    chunk_sizes = [
+        len(
+            next(
+                value for value in call.args[0].compile().params.values() if isinstance(value, list)
+            )
+        )
+        for call in mock_db_session.execute.await_args_list
+    ]
+    assert chunk_sizes == [1_000, 1]
