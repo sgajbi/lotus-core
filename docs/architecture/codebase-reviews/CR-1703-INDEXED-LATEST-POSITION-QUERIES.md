@@ -1,7 +1,7 @@
 # CR-1703 - Indexed Latest Position Queries
 
 Date: 2026-08-21
-Status: Fixed locally; protected PR, exact-main validation, and issue closure pending
+Status: Merged and exact-main validated; closure evidence reconciled
 Issue: #505
 
 ## Finding
@@ -74,8 +74,15 @@ remains an internal PostgreSQL query-shape improvement.
   and repo-local wiki validation gates also passed.
 - The protected critical-database suite passed all 85 tests in 340.78 seconds.
 - Ruff check and formatting, MyPy across 318 source files, architecture/security/governance gates,
-  documentation evidence, wiki/docs validation, and diff hygiene passed locally. Protected PR
-  evidence, exact-main validation, and issue-loop closure must be reconciled before #505 closes.
+  documentation evidence, wiki/docs validation, and diff hygiene passed locally.
+- PR #983 passed Remote Feature Lane `32488658955`, Quality Baseline `32488663340`, and Pull
+  Request Merge Gate `32488663272` at exact signed head
+  `37bf4fb3b6d234c7f903a0a1150ae8d74db0bb42`. It merged by rebase as exact main
+  `f095fc1149afb79ff50bdc24cfee2080a1d9b55b`.
+- Main Releasability `32492773295` completed successfully at that exact main SHA: 24 jobs passed,
+  two institutional jobs were skipped by policy, and no job failed or was cancelled. Final issue
+  closure follows this durable reconciliation reaching validated main, wiki publication/parity,
+  and branch/worktree hygiene.
 
 ## Same-Pattern And Governance Decision
 
@@ -86,5 +93,5 @@ Any future query that newly requires control-state authority for facts predating
 ship upgrade-path backfill proof in the same change; current-data fixtures alone are insufficient.
 The operator wiki documents `SNAPSHOT_ONLY` because it is a new support-visible source posture;
 publication and strict parity remain post-merge requirements. No central skill or platform context
-change is needed; this
-repository-local rule makes the existing bounded-query and current-epoch governance precise.
+change is needed; this repository-local rule makes the existing bounded-query and current-epoch
+governance precise.

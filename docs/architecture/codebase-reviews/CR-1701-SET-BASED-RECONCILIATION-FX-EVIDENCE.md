@@ -1,7 +1,7 @@
 # CR-1701 - Set-Based Reconciliation FX Evidence
 
 Date: 2026-08-21
-Status: Merged and exact-main validated; issue closure reconciliation pending
+Status: Merged and exact-main validated; closure evidence reconciled
 Issue: #504
 
 ## Finding
@@ -61,8 +61,8 @@ dependency closure. The existing Financial Reconciliation wiki already describes
 operator-visible control and no command, response, or operating procedure changed, so no wiki
 source change is required.
 
-The implementation branch was patch-equivalent to main before removal. Issue-loop closure remains
-gated on this durable evidence reaching validated main and final repository hygiene.
+The implementation branch was patch-equivalent to main before removal. Final issue closure follows
+this durable reconciliation reaching validated main and final repository hygiene.
 
 The same-pattern scan found that timeseries integrity still loads authoritative rows and snapshot
 counts per reconciliation scope key. That broader high-cardinality reconciliation read boundary is

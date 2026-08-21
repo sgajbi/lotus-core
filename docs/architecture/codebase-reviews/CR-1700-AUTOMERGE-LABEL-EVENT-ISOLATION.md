@@ -1,7 +1,7 @@
 # CR-1700 - Automerge Label Event Isolation
 
 Date: 2026-08-21
-Status: Merged and exact-main validated; wiki publication and issue closure reconciliation pending
+Status: Merged and exact-main validated; closure evidence reconciled
 Issue: #969
 
 ## Finding
@@ -47,9 +47,9 @@ event, dependency, image, domain, or calculation change.
   `32470268022`, and PR Auto Merge `32470267402`; PR #980 then merged by rebase as
   `d75da061c16724f2648b15bc3cef7fbc9aced20b`.
 - Cumulative Main Releasability `32480746388` completed successfully at exact main
-  `80be01753f86b1c6774d856f6d32efe5182056ee`. Current authored wiki publication/parity,
-  issue-loop closure, and final branch/worktree cleanup remain pending and must be reconciled
-  before #969 closes.
+  `80be01753f86b1c6774d856f6d32efe5182056ee`. The authored wiki truth is ready for publication;
+  final issue closure follows this durable reconciliation reaching validated main, wiki parity
+  verification, and branch/worktree hygiene.
 
 ## Governance Decision
 
