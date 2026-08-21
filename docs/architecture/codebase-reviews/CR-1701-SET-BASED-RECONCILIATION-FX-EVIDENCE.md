@@ -36,6 +36,9 @@ instead of independent financial verification.
   1,000/1 boundary with exact bind counts.
 - A real-PostgreSQL proof resolves multiple pairs and as-of dates, including missing evidence, in
   exactly one statement and returns the expected historical rates.
+- The reconciliation repository PostgreSQL suite is now part of the protected
+  `critical-db-coverage` manifest; its manifest contract and the full financial-reconciliation unit
+  pack pass (`118 passed`).
 - Full MyPy passes across 318 source files; focused Ruff and diff hygiene pass.
 
 ## Compatibility And Scope
