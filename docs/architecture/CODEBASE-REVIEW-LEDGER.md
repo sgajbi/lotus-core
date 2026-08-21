@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1698 bounded DPM market-data and aggregation recovery batches (2026-08-21): DPM
+coverage/readiness accepted caller-sized instrument and FX collections, adapters built unbounded
+predicates, model-target expansion could exceed the leaf capacity after partial source reads, and
+aggregation recovery selected every expired lease before caller-sized identifier updates. Core now
+enforces contract-owned 1,000-item limits and ISO/duplicate validation, shared bind-safe
+deterministic price/FX reads, fail-closed pre-read evaluated-universe enforcement, and ordered
+locked 1,000-row aggregation cohorts with disjoint chunked failed/requeue updates in the caller
+transaction. Keep #972/#503/#719/#714 in their existing ownership boundaries. Protected PR,
+exact-main, wiki publication/parity, issue closure, and hygiene remain pending. Evidence:
+[CR-1698-BOUNDED-DPM-AND-AGGREGATION-BATCHES.md](./codebase-reviews/CR-1698-BOUNDED-DPM-AND-AGGREGATION-BATCHES.md).
+
 Exact-main closure reconciliation (2026-08-21): Main Releasability run `32436643792` passed all
 24 executable jobs at exact main `577dba8ea08182355a262004937dd693fe46ac04`; the two institutional
 jobs were expected policy skips and there were no failures or cancellations. This provides final
