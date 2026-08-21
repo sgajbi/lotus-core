@@ -1,0 +1,59 @@
+"""Rollback-safe plan evidence for reprocessing claim and stale recovery."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .contract import HotPathPlanResult, HotPathScenario, evaluate_hot_path_plan
+from .plan_capture import capture_and_explain_rolled_back_statement
+
+
+async def measure_reprocessing_job_claim(
+    session: AsyncSession,
+    *,
+    scenario: HotPathScenario,
+) -> HotPathPlanResult:
+    """Measure the exact RESET_WATERMARKS claim UPDATE without retaining it."""
+
+    plan = await capture_and_explain_rolled_back_statement(
+        session,
+        lambda evidence_session: ReprocessingJobRepository(evidence_session).find_and_claim_jobs(
+            "RESET_WATERMARKS",
+            batch_size=scenario.max_root_actual_rows,
+        ),
+        statement_prefix="UPDATE",
+    )
+    return evaluate_hot_path_plan(scenario, plan)
+
+
+async def measure_reprocessing_stale_recovery(
+    session: AsyncSession,
+    *,
+    scan_scenario: HotPathScenario,
+    reset_scenario: HotPathScenario,
+    reset_job_ids: tuple[int, ...],
+) -> tuple[HotPathPlanResult, HotPathPlanResult]:
+    """Measure exact stale selection and reset statements without retaining them."""
+
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    scan_plan = await capture_and_explain_rolled_back_statement(
+        session,
+        lambda evidence_session: ReprocessingJobRepository(evidence_session)._find_stale_job_rows(
+            stale_cutoff
+        ),
+        statement_prefix="SELECT",
+    )
+    reset_plan = await capture_and_explain_rolled_back_statement(
+        session,
+        lambda evidence_session: ReprocessingJobRepository(
+            evidence_session
+        )._reset_retryable_stale_jobs(list(reset_job_ids), stale_cutoff),
+        statement_prefix="UPDATE",
+    )
+    return (
+        evaluate_hot_path_plan(scan_scenario, scan_plan),
+        evaluate_hot_path_plan(reset_scenario, reset_plan),
+    )

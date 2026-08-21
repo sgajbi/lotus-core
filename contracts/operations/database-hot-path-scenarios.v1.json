@@ -45,6 +45,48 @@
       "seed_cardinality": 10000
     },
     {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Reprocessing claims must remain bounded, ordered, and index-backed across retained job history.",
+      "repository_method": "find_and_claim_jobs",
+      "repository_owner": "ReprocessingJobRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "reprocessing_job_claim",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Reprocessing stale resets must update only the bounded expired cohort by indexed job identity.",
+      "repository_method": "find_and_reset_stale_jobs.reset",
+      "repository_owner": "ReprocessingJobRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "reprocessing_stale_reset",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Reprocessing stale selection must stop at the deterministic recovery cohort without scanning retained history.",
+      "repository_method": "find_and_reset_stale_jobs.scan",
+      "repository_owner": "ReprocessingJobRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "reprocessing_stale_scan",
+      "seed_cardinality": 10000
+    },
+    {
       "max_root_actual_rows": 1,
       "max_rows_examined": 20000,
       "prohibited_node_types": [
@@ -84,6 +126,34 @@
       "repository_owner": "PositionValuation.ValuationRepository",
       "requires_indexed_access": true,
       "scenario_id": "valuation_job_claim",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Valuation stale resets must update only the bounded expired cohort by indexed job identity.",
+      "repository_method": "find_and_reset_stale_jobs.reset",
+      "repository_owner": "PositionValuation.ValuationRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "valuation_stale_reset",
+      "seed_cardinality": 10000
+    },
+    {
+      "max_root_actual_rows": 1000,
+      "max_rows_examined": 30000,
+      "prohibited_node_types": [
+        "Seq Scan",
+        "WindowAgg"
+      ],
+      "rationale": "Valuation stale selection must stop at the deterministic recovery cohort without scanning retained history.",
+      "repository_method": "find_and_reset_stale_jobs.scan",
+      "repository_owner": "PositionValuation.ValuationRepository",
+      "requires_indexed_access": true,
+      "scenario_id": "valuation_stale_scan",
       "seed_cardinality": 10000
     }
   ],

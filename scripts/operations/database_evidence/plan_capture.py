@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from sqlalchemy import event as sqlalchemy_event
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from .contract import DatabaseEvidenceContractError
 
@@ -17,6 +17,22 @@ class CapturedDatabaseStatement:
 
     sql: str
     parameters: object
+
+
+class _StatementCaptured(Exception):
+    """Stop a production operation before its selected statement executes."""
+
+    def __init__(self, statement: CapturedDatabaseStatement) -> None:
+        super().__init__("production_statement_captured")
+        self.statement = statement
+
+
+class _PlanCaptured(Exception):
+    """Carry an analyzed plan across the mandatory transaction rollback."""
+
+    def __init__(self, plan: object) -> None:
+        super().__init__("analyzed_plan_captured")
+        self.plan = plan
 
 
 async def capture_single_production_statement(
@@ -52,7 +68,9 @@ async def capture_single_production_statement(
     finally:
         sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", capture_statement)
     if len(captured) != 1:
-        raise DatabaseEvidenceContractError("capture_statement_cardinality_invalid")
+        raise DatabaseEvidenceContractError(
+            f"capture_statement_cardinality_invalid:{len(captured)}"
+        )
     return captured[0]
 
 
@@ -77,33 +95,78 @@ async def explain_captured_statement(
 
 async def capture_and_explain_rolled_back_mutation(
     session: AsyncSession,
-    operation: Callable[[], Awaitable[object]],
+    operation: Callable[[AsyncSession], Awaitable[object]],
 ) -> object:
     """Explain exact production UPDATE SQL while rolling back both executions."""
 
+    return await capture_and_explain_rolled_back_statement(
+        session,
+        operation,
+        statement_prefix="UPDATE",
+    )
+
+
+async def capture_and_explain_rolled_back_statement(
+    session: AsyncSession,
+    operation: Callable[[AsyncSession], Awaitable[object]],
+    *,
+    statement_prefix: str,
+) -> object:
+    """Explain one production statement while rolling back both executions."""
+
     if session.in_transaction():
         raise DatabaseEvidenceContractError("mutation_capture_requires_clean_session")
-    async with session.begin():
-        capture_savepoint = await session.begin_nested()
-        try:
-            captured = await capture_single_production_statement(
-                session,
-                operation,
-                statement_prefix="UPDATE",
-            )
-        finally:
-            await capture_savepoint.rollback()
+    bind = session.bind
+    if not isinstance(bind, AsyncEngine):
+        raise DatabaseEvidenceContractError("capture_session_unbound")
+    normalized_prefix = statement_prefix.strip().upper()
+    if not normalized_prefix or not normalized_prefix.isalpha():
+        raise DatabaseEvidenceContractError("capture_statement_prefix_invalid")
 
-        explain_savepoint = await session.begin_nested()
+    async with bind.connect() as connection:
+
+        def stop_before_execution(
+            _connection,
+            _cursor,
+            statement: str,
+            parameters: object,
+            _context,
+            _executemany: bool,
+        ) -> None:
+            if statement.lstrip().upper().startswith(normalized_prefix):
+                raise _StatementCaptured(CapturedDatabaseStatement(statement, parameters))
+
+        sqlalchemy_event.listen(
+            connection.sync_connection,
+            "before_cursor_execute",
+            stop_before_execution,
+        )
         try:
-            connection = await session.connection()
-            result = await connection.exec_driver_sql(
-                f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {captured.sql}",
-                captured.parameters,
-            )
-            plan = result.scalar_one_or_none()
-            if plan is None:
-                raise DatabaseEvidenceContractError("explain_plan_missing")
+            async with AsyncSession(bind=connection, expire_on_commit=False) as evidence_session:
+                try:
+                    await operation(evidence_session)
+                except _StatementCaptured as captured_error:
+                    captured = captured_error.statement
+                else:
+                    raise DatabaseEvidenceContractError("capture_statement_cardinality_invalid:0")
         finally:
-            await explain_savepoint.rollback()
-    return plan
+            sqlalchemy_event.remove(
+                connection.sync_connection,
+                "before_cursor_execute",
+                stop_before_execution,
+            )
+
+        if connection.in_transaction():
+            await connection.rollback()
+        try:
+            async with connection.begin():
+                result = await connection.exec_driver_sql(
+                    f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {captured.sql}",
+                    captured.parameters,
+                )
+                plan = result.scalar_one_or_none()
+                if plan is None:
+                    raise DatabaseEvidenceContractError("explain_plan_missing")
+                raise _PlanCaptured(plan)
+        except _PlanCaptured as captured_plan:
+            return captured_plan.plan
