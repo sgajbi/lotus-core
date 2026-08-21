@@ -37,14 +37,18 @@ change.
 
 ## Validation Evidence
 
-- 68 focused QCP contract, adapter, and application tests passed.
-- Two focused OpenAPI schema tests passed and publish both new request limits.
-- The complete real-PostgreSQL source-capacity file passed: 3 tests in 66.37 seconds, covering
-  exact-limit eligibility/tax-lot/instrument-reference reads and model-target ceiling overflow.
+- 70 focused QCP contract, adapter, application, OpenAPI, HTTP validation, and statement-batching
+  tests passed. They publish both new request limits, reject 1,001-item requests before dispatch,
+  and prove multi-statement DPM support events contain no source identifiers.
+- The complete real-PostgreSQL source-capacity file passed: 3 tests in 77.30 seconds, covering
+  exact-limit eligibility/tax-lot/instrument-reference reads, exactly 1,000 supported model
+  targets, and 1,001-target source overflow.
 - `make typecheck` passed with no issues across 318 source files.
-- Ruff, format, diff hygiene, repository-native gates, wiki premerge check, protected PR, exact-main,
-  wiki publication/parity, and issue-loop closure remain pending and must be reconciled here before
-  #972 or #976 closes.
+- `make lint`, `make architecture-guard`, `make quality-wiki-docs-gate`,
+  `make docs-evidence-pack`, Ruff formatting, and diff hygiene passed.
+- The governed wiki premerge check passed with the one intentional unpublished
+  `Mesh-Data-Products.md` source change. Protected PR, exact-main, wiki publication/parity, and
+  issue-loop closure remain pending and must be reconciled here before #972 or #976 closes.
 
 ## Same-Pattern And Governance Decision
 
