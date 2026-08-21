@@ -136,6 +136,57 @@ async def test_latest_market_prices_normalize_ids_and_bound_as_of_date() -> None
 
 
 @pytest.mark.asyncio
+async def test_eligibility_reader_chunks_oversized_inputs_and_globally_orders_results() -> None:
+    later_record = SimpleNamespace(
+        security_id="SEC_1000",
+        eligibility_status="approved",
+        product_shelf_status="approved",
+        buy_allowed=True,
+        sell_allowed=True,
+        restriction_reason_codes=[],
+        settlement_days=2,
+        settlement_calendar_id="GLOBAL",
+        liquidity_tier=None,
+        issuer_id=None,
+        issuer_name=None,
+        ultimate_parent_issuer_id=None,
+        ultimate_parent_issuer_name=None,
+        asset_class="Equity",
+        country_of_risk="US",
+        effective_from=date(2026, 4, 1),
+        effective_to=None,
+        eligibility_version=1,
+        source_system="eligibility",
+        source_record_id="eligibility:1000",
+        quality_status="accepted",
+        **_timestamps(),
+    )
+    earlier_record = SimpleNamespace(
+        **{**vars(later_record), "security_id": "SEC_0000", "source_record_id": "eligibility:0"}
+    )
+    first_result = MagicMock()
+    first_result.scalars.return_value.all.return_value = [later_record]
+    second_result = MagicMock()
+    second_result.scalars.return_value.all.return_value = [earlier_record]
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[first_result, second_result])
+
+    records = await SqlAlchemyDpmReferenceDataReader(
+        session
+    ).list_instrument_eligibility_profiles(
+        security_ids=[f"SEC_{index:04d}" for index in reversed(range(1_001))],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    assert [record.security_id for record in records] == ["SEC_0000", "SEC_1000"]
+    assert session.execute.await_count == 2
+    first_statement = session.execute.await_args_list[0].args[0]
+    compiled = first_statement.compile(dialect=postgresql.dialect())
+    expanding_values = next(value for value in compiled.params.values() if isinstance(value, list))
+    assert expanding_values == [f"SEC_{index:04d}" for index in range(1_000)]
+
+
+@pytest.mark.asyncio
 async def test_latest_fx_rates_normalize_and_deduplicate_pairs() -> None:
     session = _session_returning(
         SimpleNamespace(

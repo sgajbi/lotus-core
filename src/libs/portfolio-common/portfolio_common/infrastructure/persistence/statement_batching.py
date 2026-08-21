@@ -28,6 +28,7 @@ class StatementBatchOperation(StrEnum):
     VALUATION_STALE_RESET_UPDATE = "valuation_stale_reset_update"
     REPROCESSING_STALE_FAILED_UPDATE = "reprocessing_stale_failed_update"
     REPROCESSING_STALE_RESET_UPDATE = "reprocessing_stale_reset_update"
+    DPM_INSTRUMENT_ELIGIBILITY_LOOKUP = "dpm_instrument_eligibility_lookup"
     DPM_MARKET_PRICE_LOOKUP = "dpm_market_price_lookup"
     DPM_FX_RATE_LOOKUP = "dpm_fx_rate_lookup"
     AGGREGATION_STALE_FAILED_UPDATE = "aggregation_stale_failed_update"
