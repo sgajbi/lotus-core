@@ -1,7 +1,7 @@
 # CR-1700 - Automerge Label Event Isolation
 
 Date: 2026-08-21
-Status: Fixed locally; live labeled-event, protected PR, exact-main, and wiki proof pending
+Status: PR open; live labeled-event and premerge wiki proof passed; exact-main and publication pending
 Issue: #969
 
 ## Finding
@@ -39,9 +39,9 @@ event, dependency, image, domain, or calculation change.
   premerge source comparison also passed at exact head `7afb476f6` from a detached worktree with
   canonical repository naming; it reported the one intentional unpublished
   `Validation-and-CI.md` source delta and no incompatible publication state.
-- The implementation PR must add `automerge` while its original full-gate run is active and record
-  that only PR Auto Merge is triggered, the full-gate run ID remains unchanged, and all existing
-  exact-head checks continue.
+- PR #980 added `automerge` while Pull Request Merge Gate `32468717633` was active at unchanged
+  head `7afb476f6`. Only PR Auto Merge run `32468752293` started; the original full-gate and Quality
+  Baseline run IDs remained unchanged, neither was cancelled, and no duplicate full gate appeared.
 - Protected PR, exact-main, wiki publication/parity, issue-loop closure, and worktree cleanup remain
   pending and must be reconciled here before #969 closes.
 
