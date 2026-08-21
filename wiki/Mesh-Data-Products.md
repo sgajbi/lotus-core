@@ -154,6 +154,10 @@ conclusions.
 diagnostics over an explicit held and target universe. It resolves latest market prices and FX
 rates on or before the requested as-of date, preserves per-instrument and per-pair status, reports
 missing and stale observations, and classifies batch readiness as ready, degraded, or incomplete.
+Both public request collections are capped at 1,000 unique items and the source adapters use the
+shared PostgreSQL row/bind budget. DPM readiness applies the same caller limit; when model targets
+expand the evaluated universe above it, Core performs no eligibility, tax-lot, or market-data read
+and publishes `DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED` instead of truncating source authority.
 It is not a valuation engine, FX attribution method, liquidity ladder, cash forecast,
 market-impact model, execution-quality assessment, best-execution certification, venue-routing
 model, or OMS acknowledgement.

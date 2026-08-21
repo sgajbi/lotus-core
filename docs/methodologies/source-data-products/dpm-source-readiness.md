@@ -111,16 +111,19 @@ Overall state precedence is fail-closed:
 6. If `MP` is available, resolve active model targets; append the source product state and target
    count, or append `MODEL_TARGETS_UNAVAILABLE` on lookup/validation failure.
 7. Build `I_eval` from request instruments and resolved target instruments.
-8. If `I_eval` is empty, append an `UNAVAILABLE` `DPM_INSTRUMENT_UNIVERSE_EMPTY` eligibility row.
-9. If `I_eval` is not empty, resolve instrument eligibility; append source supportability and
+8. If model-target expansion makes `I_eval` exceed 1,000 instruments, perform none of the
+   eligibility, tax-lot, or market-data reads; publish those three families as `UNAVAILABLE` with
+   reason `DPM_EVALUATED_INSTRUMENT_LIMIT_EXCEEDED`, and publish no truncated evaluated universe.
+9. If `I_eval` is empty, append an `UNAVAILABLE` `DPM_INSTRUMENT_UNIVERSE_EMPTY` eligibility row.
+10. If `I_eval` is not empty, resolve instrument eligibility; append source supportability and
    resolved count, or append `INSTRUMENT_ELIGIBILITY_UNAVAILABLE` on lookup/validation failure.
-10. Resolve portfolio tax lots for `P`, `A`, `T`, and `I_eval` when present; append source
+11. Resolve portfolio tax lots for `P`, `A`, `T`, and `I_eval` when present; append source
     supportability and returned lot count, or append `PORTFOLIO_TAX_LOTS_UNAVAILABLE` on
     lookup/validation failure.
-11. Resolve market-data coverage for `I_eval`, `C`, `A`, `V`, `S`, and `T`; append source
+12. Resolve market-data coverage for `I_eval`, `C`, `A`, `V`, `S`, and `T`; append source
     supportability, missing items, stale items, and resolved observation count, or append
     `MARKET_DATA_COVERAGE_UNAVAILABLE` on lookup/validation failure.
-12. Apply the fail-closed state precedence and return runtime source-data metadata.
+13. Apply the fail-closed state precedence and return runtime source-data metadata.
 
 ## Validation And Failure Behavior
 
