@@ -77,8 +77,19 @@ def test_app_local_postgres_defaults_remain_scoped_to_app_local_composition() ->
 
 def test_kafka_retries_bounded_startup_without_mutating_zookeeper_state() -> None:
     kafka = _compose()["services"]["kafka"]
+    healthcheck = kafka["healthcheck"]
 
     assert kafka["restart"] == "on-failure:5"
+    assert healthcheck == {
+        "test": [
+            "CMD-SHELL",
+            "kafka-topics --bootstrap-server kafka:9093 --list || exit 1",
+        ],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 12,
+        "start_period": "30s",
+    }
     assert "entrypoint" not in kafka
     assert "command" not in kafka
     assert "volumes" not in kafka
