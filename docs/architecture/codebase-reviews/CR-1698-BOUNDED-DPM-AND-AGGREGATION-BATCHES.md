@@ -50,4 +50,3 @@ schema/migration, event/Kafka, calculation, dependency, image, datastore, or top
 transaction economics, and #714 owns broader derived-state topology/capacity. Existing platform
 governance already mandates contract-owned capacity and repository-owned bind safety, so no central
 skill or platform-context change is required.
-
