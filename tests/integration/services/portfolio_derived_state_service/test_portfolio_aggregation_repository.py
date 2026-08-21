@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     PortfolioAggregationJob,
     PositionTimeseries,
 )
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
@@ -31,6 +32,46 @@ PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggre
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _seed_expired_aggregation_jobs(
+    session: AsyncSession,
+    *,
+    count: int,
+    prefix: str,
+) -> list[int]:
+    expired_at = datetime.now(UTC) - timedelta(minutes=5)
+    portfolios = [
+        Portfolio(
+            portfolio_id=f"{prefix}-{index:04d}",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="balanced",
+            investment_time_horizon="long_term",
+            portfolio_type="discretionary",
+            booking_center_code="SG",
+            client_id=f"CLIENT-{prefix}-{index:04d}",
+            status="ACTIVE",
+        )
+        for index in range(count)
+    ]
+    session.add_all(portfolios)
+    await session.flush()
+    jobs = [
+        PortfolioAggregationJob(
+            portfolio_id=portfolio.portfolio_id,
+            aggregation_date=date(2026, 4, 10),
+            status="PROCESSING",
+            attempt_count=1,
+            lease_owner="expired-worker",
+            lease_token=f"expired-{index:04d}",
+            lease_expires_at=expired_at,
+        )
+        for index, portfolio in enumerate(portfolios)
+    ]
+    session.add_all(jobs)
+    await session.commit()
+    return [int(job.id) for job in jobs]
 
 
 async def _seed_aggregation_fence_scope(
@@ -297,6 +338,85 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
         assert job1.lease_owner is None
         assert job1.lease_token is None
         assert job1.lease_expires_at is None
+
+
+@pytest.mark.lifecycle
+async def test_expired_aggregation_backlog_drains_in_bounded_cohorts(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_expired_aggregation_jobs(
+        async_db_session,
+        count=1_001,
+        prefix="P-AGG-STALE-COHORT",
+    )
+    repository = PortfolioAggregationRepository(async_db_session)
+
+    first = await repository.recover_expired_job_leases(
+        now=datetime.now(UTC),
+        max_attempts=3,
+    )
+    await async_db_session.commit()
+    second = await repository.recover_expired_job_leases(
+        now=datetime.now(UTC),
+        max_attempts=3,
+    )
+    await async_db_session.commit()
+
+    assert first == ExpiredAggregationJobRecovery(requeued_count=1_000, failed_count=0)
+    assert second == ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
+    status_counts = dict(
+        (
+            await async_db_session.execute(
+                select(PortfolioAggregationJob.status, func.count())
+                .where(PortfolioAggregationJob.portfolio_id.like("P-AGG-STALE-COHORT-%"))
+                .group_by(PortfolioAggregationJob.status)
+            )
+        ).all()
+    )
+    assert status_counts == {"PENDING": 1_001}
+
+
+@pytest.mark.lifecycle
+async def test_later_aggregation_recovery_chunk_failure_rolls_back_all_updates(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    job_ids = await _seed_expired_aggregation_jobs(
+        async_db_session,
+        count=1_001,
+        prefix="P-AGG-STALE-ROLLBACK",
+    )
+    bind = async_db_session.bind
+    assert bind is not None
+    update_count = 0
+
+    def fail_second_update(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+        nonlocal update_count
+        normalized = statement.lower().lstrip()
+        if normalized.startswith("update portfolio_aggregation_jobs"):
+            update_count += 1
+            if update_count == 2:
+                raise RuntimeError("injected second aggregation recovery chunk failure")
+
+    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", fail_second_update)
+    try:
+        with pytest.raises(RuntimeError, match="second aggregation recovery chunk failure"):
+            async with async_db_session.begin():
+                await PortfolioAggregationRepository(async_db_session)._requeue_expired_job_leases(
+                    job_ids, datetime.now(UTC)
+                )
+    finally:
+        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", fail_second_update)
+
+    durable_processing_count = await async_db_session.scalar(
+        select(func.count()).where(
+            PortfolioAggregationJob.id.in_(job_ids),
+            PortfolioAggregationJob.status == "PROCESSING",
+        )
+    )
+    assert update_count == 2
+    assert durable_processing_count == 1_001
 
 
 @pytest.mark.lifecycle
