@@ -148,16 +148,17 @@ class ValuationRepositoryBase:
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
                 PositionHistory.updated_at.label("updated_at"),
-                func.row_number()
-                .over(
-                    partition_by=(PositionHistory.portfolio_id, PositionHistory.epoch),
-                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
-                )
-                .label("rn"),
             )
             .where(
                 PositionHistory.security_id == security_id,
                 PositionHistory.position_date <= a_date,
+            )
+            .distinct(PositionHistory.portfolio_id, PositionHistory.epoch)
+            .order_by(
+                PositionHistory.portfolio_id,
+                PositionHistory.epoch,
+                PositionHistory.position_date.desc(),
+                PositionHistory.id.desc(),
             )
             .subquery()
         )
@@ -187,7 +188,6 @@ class ValuationRepositoryBase:
                 & (DailyPositionSnapshot.epoch == latest_history_subquery.c.epoch),
             )
             .where(
-                latest_history_subquery.c.rn == 1,
                 latest_history_subquery.c.quantity != 0,
                 func.coalesce(
                     DailyPositionSnapshot.updated_at,
@@ -210,12 +210,6 @@ class ValuationRepositoryBase:
             select(
                 PositionHistory.portfolio_id,
                 PositionHistory.quantity,
-                func.row_number()
-                .over(
-                    partition_by=PositionHistory.portfolio_id,
-                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
-                )
-                .label("rn"),
             )
             .join(
                 PositionState,
@@ -229,11 +223,17 @@ class ValuationRepositoryBase:
                 PositionHistory.security_id == security_id,
                 PositionHistory.position_date <= a_date,
             )
+            .distinct(PositionHistory.portfolio_id)
+            .order_by(
+                PositionHistory.portfolio_id,
+                PositionHistory.position_date.desc(),
+                PositionHistory.id.desc(),
+            )
             .subquery()
         )
 
         stmt = select(latest_history_subquery.c.portfolio_id).where(
-            latest_history_subquery.c.rn == 1, latest_history_subquery.c.quantity != 0
+            latest_history_subquery.c.quantity != 0
         )
 
         result = await self.db.execute(stmt)
@@ -922,24 +922,35 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_all_open_positions")
     async def get_all_open_positions(self) -> List[dict]:
-        ranked_snapshots_subq = select(
-            DailyPositionSnapshot.portfolio_id,
-            DailyPositionSnapshot.security_id,
-            DailyPositionSnapshot.quantity,
-            func.row_number()
-            .over(
-                partition_by=(
-                    DailyPositionSnapshot.portfolio_id,
-                    DailyPositionSnapshot.security_id,
-                ),
-                order_by=DailyPositionSnapshot.date.desc(),
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        latest_snapshots_subq = (
+            select(
+                DailyPositionSnapshot.portfolio_id,
+                snapshot_security_id.label("security_id"),
+                DailyPositionSnapshot.quantity,
             )
-            .label("rn"),
-        ).subquery()
+            .join(
+                PositionState,
+                and_(
+                    PositionState.portfolio_id == DailyPositionSnapshot.portfolio_id,
+                    state_security_id == snapshot_security_id,
+                    PositionState.epoch == DailyPositionSnapshot.epoch,
+                ),
+            )
+            .distinct(DailyPositionSnapshot.portfolio_id, snapshot_security_id)
+            .order_by(
+                DailyPositionSnapshot.portfolio_id,
+                snapshot_security_id,
+                DailyPositionSnapshot.date.desc(),
+                DailyPositionSnapshot.id.desc(),
+            )
+            .subquery()
+        )
 
         stmt = select(
-            ranked_snapshots_subq.c.portfolio_id, ranked_snapshots_subq.c.security_id
-        ).where(ranked_snapshots_subq.c.rn == 1, ranked_snapshots_subq.c.quantity != 0)
+            latest_snapshots_subq.c.portfolio_id, latest_snapshots_subq.c.security_id
+        ).where(latest_snapshots_subq.c.quantity != 0)
 
         result = await self.db.execute(stmt)
         open_positions = result.mappings().all()

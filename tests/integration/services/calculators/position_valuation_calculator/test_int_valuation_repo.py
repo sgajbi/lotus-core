@@ -306,6 +306,23 @@ def setup_snapshot_data(db_engine):
         ]
         session.add_all(portfolios)
         session.flush()
+        session.add_all(
+            [
+                PositionState(
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    epoch=0,
+                    watermark_date=date(2025, 8, 15),
+                    status="CURRENT",
+                )
+                for portfolio_id, security_id in (
+                    ("P1", "S1"),
+                    ("P2", "S1"),
+                    ("P3", "S1"),
+                    ("P4", "S2"),
+                )
+            ]
+        )
 
         snapshots = [
             DailyPositionSnapshot(
@@ -335,6 +352,14 @@ def setup_snapshot_data(db_engine):
                 date=date(2025, 8, 15),
                 quantity=Decimal("100"),
                 cost_basis=Decimal("1"),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P3",
+                security_id="S1",
+                date=date(2025, 8, 16),
+                epoch=1,
+                quantity=Decimal("0"),
+                cost_basis=Decimal("0"),
             ),
             DailyPositionSnapshot(
                 portfolio_id="P4",
@@ -553,7 +578,7 @@ async def test_get_all_open_positions(
     """
     GIVEN a database with various positions, some open and some closed
     WHEN get_all_open_positions is called
-    THEN it should return only the (portfolio_id, security_id) pairs with a non-zero quantity.
+    THEN it should return only current-epoch keys whose latest snapshot has non-zero quantity.
     """
     repo = ValuationRepository(async_db_session)
     open_positions = await repo.get_all_open_positions()
@@ -561,6 +586,7 @@ async def test_get_all_open_positions(
     assert len(open_positions) == 3
     position_set = {(p["portfolio_id"], p["security_id"]) for p in open_positions}
     assert ("P1", "S1") in position_set
+    # A later zero snapshot from stale epoch 1 must not hide current epoch 0 authority.
     assert ("P3", "S1") in position_set
     assert ("P4", "S2") in position_set
     assert ("P2", "S1") not in position_set
