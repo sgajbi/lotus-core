@@ -1,25 +1,29 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scripts.operations.database_evidence.contract import load_hot_path_scenario_catalog
+from scripts.operations.database_evidence.latest_position import measure_latest_position_snapshot
 from scripts.operations.database_evidence.plan_capture import (
     capture_single_production_statement,
     explain_captured_statement,
 )
+from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
 from src.services.calculators.position_valuation_calculator.app.repositories import (
     valuation_repository,
 )
-from src.services.query_service.app.repositories.position_repository import PositionRepository
 from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
 _TARGET_PORTFOLIO = "LATEST-PLAN-TARGET"
 _NOISE_PORTFOLIO = "LATEST-PLAN-NOISE"
+_CATALOG_PATH = Path("contracts/operations/database-hot-path-scenarios.v1.json")
 
 
 async def _seed_representative_latest_row_history(session: AsyncSession) -> None:
@@ -159,12 +163,7 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
 ) -> None:
     await _seed_representative_latest_row_history(async_db_session)
 
-    position_repository = PositionRepository(async_db_session)
     valuation_repo = valuation_repository.ValuationRepository(async_db_session)
-    snapshot_statement = await capture_single_production_statement(
-        async_db_session,
-        lambda: position_repository.get_latest_positions_by_portfolio(_TARGET_PORTFOLIO),
-    )
     history_statement = await capture_single_production_statement(
         async_db_session,
         lambda: valuation_repo.find_portfolios_holding_security_on_date(
@@ -172,8 +171,13 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
             date(2026, 8, 21),
         ),
     )
-    snapshot_plan = await explain_captured_statement(async_db_session, snapshot_statement)
     history_plan = await explain_captured_statement(async_db_session, history_statement)
+    snapshot_result = await measure_latest_position_snapshot(
+        async_db_session,
+        portfolio_id=_TARGET_PORTFOLIO,
+        scenario=load_hot_path_scenario_catalog(_CATALOG_PATH).by_id()["latest_position_snapshot"],
+    )
+    publish_requested_fragments((snapshot_result,))
     governed_indexes = set(
         (
             await async_db_session.scalars(
@@ -196,9 +200,10 @@ async def test_latest_snapshot_and_history_queries_use_covering_indexes(
         "ix_daily_snap_port_norm_sec_date_id",
         "ix_pos_hist_port_norm_sec_date_id",
     }
-    assert plan_index_names(snapshot_plan)
+    assert snapshot_result.status == "passed", snapshot_result
+    assert snapshot_result.index_names
     assert plan_index_names(history_plan)
-    assert "Seq Scan" not in plan_node_types(snapshot_plan)
+    assert snapshot_result.sequential_scan_relations == ()
     assert "Seq Scan" not in plan_node_types(history_plan)
-    assert "WindowAgg" not in plan_node_types(snapshot_plan)
+    assert "WindowAgg" not in snapshot_result.node_types
     assert "WindowAgg" not in plan_node_types(history_plan)
