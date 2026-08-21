@@ -1,7 +1,7 @@
 # CR-1699 - Bounded DPM Source Cardinality
 
 Date: 2026-08-21
-Status: Fixed locally; protected PR, exact-main, wiki publication, and issue closure pending
+Status: Merged to main; exact-main validation in progress
 Issues: #972 and #976
 
 ## Finding
@@ -47,8 +47,14 @@ change.
 - `make lint`, `make architecture-guard`, `make quality-wiki-docs-gate`,
   `make docs-evidence-pack`, Ruff formatting, and diff hygiene passed.
 - The governed wiki premerge check passed with the one intentional unpublished
-  `Mesh-Data-Products.md` source change. Protected PR, exact-main, wiki publication/parity, and
-  issue-loop closure remain pending and must be reconciled here before #972 or #976 closes.
+  `Mesh-Data-Products.md` source change.
+- PR #979 passed all 45 checks at exact head `e657dac02a45465344e395ffdfb2842ffa1c063a`,
+  including Remote Feature Lane `32464430564` and Pull Request Merge Gate `32464451357`, then
+  merged by rebase as exact main `21a2c59183ffd74bcfa2467415de807e374ddaf0`.
+- Authored wiki publication `1f858768f598e2ae7225c365b0227c13cd88645f` includes the DPM
+  source-cardinality truth and strict parity is zero. Main Releasability run `32467907834` is
+  validating the exact merge SHA; issue-loop closure remains gated on its terminal result and this
+  reconciliation reaching validated main.
 
 ## Same-Pattern And Governance Decision
 
