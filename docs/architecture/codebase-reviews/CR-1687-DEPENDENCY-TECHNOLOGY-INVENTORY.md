@@ -98,3 +98,16 @@ tests distinguish replay seeding from fresh update resolution, and repeated Wind
 replay checks provide platform evidence. The authored CI wiki changes because developer-facing
 replay/update semantics changed; README, supported features, OpenAPI, migrations, and central
 platform context remain unchanged.
+
+## Final delivery evidence
+
+PR #966 merged the deterministic replay fix by governed rebase at exact main SHA
+`0e40320367294f8f41366b6c262f8e2fab27b3b2`, following the reviewed cross-platform closure refresh
+in PR #959 at `feb2d20430a2ff557554c14df5905ef1c4d590e7`. Main Releasability run
+`32436643792` subsequently passed at exact main
+`577dba8ea08182355a262004937dd693fe46ac04`; both Windows and Linux replay authority, dependency,
+security, contract, integration, image, performance, and recovery lanes were green. The authored
+wiki is published through `9fa7545271bd490a6ac55aa6023f5a150b8e6229` with strict parity zero.
+Issue #958 is therefore implementation-complete and exact-main validated; the governed technology
+inventory remains deliberately non-certifying until its recorded license/supportability findings
+are resolved.
