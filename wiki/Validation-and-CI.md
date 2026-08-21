@@ -27,6 +27,12 @@ smallest evidence command for a change, then cite generated artifacts from the r
 2. `Pull Request Merge Gate`
 3. `Main Releasability Gate`
 
+The `automerge` label is consumed only by the small PR Auto Merge workflow. Applying that label
+does not route to, cancel, or duplicate the full Pull Request Merge Gate for an unchanged head SHA.
+Code-changing `synchronize` events still invalidate stale-head work and run the complete protected
+gate for the new immutable head. Opened, reopened, and ready-for-review events retain their current
+full-gate behavior; broader same-head evidence reuse is outside this bounded control.
+
 Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
 platform, installer, dependency/packaging manifests, locks, and the cache implementation. A verified
 miss is saved immediately after dependency proof rather than after unrelated job gates. Main and
