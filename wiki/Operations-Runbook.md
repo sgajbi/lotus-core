@@ -319,9 +319,14 @@ KEDA lag scalers share that SASL/TLS authority instead of connecting to the loca
 
 An interrupted Kafka broker can temporarily leave `/brokers/ids/1` owned by its previous ZooKeeper
 session. App-local Kafka retries the unchanged startup at most five times while that ephemeral
-session expires; it never deletes registration state or volumes. Run
-`make test-kafka-restart-recovery-gate` for isolated restart certification. If attempts are
-exhausted, inspect `docker compose ps` and the exact ZooKeeper/Kafka logs for another live broker.
+session expires; it never deletes registration state or volumes. Its unchanged real broker-health
+probe has a 30-second start period and twelve 10-second attempts, including two bounded attempts
+beyond the former ten-probe budget. Run `make test-kafka-restart-recovery-gate` for isolated restart
+certification. The gate first observes real readiness, deterministically reports ten successful
+probes as failures, and then requires the actual
+`service_healthy` dependency path, topic creator, and a dependent Core service to recover. If the
+bounded attempts are exhausted, inspect `docker compose ps` and the exact ZooKeeper/Kafka logs for
+another live broker.
 Do not use daemon-wide prune, direct ZooKeeper node deletion, or volume removal as default recovery.
 The full command and secret-sourcing contract is in the repository
 [operations runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/runbook.md#app-local-connection-security-and-kafka-restart-recovery).

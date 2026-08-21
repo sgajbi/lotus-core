@@ -4038,6 +4038,17 @@ Most relevant current governance:
      route to its owning issue, not a reason to weaken the catalog or change runtime SQL inside the
      evidence slice.
 
+248. App-local Kafka startup keeps the real `kafka-topics --bootstrap-server kafka:9093 --list`
+     health probe, a 30-second start period, 10-second probe interval, and twelve bounded attempts.
+     The two attempts beyond the former ten-probe budget are measured recovery margin, not a weaker
+     readiness signal. `make test-kafka-restart-recovery-gate` must exercise the actual
+     `service_healthy` dependency edge with validation-only fault injection that first observes real
+     readiness and then exhausts the former budget, before proving topic provisioning and one
+     dependent Core service. Persistent failure must
+     still block startup with source-safe project diagnostics. Do not replace this contract with a
+     fixed sleep, an always-healthy probe, broad Docker cleanup, ZooKeeper registration deletion, or
+     volume removal.
+
 ## Context Maintenance Rule
 
 Update this document when:

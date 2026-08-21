@@ -594,15 +594,22 @@ KEDA lag scalers use the same secrets through `lotus-core-kafka-auth` and the TL
 The app-local broker uses bounded `on-failure:5` restart policy because an interrupted broker can
 leave `/brokers/ids/1` owned until ZooKeeper expires the prior ephemeral session. Normal startup
 waits for that expiry and retries the unchanged broker process; it never deletes ZooKeeper state or
-application volumes. Certify this behavior with:
+application volumes. Compose evaluates the unchanged `kafka-topics` health probe after a 30-second
+start period, at 10-second intervals, with twelve attempts. The final two attempts are the bounded
+recovery margin beyond the former ten-probe budget; persistent unavailability still makes the
+dependency unhealthy and blocks dependent services. Certify this behavior with:
 
 ```powershell
 make test-kafka-restart-recovery-gate
 ```
 
-The gate owns a unique Compose project, verifies container ownership before interruption, proves
-topic creation, performs two clean stop/start cycles, starts a Kafka-dependent Core service, and
-emits machine-readable evidence. It tears down only its exact project and does not remove volumes.
+The gate owns a unique Compose project, verifies container ownership before interruption, first
+observes genuine broker readiness within a bounded validation probe, then reports ten successful
+real probes as failures in a validation-only Compose override. The next unchanged real probe must
+pass. It exercises topic creation through the actual
+`service_healthy` dependency edge, performs two clean stop/start cycles, starts a Kafka-dependent
+Core service, and emits machine-readable evidence including the observed probe count. It tears down
+only its exact project and does not remove volumes.
 
 If the broker exhausts all five attempts, inspect the exact project first:
 
