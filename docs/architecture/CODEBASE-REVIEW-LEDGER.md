@@ -8,8 +8,11 @@ predicate remains outside latest-history selection so closed or stale-epoch hist
 resurrected. The plan gate captures and explains the complete production latest-position and
 security/date reprocessing statements against 7,500-row snapshot and history cohorts; both use
 indexed access with no sequential scan or `WindowAgg`. Existing covering indexes remain the
-storage authority and no migration/materialized state was introduced. Status: fixed locally; protected PR, exact-main
-validation, issue closure, and branch cleanup are pending. Evidence:
+storage authority. Late review identified that the newly epoch-fenced open-snapshot reader could
+hide evidence created before `position_state` existed, so an idempotent forward data migration now
+registers missing history/snapshot keys at their latest epoch with a conservative replay watermark,
+without overwriting live state. No table shape or materialized state was introduced. Status: fixed
+locally; protected PR, exact-main validation, issue closure, and branch cleanup are pending. Evidence:
 [CR-1703-INDEXED-LATEST-POSITION-QUERIES.md](./codebase-reviews/CR-1703-INDEXED-LATEST-POSITION-QUERIES.md).
 
 CR-1702 governed pip vulnerability remediation (2026-08-21): exact-main and PR gates failed closed

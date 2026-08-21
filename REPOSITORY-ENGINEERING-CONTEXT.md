@@ -4011,6 +4011,11 @@ Most relevant current governance:
      `WindowAgg`, but do not force or claim a particular covering index when the optimizer selects
      another indexed plan. Add materialized latest state only when measured plans prove existing
      normalized indexes inadequate.
+     When a query newly requires `PositionState` or another control row for facts that can predate
+     that control model, treat upgrade compatibility as part of the query change. Add an
+     idempotent, source-derived backfill that preserves existing live authority and starts missing
+     keys from a conservative replay posture; current-data fixtures alone do not prove upgraded
+     books remain complete.
 
 ## Context Maintenance Rule
 
