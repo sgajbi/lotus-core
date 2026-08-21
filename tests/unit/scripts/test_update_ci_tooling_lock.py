@@ -20,7 +20,7 @@ def test_normalized_lock_removes_machine_paths_and_interpreter_drift(tmp_path: P
     assert first == second
     assert str(root) not in first
     assert "Python 3.13" not in first
-    assert "pip==26.1.2; pip-tools==7.5.3; Python 3.11; platform linux/amd64" in first
+    assert "pip==26.2.1; pip-tools==7.6.1; Python 3.11; platform linux/amd64" in first
     assert "# via -r requirements/ci-tooling.in" in first
 
 

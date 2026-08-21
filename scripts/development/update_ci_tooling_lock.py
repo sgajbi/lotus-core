@@ -17,8 +17,8 @@ TEST_INPUT = REPO_ROOT / "tests" / "requirements.txt"
 LINUX_TOOLING_LOCK = REPO_ROOT / "requirements" / "ci-tooling.lock.txt"
 WINDOWS_TOOLING_LOCK = REPO_ROOT / "requirements" / "ci-tooling-windows.lock.txt"
 WINDOWS_RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime-windows.lock.txt"
-PIP_TOOLS_VERSION = "7.5.3"
-PIP_VERSION = "26.1.2"
+PIP_TOOLS_VERSION = "7.6.1"
+PIP_VERSION = "26.2.1"
 GOVERNED_PYTHON = (3, 11)
 LINUX_COMPILE_IMAGE = (
     "python:3.11-slim-bookworm@"

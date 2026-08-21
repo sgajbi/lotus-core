@@ -50,10 +50,12 @@ instead of independent financial verification.
 ## Compatibility And Scope
 
 There is no route, request/response DTO, OpenAPI, schema/migration, event/Kafka, calculation,
-dependency, image, datastore, or topology change. The repository port changes only an internal
-single-key evidence method into a set-based method. The existing Financial Reconciliation wiki
-already describes the operator-visible control and no command, response, or operating procedure
-changed, so no wiki source change is required.
+application/runtime dependency, image, datastore, or topology change. The repository port changes
+only an internal single-key evidence method into a set-based method. This PR also carries the
+separately governed CI-only installer remediation recorded in CR-1702; it does not alter runtime
+dependency closure. The existing Financial Reconciliation wiki already describes the
+operator-visible control and no command, response, or operating procedure changed, so no wiki
+source change is required.
 
 The same-pattern scan found that timeseries integrity still loads authoritative rows and snapshot
 counts per reconciliation scope key. That broader high-cardinality reconciliation read boundary is
