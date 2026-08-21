@@ -59,15 +59,21 @@ def test_topic_admin_client_accepts_explicit_runtime_authority(monkeypatch) -> N
     assert admin_client.call_args.args[0]["bootstrap.servers"] == "runtime-broker:19092"
 
 
-def test_topic_admin_client_rejects_plaintext_production_before_construction(monkeypatch) -> None:
+def test_topic_admin_client_rejects_plaintext_production_without_endpoint_disclosure(
+    monkeypatch, caplog
+) -> None:
+    sensitive_endpoint = "private-kafka-bootstrap.internal:19093"
     admin_client = MagicMock()
     monkeypatch.setattr(kafka_setup_module, "AdminClient", admin_client)
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS_HOST", sensitive_endpoint)
 
-    with pytest.raises(RuntimeConfigurationError, match="plaintext Kafka transport"):
+    with pytest.raises(RuntimeConfigurationError, match="plaintext Kafka transport") as exc_info:
         build_topic_admin_client()
 
+    assert sensitive_endpoint not in str(exc_info.value)
+    assert sensitive_endpoint not in caplog.text
     admin_client.assert_not_called()
 
 
