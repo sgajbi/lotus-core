@@ -24,8 +24,10 @@ That work grew with retained history rather than the requested current portfolio
 4. Existing normalized portfolio/security/date/id indexes remain the storage authority. An
    additive, idempotent data migration restores missing `PositionState` rows for evidence created
    before epoch control existed. It derives the latest persisted epoch from history and snapshots,
-   preserves every existing live state row, and starts repaired keys in `REPROCESSING` from the
-   day before their earliest evidence instead of fabricating a completed watermark.
+   preserves every existing live state row, and starts history-backed keys in `REPROCESSING` from
+   the day before their earliest history. Snapshot-only keys, which the history-driven scheduler
+   cannot replay, receive a terminal `CURRENT` watermark at their latest actual snapshot rather
+   than being parked permanently in the recovery backlog or advanced beyond source evidence.
 5. PostgreSQL plan tests invoke the real Query Service latest-position and valuation-reprocessing
    repository methods, capture the exact SQL sent to PostgreSQL, and explain those complete query
    shapes. They reject `WindowAgg` and sequential scans, verify the governed covering indexes
@@ -55,10 +57,11 @@ remains an internal PostgreSQL query-shape improvement.
   quantity, and outer-join predicates. Both plans used indexed access and contained neither
   `Seq Scan` nor `WindowAgg`; the normalized covering indexes were present and valid.
 - The legacy-state migration contract proves both history and snapshot evidence sources, latest
-  epoch selection, conservative watermark derivation, normalized-key idempotency, preservation of
-  existing state, and irreversible downgrade posture. Real PostgreSQL proof runs the migration
-  twice, preserves a live epoch-3 state, and verifies that a formerly unregistered epoch-0 snapshot
-  remains visible through the production open-position reader.
+  epoch selection, evidence-class-specific watermark derivation, normalized-key idempotency,
+  preservation of existing state, and irreversible downgrade posture. Real PostgreSQL proof runs
+  the migration twice, preserves a live epoch-3 state, proves snapshot-only evidence becomes
+  terminal rather than unreplayably backlogged, and verifies that its formerly unregistered
+  epoch-0 snapshot remains visible through the production open-position reader.
 - The protected critical-database suite passed all 85 tests in 340.78 seconds.
 - Ruff check and formatting, MyPy across 318 source files, architecture/security/governance gates,
   documentation evidence, wiki/docs validation, and diff hygiene passed locally. Protected PR

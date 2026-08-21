@@ -150,8 +150,8 @@ async def test_backfill_restores_missing_snapshot_and_history_state_without_over
             "portfolio_id": "LEGACY-SNAPSHOT",
             "security_id": "LEGACY-SEC-1",
             "epoch": 0,
-            "watermark_date": date(2026, 1, 9),
-            "status": "REPROCESSING",
+            "watermark_date": date(2026, 1, 10),
+            "status": "CURRENT",
         },
         {
             "portfolio_id": "LIVE-STATE",

@@ -24,7 +24,8 @@ LEGACY_POSITION_STATE_BACKFILL = sa.text(
             portfolio_id,
             btrim(security_id) AS security_id,
             epoch,
-            position_date AS evidence_date
+            position_date AS evidence_date,
+            'history' AS evidence_kind
         FROM position_history
         WHERE btrim(portfolio_id) <> ''
           AND btrim(security_id) <> ''
@@ -35,7 +36,8 @@ LEGACY_POSITION_STATE_BACKFILL = sa.text(
             portfolio_id,
             btrim(security_id) AS security_id,
             epoch,
-            date AS evidence_date
+            date AS evidence_date,
+            'snapshot' AS evidence_kind
         FROM daily_position_snapshots
         WHERE btrim(portfolio_id) <> ''
           AND btrim(security_id) <> ''
@@ -51,10 +53,22 @@ LEGACY_POSITION_STATE_BACKFILL = sa.text(
             evidence.security_id,
             evidence.epoch,
             CASE
-                WHEN min(evidence.evidence_date) > DATE '0001-01-01'
-                    THEN min(evidence.evidence_date) - 1
-                ELSE min(evidence.evidence_date)
-            END AS watermark_date
+                WHEN bool_or(evidence.evidence_kind = 'history') THEN
+                    CASE
+                        WHEN min(evidence.evidence_date)
+                             FILTER (WHERE evidence.evidence_kind = 'history') > DATE '0001-01-01'
+                            THEN min(evidence.evidence_date)
+                                 FILTER (WHERE evidence.evidence_kind = 'history') - 1
+                        ELSE min(evidence.evidence_date)
+                             FILTER (WHERE evidence.evidence_kind = 'history')
+                    END
+                ELSE max(evidence.evidence_date)
+                     FILTER (WHERE evidence.evidence_kind = 'snapshot')
+            END AS watermark_date,
+            CASE
+                WHEN bool_or(evidence.evidence_kind = 'history') THEN 'REPROCESSING'
+                ELSE 'CURRENT'
+            END AS status
         FROM legacy_position_evidence AS evidence
         JOIN latest_evidence_epoch AS latest
           ON latest.portfolio_id = evidence.portfolio_id
@@ -82,7 +96,7 @@ LEGACY_POSITION_STATE_BACKFILL = sa.text(
         security_id,
         epoch,
         watermark_date,
-        'REPROCESSING',
+        status,
         now(),
         now()
     FROM missing_state_rows
