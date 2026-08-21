@@ -2,7 +2,7 @@
 
 Date: 2026-08-21
 Issue: #973
-Status: Fixed locally; protected PR and exact-main proof pending
+Status: merged and exact-main validated
 
 ## Objective
 
@@ -49,8 +49,18 @@ existing typed settings and connection-security boundaries.
   `LOTUS_TEST_SCOPE=integration-all python -m pytest -q -W error tests/integration/tools/test_kafka_setup.py`
   -> `1 passed in 42.05s`.
 - Scoped Ruff and MyPy validation passed for the changed Python sources.
-- Protected PR, replacement exact-main Main Releasability, and final issue closure evidence remain
-  pending.
+- Signed exact feature head `6bc01707459a28ebcde3cb4c9b0fed8a86dfef18` passed Remote Feature
+  Lane `32433993714` (6/6 jobs) and PR Merge Gate `32434065615` (23/23 jobs). Independent review
+  approved endpoint/credential non-disclosure, runtime authority, security, and compatibility.
+- PR #974 merged by governed rebase at exact main
+  `577dba8ea08182355a262004937dd693fe46ac04`. Main Releasability run `32436643792` passed all 24
+  executable jobs, including the formerly failing Integration Full topic-provisioning test, full
+  E2E, coverage, exact-source image, performance, latency, and recovery lanes. The two institutional
+  jobs were expected policy skips; there were no failures or cancellations.
+- Wiki parity remains strict zero at published wiki head
+  `9fa7545271bd490a6ac55aa6023f5a150b8e6229`; no wiki source change was required for this slice.
+  Local and remote feature branches were removed after patch-equivalence proof, leaving one clean
+  Core worktree on exact `main`.
 
 ## Compatibility and documentation decision
 
