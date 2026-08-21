@@ -361,6 +361,7 @@ async def test_get_lagging_states_uses_scheduler_order(
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_state.watermark_date < '2026-03-27'" in compiled_query
+    assert "position_state.status IN ('CURRENT', 'REPROCESSING')" in compiled_query
     assert (
         "ORDER BY position_state.updated_at ASC, position_state.portfolio_id ASC, "
         "position_state.security_id ASC"
@@ -408,6 +409,7 @@ async def test_get_states_needing_backfill_uses_scheduler_order(
         in compiled_query
     )
     assert "position_state.watermark_date < '2026-03-27'" in compiled_query
+    assert "position_state.status IN ('CURRENT', 'REPROCESSING')" in compiled_query
     assert (
         "ORDER BY position_state.updated_at ASC, position_state.portfolio_id ASC, "
         "position_state.security_id ASC"

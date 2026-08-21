@@ -151,7 +151,7 @@ async def test_backfill_restores_missing_snapshot_and_history_state_without_over
             "security_id": "LEGACY-SEC-1",
             "epoch": 0,
             "watermark_date": date(2026, 1, 10),
-            "status": "CURRENT",
+            "status": "SNAPSHOT_ONLY",
         },
         {
             "portfolio_id": "LIVE-STATE",
@@ -169,3 +169,15 @@ async def test_backfill_restores_missing_snapshot_and_history_state_without_over
         {"portfolio_id": "LEGACY-SNAPSHOT", "security_id": "LEGACY-SEC-1"},
         {"portfolio_id": "LIVE-STATE", "security_id": "LEGACY-SEC-3"},
     ]
+
+    repo = valuation_repository.ValuationRepository(async_db_session)
+    lagging_states = await repo.get_lagging_states(date(2026, 1, 13), limit=10)
+    backfill_states = await repo.get_states_needing_backfill(date(2026, 1, 13), limit=10)
+    assert ("LEGACY-HISTORY", "REPROCESSING") in {
+        (state.portfolio_id, state.status) for state in lagging_states
+    }
+    assert ("LEGACY-HISTORY", "REPROCESSING") in {
+        (state.portfolio_id, state.status) for state in backfill_states
+    }
+    assert all(state.portfolio_id != "LEGACY-SNAPSHOT" for state in lagging_states)
+    assert all(state.portfolio_id != "LEGACY-SNAPSHOT" for state in backfill_states)

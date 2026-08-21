@@ -2,6 +2,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List
 
+from portfolio_common.domain.valuation.position_state import PositionStateStatus
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
     POSITION_STATE_WATERMARK_LAG_DAYS,
@@ -50,7 +51,9 @@ class ValuationBackfillPlanner:
             key = (state.portfolio_id, state.security_id, state.epoch)
             if key in first_open_dates:
                 continue
-            if state.status == "REPROCESSING":
+            if state.status == PositionStateStatus.SNAPSHOT_ONLY:
+                continue
+            if state.status == PositionStateStatus.REPROCESSING:
                 states_waiting_for_history.append(state)
             else:
                 states_to_normalize.append(state)

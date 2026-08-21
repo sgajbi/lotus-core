@@ -1536,7 +1536,9 @@ class LineageResponse(BaseModel):
         examples=["2025-11-01"],
     )
     reprocessing_status: str = Field(
-        ..., description="Current status for this key.", examples=["CURRENT", "REPROCESSING"]
+        ...,
+        description="Current status for this key.",
+        examples=["CURRENT", "REPROCESSING", "SNAPSHOT_ONLY"],
     )
     latest_position_history_date: Optional[date] = Field(
         None,
@@ -1585,7 +1587,13 @@ class LineageResponse(BaseModel):
             "Derived operator-facing lineage state for this key, based on replay status and "
             "artifact freshness."
         ),
-        examples=["HEALTHY", "REPLAYING", "ARTIFACT_GAP", "VALUATION_BLOCKED"],
+        examples=[
+            "HEALTHY",
+            "REPLAYING",
+            "SNAPSHOT_ONLY",
+            "ARTIFACT_GAP",
+            "VALUATION_BLOCKED",
+        ],
     )
 
 
@@ -1602,7 +1610,7 @@ class LineageKeyRecord(BaseModel):
     reprocessing_status: str = Field(
         ...,
         description="Current key status.",
-        examples=["CURRENT", "REPROCESSING"],
+        examples=["CURRENT", "REPROCESSING", "SNAPSHOT_ONLY"],
     )
     latest_position_history_date: Optional[date] = Field(
         None,
@@ -1655,7 +1663,13 @@ class LineageKeyRecord(BaseModel):
             "Derived operator-facing lineage state for this key, based on replay status and "
             "artifact freshness."
         ),
-        examples=["HEALTHY", "REPLAYING", "ARTIFACT_GAP", "VALUATION_BLOCKED"],
+        examples=[
+            "HEALTHY",
+            "REPLAYING",
+            "SNAPSHOT_ONLY",
+            "ARTIFACT_GAP",
+            "VALUATION_BLOCKED",
+        ],
     )
 
 
@@ -2940,10 +2954,16 @@ class ReprocessingKeyRecord(BaseModel):
         ),
         examples=[False],
     )
-    operational_state: Literal["STALE_REPROCESSING", "REPROCESSING", "CURRENT"] = Field(
-        ...,
-        description="Derived operator-facing lifecycle state used for support triage ordering.",
-        examples=["REPROCESSING"],
+    operational_state: Literal["STALE_REPROCESSING", "REPROCESSING", "SNAPSHOT_ONLY", "CURRENT"] = (
+        Field(
+            ...,
+            description=(
+                "Derived operator-facing lifecycle state used for support triage ordering. "
+                "SNAPSHOT_ONLY identifies visible legacy snapshot evidence without replayable "
+                "position history."
+            ),
+            examples=["REPROCESSING", "SNAPSHOT_ONLY"],
+        )
     )
 
 

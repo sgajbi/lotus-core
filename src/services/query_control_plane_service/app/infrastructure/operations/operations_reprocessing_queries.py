@@ -47,6 +47,7 @@ def reprocessing_key_priority(status_column, updated_at_column, stale_threshold:
             0,
         ),
         (governed_status == "REPROCESSING", 1),
+        (governed_status == "SNAPSHOT_ONLY", 2),
         else_=9,
     )
 

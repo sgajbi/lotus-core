@@ -424,6 +424,59 @@ async def test_scheduler_defers_reprocessing_keys_with_no_position_history(
     mock_state_repo.bulk_update_states.assert_not_awaited()
 
 
+async def test_scheduler_preserves_snapshot_only_authority_without_position_history(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+
+    snapshot_date = date(2025, 8, 10)
+    mock_repo.get_latest_business_date.return_value = date(2025, 8, 12)
+    mock_repo.get_states_needing_backfill.return_value = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=snapshot_date,
+            epoch=1,
+            status="SNAPSHOT_ONLY",
+        )
+    ]
+    mock_repo.get_first_open_dates_for_keys.return_value = {}
+
+    await scheduler._create_backfill_jobs(AsyncMock())
+
+    mock_job_repo.upsert_jobs.assert_not_called()
+    mock_state_repo.bulk_update_states.assert_not_awaited()
+
+
+async def test_scheduler_never_advances_snapshot_only_watermark(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    latest_business_date = date(2025, 8, 12)
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_lagging_states.return_value = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            status="SNAPSHOT_ONLY",
+        )
+    ]
+    mock_repo.get_terminal_reprocessing_states.return_value = []
+
+    await scheduler._advance_watermarks(AsyncMock())
+
+    mock_repo.get_first_open_dates_for_keys.assert_awaited_once_with([])
+    mock_repo.find_contiguous_snapshot_dates.assert_not_awaited()
+    mock_state_repo.bulk_update_states.assert_not_awaited()
+
+
 async def test_scheduler_advances_watermarks(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,

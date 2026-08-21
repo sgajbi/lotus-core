@@ -11,9 +11,12 @@ indexed access with no sequential scan or `WindowAgg`. Existing covering indexes
 storage authority. Late review identified that the newly epoch-fenced open-snapshot reader could
 hide evidence created before `position_state` existed, so an idempotent forward data migration now
 registers missing keys at their latest epoch without overwriting live state. History-backed keys
-start from a conservative replay watermark; snapshot-only keys become terminal at their latest
-actual snapshot because the history-driven scheduler cannot reconstruct them. No table shape or
-materialized state was introduced. Status: fixed
+start from a conservative replay watermark; snapshot-only keys receive an explicit
+`SNAPSHOT_ONLY` posture at their latest actual snapshot because the history-driven scheduler cannot
+reconstruct them. Scheduler repository and planner defenses prevent fabricated watermark
+advancement, while support contracts expose the truthful posture. No table shape or materialized
+state was introduced; support ordering keeps the source-authority gap ahead of healthy keys.
+Status: fixed
 locally; protected PR, exact-main validation, issue closure, and branch cleanup are pending. Evidence:
 [CR-1703-INDEXED-LATEST-POSITION-QUERIES.md](./codebase-reviews/CR-1703-INDEXED-LATEST-POSITION-QUERIES.md).
 

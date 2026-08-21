@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List
 
+from portfolio_common.domain.valuation.position_state import SCHEDULABLE_POSITION_STATE_STATUSES
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
     REPROCESSING_ACTIVE_KEYS_TOTAL,
@@ -153,7 +154,11 @@ class ValuationWatermarkAdvancer:
         if not latest_business_date:
             return None
 
-        lagging_states = await repo.get_lagging_states(latest_business_date, self._batch_size)
+        lagging_states = [
+            state
+            for state in await repo.get_lagging_states(latest_business_date, self._batch_size)
+            if state.status in SCHEDULABLE_POSITION_STATE_STATUSES
+        ]
         terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
             latest_business_date, self._batch_size
         )

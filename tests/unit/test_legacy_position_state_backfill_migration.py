@@ -33,7 +33,7 @@ def test_position_state_backfill_is_conservative_idempotent_and_irreversible(mon
     assert "FILTER (WHERE EVIDENCE.EVIDENCE_KIND = 'HISTORY') - 1" in sql
     assert "FILTER (WHERE EVIDENCE.EVIDENCE_KIND = 'SNAPSHOT')" in sql
     assert "WHEN BOOL_OR(EVIDENCE.EVIDENCE_KIND = 'HISTORY') THEN 'REPROCESSING'" in sql
-    assert "ELSE 'CURRENT'" in sql
+    assert "ELSE 'SNAPSHOT_ONLY'" in sql
     assert "NOT EXISTS" in sql
     assert "BTRIM(EXISTING.SECURITY_ID) = EVIDENCE.SECURITY_ID" in sql
     assert "ON CONFLICT (PORTFOLIO_ID, SECURITY_ID) DO NOTHING" in sql
