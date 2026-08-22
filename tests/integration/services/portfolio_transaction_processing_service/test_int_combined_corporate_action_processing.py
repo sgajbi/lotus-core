@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from argparse import Namespace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -17,6 +18,12 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scripts.operations.audit_lot_position_parity import (
+    report_exit_code,
+)
+from scripts.operations.audit_lot_position_parity import (
+    run as run_lot_position_parity_audit,
+)
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingIntent,
     TransactionProcessingStatus,
@@ -506,6 +513,26 @@ async def test_same_time_restatements_share_cost_and_position_order(
         session_factory=context.session_factory
     ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
     assert parity.status is LotPositionParityStatus.CURRENT
+
+    audit_args = Namespace(
+        portfolio_id=portfolio_id,
+        limit=100,
+        after_portfolio_id=None,
+        after_security_id=None,
+        output=None,
+    )
+    current_report = await run_lot_position_parity_audit(audit_args)
+    assert report_exit_code(current_report) == 0
+
+    async with context.session_factory() as drift_session:
+        async with drift_session.begin():
+            await drift_session.execute(
+                update(PositionHistory)
+                .where(PositionHistory.transaction_id == bonus.transaction_id)
+                .values(quantity=Decimal("249"))
+            )
+    drifted_report = await run_lot_position_parity_audit(audit_args)
+    assert report_exit_code(drifted_report) == 1
 
 
 async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(

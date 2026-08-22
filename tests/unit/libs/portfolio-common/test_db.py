@@ -426,7 +426,7 @@ def test_database_runtime_identity_is_required_in_governed_environment(monkeypat
 
 
 def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
-    assert len(DATABASE_RUNTIME_IDENTITIES) == 26
+    assert len(DATABASE_RUNTIME_IDENTITIES) == 27
     assert all(
         0 < len(identity) <= DATABASE_APPLICATION_NAME_MAX_LENGTH
         for identity in DATABASE_RUNTIME_IDENTITIES
