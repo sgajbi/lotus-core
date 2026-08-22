@@ -10,10 +10,10 @@ import pytest
 import tools.front_office_portfolio_seed as front_office_seed_module
 import tools.front_office_seed_contract as front_office_seed_contract_module
 import tools.validate_front_office_advisor_book_seed as advisor_book_seed_validator
-from services.ingestion_service.app.DTOs.market_price_dto import (
+from src.services.ingestion_service.app.DTOs.market_price_dto import (
     AuthoritativeMarketPriceSourceFactIngestionRequest,
 )
-from services.ingestion_service.app.DTOs.reference_data_valuation_policy_dto import (
+from src.services.ingestion_service.app.DTOs.reference_data_valuation_policy_dto import (
     InstrumentValuationPolicyAssignmentIngestionRequest,
 )
 from tools.front_office_portfolio_seed import (
