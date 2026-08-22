@@ -302,23 +302,13 @@ class AverageCostSourceAllocation:
             (source_transaction_id, self._contributions[source_transaction_id])
             for source_transaction_id in self._active_source_ids_by_key[book_key]
         )
-        last_quantity_source_id = next(
-            (
-                source_transaction_id
-                for source_transaction_id, contribution in reversed(contributions)
-                if contribution.generation == self._generation_by_key[book_key]
-            ),
-            None,
-        )
         allocated = AverageCostPool()
         quantities: dict[str, Decimal] = {}
         for source_transaction_id, contribution in contributions:
             disposal_factor = self._disposal_factor(contribution)
             quantity = _materialized_quantity(
                 contribution=contribution,
-                source_transaction_id=source_transaction_id,
                 current_generation=self._generation_by_key[book_key],
-                last_source_id=last_quantity_source_id,
                 disposal_factor=disposal_factor,
                 aggregate=pool.quantity,
                 allocated=allocated.quantity,
@@ -329,6 +319,13 @@ class AverageCostSourceAllocation:
                 quantity,
                 field_name="allocated_quantity",
             )
+
+        _assign_quantity_residual(
+            contributions=contributions,
+            quantities=quantities,
+            aggregate=pool.quantity,
+            allocated=allocated.quantity,
+        )
 
         last_local_cost_source_id: str | None = None
         last_base_cost_source_id: str | None = None
@@ -534,30 +531,19 @@ class AverageCostSourceAllocation:
 def _materialized_quantity(
     *,
     contribution: AverageCostSourceContribution,
-    source_transaction_id: str,
     current_generation: int,
-    last_source_id: str | None,
     disposal_factor: Decimal,
     aggregate: Decimal,
     allocated: Decimal,
 ) -> Decimal:
     if contribution.generation != current_generation:
         return Decimal(0)
-    if source_transaction_id == last_source_id:
-        return cast(
-            Decimal,
-            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-                aggregate,
-                allocated,
-                field_name="open_quantity",
-            ),
-        )
     with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
         quantity = (contribution.quantity * disposal_factor).quantize(
             LOT_QUANTITY_QUANTUM,
             rounding=ROUND_DOWN,
         )
-    return cast(
+    bounded_share = cast(
         Decimal,
         allocate_nonnegative_storage_share(
             quantity,
@@ -566,6 +552,57 @@ def _materialized_quantity(
             field_name="open_quantity",
         ),
     )
+    return min(bounded_share, contribution.original_quantity)
+
+
+def _assign_quantity_residual(
+    *,
+    contributions: tuple[tuple[str, AverageCostSourceContribution], ...],
+    quantities: dict[str, Decimal],
+    aggregate: Decimal,
+    allocated: Decimal,
+) -> None:
+    """Assign rounding residual without exceeding any source lot's authority."""
+
+    remaining = cast(
+        Decimal,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            aggregate,
+            allocated,
+            field_name="unallocated_open_quantity",
+        ),
+    )
+    for source_transaction_id, contribution in reversed(contributions):
+        if remaining == Decimal(0):
+            return
+        current = quantities[source_transaction_id]
+        headroom = cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                contribution.original_quantity,
+                current,
+                field_name="source_quantity_headroom",
+            ),
+        )
+        assigned = min(remaining, headroom)
+        quantities[source_transaction_id] = cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                current,
+                assigned,
+                field_name="open_quantity",
+            ),
+        )
+        remaining = cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                remaining,
+                assigned,
+                field_name="unallocated_open_quantity",
+            ),
+        )
+    if remaining != Decimal(0):
+        raise ValueError("AVCO pool quantity exceeds source original quantity authority")
 
 
 def _materialized_cost(

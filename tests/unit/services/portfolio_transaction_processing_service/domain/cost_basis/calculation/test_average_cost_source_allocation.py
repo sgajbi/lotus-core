@@ -52,6 +52,93 @@ def test_average_cost_disposals_do_not_rewrite_source_contributions() -> None:
     assert sum(state.cost_base for state in states.values()) == Decimal("1080")
 
 
+def test_materialize_distributes_residual_within_each_source_original_quantity() -> None:
+    allocation = AverageCostSourceAllocation()
+    book_key = ("P1", "I1")
+    pool = AverageCostPool()
+
+    for index in range(3):
+        pool.add(quantity=Decimal("1"), cost_local=Decimal("10"), cost_base=Decimal("10"))
+        allocation.add_source(
+            book_key=book_key,
+            source_transaction_id=f"BUY-EARLY-{index}",
+            source_lot_id=f"LOT-EARLY-{index}",
+            source_acquisition_date=date(2026, 1, 1),
+            quantity=Decimal("1"),
+            cost_local=Decimal("10"),
+            cost_base=Decimal("10"),
+            pool_quantity_after=pool.quantity,
+        )
+    allocation.apply_disposal(
+        book_key=book_key,
+        quantity_before=Decimal("3"),
+        quantity_after=Decimal("2"),
+    )
+    pool.quantity = Decimal("2")
+    pool.cost_local = Decimal("20")
+    pool.cost_base = Decimal("20")
+
+    for index in range(3):
+        pool.add(quantity=Decimal("1"), cost_local=Decimal("10"), cost_base=Decimal("10"))
+        allocation.add_source(
+            book_key=book_key,
+            source_transaction_id=f"BUY-LATE-{index}",
+            source_lot_id=f"LOT-LATE-{index}",
+            source_acquisition_date=date(2026, 1, 2),
+            quantity=Decimal("1"),
+            cost_local=Decimal("10"),
+            cost_base=Decimal("10"),
+            pool_quantity_after=pool.quantity,
+        )
+    allocation.apply_disposal(
+        book_key=book_key,
+        quantity_before=Decimal("5"),
+        quantity_after=Decimal("4"),
+    )
+    pool.quantity = Decimal("4")
+    pool.cost_local = Decimal("40")
+    pool.cost_base = Decimal("40")
+
+    states = allocation.materialize_book(book_key=book_key, pool=pool)
+
+    assert sum((state.quantity for state in states.values()), Decimal(0)) == Decimal("4")
+    assert all(state.quantity <= state.original_quantity for state in states.values())
+    assert [state.quantity for state in states.values()] == [
+        Decimal("0.5333333333"),
+        Decimal("0.5333333333"),
+        Decimal("0.5333333333"),
+        Decimal("0.8000000000"),
+        Decimal("0.8000000000"),
+        Decimal("0.8000000001"),
+    ]
+
+
+def test_materialize_rejects_pool_quantity_beyond_source_authority() -> None:
+    allocation = AverageCostSourceAllocation()
+    book_key = ("P1", "I1")
+    allocation.add_source(
+        book_key=book_key,
+        source_transaction_id="BUY-1",
+        source_lot_id="LOT-BUY-1",
+        source_acquisition_date=date(2026, 1, 1),
+        quantity=Decimal("1"),
+        original_quantity=Decimal("0.5"),
+        cost_local=Decimal("10"),
+        cost_base=Decimal("10"),
+        pool_quantity_after=Decimal("1"),
+    )
+
+    with pytest.raises(ValueError, match="exceeds source original quantity authority"):
+        allocation.materialize_book(
+            book_key=book_key,
+            pool=AverageCostPool(
+                quantity=Decimal("1"),
+                cost_local=Decimal("10"),
+                cost_base=Decimal("10"),
+            ),
+        )
+
+
 def test_materialize_book_is_bounded_to_requested_book() -> None:
     allocation = AverageCostSourceAllocation()
     for book_key, source_id in (("I1", "BUY-1"), ("I2", "BUY-2")):
