@@ -18,6 +18,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingIntent,
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -162,6 +163,62 @@ async def test_quantity_restatement_keeps_lot_and_position_authority_in_lockstep
         session_factory=context.session_factory
     ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
     assert parity.status is LotPositionParityStatus.CURRENT
+
+    corrected_split = split.model_copy(
+        update={"transaction_date": datetime(2026, 7, 2, 12, 0, tzinfo=timezone.utc)}
+    )
+    await async_db_session.execute(
+        update(DBTransaction)
+        .where(DBTransaction.transaction_id == split.transaction_id)
+        .values(transaction_date=corrected_split.transaction_date)
+    )
+    await async_db_session.commit()
+    replayed = await process_booked_transaction(
+        context=context,
+        event=corrected_split,
+        event_id=f"repair-{split.transaction_id}",
+        correlation_id=f"corr-repair-{split.transaction_id.lower()}",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert replayed.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as replay_verification_session:
+        replayed_lot = (
+            await replay_verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == acquisition.transaction_id
+                )
+            )
+        ).scalar_one()
+        replayed_position = (
+            await replay_verification_session.execute(
+                select(PositionHistory)
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    PositionHistory.security_id == security_id,
+                    PositionHistory.epoch == 1,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+    assert (
+        replayed_lot.original_quantity,
+        replayed_lot.open_quantity,
+        replayed_lot.lot_cost_local,
+        replayed_lot.lot_cost_base,
+    ) == (
+        restated_lot.original_quantity,
+        restated_lot.open_quantity,
+        restated_lot.lot_cost_local,
+        restated_lot.lot_cost_base,
+    )
+    assert replayed_position.epoch == 1
+    assert replayed_position.quantity == replayed_lot.open_quantity
+    (replayed_parity,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert replayed_parity.status is LotPositionParityStatus.CURRENT
 
     result = await persist_and_process_booked_transaction(
         session=async_db_session,
