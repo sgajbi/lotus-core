@@ -696,6 +696,17 @@ and only then resume work. Never downgrade beneath a running new binary or start
 the new constraints are active. Certify forward and rollback against seeded prior-schema
 `PENDING`, `PROCESSING`, and terminal rows in real PostgreSQL before production release.
 
+### Valuation job hot-path index replacement
+
+Migration `c160b2c3d527` replaces the expiry-only partial valuation-job index with the ordered
+`(valuation_lease_expires_at, id)` recovery index for `PROCESSING` rows. Upgrade and downgrade build
+the replacement index concurrently before dropping the superseded index concurrently, so no writer
+quiescence is required for this index-only migration. Do not manually retain both indexes: they
+serve the same stale-recovery predicate, and duplicate maintenance would increase write cost on the
+job table. After rollout, run `make database-hot-path-evidence` and require `valuation_job_claim`,
+`valuation_stale_scan`, and `valuation_stale_reset` to remain indexed, within their governed row
+budgets, and free of `Seq Scan` and `WindowAgg`.
+
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
 
