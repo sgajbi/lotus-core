@@ -2496,6 +2496,17 @@ def _ingest_valuation_authority(
         )
 
 
+def _requested_portfolio_master(
+    *,
+    bundle: dict[str, Any],
+    portfolio_id: str,
+) -> dict[str, Any]:
+    matches = [row for row in bundle["portfolios"] if row.get("portfolio_id") == portfolio_id]
+    if len(matches) != 1:
+        raise RuntimeError("Canonical portfolio master is not uniquely available for upgrade.")
+    return matches[0]
+
+
 def _upgrade_front_office_valuation_authority(
     *,
     ingestion_base_url: str,
@@ -2522,7 +2533,11 @@ def _upgrade_front_office_valuation_authority(
         _request_json(
             "POST",
             f"{ingestion_base_url}/ingest/portfolios",
-            payload={"portfolios": bundle["portfolios"]},
+            payload={
+                "portfolios": [
+                    _requested_portfolio_master(bundle=bundle, portfolio_id=portfolio_id)
+                ]
+            },
         )
     _wait_for_portfolio_persistence(
         query_base_url=query_base_url,
