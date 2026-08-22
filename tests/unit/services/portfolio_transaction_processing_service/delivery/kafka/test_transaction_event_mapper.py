@@ -57,7 +57,12 @@ def test_domain_model_covers_every_transaction_business_field() -> None:
     event_business_fields = set(TransactionEvent.model_fields) - GOVERNED_EVENT_ENVELOPE_FIELDS
 
     assert domain_fields == event_business_fields
-    assert BOOKED_TRANSACTION_DERIVED_FIELDS == {"calculation_lineage"}
+    assert BOOKED_TRANSACTION_DERIVED_FIELDS == {
+        "calculation_lineage",
+        "lot_restatement",
+        "source_lot_order_quantity",
+        "source_lot_original_quantity",
+    }
     mapper.validate_transaction_event_mapping_contract()
 
 
