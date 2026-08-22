@@ -2607,6 +2607,7 @@ def _ingest_front_office_core_data(
     *,
     ingestion_base_url: str,
     query_base_url: str,
+    postgres_container: str,
     bundle: dict[str, Any],
     portfolio_id: str,
     wait_seconds: int,
@@ -2629,6 +2630,12 @@ def _ingest_front_office_core_data(
         if endpoint == "/ingest/portfolios":
             _wait_for_portfolio_persistence(
                 query_base_url=query_base_url,
+                portfolio_id=portfolio_id,
+                wait_seconds=wait_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+            _wait_for_portfolio_valuation_scope(
+                postgres_container=postgres_container,
                 portfolio_id=portfolio_id,
                 wait_seconds=wait_seconds,
                 poll_interval_seconds=poll_interval_seconds,
@@ -3627,6 +3634,7 @@ def main() -> int:
             _ingest_front_office_core_data(
                 ingestion_base_url=ingestion_base_url,
                 query_base_url=query_base_url,
+                postgres_container=args.postgres_container,
                 bundle=bundle,
                 portfolio_id=args.portfolio_id,
                 wait_seconds=args.wait_seconds,
