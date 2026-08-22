@@ -114,6 +114,7 @@ def _replace_index(
     required_name: str,
     required_columns: Sequence[str],
     superseded_name: str,
+    superseded_columns: Sequence[str],
 ) -> None:
     context = op.get_context()
     with context.autocommit_block():
@@ -122,7 +123,16 @@ def _replace_index(
             _drop_index(superseded_name)
             return
         _ensure_index(required_name, required_columns)
-        if _index_state(superseded_name) is not None:
+        superseded_state = _index_state(superseded_name)
+        if superseded_state is not None:
+            if (
+                superseded_state.valid
+                and superseded_state.ready
+                and not _matches_governed_definition(superseded_state, superseded_columns)
+            ):
+                raise RuntimeError(
+                    f"existing {superseded_name} does not match the governed index definition"
+                )
             _drop_index(superseded_name)
 
 
@@ -133,6 +143,7 @@ def upgrade() -> None:
         required_name=_NEW_INDEX,
         required_columns=("valuation_lease_expires_at", "id"),
         superseded_name=_OLD_INDEX,
+        superseded_columns=("valuation_lease_expires_at",),
     )
 
 
@@ -143,4 +154,5 @@ def downgrade() -> None:
         required_name=_OLD_INDEX,
         required_columns=("valuation_lease_expires_at",),
         superseded_name=_NEW_INDEX,
+        superseded_columns=("valuation_lease_expires_at", "id"),
     )
