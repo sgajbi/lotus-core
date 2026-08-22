@@ -189,6 +189,9 @@ class _Position:
             ),
             locked_state_epoch=self.locked_state_epoch,
             resulting_quantity=self.resulting_quantity_by_id.get(transaction.transaction_id),
+            processed_transaction_quantity=self.resulting_quantity_by_id.get(
+                transaction.transaction_id
+            ),
         )
 
 
