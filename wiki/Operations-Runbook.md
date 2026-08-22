@@ -305,7 +305,10 @@ durable tenant/book scope is wrong, waits for existing instruments, and publishe
 missing from the complete raw-price windows. Existing observations must match the canonical price
 and currency; a conflict fails closed instead of being certified by new source authority. It then
 publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
-source parents nor silently treats an existing pre-authority seed as complete.
+source parents nor silently treats an existing pre-authority seed as complete. If an affected
+canonical bond already has terminal failed valuation jobs, the tool reprocesses only that
+security's bounded transaction set after authority is durable; it does not replay the full
+portfolio transaction history.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
