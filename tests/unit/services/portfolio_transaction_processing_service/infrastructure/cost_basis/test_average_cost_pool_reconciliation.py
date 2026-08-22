@@ -56,6 +56,7 @@ def _summary(
     replay_revision: str = "1",
     lineage_algorithm_id: str = "average-cost-pool-rebuild",
     source_lineage_valid: bool = True,
+    source_original_quantities: tuple[tuple[str, Decimal], ...] | None = None,
 ) -> AverageCostPoolPersistedSummary:
     plan = _plan(replay_revision=replay_revision)
     pool_lineage = build_average_cost_pool_rebuild_lineage(
@@ -88,6 +89,11 @@ def _summary(
         source_cost_local=Decimal(cost_local),
         source_cost_base=Decimal(cost_base),
         source_lineage_valid=source_lineage_valid,
+        source_original_quantities=(
+            source_original_quantities
+            if source_original_quantities is not None
+            else (("BUY-1", Decimal("10")), ("BUY-2", Decimal("5")))
+        ),
         pool_quantity=Decimal(quantity) if pool_present else None,
         pool_cost_local=Decimal(cost_local) if pool_present else None,
         pool_cost_base=Decimal(cost_base) if pool_present else None,
@@ -103,9 +109,23 @@ def _summary(
 def _plan(*, replay_revision: str = "1") -> SimpleNamespace:
     return SimpleNamespace(
         source_transactions=(
-            SimpleNamespace(transaction_id="BUY-1"),
-            SimpleNamespace(transaction_id="BUY-2"),
+            SimpleNamespace(
+                transaction_id="BUY-1",
+                source_lot_original_quantity=None,
+                source_lot_order_quantity=None,
+                quantity=Decimal("10"),
+            ),
+            SimpleNamespace(
+                transaction_id="BUY-2",
+                source_lot_original_quantity=None,
+                source_lot_order_quantity=None,
+                quantity=Decimal("5"),
+            ),
         ),
+        source_states={
+            "BUY-1": SimpleNamespace(original_quantity=Decimal("10")),
+            "BUY-2": SimpleNamespace(original_quantity=Decimal("5")),
+        },
         processing_checkpoint=SimpleNamespace(latest_transaction_id="SELL-AVCO-1"),
         checkpoint=SimpleNamespace(
             portfolio_id="P1",
@@ -259,6 +279,25 @@ async def test_equal_economics_accept_governed_incremental_pool_lineage_without_
     assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=True)
 
     assert assessment.status is AverageCostPoolReconciliationStatus.CURRENT
+    repository.apply_average_cost_pool_rebuild.assert_not_awaited()
+    processing_state.upsert_cost_basis_processing_checkpoint.assert_not_awaited()
+
+
+async def test_dry_run_rejects_stale_source_original_quantity_with_equal_aggregates() -> None:
+    session = _session()
+    adapter, rebuild_planner, repository, processing_state = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
+    repository.get_average_cost_pool_persisted_summary.return_value = _summary(
+        source_original_quantities=(("BUY-1", Decimal("5")), ("BUY-2", Decimal("10")))
+    )
+
+    assessment = await adapter.reconcile(
+        key=AverageCostPoolKey("P1", "S1"),
+        apply=False,
+    )
+
+    assert assessment.status is AverageCostPoolReconciliationStatus.DRIFTED
+    assert assessment.reason_code == "source_original_quantity_mismatch"
     repository.apply_average_cost_pool_rebuild.assert_not_awaited()
     processing_state.upsert_cost_basis_processing_checkpoint.assert_not_awaited()
 

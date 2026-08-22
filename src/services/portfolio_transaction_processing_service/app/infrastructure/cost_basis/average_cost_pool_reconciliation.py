@@ -27,6 +27,7 @@ from ...domain.cost_basis import (
     AverageCostPoolCheckpoint,
     build_average_cost_pool_rebuild_lineage,
 )
+from ...domain.cost_basis.calculation.lot_state import resolve_source_lot_original_quantity
 from ...domain.cost_basis.state_lineage import canonical_cost_basis_output_payload
 from ...ports import (
     AverageCostPoolPersistedSummary,
@@ -167,6 +168,23 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                     expected_quantity = plan.checkpoint.quantity
                     expected_cost_local = plan.checkpoint.cost_local
                     expected_cost_base = plan.checkpoint.cost_base
+                    expected_source_original_quantities = tuple(
+                        sorted(
+                            (
+                                source.transaction_id,
+                                (
+                                    plan.source_states[source.transaction_id].original_quantity
+                                    if source.transaction_id in plan.source_states
+                                    else resolve_source_lot_original_quantity(
+                                        original_quantity=source.source_lot_original_quantity,
+                                        order_quantity=source.source_lot_order_quantity,
+                                        current_quantity=source.quantity,
+                                    )
+                                ),
+                            )
+                            for source in plan.source_transactions
+                        )
+                    )
                     expected_checkpoint_lineage = build_average_cost_pool_rebuild_lineage(
                         replay_lineage=plan.replay_lineage,
                         checkpoint=plan.checkpoint,
@@ -183,6 +201,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         expected_quantity=expected_quantity,
                         expected_cost_local=expected_cost_local,
                         expected_cost_base=expected_cost_base,
+                        expected_source_original_quantities=(expected_source_original_quantities),
                         expected_checkpoint=plan.checkpoint,
                         expected_checkpoint_lineage=expected_checkpoint_lineage,
                     ):
@@ -207,6 +226,9 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                             reason_code=_drift_reason(
                                 persisted_before,
                                 expected_source_count=expected_source_count,
+                                expected_source_original_quantities=(
+                                    expected_source_original_quantities
+                                ),
                                 expected_checkpoint=plan.checkpoint,
                                 expected_checkpoint_lineage=expected_checkpoint_lineage,
                             ),
@@ -228,12 +250,16 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         expected_quantity=expected_quantity,
                         expected_cost_local=expected_cost_local,
                         expected_cost_base=expected_cost_base,
+                        expected_source_original_quantities=(expected_source_original_quantities),
                         expected_checkpoint=plan.checkpoint,
                         expected_checkpoint_lineage=expected_checkpoint_lineage,
                     ):
                         post_write_reason = _drift_reason(
                             persisted_after,
                             expected_source_count=expected_source_count,
+                            expected_source_original_quantities=(
+                                expected_source_original_quantities
+                            ),
                             expected_checkpoint=plan.checkpoint,
                             expected_checkpoint_lineage=expected_checkpoint_lineage,
                         )
@@ -277,6 +303,7 @@ def _empty_summary() -> AverageCostPoolPersistedSummary:
         source_cost_local=Decimal(0),
         source_cost_base=Decimal(0),
         source_lineage_valid=True,
+        source_original_quantities=(),
         pool_quantity=None,
         pool_cost_local=None,
         pool_cost_base=None,
@@ -294,12 +321,14 @@ def _summary_matches_plan(
     expected_quantity: Decimal,
     expected_cost_local: Decimal,
     expected_cost_base: Decimal,
+    expected_source_original_quantities: tuple[tuple[str, Decimal], ...],
     expected_checkpoint: AverageCostPoolCheckpoint,
     expected_checkpoint_lineage: CalculationLineage,
 ) -> bool:
     return bool(
         summary.source_count == expected_source_count
         and summary.source_lineage_valid
+        and summary.source_original_quantities == expected_source_original_quantities
         and summary.source_quantity == expected_quantity
         and summary.source_cost_local == expected_cost_local
         and summary.source_cost_base == expected_cost_base
@@ -373,6 +402,7 @@ def _drift_reason(
     summary: AverageCostPoolPersistedSummary,
     *,
     expected_source_count: int,
+    expected_source_original_quantities: tuple[tuple[str, Decimal], ...],
     expected_checkpoint: AverageCostPoolCheckpoint,
     expected_checkpoint_lineage: CalculationLineage,
 ) -> str:
@@ -382,6 +412,8 @@ def _drift_reason(
         return "source_count_mismatch"
     if not summary.source_lineage_valid:
         return "source_lineage_evidence_mismatch"
+    if summary.source_original_quantities != expected_source_original_quantities:
+        return "source_original_quantity_mismatch"
     if not _pool_lineage_matches_plan(
         summary.pool_calculation_lineage,
         expected_checkpoint=expected_checkpoint,
