@@ -15,15 +15,15 @@ mismatched metadata fails before publication and runtime quantity is not treated
 Routine portfolio cleanup cannot delete this shared canonical source authority or its canonical
 portfolio/instrument parents. Before cleanup or HTTP publication, entirely absent authority and an
 exact complete latest-version replay are accepted; partial, extra, or changed version-1 authority
-fails source-safely and requires an explicit full local-state reset. The reuse path requires
-all canonical seeded valuation work to be
-quiescent, waits for existing instruments, validates raw-price content before any scope mutation,
-and requires complete matching raw-price coverage. Missing or conflicting observations require a
-governed full reseed because reuse lacks an exact deferred-work acknowledgement; only complete
-coverage permits repair of incorrect portfolio scope and authority without broad transaction
-replay. Active or terminal quote-authority work blocks reuse; a second check after complete
+fails source-safely and requires an explicit full local-state reset. The reuse path is validation-only
+for valuation authority: it requires all canonical seeded valuation work to be quiescent, exact
+durable portfolio scope, existing instruments, complete matching raw-price coverage, and exact
+durable assignments/latest-version facts. Wrong scope, absent authority, and missing or conflicting
+observations require a governed full reseed before core seed writes. Reuse publishes no scope, raw
+prices, or valuation authority because no source-row-to-consumer acknowledgement exists for deferred
+price processing. Active or terminal quote-authority work blocks reuse; a second check after complete
 raw-price visibility is validated blocks deferred instrument triggers and `RESET_WATERMARKS`
-jobs before scope mutation, while a post-authority check catches concurrent work before downstream
+jobs before authority verification, while a post-authority check catches concurrent work before downstream
 continuation. Unchanged transaction
 replay cannot reopen a completed readiness stage. Ingest-only evidence requests fail before
 readiness because no verification receipt can truthfully be produced.
@@ -40,7 +40,7 @@ derived its replacement from exact durable rows: 11 assignments / 4,176 facts, a
 `7c768348fa5cbbe6361b43a47af9fbfb9ebb8b0bb165582947794bef6e795a9f`, receipt content hash
 `69a84bfa7fbc6525cc480703ccd581792acbf5841fdee6847202ab733cf4c585`, and retained byte hash
 `0fd3af5576c14a154382bffc90f3563ba1c8727f2d8c3074982194e872fbc949`; all canonical product and
-queue postures remained complete and terminal for three observations after a no-op reuse upgrade.
+queue postures remained complete and terminal for three observations after no-op reuse validation.
 Status: fixed locally;
 protected PR, exact-main, wiki
 publication/parity, issue closure, and hygiene remain pending. Evidence:

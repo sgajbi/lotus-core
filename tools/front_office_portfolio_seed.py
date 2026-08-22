@@ -2519,21 +2519,8 @@ def _ingest_valuation_authority(
         )
 
 
-def _requested_portfolio_master(
+def _validate_front_office_valuation_authority_for_reuse(
     *,
-    bundle: dict[str, Any],
-    portfolio_id: str,
-) -> dict[str, Any]:
-    portfolios = cast(list[dict[str, Any]], bundle["portfolios"])
-    matches = [row for row in portfolios if row.get("portfolio_id") == portfolio_id]
-    if len(matches) != 1:
-        raise RuntimeError("Canonical portfolio master is not uniquely available for upgrade.")
-    return matches[0]
-
-
-def _upgrade_front_office_valuation_authority(
-    *,
-    ingestion_base_url: str,
     query_base_url: str,
     postgres_container: str,
     bundle: dict[str, Any],
@@ -2541,7 +2528,7 @@ def _upgrade_front_office_valuation_authority(
     wait_seconds: int,
     poll_interval_seconds: int,
 ) -> None:
-    """Upgrade authority only when no terminal valuation recovery is required."""
+    """Validate that reuse already has complete, safely scoped valuation authority."""
 
     _require_quiescent_quote_authority_jobs(
         postgres_container=postgres_container,
@@ -2555,6 +2542,10 @@ def _upgrade_front_office_valuation_authority(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     )
+    if existing_scope != expected_scope:
+        raise RuntimeError(
+            "Canonical portfolio valuation scope is incomplete; a governed full reseed is required."
+        )
     _wait_for_instrument_persistence(
         query_base_url=query_base_url,
         security_ids=[instrument["security_id"] for instrument in bundle["instruments"]],
@@ -2579,34 +2570,9 @@ def _upgrade_front_office_valuation_authority(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     )
-    if existing_scope != expected_scope:
-        _request_json(
-            "POST",
-            f"{ingestion_base_url}/ingest/portfolios",
-            payload={
-                "portfolios": [
-                    _requested_portfolio_master(bundle=bundle, portfolio_id=portfolio_id)
-                ]
-            },
-        )
-    _wait_for_portfolio_persistence(
-        query_base_url=query_base_url,
-        portfolio_id=portfolio_id,
-        wait_seconds=wait_seconds,
-        poll_interval_seconds=poll_interval_seconds,
-    )
-    _wait_for_portfolio_valuation_scope(
-        postgres_container=postgres_container,
-        portfolio_id=portfolio_id,
-        wait_seconds=wait_seconds,
-        poll_interval_seconds=poll_interval_seconds,
-    )
-    _ingest_valuation_authority(ingestion_base_url=ingestion_base_url, bundle=bundle)
-    _wait_for_durable_front_office_valuation_authority(
+    _verify_durable_front_office_valuation_authority(
         postgres_container=postgres_container,
         bundle=bundle,
-        wait_seconds=wait_seconds,
-        poll_interval_seconds=poll_interval_seconds,
     )
     _require_quiescent_quote_authority_jobs(
         postgres_container=postgres_container,
@@ -3744,8 +3710,7 @@ def main() -> int:
                 poll_interval_seconds=args.poll_interval_seconds,
             )
         else:
-            _upgrade_front_office_valuation_authority(
-                ingestion_base_url=ingestion_base_url,
+            _validate_front_office_valuation_authority_for_reuse(
                 query_base_url=query_base_url,
                 postgres_container=args.postgres_container,
                 bundle=bundle,

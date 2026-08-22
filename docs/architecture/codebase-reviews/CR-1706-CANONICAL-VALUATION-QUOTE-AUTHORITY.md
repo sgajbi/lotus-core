@@ -18,8 +18,9 @@ A clean canonical run therefore valued nine of eleven positions while both
 Make the canonical seed the source owner for its complete valuation evidence:
 
 1. Scope `PB_SG_GLOBAL_BAL_001` to tenant `LOTUS_PB_SG` and legal book
-   `SG_PRIVATE_BANK_BOOK`, and require that exact scope to be durably visible before either a full
-   seed or reuse upgrade publishes dependent instruments, authority, dates, or transactions.
+   `SG_PRIVATE_BANK_BOOK`. A full seed requires that scope to be durably visible before publishing
+   dependent instruments, authority, dates, or transactions; reuse requires the exact scope before
+   validation and publishes no core valuation authority.
 2. Publish one effective-dated `UNIT_PRICE_MARKET_VALUE` policy assignment for every seeded
    instrument.
 3. Require an explicit source quote convention for every canonical security and publish one
@@ -42,19 +43,19 @@ Make the canonical seed the source owner for its complete valuation evidence:
    use an explicit full local-state reset. Before cleanup or any HTTP write, accept only wholly
    absent seed-owned authority or an exact complete latest-version replay; partial, extra, or
    changed version-1 authority fails source-safely and requires that reset.
-8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: require all canonical seeded
-   valuation work to be quiescent, wait for existing instruments, and require complete matching raw
-   observations before any scope write. Missing or conflicting observations require a governed full
-   reseed; reuse does not publish raw prices without exact acknowledgement of deferred price
-   reprocessing. With complete coverage, update the portfolio master only when durable tenant/book
-   scope is wrong, then publish and durably verify
-   assignments and source facts without broad transaction replay or rearming unchanged parents.
+8. Make the `--skip-cleanup` reuse path validation-only for valuation authority: require all
+   canonical seeded valuation work to be quiescent, exact durable tenant/book scope, existing
+   instruments, complete matching raw observations, and exact durable assignments/source facts.
+   Wrong scope, absent authority, and missing or conflicting observations require a governed full
+   reseed before core seed writes. Reuse does not publish portfolio scope, raw prices, or valuation
+   authority because the current outbox contract has no source-row-to-consumer acknowledgement for
+   deferred price processing. Do not broadly replay transactions or rearm unchanged parents.
    Active or terminal exact canonical security jobs block the reuse path before mutation. Wait and retry
    active work; terminal work requires a normal governed full reseed. The full reseed recreates
    portfolio-owned valuation work while preserving shared append-only authority; unchanged
    transaction replay cannot reopen an already-completed readiness stage. Repeat the check after
-   complete raw-price visibility is validated before scope mutation and after authority becomes
-   durable so concurrent work cannot escape the initial snapshot or enter downstream seed
+   complete raw-price visibility is validated before authority verification and after authority is
+   verified so concurrent work cannot escape the initial snapshot or enter downstream seed
    continuation. Fence direct valuation jobs, instrument reprocessing triggers, and active/failed
    `RESET_WATERMARKS` jobs.
    Reject `--ingest-only --evidence-output` before readiness because
@@ -79,7 +80,7 @@ under #798. Downstream applications must consume Core authority and must not fab
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,
   portfolio-safe append-only authority preservation, machine-readable evidence, reuse-path
-  authority upgrade, durable-row comparison, and repeated scheduler observations.
+  authority reuse validation, durable-row comparison, and repeated scheduler observations.
 - The combined canonical seed, quote-authority domain, and valuation-logic pack passed `121` tests;
   full MyPy passed `318` source files.
 - Ruff, format, signature, and diff-hygiene checks passed for the changed seed and test files.

@@ -4065,15 +4065,15 @@ Most relevant current governance:
      valuation queue. Routine portfolio cleanup must not erase shared append-only valuation
      authority or its canonical portfolio/instrument parents; identical source-version replay is
      idempotent and changed evidence requires a governed newer version or explicit full local-state
-     reset. The `--skip-cleanup` path must
-     require all canonical seeded valuation work to be quiescent, wait for existing
-     instruments, and require complete matching raw-price coverage before any scope mutation.
-     Missing or conflicting observations require a governed full reseed; reuse must not publish raw
-     prices without exact acknowledgement of deferred reprocessing. Only then may it update wrong
-     portfolio scope and durably prove assignments and latest-version facts. Active or terminal
+     reset. The `--skip-cleanup` path is validation-only for valuation authority: it must require all
+     canonical seeded valuation work to be quiescent, exact durable portfolio scope, existing
+     instruments, complete matching raw-price coverage, and exact durable assignments/latest-version
+     facts. Wrong scope, absent authority, and missing or conflicting observations require a governed
+     full reseed before core seed writes. Reuse must not publish scope, raw prices, or authority because
+     no source-row-to-consumer acknowledgement exists for deferred price processing. Active or terminal
      quote-authority work blocks the reuse path; repeat the check after complete raw-price
      visibility is validated and after durable authority so concurrent work cannot
-     enter scope mutation or downstream seed continuation. The fence must include direct valuation
+     enter downstream seed continuation. The fence must include direct valuation
      jobs, `instrument_reprocessing_state`, and active/failed `RESET_WATERMARKS` jobs.
      Unchanged transaction replay cannot reopen an
      already-completed readiness stage. The verifier
