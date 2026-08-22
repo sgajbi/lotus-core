@@ -45,8 +45,10 @@ Make the canonical seed the source owner for its complete valuation evidence:
    raw observations whose price or currency conflicts with the canonical bundle, publish only
    observations missing from the complete raw-price windows, then publish and durably verify
    assignments and source facts without broad transaction replay or rearming unchanged parents.
-   If exact canonical bond jobs were already terminal `FAILED`, reprocess only transactions for
-   those affected securities after authority is durable so the prior failure cannot remain frozen.
+   If exact canonical bond jobs are already terminal `FAILED`, fail before any reuse-path write and
+   require a normal governed full reseed. The full reseed recreates portfolio-owned valuation work
+   while preserving shared append-only authority; unchanged transaction replay cannot reopen an
+   already-completed readiness stage.
 9. Require three consecutive terminal queue observations. Emit a content-bound JSON receipt only
    after a read-only PostgreSQL projection of the latest append-only source versions exactly
    matches every expected durable assignment and source fact; derive receipt counts and hashes
@@ -62,7 +64,7 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `101 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `102 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,
