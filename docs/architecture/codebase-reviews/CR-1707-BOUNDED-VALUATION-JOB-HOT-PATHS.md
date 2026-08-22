@@ -31,8 +31,8 @@ bounded and primary-key indexed.
 
 ## Measured Result
 
-`make database-hot-path-evidence` at signed production-query SHA `b73b47960` completed seven real
-PostgreSQL producer nodes in 74.68 seconds. The unchanged versioned catalog reported:
+`make database-hot-path-evidence` at exact clean signed source SHA `342d27857` completed seven real
+PostgreSQL producer nodes in 96.34 seconds. The unchanged versioned catalog reported:
 
 | Scenario | Before | After | Result |
 | --- | ---: | ---: | --- |
@@ -41,7 +41,7 @@ PostgreSQL producer nodes in 74.68 seconds. The unchanged versioned catalog repo
 | valuation stale reset | 2,000 examined | 2,000 examined | 1,000 rows; primary-key indexed |
 
 The report-only artifact contains twelve scenarios and content identity
-`sha256:aba3b5b3b889967a198c6741f98c47dc6f9158777491dc23eaaf4428227ce704`.
+`sha256:94a791eeb6f8d2a207d335b19d06af974e0627dbb149234a22efeb154bb583cc`.
 Its remaining failed posture belongs only to the already routed #506 and #988 families; this slice
 does not weaken their budgets or claim their closure.
 
