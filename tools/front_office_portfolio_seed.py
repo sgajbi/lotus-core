@@ -2499,11 +2499,21 @@ def _upgrade_front_office_valuation_authority(
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/ingest/instruments",
+        payload={"instruments": bundle["instruments"]},
+    )
     _wait_for_instrument_persistence(
         query_base_url=query_base_url,
         security_ids=[instrument["security_id"] for instrument in bundle["instruments"]],
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
+    )
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/ingest/market-prices",
+        payload={"market_prices": bundle["market_prices"]},
     )
     _wait_for_required_market_price_readiness(
         query_base_url=query_base_url,
@@ -2512,6 +2522,12 @@ def _upgrade_front_office_valuation_authority(
         poll_interval_seconds=poll_interval_seconds,
     )
     _ingest_valuation_authority(ingestion_base_url=ingestion_base_url, bundle=bundle)
+    _wait_for_durable_front_office_valuation_authority(
+        postgres_container=postgres_container,
+        bundle=bundle,
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
 
 
 def _ingest_front_office_core_data(
@@ -2930,11 +2946,18 @@ select json_build_object(
         'valid_from', to_char(valid_from, 'YYYY-MM-DD'),
         'valid_to', case when valid_to is null then null else to_char(valid_to, 'YYYY-MM-DD') end
       ) order by security_id, source_record_id)
-      from instrument_valuation_policy_assignments
-      where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
-        and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
-        and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
-        and source_record_id like 'front-office-valuation-policy:%'
+      from (
+        select *, row_number() over (
+          partition by tenant_id, legal_book_id, security_id, source_system, source_record_id
+          order by assignment_version desc
+        ) as source_rank
+        from instrument_valuation_policy_assignments
+        where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+          and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
+          and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
+          and source_record_id like 'front-office-valuation-policy:%'
+      ) latest_assignments
+      where source_rank = 1
     ), '[]'::json
   ),
   'market_price_source_facts', coalesce(
@@ -2955,11 +2978,18 @@ select json_build_object(
         'source_system', source_system,
         'tenant_id', tenant_id
       ) order by security_id, price_date, source_record_id)
-      from market_price_source_facts
-      where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
-        and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
-        and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
-        and source_record_id like 'front-office-price:%'
+      from (
+        select *, row_number() over (
+          partition by source_system, source_record_id
+          order by fact_version desc
+        ) as source_rank
+        from market_price_source_facts
+        where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+          and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
+          and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
+          and source_record_id like 'front-office-price:%'
+      ) latest_facts
+      where source_rank = 1
     ), '[]'::json
   )
 )::text;
@@ -2977,6 +3007,27 @@ select json_build_object(
         "market_price_source_fact_count": len(facts),
         "market_price_source_facts_hash": _canonical_payload_fingerprint(facts),
     }
+
+
+def _wait_for_durable_front_office_valuation_authority(
+    *,
+    postgres_container: str,
+    bundle: dict[str, Any],
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> dict[str, Any]:
+    """Wait until the complete latest-version authority is durably queryable."""
+
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    while datetime.now(tz=UTC) <= deadline:
+        try:
+            return _verify_durable_front_office_valuation_authority(
+                postgres_container=postgres_container,
+                bundle=bundle,
+            )
+        except RuntimeError:
+            time.sleep(poll_interval_seconds)
+    raise TimeoutError("Canonical valuation authority was not durably visible in time.")
 
 
 def _cleanup_existing_front_office_seed(
