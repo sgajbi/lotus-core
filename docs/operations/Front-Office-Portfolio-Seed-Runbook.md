@@ -95,6 +95,7 @@ python scripts/development/repository_python.py tools/front_office_portfolio_see
   --start-date 2025-03-31 `
   --end-date 2026-04-10 `
   --benchmark-start-date 2025-01-06 `
+  --evidence-output output/front-office-qa/canonical-seed-verification.json `
   --wait-seconds 900
 ```
 
@@ -126,6 +127,10 @@ verifies:
   families
 - gateway performance `report_end_date` and return-path latest available date are
   at or after the seed end date
+- three consecutive observations contain no pending, processing, stale, or failed valuation or
+  aggregation work; any reopened scheduler work resets this non-amplification fence
+- the optional evidence file binds the complete source-fact set, assignment/fact counts, governed
+  dates, terminal queue observations, and final verification result with a SHA-256 content hash
 
 ## Validation Evidence
 
@@ -180,7 +185,8 @@ retrying. `bond valuation requires explicit quote-convention authority` means th
 policy assignment or same-tenant/same-book authoritative source fact is missing; it must not be
 worked around with the retired magnitude heuristic or a downstream-fabricated quote basis. The
 seed cleanup removes only authority owned by `LOTUS_FRONT_OFFICE_SEED` in the exact canonical
-tenant/book so a changed deterministic replay can republish version `1` without affecting other
+tenant/book and the `front-office-price:` / `front-office-valuation-policy:` record namespaces, so
+a changed deterministic replay can republish version `1` without affecting other portfolios or
 source owners.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler

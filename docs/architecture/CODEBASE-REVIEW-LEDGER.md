@@ -8,13 +8,17 @@ effective-dated policy and deterministic source authority after raw price readin
 business-date horizon, plus cash unit-price authority through the final planned-withdrawal date,
 with bounded 500-row requests and exact-scope replay cleanup. Missing,
 overlapping, stale, and wrong-book evidence still fails closed. The source contract explicitly
-normalizes clean-percent bond quotes to the price per 1,000-face held unit and binds that convention
-into the source hash; runtime quantity is not treated as face authority. No valuation formula, public API,
-schema, event, dependency, image, or topology changed. Exact signed `3f8fb933c` published 4,176
-source facts and proved 11-of-11 valued positions, complete position/cash data quality, current
-`2026-04-10` analytics/performance/return paths, and zero active or failed valuation/aggregation
-jobs. Status: fixed locally; protected PR, exact-main, wiki publication/parity, issue closure, and
-hygiene remain pending. Evidence:
+requires explicit per-security quote metadata, normalizes both declared clean-percent bond quotes
+to the price per 1,000-face held unit, and binds those inputs into the source hash; missing or
+mismatched metadata fails before publication and runtime quantity is not treated as face authority.
+Generic portfolio cleanup cannot delete this canonical source authority, and the verifier supports
+a content-bound JSON receipt plus a three-observation non-amplification fence. No valuation
+formula, public API, schema, event, dependency, image, or topology changed. Exact signed
+`e5ebb86c8` published 4,176 source facts and proved 11-of-11 valued positions, complete
+position/cash data quality, current `2026-04-10` analytics/performance/return paths, and three
+consecutive observations with zero active or failed valuation/aggregation jobs. The content-bound
+machine receipt is attached to #990. Status: fixed locally; protected PR, exact-main, wiki
+publication/parity, issue closure, and hygiene remain pending. Evidence:
 [CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md](./codebase-reviews/CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md).
 
 CR-1705 bounded Kafka startup recovery (2026-08-22): canonical dependency-gated Core startup could
