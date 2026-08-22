@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from dataclasses import replace
@@ -45,6 +46,7 @@ from tools.front_office_portfolio_seed import (
     _wait_for_portfolio_persistence,
     _wait_for_required_fx_readiness,
     _wait_for_required_market_price_readiness,
+    _write_front_office_verification_evidence,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
     build_front_office_valuation_authority_cleanup_sql,
@@ -63,6 +65,35 @@ def _build_bundle():
         benchmark_start_date=date(2025, 1, 6),
         benchmark_id=DEFAULT_BENCHMARK_ID,
     )
+
+
+def test_front_office_verification_evidence_is_machine_readable_and_content_bound(tmp_path):
+    bundle = _build_bundle()
+    output_path = tmp_path / "canonical-front-office-verification.json"
+    verification = {
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "positions": 11,
+        "valued_positions": 11,
+        "failed_valuation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "terminal_queue_stable_observations": 3,
+    }
+
+    evidence = _write_front_office_verification_evidence(
+        output_path=output_path,
+        verification=verification,
+        bundle=bundle,
+        start_date=date(2025, 3, 31),
+        end_date=date(2026, 4, 10),
+    )
+    persisted = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert persisted == evidence
+    assert evidence["schema_version"] == "front-office-seed-verification.v1"
+    assert evidence["authority"]["valuation_policy_assignment_count"] == 11
+    assert evidence["authority"]["market_price_source_fact_count"] == 4176
+    assert len(evidence["authority"]["market_price_source_facts_hash"]) == 64
+    assert len(evidence["content_hash"]) == 64
 
 
 def test_front_office_bundle_uses_real_business_names_and_context():
