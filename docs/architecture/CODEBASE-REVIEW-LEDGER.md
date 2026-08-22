@@ -5,7 +5,8 @@ CR-1706 canonical valuation quote authority (2026-08-22): canonical
 authoritative source facts. Production correctly refused magnitude inference, leaving both seeded
 bonds unvalued while nine non-bond positions completed. The seed now publishes complete
 effective-dated policy and deterministic source authority after raw price readiness and before the
-business-date horizon, plus cash unit-price authority through the final planned-withdrawal date,
+business-date horizon, with exact portfolio tenant/book scope durably fenced before dependent
+ingestion, plus cash unit-price authority through the final planned-withdrawal date,
 with bounded 500-row requests and append-only replay. Missing,
 overlapping, stale, and wrong-book evidence still fails closed. The source contract explicitly
 requires explicit per-security quote metadata, normalizes both declared clean-percent bond quotes

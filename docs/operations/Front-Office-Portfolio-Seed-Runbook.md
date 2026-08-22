@@ -186,6 +186,9 @@ If only the fixed-income positions remain unvalued, inspect `portfolio_valuation
 retrying. `bond valuation requires explicit quote-convention authority` means the canonical
 policy assignment or same-tenant/same-book authoritative source fact is missing; it must not be
 worked around with the retired magnitude heuristic or a downstream-fabricated quote basis. The
+tool waits for the exact canonical portfolio tenant/book scope to become durable before publishing
+dependent instruments, authority, business dates, or transactions, including on a full reseed of
+an older portfolio row. The
 routine seed cleanup never removes this shared tenant/book/security authority or its canonical
 portfolio/instrument parents. Identical version-1 replay is idempotent. Changed source evidence
 must use a governed newer source version; use an explicit full local-state reset for incompatible
