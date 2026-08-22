@@ -888,9 +888,10 @@ async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
 
 
 @pytest.mark.lifecycle
-async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
+async def test_find_and_reset_stale_jobs_skips_terminal_writer_locked_row(
     clean_db, setup_stale_job_data, session_factory: async_sessionmaker
 ):
+    """Recovery must not wait for or overwrite a terminal writer transaction."""
     async with session_factory() as session:
         job_id = (
             (
@@ -904,33 +905,30 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
             .one()
         )
 
-    async with session_factory() as session:
-        repo = ValuationRepository(session)
-        original_execute = session.execute
-        execute_count = 0
+    async with (
+        session_factory() as completing_session,
+        session_factory() as recovery_session,
+    ):
+        await completing_session.execute(
+            update(PortfolioValuationJob)
+            .where(PortfolioValuationJob.id == job_id)
+            .values(
+                status="COMPLETE",
+                valuation_lease_owner=None,
+                valuation_claim_token=None,
+                valuation_lease_expires_at=None,
+                updated_at=func.now(),
+            )
+        )
 
-        async def execute_with_concurrent_completion(*args, **kwargs):
-            nonlocal execute_count
-            execute_count += 1
-            if execute_count == 2:
-                async with session_factory() as concurrent_session:
-                    await concurrent_session.execute(
-                        update(PortfolioValuationJob)
-                        .where(PortfolioValuationJob.id == job_id)
-                        .values(
-                            status="COMPLETE",
-                            valuation_lease_owner=None,
-                            valuation_claim_token=None,
-                            valuation_lease_expires_at=None,
-                            updated_at=func.now(),
-                        )
-                    )
-                    await concurrent_session.commit()
-            return await original_execute(*args, **kwargs)
-
-        session.execute = execute_with_concurrent_completion
-        reset_count = await repo.find_and_reset_stale_jobs(max_attempts=3)
-        await session.commit()
+        reset_count = await asyncio.wait_for(
+            ValuationRepository(recovery_session).find_and_reset_stale_jobs(
+                max_attempts=3
+            ),
+            timeout=15,
+        )
+        await recovery_session.commit()
+        await completing_session.commit()
 
     assert reset_count == 0
 
@@ -941,6 +939,104 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
             )
         ).scalar_one()
         assert job.status == "COMPLETE"
+
+
+@pytest.mark.lifecycle
+async def test_concurrent_stale_recovery_drains_disjoint_bounded_cohorts(
+    clean_db,
+    session_factory: async_sessionmaker,
+):
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+    job_count = 1_001
+    async with session_factory() as seed_session:
+        seed_session.add_all(
+            [
+                PortfolioValuationJob(
+                    portfolio_id=f"P-STALE-COHORT-{index:04d}",
+                    security_id="S-STALE-COHORT",
+                    valuation_date=date(2025, 8, 1),
+                    status="PROCESSING",
+                    updated_at=stale_time,
+                    **_valuation_lease(
+                        f"{index + 1:032x}",
+                        expires_at=stale_time,
+                    ),
+                )
+                for index in range(job_count)
+            ]
+        )
+        await seed_session.commit()
+
+    async def recover_one_cohort() -> int:
+        async with session_factory() as recovery_session:
+            reset_count = await ValuationRepository(
+                recovery_session
+            ).find_and_reset_stale_jobs(max_attempts=3)
+            await recovery_session.commit()
+            return reset_count
+
+    reset_counts = await asyncio.wait_for(
+        asyncio.gather(recover_one_cohort(), recover_one_cohort()),
+        timeout=30,
+    )
+
+    assert sum(reset_counts) == job_count
+    assert all(reset_count <= 1_000 for reset_count in reset_counts)
+    async with session_factory() as verification_session:
+        status_counts = dict(
+            (
+                await verification_session.execute(
+                    select(PortfolioValuationJob.status, func.count())
+                    .where(PortfolioValuationJob.security_id == "S-STALE-COHORT")
+                    .group_by(PortfolioValuationJob.status)
+                )
+            ).all()
+        )
+    assert status_counts == {"PENDING": job_count}
+
+
+@pytest.mark.lifecycle
+async def test_stale_recovery_rollback_preserves_lease_authority(
+    clean_db,
+    session_factory: async_sessionmaker,
+):
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+    async with session_factory() as seed_session:
+        seed_session.add(
+            PortfolioValuationJob(
+                portfolio_id="P-STALE-ROLLBACK",
+                security_id="S-STALE-ROLLBACK",
+                valuation_date=date(2025, 8, 1),
+                status="PROCESSING",
+                attempt_count=2,
+                updated_at=stale_time,
+                **_valuation_lease("f" * 32, expires_at=stale_time),
+            )
+        )
+        await seed_session.commit()
+
+    async with session_factory() as recovery_session:
+        assert (
+            await ValuationRepository(recovery_session).find_and_reset_stale_jobs(
+                max_attempts=3
+            )
+            == 1
+        )
+        await recovery_session.rollback()
+
+    async with session_factory() as verification_session:
+        job = (
+            await verification_session.execute(
+                select(PortfolioValuationJob).where(
+                    PortfolioValuationJob.portfolio_id == "P-STALE-ROLLBACK"
+                )
+            )
+        ).scalar_one()
+    assert job.status == "PROCESSING"
+    assert job.attempt_count == 2
+    assert job.valuation_lease_owner == "valuation-integration-test"
+    assert job.valuation_claim_token == "f" * 32
+    assert job.valuation_lease_expires_at == stale_time
 
 
 async def test_get_first_open_dates_for_keys(
