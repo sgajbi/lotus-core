@@ -4103,7 +4103,11 @@ Most relevant current governance:
 
 251. Same-instrument quantity corporate actions (`SPLIT`, `REVERSE_SPLIT`, `CONSOLIDATION`,
      `BONUS_ISSUE`, and `STOCK_DIVIDEND`) must restate both original and open FIFO/AVCO lot
-     quantities through one exact before/after ratio while conserving local and base basis. Never
+     quantities through one exact before/after ratio while conserving local and base basis. A
+     source acquisition at the same transaction timestamp has dependency rank 4 and must precede
+     every same-instrument restatement at rank 5. When multiple restatements share that timestamp,
+     cost-basis and position replay must both use descending governed quantity followed by stable
+     transaction identity; neither ledger may apply its legacy tail tiebreaker first. Never
      round a per-lot remainder: if any lot is not exactly representable at the governed transaction
      quantity scale, reject the complete event before state mutation. AVCO must precompute both
      pool and source-allocation segment quantities before applying any source or pool replacement;
