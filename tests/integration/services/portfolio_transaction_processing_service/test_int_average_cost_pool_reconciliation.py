@@ -23,9 +23,15 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
+    build_cost_basis_state_lineage,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyAverageCostPoolReconciliationAdapter,
     SqlAlchemyAverageCostPoolRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_lineage import (  # noqa: E501
+    lot_state_lineage_output_from_row,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -197,6 +203,61 @@ async def test_historical_avco_reconciliation_repairs_stale_sources_and_is_idemp
     assert pool.representative_source_transaction_id == second_buy.transaction_id
     assert checkpoint.cost_basis_method == "AVCO"
     assert checkpoint.latest_transaction_id == disposal.transaction_id
+
+    async with context.session_factory() as drift_session:
+        async with drift_session.begin():
+            stale_sources = (
+                (
+                    await drift_session.execute(
+                        select(PositionLotState)
+                        .where(
+                            PositionLotState.portfolio_id == portfolio_id,
+                            PositionLotState.security_id == security_id,
+                        )
+                        .order_by(PositionLotState.source_transaction_id)
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            stale_sources[0].original_quantity = Decimal("175")
+            stale_sources[1].original_quantity = Decimal("225")
+            for source in stale_sources:
+                source.calculation_lineage = build_cost_basis_state_lineage(
+                    algorithm_id="average-cost-source-rebuild",
+                    input_payload={"legacy_repair": source.source_transaction_id},
+                    output_payload=lot_state_lineage_output_from_row(source),
+                ).lineage_payload()
+
+    stale_dry_run = await use_case.execute(
+        ReconcileAverageCostPoolsCommand(portfolio_id=portfolio_id)
+    )
+    stale_applied = await use_case.execute(
+        ReconcileAverageCostPoolsCommand(apply=True, portfolio_id=portfolio_id)
+    )
+    stale_repeated = await use_case.execute(
+        ReconcileAverageCostPoolsCommand(apply=True, portfolio_id=portfolio_id)
+    )
+
+    assert stale_dry_run.assessments[0].status is AverageCostPoolReconciliationStatus.DRIFTED
+    assert stale_dry_run.assessments[0].reason_code == "source_original_quantity_mismatch"
+    assert stale_applied.assessments[0].status is AverageCostPoolReconciliationStatus.RECONCILED
+    assert stale_repeated.assessments[0].status is AverageCostPoolReconciliationStatus.CURRENT
+    async with context.session_factory() as verification_session:
+        repaired_originals = tuple(
+            (
+                await verification_session.execute(
+                    select(PositionLotState.original_quantity)
+                    .where(
+                        PositionLotState.portfolio_id == portfolio_id,
+                        PositionLotState.security_id == security_id,
+                    )
+                    .order_by(PositionLotState.source_transaction_id)
+                )
+            ).scalars()
+        )
+    assert repaired_originals == (Decimal("200"), Decimal("200"))
 
 
 async def test_historical_avco_reconciliation_rolls_back_partial_database_repair(

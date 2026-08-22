@@ -308,6 +308,9 @@ class SqlAlchemyAverageCostPoolRepository:
             source_cost_local=source_cost_local,
             source_cost_base=source_cost_base,
             source_lineage_valid=all(_source_row_lineage_is_valid(row) for row in source_rows),
+            source_original_quantities=tuple(
+                (row.source_transaction_id, row.original_quantity) for row in source_rows
+            ),
             pool_quantity=pool.pool_quantity if pool is not None else None,
             pool_cost_local=pool.pool_cost_local if pool is not None else None,
             pool_cost_base=pool.pool_cost_base if pool is not None else None,

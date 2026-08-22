@@ -38,6 +38,7 @@ class AverageCostPoolPersistedSummary:
     source_cost_local: Decimal
     source_cost_base: Decimal
     source_lineage_valid: bool
+    source_original_quantities: tuple[tuple[str, Decimal], ...]
     pool_quantity: Decimal | None
     pool_cost_local: Decimal | None
     pool_cost_base: Decimal | None
