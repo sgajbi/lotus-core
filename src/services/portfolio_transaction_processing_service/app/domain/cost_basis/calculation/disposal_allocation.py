@@ -211,7 +211,8 @@ class SourceLotDisposalAllocation:
         source_original_quantity = self.source_original_quantity
         source_open_quantity_before = self.source_open_quantity_before
         if source_original_quantity is not None:
-            assert source_open_quantity_before is not None
+            if source_open_quantity_before is None:
+                raise ValueError("source quantity authority must be complete when supplied")
             _require_decimal(
                 source_original_quantity,
                 "source_original_quantity",
