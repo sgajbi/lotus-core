@@ -171,7 +171,10 @@ def test_transaction_order_key_is_the_sorter_total_order(sorter):
     )
 
 
-@pytest.mark.parametrize("restatement_type", ["SPLIT", "REVERSE_SPLIT", "CONSOLIDATION"])
+@pytest.mark.parametrize(
+    "restatement_type",
+    ["SPLIT", "REVERSE_SPLIT", "CONSOLIDATION", "BONUS_ISSUE", "STOCK_DIVIDEND"],
+)
 def test_same_time_quantity_restatement_follows_its_source_acquisition(
     sorter,
     restatement_type: str,

@@ -8,6 +8,9 @@ from decimal import Decimal
 from typing import Callable
 
 from ..transaction.booked import BookedTransaction
+from ..transaction.corporate_action.classification import (
+    SAME_INSTRUMENT_CORPORATE_ACTION_TYPES,
+)
 from ..transaction.processing_type import resolve_effective_processing_transaction_type
 from ..transaction.redemption import REDEMPTION_TRANSACTION_TYPES
 from .numeric_policy import POSITION_HISTORY_LEDGER_OUTPUT_V1
@@ -46,13 +49,6 @@ POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES = {
     "DEMERGER_IN",
     "RIGHTS_ALLOCATE",
     "RIGHTS_SHARE_DELIVERY",
-}
-SAME_INSTRUMENT_CORPORATE_ACTION_TYPES = {
-    "SPLIT",
-    "REVERSE_SPLIT",
-    "CONSOLIDATION",
-    "BONUS_ISSUE",
-    "STOCK_DIVIDEND",
 }
 SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES = {"REVERSE_SPLIT", "CONSOLIDATION"}
 _POSITION_START_DATE = date(1970, 1, 1)
