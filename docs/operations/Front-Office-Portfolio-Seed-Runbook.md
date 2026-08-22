@@ -35,6 +35,8 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 ## Seeded Portfolio
 
 - portfolio id: `PB_SG_GLOBAL_BAL_001`
+- valuation tenant id: `LOTUS_PB_SG`
+- valuation legal book id: `SG_PRIVATE_BANK_BOOK`
 - client id: `CIF_SG_000184` (cataloged synthetic seed identifier)
 - booking centre: `Singapore`
 - mandate: global balanced discretionary
@@ -58,6 +60,10 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 - normalized cash-book transaction rows with `price = 1` and
   `quantity = gross_transaction_amount`
 - full valuation coverage through the report end date so performance analytics remain valid
+- effective-dated valuation-policy assignments for every seeded instrument and authoritative
+  market-price source facts for every seeded price observation. Bonds use
+  `CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL` with `PERCENT_OF_PRINCIPAL_CLEAN`; all other seeded
+  instruments use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`.
 - FX and benchmark component coverage through the forward validation window so
   next-day and current-date analytics requests remain valid. The seed extends these reference
   series through at least 45 calendar days after the canonical as-of date, and through any later
@@ -95,6 +101,8 @@ The tool ingests the portfolio bundle plus benchmark reference data and then
 verifies:
 
 - required cross-currency FX windows are queryable before transaction replay
+- policy assignments and authoritative price source facts are ingested after raw price readiness
+  and before the business-date horizon activates
 - positions are populated
 - valued positions are populated
 - transactions are populated
@@ -163,6 +171,14 @@ available, check `portfolio_aggregation_jobs` for a pending backlog and
 `portfolio_timeseries` for a stale max date. The canonical readiness path
 requires portfolio aggregation to catch up before workbench validation or demo
 screenshots are accepted.
+
+If only the fixed-income positions remain unvalued, inspect `portfolio_valuation_jobs` before
+retrying. `bond valuation requires explicit quote-convention authority` means the canonical
+policy assignment or same-tenant/same-book authoritative source fact is missing; it must not be
+worked around with the retired magnitude heuristic or a downstream-fabricated quote basis. The
+seed cleanup removes only authority owned by `LOTUS_FRONT_OFFICE_SEED` in the exact canonical
+tenant/book so a changed deterministic replay can republish version `1` without affecting other
+source owners.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
 claims ready portfolio-day rows from `portfolio_aggregation_jobs` with `FOR UPDATE SKIP LOCKED` and

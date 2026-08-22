@@ -4048,6 +4048,17 @@ Most relevant current governance:
      fixed sleep, an always-healthy probe, broad Docker cleanup, ZooKeeper registration deletion, or
      volume removal.
 
+249. Canonical `PB_SG_GLOBAL_BAL_001` valuation is scoped to tenant `LOTUS_PB_SG` and legal book
+     `SG_PRIVATE_BANK_BOOK`. The seed must publish one effective-dated valuation-policy assignment
+     per seeded instrument plus one deterministic authoritative market-price source fact per raw
+     price observation after raw price readiness and before activating the business-date horizon.
+     Bonds use `CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL` with
+     `PERCENT_OF_PRINCIPAL_CLEAN`; other seeded instruments use
+     `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`. Source fact identity is stable for replay and its
+     content hash changes with source evidence. Cleanup may remove only evidence owned by
+     `LOTUS_FRONT_OFFICE_SEED` in the exact canonical tenant/book. Never restore price-magnitude
+     inference or fabricate quote authority downstream when this evidence is unavailable.
+
 ## Context Maintenance Rule
 
 Update this document when:

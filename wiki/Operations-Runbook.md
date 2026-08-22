@@ -271,10 +271,21 @@ of canonical private-banking proof. Governed Workbench and platform QA startup s
 first-party imports are proven to come from the active checkout.
 
 Canonical clean bootstrap is source first: persist portfolio and instrument parents, then FX and
-market-price history, and fail closed until the required source windows are query visible before
-activating the business-date horizon. Transactions are posted only after that fence. This prevents
-initial history from being misclassified as late corrections while preserving durable replay for
-backdated or future observations against an existing horizon.
+market-price history, and fail closed until the required source windows are query visible. After
+raw price readiness, publish effective-dated valuation-policy assignments for every seeded
+instrument and authoritative price source facts for every seeded observation before activating the
+business-date horizon. Bonds use `CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL` with
+`PERCENT_OF_PRINCIPAL_CLEAN`; other seeded instruments use `UNIT_PRICE_MARKET_VALUE` with
+`UNIT_PRICE`. Transactions are posted only after that fence. This prevents initial history from
+being misclassified as late corrections while preserving durable replay for backdated or future
+observations against an existing horizon.
+
+The canonical portfolio owns valuation scope `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK`. If only bond
+positions remain unvalued and valuation jobs report
+`bond valuation requires explicit quote-convention authority`, repair the missing same-scope Core
+assignment/source evidence. Do not restore magnitude inference or synthesize quote authority in
+Gateway, Workbench, or another downstream service. Replay cleanup is limited to evidence owned by
+`LOTUS_FRONT_OFFICE_SEED` in that exact tenant/book.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
