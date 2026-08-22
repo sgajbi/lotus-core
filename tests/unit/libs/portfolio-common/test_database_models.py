@@ -1294,7 +1294,7 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
     claim_order_epoch = indexes["ix_portfolio_valuation_jobs_claim_order_epoch"]
     lineage_latest = indexes["ix_val_jobs_lineage_latest"]
     correlation_support = indexes["ix_val_jobs_port_corr_date_updated_id"]
-    lease_expiry = indexes["ix_portfolio_valuation_jobs_processing_lease_expiry"]
+    lease_expiry = indexes["ix_portfolio_valuation_jobs_processing_lease_recovery"]
 
     assert columns["valuation_lease_owner"].type.length == 128
     assert columns["valuation_claim_token"].type.length == 32
@@ -1303,7 +1303,10 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
     assert "ck_portfolio_valuation_jobs_lease_owner_nonblank" in constraint_names
     assert "ck_portfolio_valuation_jobs_lease_expiry_finite" in constraint_names
     assert "ck_portfolio_valuation_jobs_processing_lease_state" in constraint_names
-    assert [column.name for column in lease_expiry.columns] == ["valuation_lease_expires_at"]
+    assert [column.name for column in lease_expiry.columns] == [
+        "valuation_lease_expires_at",
+        "id",
+    ]
     assert lease_expiry.dialect_options["postgresql"]["where"] is not None
 
     assert [column.name for column in portfolio_status_updated.columns] == [

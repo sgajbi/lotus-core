@@ -4682,8 +4682,9 @@ class PortfolioValuationJob(Base):
             "updated_at",
         ),
         Index(
-            "ix_portfolio_valuation_jobs_processing_lease_expiry",
+            "ix_portfolio_valuation_jobs_processing_lease_recovery",
             "valuation_lease_expires_at",
+            "id",
             postgresql_where=status == "PROCESSING",
         ),
         Index(
