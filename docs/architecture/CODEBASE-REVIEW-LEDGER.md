@@ -35,9 +35,14 @@ proof at `100%` line/branch coverage, with calculated financial/changed-code mar
 gaps: amortized-cost disposal uses strategy-owned restated quantities; AVCO currentness compares
 every source's original authority and repairs a valid-lineage stale estate; and the parity audit
 normalizes legacy lot/history identifiers. Focused unit proof is `68 passed`; AVCO unit/PostgreSQL
-reconciliation is `15 passed in 71.49s`. Status:
-fixed locally; protected PR,
-exact-main validation, wiki publication/parity, and issue closure pending.
+reconciliation is `15 passed in 71.49s`. PR #1016 preserved 54 signed semantic commits, passed
+Remote Feature Lane `32600623639` (6/6) and PR Merge Gate `32600625910` (23/23), and rebase-merged
+as exact main `fee348add202fc0b7a1f1e3de5cc9159b9f3034a`. Main Releasability `32602723125`
+passed at that exact SHA with 24 successful jobs, two expected institutional skips, and no failed or
+cancelled jobs. Cost Calculator wiki publication `0353082d1bcb5b09e6d881fd19154f39a83f9ea8`
+has strict parity `DiffCount 0`; patch-equivalent merged branch/worktree cleanup returned Core to one
+clean exact-main worktree with no stash or unmerged remote branch. Status: merged, exact-main
+validated, wiki published, and closure evidence reconciled.
 Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
 
 CR-1707 bounded valuation job hot paths (2026-08-22): the governed 10,000-row evidence found
@@ -52,14 +57,19 @@ Review fix-forward also made concurrent index replacement restart-safe and align
 dispatch-exhaustion, ingestion-policy, and Query Control Plane capacity truth to one effective
 1,000-row claim cohort. API payload shapes, events, calculations, dependencies, images, datastores,
 and topology remain unchanged; OpenAPI descriptions and the ingestion policy maximum now state the
-effective physical boundary. #988 and #506 retain their distinct report-only findings. Status:
-fixed locally; protected PR, exact-main validation, wiki publication/parity, and issue closure
-pending. Exact signed implementation head `ac7000b2a` passed Remote Feature Lane `32568806213`
+effective physical boundary. #988 and #506 retain their distinct report-only findings. Exact signed
+implementation head `ac7000b2a` passed Remote Feature Lane `32568806213`
 and Quality Baseline `32568807457`; PR Merge Gate `32568807448` passed every test and contract job
 before the final documentation-only head. Codex review found no major issue at that implementation
 head, all earlier review threads are resolved, and the changed operator wiki passes both the
-professional-page audit and repository wiki/docs gate. Final documentation-head PR validation and
-review remain pending. Evidence:
+professional-page audit and repository wiki/docs gate. Final head `8b76844ee` passed Remote Feature
+Lane `32570142091`, PR Merge Gate `32570143906`, and Quality Baseline `32570143907`; PR #995
+rebase-merged as `1351d6386`. Companion PR #1010 rebase-merged the dependency-ordered migration
+proof as `821f58db7`, where Main Releasability `32581134802` passed with 24 successful jobs, two
+expected institutional skips, and no failed or cancelled jobs. Published Operations Runbook truth
+is included in wiki head `0353082d1bcb5b09e6d881fd19154f39a83f9ea8` with strict parity
+`DiffCount 0`; merged branches/worktrees were removed. Status: merged, exact-main validated, wiki
+published, and closure evidence reconciled. Evidence:
 [CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md](./codebase-reviews/CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md).
 
 CR-1706 canonical valuation quote authority (2026-08-22): canonical
