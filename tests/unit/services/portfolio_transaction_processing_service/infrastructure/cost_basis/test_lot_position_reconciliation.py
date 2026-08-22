@@ -35,4 +35,9 @@ async def test_audit_uses_one_statement_and_scopes_candidates_to_governed_lots()
         )
     )
     assert "EXISTS (SELECT position_lot_state.id" in compiled
+    assert "trim(position_lot_state.portfolio_id) = trim(position_state.portfolio_id)" in compiled
+    assert "trim(position_lot_state.security_id) = trim(position_state.security_id)" in compiled
+    assert "trim(position_history.security_id) = trim(lot_position_parity_keys.security_id)" in (
+        compiled
+    )
     assert "LIMIT 1000" in compiled

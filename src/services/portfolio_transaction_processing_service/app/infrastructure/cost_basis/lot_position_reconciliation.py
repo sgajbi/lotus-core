@@ -33,8 +33,8 @@ class SqlAlchemyLotPositionParityAdapter:
         governed_lot_exists = (
             select(PositionLotState.id)
             .where(
-                PositionLotState.portfolio_id == PositionState.portfolio_id,
-                PositionLotState.security_id == PositionState.security_id,
+                func.trim(PositionLotState.portfolio_id) == func.trim(PositionState.portfolio_id),
+                func.trim(PositionLotState.security_id) == func.trim(PositionState.security_id),
             )
             .exists()
         )
@@ -63,8 +63,8 @@ class SqlAlchemyLotPositionParityAdapter:
         lot_quantity = (
             select(func.coalesce(func.sum(PositionLotState.open_quantity), 0))
             .where(
-                PositionLotState.portfolio_id == keys.c.portfolio_id,
-                PositionLotState.security_id == keys.c.security_id,
+                func.trim(PositionLotState.portfolio_id) == func.trim(keys.c.portfolio_id),
+                func.trim(PositionLotState.security_id) == func.trim(keys.c.security_id),
             )
             .correlate(keys)
             .scalar_subquery()
@@ -72,8 +72,8 @@ class SqlAlchemyLotPositionParityAdapter:
         position_quantity = (
             select(PositionHistory.quantity)
             .where(
-                PositionHistory.portfolio_id == keys.c.portfolio_id,
-                PositionHistory.security_id == keys.c.security_id,
+                func.trim(PositionHistory.portfolio_id) == func.trim(keys.c.portfolio_id),
+                func.trim(PositionHistory.security_id) == func.trim(keys.c.security_id),
                 PositionHistory.epoch == keys.c.epoch,
             )
             .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
