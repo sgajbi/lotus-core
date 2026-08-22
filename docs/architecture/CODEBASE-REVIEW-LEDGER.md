@@ -6,7 +6,9 @@ authoritative source facts. Production correctly refused magnitude inference, le
 bonds unvalued while nine non-bond positions completed. The seed now publishes complete
 effective-dated policy and deterministic source authority after raw price readiness and before the
 business-date horizon, with bounded 500-row requests and exact-scope replay cleanup. Missing,
-overlapping, stale, and wrong-book evidence still fails closed; no valuation formula, public API,
+overlapping, stale, and wrong-book evidence still fails closed. The source contract explicitly
+normalizes clean-percent bond quotes to the price per 1,000-face held unit and binds that convention
+into the source hash; runtime quantity is not treated as face authority. No valuation formula, public API,
 schema, event, dependency, image, or topology changed. Status: fixed locally; protected PR,
 exact-main, canonical 11-of-11 runtime, wiki publication/parity, issue closure, and hygiene remain
 pending. Evidence:

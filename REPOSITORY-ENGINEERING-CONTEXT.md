@@ -4052,10 +4052,11 @@ Most relevant current governance:
      `SG_PRIVATE_BANK_BOOK`. The seed must publish one effective-dated valuation-policy assignment
      per seeded instrument plus one deterministic authoritative market-price source fact per raw
      price observation after raw price readiness and before activating the business-date horizon.
-     Bonds use `CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL` with
-     `PERCENT_OF_PRINCIPAL_CLEAN`; other seeded instruments use
-     `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`. Source fact identity is stable for replay and its
-     content hash changes with source evidence. Cleanup may remove only evidence owned by
+     The source contract defines one held bond unit as 1,000 face and binds its deterministic
+     clean-percent-to-unit-price normalization into the source content hash. All canonical
+     assignments use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`; runtime position quantity is
+     never relabeled as face authority. Source fact identity is stable for replay and its content
+     hash changes with source evidence. Cleanup may remove only evidence owned by
      `LOTUS_FRONT_OFFICE_SEED` in the exact canonical tenant/book. Never restore price-magnitude
      inference or fabricate quote authority downstream when this evidence is unavailable.
 

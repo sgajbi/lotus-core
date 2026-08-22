@@ -19,11 +19,13 @@ Make the canonical seed the source owner for its complete valuation evidence:
 
 1. Scope `PB_SG_GLOBAL_BAL_001` to tenant `LOTUS_PB_SG` and legal book
    `SG_PRIVATE_BANK_BOOK`.
-2. Publish one effective-dated policy assignment for every seeded instrument. Bonds use
-   `CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL`; other instruments use
-   `UNIT_PRICE_MARKET_VALUE`.
-3. Publish one authoritative source fact for every raw market-price observation. Bond facts carry
-   `PERCENT_OF_PRINCIPAL_CLEAN`; other facts carry `UNIT_PRICE`.
+2. Publish one effective-dated `UNIT_PRICE_MARKET_VALUE` policy assignment for every seeded
+   instrument.
+3. Publish one authoritative `UNIT_PRICE` source fact for every raw market-price observation. The
+   canonical source contract defines one held bond unit as 1,000 face and normalizes its clean
+   percent quote as `raw_quote * 1000 / 100`. Bind the raw quote, raw quote basis, denominator,
+   face-per-unit convention, normalization identity, and normalized price into the source content
+   hash; do not relabel runtime position quantity as face authority.
 4. Derive stable source record identity from security/date and bind the complete source evidence
    into a deterministic SHA-256 content hash. Identical replay is stable; changed price evidence
    changes the hash.
@@ -51,8 +53,11 @@ under #798. Downstream applications must consume Core authority and must not fab
   batches for the canonical 2025-03-31 through 2026-04-10 window.
 - The pre-fix canonical runtime reached healthy Core startup, populated 11 positions, valued the
   nine non-bond positions, and recorded the exact missing-authority reason for both bonds. Patched
-  live 11-of-11 valuation, terminal-queue stability, protected PR, exact-main, wiki publication,
-  issue closure, and branch/worktree hygiene remain pending at this fixed-local checkpoint.
+  replay proved the assignments and 4,136 facts were present, removed the missing-quote error, and
+  then exposed that a percent-of-face policy requires independent `signed_face_amount` authority.
+  The final source-owned unit-price normalization avoids that prohibited runtime inference. Live
+  11-of-11 valuation, terminal-queue stability, protected PR, exact-main, wiki publication, issue
+  closure, and branch/worktree hygiene remain pending at this fixed-local checkpoint.
 
 ## Documentation decision
 

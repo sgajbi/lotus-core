@@ -61,9 +61,10 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
   `quantity = gross_transaction_amount`
 - full valuation coverage through the report end date so performance analytics remain valid
 - effective-dated valuation-policy assignments for every seeded instrument and authoritative
-  market-price source facts for every seeded price observation. Bonds use
-  `CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL` with `PERCENT_OF_PRINCIPAL_CLEAN`; all other seeded
-  instruments use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`.
+  market-price source facts for every seeded price observation. The canonical source contract
+  defines one held bond unit as 1,000 face and deterministically normalizes its clean-percent quote
+  into `UNIT_PRICE`; all assignments therefore use `UNIT_PRICE_MARKET_VALUE` without treating
+  position quantity as runtime face authority.
 - FX and benchmark component coverage through the forward validation window so
   next-day and current-date analytics requests remain valid. The seed extends these reference
   series through at least 45 calendar days after the canonical as-of date, and through any later
