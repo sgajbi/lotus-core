@@ -84,6 +84,33 @@ def _validate_ordinary_settlement_cash(transaction: BookedTransaction) -> None:
         raise build_settlement_cash_rejection(transaction, exc) from exc
 
 
+def _validate_lot_position_quantity_parity(
+    transaction: BookedTransaction,
+    position_result: PositionProcessingResult,
+) -> None:
+    restatement = transaction.lot_restatement
+    if restatement is None:
+        return
+    expected_quantity = restatement.get("quantity_after")
+    observed_quantity = position_result.resulting_quantity
+    if expected_quantity == observed_quantity:
+        return
+    raise TransactionProcessingRejected(
+        reason_code="lot_quantity_vs_position_mismatch",
+        detail={
+            "portfolio_id": transaction.portfolio_id,
+            "security_id": transaction.security_id,
+            "transaction_id": transaction.transaction_id,
+            "epoch": transaction.epoch or 0,
+            "expected_lot_quantity": str(expected_quantity),
+            "observed_position_quantity": (
+                str(observed_quantity) if observed_quantity is not None else None
+            ),
+        },
+        retryable=False,
+    )
+
+
 class ProcessTransactionUseCase:
     def __init__(
         self,
@@ -209,6 +236,10 @@ class ProcessTransactionUseCase:
                         rebuild_existing=correction_claimed,
                     )
                     position_results.append(position_result)
+                    _validate_lot_position_quantity_parity(
+                        processed_transaction,
+                        position_result,
+                    )
                     if position_result.locked_state_epoch is not None:
                         locked_position_epochs[
                             (

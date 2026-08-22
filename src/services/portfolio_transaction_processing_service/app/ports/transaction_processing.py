@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
@@ -27,6 +28,7 @@ class PositionProcessingResult:
     replay_queued: bool = False
     cashflow_rebuild_transactions: tuple[BookedTransaction, ...] = ()
     locked_state_epoch: int | None = None
+    resulting_quantity: Decimal | None = None
 
 
 class TransactionIdempotencyOutcome(StrEnum):
