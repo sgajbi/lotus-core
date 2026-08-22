@@ -33,13 +33,16 @@ from tools.front_office_portfolio_seed import (
     _ingest_cash_account_masters,
     _ingest_front_office_core_data,
     _ingest_reference_data,
+    _postgres_string_literal,
     _reprocess_front_office_transactions,
     _required_cross_currency_fx_windows,
     _required_market_price_windows,
     _should_reprocess_after_ingest,
     _terminate_front_office_seed_cleanup_blockers,
+    _upgrade_front_office_valuation_authority,
     _validate_front_office_cash_transactions,
     _validate_front_office_internal_transaction_pairs,
+    _verify_durable_front_office_valuation_authority,
     _verify_front_office_portfolio,
     _wait_for_cash_account_persistence,
     _wait_for_instrument_persistence,
@@ -49,7 +52,6 @@ from tools.front_office_portfolio_seed import (
     _write_front_office_verification_evidence,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
-    build_front_office_valuation_authority_cleanup_sql,
     build_portfolio_seed_cleanup_sql,
     parse_args,
 )
@@ -68,7 +70,6 @@ def _build_bundle():
 
 
 def test_front_office_verification_evidence_is_machine_readable_and_content_bound(tmp_path):
-    bundle = _build_bundle()
     output_path = tmp_path / "canonical-front-office-verification.json"
     verification = {
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
@@ -78,11 +79,18 @@ def test_front_office_verification_evidence_is_machine_readable_and_content_boun
         "failed_aggregation_jobs": 0,
         "terminal_queue_stable_observations": 3,
     }
+    durable_authority = {
+        "durable_authority_verified": True,
+        "valuation_policy_assignment_count": 11,
+        "valuation_policy_assignments_hash": "a" * 64,
+        "market_price_source_fact_count": 4176,
+        "market_price_source_facts_hash": "b" * 64,
+    }
 
     evidence = _write_front_office_verification_evidence(
         output_path=output_path,
         verification=verification,
-        bundle=bundle,
+        durable_authority=durable_authority,
         start_date=date(2025, 3, 31),
         end_date=date(2026, 4, 10),
     )
@@ -92,9 +100,94 @@ def test_front_office_verification_evidence_is_machine_readable_and_content_boun
     assert evidence["schema_version"] == "front-office-seed-verification.v1"
     assert evidence["authority"]["valuation_policy_assignment_count"] == 11
     assert evidence["authority"]["market_price_source_fact_count"] == 4176
+    assert evidence["authority"]["durable_authority_verified"] is True
     assert len(evidence["authority"]["market_price_source_facts_hash"]) == 64
     content_hash = persisted.pop("content_hash")
     assert content_hash == front_office_seed_module._canonical_payload_fingerprint(persisted)
+
+
+def test_postgres_string_literal_escapes_quotes_and_rejects_nul():
+    assert _postgres_string_literal("PB_SG_'quoted'") == "'PB_SG_''quoted'''"
+
+    with pytest.raises(ValueError, match="cannot contain NUL"):
+        _postgres_string_literal("PB_SG_\x00invalid")
+
+
+def test_durable_valuation_authority_must_exactly_match_seed_bundle(monkeypatch):
+    bundle = _build_bundle()
+    durable = front_office_seed_module._expected_durable_valuation_authority(bundle)
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_postgres_json",
+        lambda **_kwargs: durable,
+    )
+
+    receipt = _verify_durable_front_office_valuation_authority(
+        postgres_container="postgres",
+        bundle=bundle,
+    )
+
+    assert receipt["durable_authority_verified"] is True
+    assert receipt["valuation_policy_assignment_count"] == 11
+    assert receipt["market_price_source_fact_count"] == 4176
+    assert len(receipt["valuation_policy_assignments_hash"]) == 64
+    assert len(receipt["market_price_source_facts_hash"]) == 64
+
+
+@pytest.mark.parametrize("mutation", ["missing", "changed", "extra"])
+def test_durable_valuation_authority_rejects_incomplete_or_changed_state(monkeypatch, mutation):
+    bundle = _build_bundle()
+    durable = front_office_seed_module._expected_durable_valuation_authority(bundle)
+    facts = list(durable["market_price_source_facts"])
+    if mutation == "missing":
+        facts.pop()
+    elif mutation == "changed":
+        facts[0] = {**facts[0], "source_content_hash": "0" * 64}
+    else:
+        facts.append({**facts[0], "source_record_id": "front-office-price:unexpected"})
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_postgres_json",
+        lambda **_kwargs: {**durable, "market_price_source_facts": facts},
+    )
+
+    with pytest.raises(RuntimeError, match="does not match the seed bundle"):
+        _verify_durable_front_office_valuation_authority(
+            postgres_container="postgres",
+            bundle=bundle,
+        )
+
+
+def test_verify_only_does_not_emit_evidence_when_durable_authority_is_unavailable(
+    monkeypatch, tmp_path
+):
+    output_path = tmp_path / "must-not-exist.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "front_office_portfolio_seed.py",
+            "--verify-only",
+            "--evidence-output",
+            str(output_path),
+        ],
+    )
+    monkeypatch.setattr(front_office_seed_module, "_wait_ready", lambda *_args: None)
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_verify_front_office_portfolio",
+        lambda **_kwargs: {"portfolio_id": "PB_SG_GLOBAL_BAL_001"},
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_verify_durable_front_office_valuation_authority",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("durable authority unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="durable authority unavailable"):
+        front_office_seed_module.main()
+
+    assert not output_path.exists()
 
 
 def test_front_office_bundle_uses_real_business_names_and_context():
@@ -970,10 +1063,10 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "PB_SG_GLOBAL_GROWTH_003" in sql
     assert DEFAULT_BENCHMARK_ID in sql
     assert DEFAULT_DPM_MODEL_PORTFOLIO_ID in sql
-    assert sql.count("delete from market_price_source_facts") == 1
-    assert sql.count("delete from instrument_valuation_policy_assignments") == 1
-    assert "source_record_id like 'front-office-price:%'" in sql
-    assert "source_record_id like 'front-office-valuation-policy:%'" in sql
+    assert "delete from market_price_source_facts" not in sql
+    assert "delete from instrument_valuation_policy_assignments" not in sql
+    assert "front-office-price:" not in sql
+    assert "front-office-valuation-policy:" not in sql
     assert sql.startswith("begin;\n")
     assert sql.endswith("\ncommit;")
 
@@ -1168,16 +1261,19 @@ def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     assert "event_id like 'portfolio_day.reconciliation.%'" not in sql
 
 
-def test_front_office_valuation_authority_cleanup_is_exactly_source_namespaced():
-    sql = build_front_office_valuation_authority_cleanup_sql()
+def test_full_front_office_cleanup_preserves_shared_append_only_valuation_authority():
+    sql = build_front_office_seed_cleanup_sql(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        benchmark_id=DEFAULT_BENCHMARK_ID,
+    )
 
-    assert sql.count("delete from market_price_source_facts") == 1
-    assert sql.count("delete from instrument_valuation_policy_assignments") == 1
-    assert "tenant_id = 'LOTUS_PB_SG'" in sql
-    assert "legal_book_id = 'SG_PRIVATE_BANK_BOOK'" in sql
-    assert "source_system = 'LOTUS_FRONT_OFFICE_SEED'" in sql
-    assert "source_record_id like 'front-office-price:%'" in sql
-    assert "source_record_id like 'front-office-valuation-policy:%'" in sql
+    assert "delete from market_price_source_facts" not in sql
+    assert "delete from instrument_valuation_policy_assignments" not in sql
+    assert "front-office-price:" not in sql
+    assert "front-office-valuation-policy:" not in sql
+    assert "delete from instruments where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" not in sql
+    assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" not in sql
+    assert "delete from instruments where portfolio_id = 'PB_SG_GLOBAL_INC_002';" in sql
 
 
 def test_unrelated_portfolio_cleanup_cannot_erase_canonical_valuation_authority():
@@ -1638,6 +1734,60 @@ def test_front_office_seed_ingests_and_awaits_cash_account_masters(monkeypatch):
     ]
 
 
+def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(monkeypatch):
+    bundle = _build_bundle()
+    timeline: list[str] = []
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda method, url, *, payload=None: timeline.append(url) or (202, {"accepted_count": 1}),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_portfolio_persistence",
+        lambda **_kwargs: timeline.append("portfolio_visible"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_portfolio_valuation_scope",
+        lambda **_kwargs: timeline.append("portfolio_scope_durable"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_instrument_persistence",
+        lambda **_kwargs: timeline.append("instruments_visible"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_required_market_price_readiness",
+        lambda **_kwargs: timeline.append("raw_prices_visible"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_ingest_valuation_authority",
+        lambda **_kwargs: timeline.append("valuation_authority_published"),
+    )
+
+    _upgrade_front_office_valuation_authority(
+        ingestion_base_url="http://ingestion.dev.lotus",
+        query_base_url="http://query.dev.lotus",
+        postgres_container="postgres",
+        bundle=bundle,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        wait_seconds=90,
+        poll_interval_seconds=3,
+    )
+
+    assert timeline == [
+        "http://ingestion.dev.lotus/ingest/portfolios",
+        "portfolio_visible",
+        "portfolio_scope_durable",
+        "instruments_visible",
+        "raw_prices_visible",
+        "valuation_authority_published",
+    ]
+
+
 def test_front_office_seed_reuse_repairs_cash_accounts_without_replaying_transactions(
     monkeypatch,
 ):
@@ -1662,6 +1812,11 @@ def test_front_office_seed_reuse_repairs_cash_accounts_without_replaying_transac
     )
     monkeypatch.setattr(
         front_office_seed_module,
+        "_upgrade_front_office_valuation_authority",
+        lambda **_kwargs: timeline.append("valuation_authority_upgraded"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
         "_ingest_cash_account_masters",
         lambda **_kwargs: timeline.append("cash_accounts_ingested_and_visible"),
     )
@@ -1673,6 +1828,7 @@ def test_front_office_seed_reuse_repairs_cash_accounts_without_replaying_transac
 
     assert front_office_seed_module.main() == 0
     assert timeline == [
+        "valuation_authority_upgraded",
         "cash_accounts_ingested_and_visible",
         "remaining_reference_data_ingested",
     ]
