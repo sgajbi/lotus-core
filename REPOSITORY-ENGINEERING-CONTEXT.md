@@ -4123,6 +4123,12 @@ Most relevant current governance:
      interleaved buy/disposal sequences, exact aggregate conservation, deterministic residual
      placement, and the unreconcilable posture under the warning-strict unit gate.
 
+253. Historical AVCO reconciliation and repair must persist every rebuilt lot authority from the
+     planner's `OpenLotState`, including `original_quantity`; never combine restated open quantity
+     with the pre-corporate-action BUY quantity. Prove forward and reverse restatement at the
+     repository statement boundary and one real-PostgreSQL reconciliation that repairs, conserves
+     source/pool basis, and becomes idempotently current.
+
 ## Context Maintenance Rule
 
 Update this document when:
