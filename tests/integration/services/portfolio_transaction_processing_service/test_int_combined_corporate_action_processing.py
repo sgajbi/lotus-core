@@ -37,6 +37,165 @@ pytestmark = [
 ]
 
 
+@pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
+async def test_quantity_restatement_keeps_lot_and_position_authority_in_lockstep(
+    clean_db,
+    async_db_session: AsyncSession,
+    cost_basis_method: str,
+) -> None:
+    portfolio_id = f"PORT-LOT-RESTATE-{cost_basis_method}"
+    security_id = f"EQ-LOT-RESTATE-{cost_basis_method}"
+    acquisition = booked_transaction_event(
+        transaction_id=f"BUY-LOT-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="10",
+        gross_amount="1000",
+    )
+    partial_disposal = booked_transaction_event(
+        transaction_id=f"SELL-PRE-SPLIT-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="25",
+        price="15",
+        gross_amount="375",
+    )
+    split = booked_transaction_event(
+        transaction_id=f"SPLIT-LOT-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 3, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SPLIT",
+        quantity="75",
+        price="0",
+        gross_amount="0",
+    )
+    final_disposal = booked_transaction_event(
+        transaction_id=f"SELL-POST-SPLIT-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 4, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="150",
+        price="15",
+        gross_amount="2250",
+    )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method=cost_basis_method))
+    async_db_session.add(
+        instrument_record(
+            security_id,
+            name=f"Lot Restatement {cost_basis_method}",
+            isin=("SG0000000991" if cost_basis_method == "FIFO" else "SG0000000992"),
+            currency="USD",
+        )
+    )
+    context = transaction_processing_test_context(async_db_session)
+
+    for offset, event in enumerate((acquisition, partial_disposal, split), start=9901):
+        result = await persist_and_process_booked_transaction(
+            session=async_db_session,
+            context=context,
+            event=event,
+            event_id=f"transactions.persisted-0-{offset}",
+            correlation_id=f"corr-{event.transaction_id.lower()}",
+        )
+        assert result.status is TransactionProcessingStatus.PROCESSED
+
+    duplicate_split = await process_booked_transaction(
+        context=context,
+        event=split,
+        event_id="transactions.persisted-0-9903",
+        correlation_id=f"corr-{split.transaction_id.lower()}",
+    )
+    assert duplicate_split.status is TransactionProcessingStatus.DUPLICATE
+
+    async with context.session_factory() as verification_session:
+        restated_lot = (
+            await verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == acquisition.transaction_id
+                )
+            )
+        ).scalar_one()
+        restated_position = (
+            await verification_session.execute(
+                select(PositionHistory)
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    PositionHistory.security_id == security_id,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+
+    assert (
+        restated_lot.original_quantity,
+        restated_lot.open_quantity,
+        restated_lot.lot_cost_local,
+        restated_lot.lot_cost_base,
+    ) == (
+        Decimal("200.0000000000"),
+        Decimal("150.0000000000"),
+        Decimal("750.0000000000"),
+        Decimal("750.0000000000"),
+    )
+    assert (restated_position.quantity, restated_position.cost_basis) == (
+        Decimal("150.0000000000"),
+        Decimal("750.0000000000"),
+    )
+    assert restated_lot.open_quantity <= restated_lot.original_quantity
+    assert restated_lot.calculation_lineage["output_content_hash"]
+
+    result = await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=final_disposal,
+        event_id="transactions.persisted-0-9904",
+        correlation_id=f"corr-{final_disposal.transaction_id.lower()}",
+    )
+    assert result.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as verification_session:
+        final_lot = (
+            await verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == acquisition.transaction_id
+                )
+            )
+        ).scalar_one()
+        final_position = (
+            await verification_session.execute(
+                select(PositionHistory)
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    PositionHistory.security_id == security_id,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+        final_transaction = (
+            await verification_session.execute(
+                select(DBTransaction).where(
+                    DBTransaction.transaction_id == final_disposal.transaction_id
+                )
+            )
+        ).scalar_one()
+
+    assert (final_lot.open_quantity, final_lot.lot_cost_base) == (Decimal(0), Decimal(0))
+    assert (final_position.quantity, final_position.cost_basis) == (Decimal(0), Decimal(0))
+    assert (final_transaction.net_cost, final_transaction.realized_gain_loss) == (
+        Decimal("-750.0000000000"),
+        Decimal("1500.0000000000"),
+    )
+
+
 async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
     clean_db,
     async_db_session: AsyncSession,
