@@ -1863,7 +1863,11 @@ def build_front_office_portfolio_bundle(
     }
 
     market_prices: list[dict[str, Any]] = []
-    for current_date in calendar_dates:
+    cash_market_price_dates = _calendar_dates(
+        start_date,
+        current_horizon_planned_withdrawal_date,
+    )
+    for current_date in cash_market_price_dates:
         market_prices.extend(
             [
                 {
