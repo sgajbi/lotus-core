@@ -105,7 +105,7 @@ class SqlAlchemyCostBasisLotDisposalRepository:
                     )
                 _require_same_receipt_identity(prior_state, state)
                 if prior_state.semantic_content_hash == state.semantic_content_hash:
-                    if prior_state != state:
+                    if prior_state.semantic_payload() != state.semantic_payload():
                         raise CorruptLotDisposalReceiptError(
                             "receipt semantic hash matched different reconstructed content: "
                             f"{state.receipt_id}"

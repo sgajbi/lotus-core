@@ -338,6 +338,37 @@ async def test_exact_retry_is_write_neutral() -> None:
 
 
 @pytest.mark.asyncio
+async def test_retry_with_transient_quantity_authority_is_write_neutral() -> None:
+    persisted_state = _active_state()
+    record, allocations = _persisted_version(persisted_state)
+    candidate = replace(
+        persisted_state,
+        allocations=(
+            replace(
+                persisted_state.allocations[0],
+                source_original_quantity=Decimal("4"),
+                source_open_quantity_before=Decimal("3"),
+            ),
+        ),
+    )
+    session = AsyncMock()
+    repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={persisted_state.disposal_transaction_id: (record,)}
+    )
+    repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
+        return_value={(persisted_state.receipt_id, 1): allocations}
+    )
+
+    assert candidate != persisted_state
+    assert candidate.semantic_payload() == persisted_state.semantic_payload()
+
+    await repository.reconcile_disposal_receipts(receipt_states=(candidate,))
+
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_reconciliation_verifies_every_version_before_accepting_retry() -> None:
     state = _active_state()
     chain: list[LotDisposalReceiptRecord] = []
