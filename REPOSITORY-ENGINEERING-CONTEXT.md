@@ -4067,10 +4067,14 @@ Most relevant current governance:
      idempotent and changed evidence requires a governed newer version or explicit full local-state
      reset. The `--skip-cleanup` path must
      require all canonical seeded valuation work to be quiescent, wait for existing
-     instruments, validate raw-price content before any scope mutation, publish only missing
-     observations, then update portfolio scope only when wrong and durably prove assignments and
-     latest-version facts. Active or terminal quote-authority work blocks the reuse path; repeat the
-     check after durable authority so concurrent work cannot enter downstream seed continuation.
+     instruments, and require complete matching raw-price coverage before any scope mutation.
+     Missing or conflicting observations require a governed full reseed; reuse must not publish raw
+     prices without exact acknowledgement of deferred reprocessing. Only then may it update wrong
+     portfolio scope and durably prove assignments and latest-version facts. Active or terminal
+     quote-authority work blocks the reuse path; repeat the check after complete raw-price
+     visibility is validated and after durable authority so concurrent work cannot
+     enter scope mutation or downstream seed continuation. The fence must include direct valuation
+     jobs, `instrument_reprocessing_state`, and active/failed `RESET_WATERMARKS` jobs.
      Unchanged transaction replay cannot reopen an
      already-completed readiness stage. The verifier
      may emit a source-safe content-bound JSON receipt only after exact durable-row comparison, and

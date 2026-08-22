@@ -43,17 +43,21 @@ Make the canonical seed the source owner for its complete valuation evidence:
    absent seed-owned authority or an exact complete latest-version replay; partial, extra, or
    changed version-1 authority fails source-safely and requires that reset.
 8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: require all canonical seeded
-   valuation work to be quiescent, wait for existing instruments, and reject conflicting raw
-   observations before any scope write. Publish only observations missing from the complete
-   raw-price windows, update the portfolio master only when durable tenant/book scope is wrong,
-   then publish and durably verify
+   valuation work to be quiescent, wait for existing instruments, and require complete matching raw
+   observations before any scope write. Missing or conflicting observations require a governed full
+   reseed; reuse does not publish raw prices without exact acknowledgement of deferred price
+   reprocessing. With complete coverage, update the portfolio master only when durable tenant/book
+   scope is wrong, then publish and durably verify
    assignments and source facts without broad transaction replay or rearming unchanged parents.
    Active or terminal exact canonical security jobs block the reuse path before mutation. Wait and retry
    active work; terminal work requires a normal governed full reseed. The full reseed recreates
    portfolio-owned valuation work while preserving shared append-only authority; unchanged
    transaction replay cannot reopen an already-completed readiness stage. Repeat the check after
-   authority becomes durable so concurrent work cannot escape the initial snapshot or enter
-   downstream seed continuation. Reject `--ingest-only --evidence-output` before readiness because
+   complete raw-price visibility is validated before scope mutation and after authority becomes
+   durable so concurrent work cannot escape the initial snapshot or enter downstream seed
+   continuation. Fence direct valuation jobs, instrument reprocessing triggers, and active/failed
+   `RESET_WATERMARKS` jobs.
+   Reject `--ingest-only --evidence-output` before readiness because
    a verification receipt cannot truthfully be emitted by an ingest-only run.
 9. Require three consecutive terminal queue observations. Emit a content-bound JSON receipt only
    after a read-only PostgreSQL projection of the latest append-only source versions exactly
@@ -70,7 +74,7 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `108 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `110 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,

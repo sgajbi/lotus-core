@@ -1977,10 +1977,10 @@ def test_front_office_seed_ingests_and_awaits_cash_account_masters(monkeypatch):
     ]
 
 
-def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(monkeypatch):
+def test_existing_seed_upgrade_validates_sources_before_scope_and_authority(monkeypatch):
     bundle = _build_bundle()
     timeline: list[str] = []
-    failed_job_checks = iter([(), ()])
+    failed_job_checks = iter([(), (), ()])
 
     def request(method, url, *, payload=None):
         assert method == "POST"
@@ -1989,15 +1989,6 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
                 "PB_SG_GLOBAL_BAL_001"
             ]
             timeline.append(url)
-        elif url.endswith("/ingest/market-prices"):
-            cash_dates = [
-                row["price_date"]
-                for row in payload["market_prices"]
-                if row["security_id"].startswith("CASH_")
-            ]
-            assert min(cash_dates) > "2026-04-10"
-            assert max(cash_dates) == "2026-04-30"
-            timeline.append("raw_prices_published_through_2026-04-30")
         else:
             timeline.append(url)
         return 202, {"accepted_count": 1}
@@ -2028,15 +2019,10 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "_wait_for_instrument_persistence",
         lambda **_kwargs: timeline.append("instruments_visible"),
     )
-    missing_price_tail = [
-        row
-        for row in bundle["market_prices"]
-        if row["security_id"].startswith("CASH_") and row["price_date"] > "2026-04-10"
-    ]
     monkeypatch.setattr(
         front_office_seed_module,
         "_missing_required_market_prices",
-        lambda **_kwargs: timeline.append("old_price_coverage_inspected") or missing_price_tail,
+        lambda **_kwargs: timeline.append("raw_price_coverage_validated") or [],
     )
     monkeypatch.setattr(
         front_office_seed_module,
@@ -2077,9 +2063,9 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
     assert timeline == [
         "failed_jobs_checked",
         "instruments_visible",
-        "old_price_coverage_inspected",
-        "raw_prices_published_through_2026-04-30",
+        "raw_price_coverage_validated",
         "raw_prices_visible",
+        "failed_jobs_checked",
         "http://ingestion.dev.lotus/ingest/portfolios",
         "portfolio_visible",
         "portfolio_scope_durable",
@@ -2179,6 +2165,9 @@ def test_front_office_seed_reads_only_blocking_quote_authority_securities(monkey
         "FO_BOND_UST_2030",
     )
     assert "from portfolio_valuation_jobs" in observed_sql[0]
+    assert "from instrument_reprocessing_state" in observed_sql[0]
+    assert "from reprocessing_jobs" in observed_sql[0]
+    assert "job_type = 'RESET_WATERMARKS'" in observed_sql[0]
     assert "and status in ('PENDING', 'PROCESSING', 'FAILED')" in observed_sql[0]
     assert "FO_BOND_UST_2030" in observed_sql[0]
     assert "FO_BOND_SIEMENS_2031" in observed_sql[0]
@@ -2217,7 +2206,7 @@ def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_
 def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authority(
     monkeypatch,
 ):
-    checks = iter([(), ("FO_EQ_AAPL_US",)])
+    checks = iter([(), (), ("FO_EQ_AAPL_US",)])
     timeline: list[str] = []
     monkeypatch.setattr(
         front_office_seed_module,
@@ -2310,6 +2299,95 @@ def test_existing_seed_upgrade_validates_raw_prices_before_scope_write(monkeypat
             wait_seconds=90,
             poll_interval_seconds=3,
         )
+
+
+def test_existing_seed_upgrade_rejects_missing_prices_before_any_write(monkeypatch):
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_blocking_quote_authority_job_security_ids",
+        lambda **_kwargs: (),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_portfolio_valuation_scope",
+        lambda **_kwargs: {"tenant_id": None, "legal_book_id": None},
+    )
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_instrument_persistence", lambda **_: None
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_missing_required_market_prices",
+        lambda **_kwargs: [{"security_id": "CASH_USD_BOOK_OPERATING"}],
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda *_args, **_kwargs: pytest.fail("missing coverage must precede every write"),
+    )
+
+    with pytest.raises(RuntimeError, match="coverage is incomplete"):
+        _upgrade_front_office_valuation_authority(
+            ingestion_base_url="http://ingestion.dev.lotus",
+            query_base_url="http://query.dev.lotus",
+            postgres_container="postgres",
+            bundle=_build_bundle(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            wait_seconds=90,
+            poll_interval_seconds=3,
+        )
+
+
+def test_existing_seed_upgrade_fences_deferred_reprocessing_before_scope(monkeypatch):
+    checks = iter([(), ("CASH_USD_BOOK_OPERATING",)])
+    timeline: list[str] = []
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_blocking_quote_authority_job_security_ids",
+        lambda **_kwargs: next(checks),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_portfolio_valuation_scope",
+        lambda **_kwargs: {"tenant_id": None, "legal_book_id": None},
+    )
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_instrument_persistence", lambda **_: None
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_missing_required_market_prices",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda *_args, **_kwargs: pytest.fail("deferred work must block scope writes"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_required_market_price_readiness",
+        lambda **_: timeline.append("complete_raw_prices_visible"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_ingest_valuation_authority",
+        lambda **_: pytest.fail("deferred reprocessing must block authority publication"),
+    )
+
+    with pytest.raises(RuntimeError, match="valuation work must be quiescent") as exc_info:
+        _upgrade_front_office_valuation_authority(
+            ingestion_base_url="http://ingestion.dev.lotus",
+            query_base_url="http://query.dev.lotus",
+            postgres_container="postgres",
+            bundle=_build_bundle(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            wait_seconds=90,
+            poll_interval_seconds=3,
+        )
+
+    assert timeline == ["complete_raw_prices_visible"]
+    assert "CASH_USD_BOOK_OPERATING" not in str(exc_info.value)
 
 
 def test_front_office_seed_reuse_repairs_cash_accounts_without_full_core_reingestion(
