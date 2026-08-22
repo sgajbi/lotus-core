@@ -58,7 +58,7 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `97 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `98 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,
