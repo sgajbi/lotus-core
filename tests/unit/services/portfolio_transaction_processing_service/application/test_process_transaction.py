@@ -166,13 +166,13 @@ class _Position:
         error_on: str | None = None,
         cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
         locked_state_epoch: int | None = None,
-        resulting_quantity_by_id: dict[str, Decimal] | None = None,
+        processed_quantity_by_id: dict[str, Decimal] | None = None,
     ) -> None:
         self.calls = calls
         self.error_on = error_on
         self.cashflow_rebuild_transactions_by_id = cashflow_rebuild_transactions_by_id or {}
         self.locked_state_epoch = locked_state_epoch
-        self.resulting_quantity_by_id = resulting_quantity_by_id or {}
+        self.processed_quantity_by_id = processed_quantity_by_id or {}
         self.rebuild_existing_calls: list[bool] = []
 
     async def process(self, transaction: BookedTransaction, **kwargs) -> PositionProcessingResult:
@@ -188,8 +188,7 @@ class _Position:
                 (),
             ),
             locked_state_epoch=self.locked_state_epoch,
-            resulting_quantity=self.resulting_quantity_by_id.get(transaction.transaction_id),
-            processed_transaction_quantity=self.resulting_quantity_by_id.get(
+            processed_transaction_quantity=self.processed_quantity_by_id.get(
                 transaction.transaction_id
             ),
         )
@@ -237,7 +236,7 @@ class _UnitOfWork:
             error_on=position_error_on,
             cashflow_rebuild_transactions_by_id=cashflow_rebuild_transactions_by_id,
             locked_state_epoch=position_locked_state_epoch,
-            resulting_quantity_by_id=position_resulting_quantity_by_id,
+            processed_quantity_by_id=position_resulting_quantity_by_id,
         )
         self.readiness = _Readiness(calls)
         self.committed = False
