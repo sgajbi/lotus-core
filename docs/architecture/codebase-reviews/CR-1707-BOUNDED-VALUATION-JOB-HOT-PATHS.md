@@ -24,7 +24,10 @@ bounded and primary-key indexed.
 3. The expiry-only partial index is replaced by a partial `(valuation_lease_expires_at, id)` index
    for `PROCESSING` rows. Upgrade and downgrade create the replacement before dropping the
    superseded index, using PostgreSQL concurrent index operations outside the migration
-   transaction so the hot writer table is not blocked by an index build.
+   transaction so the hot writer table is not blocked by an index build. The migration inspects
+   PostgreSQL catalog validity and the exact governed definition before acting: a valid partial
+   replacement is resumed, an invalid interrupted concurrent build is dropped and rebuilt, and a
+   conflicting same-name index fails source-safely instead of being silently accepted.
 4. Existing chunked, predicate-rechecked reset/fail/supersede updates remain unchanged. Repository
    methods still stage work only; the scheduler-owned unit of work retains commit and rollback
    authority.
@@ -55,8 +58,11 @@ does not weaken their budgets or claim their closure.
   lease owner, opaque claim token, and expiry.
 - Existing two-claimer tests still prove one durable claim per job, the shared in-flight ceiling,
   and newer-epoch exclusion.
-- Real PostgreSQL downgrade/upgrade proof replaces and restores the partial indexes and leaves the
-  head index present. The Alembic single-head SQL contract also passes.
+- Real PostgreSQL downgrade/upgrade proof replaces and restores the partial indexes, then simulates
+  interruption after the replacement was created but before the old index was removed. A retry
+  recognizes the valid replacement, removes the superseded index, and leaves the head index
+  present. Unit proofs cover invalid-build repair and conflicting-definition rejection. The
+  Alembic single-head SQL contract also passes.
 
 ## Compatibility
 
@@ -84,7 +90,9 @@ needed.
   1,000 and 1 cohorts in 90.53s.
 - Complete valuation repository PostgreSQL file: 40 passed in 253.42s.
 - Repository-native `test-unit-db`: 18 passed in 113.99s.
-- Online index downgrade/upgrade PostgreSQL proof: 1 passed in 86.25s.
+- Restart-safe index unit matrix: 4 passed; governed resume, invalid repair, conflicting-definition
+  rejection, and reversible online DDL are covered.
+- Online index downgrade/upgrade and interrupted-create replay PostgreSQL proof: 2 passed in 96.68s.
 - Alembic single-head SQL migration contract: passed.
 - Full lint/security/contract guard chain, MyPy across 318 source files, complete architecture guard,
   documentation evidence pack, architecture catalog, and wiki-source validation: passed.
