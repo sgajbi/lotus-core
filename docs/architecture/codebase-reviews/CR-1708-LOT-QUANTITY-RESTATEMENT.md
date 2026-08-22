@@ -76,6 +76,11 @@ basis, or leave phantom quantity.
   prevents stale-generation revival; and the position application/port result now carries only the
   corporate-action-row quantity actually consumed by the parity fence. The focused domain,
   application, and adapter pack passes `105` warning-strict tests.
+- Coverage fix-forward: the lot-position audit domain now directly rejects blank identities,
+  negative epoch/lot authority, and falsely current assessments. Its line and branch coverage are
+  `100%`; the four added invariant exits move financial-calculation branch coverage from `84.95%`
+  to a calculated `85.47%` and changed critical-code branch coverage from `84.71%` to `85.24%`
+  without changing thresholds or excluding source.
 - Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
 - Repository database unit lane: `18 passed in 98.39s`; restored-lot repository integration:
   `12 passed in 109.45s`.

@@ -25,7 +25,11 @@ BUY/BUY/SPLIT/SELL reconciliation prove exact originals, opens, basis, and idemp
 Final unresolved-thread reconciliation precomputes the AVCO pool segment before any source/pool
 mutation, fences residual assignment to the current source generation, removes the unused final-
 timeline quantity from the position application/port contract, and adds direct fail-before-mutation,
-generation, and focused application/adapter proof (`105 passed`). Status:
+generation, and focused application/adapter proof (`105 passed`).
+The first exact-head combined coverage run then exposed missing fail-closed audit-domain decisions;
+blank identities, negative epoch/quantity authority, and falsely current assessments now have direct
+proof at `100%` line/branch coverage, with calculated financial/changed-code margins of `85.47%` and
+`85.24%` before the replacement protected run. Status:
 fixed locally; protected PR,
 exact-main validation, wiki publication/parity, and issue closure pending.
 Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
