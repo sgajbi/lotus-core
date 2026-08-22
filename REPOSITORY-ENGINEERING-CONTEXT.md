@@ -4052,6 +4052,8 @@ Most relevant current governance:
      `SG_PRIVATE_BANK_BOOK`. The seed must publish one effective-dated valuation-policy assignment
      per seeded instrument plus one deterministic authoritative market-price source fact per raw
      price observation after raw price readiness and before activating the business-date horizon.
+     Both full seed and reuse paths must wait for exact durable portfolio tenant/book scope before
+     publishing dependent instruments, authority, business dates, or transactions.
      Every seeded security requires explicit source quote metadata. Both canonical bonds declare
      clean percent, denominator 100, and 1,000 face per held unit; missing or mismatched metadata
      fails before publication. Bind the deterministic clean-percent-to-unit-price normalization

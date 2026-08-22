@@ -294,7 +294,9 @@ positions remain unvalued and valuation jobs report
 assignment/source evidence. If they instead report missing `signed_face_amount`, verify that the
 canonical bond fact was normalized to `UNIT_PRICE`; do not infer face from position quantity. Do not
 restore magnitude inference or synthesize quote authority in Gateway, Workbench, or another
-downstream service. Routine replay cleanup never deletes the shared append-only valuation
+downstream service. A full seed and a reuse upgrade both wait for the exact portfolio tenant/book
+scope to become durable before dependent instruments, authority, dates, or transactions proceed.
+Routine replay cleanup never deletes the shared append-only valuation
 authority or its canonical portfolio/instrument parents. Identical version-1 replay is idempotent;
 changed evidence must append a governed newer version or use an explicit full local-state reset.
 

@@ -18,7 +18,8 @@ A clean canonical run therefore valued nine of eleven positions while both
 Make the canonical seed the source owner for its complete valuation evidence:
 
 1. Scope `PB_SG_GLOBAL_BAL_001` to tenant `LOTUS_PB_SG` and legal book
-   `SG_PRIVATE_BANK_BOOK`.
+   `SG_PRIVATE_BANK_BOOK`, and require that exact scope to be durably visible before either a full
+   seed or reuse upgrade publishes dependent instruments, authority, dates, or transactions.
 2. Publish one effective-dated `UNIT_PRICE_MARKET_VALUE` policy assignment for every seeded
    instrument.
 3. Require an explicit source quote convention for every canonical security and publish one
