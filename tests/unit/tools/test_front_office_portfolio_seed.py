@@ -111,6 +111,9 @@ def test_front_office_bundle_carries_complete_deterministic_valuation_authority(
     assert max(row["price_date"] for row in ust_facts) == "2026-04-10"
     latest_ust_fact = next(row for row in ust_facts if row["price_date"] == "2026-04-10")
     assert latest_ust_fact["price"] == "1013.5000"
+    cash_facts = [row for row in facts if row["security_id"] == "CASH_USD_BOOK_OPERATING"]
+    assert max(row["price_date"] for row in cash_facts) == "2026-04-30"
+    assert {row["price"] for row in cash_facts} == {"1.0000000000"}
 
 
 def test_front_office_valuation_authority_satisfies_ingestion_contracts():
@@ -284,7 +287,7 @@ def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
     )
 
     assert max(aapl_prices) == "2026-04-17"
-    assert max(cash_prices) == "2026-04-17"
+    assert max(cash_prices) == current_horizon_withdrawal["transaction_date"][:10]
     assert future_withdrawal["transaction_date"].startswith("2026-04-24")
     assert future_withdrawal["settlement_date"].startswith("2026-04-27")
     assert current_horizon_withdrawal["transaction_date"].startswith("2026-05-07")
