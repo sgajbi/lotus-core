@@ -75,29 +75,31 @@ class LotRestatement:
         }
 
 
-def _require_finite_decimal(value: object, field_name: str) -> None:
+def _require_finite_decimal(value: object, field_name: str) -> Decimal:
     if not isinstance(value, Decimal):
         raise TypeError(f"{field_name} must be a Decimal")
     if not value.is_finite():
         raise LotRestatementError(f"{field_name} must be finite")
+    return value
 
 
-def _require_non_negative_persistable_quantity(value: object, field_name: str) -> None:
-    _require_finite_decimal(value, field_name)
-    if value < Decimal(0):
+def _require_non_negative_persistable_quantity(value: object, field_name: str) -> Decimal:
+    amount = _require_finite_decimal(value, field_name)
+    if amount < Decimal(0):
         raise LotRestatementError(f"{field_name} must be non-negative")
-    _require_exact_persistable_quantity(value, field_name)
+    return _require_exact_persistable_quantity(amount, field_name)
 
 
-def _require_positive_persistable_quantity(value: object, field_name: str) -> None:
-    _require_non_negative_persistable_quantity(value, field_name)
-    if value == Decimal(0):
+def _require_positive_persistable_quantity(value: object, field_name: str) -> Decimal:
+    amount = _require_non_negative_persistable_quantity(value, field_name)
+    if amount == Decimal(0):
         raise LotRestatementError(f"{field_name} must be positive")
+    return amount
 
 
 def _require_exact_persistable_quantity(value: Decimal, field_name: str) -> Decimal:
     try:
-        return TRANSACTION_PERSISTENCE_PRECISION_V1.require_exact(
+        exact = TRANSACTION_PERSISTENCE_PRECISION_V1.require_exact(
             value,
             field_name=field_name,
         )
@@ -105,3 +107,6 @@ def _require_exact_persistable_quantity(value: Decimal, field_name: str) -> Deci
         raise LotRestatementError(
             f"{field_name} exceeds governed quantity precision"
         ) from exc
+    if not isinstance(exact, Decimal):
+        raise LotRestatementError(f"{field_name} did not normalize to a Decimal")
+    return exact
