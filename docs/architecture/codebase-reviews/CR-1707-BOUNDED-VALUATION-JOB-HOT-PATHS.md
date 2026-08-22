@@ -114,10 +114,10 @@ is needed.
 - The changed `Operations-Runbook.md` passes the platform professional-wiki audit and the
   repository wiki/docs gate after adding an early current-scope, evidence-boundary, and reader map.
 - At exact signed implementation head `ac7000b2a`, Remote Feature Lane `32568806213` and Quality
-  Baseline `32568807457` passed. PR Merge Gate `32568807448` passed every test and contract job
-  before this final documentation-only head. Codex review reported no major issues at that exact
-  implementation head, and all three earlier review threads are resolved with linked fix-forward
-  evidence.
+  Baseline `32568807457` passed. PR Merge Gate `32568807448` passed every test and contract job,
+  then concluded cancelled when the final documentation-only head superseded it. Codex review
+  reported no major issues at that exact implementation head, and all three earlier review threads
+  are resolved with linked fix-forward evidence.
 - Final documentation head `8b76844eee3e57be4399b05fa9b8dee97b05d2c8` passed Remote Feature Lane
   `32570142091`, PR Merge Gate `32570143906`, and Quality Baseline `32570143907`; PR #995
   rebase-merged as `1351d63868c158568fd334e554e361e36fb36fe5`.

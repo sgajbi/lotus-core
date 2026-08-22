@@ -59,9 +59,10 @@ dispatch-exhaustion, ingestion-policy, and Query Control Plane capacity truth to
 and topology remain unchanged; OpenAPI descriptions and the ingestion policy maximum now state the
 effective physical boundary. #988 and #506 retain their distinct report-only findings. Exact signed
 implementation head `ac7000b2a` passed Remote Feature Lane `32568806213`
-and Quality Baseline `32568807457`; PR Merge Gate `32568807448` passed every test and contract job
-before the final documentation-only head. Codex review found no major issue at that implementation
-head, all earlier review threads are resolved, and the changed operator wiki passes both the
+and Quality Baseline `32568807457`; PR Merge Gate `32568807448` passed every test and contract job,
+then concluded cancelled when the final documentation-only head superseded it. Codex review found
+no major issue at that implementation head, all earlier review threads are resolved, and the changed
+operator wiki passes both the
 professional-page audit and repository wiki/docs gate. Final head `8b76844ee` passed Remote Feature
 Lane `32570142091`, PR Merge Gate `32570143906`, and Quality Baseline `32570143907`; PR #995
 rebase-merged as `1351d6386`. Companion PR #1010 rebase-merged the dependency-ordered migration
