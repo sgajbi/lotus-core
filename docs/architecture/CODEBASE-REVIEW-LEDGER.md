@@ -8,9 +8,13 @@ partial index created and removed concurrently. Exact PostgreSQL evidence moved 
 to 9,001 examined rows and stale selection from 13,000 to 3,000; both now return 1,000 rows with
 indexed access and no `Seq Scan` or `WindowAgg`. Concurrent recovery, terminal-writer exclusion,
 rollback authority, existing claim concurrency, and real migration downgrade/upgrade proofs pass.
-No API, event, calculation, dependency, image, datastore, or topology contract changed. #988 and
-#506 retain their distinct report-only findings. Status: fixed locally; protected PR, exact-main
-validation, and issue closure pending. Evidence:
+Review fix-forward also made concurrent index replacement restart-safe and aligned repository,
+dispatch-exhaustion, ingestion-policy, and Query Control Plane capacity truth to one effective
+1,000-row claim cohort. API payload shapes, events, calculations, dependencies, images, datastores,
+and topology remain unchanged; OpenAPI descriptions and the ingestion policy maximum now state the
+effective physical boundary. #988 and #506 retain their distinct report-only findings. Status:
+fixed locally; protected PR, exact-main validation, wiki publication/parity, and issue closure
+pending. Evidence:
 [CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md](./codebase-reviews/CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md).
 
 CR-1706 canonical valuation quote authority (2026-08-22): canonical

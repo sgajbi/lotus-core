@@ -73,19 +73,24 @@ does not weaken their budgets or claim their closure.
 ## Compatibility
 
 This is an internal query, lock, and index-shape change. Repository method signatures, scheduler
-cadence, lease/token semantics, readiness-outbox authority, status transitions, API/OpenAPI,
-events/Kafka, calculations, dependencies, images, datastores, and topology are unchanged. The
-schema migration changes only index metadata and is reversible; it does not change stored rows.
+cadence, lease/token semantics, readiness-outbox authority, status transitions, API payload shapes,
+events/Kafka, calculations, dependencies, images, datastores, and topology are unchanged. OpenAPI
+descriptions and the ingestion operating-policy maximum now state the effective 1,000-row physical
+claim boundary. The schema migration changes only index metadata and is reversible; it does not
+change stored rows.
 
 ## Same-Pattern And Governance Decision
 
 #988 remains the distinct owner for `reprocessing_jobs` duplicate normalization, and #506 remains
 the transaction-ledger page owner. #508 retains broader index-audit work; the obsolete valuation
 lease index is replaced rather than duplicated here. #794/#795 retain outbox and capacity work.
-No public or operator command changed, so README, RFC, OpenAPI, supported-feature, and authored wiki
-source do not change. Existing backend and database-evidence governance already encode the reusable
-bounded-query and caller-owned transaction rules, so no central platform context or skill change is
-needed.
+No public or operator command changed, so README, RFC, supported-feature, and authored-wiki
+navigation surfaces do not change. The operator-visible effective-capacity clarification is
+recorded in the OpenAPI descriptions, repository runbook, and authored
+`wiki/Operations-Runbook.md`; pre-merge source validation and post-main publication/parity are
+required. Existing backend and database-evidence governance already encode the reusable
+bounded-query and caller-owned transaction rules, so no central platform context or skill change
+is needed.
 
 ## Validation Evidence
 
@@ -106,4 +111,5 @@ needed.
 - Alembic single-head SQL migration contract: passed.
 - Full lint/security/contract guard chain, MyPy across 318 source files, complete architecture guard,
   documentation evidence pack, architecture catalog, and wiki-source validation: passed.
-- Protected PR, exact-main, final independent review, and issue closure evidence remain pending.
+- Protected PR, exact-main, authored-wiki publication/parity, final independent review, and issue
+  closure evidence remain pending.

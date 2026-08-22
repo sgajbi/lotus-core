@@ -192,6 +192,11 @@ statements, inspect the single structured `database_statement_batch` event: its 
 `max_rows_per_statement`. It contains no portfolio, security, job, claim, or correlation identity.
 Multiple statements do not mean partial persistence; they share the caller's transaction, so any
 later-chunk failure rolls back the complete logical operation.
+`VALUATION_SCHEDULER_BATCH_SIZE` therefore has an effective maximum of 1,000 for claim execution,
+dispatch-loop exhaustion, ingestion operating-policy reporting, and Query Control Plane poll
+capacity. A larger legacy configured value remains startup-compatible but is exposed and executed
+as 1,000; dispatch rounds may continue after a full 1,000-row cohort until the configured round,
+poll-budget, dispatch-budget, in-flight, or producer-back-pressure boundary is reached.
 Expired valuation claims and stale reprocessing jobs are recovered in deterministic cohorts of at
 most 1,000 per scheduler poll; subsequent polls drain any remaining backlog. Recovery evidence uses
 bounded counts and reason codes and never emits job-ID collections. Use the support APIs above for
