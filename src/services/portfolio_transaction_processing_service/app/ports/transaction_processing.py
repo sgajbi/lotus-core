@@ -29,6 +29,7 @@ class PositionProcessingResult:
     cashflow_rebuild_transactions: tuple[BookedTransaction, ...] = ()
     locked_state_epoch: int | None = None
     resulting_quantity: Decimal | None = None
+    processed_transaction_quantity: Decimal | None = None
 
 
 class TransactionIdempotencyOutcome(StrEnum):

@@ -92,7 +92,7 @@ def _validate_lot_position_quantity_parity(
     if restatement is None:
         return
     expected_quantity = restatement.get("quantity_after")
-    observed_quantity = position_result.resulting_quantity
+    observed_quantity = position_result.processed_transaction_quantity
     if expected_quantity == observed_quantity:
         return
     raise TransactionProcessingRejected(
