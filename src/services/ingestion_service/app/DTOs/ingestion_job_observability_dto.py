@@ -175,7 +175,11 @@ class IngestionOpsPolicyResponse(BaseModel):
     )
     valuation_scheduler_batch_size: int = Field(
         ge=1,
-        description="Configured batch size for valuation scheduler scans and claims.",
+        le=1_000,
+        description=(
+            "Effective per-round valuation scheduler claim cohort after applying the governed "
+            "1,000-row physical statement ceiling."
+        ),
         examples=[100],
     )
     valuation_scheduler_dispatch_rounds: int = Field(

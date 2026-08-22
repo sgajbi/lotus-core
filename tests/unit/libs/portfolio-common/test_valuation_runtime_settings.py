@@ -1,6 +1,11 @@
 import pytest
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    POSTGRES_STATEMENT_ROW_LIMIT,
+)
 from portfolio_common.valuation_runtime_settings import (
+    VALUATION_JOB_CLAIM_COHORT_LIMIT,
     ValuationRuntimeConfigurationError,
+    effective_valuation_job_claim_cohort_size,
     get_valuation_runtime_settings,
 )
 
@@ -73,3 +78,13 @@ def test_get_valuation_runtime_settings_strict_rejects_invalid_env_values(monkey
 
     with pytest.raises(ValuationRuntimeConfigurationError, match="VALUATION_SCHEDULER_BATCH_SIZE"):
         get_valuation_runtime_settings()
+
+
+def test_valuation_scheduler_batch_size_exposes_effective_physical_cohort(monkeypatch):
+    monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "1001")
+
+    settings = get_valuation_runtime_settings()
+
+    assert settings.valuation_scheduler_batch_size == VALUATION_JOB_CLAIM_COHORT_LIMIT
+    assert effective_valuation_job_claim_cohort_size(1_001) == 1_000
+    assert VALUATION_JOB_CLAIM_COHORT_LIMIT == POSTGRES_STATEMENT_ROW_LIMIT

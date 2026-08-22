@@ -16,6 +16,9 @@ from portfolio_common.scheduler_dispatch_recovery import (
     SchedulerDispatchError,
     dispatch_failure_reason,
 )
+from portfolio_common.valuation_runtime_settings import (
+    effective_valuation_job_claim_cohort_size,
+)
 
 from ..repositories.valuation_repository import ValuationRepository
 from .valuation_job_publisher import ValuationJobPublishError
@@ -50,7 +53,7 @@ class ValuationDispatchCoordinator:
         session_provider: SessionProvider,
         repository_factory: ValuationDispatchRepositoryFactory,
     ) -> None:
-        self._batch_size = batch_size
+        self._batch_size = effective_valuation_job_claim_cohort_size(batch_size)
         self._max_in_flight_jobs = max_in_flight_jobs
         self._dispatch_rounds_per_poll = dispatch_rounds_per_poll
         self._poll_budget_seconds = poll_budget_seconds

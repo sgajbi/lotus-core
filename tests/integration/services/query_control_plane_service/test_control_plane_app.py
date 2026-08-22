@@ -426,7 +426,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     ].startswith("Configured valuation scheduler poll interval")
     assert load_run_progress_schema["properties"]["valuation_scheduler_max_dispatch_jobs_per_poll"][
         "description"
-    ].startswith("Configured maximum number of valuation jobs")
+    ].startswith("Effective maximum number of valuation jobs")
     assert load_run_progress_schema["properties"][
         "valuation_scheduler_pending_dispatch_polls_lower_bound"
     ]["description"].startswith("Lower bound on scheduler poll cycles")

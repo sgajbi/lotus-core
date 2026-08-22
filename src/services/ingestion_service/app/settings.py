@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal, cast
 
+from portfolio_common.valuation_runtime_settings import (
+    effective_valuation_job_claim_cohort_size,
+)
+
 logger = logging.getLogger(__name__)
 
 STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
@@ -627,8 +631,8 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             valuation_scheduler_poll_interval_seconds=_env_int(
                 "VALUATION_SCHEDULER_POLL_INTERVAL", 30, minimum=1
             ),
-            valuation_scheduler_batch_size=_env_int(
-                "VALUATION_SCHEDULER_BATCH_SIZE", 100, minimum=1
+            valuation_scheduler_batch_size=effective_valuation_job_claim_cohort_size(
+                _env_int("VALUATION_SCHEDULER_BATCH_SIZE", 100, minimum=1)
             ),
             valuation_scheduler_dispatch_rounds=_env_int(
                 "VALUATION_SCHEDULER_DISPATCH_ROUNDS", 10, minimum=1

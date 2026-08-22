@@ -806,9 +806,9 @@ class LoadRunProgressResponse(BaseModel):
     valuation_scheduler_max_dispatch_jobs_per_poll: int = Field(
         ...,
         description=(
-            "Configured maximum number of valuation jobs that the scheduler can claim and "
-            "dispatch in a single poll cycle, expressed as "
-            "`valuation_scheduler_batch_size * valuation_scheduler_dispatch_rounds`. "
+            "Effective maximum number of valuation jobs that the scheduler can claim and "
+            "dispatch in a single poll cycle, expressed as the governed physical claim cohort "
+            "(at most 1,000) multiplied by `valuation_scheduler_dispatch_rounds`. "
             "Actual dispatch can be lower when the scheduler poll budget, dispatch budget, "
             "or producer back-pressure stop condition is reached."
         ),

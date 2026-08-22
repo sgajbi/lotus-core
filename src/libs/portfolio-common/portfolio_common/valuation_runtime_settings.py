@@ -6,6 +6,13 @@ from portfolio_common.runtime_settings import RuntimeConfigurationError
 from portfolio_common.runtime_settings import env_int as shared_env_int
 
 VALUATION_RUNTIME_SERVICE_NAME = "valuation runtime"
+VALUATION_JOB_CLAIM_COHORT_LIMIT = 1_000
+
+
+def effective_valuation_job_claim_cohort_size(requested_batch_size: int) -> int:
+    """Return the physical claim cohort shared by execution and support reporting."""
+
+    return min(requested_batch_size, VALUATION_JOB_CLAIM_COHORT_LIMIT)
 
 
 def _env_positive_int(name: str, default: int) -> int:
@@ -47,13 +54,14 @@ def load_valuation_runtime_settings(
     worker_poll_interval_default: int = 10,
     worker_batch_size_default: int = 10,
 ) -> ValuationRuntimeSettings:
+    valuation_scheduler_batch_size = effective_valuation_job_claim_cohort_size(
+        _env_positive_int("VALUATION_SCHEDULER_BATCH_SIZE", scheduler_batch_size_default)
+    )
     return ValuationRuntimeSettings(
         valuation_scheduler_poll_interval_seconds=_env_positive_int(
             "VALUATION_SCHEDULER_POLL_INTERVAL", scheduler_poll_interval_default
         ),
-        valuation_scheduler_batch_size=_env_positive_int(
-            "VALUATION_SCHEDULER_BATCH_SIZE", scheduler_batch_size_default
-        ),
+        valuation_scheduler_batch_size=valuation_scheduler_batch_size,
         valuation_scheduler_max_in_flight_jobs=_env_positive_int(
             "VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS", scheduler_batch_size_default
         ),
