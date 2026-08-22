@@ -47,11 +47,18 @@ _CASH_CONSIDERATION_RANK_TYPES = {
     CASH_CONSIDERATION_TRANSACTION_TYPE,
     "RIGHTS_SHARE_DELIVERY",
 }
+_SAME_INSTRUMENT_QUANTITY_RESTATEMENT_TYPES = {
+    "SPLIT",
+    "REVERSE_SPLIT",
+    "CONSOLIDATION",
+}
 _DEPENDENCY_RANK_BY_TYPE = {
     **dict.fromkeys(_SOURCE_OUT_RANK_TYPES, 0),
     **dict.fromkeys(_TARGET_IN_RANK_TYPES, 1),
     **dict.fromkeys(_CASH_CONSIDERATION_RANK_TYPES, 2),
     "RIGHTS_REFUND": 3,
+    # Same-time source acquisitions must exist before their quantity is restated.
+    **dict.fromkeys(_SAME_INSTRUMENT_QUANTITY_RESTATEMENT_TYPES, 5),
 }
 
 
@@ -63,7 +70,8 @@ def corporate_action_dependency_rank(transaction: CorporateActionOrderable) -> i
     1: target-in legs / rights election legs
     2: cash consideration marker legs / rights delivery legs
     3: rights refund stage
-    4: non-Bundle-A / unknown
+    4: non-Bundle-A / unknown, including source acquisitions
+    5: same-instrument quantity restatements
     """
     transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
     return _DEPENDENCY_RANK_BY_TYPE.get(transaction_type, 4)

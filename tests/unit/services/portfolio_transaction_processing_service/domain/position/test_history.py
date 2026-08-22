@@ -118,6 +118,32 @@ def test_order_position_transactions_uses_canonical_dependency_and_target_order(
     )
 
 
+@pytest.mark.parametrize("restatement_type", ["SPLIT", "REVERSE_SPLIT", "CONSOLIDATION"])
+def test_same_time_position_restatement_follows_its_source_acquisition(
+    restatement_type: str,
+) -> None:
+    transaction_time = datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc)
+    acquisition = _transaction(
+        "BUY-SOURCE",
+        "BUY",
+        transaction_date=transaction_time,
+        quantity=Decimal("100"),
+    )
+    restatement = _transaction(
+        "ACTION-RESTATE",
+        restatement_type,
+        transaction_date=transaction_time,
+        quantity=Decimal("200"),
+    )
+
+    ordered = order_position_transactions((restatement, acquisition))
+
+    assert tuple(transaction.transaction_id for transaction in ordered) == (
+        "BUY-SOURCE",
+        "ACTION-RESTATE",
+    )
+
+
 def test_order_position_transactions_uses_ingestion_and_identity_tiebreakers() -> None:
     transaction_time = datetime(2026, 4, 10, 9, 30, tzinfo=timezone(timedelta(hours=8)))
     transactions = (

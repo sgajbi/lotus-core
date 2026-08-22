@@ -171,6 +171,33 @@ def test_transaction_order_key_is_the_sorter_total_order(sorter):
     )
 
 
+@pytest.mark.parametrize("restatement_type", ["SPLIT", "REVERSE_SPLIT", "CONSOLIDATION"])
+def test_same_time_quantity_restatement_follows_its_source_acquisition(
+    sorter,
+    restatement_type: str,
+) -> None:
+    transaction_time = datetime(2026, 7, 1, 10, 0)
+    acquisition = _transaction(
+        transaction_id="BUY-SOURCE",
+        transaction_date=transaction_time,
+        transaction_type="BUY",
+        quantity=Decimal("100"),
+    )
+    restatement = _transaction(
+        transaction_id="ACTION-RESTATE",
+        transaction_date=transaction_time,
+        transaction_type=restatement_type,
+        quantity=Decimal("200"),
+    )
+
+    ordered = sorter.sort_transactions([], [restatement, acquisition])
+
+    assert [transaction.transaction_id for transaction in ordered] == [
+        "BUY-SOURCE",
+        "ACTION-RESTATE",
+    ]
+
+
 def test_sort_bundle_a_dependency_and_target_ordering(sorter):
     """
     Bundle A ordering should process source-out before target-in legs,
