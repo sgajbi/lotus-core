@@ -93,6 +93,7 @@ def _validate_lot_position_quantity_parity(
         return
     expected_quantity = restatement.get("quantity_after")
     observed_quantity = position_result.processed_transaction_quantity
+    # A coalesced/missing transaction record has no like-for-like authority and fails closed.
     if expected_quantity == observed_quantity:
         return
     raise TransactionProcessingRejected(
