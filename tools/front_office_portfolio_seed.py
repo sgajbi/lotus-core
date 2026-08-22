@@ -45,6 +45,8 @@ DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
 FRONT_OFFICE_VALUATION_TENANT_ID = "LOTUS_PB_SG"
 FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID = "SG_PRIVATE_BANK_BOOK"
 FRONT_OFFICE_VALUATION_SOURCE_SYSTEM = "LOTUS_FRONT_OFFICE_SEED"
+FRONT_OFFICE_BOND_FACE_AMOUNT_PER_POSITION_UNIT = Decimal("1000")
+FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR = Decimal("100")
 DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
     {
         "portfolio_id": "PB_SG_GLOBAL_INC_002",
@@ -369,13 +371,37 @@ def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
 
 
 def _valuation_policy_for_instrument(instrument: dict[str, Any]) -> tuple[str, str]:
-    product_type = str(instrument["product_type"]).strip().lower()
-    if product_type == "bond":
-        return (
-            "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL",
-            "PERCENT_OF_PRINCIPAL_CLEAN",
-        )
     return ("UNIT_PRICE_MARKET_VALUE", "UNIT_PRICE")
+
+
+def _authoritative_source_value(
+    *,
+    market_price: dict[str, Any],
+    instrument: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    raw_price = Decimal(str(market_price["price"]))
+    if str(instrument["product_type"]).strip().lower() != "bond":
+        return format(raw_price, "f"), {
+            "normalization": "SOURCE_UNIT_PRICE",
+            "raw_price": format(raw_price, "f"),
+            "raw_quote_basis": "UNIT_PRICE",
+        }
+
+    normalized_unit_price = (
+        raw_price
+        * FRONT_OFFICE_BOND_FACE_AMOUNT_PER_POSITION_UNIT
+        / FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR
+    )
+    return format(normalized_unit_price, "f"), {
+        "face_amount_per_position_unit": format(
+            FRONT_OFFICE_BOND_FACE_AMOUNT_PER_POSITION_UNIT,
+            "f",
+        ),
+        "normalization": "PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE",
+        "quote_denominator": format(FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR, "f"),
+        "raw_price": format(raw_price, "f"),
+        "raw_quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+    }
 
 
 def _build_market_price_source_fact(
@@ -385,6 +411,10 @@ def _build_market_price_source_fact(
     observed_at: str,
 ) -> dict[str, Any]:
     _, quote_basis = _valuation_policy_for_instrument(instrument)
+    authoritative_price, normalization_evidence = _authoritative_source_value(
+        market_price=market_price,
+        instrument=instrument,
+    )
     price_date = str(market_price["price_date"])
     security_id = str(market_price["security_id"])
     source_record_id = f"front-office-price:{security_id}:{price_date}"
@@ -394,7 +424,7 @@ def _build_market_price_source_fact(
         "fact_version": 1,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
         "observed_at": observed_at,
-        "price": str(market_price["price"]),
+        "price": authoritative_price,
         "price_date": price_date,
         "quote_basis": quote_basis,
         "security_id": security_id,
@@ -402,13 +432,14 @@ def _build_market_price_source_fact(
         "source_revision": "v1",
         "source_system": FRONT_OFFICE_VALUATION_SOURCE_SYSTEM,
         "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        **normalization_evidence,
     }
     return {
         "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
         "security_id": security_id,
         "price_date": price_date,
-        "price": str(market_price["price"]),
+        "price": authoritative_price,
         "currency": str(market_price["currency"]),
         "quote_basis": quote_basis,
         "fact_status": "ACTIVE",
@@ -444,8 +475,9 @@ def _build_valuation_policy_assignment(
         "source_revision": "v1",
         "observed_at": observed_at,
         "assignment_reason": (
-            "Canonical fixed-income quote represented as clean percent of face principal."
-            if policy_id == "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
+            "Canonical clean-percent bond quote normalized by the source owner to the explicit "
+            "price per 1,000-face position unit."
+            if str(instrument["product_type"]).strip().lower() == "bond"
             else "Canonical source value represented as a price per position unit."
         ),
     }
