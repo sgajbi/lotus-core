@@ -16,6 +16,10 @@ basis, or leave phantom quantity.
   ratio to every original/open quantity without a rounded factor.
 - FIFO lots and AVCO source/pool authority precompute every replacement before mutation. Any
   non-representable lot rejects the complete event at the transaction persistence scale.
+- AVCO materialization caps each preliminary open-quantity share by its source original quantity,
+  then assigns the exact storage-quantum residual deterministically across remaining source
+  headroom. Aggregate quantity that cannot be represented without violating source authority fails
+  closed instead of over-allocating the final source lot.
 - Local/base basis is conserved; original and open quantities persist atomically in the existing
   caller-owned transaction. Calculation lineage binds the exact restatement payload.
 - `quantity_restatement` is state-dependent and forces complete AVCO source-history reconstruction.
@@ -50,6 +54,12 @@ basis, or leave phantom quantity.
   remains exact, and parity remains current (`2 passed in 70.20s`).
 - Cross-product goldens: split-then-full-sale and reverse-split-then-full-sale run against both
   strategies and assert exact cost relief, realized P&L, and empty residual lot state.
+- CI fix-forward: the full warning gate exposed an interleaved AVCO buy/disposal sequence where the
+  former last-source residual shortcut produced open quantity `1.0000000002` against original
+  quantity `1`. A deterministic six-source domain regression now proves exact aggregate
+  reconciliation, source-level `open <= original`, stable residual placement, and fail-closed
+  rejection when aggregate quantity exceeds total source authority. The focused pack passes
+  `23` tests and the complete warning gate passes with zero warnings.
 - Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
 - Repository database unit lane: `18 passed in 98.39s`; restored-lot repository integration:
   `12 passed in 109.45s`.
@@ -71,6 +81,8 @@ validation followed by post-main publication and strict parity.
 
 Whenever two durable projections represent one financial invariant, preserve typed authority across
 the application boundary and compare them before commit. Also provide a bounded read-only estate
-audit; do not rely only on prospective rejection. This repository-local rule is now recorded in
+audit; do not rely only on prospective rejection. Residual allocation must conserve the aggregate
+without violating any component's authority; never repair aggregate rounding by blindly assigning
+the remainder to one final component. This repository-local rule is now recorded in
 `REPOSITORY-ENGINEERING-CONTEXT.md`; existing backend delivery and codebase-review skills already
 cover the reusable platform-wide pattern, so no central skill change is required.
