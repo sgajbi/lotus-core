@@ -6,7 +6,9 @@ basis. Non-representable per-lot results reject before mutation; typed restateme
 cost persistence into position processing, and like-for-like quantity at the corporate-action row
 drives `lot_quantity_vs_position_mismatch` before cashflow/readiness/commit, including backdated
 rebuilds with later trades. A one-round-trip, ordered, bounded read-only audit surfaces historical
-drift without transaction/lot identifiers and scopes candidates to the durable lot estate. Restored
+drift without transaction/lot identifiers and scopes candidates to the durable lot estate. Its
+allowlisted `lot-position-parity-audit` operator identity is certifying; real entry-point proof
+returns zero for CURRENT and one for DRIFTED while disposing the governed engine. Restored
 lots require original-quantity authority, while invariant failures use a stable source-safe,
 non-retryable rejection. FIFO/AVCO PostgreSQL tests prove partial-disposal split,
 duplicate delivery, backdated epoch replay, an adverse BUY/later-SELL/backdated-SPLIT ordering,

@@ -49,7 +49,9 @@ basis, or leave phantom quantity.
 - `make audit-lot-position-parity` provides a read-only ordered page (maximum 1,000 keys), assessed
   in one database round trip, for detecting historical drift without exposing transaction/lot IDs.
   Candidate selection is limited to positions with durable lot-state authority, avoiding false
-  findings for cash and other non-lot products.
+  findings for cash and other non-lot products. The command runs under the allowlisted,
+  operator-cohort `lot-position-parity-audit` database identity. It is intentionally certifying:
+  CURRENT returns zero and any governed drift returns one.
 
 ## Evidence
 
@@ -63,6 +65,10 @@ basis, or leave phantom quantity.
 - Adverse-order PostgreSQL replay: FIFO and AVCO each prove BUY, later SELL, then a backdated SPLIT
   ordered before that SELL. The split row holds 175, the final row and lot book hold 150, basis
   remains exact, and parity remains current (`2 passed in 70.20s`).
+- Operator-entry proof executes the real registered identity and composed database adapter against
+  PostgreSQL: a CURRENT lot estate returns exit code zero and a deliberately drifted current
+  position returns one. The focused unit proof also enters the real identity scope and verifies
+  operator-cohort, certifying classification, bounded command projection, and engine disposal.
 - Cross-product goldens: split-then-full-sale and reverse-split-then-full-sale run against both
   strategies and assert exact cost relief, realized P&L, and empty residual lot state.
 - CI fix-forward: the full warning gate exposed an interleaved AVCO buy/disposal sequence where the
