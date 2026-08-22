@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 Issue: [#996](https://github.com/sgajbi/lotus-core/issues/996)
-Status: Fixed locally; protected PR, exact-main, wiki publication, and issue closure pending.
+Status: Merged, exact-main validated, wiki published, and closure evidence reconciled.
 
 ## Finding
 
@@ -104,8 +104,21 @@ basis, or leave phantom quantity.
 - Transaction sell contract: `189 passed in 4.49s`; full transaction-processing contract:
   `150 passed in 891.96s`.
 - Repository Ruff/format and lint governance, MyPy (`323` source files), and the complete architecture
-  guard are green. Protected PR, exact-main, and release certification remain pending at this
-  fixed-local documentation head.
+  guard are green.
+- PR #1016 preserved 54 signed semantic commits and passed final-head Remote Feature Lane
+  `32600623639` (6/6) plus PR Merge Gate `32600625910` (23/23) at approved head
+  `88b1afcc24005785325539e5c0a3e25552e303c1`. It was rebase-merged as exact main
+  `fee348add202fc0b7a1f1e3de5cc9159b9f3034a`.
+- Main Releasability `32602723125` passed at that exact merge SHA with 24 successful jobs, two
+  expected institutional skips, and zero failures or cancellations. The run included combined
+  coverage, the full transaction-processing contract, full PostgreSQL integration, exact-source
+  Docker build and smoke, full E2E, latency, fast/full performance, and failure recovery.
+- Authored Cost Calculator wiki source was published as
+  `0353082d1bcb5b09e6d881fd19154f39a83f9ea8`; strict source-to-publication parity returned
+  `DiffCount 0`.
+- After exact-main proof, patch-equivalence and unique-commit checks passed; the merged local/remote
+  feature branch and alternate worktree were removed. Core returned to one clean worktree on exact
+  main with no stash or unmerged remote branch.
 
 ## Compatibility and scope
 
