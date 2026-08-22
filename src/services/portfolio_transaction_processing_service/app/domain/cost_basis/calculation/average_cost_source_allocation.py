@@ -117,6 +117,7 @@ class AverageCostSourceContribution:
     source_lot_id: str
     source_acquisition_date: date
     generation: int
+    original_quantity: Decimal
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal
@@ -151,6 +152,7 @@ class AverageCostSourceAllocation:
         source_lot_id: str,
         source_acquisition_date: date,
         quantity: Decimal,
+        original_quantity: Decimal | None = None,
         cost_local: Decimal,
         cost_base: Decimal,
         pool_quantity_after: Decimal,
@@ -162,6 +164,7 @@ class AverageCostSourceAllocation:
             source_lot_id=source_lot_id,
             source_acquisition_date=source_acquisition_date,
             generation=self._generation_by_key[book_key],
+            original_quantity=(quantity if original_quantity is None else original_quantity),
             quantity=quantity,
             cost_local=cost_local,
             cost_base=cost_base,
@@ -247,6 +250,9 @@ class AverageCostSourceAllocation:
                 states[source_transaction_id] = active_states.get(
                     source_transaction_id,
                     OpenLotState(
+                        original_quantity=self._contributions[
+                            source_transaction_id
+                        ].original_quantity,
                         quantity=Decimal(0),
                         cost_local=Decimal(0),
                         cost_base=Decimal(0),
@@ -310,6 +316,7 @@ class AverageCostSourceAllocation:
             disposal_factor = self._disposal_factor(contribution)
             quantity = quantities[source_transaction_id]
             state = OpenLotState(
+                original_quantity=contribution.original_quantity,
                 quantity=quantity,
                 cost_local=_materialized_cost(
                     eligible=quantity > Decimal(0),
@@ -416,6 +423,7 @@ class AverageCostSourceAllocation:
                     source_acquisition_date=contribution.source_acquisition_date,
                     source_sequence=source_sequence,
                     generation=contribution.generation,
+                    original_quantity=contribution.original_quantity,
                     quantity=contribution.quantity,
                     cost_local=contribution.cost_local,
                     cost_base=contribution.cost_base,
@@ -451,6 +459,7 @@ class AverageCostSourceAllocation:
                 source_lot_id=source.source_lot_id,
                 source_acquisition_date=source.source_acquisition_date,
                 generation=source.generation,
+                original_quantity=source.original_quantity,
                 quantity=source.quantity,
                 cost_local=source.cost_local,
                 cost_base=source.cost_base,

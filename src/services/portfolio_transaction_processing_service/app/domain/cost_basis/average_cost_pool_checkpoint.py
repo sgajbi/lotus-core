@@ -107,6 +107,7 @@ class AverageCostPoolCheckpoint:
 
     def as_open_lot_state(self) -> OpenLotState:
         return OpenLotState(
+            original_quantity=self.quantity,
             quantity=self.quantity,
             cost_local=self.cost_local,
             cost_base=self.cost_base,

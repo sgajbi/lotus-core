@@ -50,6 +50,7 @@ def _transaction(transaction_type: str = "SELL") -> BookedTransaction:
 def _open_lot_states() -> dict[str, OpenLotState]:
     return {
         "BUY-1": OpenLotState(
+            original_quantity=Decimal("10"),
             quantity=Decimal("6"),
             cost_local=Decimal("60"),
             cost_base=Decimal("63"),
@@ -118,6 +119,7 @@ async def test_initial_opening_lot_does_not_reread_complete_snapshot(
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     states = {
         "BUY-1": OpenLotState(
+            original_quantity=Decimal("10"),
             quantity=Decimal("4"),
             cost_local=Decimal("48"),
             cost_base=Decimal("48"),

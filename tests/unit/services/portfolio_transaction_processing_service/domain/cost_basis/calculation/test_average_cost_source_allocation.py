@@ -77,6 +77,7 @@ def test_materialize_book_is_bounded_to_requested_book() -> None:
 
     assert states == {
         "BUY-1": OpenLotState(
+            original_quantity=Decimal("10"),
             quantity=Decimal("10"),
             cost_local=Decimal("100"),
             cost_base=Decimal("120"),
@@ -163,6 +164,7 @@ def test_closed_generations_are_not_scanned_during_later_disposals() -> None:
 
     assert allocation.materialize_book(book_key=book_key, pool=pool) == {
         "BUY-ACTIVE": OpenLotState(
+            original_quantity=Decimal("2"),
             quantity=Decimal("2"),
             cost_local=Decimal("20"),
             cost_base=Decimal("24"),

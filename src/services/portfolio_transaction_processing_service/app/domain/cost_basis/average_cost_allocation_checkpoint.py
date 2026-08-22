@@ -26,6 +26,7 @@ class AverageCostSourceAccumulator:
     source_acquisition_date: date
     source_sequence: int
     generation: int
+    original_quantity: Decimal
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal
@@ -51,8 +52,10 @@ class AverageCostSourceAccumulator:
             raise ValueError("source_sequence must be positive")
         for field_name in ("generation", "cost_local_generation", "cost_base_generation"):
             _require_nonnegative_integer(getattr(self, field_name), field_name=field_name)
-        for field_name in ("quantity", "cost_local", "cost_base"):
+        for field_name in ("original_quantity", "quantity", "cost_local", "cost_base"):
             _require_decimal(getattr(self, field_name), field_name=field_name, positive=False)
+        if self.quantity > self.original_quantity:
+            raise ValueError("AVCO source quantity must not exceed original_quantity")
         if self.quantity == Decimal(0):
             raise ValueError("active AVCO source quantity must be positive")
         for field_name in (

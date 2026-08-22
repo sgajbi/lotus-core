@@ -335,6 +335,7 @@ class CostBasisCalculationCoordinator:
                 )
         else:
             existing_sources_after = OpenLotState(
+                original_quantity=Decimal(0),
                 quantity=Decimal(0),
                 cost_local=Decimal(0),
                 cost_base=Decimal(0),
@@ -368,6 +369,7 @@ class CostBasisCalculationCoordinator:
         for record in records:
             transaction_raw = build_cost_basis_engine_input(record.transaction)
             transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
+            transaction_raw["source_lot_original_quantity"] = record.original_quantity
             transaction_raw["quantity"] = record.quantity
             transaction_raw["net_cost_local"] = record.cost_local
             transaction_raw["net_cost"] = record.cost_base

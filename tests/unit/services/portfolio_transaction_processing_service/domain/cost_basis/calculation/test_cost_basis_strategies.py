@@ -718,11 +718,13 @@ def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -
 
     assert strategy.get_open_lot_states() == {
         "AVCO_CLOSED_SOURCE": OpenLotState(
+            original_quantity=Decimal("2"),
             quantity=Decimal("0"),
             cost_local=Decimal("0"),
             cost_base=Decimal("0"),
         ),
         "AVCO_REOPENED_SOURCE": OpenLotState(
+            original_quantity=Decimal("3"),
             quantity=Decimal("2"),
             cost_local=Decimal("30"),
             cost_base=Decimal("30"),
@@ -779,6 +781,7 @@ def test_average_cost_basis_transfer_restarts_disposal_segment_after_partial_sal
     )
     states = strategy.get_open_lot_states()
     assert states["AVCO-PARTIAL-BASIS-SOURCE"] == OpenLotState(
+        original_quantity=Decimal("100"),
         quantity=Decimal("25"),
         cost_local=Decimal("150"),
         cost_base=Decimal("150"),
@@ -1037,8 +1040,9 @@ def test_average_cost_near_full_disposal_couples_quantity_and_basis_residuals() 
         [
             remaining_transaction.model_copy(
                 update={
-                    "quantity": remaining_state.quantity,
-                    "gross_transaction_amount": remaining_state.cost_local,
+                        "quantity": remaining_state.quantity,
+                        "source_lot_original_quantity": remaining_state.original_quantity,
+                        "gross_transaction_amount": remaining_state.cost_local,
                     "net_cost": remaining_state.cost_base,
                     "net_cost_local": remaining_state.cost_local,
                 }
@@ -1095,11 +1099,13 @@ def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zer
 
     states = strategy.get_open_lot_states()
     assert states["ZERO-BASIS-SOURCE"] == OpenLotState(
+        original_quantity=Decimal("100"),
         quantity=Decimal("100"),
         cost_local=Decimal("0"),
         cost_base=Decimal("0"),
     )
     assert states["POST-TRANSFER-SOURCE"] == OpenLotState(
+        original_quantity=Decimal("20"),
         quantity=Decimal("20"),
         cost_local=Decimal("300"),
         cost_base=Decimal("300"),

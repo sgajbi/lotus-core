@@ -174,11 +174,13 @@ def test_cost_basis_timeline_processor_handles_backdated_insert(
     assert results["BUY_2_BACKDATED"].realized_gain_loss == Decimal("0")
     assert open_lot_states == {
         "BUY_1": OpenLotState(
+            original_quantity=Decimal("100"),
             quantity=Decimal("50"),
             cost_local=Decimal("500"),
             cost_base=Decimal("500"),
         ),
         "BUY_2_BACKDATED": OpenLotState(
+            original_quantity=Decimal("100"),
             quantity=Decimal("100"),
             cost_local=Decimal("800"),
             cost_base=Decimal("800"),
@@ -257,6 +259,7 @@ def test_basis_only_corporate_action_without_target_is_rejected_before_lot_mutat
     assert result.processed == []
     assert result.basis_transfers == ()
     assert result.open_lot_states["BUY-1"] == OpenLotState(
+        original_quantity=Decimal("100"),
         quantity=Decimal("100"),
         cost_local=Decimal("1000"),
         cost_base=Decimal("1000"),
@@ -462,6 +465,7 @@ def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
         def get_open_lot_states(self):
             return {
                 "NEW_OK": OpenLotState(
+                    original_quantity=Decimal("1"),
                     quantity=Decimal("1"),
                     cost_local=Decimal("10"),
                     cost_base=Decimal("10"),
@@ -491,6 +495,7 @@ def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
     ]
     assert result.open_lot_states == {
         "NEW_OK": OpenLotState(
+            original_quantity=Decimal("1"),
             quantity=Decimal("1"),
             cost_local=Decimal("10"),
             cost_base=Decimal("10"),
