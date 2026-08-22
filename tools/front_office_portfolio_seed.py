@@ -2508,11 +2508,22 @@ def _upgrade_front_office_valuation_authority(
 ) -> None:
     """Upgrade an existing canonical seed without replaying its transaction history."""
 
-    _request_json(
-        "POST",
-        f"{ingestion_base_url}/ingest/portfolios",
-        payload={"portfolios": bundle["portfolios"]},
-    )
+    expected_scope = {
+        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
+    }
+    if (
+        _read_portfolio_valuation_scope(
+            postgres_container=postgres_container,
+            portfolio_id=portfolio_id,
+        )
+        != expected_scope
+    ):
+        _request_json(
+            "POST",
+            f"{ingestion_base_url}/ingest/portfolios",
+            payload={"portfolios": bundle["portfolios"]},
+        )
     _wait_for_portfolio_persistence(
         query_base_url=query_base_url,
         portfolio_id=portfolio_id,
@@ -2524,11 +2535,6 @@ def _upgrade_front_office_valuation_authority(
         portfolio_id=portfolio_id,
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
-    )
-    _request_json(
-        "POST",
-        f"{ingestion_base_url}/ingest/instruments",
-        payload={"instruments": bundle["instruments"]},
     )
     _wait_for_instrument_persistence(
         query_base_url=query_base_url,
@@ -2866,13 +2872,11 @@ def _postgres_string_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _wait_for_portfolio_valuation_scope(
+def _read_portfolio_valuation_scope(
     *,
     postgres_container: str,
     portfolio_id: str,
-    wait_seconds: int,
-    poll_interval_seconds: int,
-) -> None:
+) -> Any:
     sql = f"""
 select coalesce(
   (
@@ -2883,11 +2887,21 @@ select coalesce(
   'null'::json
 )::text;
 """
+    return _read_postgres_json(postgres_container=postgres_container, sql=sql)
+
+
+def _wait_for_portfolio_valuation_scope(
+    *,
+    postgres_container: str,
+    portfolio_id: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
     deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
     while datetime.now(tz=UTC) <= deadline:
-        scope = _read_postgres_json(
+        scope = _read_portfolio_valuation_scope(
             postgres_container=postgres_container,
-            sql=sql,
+            portfolio_id=portfolio_id,
         )
         if scope == {
             "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
