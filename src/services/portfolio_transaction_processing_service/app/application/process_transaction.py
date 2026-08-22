@@ -234,7 +234,7 @@ class ProcessTransactionUseCase:
                         processed_transaction,
                         correlation_id=metadata.correlation_id,
                         traceparent=metadata.traceparent,
-                        rebuild_existing=correction_claimed,
+                        rebuild_existing=correction_claimed or repair_delivery_claimed,
                     )
                     position_results.append(position_result)
                     _validate_lot_position_quantity_parity(
