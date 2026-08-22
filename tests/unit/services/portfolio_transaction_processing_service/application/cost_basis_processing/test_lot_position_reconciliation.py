@@ -85,6 +85,32 @@ def test_drifted_assessment_requires_governed_finding_type() -> None:
         )
 
 
+def test_missing_position_is_governed_lot_position_drift() -> None:
+    assessment = LotPositionParityAssessment(
+        key=LotPositionParityKey("P-1", "S-1"),
+        epoch=0,
+        lot_quantity=Decimal("1"),
+        position_quantity=None,
+        status=LotPositionParityStatus.DRIFTED,
+        finding_type=LOT_QUANTITY_VS_POSITION_MISMATCH,
+    )
+
+    assert assessment.status is LotPositionParityStatus.DRIFTED
+    assert assessment.position_quantity is None
+
+
+def test_exact_parity_cannot_be_classified_as_drifted() -> None:
+    with pytest.raises(ValueError, match="governed finding type"):
+        LotPositionParityAssessment(
+            key=LotPositionParityKey("P-1", "S-1"),
+            epoch=0,
+            lot_quantity=Decimal("1"),
+            position_quantity=Decimal("1"),
+            status=LotPositionParityStatus.DRIFTED,
+            finding_type=LOT_QUANTITY_VS_POSITION_MISMATCH,
+        )
+
+
 @pytest.mark.parametrize(
     ("portfolio_id", "security_id"),
     [(" ", "S-1"), ("P-1", "\t")],
