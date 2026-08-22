@@ -1346,6 +1346,7 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     calls = []
     timeline = []
     waits = []
+    scope_waits = []
     instrument_waits = []
     cash_account_waits = []
     fx_waits = []
@@ -1363,6 +1364,10 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     def capture_instrument_wait(**kwargs):
         instrument_waits.append(kwargs)
         timeline.append("instruments_persisted")
+
+    def capture_scope_wait(**kwargs):
+        scope_waits.append(kwargs)
+        timeline.append("portfolio_scope_durable")
 
     def capture_cash_account_wait(**kwargs):
         cash_account_waits.append(kwargs)
@@ -1386,6 +1391,10 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
         capture_fx_wait,
     )
     monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._wait_for_portfolio_valuation_scope",
+        capture_scope_wait,
+    )
+    monkeypatch.setattr(
         "tools.front_office_portfolio_seed._wait_for_instrument_persistence",
         capture_instrument_wait,
     )
@@ -1401,6 +1410,7 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     _ingest_front_office_core_data(
         ingestion_base_url="http://ingestion.dev.lotus",
         query_base_url="http://query.dev.lotus",
+        postgres_container="postgres",
         bundle=bundle,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         wait_seconds=90,
@@ -1425,6 +1435,7 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     assert timeline == [
         "http://ingestion.dev.lotus/ingest/portfolios",
         "portfolio_persisted",
+        "portfolio_scope_durable",
         "http://ingestion.dev.lotus/ingest/instruments",
         "instruments_persisted",
         "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
@@ -1451,6 +1462,14 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     assert waits == [
         {
             "query_base_url": "http://query.dev.lotus",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "wait_seconds": 90,
+            "poll_interval_seconds": 3,
+        }
+    ]
+    assert scope_waits == [
+        {
+            "postgres_container": "postgres",
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
             "wait_seconds": 90,
             "poll_interval_seconds": 3,
