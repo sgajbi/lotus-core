@@ -134,6 +134,32 @@ def test_durable_valuation_authority_must_exactly_match_seed_bundle(monkeypatch)
     assert len(receipt["market_price_source_facts_hash"]) == 64
 
 
+def test_durable_valuation_authority_compares_latest_append_only_versions(monkeypatch):
+    bundle = _build_bundle()
+    bundle["valuation_policy_assignments"][0]["assignment_version"] = 2
+    bundle["valuation_policy_assignments"][0]["source_revision"] = "2"
+    bundle["market_price_source_facts"][0]["fact_version"] = 2
+    bundle["market_price_source_facts"][0]["source_revision"] = "2"
+    durable = front_office_seed_module._expected_durable_valuation_authority(bundle)
+    observed_sql: list[str] = []
+
+    def read_latest_versions(**kwargs):
+        observed_sql.append(kwargs["sql"])
+        return durable
+
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", read_latest_versions)
+
+    receipt = _verify_durable_front_office_valuation_authority(
+        postgres_container="postgres",
+        bundle=bundle,
+    )
+
+    assert receipt["durable_authority_verified"] is True
+    assert "order by assignment_version desc" in observed_sql[0]
+    assert "order by fact_version desc" in observed_sql[0]
+    assert observed_sql[0].count("where source_rank = 1") == 2
+
+
 @pytest.mark.parametrize("mutation", ["missing", "changed", "extra"])
 def test_durable_valuation_authority_rejects_incomplete_or_changed_state(monkeypatch, mutation):
     bundle = _build_bundle()
@@ -1737,11 +1763,22 @@ def test_front_office_seed_ingests_and_awaits_cash_account_masters(monkeypatch):
 def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(monkeypatch):
     bundle = _build_bundle()
     timeline: list[str] = []
-    monkeypatch.setattr(
-        front_office_seed_module,
-        "_request_json",
-        lambda method, url, *, payload=None: timeline.append(url) or (202, {"accepted_count": 1}),
-    )
+
+    def request(method, url, *, payload=None):
+        assert method == "POST"
+        if url.endswith("/ingest/market-prices"):
+            cash_dates = [
+                row["price_date"]
+                for row in payload["market_prices"]
+                if row["security_id"].startswith("CASH_")
+            ]
+            assert max(cash_dates) == "2026-04-30"
+            timeline.append("raw_prices_published_through_2026-04-30")
+        else:
+            timeline.append(url)
+        return 202, {"accepted_count": 1}
+
+    monkeypatch.setattr(front_office_seed_module, "_request_json", request)
     monkeypatch.setattr(
         front_office_seed_module,
         "_wait_for_portfolio_persistence",
@@ -1767,6 +1804,21 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "_ingest_valuation_authority",
         lambda **_kwargs: timeline.append("valuation_authority_published"),
     )
+    durable_attempts = iter([False, True])
+
+    def verify_durable(**_kwargs):
+        if not next(durable_attempts):
+            timeline.append("valuation_authority_pending")
+            raise RuntimeError("not durable yet")
+        timeline.append("valuation_authority_durable")
+        return {"durable_authority_verified": True}
+
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_verify_durable_front_office_valuation_authority",
+        verify_durable,
+    )
+    monkeypatch.setattr(front_office_seed_module.time, "sleep", lambda _seconds: None)
 
     _upgrade_front_office_valuation_authority(
         ingestion_base_url="http://ingestion.dev.lotus",
@@ -1782,9 +1834,13 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "http://ingestion.dev.lotus/ingest/portfolios",
         "portfolio_visible",
         "portfolio_scope_durable",
+        "http://ingestion.dev.lotus/ingest/instruments",
         "instruments_visible",
+        "raw_prices_published_through_2026-04-30",
         "raw_prices_visible",
         "valuation_authority_published",
+        "valuation_authority_pending",
+        "valuation_authority_durable",
     ]
 
 
