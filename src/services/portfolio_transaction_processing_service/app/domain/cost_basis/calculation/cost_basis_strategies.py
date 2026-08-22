@@ -95,6 +95,17 @@ def _validated_buy_lot_inputs(
     return quantity, net_cost, net_cost_local
 
 
+def _source_lot_original_quantity(
+    transaction: CostBasisTransaction, *, current_quantity: Decimal
+) -> Decimal:
+    original_quantity = transaction.source_lot_original_quantity
+    if original_quantity is not None:
+        return original_quantity
+    if transaction.source_lot_order_quantity is not None:
+        raise ValueError("Restored lot source is missing original quantity authority.")
+    return current_quantity
+
+
 def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:
     if sell_quantity >= Decimal(0):
         return None
@@ -315,10 +326,9 @@ class FIFOBasisStrategy:
             quantity=quantity,
             cost_per_share_local=cost_per_share_local,
             cost_per_share_base=cost_per_share_base,
-            original_quantity=(
-                transaction.source_lot_original_quantity
-                if transaction.source_lot_original_quantity is not None
-                else quantity
+            original_quantity=_source_lot_original_quantity(
+                transaction,
+                current_quantity=quantity,
             ),
         )
         key = (transaction.portfolio_id, transaction.instrument_id)
@@ -526,10 +536,9 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             source_lot_id=f"LOT-{transaction.transaction_id}",
             source_acquisition_date=_utc_transaction_date(transaction),
             quantity=quantity,
-            original_quantity=(
-                transaction.source_lot_original_quantity
-                if transaction.source_lot_original_quantity is not None
-                else quantity
+            original_quantity=_source_lot_original_quantity(
+                transaction,
+                current_quantity=quantity,
             ),
             cost_local=net_cost_local,
             cost_base=net_cost,
