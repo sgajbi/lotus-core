@@ -4101,6 +4101,19 @@ Most relevant current governance:
      rollback preservation of complete lease authority, and reversible real-PostgreSQL migration
      behavior whenever this contract changes.
 
+251. Same-instrument quantity corporate actions (`SPLIT`, `REVERSE_SPLIT`, `CONSOLIDATION`,
+     `BONUS_ISSUE`, and `STOCK_DIVIDEND`) must restate both original and open FIFO/AVCO lot
+     quantities through one exact before/after ratio while conserving local and base basis. Never
+     round a per-lot remainder: if any lot is not exactly representable at the governed transaction
+     quantity scale, reject the complete event before state mutation. The cost output carries the
+     exact ratio as ephemeral authority into position processing; compare the restated lot total
+     with the resulting current-position quantity before cashflow, readiness, or commit and reject
+     `lot_quantity_vs_position_mismatch` non-retryably on divergence. Historical estate checks use
+     the read-only, ordered, bounded `make audit-lot-position-parity` command; its adapter must keep
+     one database round trip per page and expose no transaction or lot identifiers. Backdated repair
+     must reproduce identical lot rows in the advanced position epoch. Keep immutable disposal and
+     transfer receipt work under its existing owners rather than changing those semantics here.
+
 ## Context Maintenance Rule
 
 Update this document when:
