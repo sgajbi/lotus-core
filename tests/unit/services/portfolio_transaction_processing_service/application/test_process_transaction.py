@@ -166,11 +166,13 @@ class _Position:
         error_on: str | None = None,
         cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
         locked_state_epoch: int | None = None,
+        resulting_quantity_by_id: dict[str, Decimal] | None = None,
     ) -> None:
         self.calls = calls
         self.error_on = error_on
         self.cashflow_rebuild_transactions_by_id = cashflow_rebuild_transactions_by_id or {}
         self.locked_state_epoch = locked_state_epoch
+        self.resulting_quantity_by_id = resulting_quantity_by_id or {}
         self.rebuild_existing_calls: list[bool] = []
 
     async def process(self, transaction: BookedTransaction, **kwargs) -> PositionProcessingResult:
@@ -186,6 +188,7 @@ class _Position:
                 (),
             ),
             locked_state_epoch=self.locked_state_epoch,
+            resulting_quantity=self.resulting_quantity_by_id.get(transaction.transaction_id),
         )
 
 
@@ -216,6 +219,7 @@ class _UnitOfWork:
         position_error_on: str | None = None,
         cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
         position_locked_state_epoch: int | None = None,
+        position_resulting_quantity_by_id: dict[str, Decimal] | None = None,
     ) -> None:
         self.calls = calls
         self.idempotency = _Idempotency(calls, outcome=idempotency_outcome)
@@ -230,6 +234,7 @@ class _UnitOfWork:
             error_on=position_error_on,
             cashflow_rebuild_transactions_by_id=cashflow_rebuild_transactions_by_id,
             locked_state_epoch=position_locked_state_epoch,
+            resulting_quantity_by_id=position_resulting_quantity_by_id,
         )
         self.readiness = _Readiness(calls)
         self.committed = False
@@ -317,6 +322,73 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
             TransactionProcessingOperation.TRANSACTION,
             TransactionProcessingOutcome.PROCESSED,
         ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_quantity_restatement_commits_only_when_lot_and_position_quantities_match() -> None:
+    calls: list[str] = []
+    transaction = replace(
+        _transaction("SPLIT-1"),
+        transaction_type="SPLIT",
+        quantity=Decimal("75"),
+        lot_restatement={
+            "quantity_before": Decimal("75"),
+            "quantity_after": Decimal("150"),
+            "factor_numerator": Decimal("150"),
+            "factor_denominator": Decimal("75"),
+        },
+    )
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        cost_result=CostProcessingResult((transaction,)),
+        position_resulting_quantity_by_id={transaction.transaction_id: Decimal("150")},
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(_command())
+
+    assert result.status is TransactionProcessingStatus.PROCESSED
+    assert unit_of_work.committed is True
+    assert unit_of_work.rolled_back is False
+
+
+@pytest.mark.asyncio
+async def test_quantity_restatement_rolls_back_before_cashflow_when_position_diverges() -> None:
+    calls: list[str] = []
+    transaction = replace(
+        _transaction("SPLIT-MISMATCH"),
+        transaction_type="SPLIT",
+        quantity=Decimal("75"),
+        lot_restatement={
+            "quantity_before": Decimal("75"),
+            "quantity_after": Decimal("150"),
+            "factor_numerator": Decimal("150"),
+            "factor_denominator": Decimal("75"),
+        },
+    )
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        cost_result=CostProcessingResult((transaction,)),
+        position_resulting_quantity_by_id={transaction.transaction_id: Decimal("149")},
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await ProcessTransactionUseCase(
+            lambda: unit_of_work,
+            observer=_RecordingObserver(),
+        ).execute(_command())
+
+    assert raised.value.reason_code == "lot_quantity_vs_position_mismatch"
+    assert raised.value.retryable is False
+    assert calls == [
+        "enter",
+        "idempotency",
+        "cost:TX-001",
+        "position:SPLIT-MISMATCH",
+        "rollback",
     ]
 
 

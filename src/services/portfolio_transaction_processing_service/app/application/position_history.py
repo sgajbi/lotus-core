@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
+from decimal import Decimal
 
 from ..domain.position.history import (
     PositionHistoryRecord,
@@ -28,6 +29,7 @@ class PositionHistoryProcessingResult:
     position_record_count: int = 0
     rebuilt_transactions: tuple[BookedTransaction, ...] = ()
     locked_state_epoch: int | None = None
+    resulting_quantity: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +120,7 @@ class PositionHistoryProcessor:
         return PositionHistoryProcessingResult(
             position_record_count=len(staged.records),
             locked_state_epoch=staged.locked_state_epoch,
+            resulting_quantity=_resulting_quantity(staged.records),
         )
 
     async def _rebuild_backdated_history(
@@ -199,8 +202,8 @@ class PositionHistoryProcessor:
             position_record_count=len(staged.records),
             rebuilt_transactions=rebuilt_transactions,
             locked_state_epoch=staged.locked_state_epoch,
+            resulting_quantity=_resulting_quantity(staged.records),
         )
-
     async def _recalculate_current_history(
         self,
         *,
@@ -269,3 +272,7 @@ class PositionHistoryProcessor:
             records=records,
             locked_state_epoch=locked_state_epoch,
         )
+
+
+def _resulting_quantity(records: tuple[PositionHistoryRecord, ...]) -> Decimal | None:
+    return records[-1].quantity if records else None
