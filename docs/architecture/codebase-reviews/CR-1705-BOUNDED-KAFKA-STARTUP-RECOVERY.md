@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 Issue: [#989](https://github.com/sgajbi/lotus-core/issues/989)
-Status: Merged to main and exact-main validated; durable closure reconciliation in progress
+Status: Merged to main and exact-main validated; closure evidence reconciled
 
 ## Finding
 
@@ -48,15 +48,18 @@ authority remains separate under #990.
 - A clean governed canonical startup rebuilt Core, observed genuine Kafka readiness, completed
   topic creation, and started the dependent Core services without deleting volumes or weakening
   the probe. It proceeded into source-data validation; the distinct quote-authority failure was
-  then resolved under #990. Authored wiki source was published at wiki commit `21cd17f` and strict
-  parity reported `DiffCount=0`. Issue closure and obsolete branch/worktree hygiene remain pending
-  until this durable reconciliation is merged.
+  then resolved under #990. The cumulative Main Releasability run
+  [32556640530](https://github.com/sgajbi/lotus-core/actions/runs/32556640530) completed successfully
+  at exact current main `4ec40281dad2406bd58928a1bef677f64c179118` with `24` successful and `2`
+  expected institutional jobs skipped, including full integration,
+  combined coverage, exact-source Docker build and smoke, full E2E, latency, both performance
+  profiles, and failure recovery. Current authored wiki source was published at wiki commit
+  `42f20c4`, and strict parity reported `DiffCount=0`.
 - Focused runtime/Compose tests passed `10`; `docker compose config --quiet`, full `make lint`,
   `make typecheck` (`318` source files), `make quality-wiki-docs-gate`, and
   `make docs-evidence-pack` passed. The repo-native wiki guard passed. The central pre-merge wiki
-  helper inspected the clean primary-main checkout rather than this separate worktree, so its
-  expected unpublished `Operations-Runbook.md` drift must be rechecked from the PR branch or by the
-  protected wiki source gate before merge.
+  helper's earlier unpublished-source warning was superseded by the protected source gate and the
+  post-main publication/parity proof above.
 
 ## Documentation decision
 

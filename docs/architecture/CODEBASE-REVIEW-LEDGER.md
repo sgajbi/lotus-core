@@ -41,9 +41,12 @@ derived its replacement from exact durable rows: 11 assignments / 4,176 facts, a
 `69a84bfa7fbc6525cc480703ccd581792acbf5841fdee6847202ab733cf4c585`, and retained byte hash
 `0fd3af5576c14a154382bffc90f3563ba1c8727f2d8c3074982194e872fbc949`; all canonical product and
 queue postures remained complete and terminal for three observations after no-op reuse validation.
-Status: fixed locally;
-protected PR, exact-main, wiki
-publication/parity, issue closure, and hygiene remain pending. Evidence:
+PR #993 passed exact-head Feature `32554674740` (6/6) and PR Merge `32554678138` (23/23), then
+rebase-merged as exact main `4ec40281dad2406bd58928a1bef677f64c179118`. Main Releasability
+`32556640530` completed successfully at that exact SHA with 24 successful and 2 expected
+institutional jobs skipped. Current authored wiki publication `42f20c4`
+has strict parity `DiffCount 0`; independent exact-head review found no remaining blocker. Status:
+merged to main and exact-main validated; closure evidence reconciled. Evidence:
 [CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md](./codebase-reviews/CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md).
 
 CR-1705 bounded Kafka startup recovery (2026-08-22): canonical dependency-gated Core startup could
@@ -57,9 +60,11 @@ Persistent failure remains fail-closed and destructive recovery is still prohibi
 No API, schema, event, calculation, dependency, image, promoted
 security, or topology contract changes. PR #992 merged to exact main `1746ea913`; Main
 Releasability run `32538375716` passed; governed canonical startup reached Kafka, topic-creator, and
-dependent-service readiness; and wiki `21cd17f` has strict parity zero. Status: merged to main and
-exact-main validated; issue closure and obsolete branch/worktree hygiene remain pending until this
-durable reconciliation is merged. Evidence:
+dependent-service readiness. The cumulative Main Releasability run `32556640530` completed
+successfully at exact current main `4ec40281dad2406bd58928a1bef677f64c179118` with 24 successful
+and 2 expected institutional jobs skipped; current wiki publication
+`42f20c4` has strict parity zero. Status: merged to main and exact-main validated; closure evidence
+reconciled. Evidence:
 [CR-1705-BOUNDED-KAFKA-STARTUP-RECOVERY.md](./codebase-reviews/CR-1705-BOUNDED-KAFKA-STARTUP-RECOVERY.md).
 
 CR-1704 governed database hot-path evidence (2026-08-22): Core now has one versioned,

@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 Issue: [#990](https://github.com/sgajbi/lotus-core/issues/990)
-Status: Fixed locally; protected PR, exact-main, and wiki evidence pending
+Status: Merged to main and exact-main validated; closure evidence reconciled
 
 ## Finding
 
@@ -115,8 +115,19 @@ under #798. Downstream applications must consume Core authority and must not fab
   its exact receipt content hash is
   `69a84bfa7fbc6525cc480703ccd581792acbf5841fdee6847202ab733cf4c585`, and the retained JSON byte
   hash is `0fd3af5576c14a154382bffc90f3563ba1c8727f2d8c3074982194e872fbc949`.
-  Protected PR, exact-main, wiki publication, issue
-  closure, and branch/worktree hygiene remain pending at this fixed-local checkpoint.
+  PR [#993](https://github.com/sgajbi/lotus-core/pull/993) rebase-merged to exact main
+  `4ec40281dad2406bd58928a1bef677f64c179118`. Exact-head Remote Feature Lane
+  [32554674740](https://github.com/sgajbi/lotus-core/actions/runs/32554674740) passed all `6` jobs,
+  and Pull Request Merge Gate
+  [32554678138](https://github.com/sgajbi/lotus-core/actions/runs/32554678138) passed all `23` jobs.
+  Main Releasability
+  [32556640530](https://github.com/sgajbi/lotus-core/actions/runs/32556640530) then completed
+  successfully at that exact merge SHA with `24` successful and `2` expected institutional jobs
+  skipped, including full integration, combined coverage, exact-source Docker
+  build and smoke, full E2E, latency, both performance profiles, and failure recovery. Authored
+  Operations Runbook wiki source was published at wiki commit `42f20c4`, and strict parity reported
+  `DiffCount=0`. Independent exact-head review found no remaining code, test, documentation, or
+  compatibility blocker.
 
 ## Documentation decision
 
