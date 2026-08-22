@@ -23,22 +23,34 @@ _OLD_INDEX = "ix_portfolio_valuation_jobs_processing_lease_expiry"
 def upgrade() -> None:
     """Replace the expiry-only index with deterministic recovery ordering."""
 
-    op.create_index(
-        _NEW_INDEX,
-        "portfolio_valuation_jobs",
-        ["valuation_lease_expires_at", "id"],
-        postgresql_where=sa.text("status = 'PROCESSING'"),
-    )
-    op.drop_index(_OLD_INDEX, table_name="portfolio_valuation_jobs")
+    with op.get_context().autocommit_block():
+        op.create_index(
+            _NEW_INDEX,
+            "portfolio_valuation_jobs",
+            ["valuation_lease_expires_at", "id"],
+            postgresql_where=sa.text("status = 'PROCESSING'"),
+            postgresql_concurrently=True,
+        )
+        op.drop_index(
+            _OLD_INDEX,
+            table_name="portfolio_valuation_jobs",
+            postgresql_concurrently=True,
+        )
 
 
 def downgrade() -> None:
     """Restore the prior expiry-only partial index."""
 
-    op.create_index(
-        _OLD_INDEX,
-        "portfolio_valuation_jobs",
-        ["valuation_lease_expires_at"],
-        postgresql_where=sa.text("status = 'PROCESSING'"),
-    )
-    op.drop_index(_NEW_INDEX, table_name="portfolio_valuation_jobs")
+    with op.get_context().autocommit_block():
+        op.create_index(
+            _OLD_INDEX,
+            "portfolio_valuation_jobs",
+            ["valuation_lease_expires_at"],
+            postgresql_where=sa.text("status = 'PROCESSING'"),
+            postgresql_concurrently=True,
+        )
+        op.drop_index(
+            _NEW_INDEX,
+            table_name="portfolio_valuation_jobs",
+            postgresql_concurrently=True,
+        )
