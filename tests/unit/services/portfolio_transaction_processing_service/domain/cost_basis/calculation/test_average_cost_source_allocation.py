@@ -10,6 +10,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AverageCostSourceAllocation,
     OpenLotState,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.calculation.average_cost_source_allocation import (
+    AverageCostSourceContribution,
+    _assign_quantity_residual,
+)
 
 
 def test_average_cost_disposals_do_not_rewrite_source_contributions() -> None:
@@ -50,6 +54,41 @@ def test_average_cost_disposals_do_not_rewrite_source_contributions() -> None:
     assert sum(state.quantity for state in states.values()) == Decimal("90")
     assert sum(state.cost_local for state in states.values()) == Decimal("900")
     assert sum(state.cost_base for state in states.values()) == Decimal("1080")
+
+
+def test_quantity_residual_never_revives_a_stale_generation() -> None:
+    book_key = ("P1", "I1")
+
+    def contribution(source_id: str, generation: int) -> AverageCostSourceContribution:
+        return AverageCostSourceContribution(
+            book_key=book_key,
+            source_lot_id=f"LOT-{source_id}",
+            source_acquisition_date=date(2026, 1, 1),
+            generation=generation,
+            original_quantity=Decimal("1"),
+            quantity=Decimal("1"),
+            cost_local=Decimal("10"),
+            cost_base=Decimal("10"),
+            disposal_scale_at_entry=Decimal("1"),
+            cost_local_scale_at_entry=Decimal("1"),
+            cost_base_scale_at_entry=Decimal("1"),
+            cost_local_generation=generation,
+            cost_base_generation=generation,
+        )
+
+    quantities = {"CURRENT": Decimal(0), "STALE": Decimal(0)}
+    _assign_quantity_residual(
+        contributions=(
+            ("CURRENT", contribution("CURRENT", 2)),
+            ("STALE", contribution("STALE", 1)),
+        ),
+        quantities=quantities,
+        current_generation=2,
+        aggregate=Decimal("1"),
+        allocated=Decimal(0),
+    )
+
+    assert quantities == {"CURRENT": Decimal("1"), "STALE": Decimal(0)}
 
 
 def test_materialize_distributes_residual_within_each_source_original_quantity() -> None:

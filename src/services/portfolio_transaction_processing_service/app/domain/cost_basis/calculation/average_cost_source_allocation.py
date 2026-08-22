@@ -323,6 +323,7 @@ class AverageCostSourceAllocation:
         _assign_quantity_residual(
             contributions=contributions,
             quantities=quantities,
+            current_generation=self._generation_by_key[book_key],
             aggregate=pool.quantity,
             allocated=allocated.quantity,
         )
@@ -559,6 +560,7 @@ def _assign_quantity_residual(
     *,
     contributions: tuple[tuple[str, AverageCostSourceContribution], ...],
     quantities: dict[str, Decimal],
+    current_generation: int,
     aggregate: Decimal,
     allocated: Decimal,
 ) -> None:
@@ -575,6 +577,8 @@ def _assign_quantity_residual(
     for source_transaction_id, contribution in reversed(contributions):
         if remaining == Decimal(0):
             return
+        if contribution.generation != current_generation:
+            continue
         current = quantities[source_transaction_id]
         headroom = cast(
             Decimal,
