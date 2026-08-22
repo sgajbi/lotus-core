@@ -32,6 +32,11 @@ bounded and primary-key indexed.
 4. Existing chunked, predicate-rechecked reset/fail/supersede updates remain unchanged. Repository
    methods still stage work only; the scheduler-owned unit of work retains commit and rollback
    authority.
+5. The 1,000-row claim cohort is now shared runtime authority rather than a repository-only clamp.
+   The dispatch coordinator uses it for both repository calls and exhaustion detection, while the
+   ingestion operating policy and Query Control Plane capacity projection expose the same effective
+   value. A legacy configured value above 1,000 remains startup-compatible but no longer causes an
+   early dispatch-loop stop or optimistic poll-capacity report.
 
 ## Measured Result
 
@@ -89,6 +94,10 @@ needed.
 - Claim concurrency, capacity, and epoch-fencing PostgreSQL proof: 3 passed in 80.77s.
 - Review-fix oversized claim proof: unit SQL clamps to 1,000; PostgreSQL drains 1,001 as disjoint
   1,000 and 1 cohorts in 90.53s.
+- Shared-cohort review proof: an oversized configured batch exposes 1,000 through runtime and
+  ingestion settings; a two-round dispatch unit proof processes 1,000 then 1 rather than declaring
+  the first full physical cohort exhausted; Query Control Plane OpenAPI describes effective rather
+  than configured capacity.
 - Complete valuation repository PostgreSQL file: 40 passed in 253.42s.
 - Repository-native `test-unit-db`: 18 passed in 113.99s.
 - Restart-safe index unit matrix: 5 passed; governed resume, invalid repair, conflicting required
