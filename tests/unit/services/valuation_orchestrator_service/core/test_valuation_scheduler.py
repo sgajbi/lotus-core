@@ -1433,6 +1433,51 @@ async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop
     )
 
 
+async def test_dispatch_coordinator_uses_effective_claim_cohort_for_exhaustion():
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    claimed_job = PortfolioValuationJob(
+        portfolio_id="P1",
+        security_id="S1",
+        valuation_date=date(2025, 8, 11),
+        epoch=1,
+        correlation_id="corr-1",
+    )
+    full_physical_cohort = [claimed_job] * 1_000
+    final_cohort = [claimed_job]
+    mock_repo.find_and_claim_eligible_jobs.side_effect = [
+        full_physical_cohort,
+        final_cohort,
+    ]
+
+    async def get_session_gen():
+        yield mock_db_session
+
+    coordinator = ValuationDispatchCoordinator(
+        batch_size=1_001,
+        max_in_flight_jobs=2_000,
+        dispatch_rounds_per_poll=2,
+        poll_budget_seconds=30,
+        max_attempts=5,
+        lease_owner="valuation-orchestrator-test",
+        lease_duration_seconds=720,
+        session_provider=get_session_gen,
+        repository_factory=ValuationDispatchRepositoryFactory(
+            valuation_repository_factory=lambda db: mock_repo
+        ),
+    )
+    dispatch_jobs = AsyncMock()
+
+    await coordinator.claim_and_dispatch_ready_jobs(dispatch_jobs=dispatch_jobs)
+
+    assert mock_repo.find_and_claim_eligible_jobs.await_count == 2
+    assert all(
+        awaited.args[0] == 1_000
+        for awaited in mock_repo.find_and_claim_eligible_jobs.await_args_list
+    )
+    dispatch_jobs.assert_has_awaits([call(full_physical_cohort), call(final_cohort)])
+
+
 async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
     mock_kafka_producer: MagicMock,
 ):

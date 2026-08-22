@@ -94,6 +94,14 @@ def test_load_ingestion_service_settings_coerces_env_values(monkeypatch):
     assert settings.runtime_policy.calculator_peak_lag_age_seconds["timeseries"] == 300
 
 
+def test_load_ingestion_service_settings_reports_effective_valuation_claim_cohort(monkeypatch):
+    monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "1001")
+
+    settings = load_ingestion_service_settings()
+
+    assert settings.runtime_policy.valuation_scheduler_batch_size == 1_000
+
+
 def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "false")

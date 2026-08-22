@@ -34,6 +34,7 @@ from .infrastructure.persistence.statement_batching import (
 )
 from .utils import async_timed
 from .valuation_job_contracts import ValuationJobTransitionOutcome
+from .valuation_runtime_settings import effective_valuation_job_claim_cohort_size
 from .valuation_snapshot_contiguity import (
     build_contiguous_snapshot_dates_stmt,
     contiguous_snapshot_dates_by_key,
@@ -638,7 +639,7 @@ class ValuationRepositoryBase:
             raise ValueError("valuation lease owner must contain 1 to 128 characters")
         if lease_duration_seconds < 1:
             raise ValueError("valuation lease duration must be positive")
-        effective_batch_size = min(batch_size, POSTGRES_STATEMENT_ROW_LIMIT)
+        effective_batch_size = effective_valuation_job_claim_cohort_size(batch_size)
         if max_in_flight_jobs is not None:
             await self.db.execute(select(func.pg_advisory_xact_lock(_VALUATION_JOB_CLAIM_LOCK_ID)))
             processing_count = int(
