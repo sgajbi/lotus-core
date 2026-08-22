@@ -45,8 +45,53 @@ DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
 FRONT_OFFICE_VALUATION_TENANT_ID = "LOTUS_PB_SG"
 FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID = "SG_PRIVATE_BANK_BOOK"
 FRONT_OFFICE_VALUATION_SOURCE_SYSTEM = "LOTUS_FRONT_OFFICE_SEED"
-FRONT_OFFICE_BOND_FACE_AMOUNT_PER_POSITION_UNIT = Decimal("1000")
 FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR = Decimal("100")
+
+
+@dataclass(frozen=True)
+class CanonicalMarketPriceConvention:
+    expected_product_type: str
+    raw_quote_basis: str
+    normalization: str
+    face_amount_per_position_unit: Decimal | None = None
+    quote_denominator: Decimal | None = None
+
+
+_UNIT_PRICE_CONVENTION_BY_SECURITY_ID = {
+    security_id: CanonicalMarketPriceConvention(
+        expected_product_type=product_type,
+        raw_quote_basis="UNIT_PRICE",
+        normalization="SOURCE_UNIT_PRICE",
+    )
+    for security_id, product_type in (
+        ("CASH_USD_BOOK_OPERATING", "cash"),
+        ("CASH_EUR_BOOK_OPERATING", "cash"),
+        ("FO_EQ_AAPL_US", "equity"),
+        ("FO_EQ_MSFT_US", "equity"),
+        ("FO_EQ_SAP_DE", "equity"),
+        ("FO_ETF_MSCI_WORLD", "etf"),
+        ("FO_FUND_BLK_ALLOC", "fund"),
+        ("FO_FUND_PIMCO_INC", "fund"),
+        ("FO_PRIV_PRIVATE_CREDIT_A", "fund"),
+    )
+}
+FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID = {
+    **_UNIT_PRICE_CONVENTION_BY_SECURITY_ID,
+    "FO_BOND_UST_2030": CanonicalMarketPriceConvention(
+        expected_product_type="bond",
+        raw_quote_basis="PERCENT_OF_PRINCIPAL_CLEAN",
+        normalization="PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE",
+        face_amount_per_position_unit=Decimal("1000"),
+        quote_denominator=FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR,
+    ),
+    "FO_BOND_SIEMENS_2031": CanonicalMarketPriceConvention(
+        expected_product_type="bond",
+        raw_quote_basis="PERCENT_OF_PRINCIPAL_CLEAN",
+        normalization="PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE",
+        face_amount_per_position_unit=Decimal("1000"),
+        quote_denominator=FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR,
+    ),
+}
 DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
     {
         "portfolio_id": "PB_SG_GLOBAL_INC_002",
@@ -255,18 +300,6 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_party_role_assignments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
-            (
-                "delete from market_price_source_facts "
-                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
-                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
-                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}';"
-            ),
-            (
-                "delete from instrument_valuation_policy_assignments "
-                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
-                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
-                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}';"
-            ),
             "delete from sustainability_preference_profiles "
             f"where portfolio_id = '{portfolio_id}';",
             f"delete from client_restriction_profiles where portfolio_id = '{portfolio_id}';",
@@ -281,6 +314,29 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
             f"delete from instruments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolios where portfolio_id = '{portfolio_id}';",
+        ]
+    )
+
+
+def build_front_office_valuation_authority_cleanup_sql() -> str:
+    """Delete only valuation authority owned by the canonical front-office source namespace."""
+
+    return "\n".join(
+        [
+            (
+                "delete from market_price_source_facts "
+                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
+                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
+                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}' "
+                "and source_record_id like 'front-office-price:%';"
+            ),
+            (
+                "delete from instrument_valuation_policy_assignments "
+                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
+                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
+                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}' "
+                "and source_record_id like 'front-office-valuation-policy:%';"
+            ),
         ]
     )
 
@@ -313,6 +369,7 @@ def build_front_office_seed_cleanup_sql(
         [
             "begin;",
             *business_date_bound_sql,
+            build_front_office_valuation_authority_cleanup_sql(),
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             *source_only_candidate_cleanup,
             *business_date_bound_sql,
@@ -370,7 +427,23 @@ def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
     )
 
 
+def _valuation_source_convention(
+    instrument: dict[str, Any],
+) -> CanonicalMarketPriceConvention:
+    security_id = str(instrument.get("security_id") or "").strip()
+    convention = FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID.get(security_id)
+    if convention is None:
+        raise ValueError(f"Canonical market-price convention is missing for {security_id!r}.")
+    product_type = str(instrument.get("product_type") or "").strip().lower()
+    if product_type != convention.expected_product_type:
+        raise ValueError(
+            "Canonical market-price convention product type does not match the instrument."
+        )
+    return convention
+
+
 def _valuation_policy_for_instrument(instrument: dict[str, Any]) -> tuple[str, str]:
+    _valuation_source_convention(instrument)
     return ("UNIT_PRICE_MARKET_VALUE", "UNIT_PRICE")
 
 
@@ -380,27 +453,31 @@ def _authoritative_source_value(
     instrument: dict[str, Any],
 ) -> tuple[str, dict[str, Any]]:
     raw_price = Decimal(str(market_price["price"]))
-    if str(instrument["product_type"]).strip().lower() != "bond":
+    convention = _valuation_source_convention(instrument)
+    if convention.normalization == "SOURCE_UNIT_PRICE":
         return format(raw_price, "f"), {
-            "normalization": "SOURCE_UNIT_PRICE",
+            "normalization": convention.normalization,
             "raw_price": format(raw_price, "f"),
-            "raw_quote_basis": "UNIT_PRICE",
+            "raw_quote_basis": convention.raw_quote_basis,
         }
 
-    normalized_unit_price = (
-        raw_price
-        * FRONT_OFFICE_BOND_FACE_AMOUNT_PER_POSITION_UNIT
-        / FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR
-    )
+    face_amount = convention.face_amount_per_position_unit
+    quote_denominator = convention.quote_denominator
+    if (
+        convention.normalization != "PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE"
+        or face_amount is None
+        or face_amount <= 0
+        or quote_denominator is None
+        or quote_denominator <= 0
+    ):
+        raise ValueError("Canonical market-price convention is incomplete or unsupported.")
+    normalized_unit_price = raw_price * face_amount / quote_denominator
     return format(normalized_unit_price, "f"), {
-        "face_amount_per_position_unit": format(
-            FRONT_OFFICE_BOND_FACE_AMOUNT_PER_POSITION_UNIT,
-            "f",
-        ),
-        "normalization": "PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE",
-        "quote_denominator": format(FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR, "f"),
+        "face_amount_per_position_unit": format(face_amount, "f"),
+        "normalization": convention.normalization,
+        "quote_denominator": format(quote_denominator, "f"),
         "raw_price": format(raw_price, "f"),
-        "raw_quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+        "raw_quote_basis": convention.raw_quote_basis,
     }
 
 
@@ -477,7 +554,8 @@ def _build_valuation_policy_assignment(
         "assignment_reason": (
             "Canonical clean-percent bond quote normalized by the source owner to the explicit "
             "price per 1,000-face position unit."
-            if str(instrument["product_type"]).strip().lower() == "bond"
+            if _valuation_source_convention(instrument).normalization
+            == "PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE"
             else "Canonical source value represented as a price per position unit."
         ),
     }
@@ -3015,6 +3093,7 @@ def _verify_front_office_portfolio(
                 "advisor_book_portfolio_manager_id": expected.portfolio_manager_id,
                 "advisor_book_governed_membership": True,
                 "advisor_book_source_evidence_current": True,
+                "terminal_queue_stable_observations": stable_terminal_queue_observations,
             }
 
         blockers = _front_office_readiness_blockers(
