@@ -303,15 +303,15 @@ Before cleanup or any ingest write, the tool accepts only entirely absent seed-o
 exact complete latest-version replay. Partial, extra, or changed version-1 authority fails before
 mutation and requires the explicit full local-state reset.
 
-On `--skip-cleanup`, the tool preserves transaction history, requires canonical bond valuation work
-to be quiescent, waits for existing instruments, and validates existing observations before any
+On `--skip-cleanup`, the tool preserves transaction history, requires all canonical seeded valuation
+work to be quiescent, waits for existing instruments, and validates existing observations before any
 scope write. It publishes only observations missing from the complete raw-price windows, then
 updates the portfolio master only when durable tenant/book scope is wrong. Existing observations
 must match the canonical price and currency; a conflict fails closed without partially activating
 new scope. It then
 publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
 source parents nor silently treats an existing pre-authority seed as complete. If an affected
-canonical bond already has terminal failed valuation jobs, the tool fails before any write and
+canonical security already has terminal failed valuation jobs, the tool fails before any write and
 requires a normal governed full reseed without `--skip-cleanup`. The full reseed recreates
 portfolio-owned valuation work while preserving shared append-only quote authority; unchanged
 transaction replay is not treated as a recovery mechanism for a completed readiness stage. A

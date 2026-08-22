@@ -2164,7 +2164,7 @@ def test_front_office_seed_reads_only_blocking_quote_authority_securities(monkey
 
     def read_failed(**kwargs):
         observed_sql.append(kwargs["sql"])
-        return ["FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030"]
+        return ["CASH_USD_BOOK_OPERATING", "FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030"]
 
     monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", read_failed)
 
@@ -2173,11 +2173,17 @@ def test_front_office_seed_reads_only_blocking_quote_authority_securities(monkey
         portfolio_id="PB_SG_GLOBAL_BAL_001",
     )
 
-    assert result == ("FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030")
+    assert result == (
+        "CASH_USD_BOOK_OPERATING",
+        "FO_BOND_SIEMENS_2031",
+        "FO_BOND_UST_2030",
+    )
     assert "from portfolio_valuation_jobs" in observed_sql[0]
     assert "and status in ('PENDING', 'PROCESSING', 'FAILED')" in observed_sql[0]
     assert "FO_BOND_UST_2030" in observed_sql[0]
     assert "FO_BOND_SIEMENS_2031" in observed_sql[0]
+    assert "FO_EQ_AAPL_US" in observed_sql[0]
+    assert "CASH_USD_BOOK_OPERATING" in observed_sql[0]
 
 
 def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_writes(
@@ -2211,7 +2217,7 @@ def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_
 def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authority(
     monkeypatch,
 ):
-    checks = iter([(), ("FO_BOND_UST_2030",)])
+    checks = iter([(), ("FO_EQ_AAPL_US",)])
     timeline: list[str] = []
     monkeypatch.setattr(
         front_office_seed_module,
@@ -2262,7 +2268,7 @@ def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authorit
         )
 
     assert timeline == ["authority_published", "authority_durable"]
-    assert "FO_BOND_UST_2030" not in str(exc_info.value)
+    assert "FO_EQ_AAPL_US" not in str(exc_info.value)
 
 
 def test_existing_seed_upgrade_validates_raw_prices_before_scope_write(monkeypatch):

@@ -16,7 +16,7 @@ Routine portfolio cleanup cannot delete this shared canonical source authority o
 portfolio/instrument parents. Before cleanup or HTTP publication, entirely absent authority and an
 exact complete latest-version replay are accepted; partial, extra, or changed version-1 authority
 fails source-safely and requires an explicit full local-state reset. The reuse path requires
-canonical bond valuation work to be
+all canonical seeded valuation work to be
 quiescent, waits for existing instruments, validates raw-price content before any scope mutation,
 publishes only missing observations, and only then repairs incorrect portfolio scope and authority
 without broad transaction replay. Active or terminal quote-authority work blocks reuse; a second
