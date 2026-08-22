@@ -93,9 +93,11 @@ under #798. Downstream applications must consume Core authority and must not fab
   observations with every valuation and aggregation queue at zero. Its exact durable projection
   proves 11 policy assignments and 4,176 source facts; the assignment hash is
   `c5cdc57d8d25a593a8e890f24a1a4111ff7039de447c86b8626f587d7c8fc433`, the source-fact hash is
-  `7c768348fa5cbbe6361b43a47af9fbfb9ebb8b0bb165582947794bef6e795a9f`, the receipt content hash is
-  `955657d7b140454dd39e1ea099e7ebd58d06fab608b4f3ef403ac94e89ce31c7`, and the retained JSON byte
-  hash is `8ded370b0098bbd1fff6420bcf9cc71816885144208bb0c1aa509bed61d63253`.
+  `7c768348fa5cbbe6361b43a47af9fbfb9ebb8b0bb165582947794bef6e795a9f`. A subsequent no-op
+  `--skip-cleanup` upgrade retained COMPLETE quality and zero work across all eight queue states;
+  its exact receipt content hash is
+  `69a84bfa7fbc6525cc480703ccd581792acbf5841fdee6847202ab733cf4c585`, and the retained JSON byte
+  hash is `0fd3af5576c14a154382bffc90f3563ba1c8727f2d8c3074982194e872fbc949`.
   Protected PR, exact-main, wiki publication, issue
   closure, and branch/worktree hygiene remain pending at this fixed-local checkpoint.
 
