@@ -922,9 +922,7 @@ async def test_find_and_reset_stale_jobs_skips_terminal_writer_locked_row(
         )
 
         reset_count = await asyncio.wait_for(
-            ValuationRepository(recovery_session).find_and_reset_stale_jobs(
-                max_attempts=3
-            ),
+            ValuationRepository(recovery_session).find_and_reset_stale_jobs(max_attempts=3),
             timeout=15,
         )
         await recovery_session.commit()
@@ -969,9 +967,9 @@ async def test_concurrent_stale_recovery_drains_disjoint_bounded_cohorts(
 
     async def recover_one_cohort() -> int:
         async with session_factory() as recovery_session:
-            reset_count = await ValuationRepository(
-                recovery_session
-            ).find_and_reset_stale_jobs(max_attempts=3)
+            reset_count = await ValuationRepository(recovery_session).find_and_reset_stale_jobs(
+                max_attempts=3
+            )
             await recovery_session.commit()
             return reset_count
 
@@ -1017,9 +1015,7 @@ async def test_stale_recovery_rollback_preserves_lease_authority(
 
     async with session_factory() as recovery_session:
         assert (
-            await ValuationRepository(recovery_session).find_and_reset_stale_jobs(
-                max_attempts=3
-            )
+            await ValuationRepository(recovery_session).find_and_reset_stale_jobs(max_attempts=3)
             == 1
         )
         await recovery_session.rollback()

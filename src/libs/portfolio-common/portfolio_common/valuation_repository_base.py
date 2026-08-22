@@ -677,10 +677,7 @@ class ValuationRepositoryBase:
 
         query = (
             update(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.id
-                == any_(cast(eligible_id_array, ARRAY(Integer)))
-            )
+            .where(PortfolioValuationJob.id == any_(cast(eligible_id_array, ARRAY(Integer))))
             .values(
                 status="PROCESSING",
                 requeue_requested=False,
