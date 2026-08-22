@@ -194,9 +194,11 @@ experimental history rather than deleting append-only evidence from a portfolio 
 `--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it
 updates the portfolio master only when durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` scope is
 wrong, waits for existing instruments, and publishes only raw-price observations missing from the
-complete required windows. It then publishes and durably verifies valuation assignments/source
-facts before continuing. It never replays transactions or rearms unchanged source parents unless
-the separate governed reprocess option is selected.
+complete required windows. Existing observations must match the canonical price and currency;
+conflicts fail closed instead of being blessed by new source authority. The tool then publishes and
+durably verifies valuation assignments/source facts before continuing. It never replays
+transactions or rearms unchanged source parents unless the separate governed reprocess option is
+selected.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
 claims ready portfolio-day rows from `portfolio_aggregation_jobs` with `FOR UPDATE SKIP LOCKED` and

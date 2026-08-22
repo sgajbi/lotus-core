@@ -4065,7 +4065,8 @@ Most relevant current governance:
      idempotent and changed evidence requires a governed newer version or explicit full local-state
      reset. The `--skip-cleanup` path must
      update portfolio scope only when wrong, wait for existing instruments, publish only the
-     observations missing from complete raw-price windows, and durably prove assignments and
+     observations missing from complete raw-price windows, fail closed when an existing raw price
+     or currency conflicts with the canonical bundle, and durably prove assignments and
      latest-version facts
      without replaying transactions. The verifier may emit a source-safe content-bound JSON
      receipt only after exact durable-row comparison, and must observe three terminal queue
