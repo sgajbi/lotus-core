@@ -194,19 +194,24 @@ portfolio/instrument parents. Identical version-1 replay is idempotent. Changed 
 must use a governed newer source version; use an explicit full local-state reset for incompatible
 experimental history rather than deleting append-only evidence from a portfolio cleanup.
 
-`--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it
-updates the portfolio master only when durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` scope is
-wrong, waits for existing instruments, and publishes only raw-price observations missing from the
-complete required windows. Existing observations must match the canonical price and currency;
-conflicts fail closed instead of being blessed by new source authority. The tool then publishes and
+`--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it first
+requires the canonical bond valuation work to be quiescent, waits for existing instruments, and
+validates every existing raw-price observation before any scope write. It publishes only missing
+observations, then updates the portfolio master only when durable `LOTUS_PB_SG` /
+`SG_PRIVATE_BANK_BOOK` scope is wrong. Existing observations must match the canonical price and
+currency; conflicts fail closed without partially activating new scope. The tool then publishes and
 durably verifies valuation assignments/source facts before continuing. It never replays
 the full transaction set or rearms unchanged source parents. If an exact canonical bond already
 has terminal failed valuation jobs, the reuse path fails before any write and requires a normal
 governed full reseed without `--skip-cleanup`. That path recreates portfolio-owned valuation work
 while preserving the shared append-only quote authority. It does not pretend that replaying an
 unchanged transaction can reopen an already-completed readiness stage. The tool repeats the
-terminal-failure check after authority is durable so a job that fails during the upgrade cannot be
-misclassified from the initial snapshot or allowed into downstream seed continuation.
+active-or-terminal check after authority is durable so concurrent work cannot be misclassified
+from the initial snapshot or allowed into downstream seed continuation. Wait and retry when work is
+active; use the full reseed when it is terminal.
+
+`--evidence-output` requires verification and is incompatible with `--ingest-only`; the tool rejects
+that combination before readiness checks rather than exiting successfully without an artifact.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
 claims ready portfolio-day rows from `portfolio_aggregation_jobs` with `FOR UPDATE SKIP LOCKED` and
