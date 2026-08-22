@@ -229,6 +229,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     lot_states.get_fifo_disposal_lot_checkpoint_records.return_value = [
         OpenLotCheckpointRecord(
             transaction=_history_transaction(_persisted_buy("BUY-1", buy_date)),
+            original_quantity=Decimal("10"),
             quantity=Decimal("10"),
             cost_local=Decimal("100"),
             cost_base=Decimal("100"),
@@ -786,6 +787,7 @@ async def test_average_cost_pool_transition_rejects_missing_representative_state
         open_lot_states={},
     )
     assert closed_transition.existing_sources_after == OpenLotState(
+        original_quantity=Decimal(0),
         quantity=Decimal(0),
         cost_local=Decimal(0),
         cost_base=Decimal(0),

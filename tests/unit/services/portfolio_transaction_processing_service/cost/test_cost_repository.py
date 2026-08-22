@@ -659,11 +659,13 @@ def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPool
     )
     states = {
         "BUY-1": OpenLotState(
+            original_quantity=Decimal("10"),
             quantity=Decimal("6"),
             cost_local=Decimal("72"),
             cost_base=Decimal("78"),
         ),
         "BUY-2": OpenLotState(
+            original_quantity=Decimal("5"),
             quantity=Decimal("3"),
             cost_local=Decimal("36"),
             cost_base=Decimal("39"),
@@ -958,6 +960,7 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal("9"),
             cost_local=Decimal("108"),
             cost_base=Decimal("117"),
@@ -999,6 +1002,7 @@ async def test_average_cost_source_lineage_binds_prior_and_transition_revisions(
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal("9"),
             cost_local=Decimal("108"),
             cost_base=Decimal("117"),
@@ -1062,6 +1066,7 @@ async def test_apply_average_cost_pool_transition_rejects_missing_close_sources(
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal(0),
             cost_local=Decimal(0),
             cost_base=Decimal(0),
@@ -1091,6 +1096,7 @@ async def test_apply_average_cost_pool_transition_rejects_negative_residual() ->
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal("9"),
             cost_local=Decimal("108"),
             cost_base=Decimal("117"),
@@ -1126,6 +1132,7 @@ async def test_apply_average_cost_pool_transition_updates_explicit_new_source() 
     select_result.scalars.return_value.all.return_value = [new_lot]
     db_session.execute.side_effect = [select_result, MagicMock()]
     explicit_state = OpenLotState(
+        original_quantity=Decimal("5"),
         quantity=Decimal("5"),
         cost_local=Decimal("70"),
         cost_base=Decimal("75"),
@@ -1325,6 +1332,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         security_id=" SEC01 ",
         states_by_source_transaction_id={
             "BUY01": OpenLotState(
+                original_quantity=Decimal("10"),
                 quantity=Decimal("4"),
                 cost_local=Decimal("400"),
                 cost_base=Decimal("420"),
@@ -1404,6 +1412,7 @@ async def test_update_selected_open_lot_states_does_not_close_omitted_lots() -> 
         security_id="SEC01",
         states_by_source_transaction_id={
             "BUY01": OpenLotState(
+                original_quantity=Decimal("10"),
                 quantity=Decimal("4"),
                 cost_local=Decimal("400"),
                 cost_base=Decimal("420"),
@@ -1472,6 +1481,7 @@ async def test_lot_state_lineage_binds_trigger_and_prior_state_for_identical_out
             security_id="SEC01",
             states_by_source_transaction_id={
                 "BUY01": OpenLotState(
+                    original_quantity=Decimal("10"),
                     quantity=Decimal("4"),
                     cost_local=Decimal("400"),
                     cost_base=Decimal("420"),
@@ -1502,6 +1512,7 @@ async def test_update_selected_open_lot_states_rejects_missing_source_lot() -> N
             security_id="SEC01",
             states_by_source_transaction_id={
                 "BUY01": OpenLotState(
+                    original_quantity=Decimal("10"),
                     quantity=Decimal("4"),
                     cost_local=Decimal("400"),
                     cost_base=Decimal("420"),

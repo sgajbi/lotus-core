@@ -216,6 +216,7 @@ def _consume_next_fifo_lot(
     )
     if current_lot.remaining_quantity == Decimal(0):
         state_after = OpenLotState(
+            original_quantity=current_lot.original_quantity,
             quantity=Decimal(0),
             cost_local=Decimal(0),
             cost_base=Decimal(0),
@@ -307,6 +308,7 @@ class FIFOBasisStrategy:
             quantity=quantity,
             cost_per_share_local=cost_per_share_local,
             cost_per_share_base=cost_per_share_base,
+            original_quantity=getattr(transaction, "source_lot_original_quantity", quantity),
         )
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
@@ -474,6 +476,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             source_lot_id=f"LOT-{transaction.transaction_id}",
             source_acquisition_date=_utc_transaction_date(transaction),
             quantity=quantity,
+            original_quantity=getattr(transaction, "source_lot_original_quantity", quantity),
             cost_local=net_cost_local,
             cost_base=net_cost,
             pool_quantity_after=self._pools[key].quantity,
@@ -525,6 +528,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             state_after = states_after.get(
                 source_transaction_id,
                 OpenLotState(
+                    original_quantity=contribution.quantity,
                     quantity=Decimal(0),
                     cost_local=Decimal(0),
                     cost_base=Decimal(0),

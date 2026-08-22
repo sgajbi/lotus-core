@@ -52,14 +52,17 @@ class AmortizedCostCarryState:
 
 @dataclass(frozen=True, slots=True)
 class OpenLotState:
+    original_quantity: Decimal
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal
     amortized_cost: AmortizedCostCarryState | None = None
 
     def __post_init__(self) -> None:
-        for field_name in ("quantity", "cost_local", "cost_base"):
+        for field_name in ("original_quantity", "quantity", "cost_local", "cost_base"):
             _require_non_negative_decimal(getattr(self, field_name), field_name)
+        if self.quantity > self.original_quantity:
+            raise ValueError("quantity must not exceed original_quantity")
         if self.quantity == Decimal(0) and self.amortized_cost is not None:
             raise ValueError("closed lot state must not retain amortized-cost carry state")
         if self.amortized_cost is not None and not isinstance(
@@ -82,17 +85,21 @@ class CostLot:
         quantity: Decimal,
         cost_per_share_local: Decimal,
         cost_per_share_base: Decimal,
+        original_quantity: Decimal | None = None,
     ):
         self.transaction_id = transaction_id
         self.lot_id = lot_id
         self.acquisition_date = acquisition_date
-        self.original_quantity = quantity
+        self.original_quantity = original_quantity if original_quantity is not None else quantity
+        if self.original_quantity < quantity:
+            raise ValueError("lot original_quantity must not be below open quantity")
         self.remaining_quantity = quantity
         self.cost_per_share_local = cost_per_share_local
         self.cost_per_share_base = cost_per_share_base
 
     def open_state(self) -> OpenLotState:
         return OpenLotState(
+            original_quantity=self.original_quantity,
             quantity=self.remaining_quantity,
             cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
                 self.remaining_quantity,

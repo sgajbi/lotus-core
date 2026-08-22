@@ -120,6 +120,7 @@ class SqlAlchemyCostBasisLotRepository:
                     transition_evidence=transition_evidence,
                 )
                 continue
+            lot_row.original_quantity = state.original_quantity
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
@@ -159,6 +160,7 @@ class SqlAlchemyCostBasisLotRepository:
         for lot_row in lot_rows:
             prior_lineage = calculation_lineage_from_payload(lot_row.calculation_lineage)
             state = states_by_source_transaction_id[lot_row.source_transaction_id]
+            lot_row.original_quantity = state.original_quantity
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
@@ -220,6 +222,7 @@ class SqlAlchemyCostBasisLotRepository:
     ) -> OpenLotCheckpointRecord:
         return OpenLotCheckpointRecord(
             transaction=to_booked_transaction(TransactionEvent.model_validate(transaction)),
+            original_quantity=lot.original_quantity,
             quantity=lot.open_quantity,
             cost_local=lot.lot_cost_local,
             cost_base=lot.lot_cost_base,

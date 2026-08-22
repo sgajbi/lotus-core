@@ -17,16 +17,19 @@ def test_checkpoint_aggregates_source_states_and_uses_last_positive_source() -> 
         security_id="S1",
         states_by_source_transaction_id={
             "BUY-1": OpenLotState(
+                original_quantity=Decimal("4"),
                 quantity=Decimal("4"),
                 cost_local=Decimal("40"),
                 cost_base=Decimal("44"),
             ),
             "BUY-2": OpenLotState(
+                original_quantity=Decimal(0),
                 quantity=Decimal(0),
                 cost_local=Decimal(0),
                 cost_base=Decimal(0),
             ),
             "BUY-3": OpenLotState(
+                original_quantity=Decimal("6"),
                 quantity=Decimal("6"),
                 cost_local=Decimal("72"),
                 cost_base=Decimal("78"),
@@ -55,6 +58,7 @@ def test_checkpoint_allows_fully_closed_pool_without_representative_source() -> 
         security_id="S1",
         states_by_source_transaction_id={
             "BUY-1": OpenLotState(
+                original_quantity=Decimal(0),
                 quantity=Decimal(0),
                 cost_local=Decimal(0),
                 cost_base=Decimal(0),
@@ -121,6 +125,7 @@ def test_transition_rejects_non_finite_open_lot_state(
     value: str,
 ) -> None:
     state_values = {
+        "original_quantity": Decimal("1"),
         "quantity": Decimal("1"),
         "cost_local": Decimal("10"),
         "cost_base": Decimal("11"),
@@ -164,6 +169,7 @@ def test_checkpoint_compatibility_requires_version_and_book_identity() -> None:
 
 def _open_state(quantity: str, cost_local: str, cost_base: str) -> OpenLotState:
     return OpenLotState(
+        original_quantity=Decimal(quantity),
         quantity=Decimal(quantity),
         cost_local=Decimal(cost_local),
         cost_base=Decimal(cost_base),

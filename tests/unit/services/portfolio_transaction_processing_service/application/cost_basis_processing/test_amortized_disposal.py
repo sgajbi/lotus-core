@@ -546,6 +546,7 @@ async def test_basis_only_lot_change_preserves_independent_book_carry() -> None:
         errored=timeline.errored,
         open_lot_states={
             "BUY_1": OpenLotState(
+                original_quantity=Decimal("4"),
                 quantity=Decimal("2"),
                 cost_local=Decimal("50"),
                 cost_base=Decimal("60"),
@@ -566,6 +567,7 @@ async def test_basis_only_lot_change_preserves_independent_book_carry() -> None:
     )
 
     assert result.open_lot_states["BUY_1"] == OpenLotState(
+        original_quantity=Decimal("4"),
         quantity=Decimal("2"),
         cost_local=Decimal("50"),
         cost_base=Decimal("60"),
