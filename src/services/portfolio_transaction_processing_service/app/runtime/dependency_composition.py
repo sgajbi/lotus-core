@@ -14,6 +14,7 @@ from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application import (
+    AuditLotPositionParityUseCase,
     ProcessNextCorporateActionReleaseUseCase,
     ProcessTransactionUseCase,
     ReconcileAverageCostPoolsUseCase,
@@ -46,6 +47,7 @@ from ..infrastructure.cost_basis import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
+    SqlAlchemyLotPositionParityAdapter,
 )
 from ..infrastructure.fixed_income_book_cost import (
     SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork,
@@ -158,6 +160,17 @@ def build_reconcile_average_cost_pools_use_case(
         ),
     )
     return ReconcileAverageCostPoolsUseCase(reconciliation)
+
+
+def build_audit_lot_position_parity_use_case(
+    *,
+    session_factory: Callable[[], AsyncSession] | None = None,
+) -> AuditLotPositionParityUseCase:
+    return AuditLotPositionParityUseCase(
+        SqlAlchemyLotPositionParityAdapter(
+            session_factory=session_factory or get_async_session_factory()
+        )
+    )
 
 
 def build_fixed_income_book_cost_authority_use_case(

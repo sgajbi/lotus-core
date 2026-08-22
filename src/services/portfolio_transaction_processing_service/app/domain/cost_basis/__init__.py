@@ -91,6 +91,12 @@ from .lot_disposal_receipt import (
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
 )
+from .lot_position_reconciliation import (
+    LOT_QUANTITY_VS_POSITION_MISMATCH,
+    LotPositionParityAssessment,
+    LotPositionParityKey,
+    LotPositionParityStatus,
+)
 from .models.calculation_error import CostCalculationError
 from .models.cost_basis_transaction import CostBasisTransaction, Fees
 from .models.effective_fx_rate import EffectiveFxRate
@@ -145,6 +151,10 @@ __all__ = [
     "LotDispositionEngine",
     "LotRestatement",
     "LotRestatementError",
+    "LOT_QUANTITY_VS_POSITION_MISMATCH",
+    "LotPositionParityAssessment",
+    "LotPositionParityKey",
+    "LotPositionParityStatus",
     "LotBasisTransferResult",
     "LotBasisTransferReconciliationScope",
     "LotBasisTransferReceiptState",
