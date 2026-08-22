@@ -61,6 +61,12 @@ def build_report(result: AuditLotPositionParityResult) -> dict[str, Any]:
     }
 
 
+def report_exit_code(report: dict[str, Any]) -> int:
+    """Return the stable process exit code for one completed audit report."""
+
+    return 1 if report["summary"]["drifted_count"] else 0
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--portfolio-id")
@@ -102,7 +108,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(f"{rendered}\n", encoding="utf-8")
     print(rendered)
-    return 1 if report["summary"]["drifted_count"] else 0
+    return report_exit_code(report)
 
 
 if __name__ == "__main__":

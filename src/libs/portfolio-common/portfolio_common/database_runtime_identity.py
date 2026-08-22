@@ -36,6 +36,7 @@ DATABASE_RUNTIME_IDENTITIES = frozenset(
         "ingestion-service",
         LOCAL_DATABASE_RUNTIME_IDENTITY,
         "lotus-core-test",
+        "lot-position-parity-audit",
         "migration-runner",
         "offline-integrity-auditor",
         "performance-load-gate",
