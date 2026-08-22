@@ -93,7 +93,8 @@ def test_front_office_verification_evidence_is_machine_readable_and_content_boun
     assert evidence["authority"]["valuation_policy_assignment_count"] == 11
     assert evidence["authority"]["market_price_source_fact_count"] == 4176
     assert len(evidence["authority"]["market_price_source_facts_hash"]) == 64
-    assert len(evidence["content_hash"]) == 64
+    content_hash = persisted.pop("content_hash")
+    assert content_hash == front_office_seed_module._canonical_payload_fingerprint(persisted)
 
 
 def test_front_office_bundle_uses_real_business_names_and_context():
@@ -167,7 +168,9 @@ def test_front_office_market_price_conventions_are_explicit_for_every_security()
     }
 
 
-def test_front_office_market_price_authority_rejects_missing_or_mismatched_convention():
+def test_front_office_market_price_authority_rejects_missing_or_mismatched_convention(
+    monkeypatch,
+):
     market_price = {
         "security_id": "FO_BOND_UNGOVERNED",
         "price_date": "2026-04-10",
@@ -193,6 +196,23 @@ def test_front_office_market_price_authority_rejects_missing_or_mismatched_conve
         front_office_seed_module._build_market_price_source_fact(
             market_price=governed,
             instrument={"security_id": "FO_BOND_UST_2030", "product_type": "Equity"},
+            observed_at="2026-04-10T09:00:00Z",
+        )
+
+    original_convention = (
+        front_office_seed_module.FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID[
+            "FO_BOND_UST_2030"
+        ]
+    )
+    monkeypatch.setitem(
+        front_office_seed_module.FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID,
+        "FO_BOND_UST_2030",
+        replace(original_convention, normalization="UNSUPPORTED"),
+    )
+    with pytest.raises(ValueError, match="incomplete or unsupported"):
+        front_office_seed_module._build_market_price_source_fact(
+            market_price=governed,
+            instrument={"security_id": "FO_BOND_UST_2030", "product_type": "Bond"},
             observed_at="2026-04-10T09:00:00Z",
         )
 
@@ -1158,6 +1178,16 @@ def test_front_office_valuation_authority_cleanup_is_exactly_source_namespaced()
     assert "source_system = 'LOTUS_FRONT_OFFICE_SEED'" in sql
     assert "source_record_id like 'front-office-price:%'" in sql
     assert "source_record_id like 'front-office-valuation-policy:%'" in sql
+
+
+def test_unrelated_portfolio_cleanup_cannot_erase_canonical_valuation_authority():
+    sql = build_portfolio_seed_cleanup_sql(portfolio_id="PORT-RECEIPT-DB-01")
+
+    assert "PORT-RECEIPT-DB-01" in sql
+    assert "delete from market_price_source_facts" not in sql
+    assert "delete from instrument_valuation_policy_assignments" not in sql
+    assert "front-office-price:" not in sql
+    assert "front-office-valuation-policy:" not in sql
 
 
 def test_front_office_seed_persists_sources_before_activating_business_horizon(monkeypatch):
