@@ -9,6 +9,12 @@ import pytest
 import tools.front_office_portfolio_seed as front_office_seed_module
 import tools.front_office_seed_contract as front_office_seed_contract_module
 import tools.validate_front_office_advisor_book_seed as advisor_book_seed_validator
+from services.ingestion_service.app.DTOs.market_price_dto import (
+    AuthoritativeMarketPriceSourceFactIngestionRequest,
+)
+from services.ingestion_service.app.DTOs.reference_data_valuation_policy_dto import (
+    InstrumentValuationPolicyAssignmentIngestionRequest,
+)
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     DEFAULT_DPM_MODEL_PORTFOLIO_ID,
@@ -106,6 +112,29 @@ def test_front_office_bundle_carries_complete_deterministic_valuation_authority(
     assert ust_facts
     assert {row["quote_basis"] for row in ust_facts} == {"PERCENT_OF_PRINCIPAL_CLEAN"}
     assert max(row["price_date"] for row in ust_facts) == "2026-04-10"
+
+
+def test_front_office_valuation_authority_satisfies_ingestion_contracts():
+    bundle = _build_bundle()
+
+    assignment_request = InstrumentValuationPolicyAssignmentIngestionRequest.model_validate(
+        {"valuation_policy_assignments": bundle["valuation_policy_assignments"]}
+    )
+    fact_requests = [
+        AuthoritativeMarketPriceSourceFactIngestionRequest.model_validate(
+            {
+                "market_price_source_facts": bundle["market_price_source_facts"][
+                    offset : offset + 500
+                ]
+            }
+        )
+        for offset in range(0, len(bundle["market_price_source_facts"]), 500)
+    ]
+
+    assert len(assignment_request.valuation_policy_assignments) == len(bundle["instruments"])
+    assert sum(len(request.market_price_source_facts) for request in fact_requests) == len(
+        bundle["market_price_source_facts"]
+    )
 
 
 def test_front_office_market_price_authority_hash_changes_with_source_value():
