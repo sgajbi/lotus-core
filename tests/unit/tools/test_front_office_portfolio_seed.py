@@ -1920,11 +1920,23 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
             assert min(cash_dates) > "2026-04-10"
             assert max(cash_dates) == "2026-04-30"
             timeline.append("raw_prices_published_through_2026-04-30")
+        elif url.endswith("/reprocess/transactions"):
+            assert payload["transaction_ids"] == [
+                "TXN-BUY-UST-001",
+                "TXN-BUY-SIEMENS-BOND-001",
+                "TXN-INT-UST-001",
+            ]
+            timeline.append(url)
         else:
             timeline.append(url)
         return 202, {"accepted_count": 1}
 
     monkeypatch.setattr(front_office_seed_module, "_request_json", request)
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_failed_quote_authority_security_ids",
+        lambda **_kwargs: ("FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030"),
+    )
     monkeypatch.setattr(
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
@@ -2002,6 +2014,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "valuation_authority_published",
         "valuation_authority_pending",
         "valuation_authority_durable",
+        "http://ingestion.dev.lotus/reprocess/transactions",
     ]
 
 
@@ -2032,6 +2045,11 @@ def test_current_seed_upgrade_does_not_republish_unchanged_source_parents(monkey
             "tenant_id": "LOTUS_PB_SG",
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_failed_quote_authority_security_ids",
+        lambda **_kwargs: (),
     )
     monkeypatch.setattr(
         front_office_seed_module,
@@ -2069,7 +2087,28 @@ def test_current_seed_upgrade_does_not_republish_unchanged_source_parents(monkey
     )
 
 
-def test_front_office_seed_reuse_repairs_cash_accounts_without_replaying_transactions(
+def test_front_office_seed_reads_only_failed_quote_authority_securities(monkeypatch):
+    observed_sql: list[str] = []
+
+    def read_failed(**kwargs):
+        observed_sql.append(kwargs["sql"])
+        return ["FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030"]
+
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", read_failed)
+
+    result = front_office_seed_module._failed_quote_authority_security_ids(
+        postgres_container="postgres",
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+    )
+
+    assert result == ("FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030")
+    assert "from portfolio_valuation_jobs" in observed_sql[0]
+    assert "and status = 'FAILED'" in observed_sql[0]
+    assert "FO_BOND_UST_2030" in observed_sql[0]
+    assert "FO_BOND_SIEMENS_2031" in observed_sql[0]
+
+
+def test_front_office_seed_reuse_repairs_cash_accounts_without_full_core_reingestion(
     monkeypatch,
 ):
     timeline: list[str] = []

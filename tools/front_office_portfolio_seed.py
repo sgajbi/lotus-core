@@ -93,6 +93,13 @@ FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID = {
         quote_denominator=FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR,
     ),
 }
+FRONT_OFFICE_QUOTE_AUTHORITY_REPROCESSING_SECURITY_IDS = tuple(
+    sorted(
+        security_id
+        for security_id, convention in FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID.items()
+        if convention.normalization == "PERCENT_OF_FACE_TO_POSITION_UNIT_PRICE"
+    )
+)
 DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
     {
         "portfolio_id": "PB_SG_GLOBAL_INC_002",
@@ -2538,8 +2545,12 @@ def _upgrade_front_office_valuation_authority(
     wait_seconds: int,
     poll_interval_seconds: int,
 ) -> None:
-    """Upgrade an existing canonical seed without replaying its transaction history."""
+    """Upgrade authority without broad transaction replay or unchanged-source rearming."""
 
+    failed_quote_authority_security_ids = _failed_quote_authority_security_ids(
+        postgres_container=postgres_container,
+        portfolio_id=portfolio_id,
+    )
     expected_scope = {
         "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
@@ -2601,6 +2612,12 @@ def _upgrade_front_office_valuation_authority(
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
+    if failed_quote_authority_security_ids:
+        _reprocess_front_office_quote_authority_transactions(
+            ingestion_base_url=ingestion_base_url,
+            bundle=bundle,
+            security_ids=failed_quote_authority_security_ids,
+        )
 
 
 def _ingest_front_office_core_data(
@@ -2683,6 +2700,30 @@ def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[s
     ]
     if not transaction_ids:
         return
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/reprocess/transactions",
+        payload={"transaction_ids": transaction_ids},
+    )
+
+
+def _reprocess_front_office_quote_authority_transactions(
+    *,
+    ingestion_base_url: str,
+    bundle: dict[str, Any],
+    security_ids: tuple[str, ...],
+) -> None:
+    """Rearm only transactions for canonical securities blocked on quote authority."""
+
+    affected_security_ids = set(security_ids)
+    transaction_ids = [
+        transaction["transaction_id"]
+        for transaction in bundle["transactions"]
+        if transaction.get("security_id") in affected_security_ids
+        and isinstance(transaction.get("transaction_id"), str)
+    ]
+    if not transaction_ids:
+        raise RuntimeError("Canonical quote-authority recovery transactions are unavailable.")
     _request_json(
         "POST",
         f"{ingestion_base_url}/reprocess/transactions",
@@ -2931,6 +2972,34 @@ select coalesce(
 )::text;
 """
     return _read_postgres_json(postgres_container=postgres_container, sql=sql)
+
+
+def _failed_quote_authority_security_ids(
+    *,
+    postgres_container: str,
+    portfolio_id: str,
+) -> tuple[str, ...]:
+    governed_security_ids = FRONT_OFFICE_QUOTE_AUTHORITY_REPROCESSING_SECURITY_IDS
+    security_id_literals = ", ".join(
+        _postgres_string_literal(security_id) for security_id in governed_security_ids
+    )
+    sql = f"""
+select coalesce(json_agg(security_id order by security_id), '[]'::json)::text
+from (
+  select distinct security_id
+  from portfolio_valuation_jobs
+  where portfolio_id = {_postgres_string_literal(portfolio_id)}
+    and security_id in ({security_id_literals})
+    and status = 'FAILED'
+) failed_quote_authority;
+"""
+    result = _read_postgres_json(postgres_container=postgres_container, sql=sql)
+    if not isinstance(result, list) or any(
+        not isinstance(security_id, str) or security_id not in governed_security_ids
+        for security_id in result
+    ):
+        raise RuntimeError("Canonical failed quote-authority jobs could not be classified.")
+    return tuple(result)
 
 
 def _wait_for_portfolio_valuation_scope(
