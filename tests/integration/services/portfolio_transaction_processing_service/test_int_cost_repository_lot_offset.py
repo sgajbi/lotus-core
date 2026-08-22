@@ -449,6 +449,7 @@ async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine
         security_id="BOND_USD_02",
         states_by_source_transaction_id={
             "TXN_SLICE4_02": OpenLotState(
+                original_quantity=Decimal("100"),
                 quantity=Decimal("40"),
                 cost_local=Decimal("3920"),
                 cost_base=Decimal("4000"),
@@ -541,11 +542,13 @@ async def test_fifo_disposal_reads_and_updates_only_required_open_lots(
         security_id=security_id,
         states_by_source_transaction_id={
             "BUY_FIFO_01": OpenLotState(
+                original_quantity=Decimal("4"),
                 quantity=Decimal(0),
                 cost_local=Decimal(0),
                 cost_base=Decimal(0),
             ),
             "BUY_FIFO_02": OpenLotState(
+                original_quantity=Decimal("5"),
                 quantity=Decimal("3"),
                 cost_local=Decimal("300"),
                 cost_base=Decimal("300"),
