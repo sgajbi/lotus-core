@@ -26,9 +26,10 @@ machine receipt attached to #990 is pre-review runtime evidence. The fix-forward
 derived its replacement from exact durable rows: 11 assignments / 4,176 facts, assignment hash
 `c5cdc57d8d25a593a8e890f24a1a4111ff7039de447c86b8626f587d7c8fc433`, fact hash
 `7c768348fa5cbbe6361b43a47af9fbfb9ebb8b0bb165582947794bef6e795a9f`, receipt content hash
-`955657d7b140454dd39e1ea099e7ebd58d06fab608b4f3ef403ac94e89ce31c7`, and retained byte hash
-`8ded370b0098bbd1fff6420bcf9cc71816885144208bb0c1aa509bed61d63253`; all canonical product and
-queue postures remained complete and terminal for three observations. Status: fixed locally;
+`69a84bfa7fbc6525cc480703ccd581792acbf5841fdee6847202ab733cf4c585`, and retained byte hash
+`0fd3af5576c14a154382bffc90f3563ba1c8727f2d8c3074982194e872fbc949`; all canonical product and
+queue postures remained complete and terminal for three observations after a no-op reuse upgrade.
+Status: fixed locally;
 protected PR, exact-main, wiki
 publication/parity, issue closure, and hygiene remain pending. Evidence:
 [CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md](./codebase-reviews/CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md).
