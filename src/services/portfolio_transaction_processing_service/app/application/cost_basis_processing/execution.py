@@ -36,6 +36,7 @@ from ...ports import (
     InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
+from ..errors import TransactionProcessingRejected
 from ..foreign_exchange_processing import book_foreign_exchange_transaction
 from .amortized_disposal import apply_effective_amortized_cost_to_disposals
 from .basis_transfer_persistence import persist_current_lot_basis_transfers
@@ -305,8 +306,19 @@ def _processing_checkpoint(
 
 
 def _raise_for_calculation_errors(errors: Sequence[CostCalculationError]) -> None:
-    if errors:
-        raise ValueError(
-            f"Cost-basis calculation failed for {errors[0].transaction_id}: "
-            f"{errors[0].error_reason}"
+    if not errors:
+        return
+    first_error = errors[0]
+    if first_error.error_reason.startswith("Quantity restatement invariant violation:"):
+        raise TransactionProcessingRejected(
+            reason_code="lot_quantity_restatement_rejected",
+            detail={
+                "transaction_id": first_error.transaction_id,
+                "reason": "lot_restatement_invariant_violation",
+            },
+            retryable=False,
         )
+    raise ValueError(
+        f"Cost-basis calculation failed for {first_error.transaction_id}: "
+        f"{first_error.error_reason}"
+    )
