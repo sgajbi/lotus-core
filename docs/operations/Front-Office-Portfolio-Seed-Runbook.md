@@ -129,8 +129,10 @@ verifies:
   at or after the seed end date
 - three consecutive observations contain no pending, processing, stale, or failed valuation or
   aggregation work; any reopened scheduler work resets this non-amplification fence
-- the optional evidence file binds the complete source-fact set, assignment/fact counts, governed
-  dates, terminal queue observations, and final verification result with a SHA-256 content hash
+- the optional evidence file is emitted only after an exact read-only PostgreSQL comparison of
+  every seed-owned assignment and source fact; it derives durable counts and hashes from those
+  rows and binds them with governed dates, terminal queue observations, and the final verification
+  result using a SHA-256 content hash
 
 ## Validation Evidence
 
@@ -184,10 +186,16 @@ If only the fixed-income positions remain unvalued, inspect `portfolio_valuation
 retrying. `bond valuation requires explicit quote-convention authority` means the canonical
 policy assignment or same-tenant/same-book authoritative source fact is missing; it must not be
 worked around with the retired magnitude heuristic or a downstream-fabricated quote basis. The
-seed cleanup removes only authority owned by `LOTUS_FRONT_OFFICE_SEED` in the exact canonical
-tenant/book and the `front-office-price:` / `front-office-valuation-policy:` record namespaces, so
-a changed deterministic replay can republish version `1` without affecting other portfolios or
-source owners.
+routine seed cleanup never removes this shared tenant/book/security authority or its canonical
+portfolio/instrument parents. Identical version-1 replay is idempotent. Changed source evidence
+must use a governed newer source version; use an explicit full local-state reset for incompatible
+experimental history rather than deleting append-only evidence from a portfolio cleanup.
+
+`--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it
+idempotently republishes the portfolio master, proves the durable `LOTUS_PB_SG` /
+`SG_PRIVATE_BANK_BOOK` scope, waits for instruments and raw price windows, and upgrades the
+valuation assignments/source facts before verification. It never replays transactions unless the
+separate governed reprocess option is selected.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
 claims ready portfolio-day rows from `portfolio_aggregation_jobs` with `FOR UPDATE SKIP LOCKED` and

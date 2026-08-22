@@ -4060,12 +4060,15 @@ Most relevant current governance:
      never relabeled as face authority. Source fact identity is stable for replay and its content
      hash changes with source evidence. Cash unit-price facts must extend through the latest
      planned-withdrawal transaction date because future cash legs enter the same exact-scope
-     valuation queue. Cleanup may remove only evidence owned by
-     `LOTUS_FRONT_OFFICE_SEED` in the exact canonical tenant/book and canonical source-record
-     namespaces; generic portfolio cleanup must not erase it. The verifier may emit a source-safe
-     content-bound JSON receipt and must observe three terminal queue snapshots so reopened work
-     cannot masquerade as success. Never restore price-magnitude inference or fabricate quote
-     authority downstream when this evidence is unavailable.
+     valuation queue. Routine portfolio cleanup must not erase shared append-only valuation
+     authority or its canonical portfolio/instrument parents; identical source-version replay is
+     idempotent and changed evidence requires a governed newer version or explicit full local-state
+     reset. The `--skip-cleanup` path must
+     upgrade and durably prove portfolio scope, instruments, raw prices, assignments, and facts
+     without replaying transactions. The verifier may emit a source-safe content-bound JSON
+     receipt only after exact durable-row comparison, and must observe three terminal queue
+     snapshots so reopened work cannot masquerade as success. Never restore price-magnitude
+     inference or fabricate quote authority downstream when this evidence is unavailable.
 
 ## Context Maintenance Rule
 
