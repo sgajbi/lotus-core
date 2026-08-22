@@ -53,8 +53,12 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
 
     claim_stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(claim_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "NOT (EXISTS" in compiled_query
-    assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
+    assert "NOT (EXISTS" not in compiled_query
+    assert (
+        "portfolio_valuation_jobs.epoch = (SELECT portfolio_valuation_jobs_1.epoch" in compiled_query
+    )
+    assert "ORDER BY portfolio_valuation_jobs_1.epoch DESC" in compiled_query
+    assert "LIMIT 1" in compiled_query
     assert (
         "ORDER BY portfolio_valuation_jobs.portfolio_id ASC, "
         "portfolio_valuation_jobs.security_id ASC, "
@@ -132,6 +136,7 @@ async def test_stale_valuation_recovery_bounds_selection_and_chunks_reset_update
     )
     assert "ORDER BY portfolio_valuation_jobs.valuation_lease_expires_at ASC" in compiled_select
     assert "LIMIT 1000" in compiled_select
+    assert "FOR UPDATE SKIP LOCKED" in compiled_select
 
 
 async def test_stale_valuation_recovery_logs_counts_without_identifier_collections(

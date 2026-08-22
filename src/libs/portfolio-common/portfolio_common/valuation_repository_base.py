@@ -133,6 +133,22 @@ class ValuationRepositoryBase:
             .exists()
         )
 
+    @staticmethod
+    def _latest_epoch_for_job(current_job, latest_job):
+        """Resolve the latest durable epoch through the identity index."""
+
+        return (
+            select(latest_job.epoch)
+            .where(
+                latest_job.portfolio_id == current_job.portfolio_id,
+                latest_job.security_id == current_job.security_id,
+                latest_job.valuation_date == current_job.valuation_date,
+            )
+            .order_by(latest_job.epoch.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+
     @async_timed(
         repository="ValuationRepository",
         method="find_position_keys_requiring_price_revaluation",
@@ -638,12 +654,13 @@ class ValuationRepositoryBase:
             if effective_batch_size == 0:
                 return []
 
-        newer_epoch = aliased(PortfolioValuationJob)
+        latest_epoch = aliased(PortfolioValuationJob)
         eligible_ids = (
             select(PortfolioValuationJob.id)
             .where(
                 PortfolioValuationJob.status == "PENDING",
-                ~self._newer_epoch_exists(PortfolioValuationJob, newer_epoch),
+                PortfolioValuationJob.epoch
+                == self._latest_epoch_for_job(PortfolioValuationJob, latest_epoch),
             )
             .order_by(
                 PortfolioValuationJob.portfolio_id.asc(),
@@ -1097,6 +1114,7 @@ def _stale_valuation_jobs_stmt(repository: ValuationRepositoryBase):
             PortfolioValuationJob.id.asc(),
         )
         .limit(POSTGRES_STATEMENT_ROW_LIMIT)
+        .with_for_update(skip_locked=True)
     )
 
 
