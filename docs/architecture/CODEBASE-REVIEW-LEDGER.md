@@ -13,8 +13,9 @@ to the price per 1,000-face held unit, and binds those inputs into the source ha
 mismatched metadata fails before publication and runtime quantity is not treated as face authority.
 Routine portfolio cleanup cannot delete this shared canonical source authority or its canonical
 portfolio/instrument parents. The reuse path
-upgrades durable portfolio scope and authority without transaction replay, and the verifier emits
-a content-bound JSON receipt only after exact durable-row comparison, plus a three-observation
+republishes and proves durable portfolio/instrument/raw-price parents before upgrading authority
+without transaction replay, and the verifier emits a content-bound JSON receipt only after exact
+latest-source-version durable-row comparison, plus a three-observation
 non-amplification fence. No valuation
 formula, public API, schema, event, dependency, image, or topology changed. Exact signed
 `e5ebb86c8` published 4,176 source facts and proved 11-of-11 valued positions, complete

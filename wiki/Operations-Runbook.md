@@ -299,9 +299,9 @@ authority or its canonical portfolio/instrument parents. Identical version-1 rep
 changed evidence must append a governed newer version or use an explicit full local-state reset.
 
 On `--skip-cleanup`, the tool preserves transaction history while idempotently republishing the
-portfolio master, proving its durable tenant/book scope, waiting for instruments and raw prices,
-and upgrading valuation assignments/source facts. It does not silently treat an existing
-pre-authority seed as complete.
+portfolio master, instruments, and complete raw-price windows; proving durable tenant/book scope;
+and publishing plus durably verifying valuation assignments/source facts. It does not silently
+treat an existing pre-authority seed as complete.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
@@ -310,7 +310,8 @@ background success: keep it inside the existing readiness deadline so an exit-ze
 stable terminal state. The verifier sleeps for the configured poll interval between observations;
 it must not busy-loop against the shared runtime.
 Use `--evidence-output <path>` to retain a source-safe JSON receipt. The tool first compares every
-expected seed-owned assignment and source fact with a read-only PostgreSQL projection and fails
+expected seed-owned assignment and source fact with the latest-version rows from a read-only
+PostgreSQL projection and fails
 without writing a file on missing, extra, changed, or unreadable authority. Receipt counts and
 hashes are derived from those durable rows and bind the final verification, three-observation
 stability count, and receipt content hash.
