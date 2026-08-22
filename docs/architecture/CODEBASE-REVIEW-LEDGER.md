@@ -17,7 +17,9 @@ portfolio/instrument parents. The reuse path
 updates only incorrect portfolio scope, waits for existing instruments, and publishes only missing
 raw-price observations while rejecting conflicting existing price/currency values before proving
 and upgrading authority
-without transaction replay, and the verifier emits a content-bound JSON receipt only after exact
+without broad transaction replay; exact canonical quote-authority securities with terminal failed
+valuation jobs receive only bounded affected-security transaction reprocessing after authority is
+durable. The verifier emits a content-bound JSON receipt only after exact
 latest-source-version durable-row comparison, plus a three-observation
 non-amplification fence. No valuation
 formula, public API, schema, event, dependency, image, or topology changed. Exact signed

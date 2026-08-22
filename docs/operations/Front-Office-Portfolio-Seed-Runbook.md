@@ -200,8 +200,10 @@ wrong, waits for existing instruments, and publishes only raw-price observations
 complete required windows. Existing observations must match the canonical price and currency;
 conflicts fail closed instead of being blessed by new source authority. The tool then publishes and
 durably verifies valuation assignments/source facts before continuing. It never replays
-transactions or rearms unchanged source parents unless the separate governed reprocess option is
-selected.
+the full transaction set or rearms unchanged source parents. When an exact canonical bond already
+has terminal failed valuation jobs, it queues only that security's bounded transaction set for
+reprocessing after the new authority is durable. The separate governed reprocess option remains
+the explicit mechanism for a deliberate full-portfolio recovery proof.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
 claims ready portfolio-day rows from `portfolio_aggregation_jobs` with `FOR UPDATE SKIP LOCKED` and

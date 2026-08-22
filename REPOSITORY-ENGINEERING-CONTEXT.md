@@ -4069,9 +4069,10 @@ Most relevant current governance:
      update portfolio scope only when wrong, wait for existing instruments, publish only the
      observations missing from complete raw-price windows, fail closed when an existing raw price
      or currency conflicts with the canonical bundle, and durably prove assignments and
-     latest-version facts
-     without replaying transactions. The verifier may emit a source-safe content-bound JSON
-     receipt only after exact durable-row comparison, and must observe three terminal queue
+     latest-version facts. When exact canonical quote-authority securities already have terminal
+     failed valuation jobs, reprocess only their bounded transaction set after authority is
+     durable; do not replay the full transaction history. The verifier may emit a source-safe
+     content-bound JSON receipt only after exact durable-row comparison, and must observe three terminal queue
      snapshots so reopened work cannot masquerade as success. Never restore price-magnitude
      inference or fabricate quote authority downstream when this evidence is unavailable.
 
