@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1706 canonical valuation quote authority (2026-08-22): canonical
+`PB_SG_GLOBAL_BAL_001` published raw prices without tenant/book scope, policy assignments, or
+authoritative source facts. Production correctly refused magnitude inference, leaving both seeded
+bonds unvalued while nine non-bond positions completed. The seed now publishes complete
+effective-dated policy and deterministic source authority after raw price readiness and before the
+business-date horizon, with bounded 500-row requests and exact-scope replay cleanup. Missing,
+overlapping, stale, and wrong-book evidence still fails closed; no valuation formula, public API,
+schema, event, dependency, image, or topology changed. Status: fixed locally; protected PR,
+exact-main, canonical 11-of-11 runtime, wiki publication/parity, issue closure, and hygiene remain
+pending. Evidence:
+[CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md](./codebase-reviews/CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md).
+
 CR-1705 bounded Kafka startup recovery (2026-08-22): canonical dependency-gated Core startup could
 exhaust Kafka's former ten health probes immediately before the broker became healthy. Core keeps
 the unchanged real broker probe and bounded restart policy while adding two measured health-probe
