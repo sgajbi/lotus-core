@@ -299,6 +299,9 @@ scope to become durable before dependent instruments, authority, dates, or trans
 Routine replay cleanup never deletes the shared append-only valuation
 authority or its canonical portfolio/instrument parents. Identical version-1 replay is idempotent;
 changed evidence must append a governed newer version or use an explicit full local-state reset.
+Before cleanup or any ingest write, the tool accepts only entirely absent seed-owned authority or an
+exact complete latest-version replay. Partial, extra, or changed version-1 authority fails before
+mutation and requires the explicit full local-state reset.
 
 On `--skip-cleanup`, the tool preserves transaction history, requires canonical bond valuation work
 to be quiescent, waits for existing instruments, and validates existing observations before any
