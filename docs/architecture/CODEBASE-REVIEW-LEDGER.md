@@ -26,8 +26,11 @@ and dependent-service evidence. Exact signed `c28423349` passed the real gate wi
 recovery, restart count `1`, topic creator exit `0`, two clean cycles, and healthy ingestion.
 Persistent failure remains fail-closed and destructive recovery is still prohibited by default.
 No API, schema, event, calculation, dependency, image, promoted
-security, or topology contract changes. Status: fixed locally; protected PR, exact-main, canonical
-Workbench, wiki publication/parity, issue closure, and hygiene remain pending. Evidence:
+security, or topology contract changes. PR #992 merged to exact main `1746ea913`; Main
+Releasability run `32538375716` passed; governed canonical startup reached Kafka, topic-creator, and
+dependent-service readiness; and wiki `21cd17f` has strict parity zero. Status: merged to main and
+exact-main validated; issue closure and obsolete branch/worktree hygiene remain pending until this
+durable reconciliation is merged. Evidence:
 [CR-1705-BOUNDED-KAFKA-STARTUP-RECOVERY.md](./codebase-reviews/CR-1705-BOUNDED-KAFKA-STARTUP-RECOVERY.md).
 
 CR-1704 governed database hot-path evidence (2026-08-22): Core now has one versioned,

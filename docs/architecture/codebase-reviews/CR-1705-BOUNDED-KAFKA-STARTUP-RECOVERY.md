@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 Issue: [#989](https://github.com/sgajbi/lotus-core/issues/989)
-Status: Fixed locally; protected PR, exact-main, canonical Workbench, and wiki evidence pending
+Status: Merged to main and exact-main validated; durable closure reconciliation in progress
 
 ## Finding
 
@@ -40,9 +40,17 @@ authority remains separate under #990.
   health policy, source-safe failure diagnostic, and exact topic-creator dependency path.
 - Real managed Compose passed at exact signed `c28423349`: the interrupted broker recovered in
   `20.749s` with restart count `1`, topic creator exit code `0`, two clean restart cycles, and
-  `ingestion_service=healthy`. Canonical Workbench startup, protected PR, exact-main, wiki
-  publication, strict parity, issue closure, and branch/worktree hygiene remain pending at this
-  fixed-local checkpoint.
+  `ingestion_service=healthy`.
+- PR [#992](https://github.com/sgajbi/lotus-core/pull/992) merged to exact main
+  `1746ea913d64357f9d0e098f7db06e83a646adcd`. Main Releasability run
+  [32538375716](https://github.com/sgajbi/lotus-core/actions/runs/32538375716) completed successfully,
+  including full integration, E2E, performance, and failure-recovery gates.
+- A clean governed canonical startup rebuilt Core, observed genuine Kafka readiness, completed
+  topic creation, and started the dependent Core services without deleting volumes or weakening
+  the probe. It proceeded into source-data validation; the distinct quote-authority failure was
+  then resolved under #990. Authored wiki source was published at wiki commit `21cd17f` and strict
+  parity reported `DiffCount=0`. Issue closure and obsolete branch/worktree hygiene remain pending
+  until this durable reconciliation is merged.
 - Focused runtime/Compose tests passed `10`; `docker compose config --quiet`, full `make lint`,
   `make typecheck` (`318` source files), `make quality-wiki-docs-gate`, and
   `make docs-evidence-pack` passed. The repo-native wiki guard passed. The central pre-merge wiki
