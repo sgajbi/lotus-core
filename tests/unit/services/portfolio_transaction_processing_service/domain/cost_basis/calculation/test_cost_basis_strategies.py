@@ -73,7 +73,7 @@ def test_restored_buy_requires_original_quantity_authority(strategy_type) -> Non
 
     with pytest.raises(
         ValueError,
-        match="Restored lot source is missing original quantity authority",
+        match="Restored source lot is missing original quantity authority",
     ):
         strategy.add_buy_lot(restored)
 
