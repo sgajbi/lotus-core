@@ -48,7 +48,9 @@ Make the canonical seed the source owner for its complete valuation evidence:
    If exact canonical bond jobs are already terminal `FAILED`, fail before any reuse-path write and
    require a normal governed full reseed. The full reseed recreates portfolio-owned valuation work
    while preserving shared append-only authority; unchanged transaction replay cannot reopen an
-   already-completed readiness stage.
+   already-completed readiness stage. Repeat the terminal-failure check after authority becomes
+   durable so an in-flight job that fails during the upgrade cannot escape the initial snapshot or
+   enter downstream seed continuation.
 9. Require three consecutive terminal queue observations. Emit a content-bound JSON receipt only
    after a read-only PostgreSQL projection of the latest append-only source versions exactly
    matches every expected durable assignment and source fact; derive receipt counts and hashes
@@ -64,7 +66,7 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `102 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `103 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,

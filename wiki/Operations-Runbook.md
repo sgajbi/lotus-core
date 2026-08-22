@@ -309,7 +309,9 @@ source parents nor silently treats an existing pre-authority seed as complete. I
 canonical bond already has terminal failed valuation jobs, the tool fails before any write and
 requires a normal governed full reseed without `--skip-cleanup`. The full reseed recreates
 portfolio-owned valuation work while preserving shared append-only quote authority; unchanged
-transaction replay is not treated as a recovery mechanism for a completed readiness stage.
+transaction replay is not treated as a recovery mechanism for a completed readiness stage. A
+second check after durable authority catches jobs that become terminal during the upgrade before
+downstream seed continuation.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
