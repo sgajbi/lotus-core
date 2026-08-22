@@ -25,7 +25,12 @@ basis, or leave phantom quantity.
   factors.
 - Historical AVCO reconciliation persists the rebuilt state's restated original quantity alongside
   open quantity and basis. It does not reconstruct original authority from the pre-action BUY
-  payload while claiming a successful repair.
+  payload while claiming a successful repair. Its currentness fence compares the deterministic
+  original quantity of every source, so an otherwise-consistent estate repaired by an older writer
+  cannot retain stale source authority.
+- FIFO/AVCO disposal allocations carry strategy-owned original and pre-disposal quantities.
+  Amortized-cost overlays therefore allocate carrying amount after a split from the restated lot,
+  never from the immutable pre-action BUY quantity.
 - Local/base basis is conserved; original and open quantities persist atomically in the existing
   caller-owned transaction. Calculation lineage binds the exact restatement payload.
 - `quantity_restatement` is state-dependent and forces complete AVCO source-history reconstruction.
@@ -81,6 +86,12 @@ basis, or leave phantom quantity.
   `100%`; the four added invariant exits move financial-calculation branch coverage from `84.95%`
   to a calculated `85.47%` and changed critical-code branch coverage from `84.71%` to `85.24%`
   without changing thresholds or excluding source.
+- Final financial review: a split-before-disposal amortized-cost golden proves original/open
+  authority `200/200`, disposal `50`, and exact carrying-cost relief `24.25` rather than the stale
+  pre-split `48.5`. AVCO reconciliation now detects valid-lineage source-original drift, repairs
+  `175/225` back to planner authority `200/200`, and returns CURRENT on repeat (`15 passed in
+  71.49s`). The parity audit applies normalized identifier semantics to both lot and position-history
+  correlations, preventing padded legacy identifiers from disappearing from evidence.
 - Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
 - Repository database unit lane: `18 passed in 98.39s`; restored-lot repository integration:
   `12 passed in 109.45s`.
