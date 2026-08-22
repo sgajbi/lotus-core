@@ -13,7 +13,10 @@ requires explicit per-security quote metadata, normalizes both declared clean-pe
 to the price per 1,000-face held unit, and binds those inputs into the source hash; missing or
 mismatched metadata fails before publication and runtime quantity is not treated as face authority.
 Routine portfolio cleanup cannot delete this shared canonical source authority or its canonical
-portfolio/instrument parents. The reuse path requires canonical bond valuation work to be
+portfolio/instrument parents. Before cleanup or HTTP publication, entirely absent authority and an
+exact complete latest-version replay are accepted; partial, extra, or changed version-1 authority
+fails source-safely and requires an explicit full local-state reset. The reuse path requires
+canonical bond valuation work to be
 quiescent, waits for existing instruments, validates raw-price content before any scope mutation,
 publishes only missing observations, and only then repairs incorrect portfolio scope and authority
 without broad transaction replay. Active or terminal quote-authority work blocks reuse; a second

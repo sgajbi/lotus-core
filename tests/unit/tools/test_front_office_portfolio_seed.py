@@ -213,6 +213,62 @@ def test_durable_valuation_authority_rejects_incomplete_or_changed_state(monkeyp
         )
 
 
+@pytest.mark.parametrize("authority_posture", ["empty", "exact"])
+def test_preserved_valuation_authority_preflight_allows_empty_or_exact_state(
+    monkeypatch, authority_posture
+):
+    bundle = _build_bundle()
+    durable = (
+        {"valuation_policy_assignments": [], "market_price_source_facts": []}
+        if authority_posture == "empty"
+        else front_office_seed_module._expected_durable_valuation_authority(bundle)
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_durable_front_office_valuation_authority",
+        lambda **_kwargs: durable,
+    )
+
+    front_office_seed_module._require_compatible_preserved_valuation_authority(
+        postgres_container="postgres",
+        bundle=bundle,
+    )
+
+
+def test_full_seed_rejects_changed_preserved_authority_before_cleanup_or_http_writes(monkeypatch):
+    bundle = _build_bundle()
+    durable = front_office_seed_module._expected_durable_valuation_authority(bundle)
+    durable["market_price_source_facts"][0] = {
+        **durable["market_price_source_facts"][0],
+        "source_content_hash": "0" * 64,
+    }
+    monkeypatch.setattr(sys, "argv", ["front_office_portfolio_seed.py", "--ingest-only"])
+    monkeypatch.setattr(front_office_seed_module, "_wait_ready", lambda *_args: None)
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "build_front_office_portfolio_bundle",
+        lambda **_kwargs: bundle,
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_durable_front_office_valuation_authority",
+        lambda **_kwargs: durable,
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_cleanup_existing_front_office_seed",
+        lambda **_kwargs: pytest.fail("authority preflight must precede cleanup"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda *_args, **_kwargs: pytest.fail("authority preflight must precede HTTP writes"),
+    )
+
+    with pytest.raises(RuntimeError, match="explicit full local-state reset is required"):
+        front_office_seed_module.main()
+
+
 def test_verify_only_does_not_emit_evidence_when_durable_authority_is_unavailable(
     monkeypatch, tmp_path
 ):
@@ -2269,6 +2325,11 @@ def test_front_office_seed_reuse_repairs_cash_accounts_without_full_core_reinges
     monkeypatch.setattr(front_office_seed_module, "_portfolio_exists", lambda *_args: True)
     monkeypatch.setattr(
         front_office_seed_module,
+        "_require_compatible_preserved_valuation_authority",
+        lambda **_kwargs: timeline.append("valuation_authority_preflight"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
         "_ingest_front_office_core_data",
         lambda **_kwargs: pytest.fail("reuse must not replay core transactions"),
     )
@@ -2290,6 +2351,7 @@ def test_front_office_seed_reuse_repairs_cash_accounts_without_full_core_reinges
 
     assert front_office_seed_module.main() == 0
     assert timeline == [
+        "valuation_authority_preflight",
         "valuation_authority_upgraded",
         "cash_accounts_ingested_and_visible",
         "remaining_reference_data_ingested",

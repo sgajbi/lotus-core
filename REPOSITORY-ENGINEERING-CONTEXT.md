@@ -4076,6 +4076,9 @@ Most relevant current governance:
      may emit a source-safe content-bound JSON receipt only after exact durable-row comparison, and
      must observe three terminal queue snapshots so reopened work cannot masquerade as success.
      `--evidence-output` requires verification and must be rejected with `--ingest-only`.
+     Every ingest path must preflight preserved latest-version seed-owned authority before cleanup
+     or HTTP writes: accept only wholly absent authority or an exact complete replay, and require an
+     explicit full local-state reset for partial, extra, or changed version-1 evidence.
      Never restore price-magnitude
      inference or fabricate quote authority downstream when this evidence is unavailable.
 

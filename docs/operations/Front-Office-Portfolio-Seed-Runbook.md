@@ -193,6 +193,10 @@ routine seed cleanup never removes this shared tenant/book/security authority or
 portfolio/instrument parents. Identical version-1 replay is idempotent. Changed source evidence
 must use a governed newer source version; use an explicit full local-state reset for incompatible
 experimental history rather than deleting append-only evidence from a portfolio cleanup.
+Before either a full ingest or reuse write, the tool reads the preserved latest-version seed-owned
+authority. An entirely absent authority set and an exact complete replay are accepted; partial,
+extra, or changed version-1 authority fails before cleanup or HTTP publication and requires that
+explicit full local-state reset.
 
 `--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it first
 requires the canonical bond valuation work to be quiescent, waits for existing instruments, and

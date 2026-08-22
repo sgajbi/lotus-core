@@ -39,7 +39,9 @@ Make the canonical seed the source owner for its complete valuation evidence:
 7. Treat valuation assignments and source facts as shared append-only book authority. Routine
    portfolio cleanup preserves them and their canonical portfolio/instrument parents: identical
    version-1 replay is idempotent, while changed evidence must append a governed newer version or
-   use an explicit full local-state reset.
+   use an explicit full local-state reset. Before cleanup or any HTTP write, accept only wholly
+   absent seed-owned authority or an exact complete latest-version replay; partial, extra, or
+   changed version-1 authority fails source-safely and requires that reset.
 8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: require canonical bond
    valuation work to be quiescent, wait for existing instruments, and reject conflicting raw
    observations before any scope write. Publish only observations missing from the complete
@@ -68,7 +70,7 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `105 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `108 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,

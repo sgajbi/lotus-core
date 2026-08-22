@@ -3063,12 +3063,11 @@ def _expected_durable_valuation_authority(bundle: dict[str, Any]) -> dict[str, A
     return {"valuation_policy_assignments": assignments, "market_price_source_facts": facts}
 
 
-def _verify_durable_front_office_valuation_authority(
+def _read_durable_front_office_valuation_authority(
     *,
     postgres_container: str,
-    bundle: dict[str, Any],
 ) -> dict[str, Any]:
-    """Verify exact durable seed-owned authority and return its receipt projection."""
+    """Read the latest durable seed-owned authority projection."""
 
     sql = f"""
 select json_build_object(
@@ -3139,6 +3138,19 @@ select json_build_object(
 )::text;
 """
     durable = _read_postgres_json(postgres_container=postgres_container, sql=sql)
+    if not isinstance(durable, dict):
+        raise RuntimeError("Canonical durable valuation authority is invalid.")
+    return durable
+
+
+def _verify_durable_front_office_valuation_authority(
+    *,
+    postgres_container: str,
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    """Verify exact durable seed-owned authority and return its receipt projection."""
+
+    durable = _read_durable_front_office_valuation_authority(postgres_container=postgres_container)
     expected = _expected_durable_valuation_authority(bundle)
     if durable != expected:
         raise RuntimeError("Canonical durable valuation authority does not match the seed bundle.")
@@ -3151,6 +3163,27 @@ select json_build_object(
         "market_price_source_fact_count": len(facts),
         "market_price_source_facts_hash": _canonical_payload_fingerprint(facts),
     }
+
+
+def _require_compatible_preserved_valuation_authority(
+    *,
+    postgres_container: str,
+    bundle: dict[str, Any],
+) -> None:
+    """Reject writes when preserved append-only v1 authority conflicts with the bundle."""
+
+    durable = _read_durable_front_office_valuation_authority(postgres_container=postgres_container)
+    assignments = durable.get("valuation_policy_assignments")
+    facts = durable.get("market_price_source_facts")
+    if not isinstance(assignments, list) or not isinstance(facts, list):
+        raise RuntimeError("Canonical durable valuation authority is invalid.")
+    if not assignments and not facts:
+        return
+    if durable != _expected_durable_valuation_authority(bundle):
+        raise RuntimeError(
+            "Existing canonical valuation authority conflicts with the seed bundle; "
+            "an explicit full local-state reset is required."
+        )
 
 
 def _wait_for_durable_front_office_valuation_authority(
@@ -3678,6 +3711,10 @@ def main() -> int:
         benchmark_id=args.benchmark_id,
     )
     if not args.verify_only:
+        _require_compatible_preserved_valuation_authority(
+            postgres_container=args.postgres_container,
+            bundle=bundle,
+        )
         if not args.skip_cleanup:
             _cleanup_existing_front_office_seed(
                 postgres_container=args.postgres_container,
