@@ -46,7 +46,7 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     with patch(
         "src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository.observe_valuation_worker_jobs_claimed"
     ) as claimed_metric:
-        claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=50)
+        claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=1_001)
 
     assert len(claimed_jobs) == 2
     claimed_metric.assert_called_once_with(2)
@@ -66,6 +66,7 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     )
     assert "ORDER BY portfolio_valuation_jobs_1.epoch DESC" in compiled_query
     assert "LIMIT 1" in compiled_query
+    assert "LIMIT 1000" in compiled_query
     assert "portfolio_valuation_jobs.id = ANY (CAST((SELECT array_agg(" in compiled_postgres_query
     assert "AS INTEGER[]))" in compiled_postgres_query
     assert "FOR UPDATE SKIP LOCKED" in compiled_postgres_query
