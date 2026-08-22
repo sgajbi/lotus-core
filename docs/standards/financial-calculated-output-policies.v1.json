@@ -122,6 +122,7 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::AverageCostBasisStrategy.consume_sell_quantity_with_allocations",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.add_buy_lot",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.consume_sell_quantity_with_allocations",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.restate_lot_quantities",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_allocate_fifo_basis_transfer",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_assign_fifo_lot_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_consume_next_fifo_lot",
