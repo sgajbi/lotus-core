@@ -294,8 +294,9 @@ positions remain unvalued and valuation jobs report
 assignment/source evidence. If they instead report missing `signed_face_amount`, verify that the
 canonical bond fact was normalized to `UNIT_PRICE`; do not infer face from position quantity. Do not
 restore magnitude inference or synthesize quote authority in Gateway, Workbench, or another
-downstream service. A full seed and a reuse upgrade both wait for the exact portfolio tenant/book
-scope to become durable before dependent instruments, authority, dates, or transactions proceed.
+downstream service. A full seed waits for exact portfolio tenant/book scope before dependent data;
+reuse requires that scope and complete authority already durable and publishes no core valuation
+authority.
 Routine replay cleanup never deletes the shared append-only valuation
 authority or its canonical portfolio/instrument parents. Identical version-1 replay is idempotent;
 changed evidence must append a governed newer version or use an explicit full local-state reset.
@@ -303,14 +304,14 @@ Before cleanup or any ingest write, the tool accepts only entirely absent seed-o
 exact complete latest-version replay. Partial, extra, or changed version-1 authority fails before
 mutation and requires the explicit full local-state reset.
 
-On `--skip-cleanup`, the tool preserves transaction history, requires all canonical seeded valuation
-work to be quiescent, waits for existing instruments, and requires the complete canonical raw-price
-windows before any scope write. Missing observations or a price/currency conflict fail closed and
-require the governed full reseed; reuse does not publish raw prices without an exact deferred-work
-acknowledgement. With complete matching evidence, it updates the portfolio master only when durable
-tenant/book scope is wrong, then
-publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
-source parents nor silently treats an existing pre-authority seed as complete. If an affected
+On `--skip-cleanup`, the tool preserves transaction history but does not upgrade valuation
+authority. It requires all canonical seeded valuation work to be quiescent, exact durable
+tenant/book scope, existing instruments, complete matching raw-price windows, and exact durable
+valuation assignments/source facts. Wrong scope, absent authority, missing observations, or a
+price/currency conflict fails closed before core seed writes and requires the governed full reseed.
+Reuse does not publish portfolio scope, raw prices, or valuation authority because no durable
+source-row-to-consumer acknowledgement exists for deferred price processing. It neither rearms
+unchanged source parents nor silently treats an existing pre-authority seed as complete. If an affected
 canonical security already has terminal failed valuation jobs, the tool fails before any write and
 requires a normal governed full reseed without `--skip-cleanup`. The full reseed recreates
 portfolio-owned valuation work while preserving shared append-only quote authority; unchanged
@@ -318,7 +319,7 @@ transaction replay is not treated as a recovery mechanism for a completed readin
 second active-or-terminal check after durable authority catches concurrent work before downstream
 seed continuation. Wait and retry for active work; use the governed full reseed for terminal work.
 The same fence includes instrument reprocessing triggers and `RESET_WATERMARKS` jobs and runs after
-complete raw-price visibility is validated but before scope activation.
+complete raw-price visibility is validated but before durable authority verification.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured

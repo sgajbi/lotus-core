@@ -198,15 +198,16 @@ authority. An entirely absent authority set and an exact complete replay are acc
 extra, or changed version-1 authority fails before cleanup or HTTP publication and requires that
 explicit full local-state reset.
 
-`--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it first
-requires all canonical seeded valuation work to be quiescent, waits for existing instruments, and
-requires the complete canonical raw-price window before any scope write. Missing observations or
-price/currency conflicts fail closed and require a normal governed full reseed without
-`--skip-cleanup`; reuse never publishes raw prices without an exact acknowledgement that deferred
-price reprocessing has completed. With complete matching raw evidence, the tool updates the
-portfolio master only when durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` scope is wrong, then
-publishes and durably verifies valuation assignments/source facts before continuing. It never replays
-the full transaction set or rearms unchanged source parents. If an exact canonical security already
+`--skip-cleanup` preserves transaction history but is not an authority-upgrade mechanism. For an
+existing seed it first requires all canonical seeded valuation work to be quiescent and requires
+the exact durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` portfolio scope before reading dependent
+sources. It then waits for existing instruments, requires the complete matching canonical
+raw-price window, and verifies the exact durable valuation assignments/source facts. Wrong scope,
+absent authority, missing observations, or price/currency conflicts fail closed before core seed
+writes and require a normal governed full reseed without `--skip-cleanup`. Reuse never publishes
+portfolio scope, raw prices, or valuation authority because the current outbox contract has no
+source-row-to-consumer acknowledgement for deferred price processing. It never replays the full
+transaction set or rearms unchanged source parents. If an exact canonical security already
 has terminal failed valuation jobs, the reuse path fails before any write and requires a normal
 governed full reseed without `--skip-cleanup`. That path recreates portfolio-owned valuation work
 while preserving the shared append-only quote authority. It does not pretend that replaying an
@@ -216,7 +217,7 @@ from the initial snapshot or allowed into downstream seed continuation. Wait and
 active; use the full reseed when it is terminal.
 The fence covers direct valuation jobs, pending instrument reprocessing triggers, and active or
 failed `RESET_WATERMARKS` jobs. It runs again after complete raw-price visibility is validated and
-before any scope change, so deferred price correction work cannot escape into the upgrade.
+before durable authority verification, so deferred price correction work cannot escape into reuse.
 
 `--evidence-output` requires verification and is incompatible with `--ingest-only`; the tool rejects
 that combination before readiness checks rather than exiting successfully without an artifact.
