@@ -65,7 +65,7 @@ def test_processing_mode_profile_restores_one_average_cost_pool_source() -> None
     assert disposal["restored_open_lot_count"] == 1
     assert disposal["error_count"] == 0
     assert disposal["ending_open_quantity"] == "3.0000000000"
-    assert opening["ending_open_quantity"] == "1"
+    assert opening["ending_open_quantity"] == "1.0000000000"
     assert backdated["ending_open_quantity"] == "5.0000000000"
 
 
