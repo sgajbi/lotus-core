@@ -2542,9 +2542,7 @@ def test_same_instrument_ca_restatement_types_preserve_total_basis(
     cost_calculator, mock_disposition_engine, transaction_type
 ):
     signed_delta = (
-        Decimal("-10")
-        if transaction_type in {"REVERSE_SPLIT", "CONSOLIDATION"}
-        else Decimal("10")
+        Decimal("-10") if transaction_type in {"REVERSE_SPLIT", "CONSOLIDATION"} else Decimal("10")
     )
     mock_disposition_engine.restate_lot_quantities.return_value = LotRestatement.from_signed_delta(
         quantity_before=Decimal("100"),

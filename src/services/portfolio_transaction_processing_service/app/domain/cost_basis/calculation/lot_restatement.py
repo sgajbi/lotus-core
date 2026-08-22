@@ -53,9 +53,7 @@ class LotRestatement:
         """Scale one quantity and reject values requiring storage rounding."""
 
         _require_non_negative_persistable_quantity(quantity, field_name)
-        scaled = Fraction(quantity) * Fraction(self.quantity_after) / Fraction(
-            self.quantity_before
-        )
+        scaled = Fraction(quantity) * Fraction(self.quantity_after) / Fraction(self.quantity_before)
         storage_units = scaled * _LOT_QUANTITY_SCALE_FACTOR
         if storage_units.denominator != 1:
             raise LotRestatementError(
@@ -104,9 +102,7 @@ def _require_exact_persistable_quantity(value: Decimal, field_name: str) -> Deci
             field_name=field_name,
         )
     except (ArithmeticError, ValueError) as exc:
-        raise LotRestatementError(
-            f"{field_name} exceeds governed quantity precision"
-        ) from exc
+        raise LotRestatementError(f"{field_name} exceeds governed quantity precision") from exc
     if not isinstance(exact, Decimal):
         raise LotRestatementError(f"{field_name} did not normalize to a Decimal")
     return exact

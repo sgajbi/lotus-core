@@ -19,9 +19,7 @@ def test_restatement_applies_one_exact_ratio_to_original_and_open_quantity() -> 
     assert restatement.apply(Decimal("100"), field_name="original_quantity") == Decimal(
         "200.0000000000"
     )
-    assert restatement.apply(Decimal("75"), field_name="open_quantity") == Decimal(
-        "150.0000000000"
-    )
+    assert restatement.apply(Decimal("75"), field_name="open_quantity") == Decimal("150.0000000000")
     assert restatement.lineage_payload() == {
         "quantity_before": Decimal("75"),
         "quantity_after": Decimal("150"),
@@ -36,9 +34,7 @@ def test_restatement_supports_an_exact_repeating_ratio_without_rounding_factor()
         quantity_after=Decimal("4"),
     )
 
-    assert restatement.apply(Decimal("3"), field_name="open_quantity") == Decimal(
-        "4.0000000000"
-    )
+    assert restatement.apply(Decimal("3"), field_name="open_quantity") == Decimal("4.0000000000")
 
 
 def test_restatement_rejects_non_representable_source_quantity() -> None:
