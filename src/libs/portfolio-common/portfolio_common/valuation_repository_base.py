@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, case, func, or_, select, tuple_, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import Integer, and_, any_, case, cast, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -671,10 +671,15 @@ class ValuationRepositoryBase:
             .limit(effective_batch_size)
             .with_for_update(skip_locked=True)
         )
+        locked_eligible_ids = eligible_ids.subquery()
+        eligible_id_array = select(func.array_agg(locked_eligible_ids.c.id)).scalar_subquery()
 
         query = (
             update(PortfolioValuationJob)
-            .where(PortfolioValuationJob.id.in_(eligible_ids))
+            .where(
+                PortfolioValuationJob.id
+                == any_(cast(eligible_id_array, ARRAY(Integer)))
+            )
             .values(
                 status="PROCESSING",
                 requeue_requested=False,

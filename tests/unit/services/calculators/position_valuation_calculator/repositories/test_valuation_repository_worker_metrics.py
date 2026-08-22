@@ -53,12 +53,24 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
 
     claim_stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(claim_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_postgres_query = str(
+        claim_stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
     assert "NOT (EXISTS" not in compiled_query
     assert (
         "portfolio_valuation_jobs.epoch = (SELECT portfolio_valuation_jobs_1.epoch" in compiled_query
     )
     assert "ORDER BY portfolio_valuation_jobs_1.epoch DESC" in compiled_query
     assert "LIMIT 1" in compiled_query
+    assert (
+        "portfolio_valuation_jobs.id = ANY (CAST((SELECT array_agg("
+        in compiled_postgres_query
+    )
+    assert "AS INTEGER[]))" in compiled_postgres_query
+    assert "FOR UPDATE SKIP LOCKED" in compiled_postgres_query
     assert (
         "ORDER BY portfolio_valuation_jobs.portfolio_id ASC, "
         "portfolio_valuation_jobs.security_id ASC, "
