@@ -61,14 +61,12 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     )
     assert "NOT (EXISTS" not in compiled_query
     assert (
-        "portfolio_valuation_jobs.epoch = (SELECT portfolio_valuation_jobs_1.epoch" in compiled_query
+        "portfolio_valuation_jobs.epoch = (SELECT portfolio_valuation_jobs_1.epoch"
+        in compiled_query
     )
     assert "ORDER BY portfolio_valuation_jobs_1.epoch DESC" in compiled_query
     assert "LIMIT 1" in compiled_query
-    assert (
-        "portfolio_valuation_jobs.id = ANY (CAST((SELECT array_agg("
-        in compiled_postgres_query
-    )
+    assert "portfolio_valuation_jobs.id = ANY (CAST((SELECT array_agg(" in compiled_postgres_query
     assert "AS INTEGER[]))" in compiled_postgres_query
     assert "FOR UPDATE SKIP LOCKED" in compiled_postgres_query
     assert (
