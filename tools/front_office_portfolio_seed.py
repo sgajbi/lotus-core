@@ -8,7 +8,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlencode
@@ -2456,8 +2456,12 @@ def _missing_required_market_prices(
     query_base_url: str,
     bundle: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Return only canonical raw observations absent from the current query projection."""
+    """Return absent canonical observations and reject conflicting durable values."""
 
+    market_prices = cast(list[dict[str, Any]], bundle["market_prices"])
+    expected_by_key = {
+        (str(row["security_id"]), str(row["price_date"])): row for row in market_prices
+    }
     existing_keys: set[tuple[str, str]] = set()
     for security_id, start_date, end_date in _required_market_price_windows(bundle):
         _, payload = _request_json(
@@ -2469,11 +2473,27 @@ def _missing_required_market_prices(
             price_date = row.get("price_date")
             observed_security_id = row.get("security_id", security_id)
             if isinstance(observed_security_id, str) and isinstance(price_date, str):
-                existing_keys.add((observed_security_id, price_date))
+                key = (observed_security_id, price_date)
+                expected = expected_by_key.get(key)
+                if expected is None:
+                    continue
+                try:
+                    price_matches = Decimal(str(row.get("price"))) == Decimal(
+                        str(expected["price"])
+                    )
+                except (InvalidOperation, TypeError, ValueError) as exc:
+                    raise RuntimeError(
+                        "Existing canonical raw market-price observation is invalid."
+                    ) from exc
+                currency_matches = row.get("currency") == expected.get("currency")
+                if not price_matches or not currency_matches:
+                    raise RuntimeError(
+                        "Existing canonical raw market-price observation conflicts with "
+                        "seed authority."
+                    )
+                existing_keys.add(key)
     return [
-        row
-        for row in bundle["market_prices"]
-        if (row["security_id"], row["price_date"]) not in existing_keys
+        row for row in market_prices if (row["security_id"], row["price_date"]) not in existing_keys
     ]
 
 

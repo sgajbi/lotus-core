@@ -1562,9 +1562,24 @@ def test_front_office_seed_derives_required_market_price_windows():
 def test_front_office_seed_selects_only_missing_raw_price_tail(monkeypatch):
     bundle = {
         "market_prices": [
-            {"security_id": "CASH_USD", "price_date": "2026-04-09", "price": "1"},
-            {"security_id": "CASH_USD", "price_date": "2026-04-10", "price": "1"},
-            {"security_id": "CASH_USD", "price_date": "2026-04-30", "price": "1"},
+            {
+                "security_id": "CASH_USD",
+                "price_date": "2026-04-09",
+                "price": "1",
+                "currency": "USD",
+            },
+            {
+                "security_id": "CASH_USD",
+                "price_date": "2026-04-10",
+                "price": "1",
+                "currency": "USD",
+            },
+            {
+                "security_id": "CASH_USD",
+                "price_date": "2026-04-30",
+                "price": "1",
+                "currency": "USD",
+            },
         ]
     }
     monkeypatch.setattr(
@@ -1574,8 +1589,18 @@ def test_front_office_seed_selects_only_missing_raw_price_tail(monkeypatch):
             200,
             {
                 "prices": [
-                    {"security_id": "CASH_USD", "price_date": "2026-04-09"},
-                    {"security_id": "CASH_USD", "price_date": "2026-04-10"},
+                    {
+                        "security_id": "CASH_USD",
+                        "price_date": "2026-04-09",
+                        "price": "1.0000000000",
+                        "currency": "USD",
+                    },
+                    {
+                        "security_id": "CASH_USD",
+                        "price_date": "2026-04-10",
+                        "price": "1",
+                        "currency": "USD",
+                    },
                 ]
             },
         ),
@@ -1584,7 +1609,46 @@ def test_front_office_seed_selects_only_missing_raw_price_tail(monkeypatch):
     assert front_office_seed_module._missing_required_market_prices(
         query_base_url="http://query.dev.lotus",
         bundle=bundle,
-    ) == [{"security_id": "CASH_USD", "price_date": "2026-04-30", "price": "1"}]
+    ) == [
+        {
+            "security_id": "CASH_USD",
+            "price_date": "2026-04-30",
+            "price": "1",
+            "currency": "USD",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "existing_override",
+    [
+        {"price": "1.01", "currency": "USD"},
+        {"price": "1", "currency": "EUR"},
+    ],
+)
+def test_front_office_seed_rejects_conflicting_existing_raw_price(monkeypatch, existing_override):
+    expected = {
+        "security_id": "CASH_USD",
+        "price_date": "2026-04-10",
+        "price": "1",
+        "currency": "USD",
+    }
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda method, url, *, payload=None: (
+            200,
+            {"prices": [{**expected, **existing_override}]},
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="conflicts with seed authority") as exc_info:
+        front_office_seed_module._missing_required_market_prices(
+            query_base_url="http://query.dev.lotus",
+            bundle={"market_prices": [expected]},
+        )
+    for raw_value in existing_override.values():
+        assert str(raw_value) not in str(exc_info.value)
 
 
 def test_front_office_seed_waits_for_required_fx_readiness(monkeypatch):
