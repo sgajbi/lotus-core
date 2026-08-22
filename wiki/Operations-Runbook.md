@@ -1,5 +1,19 @@
 # Operations Runbook
 
+## Current Scope And Evidence
+
+This page is the first-response map for the Core app-local runtime, durable evidence, queue
+recovery, and canonical seed operations. Commands and limits below are backed by repository-owned
+contracts, tests, or the linked deep runbooks. They describe current Core behavior; they do not by
+themselves certify a particular environment, production capacity, or downstream product surface.
+
+| Reader | Start here | Escalate when |
+| --- | --- | --- |
+| Operations and support | Main operational surfaces, useful commands, and the affected runtime section | A source-safe failure persists after the documented bounded retry or recovery path |
+| Security and audit support | Durable Enterprise Access Evidence | Durable evidence is unavailable, fails domain verification, or requires controlled repair |
+| Valuation and derived-state support | Transaction-processing runtime and bounded database work | Backlog does not drain across polls, authority is missing, or terminal work conflicts with source truth |
+| Engineers and release owners | Linked contracts, deep runbooks, and validation commands | A contract, migration, topology, or operator command must change |
+
 ## Main operational surfaces
 
 - app-local compose runtime

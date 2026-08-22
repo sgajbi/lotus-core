@@ -111,5 +111,12 @@ is needed.
 - Alembic single-head SQL migration contract: passed.
 - Full lint/security/contract guard chain, MyPy across 318 source files, complete architecture guard,
   documentation evidence pack, architecture catalog, and wiki-source validation: passed.
-- Protected PR, exact-main, authored-wiki publication/parity, final independent review, and issue
-  closure evidence remain pending.
+- The changed `Operations-Runbook.md` passes the platform professional-wiki audit and the
+  repository wiki/docs gate after adding an early current-scope, evidence-boundary, and reader map.
+- At exact signed implementation head `ac7000b2a`, Remote Feature Lane `32568806213` and Quality
+  Baseline `32568807457` passed. PR Merge Gate `32568807448` passed every test and contract job
+  before this final documentation-only head. Codex review reported no major issues at that exact
+  implementation head, and all three earlier review threads are resolved with linked fix-forward
+  evidence.
+- Final documentation-head PR validation and review, exact-main validation, authored-wiki
+  publication/parity, and issue closure evidence remain pending.
