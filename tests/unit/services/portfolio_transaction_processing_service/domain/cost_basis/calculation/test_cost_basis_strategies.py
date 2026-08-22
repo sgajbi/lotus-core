@@ -148,6 +148,26 @@ def test_nonrepresentable_restatement_fails_before_mutating_any_source(strategy_
     assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal("3")
 
 
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_repeating_restatement_ratio_conserves_exact_base_and_local_basis(strategy_type) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        _restatement_buy(transaction_id="BUY-REPEATING", quantity="3", cost="1000")
+    )
+    before = strategy.get_open_lot_states()
+
+    strategy.restate_lot_quantities("P-RESTATE", "I-RESTATE", Decimal("1"))
+
+    after = strategy.get_open_lot_states()
+    assert sum(state.cost_local for state in after.values()) == sum(
+        state.cost_local for state in before.values()
+    )
+    assert sum(state.cost_base for state in after.values()) == sum(
+        state.cost_base for state in before.values()
+    )
+    assert after["BUY-REPEATING"].quantity == Decimal("4.0000000000")
+
+
 def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy):
     """
     Tests a standard scenario for the Average Cost method.

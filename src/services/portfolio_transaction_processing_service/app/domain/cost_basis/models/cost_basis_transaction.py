@@ -188,6 +188,9 @@ class CostBasisTransaction:
     realized_gain_loss: Decimal | None
     net_cost_local: Decimal | None
     realized_gain_loss_local: Decimal | None
+    source_lot_order_quantity: Decimal | None
+    source_lot_original_quantity: Decimal | None
+    lot_restatement: dict[str, Decimal] | None
     error_reason: str | None
     _extra_fields: dict[str, Any]
 
@@ -217,6 +220,9 @@ class CostBasisTransaction:
         realized_gain_loss: object = None,
         net_cost_local: object = None,
         realized_gain_loss_local: object = None,
+        source_lot_order_quantity: object = None,
+        source_lot_original_quantity: object = None,
+        lot_restatement: dict[str, Decimal] | None = None,
         error_reason: object = None,
         **extra_fields: Any,
     ) -> None:
@@ -278,6 +284,15 @@ class CostBasisTransaction:
             realized_gain_loss_local,
             field_name="realized_gain_loss_local",
         )
+        self.source_lot_order_quantity = _optional_non_negative(
+            source_lot_order_quantity,
+            field_name="source_lot_order_quantity",
+        )
+        self.source_lot_original_quantity = _optional_non_negative(
+            source_lot_original_quantity,
+            field_name="source_lot_original_quantity",
+        )
+        self.lot_restatement = lot_restatement
         self.error_reason = str(error_reason) if error_reason is not None else None
         self._extra_fields = dict(extra_fields)
         for field_name, value in self._extra_fields.items():

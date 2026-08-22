@@ -8,7 +8,14 @@ from decimal import Decimal
 
 from portfolio_common.domain.calculation_lineage import CalculationLineage
 
-BOOKED_TRANSACTION_DERIVED_FIELDS = frozenset({"calculation_lineage"})
+BOOKED_TRANSACTION_DERIVED_FIELDS = frozenset(
+    {
+        "calculation_lineage",
+        "lot_restatement",
+        "source_lot_order_quantity",
+        "source_lot_original_quantity",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -124,3 +131,6 @@ class BookedTransaction:
     created_at: datetime | None = None
     epoch: int | None = None
     calculation_lineage: CalculationLineage | None = None
+    lot_restatement: dict[str, Decimal] | None = None
+    source_lot_order_quantity: Decimal | None = None
+    source_lot_original_quantity: Decimal | None = None

@@ -184,6 +184,32 @@ async def test_persistence_supports_application_use_without_telemetry_adapter() 
     assert persisted == (_booked_transaction(transaction),)
 
 
+async def test_persistence_retains_lot_restatement_authority_for_position_parity() -> None:
+    transaction = _calculated_transaction("SPLIT-1", transaction_type="SPLIT")
+    restatement = {
+        "quantity_before": Decimal("75"),
+        "quantity_after": Decimal("150"),
+        "factor_numerator": Decimal("150"),
+        "factor_denominator": Decimal("75"),
+    }
+    transaction.set_calculated_field("lot_restatement", restatement)
+    repository, lot_states, income_offsets, observer = _ports()
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
+        transaction
+    )
+
+    (persisted,) = await persist_cost_basis_transactions(
+        processed=[transaction],
+        incoming_transaction_ids={transaction.transaction_id},
+        transactions=repository,
+        lot_states=lot_states,
+        income_offsets=income_offsets,
+        observer=observer,
+    )
+
+    assert persisted.lot_restatement == restatement
+
+
 async def test_persistence_stops_before_child_writes_when_canonical_row_is_missing() -> None:
     transaction = _calculated_transaction("BUY-MISSING")
     repository, lot_states, income_offsets, observer = _ports()
