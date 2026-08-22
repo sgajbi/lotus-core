@@ -353,12 +353,14 @@ def test_increment_preserves_original_quantity_tiebreak_for_partially_consumed_l
         "net_cost_local": Decimal("10"),
         "net_cost": Decimal("10"),
         "source_lot_order_quantity": Decimal("10"),
+        "source_lot_original_quantity": Decimal("10"),
     }
     smaller_original_lot = {
         **_raw_transaction("BUY-SMALL", transaction_date, "BUY", "5", "100"),
         "net_cost_local": Decimal("100"),
         "net_cost": Decimal("100"),
         "source_lot_order_quantity": Decimal("5"),
+        "source_lot_original_quantity": Decimal("5"),
     }
     sell = _raw_transaction("SELL-1", "2026-01-02T10:00:00+00:00", "SELL", "1", "30")
 

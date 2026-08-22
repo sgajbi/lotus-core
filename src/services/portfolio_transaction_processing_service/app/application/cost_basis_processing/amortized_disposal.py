@@ -218,11 +218,7 @@ def _decorate_allocation(
     if profile.currency != source_transaction.trade_currency.strip().upper():
         raise ValueError("amortized-cost profile currency does not match source-lot currency")
 
-    original_quantity = getattr(
-        source_transaction,
-        "source_lot_order_quantity",
-        source_transaction.quantity,
-    )
+    original_quantity = _source_lot_original_quantity(source_transaction)
     carried_book_cost = carried_book_cost_by_source.get(allocation.source_transaction_id)
     book_cost_fx_rate = _book_cost_fx_rate(
         source_transaction,
@@ -416,6 +412,15 @@ def _book_cost_fx_rate(
             field_name="book_cost_fx_rate_to_base",
         ),
     )
+
+
+def _source_lot_original_quantity(transaction: CostBasisTransaction) -> Decimal:
+    original_quantity = transaction.source_lot_original_quantity
+    if original_quantity is not None:
+        return original_quantity
+    if transaction.source_lot_order_quantity is not None:
+        raise ValueError("Restored source lot is missing original quantity authority")
+    return transaction.quantity
 
 
 def _apply_transaction_overlay(

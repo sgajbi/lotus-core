@@ -308,6 +308,7 @@ class CostBasisCalculationCoordinator:
             raise ValueError("Open average cost pool has no representative transaction")
         transaction_raw = build_cost_basis_engine_input(record.representative_transaction)
         transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
+        transaction_raw["source_lot_original_quantity"] = checkpoint.quantity
         transaction_raw["quantity"] = checkpoint.quantity
         transaction_raw["net_cost_local"] = checkpoint.cost_local
         transaction_raw["net_cost"] = checkpoint.cost_base

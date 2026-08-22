@@ -319,6 +319,7 @@ async def test_incremental_sell_resolves_restored_source_lot_economics() -> None
         "58.2",
     )
     restored_buy["source_lot_order_quantity"] = Decimal("100")
+    restored_buy["source_lot_original_quantity"] = Decimal("100")
     restored_buy["net_cost_local"] = "58.2"
     restored_buy["net_cost"] = "58.2"
     timeline = build_cost_basis_timeline_processor().process_increment(
@@ -363,6 +364,7 @@ async def test_incremental_sell_uses_persisted_residual_and_original_book_fx() -
         "97",
     )
     restored_buy["source_lot_order_quantity"] = Decimal("3")
+    restored_buy["source_lot_original_quantity"] = Decimal("3")
     restored_buy["net_cost_local"] = Decimal("70.0000000000")
     restored_buy["net_cost"] = Decimal("85.0000000000")
     restored_buy["amortized_cost_carry_state"] = AmortizedCostCarryState(
@@ -424,6 +426,7 @@ async def test_incremental_carried_sell_without_effective_profile_fails_closed()
         "97",
     )
     restored_buy["source_lot_order_quantity"] = Decimal("3")
+    restored_buy["source_lot_original_quantity"] = Decimal("3")
     restored_buy["net_cost_local"] = Decimal("70.0000000000")
     restored_buy["net_cost"] = Decimal("85.0000000000")
     restored_buy["amortized_cost_carry_state"] = AmortizedCostCarryState(
@@ -472,6 +475,7 @@ async def test_parked_profile_explicitly_unwinds_persisted_book_carry() -> None:
         "70",
     )
     restored_buy["source_lot_order_quantity"] = Decimal("3")
+    restored_buy["source_lot_original_quantity"] = Decimal("3")
     restored_buy["net_cost_local"] = Decimal("70.0000000000")
     restored_buy["net_cost"] = Decimal("85.0000000000")
     restored_buy["amortized_cost_carry_state"] = AmortizedCostCarryState(
