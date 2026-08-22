@@ -29,7 +29,6 @@ class PositionHistoryProcessingResult:
     position_record_count: int = 0
     rebuilt_transactions: tuple[BookedTransaction, ...] = ()
     locked_state_epoch: int | None = None
-    resulting_quantity: Decimal | None = None
     processed_transaction_quantity: Decimal | None = None
 
 
@@ -121,7 +120,6 @@ class PositionHistoryProcessor:
         return PositionHistoryProcessingResult(
             position_record_count=len(staged.records),
             locked_state_epoch=staged.locked_state_epoch,
-            resulting_quantity=_resulting_quantity(staged.records),
             processed_transaction_quantity=_transaction_quantity(
                 staged.records,
                 transaction_id=transaction.transaction_id,
@@ -207,7 +205,6 @@ class PositionHistoryProcessor:
             position_record_count=len(staged.records),
             rebuilt_transactions=rebuilt_transactions,
             locked_state_epoch=staged.locked_state_epoch,
-            resulting_quantity=_resulting_quantity(staged.records),
             processed_transaction_quantity=_transaction_quantity(
                 staged.records,
                 transaction_id=transaction.transaction_id,
@@ -282,10 +279,6 @@ class PositionHistoryProcessor:
             records=records,
             locked_state_epoch=locked_state_epoch,
         )
-
-
-def _resulting_quantity(records: tuple[PositionHistoryRecord, ...]) -> Decimal | None:
-    return records[-1].quantity if records else None
 
 
 def _transaction_quantity(
