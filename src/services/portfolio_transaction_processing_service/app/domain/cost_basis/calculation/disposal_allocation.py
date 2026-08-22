@@ -208,20 +208,23 @@ class SourceLotDisposalAllocation:
         _require_decimal(self.consumed_cost_base, "consumed_cost_base")
         if (self.source_original_quantity is None) != (self.source_open_quantity_before is None):
             raise ValueError("source quantity authority must be complete when supplied")
-        if self.source_original_quantity is not None:
+        source_original_quantity = self.source_original_quantity
+        source_open_quantity_before = self.source_open_quantity_before
+        if source_original_quantity is not None:
+            assert source_open_quantity_before is not None
             _require_decimal(
-                self.source_original_quantity,
+                source_original_quantity,
                 "source_original_quantity",
                 positive=True,
             )
             _require_decimal(
-                self.source_open_quantity_before,
+                source_open_quantity_before,
                 "source_open_quantity_before",
                 positive=True,
             )
-            if self.source_open_quantity_before > self.source_original_quantity:
+            if source_open_quantity_before > source_original_quantity:
                 raise ValueError("source open quantity must not exceed original quantity")
-            if self.consumed_quantity > self.source_open_quantity_before:
+            if self.consumed_quantity > source_open_quantity_before:
                 raise ValueError("consumed quantity must not exceed source open quantity")
         if self.amortized_cost_evidence is not None:
             if not isinstance(self.amortized_cost_evidence, AmortizedCostAllocationEvidence):
