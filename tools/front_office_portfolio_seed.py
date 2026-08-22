@@ -246,7 +246,11 @@ def _derive_reporting_summary_signals(
     return sorted(income_types), sorted(activity_buckets)
 
 
-def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
+def build_portfolio_seed_cleanup_sql(
+    *,
+    portfolio_id: str,
+    preserve_valuation_authority_parents: bool = False,
+) -> str:
     """
     Build the destructive local reseed cleanup SQL for the canonical front-office seed.
 
@@ -256,6 +260,14 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     rows from another demo portfolio can collide before portfolio-scoped cleanup applies. Clear only
     the canonical seed topic/service fences that can block a deterministic front-office reseed.
     """
+    parent_cleanup = (
+        []
+        if preserve_valuation_authority_parents
+        else [
+            f"delete from instruments where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolios where portfolio_id = '{portfolio_id}';",
+        ]
+    )
     return "\n".join(
         [
             (
@@ -313,31 +325,7 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             "delete from instrument_eligibility_profiles "
             "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
-            f"delete from instruments where portfolio_id = '{portfolio_id}';",
-            f"delete from portfolios where portfolio_id = '{portfolio_id}';",
-        ]
-    )
-
-
-def build_front_office_valuation_authority_cleanup_sql() -> str:
-    """Delete only valuation authority owned by the canonical front-office source namespace."""
-
-    return "\n".join(
-        [
-            (
-                "delete from market_price_source_facts "
-                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
-                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
-                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}' "
-                "and source_record_id like 'front-office-price:%';"
-            ),
-            (
-                "delete from instrument_valuation_policy_assignments "
-                f"where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}' "
-                f"and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}' "
-                f"and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}' "
-                "and source_record_id like 'front-office-valuation-policy:%';"
-            ),
+            *parent_cleanup,
         ]
     )
 
@@ -370,8 +358,10 @@ def build_front_office_seed_cleanup_sql(
         [
             "begin;",
             *business_date_bound_sql,
-            build_front_office_valuation_authority_cleanup_sql(),
-            build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
+            build_portfolio_seed_cleanup_sql(
+                portfolio_id=portfolio_id,
+                preserve_valuation_authority_parents=True,
+            ),
             *source_only_candidate_cleanup,
             *business_date_bound_sql,
             (
@@ -2480,6 +2470,50 @@ def _ingest_valuation_authority(
         )
 
 
+def _upgrade_front_office_valuation_authority(
+    *,
+    ingestion_base_url: str,
+    query_base_url: str,
+    postgres_container: str,
+    bundle: dict[str, Any],
+    portfolio_id: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    """Upgrade an existing canonical seed without replaying its transaction history."""
+
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/ingest/portfolios",
+        payload={"portfolios": bundle["portfolios"]},
+    )
+    _wait_for_portfolio_persistence(
+        query_base_url=query_base_url,
+        portfolio_id=portfolio_id,
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    _wait_for_portfolio_valuation_scope(
+        postgres_container=postgres_container,
+        portfolio_id=portfolio_id,
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    _wait_for_instrument_persistence(
+        query_base_url=query_base_url,
+        security_ids=[instrument["security_id"] for instrument in bundle["instruments"]],
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    _wait_for_required_market_price_readiness(
+        query_base_url=query_base_url,
+        bundle=bundle,
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    _ingest_valuation_authority(ingestion_base_url=ingestion_base_url, bundle=bundle)
+
+
 def _ingest_front_office_core_data(
     *,
     ingestion_base_url: str,
@@ -2745,6 +2779,204 @@ def _collect_front_office_readiness_diagnostics(
         diagnostics["aggregation_jobs_error"] = str(exc)
 
     return diagnostics
+
+
+def _read_postgres_json(
+    *,
+    postgres_container: str,
+    sql: str,
+) -> Any:
+    """Return one source-safe JSON value from the local canonical PostgreSQL runtime."""
+
+    command = [
+        "docker",
+        "exec",
+        postgres_container,
+        "psql",
+        "-U",
+        "user",
+        "-d",
+        "portfolio_db",
+        "-At",
+        "-v",
+        "ON_ERROR_STOP=1",
+    ]
+    command.extend(["-c", sql])
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError("Unable to read canonical durable authority from PostgreSQL.")
+    try:
+        return json.loads(result.stdout.strip())
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("Canonical durable authority returned invalid JSON.") from exc
+
+
+def _postgres_string_literal(value: str) -> str:
+    """Return one safely escaped PostgreSQL text literal for local operator SQL."""
+
+    if "\x00" in value:
+        raise ValueError("PostgreSQL text authority cannot contain NUL bytes.")
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _wait_for_portfolio_valuation_scope(
+    *,
+    postgres_container: str,
+    portfolio_id: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    sql = f"""
+select coalesce(
+  (
+    select json_build_object('tenant_id', tenant_id, 'legal_book_id', legal_book_id)
+    from portfolios
+    where portfolio_id = {_postgres_string_literal(portfolio_id)}
+  ),
+  'null'::json
+)::text;
+"""
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    while datetime.now(tz=UTC) <= deadline:
+        scope = _read_postgres_json(
+            postgres_container=postgres_container,
+            sql=sql,
+        )
+        if scope == {
+            "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+            "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
+        }:
+            return
+        time.sleep(poll_interval_seconds)
+    raise TimeoutError("Canonical portfolio valuation scope was not durably visible in time.")
+
+
+def _canonical_decimal_text(value: Any) -> str:
+    return format(Decimal(str(value)).normalize(), "f")
+
+
+def _expected_durable_valuation_authority(bundle: dict[str, Any]) -> dict[str, Any]:
+    assignments = sorted(
+        (
+            {
+                "assignment_reason": row["assignment_reason"],
+                "assignment_status": row["assignment_status"],
+                "assignment_version": row["assignment_version"],
+                "legal_book_id": row["legal_book_id"],
+                "observed_at": row["observed_at"],
+                "policy_id": row["policy_id"],
+                "policy_version": row["policy_version"],
+                "security_id": row["security_id"],
+                "source_record_id": row["source_record_id"],
+                "source_revision": row["source_revision"],
+                "source_system": row["source_system"],
+                "tenant_id": row["tenant_id"],
+                "valid_from": row["valid_from"],
+                "valid_to": row["valid_to"],
+            }
+            for row in bundle["valuation_policy_assignments"]
+        ),
+        key=lambda row: (row["security_id"], row["source_record_id"]),
+    )
+    facts = sorted(
+        (
+            {
+                "currency": row["currency"],
+                "fact_status": row["fact_status"],
+                "fact_version": row["fact_version"],
+                "legal_book_id": row["legal_book_id"],
+                "observed_at": row["observed_at"],
+                "price": _canonical_decimal_text(row["price"]),
+                "price_date": row["price_date"],
+                "quote_basis": row["quote_basis"],
+                "security_id": row["security_id"],
+                "source_content_hash": row["source_content_hash"],
+                "source_record_id": row["source_record_id"],
+                "source_revision": row["source_revision"],
+                "source_system": row["source_system"],
+                "tenant_id": row["tenant_id"],
+            }
+            for row in bundle["market_price_source_facts"]
+        ),
+        key=lambda row: (row["security_id"], row["price_date"], row["source_record_id"]),
+    )
+    return {"valuation_policy_assignments": assignments, "market_price_source_facts": facts}
+
+
+def _verify_durable_front_office_valuation_authority(
+    *,
+    postgres_container: str,
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    """Verify exact durable seed-owned authority and return its receipt projection."""
+
+    sql = f"""
+select json_build_object(
+  'valuation_policy_assignments', coalesce(
+    (
+      select json_agg(json_build_object(
+        'assignment_reason', assignment_reason,
+        'assignment_status', assignment_status,
+        'assignment_version', assignment_version,
+        'legal_book_id', legal_book_id,
+        'observed_at', to_char(observed_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),
+        'policy_id', policy_id,
+        'policy_version', policy_version,
+        'security_id', security_id,
+        'source_record_id', source_record_id,
+        'source_revision', source_revision,
+        'source_system', source_system,
+        'tenant_id', tenant_id,
+        'valid_from', to_char(valid_from, 'YYYY-MM-DD'),
+        'valid_to', case when valid_to is null then null else to_char(valid_to, 'YYYY-MM-DD') end
+      ) order by security_id, source_record_id)
+      from instrument_valuation_policy_assignments
+      where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+        and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
+        and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
+        and source_record_id like 'front-office-valuation-policy:%'
+    ), '[]'::json
+  ),
+  'market_price_source_facts', coalesce(
+    (
+      select json_agg(json_build_object(
+        'currency', currency,
+        'fact_status', fact_status,
+        'fact_version', fact_version,
+        'legal_book_id', legal_book_id,
+        'observed_at', to_char(observed_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),
+        'price', trim(trailing '.' from trim(trailing '0' from price::text)),
+        'price_date', to_char(price_date, 'YYYY-MM-DD'),
+        'quote_basis', quote_basis,
+        'security_id', security_id,
+        'source_content_hash', source_content_hash,
+        'source_record_id', source_record_id,
+        'source_revision', source_revision,
+        'source_system', source_system,
+        'tenant_id', tenant_id
+      ) order by security_id, price_date, source_record_id)
+      from market_price_source_facts
+      where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+        and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
+        and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
+        and source_record_id like 'front-office-price:%'
+    ), '[]'::json
+  )
+)::text;
+"""
+    durable = _read_postgres_json(postgres_container=postgres_container, sql=sql)
+    expected = _expected_durable_valuation_authority(bundle)
+    if durable != expected:
+        raise RuntimeError("Canonical durable valuation authority does not match the seed bundle.")
+    assignments = durable["valuation_policy_assignments"]
+    facts = durable["market_price_source_facts"]
+    return {
+        "durable_authority_verified": True,
+        "valuation_policy_assignment_count": len(assignments),
+        "valuation_policy_assignments_hash": _canonical_payload_fingerprint(assignments),
+        "market_price_source_fact_count": len(facts),
+        "market_price_source_facts_hash": _canonical_payload_fingerprint(facts),
+    }
 
 
 def _cleanup_existing_front_office_seed(
@@ -3150,7 +3382,7 @@ def _write_front_office_verification_evidence(
     *,
     output_path: Path,
     verification: dict[str, Any],
-    bundle: dict[str, Any],
+    durable_authority: dict[str, Any],
     start_date: date,
     end_date: date,
 ) -> dict[str, Any]:
@@ -3161,13 +3393,7 @@ def _write_front_office_verification_evidence(
         "portfolio_id": verification["portfolio_id"],
         "start_date": start_date.isoformat(),
         "as_of_date": end_date.isoformat(),
-        "authority": {
-            "valuation_policy_assignment_count": len(bundle["valuation_policy_assignments"]),
-            "market_price_source_fact_count": len(bundle["market_price_source_facts"]),
-            "market_price_source_facts_hash": _canonical_payload_fingerprint(
-                bundle["market_price_source_facts"]
-            ),
-        },
+        "authority": durable_authority,
         "verification": verification,
     }
     evidence["content_hash"] = _canonical_payload_fingerprint(evidence)
@@ -3275,6 +3501,15 @@ def main() -> int:
                 poll_interval_seconds=args.poll_interval_seconds,
             )
         else:
+            _upgrade_front_office_valuation_authority(
+                ingestion_base_url=ingestion_base_url,
+                query_base_url=query_base_url,
+                postgres_container=args.postgres_container,
+                bundle=bundle,
+                portfolio_id=args.portfolio_id,
+                wait_seconds=args.wait_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
             _ingest_cash_account_masters(
                 ingestion_base_url=ingestion_base_url,
                 query_base_url=query_base_url,
@@ -3305,10 +3540,14 @@ def main() -> int:
         )
         LOGGER.info("Front-office seed verified: %s", verification)
         if args.evidence_output is not None:
+            durable_authority = _verify_durable_front_office_valuation_authority(
+                postgres_container=args.postgres_container,
+                bundle=bundle,
+            )
             evidence = _write_front_office_verification_evidence(
                 output_path=args.evidence_output,
                 verification=verification,
-                bundle=bundle,
+                durable_authority=durable_authority,
                 start_date=start_date,
                 end_date=end_date,
             )
