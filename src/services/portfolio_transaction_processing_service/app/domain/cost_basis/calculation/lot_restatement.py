@@ -62,10 +62,7 @@ class LotRestatement:
                 f"{field_name} cannot be restated exactly at {LOT_QUANTITY_SCALE} decimal places"
             )
         result = Decimal(storage_units.numerator).scaleb(-LOT_QUANTITY_SCALE)
-        return TRANSACTION_PERSISTENCE_PRECISION_V1.require_exact(
-            result,
-            field_name=field_name,
-        )
+        return _require_exact_persistable_quantity(result, field_name)
 
     def lineage_payload(self) -> dict[str, Decimal]:
         """Return the exact ratio authority for calculation lineage."""
@@ -89,10 +86,22 @@ def _require_non_negative_persistable_quantity(value: object, field_name: str) -
     _require_finite_decimal(value, field_name)
     if value < Decimal(0):
         raise LotRestatementError(f"{field_name} must be non-negative")
-    TRANSACTION_PERSISTENCE_PRECISION_V1.require_exact(value, field_name=field_name)
+    _require_exact_persistable_quantity(value, field_name)
 
 
 def _require_positive_persistable_quantity(value: object, field_name: str) -> None:
     _require_non_negative_persistable_quantity(value, field_name)
     if value == Decimal(0):
         raise LotRestatementError(f"{field_name} must be positive")
+
+
+def _require_exact_persistable_quantity(value: Decimal, field_name: str) -> Decimal:
+    try:
+        return TRANSACTION_PERSISTENCE_PRECISION_V1.require_exact(
+            value,
+            field_name=field_name,
+        )
+    except (ArithmeticError, ValueError) as exc:
+        raise LotRestatementError(
+            f"{field_name} exceeds governed quantity precision"
+        ) from exc
