@@ -4056,7 +4056,9 @@ Most relevant current governance:
      clean-percent-to-unit-price normalization into the source content hash. All canonical
      assignments use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`; runtime position quantity is
      never relabeled as face authority. Source fact identity is stable for replay and its content
-     hash changes with source evidence. Cleanup may remove only evidence owned by
+     hash changes with source evidence. Cash unit-price facts must extend through the latest
+     planned-withdrawal transaction date because future cash legs enter the same exact-scope
+     valuation queue. Cleanup may remove only evidence owned by
      `LOTUS_FRONT_OFFICE_SEED` in the exact canonical tenant/book. Never restore price-magnitude
      inference or fabricate quote authority downstream when this evidence is unavailable.
 

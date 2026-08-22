@@ -31,7 +31,9 @@ Make the canonical seed the source owner for its complete valuation evidence:
    changes the hash.
 5. Ingest authority only after raw price readiness and before activating the business-date
    horizon. Keep each source-fact request within the existing 500-record contract.
-6. On canonical replay, delete only evidence owned by `LOTUS_FRONT_OFFICE_SEED` in the exact
+6. Extend cash unit-price authority through the latest planned-withdrawal transaction date; the
+   future cash legs are valuation work in the same exact portfolio scope.
+7. On canonical replay, delete only evidence owned by `LOTUS_FRONT_OFFICE_SEED` in the exact
    canonical tenant/book before republishing version `1`.
 
 ## Compatibility and boundaries
@@ -55,9 +57,12 @@ under #798. Downstream applications must consume Core authority and must not fab
   nine non-bond positions, and recorded the exact missing-authority reason for both bonds. Patched
   replay proved the assignments and 4,136 facts were present, removed the missing-quote error, and
   then exposed that a percent-of-face policy requires independent `signed_face_amount` authority.
-  The final source-owned unit-price normalization avoids that prohibited runtime inference. Live
-  11-of-11 valuation, terminal-queue stability, protected PR, exact-main, wiki publication, issue
-  closure, and branch/worktree hygiene remain pending at this fixed-local checkpoint.
+  The source-owned unit-price normalization avoids that prohibited runtime inference. A subsequent
+  replay reached 11-of-11 valued positions with zero bond failures, then identified two future cash
+  jobs whose dates were beyond the former cash fact window; the final bundle extends exact-scope
+  cash authority through that planned-withdrawal horizon. Terminal-queue stability, protected PR,
+  exact-main, wiki publication, issue closure, and branch/worktree hygiene remain pending at this
+  fixed-local checkpoint.
 
 ## Documentation decision
 

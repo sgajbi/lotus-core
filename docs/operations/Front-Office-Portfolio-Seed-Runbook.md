@@ -60,6 +60,8 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 - normalized cash-book transaction rows with `price = 1` and
   `quantity = gross_transaction_amount`
 - full valuation coverage through the report end date so performance analytics remain valid
+- unit-price cash authority through the latest planned-withdrawal transaction date so future cash
+  legs do not create terminal exact-scope valuation failures
 - effective-dated valuation-policy assignments for every seeded instrument and authoritative
   market-price source facts for every seeded price observation. The canonical source contract
   defines one held bond unit as 1,000 face and deterministically normalizes its clean-percent quote

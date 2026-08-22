@@ -281,6 +281,11 @@ relabeled as runtime face authority. Transactions are posted only after that fen
 being misclassified as late corrections while preserving durable replay for backdated or future
 observations against an existing horizon.
 
+Cash unit-price facts continue through the latest planned-withdrawal transaction date because those
+future cash legs enter the same exact-scope valuation queue. A canonical authority bundle that ends
+cash facts at the reporting date is incomplete even when current positions already show 11-of-11
+valued.
+
 The canonical portfolio owns valuation scope `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK`. If only bond
 positions remain unvalued and valuation jobs report
 `bond valuation requires explicit quote-convention authority`, repair the missing same-scope Core
