@@ -9,10 +9,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AverageCostPool,
     AverageCostSourceAllocation,
     OpenLotState,
-)
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.calculation.average_cost_source_allocation import (
-    AverageCostSourceContribution,
-    _assign_quantity_residual,
+    calculation,
 )
 
 
@@ -59,8 +56,10 @@ def test_average_cost_disposals_do_not_rewrite_source_contributions() -> None:
 def test_quantity_residual_never_revives_a_stale_generation() -> None:
     book_key = ("P1", "I1")
 
-    def contribution(source_id: str, generation: int) -> AverageCostSourceContribution:
-        return AverageCostSourceContribution(
+    def contribution(
+        source_id: str, generation: int
+    ) -> calculation.average_cost_source_allocation.AverageCostSourceContribution:
+        return calculation.average_cost_source_allocation.AverageCostSourceContribution(
             book_key=book_key,
             source_lot_id=f"LOT-{source_id}",
             source_acquisition_date=date(2026, 1, 1),
@@ -77,7 +76,7 @@ def test_quantity_residual_never_revives_a_stale_generation() -> None:
         )
 
     quantities = {"CURRENT": Decimal(0), "STALE": Decimal(0)}
-    _assign_quantity_residual(
+    calculation.average_cost_source_allocation._assign_quantity_residual(
         contributions=(
             ("CURRENT", contribution("CURRENT", 2)),
             ("STALE", contribution("STALE", 1)),
