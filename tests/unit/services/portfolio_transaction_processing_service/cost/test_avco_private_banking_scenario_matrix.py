@@ -248,9 +248,7 @@ def test_avco_quantity_restatements_preserve_source_basis(transaction_type: str)
     assert not errors
     assert processed[-1].net_cost == Decimal("0")
     expected_quantity = (
-        Decimal("80")
-        if transaction_type in {"REVERSE_SPLIT", "CONSOLIDATION"}
-        else Decimal("120")
+        Decimal("80") if transaction_type in {"REVERSE_SPLIT", "CONSOLIDATION"} else Decimal("120")
     )
     assert _source_values(states)["AVCO-MATRIX-SEED-BUY"] == (
         expected_quantity,

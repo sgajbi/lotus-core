@@ -204,6 +204,7 @@ class PositionHistoryProcessor:
             locked_state_epoch=staged.locked_state_epoch,
             resulting_quantity=_resulting_quantity(staged.records),
         )
+
     async def _recalculate_current_history(
         self,
         *,

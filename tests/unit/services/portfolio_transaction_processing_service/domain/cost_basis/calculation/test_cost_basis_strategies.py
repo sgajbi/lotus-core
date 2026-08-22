@@ -1187,9 +1187,9 @@ def test_average_cost_near_full_disposal_couples_quantity_and_basis_residuals() 
         [
             remaining_transaction.model_copy(
                 update={
-                        "quantity": remaining_state.quantity,
-                        "source_lot_original_quantity": remaining_state.original_quantity,
-                        "gross_transaction_amount": remaining_state.cost_local,
+                    "quantity": remaining_state.quantity,
+                    "source_lot_original_quantity": remaining_state.original_quantity,
+                    "gross_transaction_amount": remaining_state.cost_local,
                     "net_cost": remaining_state.cost_base,
                     "net_cost_local": remaining_state.cost_local,
                 }

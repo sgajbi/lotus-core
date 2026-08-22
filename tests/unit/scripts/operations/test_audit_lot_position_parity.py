@@ -36,8 +36,6 @@ def test_report_exposes_stable_mismatch_without_transaction_or_lot_identifiers()
         "current_count": 0,
         "drifted_count": 1,
     }
-    assert report["assessments"][0]["finding_type"] == (
-        LOT_QUANTITY_VS_POSITION_MISMATCH
-    )
+    assert report["assessments"][0]["finding_type"] == (LOT_QUANTITY_VS_POSITION_MISMATCH)
     assert "transaction_id" not in report["assessments"][0]
     assert "lot_id" not in report["assessments"][0]

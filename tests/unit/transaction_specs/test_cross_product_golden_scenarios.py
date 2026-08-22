@@ -276,9 +276,7 @@ def test_quantity_restatement_golden_scenarios_conserve_basis_through_sale(
     sell = result.processed[-1]
     expected = scenario["expected"]
     assert sell.net_cost == Decimal(expected["cost_basis_impact"]["sell_cost_relief"])
-    assert sell.realized_gain_loss == Decimal(
-        expected["cost_basis_impact"]["realized_gain_loss"]
-    )
+    assert sell.realized_gain_loss == Decimal(expected["cost_basis_impact"]["realized_gain_loss"])
     assert sum(state.quantity for state in result.open_lot_states.values()) == Decimal(
         expected["lot_state"]["open_quantity"]
     )
