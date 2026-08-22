@@ -182,6 +182,8 @@ class SourceLotDisposalAllocation:
     consumed_quantity: Decimal
     consumed_cost_local: Decimal
     consumed_cost_base: Decimal
+    source_original_quantity: Decimal | None = None
+    source_open_quantity_before: Decimal | None = None
     amortized_cost_evidence: AmortizedCostAllocationEvidence | None = None
 
     def __post_init__(self) -> None:
@@ -204,6 +206,23 @@ class SourceLotDisposalAllocation:
         _require_decimal(self.consumed_quantity, "consumed_quantity", positive=True)
         _require_decimal(self.consumed_cost_local, "consumed_cost_local")
         _require_decimal(self.consumed_cost_base, "consumed_cost_base")
+        if (self.source_original_quantity is None) != (self.source_open_quantity_before is None):
+            raise ValueError("source quantity authority must be complete when supplied")
+        if self.source_original_quantity is not None:
+            _require_decimal(
+                self.source_original_quantity,
+                "source_original_quantity",
+                positive=True,
+            )
+            _require_decimal(
+                self.source_open_quantity_before,
+                "source_open_quantity_before",
+                positive=True,
+            )
+            if self.source_open_quantity_before > self.source_original_quantity:
+                raise ValueError("source open quantity must not exceed original quantity")
+            if self.consumed_quantity > self.source_open_quantity_before:
+                raise ValueError("consumed quantity must not exceed source open quantity")
         if self.amortized_cost_evidence is not None:
             if not isinstance(self.amortized_cost_evidence, AmortizedCostAllocationEvidence):
                 raise TypeError(
