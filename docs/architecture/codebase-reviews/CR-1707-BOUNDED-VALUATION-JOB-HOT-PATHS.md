@@ -25,9 +25,10 @@ bounded and primary-key indexed.
    for `PROCESSING` rows. Upgrade and downgrade create the replacement before dropping the
    superseded index, using PostgreSQL concurrent index operations outside the migration
    transaction so the hot writer table is not blocked by an index build. The migration inspects
-   PostgreSQL catalog validity and the exact governed definition before acting: a valid partial
-   replacement is resumed, an invalid interrupted concurrent build is dropped and rebuilt, and a
-   conflicting same-name index fails source-safely instead of being silently accepted.
+   PostgreSQL catalog validity and both the replacement and superseded governed definitions before
+   acting: a valid partial replacement is resumed, an invalid interrupted concurrent build is
+   dropped and rebuilt, and a conflicting same-name index fails source-safely instead of being
+   silently accepted or removed.
 4. Existing chunked, predicate-rechecked reset/fail/supersede updates remain unchanged. Repository
    methods still stage work only; the scheduler-owned unit of work retains commit and rollback
    authority.
@@ -90,9 +91,9 @@ needed.
   1,000 and 1 cohorts in 90.53s.
 - Complete valuation repository PostgreSQL file: 40 passed in 253.42s.
 - Repository-native `test-unit-db`: 18 passed in 113.99s.
-- Restart-safe index unit matrix: 4 passed; governed resume, invalid repair, conflicting-definition
-  rejection, and reversible online DDL are covered.
-- Online index downgrade/upgrade and interrupted-create replay PostgreSQL proof: 2 passed in 96.68s.
+- Restart-safe index unit matrix: 5 passed; governed resume, invalid repair, conflicting required
+  or superseded definition rejection, and reversible online DDL are covered.
+- Online index downgrade/upgrade and interrupted-create replay PostgreSQL proof: 2 passed in 89.71s.
 - Alembic single-head SQL migration contract: passed.
 - Full lint/security/contract guard chain, MyPy across 318 source files, complete architecture guard,
   documentation evidence pack, architecture catalog, and wiki-source validation: passed.

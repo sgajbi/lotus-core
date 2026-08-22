@@ -31,7 +31,13 @@ def test_valuation_job_hot_path_index_migration_is_reversible(monkeypatch) -> No
     migration["upgrade"].__globals__["_index_state"] = MagicMock(
         side_effect=[
             None,
-            index_state(True, True, "old"),
+            index_state(
+                True,
+                True,
+                "CREATE INDEX old ON public.portfolio_valuation_jobs USING btree "
+                "(valuation_lease_expires_at) "
+                "WHERE ((status)::text = 'PROCESSING'::text)",
+            ),
         ]
     )
 
@@ -39,7 +45,13 @@ def test_valuation_job_hot_path_index_migration_is_reversible(monkeypatch) -> No
     migration["downgrade"].__globals__["_index_state"] = MagicMock(
         side_effect=[
             None,
-            index_state(True, True, "new"),
+            index_state(
+                True,
+                True,
+                "CREATE INDEX new ON public.portfolio_valuation_jobs USING btree "
+                "(valuation_lease_expires_at, id) "
+                "WHERE ((status)::text = 'PROCESSING'::text)",
+            ),
         ]
     )
     migration["downgrade"]()
@@ -94,7 +106,13 @@ def test_upgrade_resumes_valid_partial_replacement(monkeypatch) -> None:
                 "(valuation_lease_expires_at, id) "
                 "WHERE ((status)::text = 'PROCESSING'::text)",
             ),
-            index_state(True, True, "old"),
+            index_state(
+                True,
+                True,
+                "CREATE INDEX old ON public.portfolio_valuation_jobs USING btree "
+                "(valuation_lease_expires_at) "
+                "WHERE ((status)::text = 'PROCESSING'::text)",
+            ),
         ]
     )
 
@@ -121,7 +139,13 @@ def test_upgrade_repairs_invalid_concurrent_index(monkeypatch) -> None:
     migration["upgrade"].__globals__["_index_state"] = MagicMock(
         side_effect=[
             index_state(False, False, "invalid"),
-            index_state(True, True, "old"),
+            index_state(
+                True,
+                True,
+                "CREATE INDEX old ON public.portfolio_valuation_jobs USING btree "
+                "(valuation_lease_expires_at) "
+                "WHERE ((status)::text = 'PROCESSING'::text)",
+            ),
         ]
     )
 
@@ -167,6 +191,40 @@ def test_upgrade_rejects_conflicting_existing_index(monkeypatch) -> None:
             True,
             "CREATE INDEX conflicting ON public.portfolio_valuation_jobs USING btree (id)",
         )
+    )
+
+    with pytest.raises(RuntimeError, match="does not match the governed index definition"):
+        migration["upgrade"]()
+
+    create_index.assert_not_called()
+    drop_index.assert_not_called()
+
+
+def test_upgrade_rejects_conflicting_superseded_index(monkeypatch) -> None:
+    create_index = MagicMock()
+    drop_index = MagicMock()
+    migration_context = MagicMock()
+    migration_context.as_sql = False
+    monkeypatch.setattr(op, "create_index", create_index)
+    monkeypatch.setattr(op, "drop_index", drop_index)
+    monkeypatch.setattr(op, "get_context", MagicMock(return_value=migration_context))
+    migration = runpy.run_path(str(MIGRATION))
+    index_state = migration["_IndexState"]
+    migration["upgrade"].__globals__["_index_state"] = MagicMock(
+        side_effect=[
+            index_state(
+                True,
+                True,
+                "CREATE INDEX new ON public.portfolio_valuation_jobs USING btree "
+                "(valuation_lease_expires_at, id) "
+                "WHERE ((status)::text = 'PROCESSING'::text)",
+            ),
+            index_state(
+                True,
+                True,
+                "CREATE INDEX conflicting ON public.portfolio_valuation_jobs USING btree (id)",
+            ),
+        ]
     )
 
     with pytest.raises(RuntimeError, match="does not match the governed index definition"):
