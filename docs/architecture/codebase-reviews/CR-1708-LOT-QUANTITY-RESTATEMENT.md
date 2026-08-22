@@ -15,11 +15,14 @@ basis, or leave phantom quantity.
 - One `LotRestatement` retains exact before/after Decimal authorities and applies their rational
   ratio to every original/open quantity without a rounded factor.
 - FIFO lots and AVCO source/pool authority precompute every replacement before mutation. Any
-  non-representable lot rejects the complete event at the transaction persistence scale.
+  non-representable lot or pool/source segment rejects the complete event at the transaction
+  persistence scale without partially mutating the in-memory strategy.
 - AVCO materialization caps each preliminary open-quantity share by its source original quantity,
   then assigns the exact storage-quantum residual deterministically across remaining source
   headroom. Aggregate quantity that cannot be represented without violating source authority fails
-  closed instead of over-allocating the final source lot.
+  closed instead of over-allocating the final source lot. Residual candidates are fenced to the
+  current source-allocation generation consistently with materialized quantities and disposal
+  factors.
 - Historical AVCO reconciliation persists the rebuilt state's restated original quantity alongside
   open quantity and basis. It does not reconstruct original authority from the pre-action BUY
   payload while claiming a successful repair.
@@ -68,6 +71,11 @@ basis, or leave phantom quantity.
   two-BUY, forward-SPLIT, partial-SELL history to original quantities `200/200`, open quantities
   `175/175`, and conserved pool/source basis `1,925`; the repair is idempotent (`1 passed in
   69.26s`). The complete cost repository pack passes `40` tests.
+- Final unresolved-thread reconciliation: an AVCO basis-transfer/disposal sequence proves a
+  non-representable pool segment rejects before source or pool mutation; a direct residual proof
+  prevents stale-generation revival; and the position application/port result now carries only the
+  corporate-action-row quantity actually consumed by the parity fence. The focused domain,
+  application, and adapter pack passes `105` warning-strict tests.
 - Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
 - Repository database unit lane: `18 passed in 98.39s`; restored-lot repository integration:
   `12 passed in 109.45s`.

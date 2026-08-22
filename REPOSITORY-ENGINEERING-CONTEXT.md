@@ -4105,7 +4105,9 @@ Most relevant current governance:
      `BONUS_ISSUE`, and `STOCK_DIVIDEND`) must restate both original and open FIFO/AVCO lot
      quantities through one exact before/after ratio while conserving local and base basis. Never
      round a per-lot remainder: if any lot is not exactly representable at the governed transaction
-     quantity scale, reject the complete event before state mutation. The cost output carries the
+     quantity scale, reject the complete event before state mutation. AVCO must precompute both
+     pool and source-allocation segment quantities before applying any source or pool replacement;
+     a late segment failure must never leave an in-memory strategy partially restated. The cost output carries the
      exact ratio as ephemeral authority into position processing; compare the restated lot total
      with the position quantity at the same corporate-action transaction before cashflow, readiness,
      or commit and reject
@@ -4121,7 +4123,9 @@ Most relevant current governance:
      source headroom. If the aggregate exceeds total active source authority, fail closed; do not
      hide the inconsistency by assigning the complete remainder to a final source. Prove
      interleaved buy/disposal sequences, exact aggregate conservation, deterministic residual
-     placement, and the unreconcilable posture under the warning-strict unit gate.
+     placement, and the unreconcilable posture under the warning-strict unit gate. Every residual
+     candidate must belong to the current source-allocation generation; stale generations remain
+     ineligible under the same rule as materialized quantity and disposal factors.
 
 253. Historical AVCO reconciliation and repair must persist every rebuilt lot authority from the
      planner's `OpenLotState`, including `original_quantity`; never combine restated open quantity
