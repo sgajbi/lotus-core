@@ -42,13 +42,13 @@ Make the canonical seed the source owner for its complete valuation evidence:
    use an explicit full local-state reset. Before cleanup or any HTTP write, accept only wholly
    absent seed-owned authority or an exact complete latest-version replay; partial, extra, or
    changed version-1 authority fails source-safely and requires that reset.
-8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: require canonical bond
+8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: require all canonical seeded
    valuation work to be quiescent, wait for existing instruments, and reject conflicting raw
    observations before any scope write. Publish only observations missing from the complete
    raw-price windows, update the portfolio master only when durable tenant/book scope is wrong,
    then publish and durably verify
    assignments and source facts without broad transaction replay or rearming unchanged parents.
-   Active or terminal exact canonical bond jobs block the reuse path before mutation. Wait and retry
+   Active or terminal exact canonical security jobs block the reuse path before mutation. Wait and retry
    active work; terminal work requires a normal governed full reseed. The full reseed recreates
    portfolio-owned valuation work while preserving shared append-only authority; unchanged
    transaction replay cannot reopen an already-completed readiness stage. Repeat the check after

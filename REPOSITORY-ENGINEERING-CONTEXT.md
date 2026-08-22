@@ -4066,7 +4066,7 @@ Most relevant current governance:
      authority or its canonical portfolio/instrument parents; identical source-version replay is
      idempotent and changed evidence requires a governed newer version or explicit full local-state
      reset. The `--skip-cleanup` path must
-     require exact canonical quote-authority valuation work to be quiescent, wait for existing
+     require all canonical seeded valuation work to be quiescent, wait for existing
      instruments, validate raw-price content before any scope mutation, publish only missing
      observations, then update portfolio scope only when wrong and durably prove assignments and
      latest-version facts. Active or terminal quote-authority work blocks the reuse path; repeat the

@@ -199,13 +199,13 @@ extra, or changed version-1 authority fails before cleanup or HTTP publication a
 explicit full local-state reset.
 
 `--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it first
-requires the canonical bond valuation work to be quiescent, waits for existing instruments, and
+requires all canonical seeded valuation work to be quiescent, waits for existing instruments, and
 validates every existing raw-price observation before any scope write. It publishes only missing
 observations, then updates the portfolio master only when durable `LOTUS_PB_SG` /
 `SG_PRIVATE_BANK_BOOK` scope is wrong. Existing observations must match the canonical price and
 currency; conflicts fail closed without partially activating new scope. The tool then publishes and
 durably verifies valuation assignments/source facts before continuing. It never replays
-the full transaction set or rearms unchanged source parents. If an exact canonical bond already
+the full transaction set or rearms unchanged source parents. If an exact canonical security already
 has terminal failed valuation jobs, the reuse path fails before any write and requires a normal
 governed full reseed without `--skip-cleanup`. That path recreates portfolio-owned valuation work
 while preserving the shared append-only quote authority. It does not pretend that replaying an
