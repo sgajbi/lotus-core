@@ -47,7 +47,6 @@ def _restore_current_hot_path_index(
     hot_path_migration: dict[str, Any],
     connection,
 ) -> None:
-    connection.rollback()
     indexes = _valuation_job_indexes(connection)
     connection.rollback()
     if NEW_INDEX not in indexes:
@@ -115,10 +114,8 @@ def _seed_previous_revision_rows(connection) -> None:
     )
 
 
-def test_upgrade_requeues_legacy_claims_and_enforces_atomic_lease_cutover(
-    db_engine,
-    clean_db,
-) -> None:
+@pytest.mark.usefixtures("clean_db")
+def test_upgrade_requeues_legacy_claims_and_enforces_atomic_lease_cutover(db_engine) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
     hot_path_migration: dict[str, Any] = runpy.run_path(str(HOT_PATH_MIGRATION))
 
@@ -236,11 +233,8 @@ def test_upgrade_requeues_legacy_claims_and_enforces_atomic_lease_cutover(
             assert tuple(reapplied) == ("PENDING", None, None, None)
 
 
-def test_hot_path_index_is_restored_when_lease_migration_proof_fails(
-    db_engine,
-    clean_db,
-) -> None:
-    del clean_db
+@pytest.mark.usefixtures("clean_db")
+def test_hot_path_index_is_restored_when_lease_migration_proof_fails(db_engine) -> None:
     hot_path_migration: dict[str, Any] = runpy.run_path(str(HOT_PATH_MIGRATION))
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
