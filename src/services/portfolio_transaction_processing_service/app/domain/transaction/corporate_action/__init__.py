@@ -43,6 +43,7 @@ from .manifest import (
 from .ordering import (
     corporate_action_dependency_rank,
     corporate_action_target_order_key,
+    same_time_restatement_order_key,
 )
 from .reason_codes import CorporateActionValidationReasonCode
 from .validation import (
@@ -85,6 +86,7 @@ __all__ = [
     "assert_bundle_a_corporate_action_valid",
     "corporate_action_dependency_rank",
     "corporate_action_target_order_key",
+    "same_time_restatement_order_key",
     "evaluate_corporate_action_manifest_readiness",
     "corporate_action_manifest_child",
     "is_bundle_a_corporate_action",

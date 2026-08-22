@@ -147,6 +147,31 @@ def test_same_time_position_restatement_follows_its_source_acquisition(
     )
 
 
+def test_same_time_position_restatements_use_shared_quantity_and_identity_order() -> None:
+    transaction_time = datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc)
+    bonus = _transaction(
+        "BONUS-FIRST",
+        "BONUS_ISSUE",
+        transaction_date=transaction_time,
+        quantity=Decimal("50"),
+        created_at=datetime(2026, 7, 1, 10, 1, tzinfo=timezone.utc),
+    )
+    split = _transaction(
+        "SPLIT-LATER",
+        "SPLIT",
+        transaction_date=transaction_time,
+        quantity=Decimal("100"),
+        created_at=datetime(2026, 7, 1, 10, 2, tzinfo=timezone.utc),
+    )
+
+    ordered = order_position_transactions((bonus, split))
+
+    assert tuple(transaction.transaction_id for transaction in ordered) == (
+        "SPLIT-LATER",
+        "BONUS-FIRST",
+    )
+
+
 def test_order_position_transactions_uses_ingestion_and_identity_tiebreakers() -> None:
     transaction_time = datetime(2026, 4, 10, 9, 30, tzinfo=timezone(timedelta(hours=8)))
     transactions = (

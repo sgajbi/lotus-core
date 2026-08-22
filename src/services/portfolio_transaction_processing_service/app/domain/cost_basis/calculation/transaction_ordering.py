@@ -6,6 +6,7 @@ from decimal import Decimal
 from ...transaction.corporate_action.ordering import (
     corporate_action_dependency_rank,
     corporate_action_target_order_key,
+    same_time_restatement_order_key,
 )
 from ..models.cost_basis_transaction import CostBasisTransaction
 
@@ -30,14 +31,22 @@ def transaction_order_key(transaction: CostBasisTransaction) -> TransactionOrder
     )
     if not isinstance(order_quantity, Decimal):
         order_quantity = Decimal(str(order_quantity))
+    restatement_order = same_time_restatement_order_key(
+        transaction,
+        quantity=order_quantity,
+    )
+    quantity_order, transaction_id = restatement_order or (
+        -order_quantity,
+        transaction.transaction_id,
+    )
     return (
         transaction.transaction_date,
         corporate_action_dependency_rank(transaction),
         _cash_dependency_rank(transaction),
         target_sequence,
         target_instrument_id,
-        -order_quantity,
-        transaction.transaction_id,
+        quantity_order,
+        transaction_id,
     )
 
 

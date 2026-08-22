@@ -201,6 +201,29 @@ def test_same_time_quantity_restatement_follows_its_source_acquisition(
     ]
 
 
+def test_same_time_restatements_use_shared_quantity_and_identity_order(sorter) -> None:
+    transaction_time = datetime(2026, 7, 1, 10, 0)
+    bonus = _transaction(
+        transaction_id="BONUS-FIRST",
+        transaction_date=transaction_time,
+        transaction_type="BONUS_ISSUE",
+        quantity=Decimal("50"),
+    )
+    split = _transaction(
+        transaction_id="SPLIT-LATER",
+        transaction_date=transaction_time,
+        transaction_type="SPLIT",
+        quantity=Decimal("100"),
+    )
+
+    ordered = sorter.sort_transactions([], [bonus, split])
+
+    assert [transaction.transaction_id for transaction in ordered] == [
+        "SPLIT-LATER",
+        "BONUS-FIRST",
+    ]
+
+
 def test_sort_bundle_a_dependency_and_target_ordering(sorter):
     """
     Bundle A ordering should process source-out before target-in legs,
