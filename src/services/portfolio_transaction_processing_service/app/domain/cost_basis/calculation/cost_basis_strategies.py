@@ -26,7 +26,7 @@ from .basis_transfer_allocation import (
 )
 from .disposal_allocation import LotDisposalResult, SourceLotDisposalAllocation
 from .lot_restatement import LotRestatement
-from .lot_state import CostLot, OpenLotState
+from .lot_state import CostLot, OpenLotState, resolve_source_lot_original_quantity
 from .residual_allocation import allocate_nonnegative_storage_share
 
 logger = logging.getLogger(__name__)
@@ -98,12 +98,11 @@ def _validated_buy_lot_inputs(
 def _source_lot_original_quantity(
     transaction: CostBasisTransaction, *, current_quantity: Decimal
 ) -> Decimal:
-    original_quantity = transaction.source_lot_original_quantity
-    if original_quantity is not None:
-        return original_quantity
-    if transaction.source_lot_order_quantity is not None:
-        raise ValueError("Restored lot source is missing original quantity authority.")
-    return current_quantity
+    return resolve_source_lot_original_quantity(
+        original_quantity=transaction.source_lot_original_quantity,
+        order_quantity=transaction.source_lot_order_quantity,
+        current_quantity=current_quantity,
+    )
 
 
 def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:

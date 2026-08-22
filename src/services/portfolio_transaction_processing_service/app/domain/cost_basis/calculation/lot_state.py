@@ -10,6 +10,21 @@ from portfolio_common.domain.transaction.numeric_policy import (
 )
 
 
+def resolve_source_lot_original_quantity(
+    *,
+    original_quantity: Decimal | None,
+    order_quantity: Decimal | None,
+    current_quantity: Decimal,
+) -> Decimal:
+    """Resolve new or restored lot authority without fabricating restored history."""
+
+    if original_quantity is not None:
+        return original_quantity
+    if order_quantity is not None:
+        raise ValueError("Restored source lot is missing original quantity authority")
+    return current_quantity
+
+
 @dataclass(frozen=True, slots=True)
 class AmortizedCostCarryState:
     """Independent accounting carrying state for one persisted open lot.
