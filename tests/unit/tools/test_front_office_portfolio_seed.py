@@ -160,6 +160,35 @@ def test_durable_valuation_authority_compares_latest_append_only_versions(monkey
     assert observed_sql[0].count("where source_rank = 1") == 2
 
 
+def test_durable_market_fact_ranking_precedes_authority_scope_filter(monkeypatch):
+    bundle = _build_bundle()
+    durable = front_office_seed_module._expected_durable_valuation_authority(bundle)
+    observed_sql: list[str] = []
+
+    def capture_sql(**kwargs):
+        observed_sql.append(kwargs["sql"])
+        return durable
+
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", capture_sql)
+
+    _verify_durable_front_office_valuation_authority(
+        postgres_container="postgres",
+        bundle=bundle,
+    )
+
+    sql = observed_sql[0]
+    fact_rank_start = sql.index("partition by source_system, source_record_id")
+    fact_rank_end = sql.index(") latest_facts", fact_rank_start)
+    fact_history_query = sql[fact_rank_start:fact_rank_end]
+    latest_fact_filter = sql[fact_rank_end:]
+
+    assert "tenant_id =" not in fact_history_query
+    assert "legal_book_id =" not in fact_history_query
+    assert "where source_rank = 1" in latest_fact_filter
+    assert "tenant_id =" in latest_fact_filter
+    assert "legal_book_id =" in latest_fact_filter
+
+
 @pytest.mark.parametrize("mutation", ["missing", "changed", "extra"])
 def test_durable_valuation_authority_rejects_incomplete_or_changed_state(monkeypatch, mutation):
     bundle = _build_bundle()
