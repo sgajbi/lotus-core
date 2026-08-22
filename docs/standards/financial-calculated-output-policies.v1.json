@@ -116,6 +116,7 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation._disposal_factor",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.apply_disposal",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.materialize_book",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_assign_quantity_residual",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_materialized_cost",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_materialized_quantity",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_scaled_basis_factor",
