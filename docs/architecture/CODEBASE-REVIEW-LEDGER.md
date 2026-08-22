@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1708 lot quantity restatement (2026-08-22): same-instrument equity corporate actions now restate
+FIFO and AVCO original/open lot quantities through one exact ratio while conserving local/base
+basis. Non-representable per-lot results reject before mutation; typed restatement authority crosses
+cost persistence into position processing, and `lot_quantity_vs_position_mismatch` rejects before
+cashflow/readiness/commit. A one-round-trip, ordered, bounded read-only audit surfaces historical
+drift without transaction/lot identifiers. FIFO/AVCO PostgreSQL tests prove partial-disposal split,
+duplicate delivery, backdated epoch replay, final disposal, and durable lot/position parity; the
+cross-product golden pack now covers split and reverse-split disposal economics. Status: fixed
+locally; protected PR, exact-main validation, wiki publication/parity, and issue closure pending.
+Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
+
 CR-1707 bounded valuation job hot paths (2026-08-22): the governed 10,000-row evidence found
 sequential scans in valuation claim and stale lease selection. Claim now locks a latest-epoch,
 ordered 1,000-row cohort and updates through a typed id array with primary-key access. Stale
