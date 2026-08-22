@@ -21,11 +21,13 @@ Make the canonical seed the source owner for its complete valuation evidence:
    `SG_PRIVATE_BANK_BOOK`.
 2. Publish one effective-dated `UNIT_PRICE_MARKET_VALUE` policy assignment for every seeded
    instrument.
-3. Publish one authoritative `UNIT_PRICE` source fact for every raw market-price observation. The
-   canonical source contract defines one held bond unit as 1,000 face and normalizes its clean
-   percent quote as `raw_quote * 1000 / 100`. Bind the raw quote, raw quote basis, denominator,
-   face-per-unit convention, normalization identity, and normalized price into the source content
-   hash; do not relabel runtime position quantity as face authority.
+3. Require an explicit source quote convention for every canonical security and publish one
+   authoritative `UNIT_PRICE` source fact for every raw market-price observation. Both canonical
+   bonds declare clean percent, denominator 100, and 1,000 face per held unit, producing
+   `raw_quote * 1000 / 100`. Missing, product-mismatched, or unsupported metadata fails before
+   publication. Bind the raw quote, raw quote basis, denominator, face-per-unit convention,
+   normalization identity, and normalized price into the source content hash; do not relabel
+   runtime position quantity as face authority.
 4. Derive stable source record identity from security/date and bind the complete source evidence
    into a deterministic SHA-256 content hash. Identical replay is stable; changed price evidence
    changes the hash.
@@ -34,7 +36,11 @@ Make the canonical seed the source owner for its complete valuation evidence:
 6. Extend cash unit-price authority through the latest planned-withdrawal transaction date; the
    future cash legs are valuation work in the same exact portfolio scope.
 7. On canonical replay, delete only evidence owned by `LOTUS_FRONT_OFFICE_SEED` in the exact
-   canonical tenant/book before republishing version `1`.
+   canonical tenant/book and canonical source-record namespaces before republishing version `1`.
+   Generic per-portfolio cleanup never deletes this shared source authority.
+8. Require three consecutive terminal queue observations and optionally emit a content-bound JSON
+   receipt containing assignment/fact counts, the source-fact-set hash, governed dates, and the
+   final verification result.
 
 ## Compatibility and boundaries
 
@@ -46,10 +52,14 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `79 passed` at exact signed local head
-  `3f8fb933c` after rebasing onto main `1746ea913`; this covers complete assignment/fact coverage,
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `85 passed` after rebasing onto main
+  `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
-  and exact-scope cleanup.
+  per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,
+  portfolio-safe cleanup, machine-readable evidence, repeated scheduler observations, and
+  exact-scope cleanup.
+- The combined canonical seed, quote-authority domain, and valuation-logic pack passed `121` tests;
+  full MyPy passed `318` source files.
 - Ruff, format, signature, and diff-hygiene checks passed for the changed seed and test files.
 - DTO construction accepted all 11 assignments and all 4,176 authoritative facts in bounded
   batches for the canonical 2025-03-31 through 2026-04-10 window.
@@ -61,12 +71,17 @@ under #798. Downstream applications must consume Core authority and must not fab
   The source-owned unit-price normalization avoids that prohibited runtime inference. A subsequent
   replay reached 11-of-11 valued positions with zero bond failures, then identified two future cash
   jobs whose dates were beyond the former cash fact window; the final bundle extends exact-scope
-  cash authority through that planned-withdrawal horizon. A clean final replay at signed
-  `3f8fb933c` published 4,176 source facts and reached 11-of-11 valued positions, `COMPLETE`
+  cash authority through that planned-withdrawal horizon. A clean final replay and independent
+  verify-only receipt at signed `e5ebb86c8` published 4,176 source facts and reached 11-of-11
+  valued positions, `COMPLETE`
   position and cash data quality, analytics/performance/return-path dates of `2026-04-10`, and zero
-  pending, processing, stale, or failed valuation and aggregation jobs. Protected PR, exact-main,
-  wiki publication, issue closure, and branch/worktree hygiene remain pending at this fixed-local
-  checkpoint.
+  pending, processing, stale, or failed valuation and aggregation jobs for three consecutive
+  observations. The source-fact set hash is
+  `173e6923e428aa9da29f3fd6cef241bab8966d3c843fe75e6ee98ad325d35078`; the receipt content hash is
+  `93a999bcccadb858893bbde88955f7e287499485e57f4cf66536e20138c25c3c`, and exact retained JSON byte
+  hash is `2270401bd1865ce988768bb4e3b08b612b8d5ff2f8e028b23cb9efc19ffa1abc`. The machine-readable
+  receipt is durably attached to #990. Protected PR, exact-main, wiki publication, issue closure,
+  and branch/worktree hygiene remain pending at this fixed-local checkpoint.
 
 ## Documentation decision
 

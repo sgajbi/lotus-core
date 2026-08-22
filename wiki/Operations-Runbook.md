@@ -274,12 +274,14 @@ Canonical clean bootstrap is source first: persist portfolio and instrument pare
 market-price history, and fail closed until the required source windows are query visible. After
 raw price readiness, publish effective-dated valuation-policy assignments for every seeded
 instrument and authoritative price source facts for every seeded observation before activating the
-business-date horizon. The source contract defines one held bond unit as 1,000 face and binds the
-deterministic clean-percent-to-unit-price normalization into each fact's content hash. All canonical
-assignments therefore use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`; position quantity is never
-relabeled as runtime face authority. Transactions are posted only after that fence. This prevents initial history from
-being misclassified as late corrections while preserving durable replay for backdated or future
-observations against an existing horizon.
+business-date horizon. Each canonical security has an explicit source quote convention. Both
+canonical bonds explicitly declare clean percent, denominator 100, and 1,000 face per held unit;
+missing or mismatched per-security metadata fails before publication. The deterministic
+clean-percent-to-unit-price normalization and its inputs are bound into each fact's content hash.
+All canonical assignments therefore use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRICE`; position
+quantity is never relabeled as runtime face authority. Transactions are posted only after that
+fence. This prevents initial history from being misclassified as late corrections while preserving
+durable replay for backdated or future observations against an existing horizon.
 
 Cash unit-price facts continue through the latest planned-withdrawal transaction date because those
 future cash legs enter the same exact-scope valuation queue. A canonical authority bundle that ends
@@ -293,7 +295,8 @@ assignment/source evidence. If they instead report missing `signed_face_amount`,
 canonical bond fact was normalized to `UNIT_PRICE`; do not infer face from position quantity. Do not
 restore magnitude inference or synthesize quote authority in Gateway, Workbench, or another
 downstream service. Replay cleanup is limited to evidence owned by `LOTUS_FRONT_OFFICE_SEED` in
-that exact tenant/book.
+that exact tenant/book and the canonical source-record namespaces. Generic portfolio cleanup does
+not delete valuation authority.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
@@ -301,6 +304,9 @@ poll interval. Any reopened work resets the stability fence. Pending/processing 
 background success: keep it inside the existing readiness deadline so an exit-zero result proves a
 stable terminal state. The verifier sleeps for the configured poll interval between observations;
 it must not busy-loop against the shared runtime.
+Use `--evidence-output <path>` to retain a source-safe JSON receipt containing assignment/fact
+counts, the source-fact-set hash, the final verification, the three-observation stability count,
+and a receipt content hash.
 
 The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
 and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`
