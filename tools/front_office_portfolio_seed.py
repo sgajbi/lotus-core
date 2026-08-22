@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2501,7 +2501,8 @@ def _requested_portfolio_master(
     bundle: dict[str, Any],
     portfolio_id: str,
 ) -> dict[str, Any]:
-    matches = [row for row in bundle["portfolios"] if row.get("portfolio_id") == portfolio_id]
+    portfolios = cast(list[dict[str, Any]], bundle["portfolios"])
+    matches = [row for row in portfolios if row.get("portfolio_id") == portfolio_id]
     if len(matches) != 1:
         raise RuntimeError("Canonical portfolio master is not uniquely available for upgrade.")
     return matches[0]
@@ -3044,12 +3045,12 @@ select json_build_object(
           order by fact_version desc
         ) as source_rank
         from market_price_source_facts
-        where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
-          and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
-          and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
+        where source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
           and source_record_id like 'front-office-price:%'
       ) latest_facts
       where source_rank = 1
+        and tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+        and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
     ), '[]'::json
   )
 )::text;
