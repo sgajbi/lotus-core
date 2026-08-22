@@ -2566,16 +2566,18 @@ def _upgrade_front_office_valuation_authority(
         bundle=bundle,
     )
     if missing_market_prices:
-        _request_json(
-            "POST",
-            f"{ingestion_base_url}/ingest/market-prices",
-            payload={"market_prices": missing_market_prices},
+        raise RuntimeError(
+            "Canonical raw market-price coverage is incomplete; a governed full reseed is required."
         )
     _wait_for_required_market_price_readiness(
         query_base_url=query_base_url,
         bundle=bundle,
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
+    )
+    _require_quiescent_quote_authority_jobs(
+        postgres_container=postgres_container,
+        portfolio_id=portfolio_id,
     )
     if existing_scope != expected_scope:
         _request_json(
@@ -2959,6 +2961,16 @@ from (
   where portfolio_id = {_postgres_string_literal(portfolio_id)}
     and security_id in ({security_id_literals})
     and status in ('PENDING', 'PROCESSING', 'FAILED')
+  union
+  select security_id
+  from instrument_reprocessing_state
+  where security_id in ({security_id_literals})
+  union
+  select distinct trim(payload->>'security_id') as security_id
+  from reprocessing_jobs
+  where job_type = 'RESET_WATERMARKS'
+    and status in ('PENDING', 'PROCESSING', 'FAILED')
+    and trim(payload->>'security_id') in ({security_id_literals})
 ) blocking_quote_authority;
 """
     result = _read_postgres_json(postgres_container=postgres_container, sql=sql)

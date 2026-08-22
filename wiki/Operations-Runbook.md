@@ -304,11 +304,11 @@ exact complete latest-version replay. Partial, extra, or changed version-1 autho
 mutation and requires the explicit full local-state reset.
 
 On `--skip-cleanup`, the tool preserves transaction history, requires all canonical seeded valuation
-work to be quiescent, waits for existing instruments, and validates existing observations before any
-scope write. It publishes only observations missing from the complete raw-price windows, then
-updates the portfolio master only when durable tenant/book scope is wrong. Existing observations
-must match the canonical price and currency; a conflict fails closed without partially activating
-new scope. It then
+work to be quiescent, waits for existing instruments, and requires the complete canonical raw-price
+windows before any scope write. Missing observations or a price/currency conflict fail closed and
+require the governed full reseed; reuse does not publish raw prices without an exact deferred-work
+acknowledgement. With complete matching evidence, it updates the portfolio master only when durable
+tenant/book scope is wrong, then
 publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
 source parents nor silently treats an existing pre-authority seed as complete. If an affected
 canonical security already has terminal failed valuation jobs, the tool fails before any write and
@@ -317,6 +317,8 @@ portfolio-owned valuation work while preserving shared append-only quote authori
 transaction replay is not treated as a recovery mechanism for a completed readiness stage. A
 second active-or-terminal check after durable authority catches concurrent work before downstream
 seed continuation. Wait and retry for active work; use the governed full reseed for terminal work.
+The same fence includes instrument reprocessing triggers and `RESET_WATERMARKS` jobs and runs after
+complete raw-price visibility is validated but before scope activation.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured

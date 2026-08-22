@@ -200,11 +200,12 @@ explicit full local-state reset.
 
 `--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it first
 requires all canonical seeded valuation work to be quiescent, waits for existing instruments, and
-validates every existing raw-price observation before any scope write. It publishes only missing
-observations, then updates the portfolio master only when durable `LOTUS_PB_SG` /
-`SG_PRIVATE_BANK_BOOK` scope is wrong. Existing observations must match the canonical price and
-currency; conflicts fail closed without partially activating new scope. The tool then publishes and
-durably verifies valuation assignments/source facts before continuing. It never replays
+requires the complete canonical raw-price window before any scope write. Missing observations or
+price/currency conflicts fail closed and require a normal governed full reseed without
+`--skip-cleanup`; reuse never publishes raw prices without an exact acknowledgement that deferred
+price reprocessing has completed. With complete matching raw evidence, the tool updates the
+portfolio master only when durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` scope is wrong, then
+publishes and durably verifies valuation assignments/source facts before continuing. It never replays
 the full transaction set or rearms unchanged source parents. If an exact canonical security already
 has terminal failed valuation jobs, the reuse path fails before any write and requires a normal
 governed full reseed without `--skip-cleanup`. That path recreates portfolio-owned valuation work
@@ -213,6 +214,9 @@ unchanged transaction can reopen an already-completed readiness stage. The tool 
 active-or-terminal check after authority is durable so concurrent work cannot be misclassified
 from the initial snapshot or allowed into downstream seed continuation. Wait and retry when work is
 active; use the full reseed when it is terminal.
+The fence covers direct valuation jobs, pending instrument reprocessing triggers, and active or
+failed `RESET_WATERMARKS` jobs. It runs again after complete raw-price visibility is validated and
+before any scope change, so deferred price correction work cannot escape into the upgrade.
 
 `--evidence-output` requires verification and is incompatible with `--ingest-only`; the tool rejects
 that combination before readiness checks rather than exiting successfully without an artifact.

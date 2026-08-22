@@ -18,9 +18,13 @@ exact complete latest-version replay are accepted; partial, extra, or changed ve
 fails source-safely and requires an explicit full local-state reset. The reuse path requires
 all canonical seeded valuation work to be
 quiescent, waits for existing instruments, validates raw-price content before any scope mutation,
-publishes only missing observations, and only then repairs incorrect portfolio scope and authority
-without broad transaction replay. Active or terminal quote-authority work blocks reuse; a second
-post-authority check catches concurrent work before downstream continuation. Unchanged transaction
+and requires complete matching raw-price coverage. Missing or conflicting observations require a
+governed full reseed because reuse lacks an exact deferred-work acknowledgement; only complete
+coverage permits repair of incorrect portfolio scope and authority without broad transaction
+replay. Active or terminal quote-authority work blocks reuse; a second check after complete
+raw-price visibility is validated blocks deferred instrument triggers and `RESET_WATERMARKS`
+jobs before scope mutation, while a post-authority check catches concurrent work before downstream
+continuation. Unchanged transaction
 replay cannot reopen a completed readiness stage. Ingest-only evidence requests fail before
 readiness because no verification receipt can truthfully be produced.
 The verifier emits a content-bound JSON receipt only after exact
