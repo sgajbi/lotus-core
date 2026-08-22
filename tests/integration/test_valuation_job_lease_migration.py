@@ -47,10 +47,8 @@ def _restore_current_hot_path_index(
     hot_path_migration: dict[str, Any],
     connection,
 ) -> None:
-    indexes = _valuation_job_indexes(connection)
     connection.rollback()
-    if NEW_INDEX not in indexes:
-        hot_path_migration["upgrade"]()
+    hot_path_migration["upgrade"]()
 
 
 def _normalize_to_previous_revision(migration: dict[str, Any], connection) -> None:
@@ -242,6 +240,32 @@ def test_hot_path_index_is_restored_when_lease_migration_proof_fails(db_engine) 
         with pytest.raises(RuntimeError, match="simulated lease migration assertion failure"):
             with _lease_migration_predecessor(migration, hot_path_migration, connection):
                 raise RuntimeError("simulated lease migration assertion failure")
+
+        assert NEW_INDEX in _valuation_job_indexes(connection)
+        assert OLD_INDEX not in _valuation_job_indexes(connection)
+
+
+@pytest.mark.usefixtures("clean_db")
+def test_hot_path_index_is_restored_when_downgrade_leaves_both_indexes(db_engine) -> None:
+    hot_path_migration: dict[str, Any] = runpy.run_path(str(HOT_PATH_MIGRATION))
+    migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    original_downgrade = hot_path_migration["downgrade"]
+
+    def partially_failed_downgrade() -> None:
+        context = original_downgrade.__globals__["op"].get_context()
+        with context.autocommit_block():
+            hot_path_migration["_create_index"](
+                OLD_INDEX,
+                ("valuation_lease_expires_at",),
+            )
+        raise RuntimeError("simulated hot-path downgrade failure")
+
+    hot_path_migration["downgrade"] = partially_failed_downgrade
+
+    with db_engine.connect() as connection:
+        with pytest.raises(RuntimeError, match="simulated hot-path downgrade failure"):
+            with _lease_migration_predecessor(migration, hot_path_migration, connection):
+                pytest.fail("the failed downgrade must not enter the lease proof")
 
         assert NEW_INDEX in _valuation_job_indexes(connection)
         assert OLD_INDEX not in _valuation_job_indexes(connection)
