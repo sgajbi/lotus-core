@@ -300,9 +300,10 @@ changed evidence must append a governed newer version or use an explicit full lo
 
 On `--skip-cleanup`, the tool preserves transaction history, updates the portfolio master only when
 durable tenant/book scope is wrong, waits for existing instruments, and publishes only observations
-missing from the complete raw-price windows. It then publishes plus durably verifies valuation
-assignments/source facts. It neither rearms unchanged source parents nor silently treats an
-existing pre-authority seed as complete.
+missing from the complete raw-price windows. Existing observations must match the canonical price
+and currency; a conflict fails closed instead of being certified by new source authority. It then
+publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
+source parents nor silently treats an existing pre-authority seed as complete.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured

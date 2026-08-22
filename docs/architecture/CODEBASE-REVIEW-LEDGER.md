@@ -14,7 +14,8 @@ mismatched metadata fails before publication and runtime quantity is not treated
 Routine portfolio cleanup cannot delete this shared canonical source authority or its canonical
 portfolio/instrument parents. The reuse path
 updates only incorrect portfolio scope, waits for existing instruments, and publishes only missing
-raw-price observations before proving and upgrading authority
+raw-price observations while rejecting conflicting existing price/currency values before proving
+and upgrading authority
 without transaction replay, and the verifier emits a content-bound JSON receipt only after exact
 latest-source-version durable-row comparison, plus a three-observation
 non-amplification fence. No valuation
