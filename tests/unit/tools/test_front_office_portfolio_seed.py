@@ -1920,13 +1920,6 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
             assert min(cash_dates) > "2026-04-10"
             assert max(cash_dates) == "2026-04-30"
             timeline.append("raw_prices_published_through_2026-04-30")
-        elif url.endswith("/reprocess/transactions"):
-            assert payload["transaction_ids"] == [
-                "TXN-BUY-UST-001",
-                "TXN-BUY-SIEMENS-BOND-001",
-                "TXN-INT-UST-001",
-            ]
-            timeline.append(url)
         else:
             timeline.append(url)
         return 202, {"accepted_count": 1}
@@ -1935,7 +1928,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
     monkeypatch.setattr(
         front_office_seed_module,
         "_failed_quote_authority_security_ids",
-        lambda **_kwargs: ("FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030"),
+        lambda **_kwargs: (),
     )
     monkeypatch.setattr(
         front_office_seed_module,
@@ -2014,7 +2007,6 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "valuation_authority_published",
         "valuation_authority_pending",
         "valuation_authority_durable",
-        "http://ingestion.dev.lotus/reprocess/transactions",
     ]
 
 
@@ -2106,6 +2098,34 @@ def test_front_office_seed_reads_only_failed_quote_authority_securities(monkeypa
     assert "and status = 'FAILED'" in observed_sql[0]
     assert "FO_BOND_UST_2030" in observed_sql[0]
     assert "FO_BOND_SIEMENS_2031" in observed_sql[0]
+
+
+def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_writes(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_failed_quote_authority_security_ids",
+        lambda **_kwargs: ("FO_BOND_UST_2030",),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda *_args, **_kwargs: pytest.fail("failed-job preflight must precede writes"),
+    )
+
+    with pytest.raises(RuntimeError, match="requires a governed full reseed") as exc_info:
+        _upgrade_front_office_valuation_authority(
+            ingestion_base_url="http://ingestion.dev.lotus",
+            query_base_url="http://query.dev.lotus",
+            postgres_container="postgres",
+            bundle=_build_bundle(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            wait_seconds=90,
+            poll_interval_seconds=3,
+        )
+
+    assert "FO_BOND_UST_2030" not in str(exc_info.value)
 
 
 def test_front_office_seed_reuse_repairs_cash_accounts_without_full_core_reingestion(

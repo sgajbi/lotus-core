@@ -306,9 +306,10 @@ missing from the complete raw-price windows. Existing observations must match th
 and currency; a conflict fails closed instead of being certified by new source authority. It then
 publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
 source parents nor silently treats an existing pre-authority seed as complete. If an affected
-canonical bond already has terminal failed valuation jobs, the tool reprocesses only that
-security's bounded transaction set after authority is durable; it does not replay the full
-portfolio transaction history.
+canonical bond already has terminal failed valuation jobs, the tool fails before any write and
+requires a normal governed full reseed without `--skip-cleanup`. The full reseed recreates
+portfolio-owned valuation work while preserving shared append-only quote authority; unchanged
+transaction replay is not treated as a recovery mechanism for a completed readiness stage.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured

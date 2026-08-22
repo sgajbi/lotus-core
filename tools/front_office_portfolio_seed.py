@@ -2545,12 +2545,16 @@ def _upgrade_front_office_valuation_authority(
     wait_seconds: int,
     poll_interval_seconds: int,
 ) -> None:
-    """Upgrade authority without broad transaction replay or unchanged-source rearming."""
+    """Upgrade authority only when no terminal valuation recovery is required."""
 
     failed_quote_authority_security_ids = _failed_quote_authority_security_ids(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     )
+    if failed_quote_authority_security_ids:
+        raise RuntimeError(
+            "Canonical quote-authority valuation recovery requires a governed full reseed."
+        )
     expected_scope = {
         "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
@@ -2612,12 +2616,6 @@ def _upgrade_front_office_valuation_authority(
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
-    if failed_quote_authority_security_ids:
-        _reprocess_front_office_quote_authority_transactions(
-            ingestion_base_url=ingestion_base_url,
-            bundle=bundle,
-            security_ids=failed_quote_authority_security_ids,
-        )
 
 
 def _ingest_front_office_core_data(
@@ -2700,30 +2698,6 @@ def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[s
     ]
     if not transaction_ids:
         return
-    _request_json(
-        "POST",
-        f"{ingestion_base_url}/reprocess/transactions",
-        payload={"transaction_ids": transaction_ids},
-    )
-
-
-def _reprocess_front_office_quote_authority_transactions(
-    *,
-    ingestion_base_url: str,
-    bundle: dict[str, Any],
-    security_ids: tuple[str, ...],
-) -> None:
-    """Rearm only transactions for canonical securities blocked on quote authority."""
-
-    affected_security_ids = set(security_ids)
-    transaction_ids = [
-        transaction["transaction_id"]
-        for transaction in bundle["transactions"]
-        if transaction.get("security_id") in affected_security_ids
-        and isinstance(transaction.get("transaction_id"), str)
-    ]
-    if not transaction_ids:
-        raise RuntimeError("Canonical quote-authority recovery transactions are unavailable.")
     _request_json(
         "POST",
         f"{ingestion_base_url}/reprocess/transactions",
