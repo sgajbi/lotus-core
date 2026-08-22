@@ -20,6 +20,9 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.persistence_scope import (  # noqa: E501
     CostBasisTransactionPersistenceScope,
 )
+from src.services.portfolio_transaction_processing_service.app.application.errors import (
+    TransactionProcessingRejected,
+)
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostCalculationError,
@@ -470,6 +473,30 @@ async def test_execution_rejects_historical_calculation_error_before_persistence
                 )
             ]
         )
+
+
+def test_execution_governs_quantity_restatement_rejection_without_leaking_detail() -> None:
+    confidential_detail = "remainder 0.00000000001 for private transaction quantity"
+
+    with pytest.raises(TransactionProcessingRejected) as exc_info:
+        execution_module._raise_for_calculation_errors(
+            [
+                CostCalculationError(
+                    transaction_id="SPLIT-REJECTED",
+                    error_reason=(
+                        "Quantity restatement invariant violation: " + confidential_detail
+                    ),
+                )
+            ]
+        )
+
+    assert exc_info.value.reason_code == "lot_quantity_restatement_rejected"
+    assert exc_info.value.retryable is False
+    assert exc_info.value.detail == {
+        "transaction_id": "SPLIT-REJECTED",
+        "reason": "lot_restatement_invariant_violation",
+    }
+    assert confidential_detail not in str(exc_info.value)
 
 
 @pytest.mark.asyncio
