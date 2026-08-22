@@ -218,6 +218,9 @@ class SqlAlchemyAverageCostPoolRepository:
             payload = buy_lot_state_payload(source_transaction)
             state = plan.source_states.get(source_transaction.transaction_id)
             payload.update(
+                original_quantity=(
+                    state.original_quantity if state is not None else payload["original_quantity"]
+                ),
                 open_quantity=state.quantity if state is not None else Decimal(0),
                 lot_cost_local=state.cost_local if state is not None else Decimal(0),
                 lot_cost_base=state.cost_base if state is not None else Decimal(0),
