@@ -31,8 +31,8 @@ bounded and primary-key indexed.
 
 ## Measured Result
 
-`make database-hot-path-evidence` at exact clean signed source SHA `342d27857` completed seven real
-PostgreSQL producer nodes in 96.34 seconds. The unchanged versioned catalog reported:
+`make database-hot-path-evidence` at exact clean signed review-fix SHA `f5dc3e234` completed seven
+real PostgreSQL producer nodes in 85.93 seconds. The unchanged versioned catalog reported:
 
 | Scenario | Before | After | Result |
 | --- | ---: | ---: | --- |
@@ -41,7 +41,7 @@ PostgreSQL producer nodes in 96.34 seconds. The unchanged versioned catalog repo
 | valuation stale reset | 2,000 examined | 2,000 examined | 1,000 rows; primary-key indexed |
 
 The report-only artifact contains twelve scenarios and content identity
-`sha256:94a791eeb6f8d2a207d335b19d06af974e0627dbb149234a22efeb154bb583cc`.
+`sha256:f3810fb8984fedb45e10c9f05457bcefca028e35476f6c4f40dceb5e4f2f3f5a`.
 Its remaining failed posture belongs only to the already routed #506 and #988 families; this slice
 does not weaken their budgets or claim their closure.
 
@@ -80,6 +80,8 @@ needed.
 - Focused query/model/migration unit proof: 91 passed.
 - Stale recovery concurrency, terminal-writer, and rollback PostgreSQL proof: 3 passed in 85.28s.
 - Claim concurrency, capacity, and epoch-fencing PostgreSQL proof: 3 passed in 80.77s.
+- Review-fix oversized claim proof: unit SQL clamps to 1,000; PostgreSQL drains 1,001 as disjoint
+  1,000 and 1 cohorts in 90.53s.
 - Complete valuation repository PostgreSQL file: 40 passed in 253.42s.
 - Repository-native `test-unit-db`: 18 passed in 113.99s.
 - Online index downgrade/upgrade PostgreSQL proof: 1 passed in 86.25s.
