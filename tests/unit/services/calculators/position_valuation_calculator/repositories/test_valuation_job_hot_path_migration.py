@@ -19,8 +19,10 @@ MIGRATION = (
 def test_valuation_job_hot_path_index_migration_is_reversible(monkeypatch) -> None:
     create_index = MagicMock()
     drop_index = MagicMock()
+    migration_context = MagicMock()
     monkeypatch.setattr(op, "create_index", create_index)
     monkeypatch.setattr(op, "drop_index", drop_index)
+    monkeypatch.setattr(op, "get_context", MagicMock(return_value=migration_context))
     migration = runpy.run_path(str(MIGRATION))
 
     migration["upgrade"]()
@@ -42,11 +44,14 @@ def test_valuation_job_hot_path_index_migration_is_reversible(monkeypatch) -> No
         str(call.kwargs["postgresql_where"]) == "status = 'PROCESSING'"
         for call in create_index.call_args_list
     )
+    assert all(call.kwargs["postgresql_concurrently"] for call in create_index.call_args_list)
     assert [call.args for call in drop_index.call_args_list] == [
         ("ix_portfolio_valuation_jobs_processing_lease_expiry",),
         ("ix_portfolio_valuation_jobs_processing_lease_recovery",),
     ]
     assert all(
-        call.kwargs == {"table_name": "portfolio_valuation_jobs"}
+        call.kwargs["table_name"] == "portfolio_valuation_jobs"
         for call in drop_index.call_args_list
     )
+    assert all(call.kwargs["postgresql_concurrently"] for call in drop_index.call_args_list)
+    assert migration_context.autocommit_block.call_count == 2
