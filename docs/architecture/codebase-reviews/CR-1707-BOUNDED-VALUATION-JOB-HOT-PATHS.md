@@ -1,7 +1,7 @@
 # CR-1707 - Bounded Valuation Job Hot Paths
 
 Date: 2026-08-22
-Status: Fixed locally; protected PR, exact-main validation, and issue closure pending
+Status: Merged, exact-main validated, wiki published, and closure evidence reconciled
 Issues: #985, #987
 
 ## Finding
@@ -118,5 +118,15 @@ is needed.
   before this final documentation-only head. Codex review reported no major issues at that exact
   implementation head, and all three earlier review threads are resolved with linked fix-forward
   evidence.
-- Final documentation-head PR validation and review, exact-main validation, authored-wiki
-  publication/parity, and issue closure evidence remain pending.
+- Final documentation head `8b76844eee3e57be4399b05fa9b8dee97b05d2c8` passed Remote Feature Lane
+  `32570142091`, PR Merge Gate `32570143906`, and Quality Baseline `32570143907`; PR #995
+  rebase-merged as `1351d63868c158568fd334e554e361e36fb36fe5`.
+- Companion PR #1010 repaired dependency-ordered lease-migration proof without changing runtime or
+  migration behavior and rebase-merged as `821f58db7790a45873608cdf857561cfbda458b5`.
+  Main Releasability `32581134802` passed at that exact SHA with 24 successful jobs, two expected
+  institutional skips, and zero failures or cancellations.
+- The authored Operations Runbook is included in published wiki head
+  `0353082d1bcb5b09e6d881fd19154f39a83f9ea8`; strict parity returned `DiffCount 0`.
+- The merged #995/#1010 feature branches and worktrees were removed after patch-equivalence and
+  exact-main proof. #985, #987, and #1009 retain `status/merged-main` until this durable closure
+  reconciliation itself reaches validated main.
