@@ -1794,7 +1794,12 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
 
     def request(method, url, *, payload=None):
         assert method == "POST"
-        if url.endswith("/ingest/market-prices"):
+        if url.endswith("/ingest/portfolios"):
+            assert [row["portfolio_id"] for row in payload["portfolios"]] == [
+                "PB_SG_GLOBAL_BAL_001"
+            ]
+            timeline.append(url)
+        elif url.endswith("/ingest/market-prices"):
             cash_dates = [
                 row["price_date"]
                 for row in payload["market_prices"]
@@ -1886,6 +1891,24 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "valuation_authority_pending",
         "valuation_authority_durable",
     ]
+
+
+@pytest.mark.parametrize(
+    "portfolios",
+    [
+        [],
+        [
+            {"portfolio_id": "PB_SG_GLOBAL_BAL_001"},
+            {"portfolio_id": "PB_SG_GLOBAL_BAL_001"},
+        ],
+    ],
+)
+def test_existing_seed_upgrade_requires_one_exact_portfolio_master(portfolios):
+    with pytest.raises(RuntimeError, match="not uniquely available"):
+        front_office_seed_module._requested_portfolio_master(
+            bundle={"portfolios": portfolios},
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+        )
 
 
 def test_current_seed_upgrade_does_not_republish_unchanged_source_parents(monkeypatch):
