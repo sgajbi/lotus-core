@@ -650,15 +650,16 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             quantity_before=pool.quantity,
             signed_quantity_delta=signed_quantity_delta,
         )
+        segment_start_quantity = restatement.apply(
+            pool.segment_start_quantity,
+            field_name="segment_start_quantity",
+        )
         self._source_allocation.apply_quantity_restatement(
             book_key=key,
             restatement=restatement,
         )
         pool.quantity = restatement.quantity_after
-        pool.segment_start_quantity = restatement.apply(
-            pool.segment_start_quantity,
-            field_name="segment_start_quantity",
-        )
+        pool.segment_start_quantity = segment_start_quantity
         return restatement
 
     def transfer_basis_out(

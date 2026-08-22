@@ -166,6 +166,47 @@ def test_nonrepresentable_restatement_fails_before_mutating_any_source(strategy_
     assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal("3")
 
 
+def test_average_cost_nonrepresentable_segment_restatement_fails_before_mutation() -> None:
+    strategy = AverageCostBasisStrategy()
+    strategy.add_buy_lot(
+        _restatement_buy(
+            transaction_id="BUY-NONREP-SEGMENT",
+            quantity="2",
+            cost="20",
+        )
+    )
+    strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("0.5"),
+    )
+    assert (
+        strategy.transfer_basis_out(
+            "P-RESTATE",
+            "I-RESTATE",
+            Decimal("1"),
+            Decimal("1"),
+        )
+        is None
+    )
+    strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("0.5"),
+    )
+    states_before = strategy.get_open_lot_states()
+
+    with pytest.raises(LotRestatementError, match="cannot be restated exactly"):
+        strategy.restate_lot_quantities(
+            "P-RESTATE",
+            "I-RESTATE",
+            Decimal("-0.6666666667"),
+        )
+
+    assert strategy.get_open_lot_states() == states_before
+    assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal("1.0")
+
+
 @pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
 def test_repeating_restatement_ratio_conserves_exact_base_and_local_basis(strategy_type) -> None:
     strategy = strategy_type()
