@@ -14,7 +14,12 @@ dispatch-exhaustion, ingestion-policy, and Query Control Plane capacity truth to
 and topology remain unchanged; OpenAPI descriptions and the ingestion policy maximum now state the
 effective physical boundary. #988 and #506 retain their distinct report-only findings. Status:
 fixed locally; protected PR, exact-main validation, wiki publication/parity, and issue closure
-pending. Evidence:
+pending. Exact signed implementation head `ac7000b2a` passed Remote Feature Lane `32568806213`
+and Quality Baseline `32568807457`; PR Merge Gate `32568807448` passed every test and contract job
+before the final documentation-only head. Codex review found no major issue at that implementation
+head, all earlier review threads are resolved, and the changed operator wiki passes both the
+professional-page audit and repository wiki/docs gate. Final documentation-head PR validation and
+review remain pending. Evidence:
 [CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md](./codebase-reviews/CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md).
 
 CR-1706 canonical valuation quote authority (2026-08-22): canonical
