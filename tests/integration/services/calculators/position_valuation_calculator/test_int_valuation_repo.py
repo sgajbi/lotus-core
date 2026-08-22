@@ -2021,6 +2021,37 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
     assert jobs[0].attempt_count == 1
 
 
+async def test_find_and_claim_eligible_jobs_caps_oversized_physical_cohort(
+    async_db_session: AsyncSession,
+    clean_db,
+):
+    job_count = 1_001
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id=f"P-VAL-CLAIM-BOUND-{index:04d}",
+                security_id="S-VAL-CLAIM-BOUND",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PENDING",
+                correlation_id=f"corr-val-claim-bound-{index:04d}",
+            )
+            for index in range(job_count)
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    first_claim = await repo.find_and_claim_eligible_jobs(batch_size=job_count)
+    await async_db_session.commit()
+    second_claim = await repo.find_and_claim_eligible_jobs(batch_size=job_count)
+    await async_db_session.commit()
+
+    assert len(first_claim) == 1_000
+    assert len(second_claim) == 1
+    assert {job.id for job in first_claim}.isdisjoint(job.id for job in second_claim)
+
+
 async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit(
     async_db_session: AsyncSession, clean_db
 ):

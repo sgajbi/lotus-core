@@ -638,7 +638,7 @@ class ValuationRepositoryBase:
             raise ValueError("valuation lease owner must contain 1 to 128 characters")
         if lease_duration_seconds < 1:
             raise ValueError("valuation lease duration must be positive")
-        effective_batch_size = batch_size
+        effective_batch_size = min(batch_size, POSTGRES_STATEMENT_ROW_LIMIT)
         if max_in_flight_jobs is not None:
             await self.db.execute(select(func.pg_advisory_xact_lock(_VALUATION_JOB_CLAIM_LOCK_ID)))
             processing_count = int(
@@ -649,7 +649,7 @@ class ValuationRepositoryBase:
                 ).scalar_one()
             )
             effective_batch_size = min(
-                batch_size,
+                effective_batch_size,
                 max(max_in_flight_jobs - processing_count, 0),
             )
             if effective_batch_size == 0:
