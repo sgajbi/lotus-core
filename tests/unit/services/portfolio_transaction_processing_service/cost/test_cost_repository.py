@@ -644,7 +644,11 @@ async def test_opening_lot_lineage_hashes_persisted_accrued_interest() -> None:
     )
 
 
-def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPoolRebuildPlan:
+def _average_cost_rebuild_plan(
+    *,
+    replay_revision: str = "1",
+    original_quantities: tuple[str, str] = ("10", "5"),
+) -> AverageCostPoolRebuildPlan:
     first = _average_cost_source(
         "BUY-1",
         transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
@@ -659,13 +663,13 @@ def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPool
     )
     states = {
         "BUY-1": OpenLotState(
-            original_quantity=Decimal("10"),
+            original_quantity=Decimal(original_quantities[0]),
             quantity=Decimal("6"),
             cost_local=Decimal("72"),
             cost_base=Decimal("78"),
         ),
         "BUY-2": OpenLotState(
-            original_quantity=Decimal("5"),
+            original_quantity=Decimal(original_quantities[1]),
             quantity=Decimal("3"),
             cost_local=Decimal("36"),
             cost_base=Decimal("39"),
@@ -728,6 +732,32 @@ async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state(
     assert "INSERT INTO average_cost_pool_state" in str(
         db_session.execute.call_args_list[3].args[0]
     )
+
+
+@pytest.mark.parametrize("original_quantities", [("20", "10"), ("8", "4")])
+async def test_average_cost_rebuild_persists_restated_source_original_quantities(
+    original_quantities: tuple[str, str],
+) -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
+    repository.REBUILD_UPSERT_CHUNK_SIZE = 1
+    db_session.execute.side_effect = [MagicMock(), MagicMock(), MagicMock(), MagicMock()]
+
+    await repository.apply_average_cost_pool_rebuild(
+        _average_cost_rebuild_plan(original_quantities=original_quantities)
+    )
+
+    source_parameters = [
+        db_session.execute.call_args_list[index]
+        .args[0]
+        .compile(dialect=postgresql.dialect())
+        .params
+        for index in (1, 2)
+    ]
+    assert [
+        next(value for key, value in parameters.items() if key.startswith("original_quantity"))
+        for parameters in source_parameters
+    ] == [Decimal(value) for value in original_quantities]
 
 
 async def test_average_cost_rebuild_receipts_are_replay_bound_and_idempotent() -> None:
