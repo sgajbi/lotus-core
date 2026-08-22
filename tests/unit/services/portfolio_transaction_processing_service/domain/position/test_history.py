@@ -118,7 +118,10 @@ def test_order_position_transactions_uses_canonical_dependency_and_target_order(
     )
 
 
-@pytest.mark.parametrize("restatement_type", ["SPLIT", "REVERSE_SPLIT", "CONSOLIDATION"])
+@pytest.mark.parametrize(
+    "restatement_type",
+    ["SPLIT", "REVERSE_SPLIT", "CONSOLIDATION", "BONUS_ISSUE", "STOCK_DIVIDEND"],
+)
 def test_same_time_position_restatement_follows_its_source_acquisition(
     restatement_type: str,
 ) -> None:

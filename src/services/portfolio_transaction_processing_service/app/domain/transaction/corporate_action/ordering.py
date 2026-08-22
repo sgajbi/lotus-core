@@ -4,6 +4,7 @@ from typing import Protocol
 
 from .classification import (
     CASH_CONSIDERATION_TRANSACTION_TYPE,
+    SAME_INSTRUMENT_CORPORATE_ACTION_TYPES,
     SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES,
     TARGET_BASIS_TRANSFER_TRANSACTION_TYPES,
     normalize_corporate_action_transaction_type,
@@ -47,18 +48,13 @@ _CASH_CONSIDERATION_RANK_TYPES = {
     CASH_CONSIDERATION_TRANSACTION_TYPE,
     "RIGHTS_SHARE_DELIVERY",
 }
-_SAME_INSTRUMENT_QUANTITY_RESTATEMENT_TYPES = {
-    "SPLIT",
-    "REVERSE_SPLIT",
-    "CONSOLIDATION",
-}
 _DEPENDENCY_RANK_BY_TYPE = {
     **dict.fromkeys(_SOURCE_OUT_RANK_TYPES, 0),
     **dict.fromkeys(_TARGET_IN_RANK_TYPES, 1),
     **dict.fromkeys(_CASH_CONSIDERATION_RANK_TYPES, 2),
     "RIGHTS_REFUND": 3,
     # Same-time source acquisitions must exist before their quantity is restated.
-    **dict.fromkeys(_SAME_INSTRUMENT_QUANTITY_RESTATEMENT_TYPES, 5),
+    **dict.fromkeys(SAME_INSTRUMENT_CORPORATE_ACTION_TYPES, 5),
 }
 
 
