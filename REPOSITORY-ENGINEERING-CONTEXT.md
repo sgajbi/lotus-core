@@ -4086,6 +4086,19 @@ Most relevant current governance:
      Never restore price-magnitude
      inference or fabricate quote authority downstream when this evidence is unavailable.
 
+250. Valuation-job claim and stale-recovery queries must keep each physical lock cohort at or below
+     the shared 1,000-row statement ceiling and must pass the versioned 10,000-row hot-path plan
+     evidence without `Seq Scan` or `WindowAgg`. Claim only the latest epoch for each
+     portfolio/security/valuation-date identity, preserve deterministic business ordering, lock
+     with `FOR UPDATE SKIP LOCKED`, and update the locked ids through primary-key access. Stale
+     recovery orders by lease expiry then stable job id, locks with `SKIP LOCKED`, and leaves
+     status/expiry/max-attempt/source-correction rechecks on every update. Repositories stage work
+     in the injected session; the scheduler unit of work remains the sole commit/rollback owner.
+     Build replacement indexes on this hot writer table concurrently and create the new index
+     before dropping the superseded one. Prove two-worker disjointness, terminal-writer exclusion,
+     rollback preservation of complete lease authority, and reversible real-PostgreSQL migration
+     behavior whenever this contract changes.
+
 ## Context Maintenance Rule
 
 Update this document when:

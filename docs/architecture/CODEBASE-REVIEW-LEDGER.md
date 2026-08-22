@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1707 bounded valuation job hot paths (2026-08-22): the governed 10,000-row evidence found
+sequential scans in valuation claim and stale lease selection. Claim now locks a latest-epoch,
+ordered 1,000-row cohort and updates through a typed id array with primary-key access. Stale
+recovery locks an expiry/id ordered 1,000-row cohort with `SKIP LOCKED`, backed by a replacement
+partial index created and removed concurrently. Exact PostgreSQL evidence moved claim from 21,001
+to 9,001 examined rows and stale selection from 13,000 to 3,000; both now return 1,000 rows with
+indexed access and no `Seq Scan` or `WindowAgg`. Concurrent recovery, terminal-writer exclusion,
+rollback authority, existing claim concurrency, and real migration downgrade/upgrade proofs pass.
+No API, event, calculation, dependency, image, datastore, or topology contract changed. #988 and
+#506 retain their distinct report-only findings. Status: fixed locally; protected PR, exact-main
+validation, and issue closure pending. Evidence:
+[CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md](./codebase-reviews/CR-1707-BOUNDED-VALUATION-JOB-HOT-PATHS.md).
+
 CR-1706 canonical valuation quote authority (2026-08-22): canonical
 `PB_SG_GLOBAL_BAL_001` published raw prices without tenant/book scope, policy assignments, or
 authoritative source facts. Production correctly refused magnitude inference, leaving both seeded
