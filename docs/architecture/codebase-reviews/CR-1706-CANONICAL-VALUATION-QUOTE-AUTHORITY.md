@@ -39,10 +39,10 @@ Make the canonical seed the source owner for its complete valuation evidence:
    portfolio cleanup preserves them and their canonical portfolio/instrument parents: identical
    version-1 replay is idempotent, while changed evidence must append a governed newer version or
    use an explicit full local-state reset.
-8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: republish the scoped
-   portfolio master and instruments, prove durable tenant/book scope, publish only observations
-   missing from the complete raw-price windows, wait for those parents, then publish and durably
-   verify assignments and source facts without replaying transactions or rearming unchanged prices.
+8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: update the portfolio master
+   only when durable tenant/book scope is wrong, wait for existing instruments, publish only
+   observations missing from the complete raw-price windows, then publish and durably verify
+   assignments and source facts without replaying transactions or rearming unchanged parents.
 9. Require three consecutive terminal queue observations. Emit a content-bound JSON receipt only
    after a read-only PostgreSQL projection of the latest append-only source versions exactly
    matches every expected durable assignment and source fact; derive receipt counts and hashes
@@ -58,7 +58,7 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `94 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `95 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,

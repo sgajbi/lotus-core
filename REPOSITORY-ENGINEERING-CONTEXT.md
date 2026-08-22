@@ -4064,8 +4064,9 @@ Most relevant current governance:
      authority or its canonical portfolio/instrument parents; identical source-version replay is
      idempotent and changed evidence requires a governed newer version or explicit full local-state
      reset. The `--skip-cleanup` path must
-     idempotently publish and durably prove portfolio scope, instruments, only the observations
-     missing from complete raw-price windows, assignments, and latest-version facts
+     update portfolio scope only when wrong, wait for existing instruments, publish only the
+     observations missing from complete raw-price windows, and durably prove assignments and
+     latest-version facts
      without replaying transactions. The verifier may emit a source-safe content-bound JSON
      receipt only after exact durable-row comparison, and must observe three terminal queue
      snapshots so reopened work cannot masquerade as success. Never restore price-magnitude
