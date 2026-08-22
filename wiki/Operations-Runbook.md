@@ -298,11 +298,11 @@ downstream service. Routine replay cleanup never deletes the shared append-only 
 authority or its canonical portfolio/instrument parents. Identical version-1 replay is idempotent;
 changed evidence must append a governed newer version or use an explicit full local-state reset.
 
-On `--skip-cleanup`, the tool preserves transaction history while idempotently republishing the
-portfolio master and instruments, publishing only observations missing from the complete raw-price
-windows, proving durable tenant/book scope, and publishing plus durably verifying valuation
-assignments/source facts. It neither rearms unchanged raw prices nor silently treats an existing
-pre-authority seed as complete.
+On `--skip-cleanup`, the tool preserves transaction history, updates the portfolio master only when
+durable tenant/book scope is wrong, waits for existing instruments, and publishes only observations
+missing from the complete raw-price windows. It then publishes plus durably verifies valuation
+assignments/source facts. It neither rearms unchanged source parents nor silently treats an
+existing pre-authority seed as complete.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
