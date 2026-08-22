@@ -294,9 +294,14 @@ positions remain unvalued and valuation jobs report
 assignment/source evidence. If they instead report missing `signed_face_amount`, verify that the
 canonical bond fact was normalized to `UNIT_PRICE`; do not infer face from position quantity. Do not
 restore magnitude inference or synthesize quote authority in Gateway, Workbench, or another
-downstream service. Replay cleanup is limited to evidence owned by `LOTUS_FRONT_OFFICE_SEED` in
-that exact tenant/book and the canonical source-record namespaces. Generic portfolio cleanup does
-not delete valuation authority.
+downstream service. Routine replay cleanup never deletes the shared append-only valuation
+authority or its canonical portfolio/instrument parents. Identical version-1 replay is idempotent;
+changed evidence must append a governed newer version or use an explicit full local-state reset.
+
+On `--skip-cleanup`, the tool preserves transaction history while idempotently republishing the
+portfolio master, proving its durable tenant/book scope, waiting for instruments and raw prices,
+and upgrading valuation assignments/source facts. It does not silently treat an existing
+pre-authority seed as complete.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
@@ -304,9 +309,11 @@ poll interval. Any reopened work resets the stability fence. Pending/processing 
 background success: keep it inside the existing readiness deadline so an exit-zero result proves a
 stable terminal state. The verifier sleeps for the configured poll interval between observations;
 it must not busy-loop against the shared runtime.
-Use `--evidence-output <path>` to retain a source-safe JSON receipt containing assignment/fact
-counts, the source-fact-set hash, the final verification, the three-observation stability count,
-and a receipt content hash.
+Use `--evidence-output <path>` to retain a source-safe JSON receipt. The tool first compares every
+expected seed-owned assignment and source fact with a read-only PostgreSQL projection and fails
+without writing a file on missing, extra, changed, or unreadable authority. Receipt counts and
+hashes are derived from those durable rows and bind the final verification, three-observation
+stability count, and receipt content hash.
 
 The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
 and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`

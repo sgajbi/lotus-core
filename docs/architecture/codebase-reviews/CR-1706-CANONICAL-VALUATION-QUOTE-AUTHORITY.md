@@ -35,12 +35,16 @@ Make the canonical seed the source owner for its complete valuation evidence:
    horizon. Keep each source-fact request within the existing 500-record contract.
 6. Extend cash unit-price authority through the latest planned-withdrawal transaction date; the
    future cash legs are valuation work in the same exact portfolio scope.
-7. On canonical replay, delete only evidence owned by `LOTUS_FRONT_OFFICE_SEED` in the exact
-   canonical tenant/book and canonical source-record namespaces before republishing version `1`.
-   Generic per-portfolio cleanup never deletes this shared source authority.
-8. Require three consecutive terminal queue observations and optionally emit a content-bound JSON
-   receipt containing assignment/fact counts, the source-fact-set hash, governed dates, and the
-   final verification result.
+7. Treat valuation assignments and source facts as shared append-only book authority. Routine
+   portfolio cleanup preserves them and their canonical portfolio/instrument parents: identical
+   version-1 replay is idempotent, while changed evidence must append a governed newer version or
+   use an explicit full local-state reset.
+8. Make the `--skip-cleanup` reuse path an explicit authority upgrade: republish the scoped
+   portfolio master, prove its durable tenant/book, wait for instruments and raw prices, then
+   idempotently publish assignments and source facts without replaying transactions.
+9. Require three consecutive terminal queue observations. Emit a content-bound JSON receipt only
+   after a read-only PostgreSQL projection exactly matches every expected durable assignment and
+   source fact; derive receipt counts and hashes from those durable rows, never the local bundle.
 
 ## Compatibility and boundaries
 
@@ -52,12 +56,12 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `85 passed` after rebasing onto main
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `92 passed` after rebasing onto main
   `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   per-security quote metadata and fail-closed rejection, denomination/hash sensitivity,
-  portfolio-safe cleanup, machine-readable evidence, repeated scheduler observations, and
-  exact-scope cleanup.
+  portfolio-safe append-only authority preservation, machine-readable evidence, reuse-path
+  authority upgrade, durable-row comparison, and repeated scheduler observations.
 - The combined canonical seed, quote-authority domain, and valuation-logic pack passed `121` tests;
   full MyPy passed `318` source files.
 - Ruff, format, signature, and diff-hygiene checks passed for the changed seed and test files.
@@ -80,8 +84,18 @@ under #798. Downstream applications must consume Core authority and must not fab
   `173e6923e428aa9da29f3fd6cef241bab8966d3c843fe75e6ee98ad325d35078`; the receipt content hash is
   `93a999bcccadb858893bbde88955f7e287499485e57f4cf66536e20138c25c3c`, and exact retained JSON byte
   hash is `2270401bd1865ce988768bb4e3b08b612b8d5ff2f8e028b23cb9efc19ffa1abc`. The machine-readable
-  receipt is durably attached to #990. Protected PR, exact-main, wiki publication, issue closure,
-  and branch/worktree hygiene remain pending at this fixed-local checkpoint.
+  receipt is durably attached to #990 as pre-review runtime evidence. Review subsequently required
+  the retained receipt to be regenerated from an exact durable-row comparison rather than local
+  bundle claims. The fix-forward clean replay then completed 11-of-11 valuation, `COMPLETE`
+  position/cash quality, current `2026-04-10` analytics/performance/return paths, and three terminal
+  observations with every valuation and aggregation queue at zero. Its exact durable projection
+  proves 11 policy assignments and 4,176 source facts; the assignment hash is
+  `c5cdc57d8d25a593a8e890f24a1a4111ff7039de447c86b8626f587d7c8fc433`, the source-fact hash is
+  `7c768348fa5cbbe6361b43a47af9fbfb9ebb8b0bb165582947794bef6e795a9f`, the receipt content hash is
+  `955657d7b140454dd39e1ea099e7ebd58d06fab608b4f3ef403ac94e89ce31c7`, and the retained JSON byte
+  hash is `8ded370b0098bbd1fff6420bcf9cc71816885144208bb0c1aa509bed61d63253`.
+  Protected PR, exact-main, wiki publication, issue
+  closure, and branch/worktree hygiene remain pending at this fixed-local checkpoint.
 
 ## Documentation decision
 

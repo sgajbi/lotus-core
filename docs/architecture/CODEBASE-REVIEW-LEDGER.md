@@ -6,18 +6,28 @@ authoritative source facts. Production correctly refused magnitude inference, le
 bonds unvalued while nine non-bond positions completed. The seed now publishes complete
 effective-dated policy and deterministic source authority after raw price readiness and before the
 business-date horizon, plus cash unit-price authority through the final planned-withdrawal date,
-with bounded 500-row requests and exact-scope replay cleanup. Missing,
+with bounded 500-row requests and append-only replay. Missing,
 overlapping, stale, and wrong-book evidence still fails closed. The source contract explicitly
 requires explicit per-security quote metadata, normalizes both declared clean-percent bond quotes
 to the price per 1,000-face held unit, and binds those inputs into the source hash; missing or
 mismatched metadata fails before publication and runtime quantity is not treated as face authority.
-Generic portfolio cleanup cannot delete this canonical source authority, and the verifier supports
-a content-bound JSON receipt plus a three-observation non-amplification fence. No valuation
+Routine portfolio cleanup cannot delete this shared canonical source authority or its canonical
+portfolio/instrument parents. The reuse path
+upgrades durable portfolio scope and authority without transaction replay, and the verifier emits
+a content-bound JSON receipt only after exact durable-row comparison, plus a three-observation
+non-amplification fence. No valuation
 formula, public API, schema, event, dependency, image, or topology changed. Exact signed
 `e5ebb86c8` published 4,176 source facts and proved 11-of-11 valued positions, complete
 position/cash data quality, current `2026-04-10` analytics/performance/return paths, and three
 consecutive observations with zero active or failed valuation/aggregation jobs. The content-bound
-machine receipt is attached to #990. Status: fixed locally; protected PR, exact-main, wiki
+machine receipt attached to #990 is pre-review runtime evidence. The fix-forward clean replay
+derived its replacement from exact durable rows: 11 assignments / 4,176 facts, assignment hash
+`c5cdc57d8d25a593a8e890f24a1a4111ff7039de447c86b8626f587d7c8fc433`, fact hash
+`7c768348fa5cbbe6361b43a47af9fbfb9ebb8b0bb165582947794bef6e795a9f`, receipt content hash
+`955657d7b140454dd39e1ea099e7ebd58d06fab608b4f3ef403ac94e89ce31c7`, and retained byte hash
+`8ded370b0098bbd1fff6420bcf9cc71816885144208bb0c1aa509bed61d63253`; all canonical product and
+queue postures remained complete and terminal for three observations. Status: fixed locally;
+protected PR, exact-main, wiki
 publication/parity, issue closure, and hygiene remain pending. Evidence:
 [CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md](./codebase-reviews/CR-1706-CANONICAL-VALUATION-QUOTE-AUTHORITY.md).
 
