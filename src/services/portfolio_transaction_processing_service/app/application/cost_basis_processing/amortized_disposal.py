@@ -27,7 +27,6 @@ from ...domain.cost_basis import (
     TransactionLotDisposal,
     transaction_cost_output_payload,
 )
-from ...domain.cost_basis.calculation.lot_state import resolve_source_lot_original_quantity
 from ...domain.fixed_income_book_cost import (
     AmortizedCostProfileStatus,
     CarriedLotBookCost,
@@ -109,9 +108,6 @@ async def apply_effective_amortized_cost_to_disposals(
         **calculation.source_transactions,
         **{transaction.transaction_id: transaction for transaction in processed},
     }
-    remaining_quantity_by_source = _initial_open_quantities(
-        calculation.source_transactions.values()
-    )
     carried_book_cost_by_source = _initial_carried_book_costs(
         calculation.source_transactions.values()
     )
@@ -132,7 +128,6 @@ async def apply_effective_amortized_cost_to_disposals(
                 source_transaction=_required_transaction(
                     transactions_by_id, allocation.source_transaction_id
                 ),
-                remaining_quantity_by_source=remaining_quantity_by_source,
                 carried_book_cost_by_source=carried_book_cost_by_source,
                 open_lot_states=open_lot_states,
             )
@@ -186,27 +181,19 @@ def _decorate_allocation(
     request: EffectiveLotAmortizedCostProfileRequest,
     profile: LotAmortizedCostProfileVersion | None,
     source_transaction: CostBasisTransaction,
-    remaining_quantity_by_source: dict[str, Decimal],
     carried_book_cost_by_source: dict[str, CarriedLotBookCost],
     open_lot_states: dict[str, OpenLotState],
 ) -> SourceLotDisposalAllocation:
-    open_quantity_before = remaining_quantity_by_source.get(allocation.source_transaction_id)
-    if open_quantity_before is None:
-        raise ValueError(
-            "amortized disposal cannot resolve pre-disposal source-lot quantity: "
-            f"{allocation.source_transaction_id}"
-        )
-    remaining_quantity_by_source[allocation.source_transaction_id] = (
-        TRANSACTION_COST_LEDGER_OUTPUT_V1.subtract(
-            open_quantity_before,
-            allocation.consumed_quantity,
-            field_name="amortized_source_lot_remaining_quantity",
-        )
-    )
+    if source_transaction.transaction_type != "BUY":
+        raise ValueError("amortized disposal cannot resolve pre-disposal source-lot quantity")
+    open_quantity_before = allocation.source_open_quantity_before
+    original_quantity = allocation.source_original_quantity
     if profile is None:
         if allocation.source_transaction_id in carried_book_cost_by_source:
             raise ValueError("amortized-cost profile gap follows persisted carry state")
         return allocation
+    if original_quantity is None or open_quantity_before is None:
+        raise ValueError("amortized disposal requires strategy-owned source quantity authority")
     if profile.scope != request.scope:
         raise ValueError("effective amortized-cost profile does not match requested lot scope")
     if profile.status is not AmortizedCostProfileStatus.ACTIVE:
@@ -219,11 +206,6 @@ def _decorate_allocation(
     if profile.currency != source_transaction.trade_currency.strip().upper():
         raise ValueError("amortized-cost profile currency does not match source-lot currency")
 
-    original_quantity = resolve_source_lot_original_quantity(
-        original_quantity=source_transaction.source_lot_original_quantity,
-        order_quantity=source_transaction.source_lot_order_quantity,
-        current_quantity=source_transaction.quantity,
-    )
     carried_book_cost = carried_book_cost_by_source.get(allocation.source_transaction_id)
     book_cost_fx_rate = _book_cost_fx_rate(
         source_transaction,
@@ -295,16 +277,6 @@ def _decorate_allocation(
         consumed_cost_base=evidence.consumed_cost_base,
         amortized_cost_evidence=evidence,
     )
-
-
-def _initial_open_quantities(
-    source_transactions: Iterable[CostBasisTransaction],
-) -> dict[str, Decimal]:
-    return {
-        transaction.transaction_id: transaction.quantity
-        for transaction in source_transactions
-        if transaction.transaction_type == "BUY" and transaction.quantity > Decimal(0)
-    }
 
 
 def _initial_carried_book_costs(

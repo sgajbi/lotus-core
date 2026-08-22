@@ -128,6 +128,8 @@ class _UnreconciledSourceDisposalAllocation:
     consumed_quantity: Decimal
     consumed_cost_local: Decimal
     consumed_cost_base: Decimal
+    source_original_quantity: Decimal
+    source_open_quantity_before: Decimal
 
 
 def _apportion_nonnegative_disposal_values(
@@ -206,6 +208,8 @@ def _reconcile_disposal_allocation_residuals(
             consumed_quantity=apportioned_quantity,
             consumed_cost_local=local_costs[index - 1],
             consumed_cost_base=base_costs[index - 1],
+            source_original_quantity=allocation.source_original_quantity,
+            source_open_quantity_before=allocation.source_open_quantity_before,
         )
         for index, (allocation, apportioned_quantity) in enumerate(quantity_allocations, start=1)
     ]
@@ -252,6 +256,8 @@ def _consume_next_fifo_lot(
             field_name="disposed_cost_local",
         ),
         consumed_quantity=matched_quantity,
+        source_original_quantity=state_before.original_quantity,
+        source_open_quantity_before=state_before.quantity,
     )
     return (
         allocation,
@@ -607,6 +613,8 @@ class AverageCostBasisStrategy(CostBasisStrategy):
                     source_transaction_id=source_transaction_id,
                     source_acquisition_date=contribution.source_acquisition_date,
                     consumed_quantity=consumed_quantity,
+                    source_original_quantity=state_before.original_quantity,
+                    source_open_quantity_before=state_before.quantity,
                     consumed_cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
                         state_before.cost_local,
                         state_after.cost_local,

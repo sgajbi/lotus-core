@@ -214,6 +214,30 @@ async def test_full_rebuild_overlays_sequential_partial_sells_and_lineage() -> N
 
 
 @pytest.mark.asyncio
+async def test_full_rebuild_uses_restatement_quantities_for_amortized_disposal() -> None:
+    calculation = _calculation(
+        _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "100", "97"),
+        _raw_transaction("SPLIT_1", "2026-03-01T00:00:00Z", "SPLIT", "100", "0"),
+        _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "50", "60"),
+    )
+
+    decorated = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    evidence = decorated.disposals[0].result.allocations[0].amortized_cost_evidence
+    assert evidence is not None
+    assert evidence.original_quantity == Decimal("200.0000000000")
+    assert evidence.open_quantity_before == Decimal("200.0000000000")
+    assert evidence.consumed_quantity == Decimal("50.0000000000")
+    assert evidence.consumed_cost_local == Decimal("24.2500000000")
+    assert evidence.residual_quantity == Decimal("150.0000000000")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "transaction_type",
     ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
