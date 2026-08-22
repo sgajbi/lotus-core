@@ -16,12 +16,23 @@ from ..transaction.booked import BookedTransaction
 from ..transaction.corporate_action.ordering import (
     corporate_action_dependency_rank,
     corporate_action_target_order_key,
+    same_time_restatement_order_key,
 )
 from ..transaction.processing_type import resolve_effective_processing_transaction_type
 from .numeric_policy import POSITION_HISTORY_LEDGER_OUTPUT_V1
 from .reducer import PositionBalanceState, calculate_next_position_state
 
-PositionTransactionOrderKey = tuple[date, datetime, int, int, str, datetime, str]
+PositionTransactionOrderKey = tuple[
+    date,
+    datetime,
+    int,
+    int,
+    str,
+    Decimal,
+    str,
+    datetime,
+    str,
+]
 
 
 class PositionHistoryInvariantError(ValueError):
@@ -77,12 +88,17 @@ def position_transaction_ordering_key(
         else datetime.fromtimestamp(0, tz=timezone.utc)
     )
     target_sequence, target_instrument_id = corporate_action_target_order_key(transaction)
+    restatement_order = same_time_restatement_order_key(
+        transaction,
+        quantity=transaction.quantity,
+    ) or (Decimal(0), "")
     return (
         transaction_timestamp.date(),
         transaction_timestamp,
         corporate_action_dependency_rank(transaction),
         target_sequence,
         target_instrument_id,
+        *restatement_order,
         ingestion_timestamp,
         transaction.transaction_id,
     )

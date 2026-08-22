@@ -1,5 +1,6 @@
 """Order linked corporate-action and rights lifecycle transaction legs."""
 
+from decimal import Decimal
 from typing import Protocol
 
 from .classification import (
@@ -13,6 +14,12 @@ from .classification import (
 
 class CorporateActionOrderable(Protocol):
     """Expose the fields required for deterministic linked-leg ordering."""
+
+    @property
+    def transaction_id(self) -> str:
+        """Return the stable transaction identity."""
+
+        ...
 
     @property
     def transaction_type(self) -> str:
@@ -86,3 +93,16 @@ def corporate_action_target_order_key(
     target_instrument_id = str(transaction.target_instrument_id or "")
     sequence = int(child_sequence_hint) if child_sequence_hint is not None else 2_147_483_647
     return (sequence, target_instrument_id)
+
+
+def same_time_restatement_order_key(
+    transaction: CorporateActionOrderable,
+    *,
+    quantity: Decimal,
+) -> tuple[Decimal, str] | None:
+    """Return the shared quantity/identity tie-break for same-time restatements."""
+
+    transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
+    if transaction_type not in SAME_INSTRUMENT_CORPORATE_ACTION_TYPES:
+        return None
+    return (-quantity, transaction.transaction_id)
