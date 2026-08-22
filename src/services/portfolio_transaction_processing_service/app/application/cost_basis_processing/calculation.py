@@ -80,7 +80,8 @@ class CostBasisCalculationCoordinator:
         )
         lot_behavior = transaction_lot_behavior(transaction_type)
         requires_full_source_history = (
-            cost_basis_method is CostBasisMethod.AVCO and lot_behavior == "consume_lot"
+            cost_basis_method is CostBasisMethod.AVCO
+            and lot_behavior in {"consume_lot", "quantity_restatement"}
         )
         if (
             checkpoint is not None

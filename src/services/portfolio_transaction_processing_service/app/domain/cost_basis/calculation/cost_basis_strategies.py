@@ -25,6 +25,7 @@ from .basis_transfer_allocation import (
     SourceLotBasisTransferAllocation,
 )
 from .disposal_allocation import LotDisposalResult, SourceLotDisposalAllocation
+from .lot_restatement import LotRestatement
 from .lot_state import CostLot, OpenLotState
 from .residual_allocation import allocate_nonnegative_storage_share
 
@@ -261,6 +262,12 @@ class CostBasisStrategy(Protocol):
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> LotDisposalResult: ...
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal: ...
+    def restate_lot_quantities(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        signed_quantity_delta: Decimal,
+    ) -> LotRestatement: ...
     def transfer_basis_out(
         self,
         portfolio_id: str,
@@ -387,6 +394,45 @@ class FIFOBasisStrategy:
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)
         return self._available_quantities[key]
+
+    def restate_lot_quantities(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        signed_quantity_delta: Decimal,
+    ) -> LotRestatement:
+        """Restate every open FIFO lot atomically while conserving total basis."""
+
+        key = (portfolio_id, instrument_id)
+        quantity_before = self.get_available_quantity(portfolio_id, instrument_id)
+        restatement = LotRestatement.from_signed_delta(
+            quantity_before=quantity_before,
+            signed_quantity_delta=signed_quantity_delta,
+        )
+        lots = tuple(self._open_lots[key])
+        proposed = tuple(
+            (
+                lot,
+                restatement.apply(
+                    lot.original_quantity,
+                    field_name="original_quantity",
+                ),
+                restatement.apply(
+                    lot.remaining_quantity,
+                    field_name="open_quantity",
+                ),
+                lot.open_state(),
+            )
+            for lot in lots
+        )
+        for lot, original_quantity, open_quantity, state_before in proposed:
+            lot.original_quantity = original_quantity
+            lot.remaining_quantity = open_quantity
+            with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+                lot.cost_per_share_local = state_before.cost_local / open_quantity
+                lot.cost_per_share_base = state_before.cost_base / open_quantity
+        self._available_quantities[key] = restatement.quantity_after
+        return restatement
 
     def transfer_basis_out(
         self,
@@ -573,6 +619,31 @@ class AverageCostBasisStrategy(CostBasisStrategy):
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)
         return self._pools[key].quantity
+
+    def restate_lot_quantities(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        signed_quantity_delta: Decimal,
+    ) -> LotRestatement:
+        """Restate the AVCO pool and every source accumulator without moving basis."""
+
+        key = (portfolio_id, instrument_id)
+        pool = self._pools[key]
+        restatement = LotRestatement.from_signed_delta(
+            quantity_before=pool.quantity,
+            signed_quantity_delta=signed_quantity_delta,
+        )
+        self._source_allocation.apply_quantity_restatement(
+            book_key=key,
+            restatement=restatement,
+        )
+        pool.quantity = restatement.quantity_after
+        pool.segment_start_quantity = restatement.apply(
+            pool.segment_start_quantity,
+            field_name="segment_start_quantity",
+        )
+        return restatement
 
     def transfer_basis_out(
         self,

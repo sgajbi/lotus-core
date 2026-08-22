@@ -10,6 +10,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AverageCostBasisStrategy,
     CostBasisTransaction,
     FIFOBasisStrategy,
+    LotRestatementError,
     OpenLotState,
 )
 
@@ -37,6 +38,114 @@ def _open_quantities(strategy) -> dict[str, Decimal]:
         transaction_id: state.quantity
         for transaction_id, state in strategy.get_open_lot_states().items()
     }
+
+
+def _restatement_buy(
+    *,
+    transaction_id: str,
+    quantity: str,
+    cost: str,
+) -> CostBasisTransaction:
+    return CostBasisTransaction(
+        transaction_id=transaction_id,
+        portfolio_id="P-RESTATE",
+        instrument_id="I-RESTATE",
+        security_id="S-RESTATE",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1),
+        quantity=Decimal(quantity),
+        gross_transaction_amount=Decimal(cost),
+        net_cost=Decimal(cost),
+        net_cost_local=Decimal(cost),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_partial_disposal_then_split_restates_original_and_open_quantity_without_moving_basis(
+    strategy_type,
+) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        _restatement_buy(transaction_id="BUY-RESTATE", quantity="100", cost="1000")
+    )
+    disposed = strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("25"),
+    )
+    assert (disposed.cost_base, disposed.cost_local, disposed.consumed_quantity) == (
+        Decimal("250"),
+        Decimal("250"),
+        Decimal("25"),
+    )
+
+    restatement = strategy.restate_lot_quantities(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("75"),
+    )
+
+    state = strategy.get_open_lot_states()["BUY-RESTATE"]
+    assert restatement.lineage_payload()["quantity_after"] == Decimal("150")
+    assert (state.original_quantity, state.quantity, state.cost_local, state.cost_base) == (
+        Decimal("200.0000000000"),
+        Decimal("150.0000000000"),
+        Decimal("750"),
+        Decimal("750"),
+    )
+    final_disposal = strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("150"),
+    )
+    assert (final_disposal.cost_base, final_disposal.cost_local) == (
+        Decimal("750"),
+        Decimal("750"),
+    )
+    assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal(0)
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_reverse_split_restates_full_lot_and_conserves_basis(strategy_type) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        _restatement_buy(transaction_id="BUY-REVERSE", quantity="100", cost="1000")
+    )
+
+    strategy.restate_lot_quantities("P-RESTATE", "I-RESTATE", Decimal("-50"))
+
+    state = strategy.get_open_lot_states()["BUY-REVERSE"]
+    assert (state.original_quantity, state.quantity, state.cost_base) == (
+        Decimal("50.0000000000"),
+        Decimal("50.0000000000"),
+        Decimal("1000"),
+    )
+    disposal = strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE", "I-RESTATE", Decimal("50")
+    )
+    assert disposal.cost_base == Decimal("1000")
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_nonrepresentable_restatement_fails_before_mutating_any_source(strategy_type) -> None:
+    strategy = strategy_type()
+    for index in range(3):
+        strategy.add_buy_lot(
+            _restatement_buy(
+                transaction_id=f"BUY-NONREP-{index}",
+                quantity="1",
+                cost="10",
+            )
+        )
+    states_before = strategy.get_open_lot_states()
+
+    with pytest.raises(LotRestatementError, match="cannot be restated exactly"):
+        strategy.restate_lot_quantities("P-RESTATE", "I-RESTATE", Decimal("1"))
+
+    assert strategy.get_open_lot_states() == states_before
+    assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal("3")
 
 
 def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy):

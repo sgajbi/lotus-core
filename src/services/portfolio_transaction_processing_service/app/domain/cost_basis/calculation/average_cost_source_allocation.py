@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from typing import cast
@@ -18,6 +18,7 @@ from ..average_cost_allocation_checkpoint import (
     AverageCostSourceAccumulator,
 )
 from ..average_cost_pool_checkpoint import AverageCostPoolCheckpoint
+from .lot_restatement import LotRestatement
 from .lot_state import OpenLotState
 from .residual_allocation import allocate_nonnegative_storage_share
 
@@ -210,6 +211,35 @@ class AverageCostSourceAllocation:
             self._disposal_scale_by_key[book_key] = (
                 self._segment_start_scale_by_key[book_key] * quantity_after / segment_start_quantity
             )
+
+    def apply_quantity_restatement(
+        self,
+        *,
+        book_key: BookKey,
+        restatement: LotRestatement,
+    ) -> None:
+        """Scale every active source and segment quantity using one exact ratio."""
+
+        proposed = {
+            source_transaction_id: replace(
+                self._contributions[source_transaction_id],
+                original_quantity=restatement.apply(
+                    self._contributions[source_transaction_id].original_quantity,
+                    field_name="original_quantity",
+                ),
+                quantity=restatement.apply(
+                    self._contributions[source_transaction_id].quantity,
+                    field_name="source_quantity",
+                ),
+            )
+            for source_transaction_id in self._active_source_ids_by_key[book_key]
+        }
+        segment_start_quantity = restatement.apply(
+            self._segment_start_quantity_by_key[book_key],
+            field_name="source_allocation_segment_start_quantity",
+        )
+        self._contributions.update(proposed)
+        self._segment_start_quantity_by_key[book_key] = segment_start_quantity
 
     def apply_basis_transfer(
         self,

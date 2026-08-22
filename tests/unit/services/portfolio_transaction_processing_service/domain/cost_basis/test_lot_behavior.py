@@ -34,8 +34,10 @@ def test_transaction_lot_behavior_uses_governed_transaction_definitions(
 
 def test_lot_behavior_sets_express_incremental_and_average_cost_policy() -> None:
     assert {"open_lot", "transfer_basis_in"} <= LOT_OPENING_BEHAVIORS
-    assert {"consume_lot", "transfer_basis_out"} <= LOT_STATE_MUTATING_BEHAVIORS
-    assert "consume_lot" in STATE_DEPENDENT_LOT_BEHAVIORS
+    assert {"consume_lot", "quantity_restatement", "transfer_basis_out"} <= (
+        LOT_STATE_MUTATING_BEHAVIORS
+    )
+    assert {"consume_lot", "quantity_restatement"} <= STATE_DEPENDENT_LOT_BEHAVIORS
     assert "open_lot" not in STATE_DEPENDENT_LOT_BEHAVIORS
     assert INCREMENTAL_SAFE_LOT_BEHAVIORS == LOT_STATE_MUTATING_BEHAVIORS | {"none"}
     assert AVERAGE_COST_POOL_LOT_BEHAVIORS == {"open_lot", "consume_lot"}

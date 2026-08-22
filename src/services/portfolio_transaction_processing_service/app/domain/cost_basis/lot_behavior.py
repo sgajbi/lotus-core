@@ -16,6 +16,7 @@ LOT_STATE_MUTATING_BEHAVIORS = LOT_OPENING_BEHAVIORS | {
     "consume_rights_lot",
     "partial_basis_transfer",
     "preserve_or_consume_lot",
+    "quantity_restatement",
     "transfer_basis_out",
 }
 STATE_DEPENDENT_LOT_BEHAVIORS = LOT_STATE_MUTATING_BEHAVIORS - LOT_OPENING_BEHAVIORS
