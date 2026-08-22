@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import subprocess
 import sys
@@ -3145,6 +3146,36 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _write_front_office_verification_evidence(
+    *,
+    output_path: Path,
+    verification: dict[str, Any],
+    bundle: dict[str, Any],
+    start_date: date,
+    end_date: date,
+) -> dict[str, Any]:
+    evidence = {
+        "schema_version": "front-office-seed-verification.v1",
+        "evidence_scope": "canonical-front-office-seed",
+        "generated_at_utc": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "portfolio_id": verification["portfolio_id"],
+        "start_date": start_date.isoformat(),
+        "as_of_date": end_date.isoformat(),
+        "authority": {
+            "valuation_policy_assignment_count": len(bundle["valuation_policy_assignments"]),
+            "market_price_source_fact_count": len(bundle["market_price_source_facts"]),
+            "market_price_source_facts_hash": _canonical_payload_fingerprint(
+                bundle["market_price_source_facts"]
+            ),
+        },
+        "verification": verification,
+    }
+    evidence["content_hash"] = _canonical_payload_fingerprint(evidence)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return evidence
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Seed a realistic front-office portfolio scenario."
@@ -3164,6 +3195,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wait-seconds", type=int, default=900)
     parser.add_argument("--poll-interval-seconds", type=_positive_int, default=3)
     parser.add_argument("--postgres-container", default=DEFAULT_POSTGRES_CONTAINER)
+    parser.add_argument(
+        "--evidence-output",
+        type=Path,
+        help="Write source-safe machine-readable verification evidence after successful QA.",
+    )
     parser.add_argument("--skip-cleanup", action="store_true")
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--ingest-only", action="store_true")
@@ -3268,6 +3304,19 @@ def main() -> int:
             poll_interval_seconds=args.poll_interval_seconds,
         )
         LOGGER.info("Front-office seed verified: %s", verification)
+        if args.evidence_output is not None:
+            evidence = _write_front_office_verification_evidence(
+                output_path=args.evidence_output,
+                verification=verification,
+                bundle=bundle,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            LOGGER.info(
+                "Front-office verification evidence written to %s (content_hash=%s).",
+                args.evidence_output,
+                evidence["content_hash"],
+            )
     return 0
 
 
