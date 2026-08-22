@@ -5,10 +5,15 @@ FIFO and AVCO original/open lot quantities through one exact ratio while conserv
 basis. Non-representable per-lot results reject before mutation; typed restatement authority crosses
 cost persistence into position processing, and `lot_quantity_vs_position_mismatch` rejects before
 cashflow/readiness/commit. A one-round-trip, ordered, bounded read-only audit surfaces historical
-drift without transaction/lot identifiers. FIFO/AVCO PostgreSQL tests prove partial-disposal split,
+drift without transaction/lot identifiers and scopes candidates to the durable lot estate. Restored
+lots require original-quantity authority, while invariant failures use a stable source-safe,
+non-retryable rejection. FIFO/AVCO PostgreSQL tests prove partial-disposal split,
 duplicate delivery, backdated epoch replay, final disposal, and durable lot/position parity; the
-cross-product golden pack now covers split and reverse-split disposal economics. Status: fixed
-locally; protected PR, exact-main validation, wiki publication/parity, and issue closure pending.
+cross-product golden pack now covers split and reverse-split disposal economics. Warning-strict
+evidence includes 1,934 service units, 18 database-unit tests, 12 restored-lot repository integration
+tests, 189 sell-contract tests, and 150 full transaction-processing contract tests; Ruff/format,
+MyPy, lint governance, and architecture guards pass. Status: fixed locally; protected PR,
+exact-main validation, wiki publication/parity, and issue closure pending.
 Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
 
 CR-1707 bounded valuation job hot paths (2026-08-22): the governed 10,000-row evidence found

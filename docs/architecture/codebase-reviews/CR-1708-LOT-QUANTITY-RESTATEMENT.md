@@ -22,8 +22,13 @@ basis, or leave phantom quantity.
 - Cost persistence carries ephemeral restatement authority to position processing. The application
   compares the resulting position quantity before cashflow, readiness, and commit; divergence raises
   non-retryable `lot_quantity_vs_position_mismatch` and rolls back the unit of work.
+- Restored lot books require explicit original-quantity authority. Restatement calculation failures
+  map to source-safe, non-retryable `lot_quantity_restatement_rejected` outcomes instead of leaking
+  raw precision detail through an untyped error.
 - `make audit-lot-position-parity` provides a read-only ordered page (maximum 1,000 keys), assessed
   in one database round trip, for detecting historical drift without exposing transaction/lot IDs.
+  Candidate selection is limited to positions with durable lot-state authority, avoiding false
+  findings for cash and other non-lot products.
 
 ## Evidence
 
@@ -36,8 +41,14 @@ basis, or leave phantom quantity.
   `open_quantity <= original_quantity` throughout.
 - Cross-product goldens: split-then-full-sale and reverse-split-then-full-sale run against both
   strategies and assert exact cost relief, realized P&L, and empty residual lot state.
-- Scoped Ruff and repository MyPy are green. Final repository-native transaction and release gates
-  remain pending at this fixed-local documentation head.
+- Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
+- Repository database unit lane: `18 passed in 98.39s`; restored-lot repository integration:
+  `12 passed in 109.45s`.
+- Transaction sell contract: `189 passed in 4.49s`; full transaction-processing contract:
+  `150 passed in 891.96s`.
+- Repository Ruff/format and lint governance, MyPy (`323` source files), and the complete architecture
+  guard are green. Protected PR, exact-main, and release certification remain pending at this
+  fixed-local documentation head.
 
 ## Compatibility and scope
 
