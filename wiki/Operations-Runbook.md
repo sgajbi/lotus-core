@@ -299,9 +299,10 @@ authority or its canonical portfolio/instrument parents. Identical version-1 rep
 changed evidence must append a governed newer version or use an explicit full local-state reset.
 
 On `--skip-cleanup`, the tool preserves transaction history while idempotently republishing the
-portfolio master, instruments, and complete raw-price windows; proving durable tenant/book scope;
-and publishing plus durably verifying valuation assignments/source facts. It does not silently
-treat an existing pre-authority seed as complete.
+portfolio master and instruments, publishing only observations missing from the complete raw-price
+windows, proving durable tenant/book scope, and publishing plus durably verifying valuation
+assignments/source facts. It neither rearms unchanged raw prices nor silently treats an existing
+pre-authority seed as complete.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured

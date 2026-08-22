@@ -192,9 +192,10 @@ must use a governed newer source version; use an explicit full local-state reset
 experimental history rather than deleting append-only evidence from a portfolio cleanup.
 
 `--skip-cleanup` preserves transaction history but is not a no-op. For an existing seed it
-idempotently republishes the portfolio master, instruments, and complete raw-price windows; proves
-the durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` scope; then publishes and durably verifies the
-valuation assignments/source facts before continuing. It never replays transactions unless the
+idempotently republishes the portfolio master and instruments, publishes only raw-price
+observations missing from the complete required windows, and proves the durable `LOTUS_PB_SG` /
+`SG_PRIVATE_BANK_BOOK` scope. It then publishes and durably verifies valuation assignments/source
+facts before continuing. It never replays transactions or rearms unchanged raw prices unless the
 separate governed reprocess option is selected.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
