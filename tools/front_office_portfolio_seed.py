@@ -2547,14 +2547,10 @@ def _upgrade_front_office_valuation_authority(
 ) -> None:
     """Upgrade authority only when no terminal valuation recovery is required."""
 
-    failed_quote_authority_security_ids = _failed_quote_authority_security_ids(
+    _require_no_terminal_quote_authority_failures(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     )
-    if failed_quote_authority_security_ids:
-        raise RuntimeError(
-            "Canonical quote-authority valuation recovery requires a governed full reseed."
-        )
     expected_scope = {
         "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
@@ -2615,6 +2611,10 @@ def _upgrade_front_office_valuation_authority(
         bundle=bundle,
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
+    )
+    _require_no_terminal_quote_authority_failures(
+        postgres_container=postgres_container,
+        portfolio_id=portfolio_id,
     )
 
 
@@ -2974,6 +2974,20 @@ from (
     ):
         raise RuntimeError("Canonical failed quote-authority jobs could not be classified.")
     return tuple(result)
+
+
+def _require_no_terminal_quote_authority_failures(
+    *,
+    postgres_container: str,
+    portfolio_id: str,
+) -> None:
+    if _failed_quote_authority_security_ids(
+        postgres_container=postgres_container,
+        portfolio_id=portfolio_id,
+    ):
+        raise RuntimeError(
+            "Canonical quote-authority valuation recovery requires a governed full reseed."
+        )
 
 
 def _wait_for_portfolio_valuation_scope(

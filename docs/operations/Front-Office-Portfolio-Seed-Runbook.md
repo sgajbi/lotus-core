@@ -204,7 +204,9 @@ the full transaction set or rearms unchanged source parents. If an exact canonic
 has terminal failed valuation jobs, the reuse path fails before any write and requires a normal
 governed full reseed without `--skip-cleanup`. That path recreates portfolio-owned valuation work
 while preserving the shared append-only quote authority. It does not pretend that replaying an
-unchanged transaction can reopen an already-completed readiness stage.
+unchanged transaction can reopen an already-completed readiness stage. The tool repeats the
+terminal-failure check after authority is durable so a job that fails during the upgrade cannot be
+misclassified from the initial snapshot or allowed into downstream seed continuation.
 
 The app-local Core stack runs four bounded portfolio aggregation workers by default. The scheduler
 claims ready portfolio-day rows from `portfolio_aggregation_jobs` with `FOR UPDATE SKIP LOCKED` and

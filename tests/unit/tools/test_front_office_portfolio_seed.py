@@ -1903,6 +1903,7 @@ def test_front_office_seed_ingests_and_awaits_cash_account_masters(monkeypatch):
 def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(monkeypatch):
     bundle = _build_bundle()
     timeline: list[str] = []
+    failed_job_checks = iter([(), ()])
 
     def request(method, url, *, payload=None):
         assert method == "POST"
@@ -1928,7 +1929,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
     monkeypatch.setattr(
         front_office_seed_module,
         "_failed_quote_authority_security_ids",
-        lambda **_kwargs: (),
+        lambda **_kwargs: timeline.append("failed_jobs_checked") or next(failed_job_checks),
     )
     monkeypatch.setattr(
         front_office_seed_module,
@@ -1997,6 +1998,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
     )
 
     assert timeline == [
+        "failed_jobs_checked",
         "http://ingestion.dev.lotus/ingest/portfolios",
         "portfolio_visible",
         "portfolio_scope_durable",
@@ -2007,6 +2009,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "valuation_authority_published",
         "valuation_authority_pending",
         "valuation_authority_durable",
+        "failed_jobs_checked",
     ]
 
 
@@ -2125,6 +2128,63 @@ def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_
             poll_interval_seconds=3,
         )
 
+    assert "FO_BOND_UST_2030" not in str(exc_info.value)
+
+
+def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authority(
+    monkeypatch,
+):
+    checks = iter([(), ("FO_BOND_UST_2030",)])
+    timeline: list[str] = []
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_failed_quote_authority_security_ids",
+        lambda **_kwargs: next(checks),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_portfolio_valuation_scope",
+        lambda **_kwargs: {
+            "tenant_id": "LOTUS_PB_SG",
+            "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+        },
+    )
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_portfolio_persistence", lambda **_: None
+    )
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_portfolio_valuation_scope", lambda **_: None
+    )
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_instrument_persistence", lambda **_: None
+    )
+    monkeypatch.setattr(front_office_seed_module, "_missing_required_market_prices", lambda **_: [])
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_required_market_price_readiness", lambda **_: None
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_ingest_valuation_authority",
+        lambda **_: timeline.append("authority_published"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_durable_front_office_valuation_authority",
+        lambda **_: timeline.append("authority_durable"),
+    )
+
+    with pytest.raises(RuntimeError, match="requires a governed full reseed") as exc_info:
+        _upgrade_front_office_valuation_authority(
+            ingestion_base_url="http://ingestion.dev.lotus",
+            query_base_url="http://query.dev.lotus",
+            postgres_container="postgres",
+            bundle=_build_bundle(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            wait_seconds=90,
+            poll_interval_seconds=3,
+        )
+
+    assert timeline == ["authority_published", "authority_durable"]
     assert "FO_BOND_UST_2030" not in str(exc_info.value)
 
 
