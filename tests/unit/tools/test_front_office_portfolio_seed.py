@@ -103,15 +103,14 @@ def test_front_office_bundle_carries_complete_deterministic_valuation_authority(
     assignment_by_security = {row["security_id"]: row for row in assignments}
     for security_id, instrument in instruments.items():
         assignment = assignment_by_security[security_id]
-        if instrument["product_type"].strip().lower() == "bond":
-            assert assignment["policy_id"] == "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
-        else:
-            assert assignment["policy_id"] == "UNIT_PRICE_MARKET_VALUE"
+        assert assignment["policy_id"] == "UNIT_PRICE_MARKET_VALUE"
 
     ust_facts = [row for row in facts if row["security_id"] == "FO_BOND_UST_2030"]
     assert ust_facts
-    assert {row["quote_basis"] for row in ust_facts} == {"PERCENT_OF_PRINCIPAL_CLEAN"}
+    assert {row["quote_basis"] for row in ust_facts} == {"UNIT_PRICE"}
     assert max(row["price_date"] for row in ust_facts) == "2026-04-10"
+    latest_ust_fact = next(row for row in ust_facts if row["price_date"] == "2026-04-10")
+    assert latest_ust_fact["price"] == "1013.5000"
 
 
 def test_front_office_valuation_authority_satisfies_ingestion_contracts():
