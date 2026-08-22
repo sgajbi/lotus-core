@@ -4107,7 +4107,8 @@ Most relevant current governance:
      round a per-lot remainder: if any lot is not exactly representable at the governed transaction
      quantity scale, reject the complete event before state mutation. The cost output carries the
      exact ratio as ephemeral authority into position processing; compare the restated lot total
-     with the resulting current-position quantity before cashflow, readiness, or commit and reject
+     with the position quantity at the same corporate-action transaction before cashflow, readiness,
+     or commit and reject
      `lot_quantity_vs_position_mismatch` non-retryably on divergence. Historical estate checks use
      the read-only, ordered, bounded `make audit-lot-position-parity` command; its adapter must keep
      one database round trip per page and expose no transaction or lot identifiers. Backdated repair

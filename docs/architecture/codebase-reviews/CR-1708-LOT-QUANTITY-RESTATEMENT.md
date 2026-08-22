@@ -20,11 +20,17 @@ basis, or leave phantom quantity.
   caller-owned transaction. Calculation lineage binds the exact restatement payload.
 - `quantity_restatement` is state-dependent and forces complete AVCO source-history reconstruction.
 - Cost persistence carries ephemeral restatement authority to position processing. The application
-  compares the resulting position quantity before cashflow, readiness, and commit; divergence raises
-  non-retryable `lot_quantity_vs_position_mismatch` and rolls back the unit of work.
+  compares the position quantity at the same corporate-action transaction before cashflow,
+  readiness, and commit; divergence raises non-retryable `lot_quantity_vs_position_mismatch` and
+  rolls back the unit of work. This like-for-like boundary remains correct when a backdated rebuild
+  includes later buys or sales whose final quantity legitimately differs.
 - Restored lot books require explicit original-quantity authority. Restatement calculation failures
   map to source-safe, non-retryable `lot_quantity_restatement_rejected` outcomes instead of leaking
   raw precision detail through an untyped error.
+- Calculated-output governance binds FIFO's direct numeric-policy execution. AVCO restatement is not
+  listed as a separate policy execution callsite because it delegates all governed arithmetic to
+  the already-bound average-cost source-allocation/materialization boundaries; the fail-closed guard
+  rejects a duplicate stale boundary declaration.
 - `make audit-lot-position-parity` provides a read-only ordered page (maximum 1,000 keys), assessed
   in one database round trip, for detecting historical drift without exposing transaction/lot IDs.
   Candidate selection is limited to positions with durable lot-state authority, avoiding false
@@ -39,6 +45,9 @@ basis, or leave phantom quantity.
   backdated correction/epoch rebuild with identical economic lot fields, parity audit, final SELL
   150, and durable zero lot/position quantity. The source lot satisfies
   `open_quantity <= original_quantity` throughout.
+- Adverse-order PostgreSQL replay: FIFO and AVCO each prove BUY, later SELL, then a backdated SPLIT
+  ordered before that SELL. The split row holds 175, the final row and lot book hold 150, basis
+  remains exact, and parity remains current (`2 passed in 70.20s`).
 - Cross-product goldens: split-then-full-sale and reverse-split-then-full-sale run against both
   strategies and assert exact cost relief, realized P&L, and empty residual lot state.
 - Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
