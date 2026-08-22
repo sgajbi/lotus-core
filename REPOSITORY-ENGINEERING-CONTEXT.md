@@ -4131,7 +4131,11 @@ Most relevant current governance:
      planner's `OpenLotState`, including `original_quantity`; never combine restated open quantity
      with the pre-corporate-action BUY quantity. Prove forward and reverse restatement at the
      repository statement boundary and one real-PostgreSQL reconciliation that repairs, conserves
-     source/pool basis, and becomes idempotently current.
+     source/pool basis, and becomes idempotently current. The currentness fence must compare the
+     deterministic original quantity for every source, not only aggregate open quantity/cost and
+     otherwise-valid lineage, so estates repaired by an older writer cannot retain stale source
+     authority. Amortized-cost disposal overlays must consume the strategy-owned restated original
+     and pre-disposal quantities; reconstructing them from the immutable BUY event is prohibited.
 
 ## Context Maintenance Rule
 

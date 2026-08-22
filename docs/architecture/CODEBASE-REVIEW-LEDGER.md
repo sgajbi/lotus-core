@@ -29,7 +29,11 @@ generation, and focused application/adapter proof (`105 passed`).
 The first exact-head combined coverage run then exposed missing fail-closed audit-domain decisions;
 blank identities, negative epoch/quantity authority, and falsely current assessments now have direct
 proof at `100%` line/branch coverage, with calculated financial/changed-code margins of `85.47%` and
-`85.24%` before the replacement protected run. Status:
+`85.24%` before the replacement protected run. Final financial review closed three same-pattern
+gaps: amortized-cost disposal uses strategy-owned restated quantities; AVCO currentness compares
+every source's original authority and repairs a valid-lineage stale estate; and the parity audit
+normalizes legacy lot/history identifiers. Focused unit proof is `68 passed`; AVCO unit/PostgreSQL
+reconciliation is `15 passed in 71.49s`. Status:
 fixed locally; protected PR,
 exact-main validation, wiki publication/parity, and issue closure pending.
 Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).

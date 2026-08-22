@@ -217,6 +217,8 @@ class SqlAlchemyAverageCostPoolRepository:
         for source_transaction in plan.source_transactions:
             payload = buy_lot_state_payload(source_transaction)
             state = plan.source_states.get(source_transaction.transaction_id)
+            # The planner emits a state for every governed source, including closed sources;
+            # this fallback is limited to defensive reconstruction of an omitted source.
             payload.update(
                 original_quantity=(
                     state.original_quantity if state is not None else payload["original_quantity"]
