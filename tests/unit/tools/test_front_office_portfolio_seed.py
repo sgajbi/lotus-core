@@ -1847,6 +1847,27 @@ def test_front_office_seed_accepts_positive_cli_poll_interval(monkeypatch):
     assert parse_args().poll_interval_seconds == 1
 
 
+def test_front_office_seed_rejects_ingest_only_evidence_output_before_readiness(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "front_office_portfolio_seed.py",
+            "--ingest-only",
+            "--evidence-output",
+            "evidence.json",
+        ],
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_ready",
+        lambda *_args: pytest.fail("invalid evidence posture must fail before readiness"),
+    )
+
+    with pytest.raises(ValueError, match="Cannot use --evidence-output with --ingest-only"):
+        front_office_seed_module.main()
+
+
 def test_front_office_seed_ingests_and_awaits_cash_account_masters(monkeypatch):
     observed: list[tuple[str, object]] = []
     bundle = {
@@ -1928,7 +1949,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
     monkeypatch.setattr(front_office_seed_module, "_request_json", request)
     monkeypatch.setattr(
         front_office_seed_module,
-        "_failed_quote_authority_security_ids",
+        "_blocking_quote_authority_job_security_ids",
         lambda **_kwargs: timeline.append("failed_jobs_checked") or next(failed_job_checks),
     )
     monkeypatch.setattr(
@@ -1999,13 +2020,13 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
 
     assert timeline == [
         "failed_jobs_checked",
-        "http://ingestion.dev.lotus/ingest/portfolios",
-        "portfolio_visible",
-        "portfolio_scope_durable",
         "instruments_visible",
         "old_price_coverage_inspected",
         "raw_prices_published_through_2026-04-30",
         "raw_prices_visible",
+        "http://ingestion.dev.lotus/ingest/portfolios",
+        "portfolio_visible",
+        "portfolio_scope_durable",
         "valuation_authority_published",
         "valuation_authority_pending",
         "valuation_authority_durable",
@@ -2043,7 +2064,7 @@ def test_current_seed_upgrade_does_not_republish_unchanged_source_parents(monkey
     )
     monkeypatch.setattr(
         front_office_seed_module,
-        "_failed_quote_authority_security_ids",
+        "_blocking_quote_authority_job_security_ids",
         lambda **_kwargs: (),
     )
     monkeypatch.setattr(
@@ -2082,7 +2103,7 @@ def test_current_seed_upgrade_does_not_republish_unchanged_source_parents(monkey
     )
 
 
-def test_front_office_seed_reads_only_failed_quote_authority_securities(monkeypatch):
+def test_front_office_seed_reads_only_blocking_quote_authority_securities(monkeypatch):
     observed_sql: list[str] = []
 
     def read_failed(**kwargs):
@@ -2091,14 +2112,14 @@ def test_front_office_seed_reads_only_failed_quote_authority_securities(monkeypa
 
     monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", read_failed)
 
-    result = front_office_seed_module._failed_quote_authority_security_ids(
+    result = front_office_seed_module._blocking_quote_authority_job_security_ids(
         postgres_container="postgres",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
     )
 
     assert result == ("FO_BOND_SIEMENS_2031", "FO_BOND_UST_2030")
     assert "from portfolio_valuation_jobs" in observed_sql[0]
-    assert "and status = 'FAILED'" in observed_sql[0]
+    assert "and status in ('PENDING', 'PROCESSING', 'FAILED')" in observed_sql[0]
     assert "FO_BOND_UST_2030" in observed_sql[0]
     assert "FO_BOND_SIEMENS_2031" in observed_sql[0]
 
@@ -2108,7 +2129,7 @@ def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_
 ):
     monkeypatch.setattr(
         front_office_seed_module,
-        "_failed_quote_authority_security_ids",
+        "_blocking_quote_authority_job_security_ids",
         lambda **_kwargs: ("FO_BOND_UST_2030",),
     )
     monkeypatch.setattr(
@@ -2117,7 +2138,7 @@ def test_existing_seed_upgrade_rejects_terminal_quote_authority_failures_before_
         lambda *_args, **_kwargs: pytest.fail("failed-job preflight must precede writes"),
     )
 
-    with pytest.raises(RuntimeError, match="requires a governed full reseed") as exc_info:
+    with pytest.raises(RuntimeError, match="terminal recovery requires") as exc_info:
         _upgrade_front_office_valuation_authority(
             ingestion_base_url="http://ingestion.dev.lotus",
             query_base_url="http://query.dev.lotus",
@@ -2138,7 +2159,7 @@ def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authorit
     timeline: list[str] = []
     monkeypatch.setattr(
         front_office_seed_module,
-        "_failed_quote_authority_security_ids",
+        "_blocking_quote_authority_job_security_ids",
         lambda **_kwargs: next(checks),
     )
     monkeypatch.setattr(
@@ -2173,7 +2194,7 @@ def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authorit
         lambda **_: timeline.append("authority_durable"),
     )
 
-    with pytest.raises(RuntimeError, match="requires a governed full reseed") as exc_info:
+    with pytest.raises(RuntimeError, match="terminal recovery requires") as exc_info:
         _upgrade_front_office_valuation_authority(
             ingestion_base_url="http://ingestion.dev.lotus",
             query_base_url="http://query.dev.lotus",
@@ -2186,6 +2207,47 @@ def test_existing_seed_upgrade_rechecks_terminal_failures_after_durable_authorit
 
     assert timeline == ["authority_published", "authority_durable"]
     assert "FO_BOND_UST_2030" not in str(exc_info.value)
+
+
+def test_existing_seed_upgrade_validates_raw_prices_before_scope_write(monkeypatch):
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_blocking_quote_authority_job_security_ids",
+        lambda **_kwargs: (),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_read_portfolio_valuation_scope",
+        lambda **_kwargs: {"tenant_id": None, "legal_book_id": None},
+    )
+    monkeypatch.setattr(
+        front_office_seed_module, "_wait_for_instrument_persistence", lambda **_: None
+    )
+
+    def reject_conflicting_prices(**_kwargs):
+        raise RuntimeError("Existing canonical raw market-price observation conflicts")
+
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_missing_required_market_prices",
+        reject_conflicting_prices,
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda *_args, **_kwargs: pytest.fail("raw conflict must precede every write"),
+    )
+
+    with pytest.raises(RuntimeError, match="raw market-price observation conflicts"):
+        _upgrade_front_office_valuation_authority(
+            ingestion_base_url="http://ingestion.dev.lotus",
+            query_base_url="http://query.dev.lotus",
+            postgres_container="postgres",
+            bundle=_build_bundle(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            wait_seconds=90,
+            poll_interval_seconds=3,
+        )
 
 
 def test_front_office_seed_reuse_repairs_cash_accounts_without_full_core_reingestion(

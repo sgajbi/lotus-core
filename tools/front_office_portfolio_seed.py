@@ -93,7 +93,7 @@ FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID = {
         quote_denominator=FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR,
     ),
 }
-FRONT_OFFICE_QUOTE_AUTHORITY_REPROCESSING_SECURITY_IDS = tuple(
+FRONT_OFFICE_QUOTE_AUTHORITY_SECURITY_IDS = tuple(
     sorted(
         security_id
         for security_id, convention in FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID.items()
@@ -2547,7 +2547,7 @@ def _upgrade_front_office_valuation_authority(
 ) -> None:
     """Upgrade authority only when no terminal valuation recovery is required."""
 
-    _require_no_terminal_quote_authority_failures(
+    _require_quiescent_quote_authority_jobs(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     )
@@ -2555,33 +2555,9 @@ def _upgrade_front_office_valuation_authority(
         "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
     }
-    if (
-        _read_portfolio_valuation_scope(
-            postgres_container=postgres_container,
-            portfolio_id=portfolio_id,
-        )
-        != expected_scope
-    ):
-        _request_json(
-            "POST",
-            f"{ingestion_base_url}/ingest/portfolios",
-            payload={
-                "portfolios": [
-                    _requested_portfolio_master(bundle=bundle, portfolio_id=portfolio_id)
-                ]
-            },
-        )
-    _wait_for_portfolio_persistence(
-        query_base_url=query_base_url,
-        portfolio_id=portfolio_id,
-        wait_seconds=wait_seconds,
-        poll_interval_seconds=poll_interval_seconds,
-    )
-    _wait_for_portfolio_valuation_scope(
+    existing_scope = _read_portfolio_valuation_scope(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
-        wait_seconds=wait_seconds,
-        poll_interval_seconds=poll_interval_seconds,
     )
     _wait_for_instrument_persistence(
         query_base_url=query_base_url,
@@ -2605,6 +2581,28 @@ def _upgrade_front_office_valuation_authority(
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
+    if existing_scope != expected_scope:
+        _request_json(
+            "POST",
+            f"{ingestion_base_url}/ingest/portfolios",
+            payload={
+                "portfolios": [
+                    _requested_portfolio_master(bundle=bundle, portfolio_id=portfolio_id)
+                ]
+            },
+        )
+    _wait_for_portfolio_persistence(
+        query_base_url=query_base_url,
+        portfolio_id=portfolio_id,
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    _wait_for_portfolio_valuation_scope(
+        postgres_container=postgres_container,
+        portfolio_id=portfolio_id,
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
     _ingest_valuation_authority(ingestion_base_url=ingestion_base_url, bundle=bundle)
     _wait_for_durable_front_office_valuation_authority(
         postgres_container=postgres_container,
@@ -2612,7 +2610,7 @@ def _upgrade_front_office_valuation_authority(
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
-    _require_no_terminal_quote_authority_failures(
+    _require_quiescent_quote_authority_jobs(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     )
@@ -2948,12 +2946,12 @@ select coalesce(
     return _read_postgres_json(postgres_container=postgres_container, sql=sql)
 
 
-def _failed_quote_authority_security_ids(
+def _blocking_quote_authority_job_security_ids(
     *,
     postgres_container: str,
     portfolio_id: str,
 ) -> tuple[str, ...]:
-    governed_security_ids = FRONT_OFFICE_QUOTE_AUTHORITY_REPROCESSING_SECURITY_IDS
+    governed_security_ids = FRONT_OFFICE_QUOTE_AUTHORITY_SECURITY_IDS
     security_id_literals = ", ".join(
         _postgres_string_literal(security_id) for security_id in governed_security_ids
     )
@@ -2964,29 +2962,30 @@ from (
   from portfolio_valuation_jobs
   where portfolio_id = {_postgres_string_literal(portfolio_id)}
     and security_id in ({security_id_literals})
-    and status = 'FAILED'
-) failed_quote_authority;
+    and status in ('PENDING', 'PROCESSING', 'FAILED')
+) blocking_quote_authority;
 """
     result = _read_postgres_json(postgres_container=postgres_container, sql=sql)
     if not isinstance(result, list) or any(
         not isinstance(security_id, str) or security_id not in governed_security_ids
         for security_id in result
     ):
-        raise RuntimeError("Canonical failed quote-authority jobs could not be classified.")
+        raise RuntimeError("Canonical quote-authority jobs could not be classified.")
     return tuple(result)
 
 
-def _require_no_terminal_quote_authority_failures(
+def _require_quiescent_quote_authority_jobs(
     *,
     postgres_container: str,
     portfolio_id: str,
 ) -> None:
-    if _failed_quote_authority_security_ids(
+    if _blocking_quote_authority_job_security_ids(
         postgres_container=postgres_container,
         portfolio_id=portfolio_id,
     ):
         raise RuntimeError(
-            "Canonical quote-authority valuation recovery requires a governed full reseed."
+            "Canonical quote-authority valuation work must be quiescent; terminal recovery "
+            "requires a governed full reseed."
         )
 
 
@@ -3651,6 +3650,8 @@ def main() -> int:
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
     if args.verify_only and args.ingest_only:
         raise ValueError("Cannot use --verify-only with --ingest-only")
+    if args.ingest_only and args.evidence_output is not None:
+        raise ValueError("Cannot use --evidence-output with --ingest-only")
 
     start_date = date.fromisoformat(args.start_date)
     end_date = date.fromisoformat(args.end_date)

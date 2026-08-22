@@ -4066,16 +4066,16 @@ Most relevant current governance:
      authority or its canonical portfolio/instrument parents; identical source-version replay is
      idempotent and changed evidence requires a governed newer version or explicit full local-state
      reset. The `--skip-cleanup` path must
-     update portfolio scope only when wrong, wait for existing instruments, publish only the
-     observations missing from complete raw-price windows, fail closed when an existing raw price
-     or currency conflicts with the canonical bundle, and durably prove assignments and
-     latest-version facts. When exact canonical quote-authority securities already have terminal
-     failed valuation jobs, fail before any reuse-path write and require the governed full reseed;
-     repeat the check after durable authority so an in-flight job that becomes terminal cannot
-     enter downstream seed continuation. Unchanged transaction replay cannot reopen an
+     require exact canonical quote-authority valuation work to be quiescent, wait for existing
+     instruments, validate raw-price content before any scope mutation, publish only missing
+     observations, then update portfolio scope only when wrong and durably prove assignments and
+     latest-version facts. Active or terminal quote-authority work blocks the reuse path; repeat the
+     check after durable authority so concurrent work cannot enter downstream seed continuation.
+     Unchanged transaction replay cannot reopen an
      already-completed readiness stage. The verifier
      may emit a source-safe content-bound JSON receipt only after exact durable-row comparison, and
      must observe three terminal queue snapshots so reopened work cannot masquerade as success.
+     `--evidence-output` requires verification and must be rejected with `--ingest-only`.
      Never restore price-magnitude
      inference or fabricate quote authority downstream when this evidence is unavailable.
 

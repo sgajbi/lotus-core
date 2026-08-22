@@ -300,18 +300,20 @@ Routine replay cleanup never deletes the shared append-only valuation
 authority or its canonical portfolio/instrument parents. Identical version-1 replay is idempotent;
 changed evidence must append a governed newer version or use an explicit full local-state reset.
 
-On `--skip-cleanup`, the tool preserves transaction history, updates the portfolio master only when
-durable tenant/book scope is wrong, waits for existing instruments, and publishes only observations
-missing from the complete raw-price windows. Existing observations must match the canonical price
-and currency; a conflict fails closed instead of being certified by new source authority. It then
+On `--skip-cleanup`, the tool preserves transaction history, requires canonical bond valuation work
+to be quiescent, waits for existing instruments, and validates existing observations before any
+scope write. It publishes only observations missing from the complete raw-price windows, then
+updates the portfolio master only when durable tenant/book scope is wrong. Existing observations
+must match the canonical price and currency; a conflict fails closed without partially activating
+new scope. It then
 publishes plus durably verifies valuation assignments/source facts. It neither rearms unchanged
 source parents nor silently treats an existing pre-authority seed as complete. If an affected
 canonical bond already has terminal failed valuation jobs, the tool fails before any write and
 requires a normal governed full reseed without `--skip-cleanup`. The full reseed recreates
 portfolio-owned valuation work while preserving shared append-only quote authority; unchanged
 transaction replay is not treated as a recovery mechanism for a completed readiness stage. A
-second check after durable authority catches jobs that become terminal during the upgrade before
-downstream seed continuation.
+second active-or-terminal check after durable authority catches concurrent work before downstream
+seed continuation. Wait and retry for active work; use the governed full reseed for terminal work.
 
 A canonical seed is complete only after valuation and aggregation queues have no pending,
 processing, stale-processing, or failed work for three consecutive observations at the configured
@@ -325,6 +327,8 @@ PostgreSQL projection and fails
 without writing a file on missing, extra, changed, or unreadable authority. Receipt counts and
 hashes are derived from those durable rows and bind the final verification, three-observation
 stability count, and receipt content hash.
+`--evidence-output` cannot be combined with `--ingest-only`, because evidence requires completed
+verification; the invalid combination fails before readiness checks.
 
 The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
 and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`

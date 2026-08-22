@@ -13,14 +13,13 @@ requires explicit per-security quote metadata, normalizes both declared clean-pe
 to the price per 1,000-face held unit, and binds those inputs into the source hash; missing or
 mismatched metadata fails before publication and runtime quantity is not treated as face authority.
 Routine portfolio cleanup cannot delete this shared canonical source authority or its canonical
-portfolio/instrument parents. The reuse path
-updates only incorrect portfolio scope, waits for existing instruments, and publishes only missing
-raw-price observations while rejecting conflicting existing price/currency values before proving
-and upgrading authority
-without broad transaction replay. If exact canonical quote-authority securities already have
-terminal failed valuation jobs, the reuse path fails before any write and requires the governed
-full reseed; a post-authority check catches jobs that become terminal during the upgrade before
-downstream continuation. Unchanged transaction replay cannot reopen a completed readiness stage.
+portfolio/instrument parents. The reuse path requires canonical bond valuation work to be
+quiescent, waits for existing instruments, validates raw-price content before any scope mutation,
+publishes only missing observations, and only then repairs incorrect portfolio scope and authority
+without broad transaction replay. Active or terminal quote-authority work blocks reuse; a second
+post-authority check catches concurrent work before downstream continuation. Unchanged transaction
+replay cannot reopen a completed readiness stage. Ingest-only evidence requests fail before
+readiness because no verification receipt can truthfully be produced.
 The verifier emits a content-bound JSON receipt only after exact
 latest-source-version durable-row comparison, plus a three-observation
 non-amplification fence. No valuation
