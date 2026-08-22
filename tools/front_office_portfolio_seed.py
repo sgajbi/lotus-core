@@ -2451,6 +2451,32 @@ def _wait_for_required_market_price_readiness(
     raise RuntimeError(f"Timed out waiting for market-price readiness: {outstanding}")
 
 
+def _missing_required_market_prices(
+    *,
+    query_base_url: str,
+    bundle: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return only canonical raw observations absent from the current query projection."""
+
+    existing_keys: set[tuple[str, str]] = set()
+    for security_id, start_date, end_date in _required_market_price_windows(bundle):
+        _, payload = _request_json(
+            "GET",
+            f"{query_base_url}/prices/"
+            f"?security_id={security_id}&start_date={start_date}&end_date={end_date}",
+        )
+        for row in payload.get("prices") or []:
+            price_date = row.get("price_date")
+            observed_security_id = row.get("security_id", security_id)
+            if isinstance(observed_security_id, str) and isinstance(price_date, str):
+                existing_keys.add((observed_security_id, price_date))
+    return [
+        row
+        for row in bundle["market_prices"]
+        if (row["security_id"], row["price_date"]) not in existing_keys
+    ]
+
+
 def _ingest_valuation_authority(
     *,
     ingestion_base_url: str,
@@ -2510,11 +2536,16 @@ def _upgrade_front_office_valuation_authority(
         wait_seconds=wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
-    _request_json(
-        "POST",
-        f"{ingestion_base_url}/ingest/market-prices",
-        payload={"market_prices": bundle["market_prices"]},
+    missing_market_prices = _missing_required_market_prices(
+        query_base_url=query_base_url,
+        bundle=bundle,
     )
+    if missing_market_prices:
+        _request_json(
+            "POST",
+            f"{ingestion_base_url}/ingest/market-prices",
+            payload={"market_prices": missing_market_prices},
+        )
     _wait_for_required_market_price_readiness(
         query_base_url=query_base_url,
         bundle=bundle,

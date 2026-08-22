@@ -1530,6 +1530,34 @@ def test_front_office_seed_derives_required_market_price_windows():
     ]
 
 
+def test_front_office_seed_selects_only_missing_raw_price_tail(monkeypatch):
+    bundle = {
+        "market_prices": [
+            {"security_id": "CASH_USD", "price_date": "2026-04-09", "price": "1"},
+            {"security_id": "CASH_USD", "price_date": "2026-04-10", "price": "1"},
+            {"security_id": "CASH_USD", "price_date": "2026-04-30", "price": "1"},
+        ]
+    }
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda method, url, *, payload=None: (
+            200,
+            {
+                "prices": [
+                    {"security_id": "CASH_USD", "price_date": "2026-04-09"},
+                    {"security_id": "CASH_USD", "price_date": "2026-04-10"},
+                ]
+            },
+        ),
+    )
+
+    assert front_office_seed_module._missing_required_market_prices(
+        query_base_url="http://query.dev.lotus",
+        bundle=bundle,
+    ) == [{"security_id": "CASH_USD", "price_date": "2026-04-30", "price": "1"}]
+
+
 def test_front_office_seed_waits_for_required_fx_readiness(monkeypatch):
     bundle = _build_bundle()
     observed_urls = []
@@ -1772,6 +1800,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
                 for row in payload["market_prices"]
                 if row["security_id"].startswith("CASH_")
             ]
+            assert min(cash_dates) > "2026-04-10"
             assert max(cash_dates) == "2026-04-30"
             timeline.append("raw_prices_published_through_2026-04-30")
         else:
@@ -1793,6 +1822,16 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         front_office_seed_module,
         "_wait_for_instrument_persistence",
         lambda **_kwargs: timeline.append("instruments_visible"),
+    )
+    missing_price_tail = [
+        row
+        for row in bundle["market_prices"]
+        if row["security_id"].startswith("CASH_") and row["price_date"] > "2026-04-10"
+    ]
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_missing_required_market_prices",
+        lambda **_kwargs: timeline.append("old_price_coverage_inspected") or missing_price_tail,
     )
     monkeypatch.setattr(
         front_office_seed_module,
@@ -1836,6 +1875,7 @@ def test_existing_seed_upgrade_publishes_scope_then_waits_for_source_authority(m
         "portfolio_scope_durable",
         "http://ingestion.dev.lotus/ingest/instruments",
         "instruments_visible",
+        "old_price_coverage_inspected",
         "raw_prices_published_through_2026-04-30",
         "raw_prices_visible",
         "valuation_authority_published",
