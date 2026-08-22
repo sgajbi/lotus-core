@@ -80,6 +80,10 @@ needed.
 - Focused query/model/migration unit proof: 91 passed.
 - Stale recovery concurrency, terminal-writer, and rollback PostgreSQL proof: 3 passed in 85.28s.
 - Claim concurrency, capacity, and epoch-fencing PostgreSQL proof: 3 passed in 80.77s.
+- Complete valuation repository PostgreSQL file: 40 passed in 253.42s.
+- Repository-native `test-unit-db`: 18 passed in 113.99s.
 - Online index downgrade/upgrade PostgreSQL proof: 1 passed in 86.25s.
 - Alembic single-head SQL migration contract: passed.
+- Full lint/security/contract guard chain, MyPy across 318 source files, complete architecture guard,
+  documentation evidence pack, architecture catalog, and wiki-source validation: passed.
 - Protected PR, exact-main, final independent review, and issue closure evidence remain pending.
