@@ -54,6 +54,17 @@ def test_restatement_rejects_non_representable_source_quantity() -> None:
         restatement.apply(Decimal("1"), field_name="open_quantity")
 
 
+def test_restatement_maps_storage_overflow_to_stable_domain_failure() -> None:
+    with pytest.raises(
+        LotRestatementError,
+        match="quantity_after exceeds governed quantity precision",
+    ):
+        LotRestatement.from_signed_delta(
+            quantity_before=Decimal("99999999"),
+            signed_quantity_delta=Decimal("99999999"),
+        )
+
+
 @pytest.mark.parametrize(
     ("quantity_before", "signed_delta", "match"),
     [
