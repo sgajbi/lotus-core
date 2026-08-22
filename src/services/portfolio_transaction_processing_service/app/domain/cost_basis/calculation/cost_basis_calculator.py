@@ -1458,7 +1458,7 @@ def transaction_cost_output_payload(transaction: CostBasisTransaction) -> dict[s
         ),
         "fee_components": (transaction.fees.model_dump() if transaction.fees is not None else {}),
         "gross_cost": transaction.gross_cost,
-        "lot_restatement": getattr(transaction, "lot_restatement", None),
+        "lot_restatement": transaction.lot_restatement,
         "net_cost": transaction.net_cost,
         "net_cost_local": transaction.net_cost_local,
         "realized_capital_pnl_base": _optional_transaction_decimal(

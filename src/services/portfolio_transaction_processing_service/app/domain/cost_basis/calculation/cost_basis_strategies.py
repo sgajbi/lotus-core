@@ -315,7 +315,11 @@ class FIFOBasisStrategy:
             quantity=quantity,
             cost_per_share_local=cost_per_share_local,
             cost_per_share_base=cost_per_share_base,
-            original_quantity=getattr(transaction, "source_lot_original_quantity", quantity),
+            original_quantity=(
+                transaction.source_lot_original_quantity
+                if transaction.source_lot_original_quantity is not None
+                else quantity
+            ),
         )
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
@@ -522,7 +526,11 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             source_lot_id=f"LOT-{transaction.transaction_id}",
             source_acquisition_date=_utc_transaction_date(transaction),
             quantity=quantity,
-            original_quantity=getattr(transaction, "source_lot_original_quantity", quantity),
+            original_quantity=(
+                transaction.source_lot_original_quantity
+                if transaction.source_lot_original_quantity is not None
+                else quantity
+            ),
             cost_local=net_cost_local,
             cost_base=net_cost,
             pool_quantity_after=self._pools[key].quantity,
