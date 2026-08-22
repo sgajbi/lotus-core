@@ -83,3 +83,59 @@ def test_drifted_assessment_requires_governed_finding_type() -> None:
             position_quantity=Decimal("2"),
             status=LotPositionParityStatus.DRIFTED,
         )
+
+
+@pytest.mark.parametrize(
+    ("portfolio_id", "security_id"),
+    [(" ", "S-1"), ("P-1", "\t")],
+)
+def test_parity_key_rejects_blank_identifiers(
+    portfolio_id: str,
+    security_id: str,
+) -> None:
+    with pytest.raises(ValueError, match="identifiers must not be blank"):
+        LotPositionParityKey(portfolio_id, security_id)
+
+
+@pytest.mark.parametrize(
+    ("epoch", "lot_quantity", "message"),
+    [
+        (-1, Decimal("1"), "epoch must be nonnegative"),
+        (0, Decimal("-0.0000000001"), "Lot quantity must be nonnegative"),
+    ],
+)
+def test_parity_assessment_rejects_invalid_durable_quantities(
+    epoch: int,
+    lot_quantity: Decimal,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        LotPositionParityAssessment(
+            key=LotPositionParityKey("P-1", "S-1"),
+            epoch=epoch,
+            lot_quantity=lot_quantity,
+            position_quantity=Decimal("1"),
+            status=LotPositionParityStatus.CURRENT,
+        )
+
+
+@pytest.mark.parametrize(
+    ("position_quantity", "finding_type"),
+    [
+        (Decimal("2"), None),
+        (Decimal("1"), LOT_QUANTITY_VS_POSITION_MISMATCH),
+    ],
+)
+def test_current_assessment_requires_exact_unqualified_parity(
+    position_quantity: Decimal,
+    finding_type: str | None,
+) -> None:
+    with pytest.raises(ValueError, match="must reconcile exactly"):
+        LotPositionParityAssessment(
+            key=LotPositionParityKey("P-1", "S-1"),
+            epoch=0,
+            lot_quantity=Decimal("1"),
+            position_quantity=position_quantity,
+            status=LotPositionParityStatus.CURRENT,
+            finding_type=finding_type,
+        )
