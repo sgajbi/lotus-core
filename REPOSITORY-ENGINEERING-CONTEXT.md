@@ -4115,6 +4115,14 @@ Most relevant current governance:
      must reproduce identical lot rows in the advanced position epoch. Keep immutable disposal and
      transfer receipt work under its existing owners rather than changing those semantics here.
 
+252. AVCO source materialization must reconcile the exact aggregate open quantity without ever
+     assigning more than a source lot's original-quantity authority. Normalize and cap preliminary
+     shares first, then distribute any storage-quantum residual deterministically across available
+     source headroom. If the aggregate exceeds total active source authority, fail closed; do not
+     hide the inconsistency by assigning the complete remainder to a final source. Prove
+     interleaved buy/disposal sequences, exact aggregate conservation, deterministic residual
+     placement, and the unreconcilable posture under the warning-strict unit gate.
+
 ## Context Maintenance Rule
 
 Update this document when:

@@ -14,7 +14,11 @@ final disposal, and durable lot/position parity; the
 cross-product golden pack now covers split and reverse-split disposal economics. Warning-strict
 evidence includes 1,934 service units, 18 database-unit tests, 12 restored-lot repository integration
 tests, 189 sell-contract tests, and 150 full transaction-processing contract tests; Ruff/format,
-MyPy, lint governance, and architecture guards pass. Status: fixed locally; protected PR,
+MyPy, lint governance, and architecture guards pass. The protected warning gate then exposed the
+same-pattern AVCO last-source residual over-allocation; materialization now caps every source by its
+original authority, distributes the exact residual across deterministic available headroom, and
+fails closed if aggregate quantity cannot be reconciled. A 23-test focused pack plus the complete
+zero-warning unit gate prove the correction. Status: fixed locally; protected PR,
 exact-main validation, wiki publication/parity, and issue closure pending.
 Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
 
