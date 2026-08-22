@@ -63,6 +63,24 @@ def _restatement_buy(
 
 
 @pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_restored_buy_requires_original_quantity_authority(strategy_type) -> None:
+    strategy = strategy_type()
+    restored = _restatement_buy(
+        transaction_id="BUY-RESTORED-MISSING-AUTHORITY",
+        quantity="75",
+        cost="750",
+    ).model_copy(update={"source_lot_order_quantity": Decimal("100")})
+
+    with pytest.raises(
+        ValueError,
+        match="Restored lot source is missing original quantity authority",
+    ):
+        strategy.add_buy_lot(restored)
+
+    assert strategy.get_open_lot_states() == {}
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
 def test_partial_disposal_then_split_restates_original_and_open_quantity_without_moving_basis(
     strategy_type,
 ) -> None:
