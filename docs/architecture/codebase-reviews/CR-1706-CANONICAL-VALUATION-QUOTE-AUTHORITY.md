@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 Issue: [#990](https://github.com/sgajbi/lotus-core/issues/990)
-Status: Fixed locally; protected PR, exact-main, canonical runtime, and wiki evidence pending
+Status: Fixed locally; protected PR, exact-main, and wiki evidence pending
 
 ## Finding
 
@@ -46,23 +46,27 @@ under #798. Downstream applications must consume Core authority and must not fab
 
 ## Evidence
 
-- `tests/unit/tools/test_front_office_portfolio_seed.py`: `78 passed` at exact signed local head
-  `1c4a33251` after rebasing onto main `1746ea913`; this covers complete assignment/fact coverage,
+- `tests/unit/tools/test_front_office_portfolio_seed.py`: `79 passed` at exact signed local head
+  `3f8fb933c` after rebasing onto main `1746ea913`; this covers complete assignment/fact coverage,
   deterministic replay, changed-source hash sensitivity, exact ingestion order, 500-row batching,
   and exact-scope cleanup.
 - Ruff, format, signature, and diff-hygiene checks passed for the changed seed and test files.
-- DTO construction accepted all 11 assignments and all 4,136 authoritative facts in bounded
+- DTO construction accepted all 11 assignments and all 4,176 authoritative facts in bounded
   batches for the canonical 2025-03-31 through 2026-04-10 window.
 - The pre-fix canonical runtime reached healthy Core startup, populated 11 positions, valued the
   nine non-bond positions, and recorded the exact missing-authority reason for both bonds. Patched
-  replay proved the assignments and 4,136 facts were present, removed the missing-quote error, and
-  then exposed that a percent-of-face policy requires independent `signed_face_amount` authority.
+  replay proved the assignments and initial 4,136 facts were present, removed the missing-quote
+  error, and then exposed that a percent-of-face policy requires independent `signed_face_amount`
+  authority.
   The source-owned unit-price normalization avoids that prohibited runtime inference. A subsequent
   replay reached 11-of-11 valued positions with zero bond failures, then identified two future cash
   jobs whose dates were beyond the former cash fact window; the final bundle extends exact-scope
-  cash authority through that planned-withdrawal horizon. Terminal-queue stability, protected PR,
-  exact-main, wiki publication, issue closure, and branch/worktree hygiene remain pending at this
-  fixed-local checkpoint.
+  cash authority through that planned-withdrawal horizon. A clean final replay at signed
+  `3f8fb933c` published 4,176 source facts and reached 11-of-11 valued positions, `COMPLETE`
+  position and cash data quality, analytics/performance/return-path dates of `2026-04-10`, and zero
+  pending, processing, stale, or failed valuation and aggregation jobs. Protected PR, exact-main,
+  wiki publication, issue closure, and branch/worktree hygiene remain pending at this fixed-local
+  checkpoint.
 
 ## Documentation decision
 
