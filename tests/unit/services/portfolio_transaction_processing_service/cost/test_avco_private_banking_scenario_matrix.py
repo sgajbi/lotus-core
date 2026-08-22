@@ -247,11 +247,16 @@ def test_avco_quantity_restatements_preserve_source_basis(transaction_type: str)
 
     assert not errors
     assert processed[-1].net_cost == Decimal("0")
+    expected_quantity = (
+        Decimal("80") if transaction_type in {"REVERSE_SPLIT", "CONSOLIDATION"} else Decimal("120")
+    )
     assert _source_values(states)["AVCO-MATRIX-SEED-BUY"] == (
-        Decimal("100"),
+        expected_quantity,
         Decimal("1000"),
         Decimal("1000"),
     )
+    assert states["AVCO-MATRIX-SEED-BUY"].original_quantity == expected_quantity
+    assert processed[-1].lot_restatement["quantity_after"] == expected_quantity
 
 
 @pytest.mark.parametrize("transaction_type", sorted(AVCO_NON_LOT_TYPES))

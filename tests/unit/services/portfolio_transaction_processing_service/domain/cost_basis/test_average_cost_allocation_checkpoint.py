@@ -26,6 +26,7 @@ def _source(
         source_acquisition_date=date(2026, 1, source_sequence),
         source_sequence=source_sequence,
         generation=2,
+        original_quantity=Decimal("10"),
         quantity=Decimal("10"),
         cost_local=Decimal("98"),
         cost_base=Decimal("100"),

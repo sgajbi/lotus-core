@@ -138,6 +138,8 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
     assert result.position_record_count == 1
     assert result.rebuilt_transactions == ()
     assert result.locked_state_epoch == 3
+    assert result.resulting_quantity == Decimal("10")
+    assert result.processed_transaction_quantity == Decimal("10")
     repository.acquire_replay_lock.assert_awaited_once_with(
         portfolio_id="PB-001", security_id="SEC-001", epoch=3
     )
@@ -215,6 +217,8 @@ async def test_processor_does_not_rearm_generation_when_no_history_is_materializ
 
     assert result.position_record_count == 0
     assert result.locked_state_epoch is None
+    assert result.resulting_quantity is None
+    assert result.processed_transaction_quantity is None
     repository.save_records.assert_not_awaited()
     state_store.rearm_generation.assert_not_awaited()
     observer.records_staged.assert_called_once_with(epoch=3, record_count=0)
@@ -235,6 +239,8 @@ async def test_processor_does_not_expose_epoch_without_state_row_update_lock() -
 
     assert result.position_record_count == 1
     assert result.locked_state_epoch is None
+    assert result.resulting_quantity == Decimal("10")
+    assert result.processed_transaction_quantity == Decimal("10")
     observer.generation_rearmed.assert_not_called()
 
 
@@ -291,6 +297,8 @@ async def test_processor_rebuilds_backdated_history_in_advanced_epoch() -> None:
     assert result.position_record_count == 2
     assert result.rebuilt_transactions == expected_rebuilt
     assert result.locked_state_epoch == 4
+    assert result.resulting_quantity == Decimal("20")
+    assert result.processed_transaction_quantity == Decimal("10")
     state_store.advance_epoch.assert_awaited_once_with(
         portfolio_id="PB-001",
         security_id="SEC-001",

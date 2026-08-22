@@ -801,6 +801,22 @@ parity. Retain reports with release evidence and rerun portfolio tax-lot source-
 supportability checks after apply. Never infer completion from a zero exit code on a page that still
 returns `next_cursor`.
 
+## Lot-to-position quantity parity
+
+Audit current FIFO and AVCO lot quantities against the latest row in each position key's governed
+epoch:
+
+```bash
+make audit-lot-position-parity LOT_POSITION_AUDIT_ARGS="--limit 100 --output output/lot-position-parity.json"
+```
+
+The command is read-only, ordered, and bounded to at most 1,000 keys per page. Exit code `1` means
+at least one `lot_quantity_vs_position_mismatch` finding remains; use the `next_cursor` to continue
+until the estate is exhausted. The retained report exposes portfolio/security scope, epoch, and
+aggregate quantities, but no transaction or lot identifiers. Do not repair rows directly: isolate
+the affected portfolio/security, retain the report, and use the governed transaction correction or
+rebuild workflow after source-event authority is verified.
+
 ## Escalation
 
 Treat new collection failures, new architecture-boundary violations, new security findings, and new

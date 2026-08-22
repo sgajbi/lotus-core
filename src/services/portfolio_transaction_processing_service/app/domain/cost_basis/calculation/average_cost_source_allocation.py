@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from typing import cast
@@ -18,6 +18,7 @@ from ..average_cost_allocation_checkpoint import (
     AverageCostSourceAccumulator,
 )
 from ..average_cost_pool_checkpoint import AverageCostPoolCheckpoint
+from .lot_restatement import LotRestatement
 from .lot_state import OpenLotState
 from .residual_allocation import allocate_nonnegative_storage_share
 
@@ -117,6 +118,7 @@ class AverageCostSourceContribution:
     source_lot_id: str
     source_acquisition_date: date
     generation: int
+    original_quantity: Decimal
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal
@@ -151,6 +153,7 @@ class AverageCostSourceAllocation:
         source_lot_id: str,
         source_acquisition_date: date,
         quantity: Decimal,
+        original_quantity: Decimal | None = None,
         cost_local: Decimal,
         cost_base: Decimal,
         pool_quantity_after: Decimal,
@@ -162,6 +165,7 @@ class AverageCostSourceAllocation:
             source_lot_id=source_lot_id,
             source_acquisition_date=source_acquisition_date,
             generation=self._generation_by_key[book_key],
+            original_quantity=(quantity if original_quantity is None else original_quantity),
             quantity=quantity,
             cost_local=cost_local,
             cost_base=cost_base,
@@ -208,6 +212,35 @@ class AverageCostSourceAllocation:
                 self._segment_start_scale_by_key[book_key] * quantity_after / segment_start_quantity
             )
 
+    def apply_quantity_restatement(
+        self,
+        *,
+        book_key: BookKey,
+        restatement: LotRestatement,
+    ) -> None:
+        """Scale every active source and segment quantity using one exact ratio."""
+
+        proposed = {
+            source_transaction_id: replace(
+                self._contributions[source_transaction_id],
+                original_quantity=restatement.apply(
+                    self._contributions[source_transaction_id].original_quantity,
+                    field_name="original_quantity",
+                ),
+                quantity=restatement.apply(
+                    self._contributions[source_transaction_id].quantity,
+                    field_name="source_quantity",
+                ),
+            )
+            for source_transaction_id in self._active_source_ids_by_key[book_key]
+        }
+        segment_start_quantity = restatement.apply(
+            self._segment_start_quantity_by_key[book_key],
+            field_name="source_allocation_segment_start_quantity",
+        )
+        self._contributions.update(proposed)
+        self._segment_start_quantity_by_key[book_key] = segment_start_quantity
+
     def apply_basis_transfer(
         self,
         *,
@@ -247,6 +280,9 @@ class AverageCostSourceAllocation:
                 states[source_transaction_id] = active_states.get(
                     source_transaction_id,
                     OpenLotState(
+                        original_quantity=self._contributions[
+                            source_transaction_id
+                        ].original_quantity,
                         quantity=Decimal(0),
                         cost_local=Decimal(0),
                         cost_base=Decimal(0),
@@ -266,23 +302,13 @@ class AverageCostSourceAllocation:
             (source_transaction_id, self._contributions[source_transaction_id])
             for source_transaction_id in self._active_source_ids_by_key[book_key]
         )
-        last_quantity_source_id = next(
-            (
-                source_transaction_id
-                for source_transaction_id, contribution in reversed(contributions)
-                if contribution.generation == self._generation_by_key[book_key]
-            ),
-            None,
-        )
         allocated = AverageCostPool()
         quantities: dict[str, Decimal] = {}
         for source_transaction_id, contribution in contributions:
             disposal_factor = self._disposal_factor(contribution)
             quantity = _materialized_quantity(
                 contribution=contribution,
-                source_transaction_id=source_transaction_id,
                 current_generation=self._generation_by_key[book_key],
-                last_source_id=last_quantity_source_id,
                 disposal_factor=disposal_factor,
                 aggregate=pool.quantity,
                 allocated=allocated.quantity,
@@ -293,6 +319,13 @@ class AverageCostSourceAllocation:
                 quantity,
                 field_name="allocated_quantity",
             )
+
+        _assign_quantity_residual(
+            contributions=contributions,
+            quantities=quantities,
+            aggregate=pool.quantity,
+            allocated=allocated.quantity,
+        )
 
         last_local_cost_source_id: str | None = None
         last_base_cost_source_id: str | None = None
@@ -310,6 +343,7 @@ class AverageCostSourceAllocation:
             disposal_factor = self._disposal_factor(contribution)
             quantity = quantities[source_transaction_id]
             state = OpenLotState(
+                original_quantity=contribution.original_quantity,
                 quantity=quantity,
                 cost_local=_materialized_cost(
                     eligible=quantity > Decimal(0),
@@ -416,6 +450,7 @@ class AverageCostSourceAllocation:
                     source_acquisition_date=contribution.source_acquisition_date,
                     source_sequence=source_sequence,
                     generation=contribution.generation,
+                    original_quantity=contribution.original_quantity,
                     quantity=contribution.quantity,
                     cost_local=contribution.cost_local,
                     cost_base=contribution.cost_base,
@@ -451,6 +486,7 @@ class AverageCostSourceAllocation:
                 source_lot_id=source.source_lot_id,
                 source_acquisition_date=source.source_acquisition_date,
                 generation=source.generation,
+                original_quantity=source.original_quantity,
                 quantity=source.quantity,
                 cost_local=source.cost_local,
                 cost_base=source.cost_base,
@@ -495,30 +531,19 @@ class AverageCostSourceAllocation:
 def _materialized_quantity(
     *,
     contribution: AverageCostSourceContribution,
-    source_transaction_id: str,
     current_generation: int,
-    last_source_id: str | None,
     disposal_factor: Decimal,
     aggregate: Decimal,
     allocated: Decimal,
 ) -> Decimal:
     if contribution.generation != current_generation:
         return Decimal(0)
-    if source_transaction_id == last_source_id:
-        return cast(
-            Decimal,
-            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-                aggregate,
-                allocated,
-                field_name="open_quantity",
-            ),
-        )
     with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
         quantity = (contribution.quantity * disposal_factor).quantize(
             LOT_QUANTITY_QUANTUM,
             rounding=ROUND_DOWN,
         )
-    return cast(
+    bounded_share = cast(
         Decimal,
         allocate_nonnegative_storage_share(
             quantity,
@@ -527,6 +552,57 @@ def _materialized_quantity(
             field_name="open_quantity",
         ),
     )
+    return min(bounded_share, contribution.original_quantity)
+
+
+def _assign_quantity_residual(
+    *,
+    contributions: tuple[tuple[str, AverageCostSourceContribution], ...],
+    quantities: dict[str, Decimal],
+    aggregate: Decimal,
+    allocated: Decimal,
+) -> None:
+    """Assign rounding residual without exceeding any source lot's authority."""
+
+    remaining = cast(
+        Decimal,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            aggregate,
+            allocated,
+            field_name="unallocated_open_quantity",
+        ),
+    )
+    for source_transaction_id, contribution in reversed(contributions):
+        if remaining == Decimal(0):
+            return
+        current = quantities[source_transaction_id]
+        headroom = cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                contribution.original_quantity,
+                current,
+                field_name="source_quantity_headroom",
+            ),
+        )
+        assigned = min(remaining, headroom)
+        quantities[source_transaction_id] = cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                current,
+                assigned,
+                field_name="open_quantity",
+            ),
+        )
+        remaining = cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                remaining,
+                assigned,
+                field_name="unallocated_open_quantity",
+            ),
+        )
+    if remaining != Decimal(0):
+        raise ValueError("AVCO pool quantity exceeds source original quantity authority")
 
 
 def _materialized_cost(

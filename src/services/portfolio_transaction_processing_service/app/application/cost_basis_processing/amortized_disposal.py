@@ -27,6 +27,7 @@ from ...domain.cost_basis import (
     TransactionLotDisposal,
     transaction_cost_output_payload,
 )
+from ...domain.cost_basis.calculation.lot_state import resolve_source_lot_original_quantity
 from ...domain.fixed_income_book_cost import (
     AmortizedCostProfileStatus,
     CarriedLotBookCost,
@@ -218,10 +219,10 @@ def _decorate_allocation(
     if profile.currency != source_transaction.trade_currency.strip().upper():
         raise ValueError("amortized-cost profile currency does not match source-lot currency")
 
-    original_quantity = getattr(
-        source_transaction,
-        "source_lot_order_quantity",
-        source_transaction.quantity,
+    original_quantity = resolve_source_lot_original_quantity(
+        original_quantity=source_transaction.source_lot_original_quantity,
+        order_quantity=source_transaction.source_lot_order_quantity,
+        current_quantity=source_transaction.quantity,
     )
     carried_book_cost = carried_book_cost_by_source.get(allocation.source_transaction_id)
     book_cost_fx_rate = _book_cost_fx_rate(

@@ -14,11 +14,19 @@ from portfolio_common.database_models import (
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingIntent,
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    LOT_QUANTITY_VS_POSITION_MISMATCH,
+    LotPositionParityStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyLotPositionParityAdapter,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -35,6 +43,344 @@ pytestmark = [
     pytest.mark.db_direct,
     pytest.mark.regression,
 ]
+
+
+@pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
+async def test_quantity_restatement_keeps_lot_and_position_authority_in_lockstep(
+    clean_db,
+    async_db_session: AsyncSession,
+    cost_basis_method: str,
+) -> None:
+    portfolio_id = f"PORT-LOT-RESTATE-{cost_basis_method}"
+    security_id = f"EQ-LOT-RESTATE-{cost_basis_method}"
+    acquisition = booked_transaction_event(
+        transaction_id=f"BUY-LOT-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="10",
+        gross_amount="1000",
+    )
+    partial_disposal = booked_transaction_event(
+        transaction_id=f"SELL-PRE-SPLIT-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="25",
+        price="15",
+        gross_amount="375",
+    )
+    split = booked_transaction_event(
+        transaction_id=f"SPLIT-LOT-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 3, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SPLIT",
+        quantity="75",
+        price="0",
+        gross_amount="0",
+    )
+    final_disposal = booked_transaction_event(
+        transaction_id=f"SELL-POST-SPLIT-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 4, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="150",
+        price="15",
+        gross_amount="2250",
+    )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method=cost_basis_method))
+    async_db_session.add(
+        instrument_record(
+            security_id,
+            name=f"Lot Restatement {cost_basis_method}",
+            isin=("SG0000000991" if cost_basis_method == "FIFO" else "SG0000000992"),
+            currency="USD",
+        )
+    )
+    context = transaction_processing_test_context(async_db_session)
+
+    for offset, event in enumerate((acquisition, partial_disposal, split), start=9901):
+        result = await persist_and_process_booked_transaction(
+            session=async_db_session,
+            context=context,
+            event=event,
+            event_id=f"transactions.persisted-0-{offset}",
+            correlation_id=f"corr-{event.transaction_id.lower()}",
+        )
+        assert result.status is TransactionProcessingStatus.PROCESSED
+
+    duplicate_split = await process_booked_transaction(
+        context=context,
+        event=split,
+        event_id="transactions.persisted-0-9903",
+        correlation_id=f"corr-{split.transaction_id.lower()}",
+    )
+    assert duplicate_split.status is TransactionProcessingStatus.DUPLICATE
+
+    async with context.session_factory() as verification_session:
+        restated_lot = (
+            await verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == acquisition.transaction_id
+                )
+            )
+        ).scalar_one()
+        restated_position = (
+            await verification_session.execute(
+                select(PositionHistory)
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    PositionHistory.security_id == security_id,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+
+    assert (
+        restated_lot.original_quantity,
+        restated_lot.open_quantity,
+        restated_lot.lot_cost_local,
+        restated_lot.lot_cost_base,
+    ) == (
+        Decimal("200.0000000000"),
+        Decimal("150.0000000000"),
+        Decimal("750.0000000000"),
+        Decimal("750.0000000000"),
+    )
+    assert (restated_position.quantity, restated_position.cost_basis) == (
+        Decimal("150.0000000000"),
+        Decimal("750.0000000000"),
+    )
+    assert restated_lot.open_quantity <= restated_lot.original_quantity
+    assert restated_lot.calculation_lineage["output_content_hash"]
+    (parity,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert parity.status is LotPositionParityStatus.CURRENT
+
+    corrected_split = split.model_copy(
+        update={"transaction_date": datetime(2026, 7, 2, 12, 0, tzinfo=timezone.utc)}
+    )
+    await async_db_session.execute(
+        update(DBTransaction)
+        .where(DBTransaction.transaction_id == split.transaction_id)
+        .values(transaction_date=corrected_split.transaction_date)
+    )
+    await async_db_session.commit()
+    replayed = await process_booked_transaction(
+        context=context,
+        event=corrected_split,
+        event_id=f"repair-{split.transaction_id}",
+        correlation_id=f"corr-repair-{split.transaction_id.lower()}",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert replayed.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as replay_verification_session:
+        replayed_lot = (
+            await replay_verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == acquisition.transaction_id
+                )
+            )
+        ).scalar_one()
+        replayed_position = (
+            await replay_verification_session.execute(
+                select(PositionHistory)
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    PositionHistory.security_id == security_id,
+                    PositionHistory.epoch == 1,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+    assert (
+        replayed_lot.original_quantity,
+        replayed_lot.open_quantity,
+        replayed_lot.lot_cost_local,
+        replayed_lot.lot_cost_base,
+    ) == (
+        restated_lot.original_quantity,
+        restated_lot.open_quantity,
+        restated_lot.lot_cost_local,
+        restated_lot.lot_cost_base,
+    )
+    assert replayed_position.epoch == 1
+    assert replayed_position.quantity == replayed_lot.open_quantity
+    (replayed_parity,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert replayed_parity.status is LotPositionParityStatus.CURRENT
+
+    result = await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=final_disposal,
+        event_id="transactions.persisted-0-9904",
+        correlation_id=f"corr-{final_disposal.transaction_id.lower()}",
+    )
+    assert result.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as verification_session:
+        final_lot = (
+            await verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == acquisition.transaction_id
+                )
+            )
+        ).scalar_one()
+        final_position = (
+            await verification_session.execute(
+                select(PositionHistory)
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    PositionHistory.security_id == security_id,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+        final_transaction = (
+            await verification_session.execute(
+                select(DBTransaction).where(
+                    DBTransaction.transaction_id == final_disposal.transaction_id
+                )
+            )
+        ).scalar_one()
+
+    assert (final_lot.open_quantity, final_lot.lot_cost_base) == (Decimal(0), Decimal(0))
+    assert (final_position.quantity, final_position.cost_basis) == (Decimal(0), Decimal(0))
+    assert (final_transaction.net_cost, final_transaction.realized_gain_loss) == (
+        Decimal("-750.0000000000"),
+        Decimal("1500.0000000000"),
+    )
+
+    async with context.session_factory() as drift_session:
+        async with drift_session.begin():
+            await drift_session.execute(
+                update(PositionHistory)
+                .where(PositionHistory.id == final_position.id)
+                .values(quantity=Decimal("1"))
+            )
+    (drift,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert drift.status is LotPositionParityStatus.DRIFTED
+    assert drift.finding_type == LOT_QUANTITY_VS_POSITION_MISMATCH
+    assert (drift.lot_quantity, drift.position_quantity) == (Decimal(0), Decimal("1"))
+
+
+@pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
+async def test_backdated_restatement_compares_position_at_event_before_later_sale(
+    clean_db,
+    async_db_session: AsyncSession,
+    cost_basis_method: str,
+) -> None:
+    portfolio_id = f"PORT-BACKDATED-RESTATE-{cost_basis_method}"
+    security_id = f"EQ-BACKDATED-RESTATE-{cost_basis_method}"
+    buy = booked_transaction_event(
+        transaction_id=f"BUY-BACKDATED-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="10",
+        gross_amount="1000",
+    )
+    later_sale = booked_transaction_event(
+        transaction_id=f"SELL-AFTER-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="25",
+        price="15",
+        gross_amount="375",
+    )
+    backdated_split = booked_transaction_event(
+        transaction_id=f"SPLIT-BACKDATED-RESTATE-{cost_basis_method}",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc),
+        transaction_type="SPLIT",
+        quantity="75",
+        price="0",
+        gross_amount="0",
+    )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method=cost_basis_method))
+    async_db_session.add(
+        instrument_record(
+            security_id,
+            name=f"Backdated Restatement {cost_basis_method}",
+            isin=("SG0000000993" if cost_basis_method == "FIFO" else "SG0000000994"),
+            currency="USD",
+        )
+    )
+    context = transaction_processing_test_context(async_db_session)
+    for offset, event in enumerate((buy, later_sale), start=9951):
+        result = await persist_and_process_booked_transaction(
+            session=async_db_session,
+            context=context,
+            event=event,
+            event_id=f"transactions.persisted-0-{offset}",
+            correlation_id=f"corr-{event.transaction_id.lower()}",
+        )
+        assert result.status is TransactionProcessingStatus.PROCESSED
+
+    restated = await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=backdated_split,
+        event_id="transactions.persisted-0-9953",
+        correlation_id=f"corr-{backdated_split.transaction_id.lower()}",
+    )
+    assert restated.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as verification_session:
+        lot = (
+            await verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == buy.transaction_id
+                )
+            )
+        ).scalar_one()
+        positions = (
+            (
+                await verification_session.execute(
+                    select(PositionHistory)
+                    .where(
+                        PositionHistory.portfolio_id == portfolio_id,
+                        PositionHistory.security_id == security_id,
+                        PositionHistory.epoch == 1,
+                    )
+                    .order_by(PositionHistory.position_date, PositionHistory.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    positions_by_transaction = {item.transaction_id: item for item in positions}
+    assert positions_by_transaction[backdated_split.transaction_id].quantity == Decimal(
+        "175.0000000000"
+    )
+    assert positions_by_transaction[later_sale.transaction_id].quantity == Decimal("150.0000000000")
+    assert lot.open_quantity == Decimal("150.0000000000")
+    assert lot.lot_cost_base == Decimal("857.1428571429")
+    assert positions_by_transaction[later_sale.transaction_id].cost_basis == lot.lot_cost_base
+    (parity,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert parity.status is LotPositionParityStatus.CURRENT
 
 
 async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(

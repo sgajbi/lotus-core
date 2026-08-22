@@ -4101,6 +4101,34 @@ Most relevant current governance:
      rollback preservation of complete lease authority, and reversible real-PostgreSQL migration
      behavior whenever this contract changes.
 
+251. Same-instrument quantity corporate actions (`SPLIT`, `REVERSE_SPLIT`, `CONSOLIDATION`,
+     `BONUS_ISSUE`, and `STOCK_DIVIDEND`) must restate both original and open FIFO/AVCO lot
+     quantities through one exact before/after ratio while conserving local and base basis. Never
+     round a per-lot remainder: if any lot is not exactly representable at the governed transaction
+     quantity scale, reject the complete event before state mutation. The cost output carries the
+     exact ratio as ephemeral authority into position processing; compare the restated lot total
+     with the position quantity at the same corporate-action transaction before cashflow, readiness,
+     or commit and reject
+     `lot_quantity_vs_position_mismatch` non-retryably on divergence. Historical estate checks use
+     the read-only, ordered, bounded `make audit-lot-position-parity` command; its adapter must keep
+     one database round trip per page and expose no transaction or lot identifiers. Backdated repair
+     must reproduce identical lot rows in the advanced position epoch. Keep immutable disposal and
+     transfer receipt work under its existing owners rather than changing those semantics here.
+
+252. AVCO source materialization must reconcile the exact aggregate open quantity without ever
+     assigning more than a source lot's original-quantity authority. Normalize and cap preliminary
+     shares first, then distribute any storage-quantum residual deterministically across available
+     source headroom. If the aggregate exceeds total active source authority, fail closed; do not
+     hide the inconsistency by assigning the complete remainder to a final source. Prove
+     interleaved buy/disposal sequences, exact aggregate conservation, deterministic residual
+     placement, and the unreconcilable posture under the warning-strict unit gate.
+
+253. Historical AVCO reconciliation and repair must persist every rebuilt lot authority from the
+     planner's `OpenLotState`, including `original_quantity`; never combine restated open quantity
+     with the pre-corporate-action BUY quantity. Prove forward and reverse restatement at the
+     repository statement boundary and one real-PostgreSQL reconciliation that repairs, conserves
+     source/pool basis, and becomes idempotently current.
+
 ## Context Maintenance Rule
 
 Update this document when:

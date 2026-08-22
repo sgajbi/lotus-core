@@ -106,6 +106,7 @@ async def _persist_cost_basis_transaction(
         status=CostBasisPersistenceStatus.SUCCESS,
     )
 
+    persisted = replace(persisted, lot_restatement=transaction.lot_restatement)
     if not persist_child_state:
         return persisted
 

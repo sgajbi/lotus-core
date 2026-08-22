@@ -44,6 +44,7 @@ from ..corporate_action_cash_economics import (
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .calculation_errors import CostCalculationErrorCollector
 from .lot_disposition import LotDispositionEngine
+from .lot_restatement import LotRestatementError
 
 TRANSACTION_COST_CALCULATION_ALGORITHM_ID = "transaction-cost-basis-calculation"
 TRANSACTION_COST_CALCULATION_ALGORITHM_VERSION = 2
@@ -1127,6 +1128,30 @@ class QuantityRestatementStrategy:
         """
         _apply_zero_cost_fields(transaction)
         _apply_zero_realized_pnl(transaction)
+        definition = get_transaction_type_definition(transaction.transaction_type)
+        if definition is None or definition.position_effect not in {"increase", "decrease"}:
+            error_reporter.add_error(
+                transaction.transaction_id,
+                "Quantity restatement invariant violation: transaction type has no direction.",
+            )
+            return
+        signed_quantity_delta = (
+            -transaction.quantity
+            if definition.position_effect == "decrease"
+            else transaction.quantity
+        )
+        try:
+            restatement = disposition_engine.restate_lot_quantities(
+                transaction,
+                signed_quantity_delta=signed_quantity_delta,
+            )
+        except LotRestatementError as exc:
+            error_reporter.add_error(
+                transaction.transaction_id,
+                f"Quantity restatement invariant violation: {exc}",
+            )
+            return
+        transaction.set_calculated_field("lot_restatement", restatement.lineage_payload())
 
 
 class DividendStrategy:
@@ -1433,6 +1458,7 @@ def transaction_cost_output_payload(transaction: CostBasisTransaction) -> dict[s
         ),
         "fee_components": (transaction.fees.model_dump() if transaction.fees is not None else {}),
         "gross_cost": transaction.gross_cost,
+        "lot_restatement": transaction.lot_restatement,
         "net_cost": transaction.net_cost,
         "net_cost_local": transaction.net_cost_local,
         "realized_capital_pnl_base": _optional_transaction_decimal(

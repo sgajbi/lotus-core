@@ -644,7 +644,11 @@ async def test_opening_lot_lineage_hashes_persisted_accrued_interest() -> None:
     )
 
 
-def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPoolRebuildPlan:
+def _average_cost_rebuild_plan(
+    *,
+    replay_revision: str = "1",
+    original_quantities: tuple[str, str] = ("10", "5"),
+) -> AverageCostPoolRebuildPlan:
     first = _average_cost_source(
         "BUY-1",
         transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
@@ -659,11 +663,13 @@ def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPool
     )
     states = {
         "BUY-1": OpenLotState(
+            original_quantity=Decimal(original_quantities[0]),
             quantity=Decimal("6"),
             cost_local=Decimal("72"),
             cost_base=Decimal("78"),
         ),
         "BUY-2": OpenLotState(
+            original_quantity=Decimal(original_quantities[1]),
             quantity=Decimal("3"),
             cost_local=Decimal("36"),
             cost_base=Decimal("39"),
@@ -726,6 +732,32 @@ async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state(
     assert "INSERT INTO average_cost_pool_state" in str(
         db_session.execute.call_args_list[3].args[0]
     )
+
+
+@pytest.mark.parametrize("original_quantities", [("20", "10"), ("8", "4")])
+async def test_average_cost_rebuild_persists_restated_source_original_quantities(
+    original_quantities: tuple[str, str],
+) -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
+    repository.REBUILD_UPSERT_CHUNK_SIZE = 1
+    db_session.execute.side_effect = [MagicMock(), MagicMock(), MagicMock(), MagicMock()]
+
+    await repository.apply_average_cost_pool_rebuild(
+        _average_cost_rebuild_plan(original_quantities=original_quantities)
+    )
+
+    source_parameters = [
+        db_session.execute.call_args_list[index]
+        .args[0]
+        .compile(dialect=postgresql.dialect())
+        .params
+        for index in (1, 2)
+    ]
+    assert [
+        next(value for key, value in parameters.items() if key.startswith("original_quantity"))
+        for parameters in source_parameters
+    ] == [Decimal(value) for value in original_quantities]
 
 
 async def test_average_cost_rebuild_receipts_are_replay_bound_and_idempotent() -> None:
@@ -958,6 +990,7 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal("9"),
             cost_local=Decimal("108"),
             cost_base=Decimal("117"),
@@ -999,6 +1032,7 @@ async def test_average_cost_source_lineage_binds_prior_and_transition_revisions(
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal("9"),
             cost_local=Decimal("108"),
             cost_base=Decimal("117"),
@@ -1062,6 +1096,7 @@ async def test_apply_average_cost_pool_transition_rejects_missing_close_sources(
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal(0),
             cost_local=Decimal(0),
             cost_base=Decimal(0),
@@ -1091,6 +1126,7 @@ async def test_apply_average_cost_pool_transition_rejects_negative_residual() ->
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
+            original_quantity=Decimal("15"),
             quantity=Decimal("9"),
             cost_local=Decimal("108"),
             cost_base=Decimal("117"),
@@ -1126,6 +1162,7 @@ async def test_apply_average_cost_pool_transition_updates_explicit_new_source() 
     select_result.scalars.return_value.all.return_value = [new_lot]
     db_session.execute.side_effect = [select_result, MagicMock()]
     explicit_state = OpenLotState(
+        original_quantity=Decimal("5"),
         quantity=Decimal("5"),
         cost_local=Decimal("70"),
         cost_base=Decimal("75"),
@@ -1251,6 +1288,7 @@ async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots
     )
 
     assert [record.transaction.transaction_id for record in records] == ["BUY01", "BUY02"]
+    assert [record.original_quantity for record in records] == [Decimal("4"), Decimal("5")]
     assert sum((record.quantity for record in records), start=Decimal(0)) == Decimal("9")
     stream_result.close.assert_awaited_once_with()
     compiled_query = str(
@@ -1325,6 +1363,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         security_id=" SEC01 ",
         states_by_source_transaction_id={
             "BUY01": OpenLotState(
+                original_quantity=Decimal("20"),
                 quantity=Decimal("4"),
                 cost_local=Decimal("400"),
                 cost_base=Decimal("420"),
@@ -1343,6 +1382,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         transition_evidence=_transition_evidence(),
     )
 
+    assert lot_row.original_quantity == Decimal("20")
     assert lot_row.open_quantity == Decimal("4")
     assert lot_row.lot_cost_local == Decimal("400")
     assert lot_row.lot_cost_base == Decimal("420")
@@ -1352,6 +1392,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
     assert lot_row.amortized_book_carrying_base == Decimal("420")
     assert lot_row.calculation_lineage["algorithm_id"] == ("cost-basis-complete-lot-snapshot")
     assert closed_lot_row.open_quantity == Decimal("0")
+    assert closed_lot_row.original_quantity == Decimal("5")
     assert closed_lot_row.lot_cost_local == Decimal("0")
     assert closed_lot_row.lot_cost_base == Decimal("0")
     assert closed_lot_row.amortized_cost_profile_id is None
@@ -1404,6 +1445,7 @@ async def test_update_selected_open_lot_states_does_not_close_omitted_lots() -> 
         security_id="SEC01",
         states_by_source_transaction_id={
             "BUY01": OpenLotState(
+                original_quantity=Decimal("10"),
                 quantity=Decimal("4"),
                 cost_local=Decimal("400"),
                 cost_base=Decimal("420"),
@@ -1472,6 +1514,7 @@ async def test_lot_state_lineage_binds_trigger_and_prior_state_for_identical_out
             security_id="SEC01",
             states_by_source_transaction_id={
                 "BUY01": OpenLotState(
+                    original_quantity=Decimal("10"),
                     quantity=Decimal("4"),
                     cost_local=Decimal("400"),
                     cost_base=Decimal("420"),
@@ -1502,6 +1545,7 @@ async def test_update_selected_open_lot_states_rejects_missing_source_lot() -> N
             security_id="SEC01",
             states_by_source_transaction_id={
                 "BUY01": OpenLotState(
+                    original_quantity=Decimal("10"),
                     quantity=Decimal("4"),
                     cost_local=Decimal("400"),
                     cost_base=Decimal("420"),

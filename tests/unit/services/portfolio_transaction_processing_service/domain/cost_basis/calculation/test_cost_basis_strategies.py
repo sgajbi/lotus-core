@@ -10,6 +10,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AverageCostBasisStrategy,
     CostBasisTransaction,
     FIFOBasisStrategy,
+    LotRestatementError,
     OpenLotState,
 )
 
@@ -37,6 +38,152 @@ def _open_quantities(strategy) -> dict[str, Decimal]:
         transaction_id: state.quantity
         for transaction_id, state in strategy.get_open_lot_states().items()
     }
+
+
+def _restatement_buy(
+    *,
+    transaction_id: str,
+    quantity: str,
+    cost: str,
+) -> CostBasisTransaction:
+    return CostBasisTransaction(
+        transaction_id=transaction_id,
+        portfolio_id="P-RESTATE",
+        instrument_id="I-RESTATE",
+        security_id="S-RESTATE",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1),
+        quantity=Decimal(quantity),
+        gross_transaction_amount=Decimal(cost),
+        net_cost=Decimal(cost),
+        net_cost_local=Decimal(cost),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_restored_buy_requires_original_quantity_authority(strategy_type) -> None:
+    strategy = strategy_type()
+    restored = _restatement_buy(
+        transaction_id="BUY-RESTORED-MISSING-AUTHORITY",
+        quantity="75",
+        cost="750",
+    ).model_copy(update={"source_lot_order_quantity": Decimal("100")})
+
+    with pytest.raises(
+        ValueError,
+        match="Restored source lot is missing original quantity authority",
+    ):
+        strategy.add_buy_lot(restored)
+
+    assert strategy.get_open_lot_states() == {}
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_partial_disposal_then_split_restates_original_and_open_quantity_without_moving_basis(
+    strategy_type,
+) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        _restatement_buy(transaction_id="BUY-RESTATE", quantity="100", cost="1000")
+    )
+    disposed = strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("25"),
+    )
+    assert (disposed.cost_base, disposed.cost_local, disposed.consumed_quantity) == (
+        Decimal("250"),
+        Decimal("250"),
+        Decimal("25"),
+    )
+
+    restatement = strategy.restate_lot_quantities(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("75"),
+    )
+
+    state = strategy.get_open_lot_states()["BUY-RESTATE"]
+    assert restatement.lineage_payload()["quantity_after"] == Decimal("150")
+    assert (state.original_quantity, state.quantity, state.cost_local, state.cost_base) == (
+        Decimal("200.0000000000"),
+        Decimal("150.0000000000"),
+        Decimal("750"),
+        Decimal("750"),
+    )
+    final_disposal = strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE",
+        "I-RESTATE",
+        Decimal("150"),
+    )
+    assert (final_disposal.cost_base, final_disposal.cost_local) == (
+        Decimal("750"),
+        Decimal("750"),
+    )
+    assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal(0)
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_reverse_split_restates_full_lot_and_conserves_basis(strategy_type) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        _restatement_buy(transaction_id="BUY-REVERSE", quantity="100", cost="1000")
+    )
+
+    strategy.restate_lot_quantities("P-RESTATE", "I-RESTATE", Decimal("-50"))
+
+    state = strategy.get_open_lot_states()["BUY-REVERSE"]
+    assert (state.original_quantity, state.quantity, state.cost_base) == (
+        Decimal("50.0000000000"),
+        Decimal("50.0000000000"),
+        Decimal("1000"),
+    )
+    disposal = strategy.consume_sell_quantity_with_allocations(
+        "P-RESTATE", "I-RESTATE", Decimal("50")
+    )
+    assert disposal.cost_base == Decimal("1000")
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_nonrepresentable_restatement_fails_before_mutating_any_source(strategy_type) -> None:
+    strategy = strategy_type()
+    for index in range(3):
+        strategy.add_buy_lot(
+            _restatement_buy(
+                transaction_id=f"BUY-NONREP-{index}",
+                quantity="1",
+                cost="10",
+            )
+        )
+    states_before = strategy.get_open_lot_states()
+
+    with pytest.raises(LotRestatementError, match="cannot be restated exactly"):
+        strategy.restate_lot_quantities("P-RESTATE", "I-RESTATE", Decimal("1"))
+
+    assert strategy.get_open_lot_states() == states_before
+    assert strategy.get_available_quantity("P-RESTATE", "I-RESTATE") == Decimal("3")
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_repeating_restatement_ratio_conserves_exact_base_and_local_basis(strategy_type) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        _restatement_buy(transaction_id="BUY-REPEATING", quantity="3", cost="1000")
+    )
+    before = strategy.get_open_lot_states()
+
+    strategy.restate_lot_quantities("P-RESTATE", "I-RESTATE", Decimal("1"))
+
+    after = strategy.get_open_lot_states()
+    assert sum(state.cost_local for state in after.values()) == sum(
+        state.cost_local for state in before.values()
+    )
+    assert sum(state.cost_base for state in after.values()) == sum(
+        state.cost_base for state in before.values()
+    )
+    assert after["BUY-REPEATING"].quantity == Decimal("4.0000000000")
 
 
 def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy):
@@ -718,11 +865,13 @@ def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -
 
     assert strategy.get_open_lot_states() == {
         "AVCO_CLOSED_SOURCE": OpenLotState(
+            original_quantity=Decimal("2"),
             quantity=Decimal("0"),
             cost_local=Decimal("0"),
             cost_base=Decimal("0"),
         ),
         "AVCO_REOPENED_SOURCE": OpenLotState(
+            original_quantity=Decimal("3"),
             quantity=Decimal("2"),
             cost_local=Decimal("30"),
             cost_base=Decimal("30"),
@@ -779,6 +928,7 @@ def test_average_cost_basis_transfer_restarts_disposal_segment_after_partial_sal
     )
     states = strategy.get_open_lot_states()
     assert states["AVCO-PARTIAL-BASIS-SOURCE"] == OpenLotState(
+        original_quantity=Decimal("100"),
         quantity=Decimal("25"),
         cost_local=Decimal("150"),
         cost_base=Decimal("150"),
@@ -1038,6 +1188,7 @@ def test_average_cost_near_full_disposal_couples_quantity_and_basis_residuals() 
             remaining_transaction.model_copy(
                 update={
                     "quantity": remaining_state.quantity,
+                    "source_lot_original_quantity": remaining_state.original_quantity,
                     "gross_transaction_amount": remaining_state.cost_local,
                     "net_cost": remaining_state.cost_base,
                     "net_cost_local": remaining_state.cost_local,
@@ -1095,11 +1246,13 @@ def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zer
 
     states = strategy.get_open_lot_states()
     assert states["ZERO-BASIS-SOURCE"] == OpenLotState(
+        original_quantity=Decimal("100"),
         quantity=Decimal("100"),
         cost_local=Decimal("0"),
         cost_base=Decimal("0"),
     )
     assert states["POST-TRANSFER-SOURCE"] == OpenLotState(
+        original_quantity=Decimal("20"),
         quantity=Decimal("20"),
         cost_local=Decimal("300"),
         cost_base=Decimal("300"),

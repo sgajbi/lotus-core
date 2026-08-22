@@ -14,6 +14,7 @@ class OpenLotCheckpointRecord:
     """Carry one persisted open-lot state with its canonical source transaction."""
 
     transaction: BookedTransaction
+    original_quantity: Decimal
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal

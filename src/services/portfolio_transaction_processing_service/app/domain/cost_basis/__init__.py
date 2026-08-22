@@ -47,6 +47,7 @@ from .calculation.disposal_allocation import (
 )
 from .calculation.engine_input import build_cost_basis_engine_input, normalize_cost_fee_amount
 from .calculation.lot_disposition import LotDispositionEngine
+from .calculation.lot_restatement import LotRestatement, LotRestatementError
 from .calculation.lot_state import AmortizedCostCarryState, CostLot, OpenLotState
 from .calculation.transaction_ordering import (
     CASH_INFLOW_TRANSACTION_TYPES,
@@ -89,6 +90,12 @@ from .lot_disposal_receipt import (
     LotDisposalDestinationType,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
+)
+from .lot_position_reconciliation import (
+    LOT_QUANTITY_VS_POSITION_MISMATCH,
+    LotPositionParityAssessment,
+    LotPositionParityKey,
+    LotPositionParityStatus,
 )
 from .models.calculation_error import CostCalculationError
 from .models.cost_basis_transaction import CostBasisTransaction, Fees
@@ -142,6 +149,12 @@ __all__ = [
     "INCREMENTAL_SAFE_LOT_BEHAVIORS",
     "Fees",
     "LotDispositionEngine",
+    "LotRestatement",
+    "LotRestatementError",
+    "LOT_QUANTITY_VS_POSITION_MISMATCH",
+    "LotPositionParityAssessment",
+    "LotPositionParityKey",
+    "LotPositionParityStatus",
     "LotBasisTransferResult",
     "LotBasisTransferReconciliationScope",
     "LotBasisTransferReceiptState",

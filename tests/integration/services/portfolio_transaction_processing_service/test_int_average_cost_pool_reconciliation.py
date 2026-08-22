@@ -69,6 +69,16 @@ async def test_historical_avco_reconciliation_repairs_stale_sources_and_is_idemp
         price="12",
         gross_amount="1200",
     )
+    split = booked_transaction_event(
+        transaction_id="SPLIT-AVCO-RECONCILIATION-01",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 6, 7, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SPLIT",
+        quantity="200",
+        price="0",
+        gross_amount="0",
+    )
     disposal = booked_transaction_event(
         transaction_id="SELL-AVCO-RECONCILIATION-01",
         portfolio_id=portfolio_id,
@@ -90,6 +100,7 @@ async def test_historical_avco_reconciliation_repairs_stale_sources_and_is_idemp
             ),
             canonical_transaction_record(first_buy),
             canonical_transaction_record(second_buy),
+            canonical_transaction_record(split),
             canonical_transaction_record(disposal),
         ]
     )
@@ -167,22 +178,22 @@ async def test_historical_avco_reconciliation_repairs_stale_sources_and_is_idemp
     ] == [
         (
             first_buy.transaction_id,
-            Decimal("100"),
-            Decimal("75"),
-            Decimal("750"),
-            Decimal("750"),
+            Decimal("200"),
+            Decimal("175"),
+            Decimal("875"),
+            Decimal("875"),
         ),
         (
             second_buy.transaction_id,
-            Decimal("100"),
-            Decimal("75"),
-            Decimal("900"),
-            Decimal("900"),
+            Decimal("200"),
+            Decimal("175"),
+            Decimal("1050"),
+            Decimal("1050"),
         ),
     ]
-    assert pool.pool_quantity == Decimal("150")
-    assert pool.pool_cost_local == Decimal("1650")
-    assert pool.pool_cost_base == Decimal("1650")
+    assert pool.pool_quantity == Decimal("350")
+    assert pool.pool_cost_local == Decimal("1925")
+    assert pool.pool_cost_base == Decimal("1925")
     assert pool.representative_source_transaction_id == second_buy.transaction_id
     assert checkpoint.cost_basis_method == "AVCO"
     assert checkpoint.latest_transaction_id == disposal.transaction_id

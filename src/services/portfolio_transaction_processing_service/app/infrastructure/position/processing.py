@@ -34,4 +34,6 @@ class PositionHistoryProcessingAdapter:
             replay_queued=False,
             cashflow_rebuild_transactions=result.rebuilt_transactions,
             locked_state_epoch=result.locked_state_epoch,
+            resulting_quantity=result.resulting_quantity,
+            processed_transaction_quantity=result.processed_transaction_quantity,
         )

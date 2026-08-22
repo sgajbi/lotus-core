@@ -9,6 +9,7 @@ from ..models.cost_basis_transaction import CostBasisTransaction
 from .basis_transfer_allocation import LotBasisTransferResult, TransactionLotBasisTransfer
 from .cost_basis_strategies import CostBasisStrategy
 from .disposal_allocation import LotDisposalResult, TransactionLotDisposal
+from .lot_restatement import LotRestatement
 from .lot_state import OpenLotState
 
 
@@ -45,6 +46,20 @@ class LotDispositionEngine:
         return cast(
             Decimal,
             self._cost_basis_strategy.get_available_quantity(portfolio_id, instrument_id),
+        )
+
+    def restate_lot_quantities(
+        self,
+        transaction: CostBasisTransaction,
+        *,
+        signed_quantity_delta: Decimal,
+    ) -> LotRestatement:
+        """Apply one same-instrument quantity change to the complete open lot book."""
+
+        return self._cost_basis_strategy.restate_lot_quantities(
+            transaction.portfolio_id,
+            transaction.instrument_id,
+            signed_quantity_delta,
         )
 
     def consume_sell_quantity(

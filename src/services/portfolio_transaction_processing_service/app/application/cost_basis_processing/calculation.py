@@ -80,7 +80,8 @@ class CostBasisCalculationCoordinator:
         )
         lot_behavior = transaction_lot_behavior(transaction_type)
         requires_full_source_history = (
-            cost_basis_method is CostBasisMethod.AVCO and lot_behavior == "consume_lot"
+            cost_basis_method is CostBasisMethod.AVCO
+            and lot_behavior in {"consume_lot", "quantity_restatement"}
         )
         if (
             checkpoint is not None
@@ -307,6 +308,7 @@ class CostBasisCalculationCoordinator:
             raise ValueError("Open average cost pool has no representative transaction")
         transaction_raw = build_cost_basis_engine_input(record.representative_transaction)
         transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
+        transaction_raw["source_lot_original_quantity"] = checkpoint.quantity
         transaction_raw["quantity"] = checkpoint.quantity
         transaction_raw["net_cost_local"] = checkpoint.cost_local
         transaction_raw["net_cost"] = checkpoint.cost_base
@@ -335,6 +337,7 @@ class CostBasisCalculationCoordinator:
                 )
         else:
             existing_sources_after = OpenLotState(
+                original_quantity=Decimal(0),
                 quantity=Decimal(0),
                 cost_local=Decimal(0),
                 cost_base=Decimal(0),
@@ -368,6 +371,7 @@ class CostBasisCalculationCoordinator:
         for record in records:
             transaction_raw = build_cost_basis_engine_input(record.transaction)
             transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
+            transaction_raw["source_lot_original_quantity"] = record.original_quantity
             transaction_raw["quantity"] = record.quantity
             transaction_raw["net_cost_local"] = record.cost_local
             transaction_raw["net_cost"] = record.cost_base

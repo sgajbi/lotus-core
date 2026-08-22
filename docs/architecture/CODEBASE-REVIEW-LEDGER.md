@@ -1,5 +1,31 @@
 # Codebase Review Ledger
 
+CR-1708 lot quantity restatement (2026-08-22): same-instrument equity corporate actions now restate
+FIFO and AVCO original/open lot quantities through one exact ratio while conserving local/base
+basis. Non-representable per-lot results reject before mutation; typed restatement authority crosses
+cost persistence into position processing, and like-for-like quantity at the corporate-action row
+drives `lot_quantity_vs_position_mismatch` before cashflow/readiness/commit, including backdated
+rebuilds with later trades. A one-round-trip, ordered, bounded read-only audit surfaces historical
+drift without transaction/lot identifiers and scopes candidates to the durable lot estate. Restored
+lots require original-quantity authority, while invariant failures use a stable source-safe,
+non-retryable rejection. FIFO/AVCO PostgreSQL tests prove partial-disposal split,
+duplicate delivery, backdated epoch replay, an adverse BUY/later-SELL/backdated-SPLIT ordering,
+final disposal, and durable lot/position parity; the
+cross-product golden pack now covers split and reverse-split disposal economics. Warning-strict
+evidence includes 1,934 service units, 18 database-unit tests, 12 restored-lot repository integration
+tests, 189 sell-contract tests, and 150 full transaction-processing contract tests; Ruff/format,
+MyPy, lint governance, and architecture guards pass. The protected warning gate then exposed the
+same-pattern AVCO last-source residual over-allocation; materialization now caps every source by its
+original authority, distributes the exact residual across deterministic available headroom, and
+fails closed if aggregate quantity cannot be reconciled. A 23-test focused pack plus the complete
+zero-warning unit gate prove the correction. Late review also found that historical AVCO repair
+rebuilt original quantity from the pre-restatement BUY payload; the rebuild writer now persists the
+planner's restated source authority. Forward/reverse unit proof and a real PostgreSQL
+BUY/BUY/SPLIT/SELL reconciliation prove exact originals, opens, basis, and idempotency. Status:
+fixed locally; protected PR,
+exact-main validation, wiki publication/parity, and issue closure pending.
+Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
+
 CR-1707 bounded valuation job hot paths (2026-08-22): the governed 10,000-row evidence found
 sequential scans in valuation claim and stale lease selection. Claim now locks a latest-epoch,
 ordered 1,000-row cohort and updates through a typed id array with primary-key access. Stale

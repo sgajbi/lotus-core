@@ -582,6 +582,108 @@
         "sgajbi/lotus-core#480"
       ],
       "gap_notes": "This golden scenario is executable as economic reversal plus rebook using supported BUY/SELL semantics. First-class corporate-action correction state remains linked to lifecycle and parent-event model issues."
+    },
+    {
+      "id": "equity_split_then_full_sale",
+      "product_family": "equity_corporate_action",
+      "status": "implemented",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_SPLIT_BUY_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_SPLIT_001",
+          "transaction_date": "2026-04-01T10:00:00Z",
+          "quantity": "100",
+          "price": "10",
+          "gross_transaction_amount": "1000"
+        },
+        {
+          "transaction_id": "GOLDEN_SPLIT_001",
+          "transaction_type": "SPLIT",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_SPLIT_001",
+          "transaction_date": "2026-04-02T10:00:00Z",
+          "quantity": "100",
+          "price": "0",
+          "gross_transaction_amount": "0"
+        },
+        {
+          "transaction_id": "GOLDEN_SPLIT_SELL_001",
+          "transaction_type": "SELL",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_SPLIT_001",
+          "transaction_date": "2026-04-03T10:00:00Z",
+          "quantity": "200",
+          "price": "15",
+          "gross_transaction_amount": "3000"
+        }
+      ],
+      "expected": {
+        "position_state": {"quantity": "0", "cost_basis": "0"},
+        "cash_ledger_impact": {"trade_currency": "USD", "net_cash": "2000"},
+        "cost_basis_impact": {
+          "sell_cost_relief": "-1000",
+          "realized_gain_loss": "2000"
+        },
+        "income_cashflow_impact": {"classification": "INVESTMENT_FLOW", "amount": "2000"},
+        "lot_state": {"open_quantity": "0"},
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": ["transaction_id", "portfolio_id", "security_id"]
+        }
+      }
+    },
+    {
+      "id": "equity_reverse_split_then_full_sale",
+      "product_family": "equity_corporate_action",
+      "status": "implemented",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_REVERSE_BUY_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_REVERSE_001",
+          "transaction_date": "2026-04-01T10:00:00Z",
+          "quantity": "100",
+          "price": "10",
+          "gross_transaction_amount": "1000"
+        },
+        {
+          "transaction_id": "GOLDEN_REVERSE_001",
+          "transaction_type": "REVERSE_SPLIT",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_REVERSE_001",
+          "transaction_date": "2026-04-02T10:00:00Z",
+          "quantity": "50",
+          "price": "0",
+          "gross_transaction_amount": "0"
+        },
+        {
+          "transaction_id": "GOLDEN_REVERSE_SELL_001",
+          "transaction_type": "SELL",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_REVERSE_001",
+          "transaction_date": "2026-04-03T10:00:00Z",
+          "quantity": "50",
+          "price": "30",
+          "gross_transaction_amount": "1500"
+        }
+      ],
+      "expected": {
+        "position_state": {"quantity": "0", "cost_basis": "0"},
+        "cash_ledger_impact": {"trade_currency": "USD", "net_cash": "500"},
+        "cost_basis_impact": {
+          "sell_cost_relief": "-1000",
+          "realized_gain_loss": "500"
+        },
+        "income_cashflow_impact": {"classification": "INVESTMENT_FLOW", "amount": "500"},
+        "lot_state": {"open_quantity": "0"},
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": ["transaction_id", "portfolio_id", "security_id"]
+        }
+      }
     }
   ]
 }

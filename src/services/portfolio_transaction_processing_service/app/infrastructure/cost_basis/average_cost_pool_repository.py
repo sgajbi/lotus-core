@@ -218,6 +218,9 @@ class SqlAlchemyAverageCostPoolRepository:
             payload = buy_lot_state_payload(source_transaction)
             state = plan.source_states.get(source_transaction.transaction_id)
             payload.update(
+                original_quantity=(
+                    state.original_quantity if state is not None else payload["original_quantity"]
+                ),
                 open_quantity=state.quantity if state is not None else Decimal(0),
                 lot_cost_local=state.cost_local if state is not None else Decimal(0),
                 lot_cost_base=state.cost_base if state is not None else Decimal(0),
@@ -427,7 +430,12 @@ class SqlAlchemyAverageCostPoolRepository:
         )
         if any(value < Decimal(0) for value in residual_values):
             raise ValueError("Average cost source allocation exceeds the target pool aggregate")
-        residual_state = OpenLotState(*residual_values)
+        residual_state = OpenLotState(
+            original_quantity=residual_values[0],
+            quantity=residual_values[0],
+            cost_local=residual_values[1],
+            cost_base=residual_values[2],
+        )
         residual_result = await self._session.execute(
             update(PositionLotState)
             .where(

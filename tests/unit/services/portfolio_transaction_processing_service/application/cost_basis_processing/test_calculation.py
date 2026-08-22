@@ -229,6 +229,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     lot_states.get_fifo_disposal_lot_checkpoint_records.return_value = [
         OpenLotCheckpointRecord(
             transaction=_history_transaction(_persisted_buy("BUY-1", buy_date)),
+            original_quantity=Decimal("10"),
             quantity=Decimal("10"),
             cost_local=Decimal("100"),
             cost_base=Decimal("100"),
@@ -367,6 +368,68 @@ async def test_avco_sell_rebuilds_full_history_for_source_allocation_truth() -> 
     average_cost_pools.get_average_cost_pool_checkpoint_record.assert_not_awaited()
     lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
     lot_states.get_fifo_disposal_lot_checkpoint_records.assert_not_awaited()
+
+
+async def test_avco_quantity_restatement_rebuilds_every_source_instead_of_aggregate_pool() -> None:
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
+    processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
+    first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    second_buy_date = datetime(2026, 1, 1, 11, 0, tzinfo=timezone.utc)
+    action_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    prior_buy = _processed_buy("BUY-AVCO-2", second_buy_date)
+    processing_state.get_cost_basis_processing_checkpoint.return_value = (
+        CostBasisProcessingCheckpoint.from_transaction(
+            prior_buy,
+            cost_basis_method=CostBasisMethod.AVCO,
+        )
+    )
+    repo.get_transaction_history.return_value = [
+        _history_transaction(_persisted_buy("BUY-AVCO-1", first_buy_date)),
+        _history_transaction(_persisted_buy("BUY-AVCO-2", second_buy_date)),
+    ]
+    action_event, action_type, method = _prepare_event(
+        _event(
+            transaction_id="SPLIT-AVCO-1",
+            transaction_date=action_date,
+            transaction_type="SPLIT",
+            quantity="10",
+        ),
+        CostBasisMethod.AVCO,
+    )
+
+    calculation = await _calculate_cost_basis(
+        event=action_event,
+        event_transaction_type=action_type,
+        portfolio_base_currency="USD",
+        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+        repo=repo,
+        average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
+        fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
+        cost_basis_method=method,
+    )
+
+    assert calculation.incremental is False
+    assert calculation.errored == []
+    assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.COMPLETE_SNAPSHOT
+    assert calculation.average_cost_pool_transition is None
+    assert {
+        source_id: (state.original_quantity, state.quantity, state.cost_base)
+        for source_id, state in calculation.open_lot_states.items()
+    } == {
+        "BUY-AVCO-1": (Decimal("15.0000000000"), Decimal("15.0000000000"), Decimal("100")),
+        "BUY-AVCO-2": (Decimal("15.0000000000"), Decimal("15.0000000000"), Decimal("100")),
+    }
+    repo.get_transaction_history.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="S1",
+        exclude_id="SPLIT-AVCO-1",
+    )
+    average_cost_pools.get_average_cost_pool_checkpoint_record.assert_not_awaited()
+    lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
 
 
 async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source() -> None:
@@ -786,6 +849,7 @@ async def test_average_cost_pool_transition_rejects_missing_representative_state
         open_lot_states={},
     )
     assert closed_transition.existing_sources_after == OpenLotState(
+        original_quantity=Decimal(0),
         quantity=Decimal(0),
         cost_local=Decimal(0),
         cost_base=Decimal(0),

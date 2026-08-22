@@ -22,6 +22,7 @@ from .lot_disposal_repository import (
     CorruptLotDisposalReceiptError,
     SqlAlchemyCostBasisLotDisposalRepository,
 )
+from .lot_position_reconciliation import SqlAlchemyLotPositionParityAdapter
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 from .observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
@@ -50,6 +51,7 @@ __all__ = [
     "SqlAlchemyCostBasisFxRateRepository",
     "SqlAlchemyInitialOpeningCostStateRepository",
     "SqlAlchemyCostBasisLotRepository",
+    "SqlAlchemyLotPositionParityAdapter",
     "SqlAlchemyCostBasisLotBasisTransferRepository",
     "SqlAlchemyCostBasisLotDisposalRepository",
     "SqlAlchemyCostBasisProcessingStateRepository",

@@ -5,12 +5,16 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from portfolio_common.domain.transaction.type_registry import (
     TARGET_NOT_IMPLEMENTED,
     get_transaction_type_definition,
 )
 from portfolio_common.events import TransactionEvent
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    build_cost_basis_timeline_processor,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowRule,
@@ -239,3 +243,40 @@ def test_ca_bundle_golden_spin_off_reconciles_basis_transfer() -> None:
 
     assert result.status == "balanced"
     assert result.net_basis_delta_local == Decimal("0")
+
+
+def _cost_basis_raw(event: dict) -> dict[str, object]:
+    return {
+        **event,
+        "instrument_id": event["security_id"],
+        "trade_currency": "USD",
+        "portfolio_base_currency": "USD",
+        "transaction_fx_rate": "1",
+        "trade_fee": "0",
+    }
+
+
+@pytest.mark.parametrize(
+    "scenario_id",
+    ["equity_split_then_full_sale", "equity_reverse_split_then_full_sale"],
+)
+@pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
+def test_quantity_restatement_golden_scenarios_conserve_basis_through_sale(
+    scenario_id: str,
+    cost_basis_method: str,
+) -> None:
+    scenario = _scenario(scenario_id)
+
+    result = build_cost_basis_timeline_processor(cost_basis_method).process_transactions(
+        existing_transactions_raw=[],
+        new_transactions_raw=[_cost_basis_raw(event) for event in scenario["input_events"]],
+    )
+
+    assert result.errored == []
+    sell = result.processed[-1]
+    expected = scenario["expected"]
+    assert sell.net_cost == Decimal(expected["cost_basis_impact"]["sell_cost_relief"])
+    assert sell.realized_gain_loss == Decimal(expected["cost_basis_impact"]["realized_gain_loss"])
+    assert sum(state.quantity for state in result.open_lot_states.values()) == Decimal(
+        expected["lot_state"]["open_quantity"]
+    )

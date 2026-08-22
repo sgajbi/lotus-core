@@ -169,6 +169,12 @@ lineage with set-based exact-residual SQL. Full rebuilds, basis transfers, and u
 actions retain complete snapshots. Existing AVCO portfolios require governed historical backfill
 before source evidence can be declared current after cutover.
 
+Same-instrument splits, reverse splits, consolidations, bonus issues, and stock dividends restate
+both original and open FIFO/AVCO lot quantity using one exact before/after ratio. Local and base
+basis remain unchanged, so later disposals consume the restated per-unit cost. If even one lot would
+require rounding at the governed quantity scale, Core rejects the whole event; it never allocates a
+hidden remainder. Cost and position results must agree before the transaction can commit.
+
 Audit historical AVCO state before cutover with `make audit-average-cost-pools`. The command is
 read-only by default, processes a bounded deterministic page, compares both persisted
 representations with canonical replay truth, and returns a machine-readable resume cursor. After
@@ -176,6 +182,12 @@ review, use `make reconcile-average-cost-pools` with a portfolio scope and bound
 commits independently only after exact source-count, quantity, local-basis, and base-basis
 certification. Retain output reports as release evidence; tool availability does not prove that a
 historical estate has already been reconciled.
+
+Audit lot-to-position parity with `make audit-lot-position-parity`. It scans an ordered bounded page
+of current position epochs in one database round trip and returns
+`lot_quantity_vs_position_mismatch` when aggregate open-lot quantity differs from the current
+position quantity. The report is diagnostic only and omits transaction and lot identifiers; repair
+must use governed source correction/rebuild authority.
 
 ## Combined runtime replay controls
 
