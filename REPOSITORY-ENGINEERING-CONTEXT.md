@@ -1753,9 +1753,11 @@ Most relevant current governance:
      dispatch-round limits. Valuation scheduler uses `VALUATION_SCHEDULER_POLL_BUDGET_SECONDS` and
      `VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS`, emits poll-duration, claimed, dispatched,
      budget-exhausted, and producer-back-pressure metrics, and recovers claimed-but-undispatched
-     jobs through the existing durable dispatch recovery path. Do not increase scheduler batch
-     sizes or dispatch rounds without preserving time-budget stop behavior and source-safe
-     carry-forward semantics.
+     jobs through the existing durable dispatch recovery path. Its repository claim, dispatch-loop
+     exhaustion check, and operator capacity reports must share the governed 1,000-row effective
+     claim cohort even when a larger legacy value is configured. Do not increase scheduler batch
+     sizes or dispatch rounds without preserving time-budget stop behavior, bounded physical
+     statements, truthful capacity reporting, and source-safe carry-forward semantics.
 102. Valuation backfill staging must aggregate generated jobs across states and write them through
      bounded chunks controlled by `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE`. Keep duplicate
      idempotency and stale-epoch filtering in `ValuationJobRepository.upsert_jobs(...)`; do not
