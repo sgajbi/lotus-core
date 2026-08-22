@@ -18,7 +18,11 @@ MyPy, lint governance, and architecture guards pass. The protected warning gate 
 same-pattern AVCO last-source residual over-allocation; materialization now caps every source by its
 original authority, distributes the exact residual across deterministic available headroom, and
 fails closed if aggregate quantity cannot be reconciled. A 23-test focused pack plus the complete
-zero-warning unit gate prove the correction. Status: fixed locally; protected PR,
+zero-warning unit gate prove the correction. Late review also found that historical AVCO repair
+rebuilt original quantity from the pre-restatement BUY payload; the rebuild writer now persists the
+planner's restated source authority. Forward/reverse unit proof and a real PostgreSQL
+BUY/BUY/SPLIT/SELL reconciliation prove exact originals, opens, basis, and idempotency. Status:
+fixed locally; protected PR,
 exact-main validation, wiki publication/parity, and issue closure pending.
 Evidence: [CR-1708-LOT-QUANTITY-RESTATEMENT.md](./codebase-reviews/CR-1708-LOT-QUANTITY-RESTATEMENT.md).
 

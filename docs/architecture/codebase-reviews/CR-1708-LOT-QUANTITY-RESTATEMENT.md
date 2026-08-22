@@ -20,6 +20,9 @@ basis, or leave phantom quantity.
   then assigns the exact storage-quantum residual deterministically across remaining source
   headroom. Aggregate quantity that cannot be represented without violating source authority fails
   closed instead of over-allocating the final source lot.
+- Historical AVCO reconciliation persists the rebuilt state's restated original quantity alongside
+  open quantity and basis. It does not reconstruct original authority from the pre-action BUY
+  payload while claiming a successful repair.
 - Local/base basis is conserved; original and open quantities persist atomically in the existing
   caller-owned transaction. Calculation lineage binds the exact restatement payload.
 - `quantity_restatement` is state-dependent and forces complete AVCO source-history reconstruction.
@@ -60,6 +63,11 @@ basis, or leave phantom quantity.
   reconciliation, source-level `open <= original`, stable residual placement, and fail-closed
   rejection when aggregate quantity exceeds total source authority. The focused pack passes
   `23` tests and the complete warning gate passes with zero warnings.
+- Review fix-forward: direct repository tests prove forward- and reverse-restated originals replace
+  the source transaction quantity during AVCO rebuild. Real PostgreSQL reconciliation now repairs a
+  two-BUY, forward-SPLIT, partial-SELL history to original quantities `200/200`, open quantities
+  `175/175`, and conserved pool/source basis `1,925`; the repair is idempotent (`1 passed in
+  69.26s`). The complete cost repository pack passes `40` tests.
 - Warning-strict transaction-processing service unit suite: `1,934 passed in 14.70s`.
 - Repository database unit lane: `18 passed in 98.39s`; restored-lot repository integration:
   `12 passed in 109.45s`.
