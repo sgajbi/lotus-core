@@ -47,6 +47,7 @@ from tools.front_office_portfolio_seed import (
     _wait_for_required_market_price_readiness,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
+    build_front_office_valuation_authority_cleanup_sql,
     build_portfolio_seed_cleanup_sql,
     parse_args,
 )
@@ -114,6 +115,93 @@ def test_front_office_bundle_carries_complete_deterministic_valuation_authority(
     cash_facts = [row for row in facts if row["security_id"] == "CASH_USD_BOOK_OPERATING"]
     assert max(row["price_date"] for row in cash_facts) == "2026-04-30"
     assert {row["price"] for row in cash_facts} == {"1.0000000000"}
+
+
+def test_front_office_market_price_conventions_are_explicit_for_every_security():
+    bundle = _build_bundle()
+    security_ids = {row["security_id"] for row in bundle["instruments"]}
+
+    assert set(front_office_seed_module.FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID) == (
+        security_ids
+    )
+    assert {
+        security_id: convention.face_amount_per_position_unit
+        for security_id, convention in (
+            front_office_seed_module.FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID.items()
+        )
+        if convention.raw_quote_basis == "PERCENT_OF_PRINCIPAL_CLEAN"
+    } == {
+        "FO_BOND_UST_2030": Decimal("1000"),
+        "FO_BOND_SIEMENS_2031": Decimal("1000"),
+    }
+
+
+def test_front_office_market_price_authority_rejects_missing_or_mismatched_convention():
+    market_price = {
+        "security_id": "FO_BOND_UNGOVERNED",
+        "price_date": "2026-04-10",
+        "price": "99.25",
+        "currency": "USD",
+    }
+    instrument = {"security_id": "FO_BOND_UNGOVERNED", "product_type": "Bond"}
+
+    with pytest.raises(ValueError, match="convention is missing"):
+        front_office_seed_module._build_market_price_source_fact(
+            market_price=market_price,
+            instrument=instrument,
+            observed_at="2026-04-10T09:00:00Z",
+        )
+
+    governed = {
+        "security_id": "FO_BOND_UST_2030",
+        "price_date": "2026-04-10",
+        "price": "101.35",
+        "currency": "USD",
+    }
+    with pytest.raises(ValueError, match="product type does not match"):
+        front_office_seed_module._build_market_price_source_fact(
+            market_price=governed,
+            instrument={"security_id": "FO_BOND_UST_2030", "product_type": "Equity"},
+            observed_at="2026-04-10T09:00:00Z",
+        )
+
+
+def test_front_office_bond_denomination_changes_authoritative_price_and_hash(monkeypatch):
+    bundle = _build_bundle()
+    market_price = next(
+        row
+        for row in bundle["market_prices"]
+        if row["security_id"] == "FO_BOND_UST_2030" and row["price_date"] == "2026-04-10"
+    )
+    instrument = next(
+        row for row in bundle["instruments"] if row["security_id"] == "FO_BOND_UST_2030"
+    )
+    original = front_office_seed_module._build_market_price_source_fact(
+        market_price=market_price,
+        instrument=instrument,
+        observed_at="2026-04-10T09:00:00Z",
+    )
+    original_convention = (
+        front_office_seed_module.FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID[
+            "FO_BOND_UST_2030"
+        ]
+    )
+    monkeypatch.setitem(
+        front_office_seed_module.FRONT_OFFICE_MARKET_PRICE_CONVENTION_BY_SECURITY_ID,
+        "FO_BOND_UST_2030",
+        replace(original_convention, face_amount_per_position_unit=Decimal("100")),
+    )
+
+    changed = front_office_seed_module._build_market_price_source_fact(
+        market_price=market_price,
+        instrument=instrument,
+        observed_at="2026-04-10T09:00:00Z",
+    )
+
+    assert original["price"] == "1013.5000"
+    assert changed["price"] == "101.3500"
+    assert changed["source_record_id"] == original["source_record_id"]
+    assert changed["source_content_hash"] != original["source_content_hash"]
 
 
 def test_front_office_valuation_authority_satisfies_ingestion_contracts():
@@ -831,6 +919,10 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "PB_SG_GLOBAL_GROWTH_003" in sql
     assert DEFAULT_BENCHMARK_ID in sql
     assert DEFAULT_DPM_MODEL_PORTFOLIO_ID in sql
+    assert sql.count("delete from market_price_source_facts") == 1
+    assert sql.count("delete from instrument_valuation_policy_assignments") == 1
+    assert "source_record_id like 'front-office-price:%'" in sql
+    assert "source_record_id like 'front-office-valuation-policy:%'" in sql
     assert sql.startswith("begin;\n")
     assert sql.endswith("\ncommit;")
 
@@ -958,6 +1050,8 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
     assert "delete from reprocessing_jobs;" not in sql
+    assert "delete from market_price_source_facts" not in sql
+    assert "delete from instrument_valuation_policy_assignments" not in sql
     assert "delete from processed_events where service_name in" in sql
     assert "delete from processed_events where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
 
@@ -989,11 +1083,8 @@ def test_front_office_seed_cleanup_sql_bounds_demo_business_dates():
 def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     sql = build_portfolio_seed_cleanup_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
 
-    assert "delete from market_price_source_facts" in sql
-    assert "delete from instrument_valuation_policy_assignments" in sql
-    assert "tenant_id = 'LOTUS_PB_SG'" in sql
-    assert "legal_book_id = 'SG_PRIVATE_BANK_BOOK'" in sql
-    assert "source_system = 'LOTUS_FRONT_OFFICE_SEED'" in sql
+    assert "delete from market_price_source_facts" not in sql
+    assert "delete from instrument_valuation_policy_assignments" not in sql
     assert "delete from processed_events where service_name in" in sql
     assert "'persistence-business-dates'" in sql
     assert "'persistence-fx-rates'" in sql
@@ -1024,6 +1115,18 @@ def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     assert "delete from processed_events;" not in sql
     assert "'reporting-export-service'" not in sql
     assert "event_id like 'portfolio_day.reconciliation.%'" not in sql
+
+
+def test_front_office_valuation_authority_cleanup_is_exactly_source_namespaced():
+    sql = build_front_office_valuation_authority_cleanup_sql()
+
+    assert sql.count("delete from market_price_source_facts") == 1
+    assert sql.count("delete from instrument_valuation_policy_assignments") == 1
+    assert "tenant_id = 'LOTUS_PB_SG'" in sql
+    assert "legal_book_id = 'SG_PRIVATE_BANK_BOOK'" in sql
+    assert "source_system = 'LOTUS_FRONT_OFFICE_SEED'" in sql
+    assert "source_record_id like 'front-office-price:%'" in sql
+    assert "source_record_id like 'front-office-valuation-policy:%'" in sql
 
 
 def test_front_office_seed_persists_sources_before_activating_business_horizon(monkeypatch):
@@ -2069,7 +2172,9 @@ def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(mo
     assert diagnostics["aggregation_jobs"]["statuses"] == ["PENDING"]
 
 
-def test_front_office_seed_verification_counts_projected_transactions(monkeypatch) -> None:
+def test_front_office_seed_verification_rejects_scheduler_amplification_until_stable(
+    monkeypatch,
+) -> None:
     requested_urls: list[str] = []
     responses = {
         "http://query.dev/portfolios/P1/positions?as_of_date=2026-04-10": (
@@ -2261,6 +2366,7 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert verification["failed_aggregation_jobs"] == 0
     assert verification["advisor_book_governed_membership"] is True
     assert verification["advisor_book_source_evidence_current"] is True
+    assert verification["terminal_queue_stable_observations"] == 3
     assert positions_calls == len(support_overview_sequence) + 1
     assert support_overview_calls == len(support_overview_sequence)
     assert sleep_calls == [1] * len(support_overview_sequence)
