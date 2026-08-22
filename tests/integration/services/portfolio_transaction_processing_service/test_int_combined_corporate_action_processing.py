@@ -382,6 +382,37 @@ async def test_backdated_restatement_compares_position_at_event_before_later_sal
     ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
     assert parity.status is LotPositionParityStatus.CURRENT
 
+    semantic_repair = await process_booked_transaction(
+        context=context,
+        event=backdated_split,
+        event_id=f"repair-{backdated_split.transaction_id}",
+        correlation_id=f"corr-repair-{backdated_split.transaction_id.lower()}",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert semantic_repair.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as repair_verification_session:
+        repaired_positions = (
+            (
+                await repair_verification_session.execute(
+                    select(PositionHistory)
+                    .where(
+                        PositionHistory.portfolio_id == portfolio_id,
+                        PositionHistory.security_id == security_id,
+                        PositionHistory.epoch == 2,
+                    )
+                    .order_by(PositionHistory.position_date, PositionHistory.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    repaired_by_transaction = {item.transaction_id: item for item in repaired_positions}
+    assert repaired_by_transaction[backdated_split.transaction_id].quantity == Decimal(
+        "175.0000000000"
+    )
+    assert repaired_by_transaction[later_sale.transaction_id].quantity == Decimal("150.0000000000")
+
 
 async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
     clean_db,

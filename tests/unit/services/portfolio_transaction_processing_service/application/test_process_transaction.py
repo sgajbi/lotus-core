@@ -612,6 +612,7 @@ async def test_use_case_reprocesses_semantic_duplicate_with_canonical_repair_int
         TransactionProcessingOperation.IDEMPOTENCY,
         TransactionProcessingOutcome.REPLAYED,
     )
+    assert unit_of_work.position.rebuild_existing_calls == [True]
 
 
 @pytest.mark.asyncio
