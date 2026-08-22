@@ -1258,6 +1258,7 @@ async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots
     )
 
     assert [record.transaction.transaction_id for record in records] == ["BUY01", "BUY02"]
+    assert [record.original_quantity for record in records] == [Decimal("4"), Decimal("5")]
     assert sum((record.quantity for record in records), start=Decimal(0)) == Decimal("9")
     stream_result.close.assert_awaited_once_with()
     compiled_query = str(
@@ -1332,7 +1333,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         security_id=" SEC01 ",
         states_by_source_transaction_id={
             "BUY01": OpenLotState(
-                original_quantity=Decimal("10"),
+                original_quantity=Decimal("20"),
                 quantity=Decimal("4"),
                 cost_local=Decimal("400"),
                 cost_base=Decimal("420"),
@@ -1351,6 +1352,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         transition_evidence=_transition_evidence(),
     )
 
+    assert lot_row.original_quantity == Decimal("20")
     assert lot_row.open_quantity == Decimal("4")
     assert lot_row.lot_cost_local == Decimal("400")
     assert lot_row.lot_cost_base == Decimal("420")
@@ -1360,6 +1362,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
     assert lot_row.amortized_book_carrying_base == Decimal("420")
     assert lot_row.calculation_lineage["algorithm_id"] == ("cost-basis-complete-lot-snapshot")
     assert closed_lot_row.open_quantity == Decimal("0")
+    assert closed_lot_row.original_quantity == Decimal("5")
     assert closed_lot_row.lot_cost_local == Decimal("0")
     assert closed_lot_row.lot_cost_base == Decimal("0")
     assert closed_lot_row.amortized_cost_profile_id is None
