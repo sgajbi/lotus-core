@@ -30,11 +30,23 @@ class SqlAlchemyLotPositionParityAdapter:
         after: LotPositionParityKey | None,
         limit: int,
     ) -> tuple[LotPositionParityAssessment, ...]:
-        keys_stmt = select(
-            PositionState.portfolio_id.label("portfolio_id"),
-            PositionState.security_id.label("security_id"),
-            PositionState.epoch.label("epoch"),
-        ).order_by(PositionState.portfolio_id, PositionState.security_id)
+        governed_lot_exists = (
+            select(PositionLotState.id)
+            .where(
+                PositionLotState.portfolio_id == PositionState.portfolio_id,
+                PositionLotState.security_id == PositionState.security_id,
+            )
+            .exists()
+        )
+        keys_stmt = (
+            select(
+                PositionState.portfolio_id.label("portfolio_id"),
+                PositionState.security_id.label("security_id"),
+                PositionState.epoch.label("epoch"),
+            )
+            .where(governed_lot_exists)
+            .order_by(PositionState.portfolio_id, PositionState.security_id)
+        )
         if portfolio_id is not None:
             keys_stmt = keys_stmt.where(PositionState.portfolio_id == portfolio_id)
         if after is not None:
