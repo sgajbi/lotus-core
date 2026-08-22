@@ -14,11 +14,18 @@ from portfolio_common.database_models import (
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    LOT_QUANTITY_VS_POSITION_MISMATCH,
+    LotPositionParityStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyLotPositionParityAdapter,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -151,6 +158,10 @@ async def test_quantity_restatement_keeps_lot_and_position_authority_in_lockstep
     )
     assert restated_lot.open_quantity <= restated_lot.original_quantity
     assert restated_lot.calculation_lineage["output_content_hash"]
+    (parity,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert parity.status is LotPositionParityStatus.CURRENT
 
     result = await persist_and_process_booked_transaction(
         session=async_db_session,
@@ -194,6 +205,20 @@ async def test_quantity_restatement_keeps_lot_and_position_authority_in_lockstep
         Decimal("-750.0000000000"),
         Decimal("1500.0000000000"),
     )
+
+    async with context.session_factory() as drift_session:
+        async with drift_session.begin():
+            await drift_session.execute(
+                update(PositionHistory)
+                .where(PositionHistory.id == final_position.id)
+                .values(quantity=Decimal("1"))
+            )
+    (drift,) = await SqlAlchemyLotPositionParityAdapter(
+        session_factory=context.session_factory
+    ).assess_page(portfolio_id=portfolio_id, after=None, limit=1)
+    assert drift.status is LotPositionParityStatus.DRIFTED
+    assert drift.finding_type == LOT_QUANTITY_VS_POSITION_MISMATCH
+    assert (drift.lot_quantity, drift.position_quantity) == (Decimal(0), Decimal("1"))
 
 
 async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(

@@ -7,6 +7,7 @@ from .fx_rates import CostBasisFxRatePort
 from .initial_opening_state import InitialOpeningCostStatePort
 from .lot_basis_transfer import CostBasisLotBasisTransferPort
 from .lot_disposal import CostBasisLotDisposalPort
+from .lot_position_reconciliation import LotPositionParityPort
 from .lot_state import CostBasisLotStatePort
 from .observability import (
     CostBasisCalculationObservation,
@@ -41,6 +42,7 @@ __all__ = [
     "CostBasisLotDisposalPort",
     "CostBasisLotBasisTransferPort",
     "CostBasisLotStatePort",
+    "LotPositionParityPort",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
     "CostBasisExecutionMode",

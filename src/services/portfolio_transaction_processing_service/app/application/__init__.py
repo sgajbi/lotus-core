@@ -58,6 +58,11 @@ from .cost_basis_processing.average_cost_pool_reconciliation import (
     ReconcileAverageCostPoolsResult,
     ReconcileAverageCostPoolsUseCase,
 )
+from .cost_basis_processing.lot_position_reconciliation import (
+    AuditLotPositionParityCommand,
+    AuditLotPositionParityResult,
+    AuditLotPositionParityUseCase,
+)
 from .cost_basis_processing.timeline import (
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
@@ -134,6 +139,9 @@ __all__ = [
     "ReconcileAverageCostPoolsCommand",
     "ReconcileAverageCostPoolsResult",
     "ReconcileAverageCostPoolsUseCase",
+    "AuditLotPositionParityCommand",
+    "AuditLotPositionParityResult",
+    "AuditLotPositionParityUseCase",
     "ReplayBookedTransactionCommand",
     "ReplayBookedTransactionResult",
     "ReplayBookedTransactionUseCase",

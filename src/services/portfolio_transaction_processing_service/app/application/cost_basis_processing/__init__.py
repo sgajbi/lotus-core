@@ -12,6 +12,11 @@ from .calculation_result import CostBasisCalculationResult
 from .effect_coordination import coordinate_cost_processing_effects
 from .execution import PreparedCostProcessingUseCase
 from .fx_enrichment import FxRateNotFoundError, enrich_cost_basis_transactions_with_fx
+from .lot_position_reconciliation import (
+    AuditLotPositionParityCommand,
+    AuditLotPositionParityResult,
+    AuditLotPositionParityUseCase,
+)
 from .lot_state_persistence import OpenLotPersistenceScope, persist_open_lot_state
 from .preparation import (
     CostProcessingRoute,
@@ -25,6 +30,9 @@ from .transaction_persistence import persist_cost_basis_transactions
 __all__ = [
     "apply_effective_amortized_cost_to_disposals",
     "AverageCostPoolRebuildPlanner",
+    "AuditLotPositionParityCommand",
+    "AuditLotPositionParityResult",
+    "AuditLotPositionParityUseCase",
     "CostBasisCalculationCoordinator",
     "CostBasisCalculationResult",
     "CostBasisTimelineProcessor",
