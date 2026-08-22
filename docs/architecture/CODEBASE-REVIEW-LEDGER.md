@@ -3,12 +3,14 @@
 CR-1708 lot quantity restatement (2026-08-22): same-instrument equity corporate actions now restate
 FIFO and AVCO original/open lot quantities through one exact ratio while conserving local/base
 basis. Non-representable per-lot results reject before mutation; typed restatement authority crosses
-cost persistence into position processing, and `lot_quantity_vs_position_mismatch` rejects before
-cashflow/readiness/commit. A one-round-trip, ordered, bounded read-only audit surfaces historical
+cost persistence into position processing, and like-for-like quantity at the corporate-action row
+drives `lot_quantity_vs_position_mismatch` before cashflow/readiness/commit, including backdated
+rebuilds with later trades. A one-round-trip, ordered, bounded read-only audit surfaces historical
 drift without transaction/lot identifiers and scopes candidates to the durable lot estate. Restored
 lots require original-quantity authority, while invariant failures use a stable source-safe,
 non-retryable rejection. FIFO/AVCO PostgreSQL tests prove partial-disposal split,
-duplicate delivery, backdated epoch replay, final disposal, and durable lot/position parity; the
+duplicate delivery, backdated epoch replay, an adverse BUY/later-SELL/backdated-SPLIT ordering,
+final disposal, and durable lot/position parity; the
 cross-product golden pack now covers split and reverse-split disposal economics. Warning-strict
 evidence includes 1,934 service units, 18 database-unit tests, 12 restored-lot repository integration
 tests, 189 sell-contract tests, and 150 full transaction-processing contract tests; Ruff/format,
