@@ -1575,6 +1575,75 @@ def test_blocking_policy_rejects_unadmitted_environment_values(
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+@pytest.mark.parametrize(
+    ("action_role", "scope", "variable", "value", "error"),
+    [
+        (
+            "enforcement",
+            "job",
+            "PATH",
+            "${{ github.workspace }}/fake-bin:/usr/bin:/bin",
+            "environment key is not admitted",
+        ),
+        (
+            "enforcement",
+            "step",
+            "PATH",
+            "${{ github.workspace }}/fake-bin:/usr/bin:/bin",
+            "environment key is not admitted",
+        ),
+        (
+            "enforcement",
+            "step",
+            "PYTHON_VERSION",
+            "3.11",
+            "environment value is not admitted",
+        ),
+        (
+            "auxiliary",
+            "step",
+            "PATH",
+            "${{ github.workspace }}/fake-bin:/usr/bin:/bin",
+            "environment key is not admitted",
+        ),
+    ],
+)
+def test_blocking_policy_validates_environment_for_every_action_step(
+    action_role: str,
+    scope: str,
+    variable: str,
+    value: str,
+    error: str,
+) -> None:
+    action_step: dict[str, Any]
+    if action_role == "enforcement":
+        action_step = {"id": "enforce", "uses": "reviewdog/action-actionlint@v1"}
+        steps = [action_step]
+    else:
+        action_step = {"uses": "actions/checkout@v6"}
+        steps = [
+            action_step,
+            {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+        ]
+    job: dict[str, Any] = {
+        "name": "Quality Baseline / Security Gate",
+        "steps": steps,
+    }
+    if scope == "job":
+        job["env"] = {variable: value}
+    else:
+        action_step["env"] = {variable: value}
+    workflow = {"jobs": {"security": job}}
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match=error):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
 def test_blocking_policy_rejects_a_malformed_workflow_environment() -> None:
     workflow = {
         "env": ["MAKEFLAGS=-n"],

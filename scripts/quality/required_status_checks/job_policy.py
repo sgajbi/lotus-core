@@ -132,7 +132,7 @@ def effective_environment(
     return effective
 
 
-def _validate_run_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
+def _validate_step_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
     unsupported_keys = sorted(
         (key for key in environment if key not in _BLOCKING_ENVIRONMENT_VALUES),
         key=repr,
@@ -266,13 +266,13 @@ def _validate_blocking_step(
         raise RequiredStatusChecksError(
             f"blocking workflow step must execute run or uses: {context_text}"
         )
+    environment = effective_environment(
+        step,
+        inherited=default_environment,
+        scope=f"blocking step {context_text}",
+    )
+    _validate_step_environment(environment, context_text=context_text)
     if isinstance(run_command, str):
-        environment = effective_environment(
-            step,
-            inherited=default_environment,
-            scope=f"blocking step {context_text}",
-        )
-        _validate_run_environment(environment, context_text=context_text)
         effective_shell = _effective_run_shell(
             step, default_shell=default_shell, context_text=context_text
         )

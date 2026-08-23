@@ -4162,8 +4162,8 @@ Most relevant current governance:
      audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set, with
      action-specific `with:` key/value policy that confines alternate checkout and cache paths and
      requires literal, expression-free artifact destinations below `output/`. Continue rejecting
-     workflow/job/step environment keys or exact values outside the closed governed-workflow
-     inventory, including `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, Make control variables,
+     every blocking step's effective workflow/job/step environment keys or exact values outside the
+     closed governed-workflow inventory, including `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, Make control variables,
      alternate coverage bases, runtime-image identities, profiles, and platform paths, and any
      run-step working-directory override; the positive bare-command
      grammar makes direct, indirect, or deprecated environment/path writes, workspace mutation,
