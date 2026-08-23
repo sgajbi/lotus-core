@@ -928,6 +928,8 @@ def test_required_local_gates_are_reachable_from_lint_and_workflow_governance() 
     assert "required-status-checks-live-guard:" in makefile_text
     assert "test_required_status_checks_guard.py" in makefile_text
     assert "test_required_status_checks_fail_closed.py" in makefile_text
+    assert "ruff check scripts/quality/required_status_checks" in makefile_text
+    assert "ruff format --check scripts/quality/required_status_checks" in makefile_text
     assert "--max-absolute C --max-modules B --max-average B" in makefile_text
     assert "--max-allowed-rank B" in makefile_text
     assert "mypy --config-file mypy.ini scripts/quality/required_status_checks" in makefile_text

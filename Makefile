@@ -69,6 +69,8 @@ quality-workflow-governance-gate: required-status-checks-code-quality-gate
 	$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q
 
 required-status-checks-code-quality-gate:
+	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py
+	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff format --check scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py
 	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run xenon --max-absolute C --max-modules B --max-average B scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py
 	$(REPOSITORY_PYTHON) scripts/quality/maintainability_gate.py scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py --max-allowed-rank B
 	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run mypy --config-file mypy.ini scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py

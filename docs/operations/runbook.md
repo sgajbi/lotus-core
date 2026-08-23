@@ -120,7 +120,7 @@ after fencing Core repository roots.
    requires every manifest entry to use GitHub Actions app `15368`; and fails on missing, stale,
    duplicate, ambiguous, advisory-as-required, or undeclared check authority. `make lint` includes
    this guard and the import-boundary gate.
-   `make quality-workflow-governance-gate` additionally enforces Xenon complexity limits
+   `make quality-workflow-governance-gate` additionally enforces scoped Ruff lint/format checks and Xenon complexity limits
    (`absolute C`, `module B`, `average B`) and Radon maintainability rank B across the required-check
    package and CLI, then applies scoped MyPy, Bandit, and Vulture checks before running mutation
    tests with branch-aware coverage hard-blocked below 90%.
