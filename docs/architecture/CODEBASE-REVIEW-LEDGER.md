@@ -19,7 +19,7 @@ multi-target tokens fail closed. Every admitted static or resolved target must a
 Make's exact per-target phony flag in the delimited effective-database Files section evaluated with
 only fixed `PATH` and `LC_ALL=C`, and must appear in a literal static `.PHONY` declaration. Make
 conditionals, includes, declarations serialized inside GNU Make column-zero-scoped `define` bodies,
-`$(eval)`/`${eval}` outside recipes, parser/execution-variable assignments including multiline
+`$(eval)`/`${eval}` outside recipes, literal or computed parser/execution-variable assignments including multiline
 `define` forms, special execution
 targets, `vpath`, dynamic/continued declarations, inherited
 `MAKELEVEL`/`CI`/runner state,
@@ -62,7 +62,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 331 focused tests with 93.39% branch-aware package coverage against a 90%
+deadlock. Local evidence is 340 focused tests with 93.67% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

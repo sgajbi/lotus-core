@@ -73,7 +73,7 @@ multi-target tokens are rejected. Every admitted static or resolved target must 
 by GNU Make's exact per-target phony flag in the delimited effective-database Files section evaluated
 with only fixed `PATH` and `LC_ALL=C`, and appear in a literal static `.PHONY` declaration. Conditional
 directives, includes, declarations inside GNU Make column-zero-scoped `define` bodies,
-`$(eval)`/`${eval}` outside recipes, parser/execution-variable assignments including multiline
+`$(eval)`/`${eval}` outside recipes, literal or computed parser/execution-variable assignments including multiline
 `define` forms, special execution targets, `vpath`, dynamic or continued phony declarations, inherited process environment,
 parse-time/recipe output, serialized variable bodies, ordinary files, non-phony rules, and missing
 Makefile authority fail closed. It
