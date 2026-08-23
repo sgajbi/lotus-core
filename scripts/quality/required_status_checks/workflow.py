@@ -4,7 +4,7 @@ import os
 import re
 import subprocess  # nosec B404
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import yaml
 
@@ -166,7 +166,9 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
     return tuple(contexts)
 
 
-def _load_phony_make_targets(path: Path) -> frozenset[str]:
+def _load_phony_make_targets(
+    path: Path, *, configured_environment: Mapping[str, Any] | None = None
+) -> frozenset[str]:
     try:
         path.stat()
     except OSError as exc:
@@ -174,6 +176,12 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
     make_environment = os.environ.copy()
     for variable in ("GNUMAKEFLAGS", "MAKEFILES", "MAKEFLAGS", "MFLAGS"):
         make_environment.pop(variable, None)
+    for key, value in (configured_environment or {}).items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise RequiredStatusChecksError(
+                f"blocking workflow Make environment must contain string entries: {path}"
+            )
+        make_environment[key] = value
     make_environment["LC_ALL"] = "C"
     try:
         result = subprocess.run(  # nosec B603
@@ -203,11 +211,37 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
     return frozenset(targets)
 
 
+def _phony_target_resolver(
+    *, path: Path, fixed_targets: frozenset[str] | None
+) -> Callable[[Mapping[str, Any]], frozenset[str]]:
+    if fixed_targets is not None:
+        return lambda _environment: fixed_targets
+    cache: dict[tuple[tuple[str, str], ...], frozenset[str]] = {}
+
+    def resolve(environment: Mapping[str, Any]) -> frozenset[str]:
+        if not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in environment.items()
+        ):
+            raise RequiredStatusChecksError(
+                f"blocking workflow Make environment must contain string entries: {path}"
+            )
+        cache_key = tuple(sorted(environment.items()))
+        if cache_key not in cache:
+            cache[cache_key] = _load_phony_make_targets(
+                path,
+                configured_environment=dict(cache_key),
+            )
+        return cache[cache_key]
+
+    return resolve
+
+
 def blocking_contexts_for_workflow(
     workflow: Mapping[str, Any],
     *,
     policy: WorkflowPolicy,
     phony_make_targets: frozenset[str] | None = None,
+    makefile_path: Path = Path("Makefile"),
 ) -> tuple[str, ...]:
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
@@ -217,10 +251,9 @@ def blocking_contexts_for_workflow(
     observed_advisory: set[str] = set()
     workflow_shell = default_run_shell(workflow, scope=f"workflow {policy.path}")
     workflow_environment = effective_environment(workflow, scope=f"workflow {policy.path}")
-    governed_phony_targets = (
-        phony_make_targets
-        if phony_make_targets is not None
-        else _load_phony_make_targets(Path("Makefile"))
+    resolve_phony_make_targets = _phony_target_resolver(
+        path=makefile_path,
+        fixed_targets=phony_make_targets,
     )
     for job_id, job in jobs.items():
         if not isinstance(job_id, str) or not job_id:
@@ -236,7 +269,7 @@ def blocking_contexts_for_workflow(
             validate_blocking_job(
                 job,
                 contexts=contexts,
-                phony_make_targets=governed_phony_targets,
+                phony_make_targets_for_environment=resolve_phony_make_targets,
                 workflow_shell=workflow_shell,
                 workflow_environment=workflow_environment,
             )
@@ -310,7 +343,7 @@ def _governed_contexts(
     contexts: list[str] = []
     required_producers: dict[str, Path] = {}
     all_producers: dict[str, list[str]] = {}
-    phony_make_targets = _load_phony_make_targets(repository_root / "Makefile")
+    _load_phony_make_targets(repository_root / "Makefile")
     for policy in manifest.workflow_policies:
         workflow = _load_workflow(repository_root / policy.path, display_path=policy.path)
         _validate_workflow_triggers(workflow, path=policy.path)
@@ -323,7 +356,7 @@ def _governed_contexts(
         policy_contexts = blocking_contexts_for_workflow(
             workflow,
             policy=policy,
-            phony_make_targets=phony_make_targets,
+            makefile_path=repository_root / "Makefile",
         )
         contexts.extend(policy_contexts)
         required_producers.update(dict.fromkeys(policy_contexts, policy.path))

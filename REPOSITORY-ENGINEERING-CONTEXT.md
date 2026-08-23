@@ -4160,7 +4160,8 @@ Most relevant current governance:
      redirection, multiple lines, Make flags, wrapper commands, and other shell syntax belong
      inside a reviewed Make target, not in workflow shell text. Permit action steps only from the
      audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set, with
-     action-specific `with:` key/value policy that confines alternate checkout, cache, and artifact paths. Continue rejecting
+     action-specific `with:` key/value policy that confines alternate checkout and cache paths and
+     requires literal, expression-free artifact destinations below `output/`. Continue rejecting
      workflow/job/step environment keys outside the closed governed-workflow inventory, including
      `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, and Make control variables, and any run-step
      working-directory override; the positive bare-command
@@ -4173,7 +4174,8 @@ Most relevant current governance:
      bare Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`, and reject assignment-only targets
      such as `make FOO=bar` plus option, path, special-target, or multi-target syntax. Every admitted
      static or resolved matrix target must also be declared by a repository-root `Makefile`
-     per-target phony flag in GNU Make's delimited effective-database Files section;
+     per-target phony flag in GNU Make's delimited effective-database Files section evaluated under
+     the run step's inherited workflow/job/step environment;
      parse-time/recipe output, serialized variable bodies, missing Makefile authority, inactive
      declarations, ordinary files, and non-phony rules fail closed,
      bind runtime-image verification as a prerequisite of every consuming Make control; the target

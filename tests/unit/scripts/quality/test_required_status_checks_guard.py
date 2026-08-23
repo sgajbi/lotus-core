@@ -226,6 +226,138 @@ def test_manifest_validation_accepts_target_specific_variable_on_real_phony_targ
     validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
+@pytest.mark.parametrize("environment_scope", ["workflow", "job", "step"])
+def test_blocking_policy_evaluates_phony_authority_under_effective_run_environment(
+    tmp_path: Path,
+    environment_scope: str,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        ".PHONY: active\n"
+        "active:\n\t@true\n"
+        "ifndef DEMO_DATA_PACK_INGEST_ONLY\n"
+        ".PHONY: security-audit\n"
+        "endif\n"
+        "security-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+    step: dict[str, Any] = {
+        "id": "enforce",
+        "shell": "bash",
+        "run": "make security-audit",
+    }
+    job: dict[str, Any] = {
+        "name": "Quality Baseline / Security Gate",
+        "runs-on": "ubuntu-latest",
+        "steps": [step],
+    }
+    workflow: dict[str, Any] = {"jobs": {"security": job}}
+    environment = {"DEMO_DATA_PACK_INGEST_ONLY": "true"}
+    if environment_scope == "workflow":
+        workflow["env"] = environment
+    elif environment_scope == "job":
+        job["env"] = environment
+    else:
+        step["env"] = environment
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="not a declared phony Make target: security-audit",
+    ):
+        _blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            makefile_path=tmp_path / "Makefile",
+        )
+
+
+def test_blocking_policy_resolves_phony_authority_for_each_run_step_environment(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        "ifeq ($(DEMO_DATA_PACK_INGEST_ONLY),setup)\n"
+        ".PHONY: lint\n"
+        "endif\n"
+        "ifeq ($(DEMO_DATA_PACK_INGEST_ONLY),enforce)\n"
+        ".PHONY: security-audit\n"
+        "endif\n"
+        "lint security-audit:\n\t@true\n",
+        encoding="utf-8",
+    )
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {
+                        "name": "Setup",
+                        "shell": "bash",
+                        "run": "make lint",
+                        "env": {"DEMO_DATA_PACK_INGEST_ONLY": "setup"},
+                    },
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                        "env": {"DEMO_DATA_PACK_INGEST_ONLY": "enforce"},
+                    },
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert _blocking_contexts_for_workflow(
+        workflow,
+        policy=policy,
+        makefile_path=tmp_path / "Makefile",
+    ) == ("Quality Baseline / Security Gate",)
+
+
+def test_blocking_policy_rejects_non_string_make_environment_values(tmp_path: Path) -> None:
+    _write_fixture_makefile(tmp_path)
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "runs-on": "ubuntu-latest",
+                "env": {"DEMO_DATA_PACK_INGEST_ONLY": True},
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Make environment must contain string entries",
+    ):
+        _blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            makefile_path=tmp_path / "Makefile",
+        )
+
+
 def test_matrix_contexts_expand_from_each_include_row() -> None:
     workflow = {
         "jobs": {
@@ -765,6 +897,16 @@ def test_blocking_policy_rejects_workflow_asserted_runtime_image_authority() -> 
             "actions/download-artifact@v8",
             {"name": "runtime", "path": "."},
             "stay under output",
+        ),
+        (
+            "actions/download-artifact@v8",
+            {"name": "runtime", "path": "output/${{ '..' }}"},
+            "must not contain expressions",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "output/${{ github.sha }}"},
+            "must not contain expressions",
         ),
         (
             "actions/cache@v5",
