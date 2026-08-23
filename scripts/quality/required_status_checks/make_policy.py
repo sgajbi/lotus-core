@@ -90,8 +90,8 @@ def _has_computed_declaration_name(line: str) -> bool:
     return define is not None and "$" in define.group(1)
 
 
-def _has_fully_computed_declaration(line: str) -> bool:
-    """Reject expansion-only lines that can synthesize otherwise invisible Make syntax."""
+def _has_expansion_dependent_declaration(line: str) -> bool:
+    """Reject lines whose expansions can supply an otherwise invisible separator."""
 
     boundaries = (
         boundary
@@ -102,7 +102,7 @@ def _has_fully_computed_declaration(line: str) -> bool:
         if boundary is not None
     )
     declaration = line[: min(boundaries, default=len(line))].strip()
-    if not declaration.startswith("$") or _SAFE_DIAGNOSTIC_EXPANSION.fullmatch(declaration):
+    if "$" not in declaration or _SAFE_DIAGNOSTIC_EXPANSION.fullmatch(declaration):
         return False
     return (
         _first_unexpanded_token(declaration, _ASSIGNMENT_OPERATORS) is None
@@ -124,7 +124,7 @@ def validate_make_execution_state(line: str, *, path: Path, line_number: int) ->
     mutable_state = (
         (line.endswith("\\") and not line.startswith(".PHONY:"))
         or _has_computed_declaration_name(line)
-        or _has_fully_computed_declaration(line)
+        or _has_expansion_dependent_declaration(line)
         or _has_execution_special_target(line)
         or any(
             pattern.match(line)

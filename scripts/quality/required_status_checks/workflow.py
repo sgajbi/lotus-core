@@ -197,11 +197,11 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
             continue
         if define_depth or raw_line.startswith("\t"):
             continue
-        validate_make_execution_state(line, path=path, line_number=line_number)
         if _MAKE_CONDITIONAL_DIRECTIVE.match(line) or _MAKE_INCLUDE_DIRECTIVE.match(line):
             raise RequiredStatusChecksError(
                 f"Makefile phony authority must be static: {path}; line={line_number}"
             )
+        validate_make_execution_state(line, path=path, line_number=line_number)
         declaration = _STATIC_PHONY_DECLARATION.match(line)
         if declaration is None:
             continue

@@ -405,6 +405,10 @@ def test_blocking_policy_rejects_mutable_make_execution_state(
         "X = .IGNORE: security-audit\n$(X)",
         "X = .IGNORE: security-audit\n${X}",
         "X = .IGNORE: security-audit\n$(strip $(X))",
+        "X := .IGNORE: security-audit\ndummy $X",
+        "X := .IGNORE: security-audit\ndummy $(X)",
+        "X := .IGNORE: security-audit\ndummy ${X}",
+        "X := .IGNORE: security-audit\ndummy $(strip $(X))",
         "S = SHELL\ndefine $S\n/bin/true\nendef",
     ],
 )
