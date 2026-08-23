@@ -111,9 +111,12 @@ after fencing Core repository roots.
    failure-tolerant, or non-executable marker cannot emit merge authority. An enforce step's
    effective shell must resolve to exactly `bash`; an unspecified shell is unsafe because GitHub's
    Linux default does not guarantee `pipefail`. Workflow-, job-, and step-level shell policy cannot
-   remove fail-fast pipeline behavior. Common shell failure suppression and Make dry-run flags also fail, and a
-   blocking job may depend only on another fully validated blocking job. This static marker proves that a declared control remains present and
-   fail-propagating; reviewers remain responsible for the business semantics of the invoked command.
+   remove fail-fast pipeline behavior. A named denylist rejects explicit escapes through
+   failure-tolerance operators, `set +e`, Make dry-run flags, and background execution (`&`,
+   `nohup`, `setsid`, `coproc`, or `disown`). A
+   blocking job may depend only on another fully validated blocking job. This static marker proves
+   that a declared control remains present and fail-propagating; reviewers remain responsible for
+   the business semantics of the invoked command.
    Canonical PR events and the exact `main` branch filter plus the `merge_group` `main` filter are
    mandatory; extra `paths`, `paths-ignore`, or alternative branch keys fail closed so required
    contexts cannot silently stop posting;
@@ -137,7 +140,7 @@ after fencing Core repository roots.
    | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
    | `id: enforce` count is not one, or the marker is conditional, auxiliary, or non-executable | Put exactly one unconditional marker on the job's real non-auxiliary fail-propagating control; review the invoked command's semantics. |
-   | enforcement shell is unspecified/non-`bash`, suppressed, or dry-run | Set the effective shell to exact `bash`, remove suppression/dry-run flags, and retain `-eo pipefail` propagation. |
+   | enforcement shell is unspecified/non-`bash`, suppressed, dry-run, or backgrounded | Set the effective shell to exact `bash`, remove suppression/dry-run/background escapes, and retain foreground `-eo pipefail` propagation. |
    | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 

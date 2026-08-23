@@ -4153,8 +4153,9 @@ Most relevant current governance:
      event/`main` branch keys with no path filters and
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
      require every marked run control's workflow-, job-, or step-level effective shell to resolve
-     to exact `bash` so pipeline failures propagate, reject unspecified/non-`bash` shells and
-     shell-level failure/dry-run suppression, require every blocking-job dependency to be
+     to exact `bash` so pipeline failures propagate, reject unspecified/non-`bash` shells and a
+     named denylist of shell-level failure-tolerance, dry-run, and background-execution escapes,
+     require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
      static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
