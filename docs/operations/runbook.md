@@ -142,7 +142,7 @@ after fencing Core repository roots.
    delimited Files section evaluated with only fixed `PATH` and `LC_ALL=C`, and appear in a literal
    static `.PHONY` declaration. Conditional directives, includes, declarations inside GNU Make
    column-zero-scoped `define` bodies, `$(eval)`/`${eval}` outside recipes, parser/execution-variable
-   assignments, special execution targets, `vpath`, dynamic or continued
+   assignments including multiline `define` forms, special execution targets, `vpath`, dynamic or continued
    phony declarations, inherited `MAKELEVEL`/`CI`/runner state, parse-time/recipe output, serialized
    variable bodies, a missing Makefile, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
