@@ -12,6 +12,8 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 DEFAULT_MANIFEST_PATH = Path("contracts/ci/required-status-checks.v1.json")
+GITHUB_ACTIONS_APP_ID = 15368
+_WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 _SUPPORTED_POLICIES = frozenset({"all_jobs_blocking", "gate_jobs_blocking"})
 
@@ -110,6 +112,11 @@ def load_manifest(path: Path = DEFAULT_MANIFEST_PATH) -> RequiredChecksManifest:
         app_id = raw_check["app_id"]
         if not isinstance(app_id, int) or isinstance(app_id, bool) or app_id <= 0:
             raise RequiredStatusChecksError("required check app_id must be a positive integer")
+        if app_id != GITHUB_ACTIONS_APP_ID:
+            raise RequiredStatusChecksError(
+                "required checks must bind to the GitHub Actions application: "
+                f"expected={GITHUB_ACTIONS_APP_ID}"
+            )
         checks.append(
             RequiredCheck(
                 context=_require_non_empty_string(raw_check["context"], field="check context"),
@@ -133,9 +140,20 @@ def load_manifest(path: Path = DEFAULT_MANIFEST_PATH) -> RequiredChecksManifest:
     )
 
 
+def _matrix_name_expressions(name: str) -> tuple[re.Match[str], ...]:
+    workflow_expressions = tuple(_WORKFLOW_EXPRESSION.finditer(name))
+    matrix_expressions = tuple(_MATRIX_EXPRESSION.finditer(name))
+    if ("${{" in name and not workflow_expressions) or tuple(
+        match.span() for match in workflow_expressions
+    ) != tuple(match.span() for match in matrix_expressions):
+        raise RequiredStatusChecksError(f"job has unsupported workflow name expression: {name}")
+    return matrix_expressions
+
+
 def _expanded_job_contexts(job: Mapping[str, Any]) -> tuple[str, ...]:
     name = _require_non_empty_string(job.get("name"), field="workflow job name")
-    expressions = _MATRIX_EXPRESSION.findall(name)
+    expression_matches = _matrix_name_expressions(name)
+    expressions = tuple(match.group(1) for match in expression_matches)
     if not expressions:
         return (name,)
     if len(expressions) != 1:
@@ -160,10 +178,10 @@ def _required_context_collisions(
     job: Mapping[str, Any], *, required_contexts: set[str]
 ) -> tuple[str, ...]:
     name = _require_non_empty_string(job.get("name"), field="workflow job name")
+    expressions = _matrix_name_expressions(name)
     try:
         expanded_contexts = _expanded_job_contexts(job)
     except RequiredStatusChecksError:
-        expressions = tuple(_MATRIX_EXPRESSION.finditer(name))
         if not expressions:
             raise
         pattern_parts: list[str] = []
