@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import subprocess  # nosec B404
 from pathlib import Path
@@ -27,9 +28,11 @@ _MAKE_DATABASE_COMMAND = (
     "make",
     "--no-builtin-rules",
     "--no-builtin-variables",
-    "--dry-run",
+    "--question",
     "--print-data-base",
 )
+_MAKE_DATABASE_START = "# Make data base, printed on "
+_MAKE_DATABASE_END = "# Finished Make data base on "
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -133,6 +136,10 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
         path.stat()
     except OSError as exc:
         raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
+    make_environment = os.environ.copy()
+    for variable in ("GNUMAKEFLAGS", "MAKEFILES", "MAKEFLAGS", "MFLAGS"):
+        make_environment.pop(variable, None)
+    make_environment["LC_ALL"] = "C"
     try:
         result = subprocess.run(  # nosec B603
             (*_MAKE_DATABASE_COMMAND, "--file", path.name),
@@ -140,6 +147,7 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
             capture_output=True,
             check=False,
             encoding="utf-8",
+            env=make_environment,
             errors="replace",
             timeout=30,
         )
@@ -151,10 +159,19 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
         raise RequiredStatusChecksError(
             f"unable to evaluate Makefile phony targets: {path}"
         ) from exc
-    if result.returncode != 0:
+    if result.returncode not in {0, 1}:
         raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
+    output_lines = result.stdout.splitlines()
+    database_starts = [
+        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_START)
+    ]
+    database_ends = [
+        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_END)
+    ]
+    if not database_starts or not database_ends or database_ends[-1] <= database_starts[-1]:
+        raise RequiredStatusChecksError(f"unable to parse Makefile effective database: {path}")
     targets: set[str] = set()
-    for line in result.stdout.splitlines():
+    for line in output_lines[database_starts[-1] + 1 : database_ends[-1]]:
         match = _PHONY_DECLARATION.fullmatch(line)
         if match is None:
             continue

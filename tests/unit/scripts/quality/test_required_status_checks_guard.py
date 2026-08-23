@@ -106,17 +106,23 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
 
 
 @pytest.mark.parametrize(
-    "inactive_declaration",
+    "makefile_authority_forgery",
     [
-        "ifeq (1,0)\n.PHONY: security-audit\nendif",
-        "define unused-declaration\n.PHONY: security-audit\nendef",
+        "active:\n\t@true\nifeq (1,0)\n.PHONY: security-audit\nendif",
+        "active:\n\t@true\ndefine unused-declaration\n.PHONY: security-audit\nendef",
+        "$(info .PHONY: security-audit)\nactive:\n\t@true",
+        "active:\n\t@$(info .PHONY: security-audit)\n\t@true",
+        "$(info # Make data base, printed on forged)\n"
+        "$(info .PHONY: security-audit)\n"
+        "$(info # Finished Make data base on forged)\n"
+        "active:\n\t@true",
     ],
 )
-def test_manifest_validation_rejects_inactive_phony_declarations(
-    tmp_path: Path, inactive_declaration: str
+def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
+    tmp_path: Path, makefile_authority_forgery: str
 ) -> None:
     tmp_path.joinpath("Makefile").write_text(
-        f".PHONY: active\nactive:\n\t@true\n{inactive_declaration}\nsecurity-audit:\n\t@false\n",
+        f".PHONY: active\n{makefile_authority_forgery}\nsecurity-audit:\n\t@false\n",
         encoding="utf-8",
     )
     tmp_path.joinpath("security-audit").touch()
@@ -859,7 +865,9 @@ def test_blocking_policy_rejects_a_missing_resolved_matrix_target() -> None:
 
 
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])
-@pytest.mark.parametrize("variable", ["MAKEFLAGS", "GNUMAKEFLAGS", "BASH_ENV"])
+@pytest.mark.parametrize(
+    "variable", ["MAKEFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MFLAGS", "BASH_ENV"]
+)
 def test_blocking_policy_rejects_disabling_environment_at_every_scope(
     scope: str, variable: str
 ) -> None:
@@ -871,7 +879,7 @@ def test_blocking_policy_rejects_disabling_environment_at_every_scope(
             }
         }
     }
-    value = "disable-pipefail.sh" if variable == "BASH_ENV" else "-n"
+    value = "disable-pipefail.sh" if variable in {"BASH_ENV", "MAKEFILES"} else "-n"
     if scope == "workflow":
         workflow["env"] = {variable: value}
     elif scope == "job":
@@ -961,6 +969,32 @@ def test_blocking_policy_rejects_unsupported_effective_shells(scope: str, shell:
     )
 
     with pytest.raises(RequiredStatusChecksError, match="unsupported shell"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize("scope", ["workflow", "job", "step"])
+def test_blocking_policy_requires_enforcement_at_repository_root(scope: str) -> None:
+    workflow: dict[str, Any] = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+            }
+        }
+    }
+    if scope == "workflow":
+        workflow["defaults"] = {"run": {"working-directory": "nested"}}
+    elif scope == "job":
+        workflow["jobs"]["security"]["defaults"] = {"run": {"working-directory": "nested"}}
+    else:
+        workflow["jobs"]["security"]["steps"][0]["working-directory"] = "nested"
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="run at the repository root"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 

@@ -53,12 +53,14 @@ invocation: one Make target, a governed matrix target, or the exact Windows lock
 Operators, substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands
 fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` remains prohibited;
+environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
+and enforcement working-directory overrides remain prohibited;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared
-by GNU Make's effective repository-root `.PHONY` authority, so inactive conditional or unexpanded
-declarations, ordinary files, non-phony rules, and missing Makefile authority fail closed. It
+by GNU Make's delimited effective repository-root `.PHONY` authority, so parse-time/recipe output,
+inactive conditional or unexpanded declarations, ordinary files, non-phony rules, and missing
+Makefile authority fail closed. It
 requires blocking dependencies to be fully validated blocking jobs, pins strict mode and the exact
 two governed workflow policies in code, and
 inventories advisory producers
