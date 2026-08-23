@@ -29,8 +29,10 @@ evidence must be explicit and cannot be mistaken for release authorization.
    guard pins repository/branch authority to canonical `sgajbi/lotus-core` / `main`; manifest edits
    cannot redirect live certification to another protection target.
 2. `required_status_checks_guard.py` validates the closed manifest shape, expands matrix suites,
-   classifies every governed workflow job, requires blocking jobs and steps to be unconditional and
-   fail-propagating, inventories advisory producers in global context-uniqueness checks, scans every
+   classifies every governed workflow job, requires blocking jobs and enforcement commands to be
+   unconditional and fail-propagating, limits conditional auxiliary steps to audited checkout,
+   cache-save, and artifact-upload actions, inventories advisory producers in global
+   context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
    job-name expressions, requires every manifest entry to bind to the exact GitHub Actions
    application ID `15368`, and compares exact sets. New, renamed, skipped, failure-tolerant,
@@ -55,7 +57,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
 
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
 deterministically, the advisory context must be both declared and observed, blocking jobs cannot
-carry job-level conditions or job/step failure tolerance, advisory and blocking producers cannot
+carry job-level conditions, conditional enforcement commands, or job/step failure tolerance;
+only audited auxiliary actions may be conditional. Advisory and blocking producers cannot
 share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
 required context. Non-GitHub-Actions manifest authority, noncanonical repository/branch targets,
 advisory-as-required authority, and formatted or otherwise unsupported job-name expressions fail

@@ -18,6 +18,11 @@ GITHUB_ACTIONS_APP_ID = 15368
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 _SUPPORTED_POLICIES = frozenset({"all_jobs_blocking", "gate_jobs_blocking"})
+_CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
+    "actions/cache/save@",
+    "actions/checkout@",
+    "actions/upload-artifact@",
+)
 
 
 class RequiredStatusChecksError(RuntimeError):
@@ -261,6 +266,17 @@ def blocking_contexts_for_workflow(
                         + ", ".join(job_blocking_contexts)
                         + f"; step={step_name!r}"
                     )
+                if "if" in step:
+                    step_name = step.get("name", "<unnamed step>")
+                    action = step.get("uses")
+                    if not isinstance(action, str) or not action.startswith(
+                        _CONDITIONAL_AUXILIARY_ACTION_PREFIXES
+                    ):
+                        raise RequiredStatusChecksError(
+                            "blocking workflow enforcement steps must be unconditional: "
+                            + ", ".join(job_blocking_contexts)
+                            + f"; step={step_name!r}"
+                        )
         blocking.extend(job_blocking_contexts)
     missing_advisory = policy.advisory_contexts - observed_advisory
     if missing_advisory:
