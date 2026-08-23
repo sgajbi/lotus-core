@@ -242,6 +242,8 @@ def validate_live_protection(
                 f"live required check has invalid context or app_id: context={context!r}"
             )
         live_checks.add(RequiredCheck(context=context, app_id=app_id))
+    if len(live_checks) != len(raw_checks):
+        raise RequiredStatusChecksError("live required checks must be unique")
     expected_checks = set(manifest.required_checks)
     if live_checks != expected_checks:
         missing = sorted(expected_checks - live_checks)
