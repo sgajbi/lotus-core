@@ -39,6 +39,7 @@ _EXECUTION_DEFINE = re.compile(
 )
 _VPATH_DIRECTIVE = re.compile(r"^vpath(?:\s|$)")
 _DEFINE_DIRECTIVE = re.compile(r"^(?:(?:export|override|private)\s+)*define\s+(\S+)")
+_SAFE_DIAGNOSTIC_EXPANSION = re.compile(r"^\$\((?:error|info|warning)(?:\s|$).*\)$")
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")
 
 
@@ -89,6 +90,26 @@ def _has_computed_declaration_name(line: str) -> bool:
     return define is not None and "$" in define.group(1)
 
 
+def _has_fully_computed_declaration(line: str) -> bool:
+    """Reject expansion-only lines that can synthesize otherwise invisible Make syntax."""
+
+    boundaries = (
+        boundary
+        for boundary in (
+            _first_unexpanded_token(line, ("#",)),
+            _first_unexpanded_token(line, (";",)),
+        )
+        if boundary is not None
+    )
+    declaration = line[: min(boundaries, default=len(line))].strip()
+    if not declaration.startswith("$") or _SAFE_DIAGNOSTIC_EXPANSION.fullmatch(declaration):
+        return False
+    return (
+        _first_unexpanded_token(declaration, _ASSIGNMENT_OPERATORS) is None
+        and _first_unexpanded_token(declaration, (":",)) is None
+    )
+
+
 def _has_execution_special_target(line: str) -> bool:
     target_separator = _first_unexpanded_token(line, (":",))
     assignment = _first_unexpanded_token(line, _ASSIGNMENT_OPERATORS)
@@ -103,6 +124,7 @@ def validate_make_execution_state(line: str, *, path: Path, line_number: int) ->
     mutable_state = (
         (line.endswith("\\") and not line.startswith(".PHONY:"))
         or _has_computed_declaration_name(line)
+        or _has_fully_computed_declaration(line)
         or _has_execution_special_target(line)
         or any(
             pattern.match(line)
