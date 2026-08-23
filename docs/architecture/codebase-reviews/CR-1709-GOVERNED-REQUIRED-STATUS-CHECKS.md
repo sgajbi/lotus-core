@@ -2,8 +2,8 @@
 
 Date: 2026-08-23
 
-Status: Fixed locally; protected PR, live branch-protection reconciliation, exact-main validation,
-wiki publication/parity, issue closure, and branch/worktree hygiene remain pending.
+Status: Fixed locally and live branch protection reconciled; protected PR refresh, exact-main
+validation, wiki publication/parity, issue closure, and branch/worktree hygiene remain pending.
 
 Issue: #999
 
@@ -27,8 +27,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
 1. `contracts/ci/required-status-checks.v1.json` owns strict mode, repository/branch identity,
    workflow policy, the one advisory context, and 37 sorted `(context, app_id)` requirements.
 2. `required_status_checks_guard.py` validates the closed manifest shape, expands matrix suites,
-   classifies every governed workflow job, and compares exact sets. New or renamed jobs cannot be
-   silently omitted.
+   classifies every governed workflow job, requires blocking jobs to be unconditional, scans every
+   repository workflow for static or dynamic required-context collisions, and compares exact sets.
+   New, renamed, skipped, or impersonated jobs cannot silently authorize merge.
 3. Live verification requires GitHub's app-bound `checks` response, not legacy context strings.
    Missing, stale, wrong-app, malformed, or non-strict protection fails closed.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
@@ -46,16 +47,18 @@ evidence must be explicit and cannot be mistaken for release authorization.
 ## Meaningful Proof
 
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
-deterministically, the advisory context must be both declared and observed, an undeclared new Gate
-fails before protection can drift, and live parity rejects missing, stale, wrong-app, and wrong
-strict-mode authority. Workflow tests prove import-boundary and required-check guards are reachable
-from `make lint`, and Main uses only the dedicated read credential. The live guard currently fails
-against the pre-remediation 18-context protection with the exact 19 missing contexts; that failure
-is retained as characterization, not bypassed.
+deterministically, the advisory context must be both declared and observed, blocking jobs cannot
+carry job-level conditions, and unmanaged static or dynamic workflow names cannot collide with a
+required context. An undeclared new Gate fails before protection can drift, and live parity rejects
+missing, stale, wrong-app, and wrong strict-mode authority. Workflow tests prove import-boundary and
+required-check guards are reachable from `make lint`, and Main uses only the dedicated read
+credential. The pre-remediation live guard characterized exactly 19 missing contexts; after all 37
+contexts passed on PR head `b4badf4f6`, branch protection was updated atomically and live read-back
+passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after review hardening: `46 passed`;
+- focused workflow/manifest pack after final review hardening: `49 passed`;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;
@@ -82,7 +85,8 @@ repository context, operator runbook, wiki source, review note, and ledger.
 
 - dedicated fine-grained branch-protection read secret provisioned;
 - exact-head Feature, Quality Baseline, and Pull Request Merge Gate green;
-- app-bound branch protection atomically reconciled to the manifest;
+- refreshed exact-head Feature, Quality Baseline, and Pull Request Merge Gate green after final
+  review hardening;
 - protected merge and exact-main live-parity success;
 - wiki publication and strict parity;
 - #999 QA evidence/closure and merged branch/worktree removal.

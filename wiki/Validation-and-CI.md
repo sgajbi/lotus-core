@@ -41,10 +41,12 @@ Pull Request Merge Gate matrix suite, and includes all 14 Quality Baseline `... 
 `Quality Baseline / Report Only` is the sole explicit advisory context; it retains diagnostics but
 cannot authorize merge.
 
-`make required-status-checks-guard` compares that manifest with both governed workflows and fails
-on a missing or stale check, undeclared gate/advisory job, duplicate context, malformed matrix, or
-wrong manifest shape. It is part of `make lint`, alongside `make quality-import-boundary-gate`, so
-the local/Feature/PR/Main enforcement path cannot silently omit either control.
+`make required-status-checks-guard` compares that manifest with both governed workflows, requires
+blocking jobs to be unconditional, and scans every repository workflow for static or dynamic
+required-context collisions. It also fails on a missing or stale check, undeclared gate/advisory
+job, duplicate context, malformed matrix, or wrong manifest shape. It is part of `make lint`,
+alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enforcement path cannot
+silently omit, skip, or impersonate either control.
 
 Main Releasability additionally runs `make required-status-checks-live-guard`. The command uses a
 dedicated fine-grained `LOTUS_BRANCH_PROTECTION_READ_TOKEN` with repository Administration
