@@ -27,33 +27,40 @@ _ALLOWED_BLOCKING_JOB_KEYS = frozenset(
     }
 )
 _AUDITED_BLOCKING_JOB_RUNNERS = frozenset({"ubuntu-latest", "windows-latest"})
-_BLOCKING_ENVIRONMENT_KEYS = frozenset(
-    {
-        "COMPOSE_DOCKER_CLI_BUILD",
-        "DEMO_DATA_PACK_HISTORY_DAYS",
-        "DEMO_DATA_PACK_INGEST_ONLY",
-        "DEMO_DATA_PACK_PORTFOLIO_IDS",
-        "DOCKER_BUILDKIT",
-        "E2E_INGESTION_URL",
-        "E2E_QUERY_URL",
-        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24",
-        "GH_TOKEN",
-        "HOST_DATABASE_URL",
-        "LOTUS_COVERAGE_CHANGED_BASE",
-        "LOTUS_PLATFORM_ROOT",
-        "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID",
-        "LOTUS_RUNTIME_IMAGE_SET_GROUP",
-        "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL",
-        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH",
-        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA",
-        "LOTUS_TESTS_COMPOSE_LOG_FILE",
-        "LOTUS_TEST_ENV_PROFILE",
-        "NODE_VERSION",
-        "PIP_DISABLE_PIP_VERSION_CHECK",
-        "PYTHONUNBUFFERED",
-        "PYTHON_VERSION",
-    }
-)
+_BLOCKING_ENVIRONMENT_VALUES = {
+    "COMPOSE_DOCKER_CLI_BUILD": frozenset({"1"}),
+    "DEMO_DATA_PACK_HISTORY_DAYS": frozenset({"240"}),
+    "DEMO_DATA_PACK_INGEST_ONLY": frozenset({"true"}),
+    "DEMO_DATA_PACK_PORTFOLIO_IDS": frozenset({"DEMO_DPM_EUR_001"}),
+    "DOCKER_BUILDKIT": frozenset({"1"}),
+    "E2E_INGESTION_URL": frozenset({"http://localhost:8400"}),
+    "E2E_QUERY_URL": frozenset({"http://localhost:8401"}),
+    "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24": frozenset({"true"}),
+    "GH_TOKEN": frozenset({"${{ github.token }}"}),
+    "HOST_DATABASE_URL": frozenset({"postgresql://user:password@localhost:57432/portfolio_db"}),
+    "LOTUS_COVERAGE_CHANGED_BASE": frozenset(
+        {
+            "${{ github.event_name == 'pull_request' && "
+            "format('origin/{0}', github.base_ref) || 'HEAD~1' }}"
+        }
+    ),
+    "LOTUS_PLATFORM_ROOT": frozenset({"${{ github.workspace }}/lotus-platform"}),
+    "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID": frozenset({"${{ github.run_id }}"}),
+    "LOTUS_RUNTIME_IMAGE_SET_GROUP": frozenset({"pr-runtime-image-set"}),
+    "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL": frozenset(
+        {"${{ github.server_url }}/${{ github.repository }}"}
+    ),
+    "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH": frozenset(
+        {"${{ github.head_ref || github.ref_name }}"}
+    ),
+    "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA": frozenset({"${{ github.sha }}"}),
+    "LOTUS_TESTS_COMPOSE_LOG_FILE": frozenset({"output/e2e-smoke/e2e-smoke-logs.txt"}),
+    "LOTUS_TEST_ENV_PROFILE": frozenset({"e2e"}),
+    "NODE_VERSION": frozenset({"22"}),
+    "PIP_DISABLE_PIP_VERSION_CHECK": frozenset({"1"}),
+    "PYTHONUNBUFFERED": frozenset({"1"}),
+    "PYTHON_VERSION": frozenset({"3.12"}),
+}
 _MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 _MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
 _STATIC_MAKE_COMMAND = re.compile(rf"^make[ \t]+({_MAKE_TARGET_TEXT})$")
@@ -127,7 +134,7 @@ def effective_environment(
 
 def _validate_run_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
     unsupported_keys = sorted(
-        (key for key in environment if key not in _BLOCKING_ENVIRONMENT_KEYS),
+        (key for key in environment if key not in _BLOCKING_ENVIRONMENT_VALUES),
         key=repr,
     )
     if unsupported_keys:
@@ -135,6 +142,11 @@ def _validate_run_environment(environment: Mapping[str, Any], *, context_text: s
         raise RequiredStatusChecksError(
             f"blocking workflow environment key is not admitted: {context_text}; key={key}"
         )
+    for key, value in environment.items():
+        if not isinstance(value, str) or value not in _BLOCKING_ENVIRONMENT_VALUES[key]:
+            raise RequiredStatusChecksError(
+                f"blocking workflow environment value is not admitted: {context_text}; key={key}"
+            )
 
 
 def _validate_run_shell(shell: object, *, context_text: str) -> None:

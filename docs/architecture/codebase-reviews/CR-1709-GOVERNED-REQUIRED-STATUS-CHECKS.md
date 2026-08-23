@@ -48,7 +48,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
    serialized variable bodies, ordinary files, undeclared rules, and missing Makefile authority fail
    closed. Artifact destinations must be literal expression-free paths below
    `output/`, so expression resolution cannot traverse into the checkout. Enforcement
-   working-directory overrides fail closed.
+   working-directory overrides fail closed. Effective workflow/job/step environment keys and exact
+   values must match the positive governed inventory; alternate coverage bases, runtime-image
+   identities, profiles, platform paths, and non-string values cannot weaken a blocking control.
    Pre-enforcement steps cannot mutate `GITHUB_ENV`/`GITHUB_PATH`, and actions are restricted to
    governed auxiliary or enforcement families. Runtime-image verified state is bound directly to
    post-verification control steps instead of persisted through `GITHUB_ENV`. It requires blocking-job
@@ -97,7 +99,10 @@ positive command grammar admits only one Make target, one governed matrix target
 Windows lock-closure command. It therefore rejects `||`, `!`, pipelines, substitutions,
 conditions, redirects, multiple lines, Make options, assignments, and wrapper commands without an
 open-ended shell denylist. Effective workflow/job/step environment injection through `MAKEFLAGS`,
-`GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV` remains independently prohibited. The Docker
+`GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV` remains independently prohibited. Every
+admitted environment key is also pinned to its exact governed value, so `HEAD` cannot replace the
+canonical changed-code coverage base and alternate runtime-image identities, profiles, or platform
+paths fail before execution. The Docker
 image-set producer's
 multi-command implementation is owned by `make build-runtime-image-set`, so its marker is one bare
 invocation. Matrix expressions are not trusted as unresolved text: every referenced include-row

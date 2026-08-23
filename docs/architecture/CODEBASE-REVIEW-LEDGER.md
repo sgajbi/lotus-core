@@ -23,9 +23,10 @@ declarations, inherited `MAKELEVEL`/`CI`/runner state,
 parse-time/recipe output, serialized variable bodies, ordinary files, undeclared rules, and missing
 Makefile authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
 `windows-latest` runners, so containers, services, deployment environments, self-hosted labels,
-and runner expressions cannot replace the execution boundary. Configured environment keys must
-come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`,
-`CI`, Make control variables, and run-step working-directory overrides fail closed. The positive run-command grammar rejects direct or indirect environment/path
+and runner expressions cannot replace the execution boundary. Configured environment keys and
+their exact values must come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`,
+`LD_PRELOAD`, `MAKE`, `CI`, Make control variables, alternate coverage bases, runtime-image
+identities, profiles, platform paths, and run-step working-directory overrides fail closed. The positive run-command grammar rejects direct or indirect environment/path
 writes, workspace mutation, and command chaining; action steps are restricted to the audited
 checkout, setup, cache, artifact, Docker Buildx, and actionlint set with action-specific input
 key/value policy. Artifact destinations must be literal expression-free paths beneath `output/`, so
@@ -58,7 +59,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 279 focused tests with 93.05% branch-aware package coverage against a 90%
+deadlock. Local evidence is 285 focused tests with 93.09% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
