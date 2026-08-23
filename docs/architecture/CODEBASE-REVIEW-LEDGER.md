@@ -5,23 +5,25 @@ while five Pull Request Merge Gate jobs/suites and all 14 Quality Baseline Gate 
 bypassable by auto-merge. One versioned manifest now owns 37 sorted GitHub-Actions-app-bound
 contexts, strict mode,
 workflow sources, and the sole advisory `Quality Baseline / Report Only` context. A reusable guard
-expands matrix suites; requires every blocking job and enforcement command to be unconditional and
+expands matrix suites; requires every blocking job and executable step to be unconditional and
 fail-propagating; permits conditional steps only for audited checkout, cache-save, and
 artifact-upload actions; requires every blocking job to retain exactly one unconditional executable
 `id: enforce` step on a non-auxiliary control; verifies exact canonical PR keys without path filters
 and merge-group triggers; accepts only include-row matrices with cell-identifying names; requires
-every marked run control to resolve to exact `bash` and one bare invocation: one Make target, a
+every run step to resolve to exact `bash` and one bare invocation: one active phony Make target, a
 governed matrix target, or the exact Windows lock-closure command. Shell operators, substitutions,
 quoting, redirection, multiple lines, Make flags, and wrapper commands fail closed. Referenced
 matrix targets are resolved from every include row and must each match the same bare target-name
 grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
-multi-target tokens fail closed. Every admitted static or resolved target must also be declared by
-GNU Make's delimited effective-database Files section, so parse-time/recipe output, serialized
+multi-target tokens fail closed. Every admitted static or resolved target must also carry GNU
+Make's exact per-target phony flag in the delimited effective-database Files section, so parse-time/recipe output, serialized
 variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
 authority fail closed. Enforcement working-directory overrides and Make control-variable injection
-also fail closed. Pre-enforcement steps cannot mutate `GITHUB_ENV`/`GITHUB_PATH`, and action steps
-are restricted to governed auxiliary or enforcement actions. Runtime-image consumers bind verified
-state directly to each control step after successful load verification. The guard requires blocking
+also fail closed. The positive run-command grammar rejects direct or indirect environment/path
+writes, workspace mutation, and command chaining; action steps are restricted to the audited
+checkout, setup, cache, artifact, Docker Buildx, and actionlint set. Runtime-image consumers bind
+verified state directly to each control step only after `make runtime-image-set-load-verify`
+succeeds earlier in the same job. The guard requires blocking
 dependencies to be validated blocking jobs; pins strict mode and the exact governed workflow set;
 inventories advisory producers in global context-uniqueness proof; scans all
 workflows for static or dynamic required-context collisions; rejects unsupported job-name
@@ -47,7 +49,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 219 focused tests with 91.70% branch-aware package coverage against a 90%
+deadlock. Local evidence is 222 focused tests with 92.11% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

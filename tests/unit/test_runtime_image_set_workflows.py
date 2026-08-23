@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -88,10 +90,10 @@ def _assert_runtime_image_consumers(
         assert "docker-build" in ([needs] if isinstance(needs, str) else needs)
         assert "Download runtime image set" in _step_names(job)
         assert "Load and verify runtime image set" in _step_names(job)
+        steps = _steps(job)
         commands = _run_commands(job)
         assert "prebuild_ci_images.py" not in commands
-        assert "runtime_image_set.py load-verify" in commands
-        assert '--expected-commit-sha "${GITHUB_SHA}"' in commands
+        assert "make runtime-image-set-load-verify" in commands
         assert "GITHUB_ENV" not in commands
         runtime_controls = [
             step
@@ -99,9 +101,20 @@ def _assert_runtime_image_consumers(
             if str(step.get("run", "")).startswith("make ") and step.get("run") != "make install-ci"
         ]
         assert runtime_controls
+        verification_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("run") == "make runtime-image-set-load-verify"
+        )
         assert all(
             step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
             for step in runtime_controls
+            if step.get("run") != "make runtime-image-set-load-verify"
+        )
+        assert all(
+            steps.index(step) > verification_index
+            for step in runtime_controls
+            if step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
         )
         download = next(
             step for step in _steps(job) if step.get("name") == "Download runtime image set"
@@ -140,6 +153,29 @@ def test_main_workflow_builds_and_consumes_one_exact_source_runtime_image_set() 
     )
 
 
+def test_runtime_authority_contract_rejects_verification_moved_after_control() -> None:
+    workflow = deepcopy(_workflow(PR_WORKFLOW))
+    job = workflow["jobs"]["e2e-smoke"]  # type: ignore[index]
+    steps = _steps(job)  # type: ignore[arg-type]
+    verification = next(
+        step for step in steps if step.get("run") == "make runtime-image-set-load-verify"
+    )
+    steps.remove(verification)
+    control_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
+    )
+    steps.insert(control_index + 1, verification)
+
+    with pytest.raises(AssertionError):
+        _assert_runtime_image_consumers(
+            workflow,
+            consumers=("e2e-smoke",),
+            artifact_name="pr-runtime-image-set",
+        )
+
+
 def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     target = makefile.split("build-runtime-image-set:\n", maxsplit=1)[1].split(
@@ -158,6 +194,13 @@ def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -
     assert "scripts/release/runtime_image_set.py create" in target
     assert 'LOTUS_BUILD_TIMESTAMP="$${build_timestamp}"' in target
     assert "&&" in target
+
+    load_target = makefile.split("runtime-image-set-load-verify:\n", maxsplit=1)[1].split(
+        "\nclean:", maxsplit=1
+    )[0]
+    assert 'test -n "$${GITHUB_SHA}"' in load_target
+    assert "scripts/release/runtime_image_set.py load-verify" in load_target
+    assert '--expected-commit-sha "$${GITHUB_SHA}"' in load_target
 
 
 def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:

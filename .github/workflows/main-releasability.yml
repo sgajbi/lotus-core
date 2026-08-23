@@ -261,11 +261,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run deterministic docker endpoint smoke
@@ -301,11 +297,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run endpoint latency gate
@@ -344,11 +336,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run deterministic performance load gate
@@ -410,11 +398,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run full E2E suite
@@ -452,11 +436,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run deterministic full performance load gate
@@ -492,11 +472,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run deterministic failure recovery gate
@@ -548,11 +524,7 @@ jobs:
           name: main-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run governed institutional completion gate

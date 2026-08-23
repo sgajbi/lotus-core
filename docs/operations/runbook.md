@@ -109,21 +109,22 @@ after fencing Core repository roots.
    also requires every blocking job to retain exactly one unconditional executable `id: enforce`
    step on a non-auxiliary control; a missing, duplicate, conditional, auxiliary,
    failure-tolerant, or non-executable marker cannot emit merge authority. An enforce step's
-   effective shell must resolve to exactly `bash`; an unspecified shell is unsafe because GitHub's
+   Every run step's effective shell must resolve to exactly `bash`; an unspecified shell is unsafe because GitHub's
    Linux default does not guarantee `pipefail`. Its script must be one bare invocation: one Make
    target, a governed matrix target, or the exact Windows lock-closure command. Operators,
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
    environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
-   also fails closed, as does any enforcement working-directory override.
-   Pre-enforcement run steps must not write `GITHUB_ENV` or `GITHUB_PATH`, and action steps must use
-   a governed auxiliary or enforcement action. Runtime-image verification state belongs directly on
-   the post-verification control step, never in `GITHUB_ENV`.
+   also fails closed, as does any run-step working-directory override. Every run step must be one
+   admitted bare command and every action must be on the audited allowlist, so indirect environment
+   or path writes, workspace mutation, command chaining, and unknown actions fail closed.
+   Runtime-image verification state belongs directly on a control step only after
+   `make runtime-image-set-load-verify` succeeded earlier in that job, never in `GITHUB_ENV`.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
-   also appear as active repository-root `.PHONY:` entries in GNU Make's delimited
+   also carry GNU Make's exact per-target phony flag in the repository-root effective database's delimited
    effective-database Files section; parse-time/recipe output, serialized variable bodies, a
    missing Makefile, an inactive declaration, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
@@ -153,7 +154,7 @@ after fencing Core repository roots.
    | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
    | `id: enforce` count is not one, or the marker is conditional, auxiliary, or non-executable | Put exactly one unconditional marker on the job's real non-auxiliary fail-propagating control; review the invoked command's semantics. |
-   | enforcement shell is unspecified/non-`bash`, its script is not one admitted bare invocation, or a static/resolved target is unsafe or not effectively phony | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into one reviewed target; keep every target bare and actively declared `.PHONY`. |
+   | any run shell is unspecified/non-`bash`, its script is not one admitted bare invocation, or a static/resolved target is unsafe or not effectively phony | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into one reviewed target; keep every target bare and actively declared `.PHONY`. |
    | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 

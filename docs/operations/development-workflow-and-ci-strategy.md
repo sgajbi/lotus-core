@@ -67,8 +67,9 @@ passes. The existing `Validate Docker Build` job is the sole producer for that w
    source commit, branch, repository, CI run, generated-at time, service image IDs, Dockerfile
    hashes, compose hash, dependency-lock hash, dependency-closure hash, bundle digest, and content
    hash.
-3. Docker-backed jobs download the same one-day transport artifact and run `load-verify` against
-   `GITHUB_SHA` before installing or starting the stack.
+3. Docker-backed jobs download the same one-day transport artifact and invoke the governed
+   `make runtime-image-set-load-verify` boundary against `GITHUB_SHA` before installing or starting
+   the stack; verified-image authority is accepted only on later controls in that same job.
 4. Verification fails before test execution on source-SHA, bundle, manifest, dependency, image-ID,
    or OCI-label mismatch.
 
