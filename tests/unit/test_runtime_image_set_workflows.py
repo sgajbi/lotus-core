@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -164,6 +167,60 @@ def test_runtime_control_targets_bind_verification_as_a_make_prerequisite() -> N
         _assert_runtime_control_prerequisites(mutated)
 
 
+def _run_runtime_make_target(
+    *arguments: str, working_directory: Path, environment: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    make_executable = shutil.which("make")
+    if make_executable is None:
+        pytest.fail("GNU Make is required to verify runtime image-set prerequisite behavior")
+    return subprocess.run(
+        [make_executable, "--file", str(REPO_ROOT / "Makefile"), *arguments],
+        cwd=working_directory,
+        env=environment,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+
+def test_local_runtime_control_without_an_image_set_builds_from_source(tmp_path: Path) -> None:
+    environment = os.environ.copy()
+    environment.pop("CI", None)
+    environment.pop("GITHUB_SHA", None)
+
+    dry_run = _run_runtime_make_target(
+        "--dry-run",
+        "test-docker-smoke",
+        working_directory=tmp_path,
+        environment=environment,
+    )
+    assert dry_run.returncode == 0, dry_run.stderr
+    assert "docker_endpoint_smoke.py --build" in dry_run.stdout
+
+    verification = _run_runtime_make_target(
+        "runtime-image-set-load-verify",
+        working_directory=tmp_path,
+        environment=environment,
+    )
+    assert verification.returncode == 0, verification.stderr
+    assert "No runtime image set present; controls build from source." in verification.stdout
+    assert not (tmp_path / "output/runtime-image-set/verified-source-sha").exists()
+
+
+def test_ci_runtime_verification_requires_the_exact_github_sha(tmp_path: Path) -> None:
+    environment = os.environ.copy()
+    environment["CI"] = "true"
+    environment.pop("GITHUB_SHA", None)
+
+    verification = _run_runtime_make_target(
+        "runtime-image-set-load-verify",
+        working_directory=tmp_path,
+        environment=environment,
+    )
+    assert verification.returncode != 0
+    assert "GITHUB_SHA is required in CI" in verification.stderr
+
+
 def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     target = makefile.split("build-runtime-image-set:\n", maxsplit=1)[1].split(
@@ -186,26 +243,32 @@ def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -
     load_target = makefile.split("runtime-image-set-load-verify:\n", maxsplit=1)[1].split(
         "\nclean:", maxsplit=1
     )[0]
-    assert 'test -n "$${GITHUB_SHA}"' in load_target
+    assert 'test -n "$${GITHUB_SHA:-}"' in load_target
+    assert 'if [ -n "$${CI:-}" ]' in load_target
+    assert "No runtime image set present; controls build from source." in load_target
+    assert 'expected_sha="$${GITHUB_SHA:-$$(git rev-parse HEAD)}"' in load_target
     assert "scripts/release/runtime_image_set.py load-verify" in load_target
-    assert '--expected-commit-sha "$${GITHUB_SHA}"' in load_target
-    assert "printf '%s\\n' \"$${GITHUB_SHA}\"" in load_target
+    assert '--expected-commit-sha "$${expected_sha}"' in load_target
+    assert "printf '%s\\n' \"$${expected_sha}\"" in load_target
     assert "output/runtime-image-set/verified-source-sha" in load_target
 
 
 def test_verified_runtime_image_set_uses_prerequisites_not_workflow_assertions() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 
-    assert "RUNTIME_BUILD_ARGUMENT" not in makefile
-    assert "CERTIFICATION_RUNTIME_BUILD_ARGUMENT" not in makefile
+    assert "\nRUNTIME_BUILD_ARGUMENT =" not in makefile
+    assert "\nCERTIFICATION_RUNTIME_BUILD_ARGUMENT =" not in makefile
     assert "LOTUS_RUNTIME_IMAGE_SET_VERIFIED" not in makefile
     assert "$(filter true,$(CI))" not in makefile
+    assert "LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI),,--build)" in makefile
+    assert "LOCAL_CERTIFICATION_BUILD_ARGUMENT = $(if $(CI),,--runtime-build)" in makefile
     for command in (
         "scripts/validation/docker_endpoint_smoke.py",
-        "scripts/operations/latency_profile.py --enforce",
-        "scripts/operations/performance_load_gate.py --profile-tier fast --enforce",
-        "scripts/operations/failure_recovery_gate.py --enforce",
-        "scripts.operations.recovery.derived_state_gate --enforce",
+        "scripts/operations/latency_profile.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce",
+        "scripts/operations/performance_load_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) "
+        "--profile-tier fast --enforce",
+        "scripts/operations/failure_recovery_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce",
+        "scripts.operations.recovery.derived_state_gate $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce",
         "scripts/validation/certify_lotus_core_app.py",
     ):
         assert command in makefile

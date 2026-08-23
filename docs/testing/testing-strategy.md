@@ -221,7 +221,10 @@ source labels before stack startup. The producer also emits per-service and tota
 Every runtime-consuming Make control depends on `runtime-image-set-load-verify`. That prerequisite
 writes an exact-`GITHUB_SHA` receipt only after bundle verification; shared pytest stack support
 omits rebuilds only when the receipt matches the current head. Workflow environment cannot assert
-verified state or reorder the dependency. The
+verified state or reorder the dependency. In CI, a missing source SHA, manifest, or bundle fails
+closed. For ordinary local invocations with no runtime image-set manifest, the prerequisite emits
+no receipt and preserves the control's build-from-source default. If a manifest is present locally,
+it must verify against `GITHUB_SHA` or the current Git head before its images can be reused. The
 E2E service-set contract must equal every repo-built image started by `FULL_STACK_SERVICES`; adding a
 service to the test stack without adding it to the image set is a blocking regression.
 

@@ -9,6 +9,8 @@
 .PHONY: install-ci-tooling dependency-health-cache-key generate-runtime-sbom write-runtime-build-provenance runtime-image-set-load-verify
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
+LOCAL_CERTIFICATION_BUILD_ARGUMENT = $(if $(CI),,--runtime-build)
+LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI),,--build)
 OPENAPI_ARTIFACT_DIR ?= output/openapi
 REPOSITORY_PYTHON := python scripts/development/repository_python.py
 TRANSACTION_RELEASE_OUTPUT ?= output/task-runs/transaction-processing-release-rehearsal.json
@@ -21,10 +23,10 @@ install-ci:
 	$(REPOSITORY_PYTHON) scripts/development/bootstrap_dev.py
 
 install-ci-tooling:
-	python -m pip install -r requirements/ci-tooling.lock.txt
+	$(REPOSITORY_PYTHON) -m pip install -r requirements/ci-tooling.lock.txt
 
 dependency-health-cache-key:
-	@key="$$(python scripts/validation/dependency_health_check.py --print-cache-key)"; \
+	@key="$$( $(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py --print-cache-key)"; \
 	test "$${#key}" -eq 64; \
 	case "$${key}" in *[!0-9a-f]*) exit 1;; esac; \
 	echo "key=$${key}" >> "$${GITHUB_OUTPUT}"
@@ -431,7 +433,7 @@ live-dpm-source-validate:
 	$(REPOSITORY_PYTHON) scripts/validation/validate_live_dpm_source_products.py --control-base-url $${LOTUS_CORE_CONTROL_BASE_URL:-http://core-control.dev.lotus}
 
 lotus-core-validate: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) scripts/validation/certify_lotus_core_app.py
+	$(REPOSITORY_PYTHON) scripts/validation/certify_lotus_core_app.py $(LOCAL_CERTIFICATION_BUILD_ARGUMENT)
 
 migration-smoke:
 	$(REPOSITORY_PYTHON) scripts/quality/migration_contract_check.py --mode alembic-sql
@@ -529,16 +531,16 @@ test-e2e-all: runtime-image-set-load-verify
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite e2e-all --quiet
 
 test-docker-smoke: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) scripts/validation/docker_endpoint_smoke.py
+	$(REPOSITORY_PYTHON) scripts/validation/docker_endpoint_smoke.py $(LOCAL_RUNTIME_BUILD_ARGUMENT)
 
 test-latency-gate: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) scripts/operations/latency_profile.py --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
+	$(REPOSITORY_PYTHON) scripts/operations/latency_profile.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
 
 test-performance-load-gate: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py --profile-tier fast --enforce
+	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --profile-tier fast --enforce
 
 test-performance-load-gate-full: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py --profile-tier full --enforce
+	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --profile-tier full --enforce
 
 profile-cost-history-capacity:
 	$(REPOSITORY_PYTHON) scripts/operations/cost_history_capacity_profile.py --output output/cost-history-capacity-profile.json
@@ -547,7 +549,7 @@ profile-cost-processing-modes:
 	$(REPOSITORY_PYTHON) scripts/operations/cost_processing_mode_capacity_profile.py --output output/cost-processing-mode-capacity-profile.json
 
 test-failure-recovery-gate: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) scripts/operations/failure_recovery_gate.py --enforce
+	$(REPOSITORY_PYTHON) scripts/operations/failure_recovery_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce
 
 transaction-release-rehearsal-plan:
 	$(if $(strip $(TRANSACTION_RELEASE_CANDIDATE_MANIFEST)),,$(error TRANSACTION_RELEASE_CANDIDATE_MANIFEST is required))
@@ -570,7 +572,7 @@ test-fixed-income-book-cost-recovery-gate: runtime-image-set-load-verify
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite fixed-income-book-cost-recovery --quiet
 
 test-derived-state-recovery-gate: runtime-image-set-load-verify
-	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_gate --enforce
+	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_gate $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce
 
 test-kafka-restart-recovery-gate:
 	$(REPOSITORY_PYTHON) -m scripts.validation.kafka_restart_recovery
@@ -672,9 +674,18 @@ write-runtime-build-provenance:
 	$(REPOSITORY_PYTHON) scripts/release/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
 
 runtime-image-set-load-verify:
-	@test -n "$${GITHUB_SHA}"
-	$(REPOSITORY_PYTHON) scripts/release/runtime_image_set.py load-verify --manifest output/runtime-image-set/manifest.json --bundle output/runtime-image-set/images.tar --expected-commit-sha "$${GITHUB_SHA}"
-	@printf '%s\n' "$${GITHUB_SHA}" > output/runtime-image-set/verified-source-sha
+	@if [ -n "$${CI:-}" ]; then \
+		test -n "$${GITHUB_SHA:-}" || { printf '%s\n' 'GITHUB_SHA is required in CI' >&2; exit 1; }; \
+		expected_sha="$${GITHUB_SHA}"; \
+	elif [ ! -f output/runtime-image-set/manifest.json ]; then \
+		rm -f output/runtime-image-set/verified-source-sha; \
+		printf '%s\n' 'No runtime image set present; controls build from source.'; \
+		exit 0; \
+	else \
+		expected_sha="$${GITHUB_SHA:-$$(git rev-parse HEAD)}"; \
+	fi; \
+	$(REPOSITORY_PYTHON) scripts/release/runtime_image_set.py load-verify --manifest output/runtime-image-set/manifest.json --bundle output/runtime-image-set/images.tar --expected-commit-sha "$${expected_sha}" && \
+	printf '%s\n' "$${expected_sha}" > output/runtime-image-set/verified-source-sha
 
 clean:
 	$(REPOSITORY_PYTHON) scripts/development/clean_generated_artifacts.py
