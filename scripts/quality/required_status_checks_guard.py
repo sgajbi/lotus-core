@@ -141,7 +141,9 @@ def _expanded_job_contexts(job: Mapping[str, Any]) -> tuple[str, ...]:
     if len(expressions) != 1:
         raise RequiredStatusChecksError(f"job has unsupported matrix name expression: {name}")
     matrix_key = expressions[0]
-    include = ((job.get("strategy") or {}).get("matrix") or {}).get("include")
+    strategy = job.get("strategy") or {}
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    include = matrix.get("include") if isinstance(matrix, dict) else None
     if not isinstance(include, list) or not include:
         raise RequiredStatusChecksError(f"matrix job has no include rows: {name}")
     values: list[str] = []
@@ -152,6 +154,30 @@ def _expanded_job_contexts(job: Mapping[str, Any]) -> tuple[str, ...]:
     if len(values) != len(set(values)):
         raise RequiredStatusChecksError(f"matrix values must be unique: {name}")
     return tuple(_MATRIX_EXPRESSION.sub(lambda _match: value, name) for value in values)
+
+
+def _required_context_collisions(
+    job: Mapping[str, Any], *, required_contexts: set[str]
+) -> tuple[str, ...]:
+    name = _require_non_empty_string(job.get("name"), field="workflow job name")
+    try:
+        expanded_contexts = _expanded_job_contexts(job)
+    except RequiredStatusChecksError:
+        expressions = tuple(_MATRIX_EXPRESSION.finditer(name))
+        if not expressions:
+            raise
+        pattern_parts: list[str] = []
+        cursor = 0
+        for expression in expressions:
+            pattern_parts.append(re.escape(name[cursor : expression.start()]))
+            pattern_parts.append(".+")
+            cursor = expression.end()
+        pattern_parts.append(re.escape(name[cursor:]))
+        context_pattern = re.compile("".join(pattern_parts))
+        return tuple(
+            sorted(context for context in required_contexts if context_pattern.fullmatch(context))
+        )
+    return tuple(sorted(set(expanded_contexts) & required_contexts))
 
 
 def blocking_contexts_for_workflow(
@@ -165,19 +191,25 @@ def blocking_contexts_for_workflow(
     for job in jobs.values():
         if not isinstance(job, dict):
             raise RequiredStatusChecksError(f"workflow job must be an object: {policy.path}")
+        job_blocking_contexts: list[str] = []
         for context in _expanded_job_contexts(job):
             if context in policy.advisory_contexts:
                 observed_advisory.add(context)
                 continue
             if policy.policy == "all_jobs_blocking":
-                blocking.append(context)
+                job_blocking_contexts.append(context)
                 continue
             if context.endswith(" Gate"):
-                blocking.append(context)
+                job_blocking_contexts.append(context)
                 continue
             raise RequiredStatusChecksError(
                 f"workflow job is neither a blocking Gate nor declared advisory: {context}"
             )
+        if job_blocking_contexts and "if" in job:
+            raise RequiredStatusChecksError(
+                "blocking workflow jobs must be unconditional: " + ", ".join(job_blocking_contexts)
+            )
+        blocking.extend(job_blocking_contexts)
     missing_advisory = policy.advisory_contexts - observed_advisory
     if missing_advisory:
         raise RequiredStatusChecksError(
@@ -191,6 +223,7 @@ def validate_manifest_against_workflows(
     manifest: RequiredChecksManifest, *, repository_root: Path = Path(".")
 ) -> None:
     workflow_contexts: list[str] = []
+    required_context_producers: dict[str, Path] = {}
     for policy in manifest.workflow_policies:
         workflow_path = repository_root / policy.path
         try:
@@ -201,7 +234,10 @@ def validate_manifest_against_workflows(
             ) from exc
         if not isinstance(workflow, dict):
             raise RequiredStatusChecksError(f"workflow must be a YAML object: {policy.path}")
-        workflow_contexts.extend(blocking_contexts_for_workflow(workflow, policy=policy))
+        policy_contexts = blocking_contexts_for_workflow(workflow, policy=policy)
+        workflow_contexts.extend(policy_contexts)
+        for context in policy_contexts:
+            required_context_producers[context] = policy.path
     if len(workflow_contexts) != len(set(workflow_contexts)):
         raise RequiredStatusChecksError("blocking workflow contexts must be globally unique")
     manifest_contexts = {check.context for check in manifest.required_checks}
@@ -212,6 +248,40 @@ def validate_manifest_against_workflows(
         raise RequiredStatusChecksError(
             f"required-check manifest drift: missing={missing!r}, stale={stale!r}"
         )
+
+    workflow_directory = repository_root / ".github" / "workflows"
+    governed_paths = {policy.path for policy in manifest.workflow_policies}
+    if workflow_directory.is_dir():
+        for workflow_path in sorted(workflow_directory.glob("*.y*ml")):
+            relative_path = workflow_path.relative_to(repository_root)
+            if relative_path in governed_paths:
+                continue
+            try:
+                workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+            except (OSError, yaml.YAMLError) as exc:
+                raise RequiredStatusChecksError(
+                    f"unable to load repository workflow: {relative_path}"
+                ) from exc
+            if not isinstance(workflow, dict):
+                raise RequiredStatusChecksError(f"workflow must be a YAML object: {relative_path}")
+            jobs = workflow.get("jobs")
+            if not isinstance(jobs, dict):
+                raise RequiredStatusChecksError(f"workflow has no jobs: {relative_path}")
+            for job in jobs.values():
+                if not isinstance(job, dict):
+                    raise RequiredStatusChecksError(
+                        f"workflow job must be an object: {relative_path}"
+                    )
+                collisions = _required_context_collisions(
+                    job,
+                    required_contexts=set(required_context_producers),
+                )
+                for context in collisions:
+                    producer = required_context_producers[context]
+                    raise RequiredStatusChecksError(
+                        "required check context is also emitted by an unmanaged workflow: "
+                        f"context={context!r}, governed={producer}, collision={relative_path}"
+                    )
 
 
 def validate_live_protection(
