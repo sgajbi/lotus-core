@@ -34,7 +34,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 151 focused tests with 90.88% branch-aware package coverage against a 90%
+deadlock. Local evidence is 158 focused tests with 90.97% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
