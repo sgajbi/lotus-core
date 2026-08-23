@@ -189,6 +189,7 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
                 f"Makefile phony authority must be static: {path}; line={line_number}"
             )
         if _MAKE_DEFINE_DIRECTIVE.match(raw_line):
+            validate_make_execution_state(line, path=path, line_number=line_number)
             define_depth += 1
             continue
         if _MAKE_ENDEF_DIRECTIVE.match(raw_line):

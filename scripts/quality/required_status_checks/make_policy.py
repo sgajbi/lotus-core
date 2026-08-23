@@ -32,6 +32,11 @@ _EXECUTION_ASSIGNMENT = re.compile(
     + "|".join(re.escape(variable) for variable in sorted(_EXECUTION_VARIABLES))
     + r")\s*(?:::=|:=|\+=|\?=|!=|=)"
 )
+_EXECUTION_DEFINE = re.compile(
+    r"^(?:(?:export|override|private)\s+)*define\s+(?:"
+    + "|".join(re.escape(variable) for variable in sorted(_EXECUTION_VARIABLES))
+    + r")(?=\s|$|::=|:=|\+=|\?=|!=|=)"
+)
 _EXECUTION_SPECIAL_TARGET = re.compile(
     r"^(?:"
     + "|".join(re.escape(target) for target in sorted(_EXECUTION_SPECIAL_TARGETS))
@@ -47,6 +52,7 @@ def validate_make_execution_state(line: str, *, path: Path, line_number: int) ->
         pattern.match(line)
         for pattern in (
             _EXECUTION_ASSIGNMENT,
+            _EXECUTION_DEFINE,
             _EXECUTION_SPECIAL_TARGET,
             _VPATH_DIRECTIVE,
         )
