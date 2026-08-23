@@ -236,6 +236,31 @@ def blocking_contexts_for_workflow(
             raise RequiredStatusChecksError(
                 "blocking workflow jobs must be unconditional: " + ", ".join(job_blocking_contexts)
             )
+        if job_blocking_contexts and "continue-on-error" in job:
+            raise RequiredStatusChecksError(
+                "blocking workflow jobs must not tolerate failure: "
+                + ", ".join(job_blocking_contexts)
+            )
+        if job_blocking_contexts:
+            steps = job.get("steps")
+            if steps is not None and not isinstance(steps, list):
+                raise RequiredStatusChecksError(
+                    "blocking workflow job steps must be a list: "
+                    + ", ".join(job_blocking_contexts)
+                )
+            for step in steps or ():
+                if not isinstance(step, dict):
+                    raise RequiredStatusChecksError(
+                        "blocking workflow job step must be an object: "
+                        + ", ".join(job_blocking_contexts)
+                    )
+                if "continue-on-error" in step:
+                    step_name = step.get("name", "<unnamed step>")
+                    raise RequiredStatusChecksError(
+                        "blocking workflow steps must not tolerate failure: "
+                        + ", ".join(job_blocking_contexts)
+                        + f"; step={step_name!r}"
+                    )
         blocking.extend(job_blocking_contexts)
     missing_advisory = policy.advisory_contexts - observed_advisory
     if missing_advisory:
@@ -251,6 +276,7 @@ def validate_manifest_against_workflows(
 ) -> None:
     workflow_contexts: list[str] = []
     required_context_producers: dict[str, Path] = {}
+    governed_context_producers: dict[str, list[str]] = {}
     for policy in manifest.workflow_policies:
         workflow_path = repository_root / policy.path
         try:
@@ -261,13 +287,43 @@ def validate_manifest_against_workflows(
             ) from exc
         if not isinstance(workflow, dict):
             raise RequiredStatusChecksError(f"workflow must be a YAML object: {policy.path}")
+        jobs = workflow.get("jobs")
+        if not isinstance(jobs, dict) or not jobs:
+            raise RequiredStatusChecksError(f"workflow has no jobs: {policy.path}")
+        for job_id, job in jobs.items():
+            if not isinstance(job, dict):
+                raise RequiredStatusChecksError(f"workflow job must be an object: {policy.path}")
+            for context in _expanded_job_contexts(job):
+                governed_context_producers.setdefault(context, []).append(f"{policy.path}:{job_id}")
         policy_contexts = blocking_contexts_for_workflow(workflow, policy=policy)
         workflow_contexts.extend(policy_contexts)
         for context in policy_contexts:
             required_context_producers[context] = policy.path
     if len(workflow_contexts) != len(set(workflow_contexts)):
         raise RequiredStatusChecksError("blocking workflow contexts must be globally unique")
+    duplicate_governed_contexts = {
+        context: producers
+        for context, producers in governed_context_producers.items()
+        if len(producers) > 1
+    }
+    if duplicate_governed_contexts:
+        raise RequiredStatusChecksError(
+            "governed workflow contexts must be globally unique: "
+            + "; ".join(
+                f"context={context!r}, producers={producers!r}"
+                for context, producers in sorted(duplicate_governed_contexts.items())
+            )
+        )
     manifest_contexts = {check.context for check in manifest.required_checks}
+    declared_advisory_contexts = set().union(
+        *(policy.advisory_contexts for policy in manifest.workflow_policies)
+    )
+    required_advisory_overlap = sorted(manifest_contexts & declared_advisory_contexts)
+    if required_advisory_overlap:
+        raise RequiredStatusChecksError(
+            "required checks must not use declared advisory contexts: "
+            + ", ".join(required_advisory_overlap)
+        )
     workflow_context_set = set(workflow_contexts)
     if manifest_contexts != workflow_context_set:
         missing = sorted(workflow_context_set - manifest_contexts)

@@ -4146,10 +4146,11 @@ Most relevant current governance:
      application identity. Every Pull Request Merge Gate job and every Quality Baseline `... Gate`
      job is blocking; `Quality Baseline / Report Only` is the sole explicit advisory context.
      Pin live authority to canonical `sgajbi/lotus-core` / `main`, expand matrix suites before
-     comparison, require blocking jobs to be unconditional, scan every workflow for static or
-     dynamic required-context collisions, reject non-bare workflow name expressions, bind manifest
-     authority only to GitHub Actions app `15368`, and fail on missing, stale, duplicate, ambiguous,
-     redirected, or undeclared contexts. `make lint` must retain both the
+     comparison, require blocking jobs and their steps to be unconditional and fail-propagating,
+     inventory advisory producers when checking global context uniqueness, scan every workflow for
+     static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
+     manifest authority only to GitHub Actions app `15368`, and fail on missing, stale, duplicate,
+     ambiguous, redirected, advisory-as-required, or undeclared contexts. `make lint` must retain both the
      required-check guard and import-boundary enforcement. Main Releasability compares the manifest with live
      strict branch protection through a dedicated fine-grained Administration-read-only secret;
      the default workflow token is known to lack that authority. Update branch protection only

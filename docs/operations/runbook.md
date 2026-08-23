@@ -103,11 +103,13 @@ after fencing Core repository roots.
    repository or branch.
 2. Every Pull Request Merge Gate job and every Quality Baseline job named `... Gate` is blocking.
    `Quality Baseline / Report Only` is the sole explicit advisory job and cannot authorize merge.
-3. `make required-status-checks-guard` expands workflow matrices, rejects job-level conditions on
-   blocking jobs, scans every repository workflow for static or dynamic required-context
-   collisions, rejects unsupported job-name expressions, requires every manifest entry to use
-   GitHub Actions app `15368`, and fails on missing, stale, duplicate, ambiguous, or undeclared
-   check authority. `make lint` includes this guard and the import-boundary gate.
+3. `make required-status-checks-guard` expands workflow matrices; rejects job-level conditions and
+   job/step `continue-on-error` on blocking jobs; inventories blocking and advisory producers so an
+   advisory same-app check cannot satisfy required protection; scans every repository workflow for
+   static or dynamic required-context collisions; rejects unsupported job-name expressions;
+   requires every manifest entry to use GitHub Actions app `15368`; and fails on missing, stale,
+   duplicate, ambiguous, advisory-as-required, or undeclared check authority. `make lint` includes
+   this guard and the import-boundary gate.
 4. Main Releasability runs `make required-status-checks-live-guard` with the dedicated
    `LOTUS_BRANCH_PROTECTION_READ_TOKEN` secret. That credential must be a fine-grained token with
    Administration read-only authority for this repository; never substitute `github.token` or a

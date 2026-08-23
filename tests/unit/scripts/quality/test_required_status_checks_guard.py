@@ -143,6 +143,63 @@ def test_blocking_policy_rejects_a_conditional_required_job() -> None:
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+@pytest.mark.parametrize(
+    "failure_tolerance",
+    [
+        {"continue-on-error": True},
+        {"continue-on-error": False},
+        {"continue-on-error": "${{ matrix.experimental }}"},
+    ],
+)
+def test_blocking_policy_rejects_job_level_failure_tolerance(
+    failure_tolerance: dict[str, object],
+) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                **failure_tolerance,
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="must not tolerate failure"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_step_level_failure_tolerance() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "name": "Security audit",
+                        "run": "make security-audit",
+                        "continue-on-error": True,
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="steps must not tolerate failure.*Security audit",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
 def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_drift(
     tmp_path: Path,
 ) -> None:
@@ -171,6 +228,70 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
     manifest = load_manifest(manifest_path)
 
     with pytest.raises(RequiredStatusChecksError, match="New Control Gate"):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
+    tmp_path: Path,
+) -> None:
+    source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest_path = tmp_path / "manifest.json"
+    workflow_directory = tmp_path / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    merge_workflow_path = workflow_directory / "merge.yml"
+    quality_workflow_path = workflow_directory / "quality.yml"
+    source_manifest["workflow_policies"] = [
+        {
+            "path": ".github/workflows/merge.yml",
+            "policy": "all_jobs_blocking",
+            "advisory_contexts": [],
+        },
+        {
+            "path": ".github/workflows/quality.yml",
+            "policy": "gate_jobs_blocking",
+            "advisory_contexts": ["Quality Baseline / Report Only"],
+        },
+    ]
+    source_manifest["required_checks"] = [
+        {"context": "Quality Baseline / Report Only", "app_id": 15368}
+    ]
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+    merge_workflow_path.write_text(
+        "jobs:\n  blocking:\n    name: Quality Baseline / Report Only\n",
+        encoding="utf-8",
+    )
+    quality_workflow_path.write_text(
+        "jobs:\n  report:\n    name: Quality Baseline / Report Only\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(manifest_path)
+
+    with pytest.raises(RequiredStatusChecksError, match="globally unique.*Report Only"):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+def test_manifest_validation_rejects_required_advisory_context(tmp_path: Path) -> None:
+    source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest_path = tmp_path / "manifest.json"
+    workflow_path = tmp_path / "quality.yml"
+    source_manifest["workflow_policies"] = [
+        {
+            "path": "quality.yml",
+            "policy": "gate_jobs_blocking",
+            "advisory_contexts": ["Quality Baseline / Report Only"],
+        }
+    ]
+    source_manifest["required_checks"] = [
+        {"context": "Quality Baseline / Report Only", "app_id": 15368}
+    ]
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+    workflow_path.write_text(
+        "jobs:\n  report:\n    name: Quality Baseline / Report Only\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(manifest_path)
+
+    with pytest.raises(RequiredStatusChecksError, match="must not use declared advisory"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
