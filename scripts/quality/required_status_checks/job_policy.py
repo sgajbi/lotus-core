@@ -16,7 +16,8 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _SHELL_FAILURE_SUPPRESSION = re.compile(
     r"(?:\|\|\s*(?:true|:)(?:\s|$)|(?:^|[;&]\s*)set\s+\+e(?:\s|$)|"
-    r"\bmake\b[^\n]*(?:\s-(?:n|q)(?:\s|$)|\s--(?:dry-run|just-print|recon|question)(?:\s|$)))",
+    r"\bmake\b[^\n]*(?:\s-(?:n|q)(?:\s|$)|\s--(?:dry-run|just-print|recon|question)(?:\s|$))|"
+    r"(?<![&<>])&(?![&>])|\b(?:nohup|setsid|coproc|disown)\b)",
     re.MULTILINE,
 )
 
