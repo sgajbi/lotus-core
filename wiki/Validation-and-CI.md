@@ -45,15 +45,17 @@ manifest change cannot redirect certification to another repository or branch.
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
 blocking jobs and enforcement commands to be unconditional and fail-propagating, permits
 conditions only on audited checkout, cache-save, and artifact-upload actions, requires every
-blocking job to retain at least one command from the explicit governed Make/build/replay allowlist
-or an approved enforcement action, requires canonical PR and merge-group triggers for `main`,
-rejects matrix axes omitted from check names and ungoverned matrix targets, and
+blocking job to retain exactly one unconditional executable `id: enforce` step, requires canonical
+PR and merge-group triggers for `main`, accepts only include-row matrices with cell-identifying
+names, pins strict mode and the exact two governed workflow policies in code, and
 inventories advisory producers
 when proving global same-app context uniqueness, and scans every repository workflow for static or
 dynamic required-context collisions. It rejects formatted or otherwise unsupported job-name
 expressions and fails on a missing or stale check, undeclared gate/advisory job,
-advisory-as-required context, duplicate context, malformed/ambiguously named matrix, setup-only or
-unknown control, wrong application identity, or wrong manifest shape. It is part of `make lint`,
+advisory-as-required context, duplicate context, malformed/ambiguously named matrix, missing or
+duplicate enforcement marker, wrong application identity, or wrong manifest shape. The marker
+proves structural presence and fail propagation; command semantics remain review responsibility.
+It is part of `make lint`,
 alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enforcement path cannot
 silently omit, skip, or impersonate either control.
 

@@ -106,11 +106,13 @@ after fencing Core repository roots.
 3. `make required-status-checks-guard` expands workflow matrices; rejects job-level conditions,
    conditional enforcement commands, and job/step `continue-on-error` on blocking jobs. Conditional
    steps are limited to the audited checkout, cache-save, and artifact-upload actions. The guard
-   also requires every blocking job to retain at least one command from the explicit governed
-   Make/build/replay allowlist or an approved enforcement action; an empty, setup-only,
-   auxiliary-only, unknown-command-only, or unknown-action-only job cannot emit merge authority.
+   also requires every blocking job to retain exactly one unconditional executable `id: enforce`
+   step; a missing, duplicate, conditional, failure-tolerant, or non-executable marker cannot emit
+   merge authority. This static marker proves that a declared control remains present and
+   fail-propagating; reviewers remain responsible for the business semantics of the invoked command.
    Canonical PR events and `main` branch filters plus the `merge_group` `main` filter are mandatory;
-   matrix axes must appear in the check name and matrix targets must be governed. It inventories
+   only include-row matrices with cell-identifying names are supported. Strict mode and the exact
+   two governed workflow policies are code-pinned. It inventories
    blocking and advisory producers so an
    advisory same-app check cannot satisfy required protection; scans every repository workflow for
    static or dynamic required-context collisions; rejects unsupported job-name expressions;
