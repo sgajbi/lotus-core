@@ -71,6 +71,20 @@ def _validate_enforcement_action(
         )
 
 
+def validate_enforcement_environment(configuration: Mapping[str, Any], *, scope: str) -> None:
+    environment = configuration.get("env")
+    if environment is None:
+        return
+    if not isinstance(environment, dict):
+        raise RequiredStatusChecksError(
+            f"blocking workflow enforcement environment must be an object: {scope}"
+        )
+    if "MAKEFLAGS" in environment:
+        raise RequiredStatusChecksError(
+            f"blocking workflow enforcement environment must not set MAKEFLAGS: {scope}"
+        )
+
+
 def _validate_enforcement_shell(shell: object, *, context_text: str) -> None:
     if not isinstance(shell, str) or shell not in _SAFE_ENFORCEMENT_SHELLS:
         raise RequiredStatusChecksError(
@@ -106,6 +120,7 @@ def _validate_blocking_step(
     if step.get("id") != "enforce":
         return False
     _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
+    validate_enforcement_environment(step, scope=f"enforce step {context_text}")
     executable = step.get("run") or step.get("uses")
     if not isinstance(executable, str):
         raise RequiredStatusChecksError(
@@ -158,6 +173,7 @@ def validate_blocking_job(
         raise RequiredStatusChecksError(
             f"blocking workflow jobs must not tolerate failure: {context_text}"
         )
+    validate_enforcement_environment(job, scope=f"blocking job {context_text}")
     steps = job.get("steps")
     if steps is not None and not isinstance(steps, list):
         raise RequiredStatusChecksError(
