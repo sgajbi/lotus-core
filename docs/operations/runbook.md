@@ -112,7 +112,8 @@ after fencing Core repository roots.
    broad personal token. Missing/inadequate authority and live manifest drift fail the lane closed.
 5. Change branch protection only after the exact PR head has posted and passed every manifest-owned
    context. Apply the complete app-bound set atomically; do not add/remove checks incrementally or
-   leave a check-name-only legacy context.
+   leave a check-name-only legacy context. The generated PATCH body explicitly sends `contexts: []`
+   alongside the full app-bound `checks` list.
 
 Generate the exact reviewed update payload from repository authority; do not hand-copy 37 checks:
 

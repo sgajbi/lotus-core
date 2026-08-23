@@ -41,8 +41,10 @@ evidence must be explicit and cannot be mistaken for release authorization.
    fine-grained `LOTUS_BRANCH_PROTECTION_READ_TOKEN` with Administration read-only permission.
    A broad personal token is not an acceptable substitute.
 6. Live branch protection is reconciled only after the exact PR head has posted and passed all 37
-   checks. The guard's `--print-desired-protection` mode emits the exact atomic PATCH body. This
-   avoids hand-copy drift and making an absent context required before it has posted.
+   checks. The guard's `--print-desired-protection` mode emits the exact atomic PATCH body, including
+   an explicit empty legacy `contexts` array and the complete app-bound `checks` array. This avoids
+   hand-copy drift, retained check-name-only authority, and making an absent context required before
+   it has posted.
 7. Both governed required-check workflows subscribe to `merge_group`; required Quality Baseline
    contexts therefore post on the synthetic merge-queue commit instead of deadlocking the queue.
 
