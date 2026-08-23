@@ -329,6 +329,31 @@ def test_blocking_policy_rejects_non_static_phony_authority(
 
 
 @pytest.mark.parametrize(
+    "authority_function",
+    [
+        "$(eval SHELL:=/bin/true)",
+        "${eval SHELL:=/bin/true}",
+        "$(call eval,SHELL:=/bin/true)",
+    ],
+)
+def test_make_authority_rejects_execution_state_functions_in_recipes(
+    tmp_path: Path,
+    authority_function: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f".PHONY: security-audit\nsecurity-audit:\n\t{authority_function}\n\t@false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile phony authority must be static: .*line=3",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+@pytest.mark.parametrize(
     "execution_state",
     [
         ".RECIPEPREFIX := $(if $(PYTHON_VERSION),.,)",
