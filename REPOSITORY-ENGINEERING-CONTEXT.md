@@ -4159,6 +4159,10 @@ Most relevant current governance:
      the default workflow token is known to lack that authority. Update branch protection only
      after the exact PR head has posted and passed the complete manifest-owned set, and apply
      app-bound checks atomically with an explicit empty legacy `contexts` array.
+     Keep manifest/model parsing, workflow-policy analysis, live protection I/O, and CLI orchestration
+     in their owned required-check modules. The workflow-governance lane must enforce Xenon
+     `absolute C` / `module B` / `average B`, Radon maintainability rank B, scoped MyPy, Bandit,
+     and Vulture for that package and its tests, plus at least 90% branch-aware package coverage.
 
 ## Context Maintenance Rule
 

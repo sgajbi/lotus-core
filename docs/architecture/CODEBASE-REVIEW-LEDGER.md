@@ -15,6 +15,9 @@ expressions; pins the manifest to canonical `sgajbi/lotus-core` / `main` and Git
 undeclared, redirected, or wrong-app authority.
 `make lint` now reaches both import-boundary and
 required-check enforcement;
+manifest/model parsing, workflow-policy analysis, live-protection I/O, and CLI orchestration have
+separate modules with hard Xenon `absolute C` / `module B` / `average B`, Radon rank-B, MyPy,
+Bandit, and Vulture gates;
 Main Releasability performs read-only live parity through a dedicated fine-grained Administration-
 read-only secret because the default workflow token is known to lack that authority. The guard emits
 the exact atomic protection PATCH payload with an explicit empty legacy-context list and the full
@@ -24,7 +27,8 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 68 focused tests,
+deadlock. Local evidence is 92 focused tests with 92% branch-aware package coverage against a 90%
+hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
 reconciled to `strict=true`, 37 app-bound checks, and live read-back passed. No runtime,

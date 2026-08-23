@@ -115,6 +115,10 @@ after fencing Core repository roots.
    requires every manifest entry to use GitHub Actions app `15368`; and fails on missing, stale,
    duplicate, ambiguous, advisory-as-required, or undeclared check authority. `make lint` includes
    this guard and the import-boundary gate.
+   `make quality-workflow-governance-gate` additionally enforces Xenon complexity limits
+   (`absolute C`, `module B`, `average B`) and Radon maintainability rank B across the required-check
+   package and CLI, then applies scoped MyPy, Bandit, and Vulture checks before running mutation
+   tests with branch-aware coverage hard-blocked below 90%.
 4. Main Releasability runs `make required-status-checks-live-guard` with the dedicated
    `LOTUS_BRANCH_PROTECTION_READ_TOKEN` secret. That credential must be a fine-grained token with
    Administration read-only authority for this repository; never substitute `github.token` or a
