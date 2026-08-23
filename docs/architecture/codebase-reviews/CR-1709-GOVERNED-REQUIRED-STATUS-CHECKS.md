@@ -50,6 +50,17 @@ from `make lint`, and Main uses only the dedicated read credential. The live gua
 against the pre-remediation 18-context protection with the exact 19 missing contexts; that failure
 is retained as characterization, not bypassed.
 
+Local evidence at signed head `2b4dca688`:
+
+- `make quality-workflow-governance-gate`: `38 passed`;
+- `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
+  guard, financial/data/security/contract guards, and no warning suppression;
+- `make typecheck`: `Success: no issues found in 323 source files`;
+- `make architecture-guard`: passed every governed application/domain/port/adapter boundary;
+- `make quality-wiki-docs-gate`: passed;
+- `make docs-evidence-pack`: passed with zero failed documentation checks while the authored docs
+  delta was present.
+
 ## Compatibility And Scope
 
 No runtime application, API/OpenAPI, event/Kafka, calculation, database schema/migration,
@@ -67,7 +78,6 @@ repository context, operator runbook, wiki source, review note, and ledger.
 ## Pending Delivery Evidence
 
 - dedicated fine-grained branch-protection read secret provisioned;
-- focused and repository-native local gates at final head;
 - exact-head Feature, Quality Baseline, and Pull Request Merge Gate green;
 - app-bound branch protection atomically reconciled to the manifest;
 - protected merge and exact-main live-parity success;
