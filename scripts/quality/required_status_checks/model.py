@@ -10,6 +10,16 @@ CANONICAL_REPOSITORY = "sgajbi/lotus-core"
 CANONICAL_BRANCH = "main"
 GITHUB_ACTIONS_APP_ID = 15368
 _SUPPORTED_POLICIES = frozenset({"all_jobs_blocking", "gate_jobs_blocking"})
+_CANONICAL_WORKFLOW_POLICIES = {
+    Path(".github/workflows/pr-merge-gate.yml"): (
+        "all_jobs_blocking",
+        frozenset(),
+    ),
+    Path(".github/workflows/quality-baseline.yml"): (
+        "gate_jobs_blocking",
+        frozenset({"Quality Baseline / Report Only"}),
+    ),
+}
 
 
 class RequiredStatusChecksError(RuntimeError):
@@ -96,8 +106,8 @@ def _validate_manifest_header(payload: Mapping[str, Any]) -> tuple[str, str]:
         raise RequiredStatusChecksError("required-check manifest has an unexpected shape")
     if payload["schema_version"] != 1:
         raise RequiredStatusChecksError("unsupported required-check manifest schema_version")
-    if not isinstance(payload["strict"], bool):
-        raise RequiredStatusChecksError("strict must be a boolean")
+    if payload["strict"] is not True:
+        raise RequiredStatusChecksError("strict must be true")
     repository = require_non_empty_string(payload["repository"], field="repository")
     branch = require_non_empty_string(payload["branch"], field="branch")
     if repository != CANONICAL_REPOSITORY or branch != CANONICAL_BRANCH:
@@ -121,6 +131,23 @@ def load_manifest(path: Path = DEFAULT_MANIFEST_PATH) -> RequiredChecksManifest:
     if not isinstance(raw_policies, list) or not raw_policies:
         raise RequiredStatusChecksError("workflow_policies must be a non-empty list")
     policies = tuple(_parse_policy(value, index=index) for index, value in enumerate(raw_policies))
+    observed_policies = {
+        policy.path: (policy.policy, policy.advisory_contexts) for policy in policies
+    }
+    if len(observed_policies) != len(policies) or observed_policies != _CANONICAL_WORKFLOW_POLICIES:
+        expected_paths = set(_CANONICAL_WORKFLOW_POLICIES)
+        observed_paths = set(observed_policies)
+        missing = sorted(str(path) for path in expected_paths - observed_paths)
+        unexpected = sorted(str(path) for path in observed_paths - expected_paths)
+        differing = sorted(
+            str(path)
+            for path in expected_paths & observed_paths
+            if observed_policies[path] != _CANONICAL_WORKFLOW_POLICIES[path]
+        )
+        raise RequiredStatusChecksError(
+            "governed workflow set differs from the canonical set: "
+            f"missing={missing!r}, unexpected={unexpected!r}, differing={differing!r}"
+        )
 
     raw_checks = payload["required_checks"]
     if not isinstance(raw_checks, list) or not raw_checks:

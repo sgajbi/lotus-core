@@ -11,6 +11,8 @@ import yaml
 from scripts.quality import required_status_checks_guard as cli
 from scripts.quality.required_status_checks import (
     DEFAULT_MANIFEST_PATH,
+    RequiredCheck,
+    RequiredChecksManifest,
     RequiredStatusChecksError,
     WorkflowPolicy,
     blocking_contexts_for_workflow,
@@ -33,7 +35,8 @@ def _write_manifest(tmp_path: Path, payload: object) -> Path:
         ("non_object", "must be a JSON object"),
         ("unknown_field", "unexpected shape"),
         ("schema_version", "unsupported.*schema_version"),
-        ("strict_type", "strict must be a boolean"),
+        ("strict_type", "strict must be true"),
+        ("strict_false", "strict must be true"),
         ("empty_policies", "workflow_policies must be a non-empty list"),
         ("policy_shape", "workflow_policies.*unexpected shape"),
         ("unsupported_policy", "unsupported workflow policy"),
@@ -56,6 +59,8 @@ def test_manifest_shape_mutations_fail_closed(tmp_path: Path, mutation: str, mat
         payload["schema_version"] = 2
     elif mutation == "strict_type":
         payload["strict"] = "true"
+    elif mutation == "strict_false":
+        payload["strict"] = False
     elif mutation == "empty_policies":
         payload["workflow_policies"] = []
     elif mutation == "policy_shape":
@@ -78,6 +83,20 @@ def test_manifest_shape_mutations_fail_closed(tmp_path: Path, mutation: str, mat
         payload["required_checks"].insert(1, payload["required_checks"][0].copy())
 
     with pytest.raises(RequiredStatusChecksError, match=match):
+        load_manifest(_write_manifest(tmp_path, payload))
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unexpected", "wrong_policy"])
+def test_manifest_requires_the_exact_canonical_workflow_set(tmp_path: Path, mutation: str) -> None:
+    payload = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    if mutation == "missing":
+        payload["workflow_policies"].pop(0)
+    elif mutation == "unexpected":
+        payload["workflow_policies"][0]["path"] = ".github/workflows/shadow.yml"
+    else:
+        payload["workflow_policies"][0]["policy"] = "gate_jobs_blocking"
+
+    with pytest.raises(RequiredStatusChecksError, match="canonical set"):
         load_manifest(_write_manifest(tmp_path, payload))
 
 
@@ -173,7 +192,20 @@ def test_governed_workflow_trigger_mutations_fail_closed(
         }
     ]
     payload["required_checks"] = [{"context": "PR Merge Gate / Security Gate", "app_id": 15368}]
-    manifest = load_manifest(_write_manifest(tmp_path, payload))
+    canonical = load_manifest()
+    manifest = RequiredChecksManifest(
+        repository=canonical.repository,
+        branch=canonical.branch,
+        strict=True,
+        workflow_policies=(
+            WorkflowPolicy(
+                path=Path("governed.yml"),
+                policy="all_jobs_blocking",
+                advisory_contexts=frozenset(),
+            ),
+        ),
+        required_checks=(RequiredCheck(context="PR Merge Gate / Security Gate", app_id=15368),),
+    )
     workflow = {
         "name": "Governed",
         "on": trigger_mutation,
