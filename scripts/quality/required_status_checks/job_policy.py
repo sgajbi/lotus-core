@@ -15,7 +15,7 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
 )
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset({"BASH_ENV", "GNUMAKEFLAGS", "MAKEFLAGS"})
-_MAKE_TARGET_TEXT = r"[A-Za-z0-9_./:@,+][A-Za-z0-9_./:@,+-]*"
+_MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 _MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
 _MATRIX_ENFORCEMENT_COMMAND = re.compile(
     r"^make[ \t]+\$\{\{[ \t]*matrix\.([A-Za-z_][A-Za-z0-9_]*)[ \t]*\}\}$"

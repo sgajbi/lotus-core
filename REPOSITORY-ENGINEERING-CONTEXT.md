@@ -4159,7 +4159,8 @@ Most relevant current governance:
      inside a reviewed Make target, not in the merge-authorizing marker. Continue rejecting
      workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`,
      resolve every referenced `matrix.<key>` value from each include row and require it to be one
-     bare Make target, and reject assignment-only targets such as `make FOO=bar`,
+     bare Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`, and reject assignment-only targets
+     such as `make FOO=bar` plus option, path, special-target, or multi-target syntax,
      require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
