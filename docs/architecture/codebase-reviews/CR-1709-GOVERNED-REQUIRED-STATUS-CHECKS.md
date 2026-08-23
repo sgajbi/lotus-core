@@ -38,7 +38,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
    fine-grained `LOTUS_BRANCH_PROTECTION_READ_TOKEN` with Administration read-only permission.
    A broad personal token is not an acceptable substitute.
 6. Live branch protection is reconciled only after the exact PR head has posted and passed all 37
-   checks. This avoids making an absent context required and deadlocking the pull request.
+   checks. The guard's `--print-desired-protection` mode emits the exact atomic PATCH body. This
+   avoids hand-copy drift and making an absent context required before it has posted.
 
 ## Meaningful Proof
 
@@ -52,7 +53,7 @@ is retained as characterization, not bypassed.
 
 Local evidence at signed head `2b4dca688`:
 
-- `make quality-workflow-governance-gate`: `38 passed`;
+- focused workflow/manifest pack after review hardening: `44 passed`;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;

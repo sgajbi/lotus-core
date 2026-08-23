@@ -112,6 +112,20 @@ after fencing Core repository roots.
    context. Apply the complete app-bound set atomically; do not add/remove checks incrementally or
    leave a check-name-only legacy context.
 
+Generate the exact reviewed update payload from repository authority; do not hand-copy 37 checks:
+
+```powershell
+python scripts/development/repository_python.py `
+  scripts/quality/required_status_checks_guard.py --print-desired-protection |
+  gh api --method PATCH `
+    repos/sgajbi/lotus-core/branches/main/protection/required_status_checks `
+    --input -
+```
+
+Run the command only with an authenticated repository administrator after the exact PR head is
+green. Immediately rerun `make required-status-checks-live-guard` and retain the resulting exact
+set as PR evidence.
+
 ## Health And Readiness
 
 Shared `/health/ready` endpoints use dependency-aware readiness through `portfolio_common.health`.
