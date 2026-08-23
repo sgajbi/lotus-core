@@ -149,6 +149,10 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
             "not a declared phony Make target",
         ),
         (
+            "$(info MAKEFLAGS=-n)\nactive:\n\t@true",
+            "not a declared phony Make target",
+        ),
+        (
             "active:\n\t@$(info .PHONY: security-audit)\n\t@true",
             "not a declared phony Make target",
         ),
@@ -377,6 +381,59 @@ def test_blocking_policy_rejects_mutable_make_execution_state(
     with pytest.raises(
         RequiredStatusChecksError,
         match="Makefile execution state must be static: .*line=1",
+    ):
+        _blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            makefile_path=tmp_path / "Makefile",
+        )
+
+
+@pytest.mark.parametrize(
+    "computed_state",
+    [
+        "S = SHELL\n$S := /bin/true",
+        "S = SHELL\n$(S) := /bin/true",
+        "S = SHELL\n${S} := /bin/true",
+        "S = SHELL\nsecurity-audit: $S := /bin/true",
+        "I = .IGNORE\n$I: security-audit",
+        "I = .IGNORE\n$(I): security-audit",
+        "I = .IGNORE\n${I}: security-audit",
+        "S = SHELL\ndefine $S\n/bin/true\nendef",
+    ],
+)
+def test_blocking_policy_rejects_computed_make_execution_state_names(
+    tmp_path: Path,
+    computed_state: str,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        f"{computed_state}\n.PHONY: security-audit\nsecurity-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=2",
     ):
         _blocking_contexts_for_workflow(
             workflow,
