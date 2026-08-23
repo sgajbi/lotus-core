@@ -200,6 +200,61 @@ def test_blocking_policy_rejects_step_level_failure_tolerance() -> None:
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+@pytest.mark.parametrize("condition", [False, "${{ matrix.experimental }}", "always()"])
+def test_blocking_policy_rejects_conditional_enforcement_steps(condition: object) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "name": "Security audit",
+                        "if": condition,
+                        "run": "make security-audit",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="enforcement steps must be unconditional.*Security audit",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "name": "Upload evidence",
+                        "if": "always()",
+                        "uses": "actions/upload-artifact@v7",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "Quality Baseline / Security Gate",
+    )
+
+
 def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_drift(
     tmp_path: Path,
 ) -> None:

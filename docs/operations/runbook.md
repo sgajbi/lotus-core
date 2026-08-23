@@ -103,8 +103,10 @@ after fencing Core repository roots.
    repository or branch.
 2. Every Pull Request Merge Gate job and every Quality Baseline job named `... Gate` is blocking.
    `Quality Baseline / Report Only` is the sole explicit advisory job and cannot authorize merge.
-3. `make required-status-checks-guard` expands workflow matrices; rejects job-level conditions and
-   job/step `continue-on-error` on blocking jobs; inventories blocking and advisory producers so an
+3. `make required-status-checks-guard` expands workflow matrices; rejects job-level conditions,
+   conditional enforcement commands, and job/step `continue-on-error` on blocking jobs. Conditional
+   steps are limited to the audited checkout, cache-save, and artifact-upload actions. The guard
+   inventories blocking and advisory producers so an
    advisory same-app check cannot satisfy required protection; scans every repository workflow for
    static or dynamic required-context collisions; rejects unsupported job-name expressions;
    requires every manifest entry to use GitHub Actions app `15368`; and fails on missing, stale,
