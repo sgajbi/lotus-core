@@ -15,7 +15,10 @@ from scripts.quality.required_status_checks.job_policy import (
     effective_environment,
     validate_blocking_job,
 )
-from scripts.quality.required_status_checks.make_policy import validate_make_execution_state
+from scripts.quality.required_status_checks.make_policy import (
+    validate_make_authority_functions,
+    validate_make_execution_state,
+)
 from scripts.quality.required_status_checks.model import (
     RequiredChecksManifest,
     RequiredStatusChecksError,
@@ -40,7 +43,6 @@ _MAKE_DATABASE_FILES = "# Files"
 _MAKE_CONDITIONAL_DIRECTIVE = re.compile(r"^(?:ifeq|ifneq|ifdef|ifndef|else|endif)(?:\s|$)")
 _MAKE_DEFINE_DIRECTIVE = re.compile(r"^(?:(?:export|override|private)\s+)*define(?:\s|$)")
 _MAKE_ENDEF_DIRECTIVE = re.compile(r"^endef(?:\s|$)")
-_MAKE_AUTHORITY_FUNCTION = re.compile(r"\$(?:\(|\{)\s*(?:call|eval)(?=[\s,)}])")
 _MAKE_INCLUDE_DIRECTIVE = re.compile(r"^(?:-?include|sinclude)(?:\s|$)")
 _STATIC_PHONY_DECLARATION = re.compile(r"^\.PHONY:\s*(.*?)\s*$")
 _STATIC_PHONY_TARGET = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -180,14 +182,11 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
         raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
+    validate_make_authority_functions(lines, path=path)
     targets: set[str] = set()
     define_depth = 0
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
-        if _MAKE_AUTHORITY_FUNCTION.search(raw_line):
-            raise RequiredStatusChecksError(
-                f"Makefile phony authority must be static: {path}; line={line_number}"
-            )
         if _MAKE_DEFINE_DIRECTIVE.match(raw_line):
             validate_make_execution_state(line, path=path, line_number=line_number)
             define_depth += 1
