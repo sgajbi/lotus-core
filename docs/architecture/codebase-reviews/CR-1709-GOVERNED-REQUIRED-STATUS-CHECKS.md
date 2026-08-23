@@ -42,9 +42,12 @@ evidence must be explicit and cannot be mistaken for release authorization.
    targets are resolved from every include row and must each match the same bare target-name
    grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
    multi-target tokens fail closed. Every admitted static or resolved target must also be declared
-   by GNU Make's delimited effective-database Files section, so parse-time/recipe output,
-   serialized variable bodies, inactive declarations, ordinary files, undeclared rules, and
-   missing Makefile authority fail closed. Enforcement working-directory overrides fail closed.
+   by GNU Make's delimited effective-database Files section evaluated under the run step's inherited
+   workflow/job/step environment, so parse-time/recipe output, serialized variable bodies,
+   environment-dependent inactive declarations, ordinary files, undeclared rules, and missing
+   Makefile authority fail closed. Artifact destinations must be literal expression-free paths below
+   `output/`, so expression resolution cannot traverse into the checkout. Enforcement
+   working-directory overrides fail closed.
    Pre-enforcement steps cannot mutate `GITHUB_ENV`/`GITHUB_PATH`, and actions are restricted to
    governed auxiliary or enforcement families. Runtime-image verified state is bound directly to
    post-verification control steps instead of persisted through `GITHUB_ENV`. It requires blocking-job
@@ -100,8 +103,10 @@ invocation. Matrix expressions are not trusted as unresolved text: every referen
 value must match the same bare Make-target grammar, which excludes assignments, options, paths,
 special-target syntax, and multi-target tokens. Static and resolved targets must also appear in an
 active repository-root `.PHONY:` declaration in GNU Make's delimited effective-database Files
-section; parse-time/recipe output, serialized variable bodies, inactive declarations, existing
-files, and non-phony rules cannot authorize merge. The marker must run at repository root.
+section under each run step's inherited workflow/job/step environment; parse-time/recipe output,
+serialized variable bodies, environment-dependent inactive declarations, existing files, and
+non-phony rules cannot authorize merge. Artifact paths containing expressions fail before an action
+can resolve them into a destination outside `output/`. The marker must run at repository root.
 Pre-enforcement steps cannot write `GITHUB_ENV`/`GITHUB_PATH`; only governed action families are
 accepted, and runtime-image consumers carry verified state only on post-verification control steps.
 The marker proves an explicitly declared fail-propagating control exists;

@@ -119,8 +119,10 @@ after fencing Core repository roots.
    unlisted keys such as `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, or Make control
    variables fail closed, as does any run-step working-directory override. Every run step must be one
    admitted bare command and every action must be on the audited allowlist with action-specific
-   `with:` keys and constrained checkout/cache/artifact/setup values, so indirect environment or
-   path writes, workspace mutation, command chaining, and unknown actions or inputs fail closed.
+   `with:` keys and constrained checkout/cache/artifact/setup values. Artifact destinations must be
+   literal, expression-free paths below `output/`, so expression resolution cannot traverse into
+   the checkout. These controls make indirect environment or path writes, workspace mutation,
+   command chaining, and unknown actions or inputs fail closed.
    Runtime-image verification belongs to the Make graph: every consuming control declares
    `runtime-image-set-load-verify` as a prerequisite, which emits an exact-`GITHUB_SHA` receipt only
    after successful verification. CI fails closed when the source SHA or artifact is absent. A local
@@ -133,8 +135,9 @@ after fencing Core repository roots.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
-   also carry GNU Make's exact per-target phony flag in the repository-root effective database's delimited
-   effective-database Files section; parse-time/recipe output, serialized variable bodies, a
+   also carry GNU Make's exact per-target phony flag in the repository-root effective database's
+   delimited Files section evaluated under that run step's inherited workflow/job/step environment;
+   parse-time/recipe output, serialized variable bodies, a
    missing Makefile, an inactive declaration, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
@@ -164,6 +167,7 @@ after fencing Core repository roots.
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
    | `id: enforce` count is not one, or the marker is conditional, auxiliary, or non-executable | Put exactly one unconditional marker on the job's real non-auxiliary fail-propagating control; review the invoked command's semantics. |
    | any run shell is unspecified/non-`bash`, its script is not one admitted bare invocation, or a static/resolved target is unsafe or not effectively phony | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into one reviewed target; keep every target bare and actively declared `.PHONY`. |
+   | an artifact path contains an expression or escapes `output/` | Replace it with a literal checkout-relative destination below `output/`; do not rely on expression resolution for path confinement. |
    | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 

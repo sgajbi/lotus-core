@@ -55,7 +55,7 @@ fail closed; pipelines and multi-command implementation belong inside a reviewed
 the audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint actions are
 admitted, and each action has an explicit `with:` key/value policy. Alternate checkout is limited
 to the credential-free nested platform checkout; cache paths are exact audited directories; artifact
-paths stay below `output/`. The
+paths are literal, expression-free destinations below `output/`. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
 configured environment keys must come from the closed inventory used by the governed workflows;
 unlisted keys such as `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, and Make control variables,
@@ -67,9 +67,10 @@ expressions fail closed before they can replace the execution boundary;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared
-by GNU Make's exact per-target phony flag in the delimited effective-database Files section, so parse-time/recipe output, serialized
-variable bodies, inactive declarations, ordinary files, non-phony rules, and missing Makefile
-authority fail closed. It
+by GNU Make's exact per-target phony flag in the delimited effective-database Files section evaluated
+under the run step's inherited workflow/job/step environment, so parse-time/recipe output, serialized
+variable bodies, environment-dependent inactive declarations, ordinary files, non-phony rules, and
+missing Makefile authority fail closed. It
 requires blocking dependencies to be fully validated blocking jobs, pins strict mode and the exact
 two governed workflow policies in code, and
 inventories advisory producers

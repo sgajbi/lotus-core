@@ -49,6 +49,10 @@ def _require_relative_output_path(value: object, *, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise RequiredStatusChecksError(f"blocking workflow action {field} must be non-empty")
     for raw_path in value.splitlines():
+        if "${{" in raw_path:
+            raise RequiredStatusChecksError(
+                f"blocking workflow action {field} must not contain expressions: {raw_path!r}"
+            )
         path = raw_path.strip().replace("\\", "/")
         if not path.startswith("output/") or "/../" in f"/{path}/" or path.endswith("/.."):
             raise RequiredStatusChecksError(

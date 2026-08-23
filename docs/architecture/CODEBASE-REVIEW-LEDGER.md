@@ -16,16 +16,20 @@ quoting, redirection, multiple lines, Make flags, and wrapper commands fail clos
 matrix targets are resolved from every include row and must each match the same bare target-name
 grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens fail closed. Every admitted static or resolved target must also carry GNU
-Make's exact per-target phony flag in the delimited effective-database Files section, so parse-time/recipe output, serialized
-variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
-authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
+Make's exact per-target phony flag in the delimited effective-database Files section evaluated
+under that run step's inherited workflow/job/step environment. The evaluation is cached only for
+identical effective environments, so environment-dependent inactive declarations, parse-time/recipe
+output, serialized variable bodies, ordinary files, undeclared rules, and missing Makefile authority
+fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
 `windows-latest` runners, so containers, services, deployment environments, self-hosted labels,
 and runner expressions cannot replace the execution boundary. Configured environment keys must
 come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`,
 `CI`, Make control variables, and run-step working-directory overrides fail closed. The positive run-command grammar rejects direct or indirect environment/path
 writes, workspace mutation, and command chaining; action steps are restricted to the audited
 checkout, setup, cache, artifact, Docker Buildx, and actionlint set with action-specific input
-key/value policy. Runtime-image consumers bind verification in the Make graph: each control target
+key/value policy. Artifact destinations must be literal expression-free paths beneath `output/`, so
+expression resolution cannot turn an apparently confined download into a repository-root write.
+Runtime-image consumers bind verification in the Make graph: each control target
 depends on `runtime-image-set-load-verify`, whose exact-`GITHUB_SHA` receipt is written only after
 successful load verification. The guard requires blocking
 dependencies to be validated blocking jobs; pins strict mode and the exact governed workflow set;
@@ -53,7 +57,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 267 focused tests with 93.07% branch-aware package coverage against a 90%
+deadlock. Local evidence is 274 focused tests with 93.11% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
