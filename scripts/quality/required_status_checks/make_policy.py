@@ -38,7 +38,7 @@ _EXECUTION_DEFINE = re.compile(
     + r")(?=\s|$|::=|:=|\+=|\?=|!=|=)"
 )
 _VPATH_DIRECTIVE = re.compile(r"^vpath(?:\s|$)")
-_AUTHORITY_FUNCTION = re.compile(r"\$(?:\(|\{)\s*(?:call|eval)(?=[\s,)}])")
+_AUTHORITY_FUNCTION = re.compile(r"\$(?:\(|\{)\s*(?:call|eval)(?=[\s,)}\\]|$)")
 _SAFE_DIAGNOSTIC_EXPANSION = re.compile(r"^\$\((?:error|info|warning)(?:\s|$).*\)$")
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")
 
@@ -98,25 +98,13 @@ def _has_execution_special_target(line: str) -> bool:
 
 
 def validate_make_authority_functions(lines: list[str], *, path: Path) -> None:
-    """Reject authority functions after joining Make logical-line continuations."""
+    """Reject direct or continued Make authority-function invocations."""
 
-    logical_line: str | None = None
-    logical_line_number = 0
-    for line_number, raw_line in enumerate(lines, start=1):
-        if logical_line is None:
-            logical_line = raw_line
-            logical_line_number = line_number
-        else:
-            continuation = raw_line[1:] if raw_line.startswith("\t") else raw_line
-            logical_line += f" {continuation}"
-        if logical_line.endswith("\\"):
-            logical_line = logical_line[:-1]
-            continue
-        if _AUTHORITY_FUNCTION.search(logical_line):
+    for line_number, line in enumerate(lines, start=1):
+        if _AUTHORITY_FUNCTION.search(line):
             raise RequiredStatusChecksError(
-                f"Makefile phony authority must be static: {path}; line={logical_line_number}"
+                f"Makefile phony authority must be static: {path}; line={line_number}"
             )
-        logical_line = None
 
 
 def validate_make_execution_state(line: str, *, path: Path, line_number: int) -> None:
