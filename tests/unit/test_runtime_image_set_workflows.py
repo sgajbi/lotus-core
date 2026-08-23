@@ -53,11 +53,20 @@ def _assert_runtime_image_producer(
 ) -> None:
     jobs = workflow["jobs"]
     producer = jobs["docker-build"]  # type: ignore[index]
-    commands = _run_commands(producer)
-    assert f"prebuild_ci_images.py --cache-dir .buildx-cache --group {group}" in commands
-    assert "--metrics-output output/runtime-image-set/build-metrics.json" in commands
-    assert "runtime_image_set.py create" in commands
-    assert '--source-commit-sha "${GITHUB_SHA}"' in commands
+    build = next(
+        step
+        for step in _steps(producer)
+        if step.get("name") == "Build exact-source runtime image set"
+    )
+    assert build["run"] == "make build-runtime-image-set"
+    assert build["shell"] == "bash"
+    assert build["env"]["LOTUS_RUNTIME_IMAGE_SET_GROUP"] == group  # type: ignore[index]
+    assert build["env"]["LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA"] == "${{ github.sha }}"  # type: ignore[index]
+    assert (
+        build["env"]["LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL"]
+        == "${{ github.server_url }}/${{ github.repository }}"
+    )  # type: ignore[index]
+    assert build["env"]["LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID"] == "${{ github.run_id }}"  # type: ignore[index]
     upload = next(
         step for step in _steps(producer) if step.get("name") == "Upload runtime image set"
     )
@@ -120,6 +129,26 @@ def test_main_workflow_builds_and_consumes_one_exact_source_runtime_image_set() 
         consumers=MAIN_RUNTIME_CONSUMERS,
         artifact_name="main-runtime-image-set",
     )
+
+
+def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    target = makefile.split("build-runtime-image-set:\n", maxsplit=1)[1].split(
+        "\nclean:", maxsplit=1
+    )[0]
+
+    for variable in (
+        "LOTUS_RUNTIME_IMAGE_SET_GROUP",
+        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA",
+        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH",
+        "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL",
+        "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID",
+    ):
+        assert f'test -n "$${{{variable}}}"' in target
+    assert "scripts/release/prebuild_ci_images.py" in target
+    assert "scripts/release/runtime_image_set.py create" in target
+    assert 'LOTUS_BUILD_TIMESTAMP="$${build_timestamp}"' in target
+    assert "&&" in target
 
 
 def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:

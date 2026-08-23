@@ -232,20 +232,13 @@ jobs:
       - name: Build exact-source runtime image set
         id: enforce
         shell: bash
-        run: |
-          build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          export LOTUS_BUILD_TIMESTAMP="${build_timestamp}"
-          python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group pr-runtime-image-set \
-            --metrics-output output/runtime-image-set/build-metrics.json
-          python scripts/release/runtime_image_set.py create \
-            --group pr-runtime-image-set \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --source-commit-sha "${GITHUB_SHA}" \
-            --source-branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
-            --repository-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --ci-run-id "${GITHUB_RUN_ID}" \
-            --generated-at-utc "${build_timestamp}"
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_GROUP: pr-runtime-image-set
+          LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA: ${{ github.sha }}
+          LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+          LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID: ${{ github.run_id }}
+        run: make build-runtime-image-set
       - name: Generate runtime SBOM
         run: |
           python scripts/release/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json

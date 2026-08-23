@@ -48,10 +48,13 @@ conditions only on audited checkout, cache-save, and artifact-upload actions, re
 blocking job to retain exactly one unconditional executable `id: enforce` step on a non-auxiliary
 control, requires exact canonical PR keys and merge-group triggers for `main`, accepts only
 include-row matrices with cell-identifying names, rejects path-filtered PR triggers, requires the
-effective shell of every marked run control to be exact `bash`, and rejects a named denylist of
-shell failure-tolerance including arbitrary OR lists, clustered Bash/Make disabling flags, effective workflow/job/step environment
-injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`, shell conditionals, dry-run, and background-execution
-escapes, requires blocking dependencies
+effective shell of every marked run control to be exact `bash` and its script to be one bare
+invocation: one Make target, a governed matrix target, or the exact Windows lock-closure command.
+Operators, substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands
+fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. The
+Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
+environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` remains prohibited;
+requires blocking dependencies
 to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and
 inventories advisory producers

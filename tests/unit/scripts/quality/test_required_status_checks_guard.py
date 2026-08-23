@@ -537,6 +537,9 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "make security-audit || true",
         "make security-audit || :",
         "make security-audit || echo ignored",
+        "! make security-audit",
+        "echo $(make security-audit)",
+        "case $(make security-audit) in *) ;; esac",
         "set +e\nmake security-audit",
         "set +eo pipefail\nmake security-audit",
         "set +o errexit\nmake security-audit",
@@ -556,9 +559,13 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "if make security-audit; then echo passed; fi",
         "while make security-audit; do echo retrying; done",
         "until make security-audit; do echo retrying; done",
+        "make security-audit | tee report.txt",
+        "make security-audit && echo passed",
+        "make security-audit 2>&1",
+        "make security-audit\necho passed",
     ],
 )
-def test_blocking_policy_rejects_shell_level_enforcement_suppression(
+def test_blocking_policy_rejects_non_bare_enforcement_commands(
     run_command: str,
 ) -> None:
     workflow = {
@@ -575,26 +582,20 @@ def test_blocking_policy_rejects_shell_level_enforcement_suppression(
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="suppresses command"):
+    with pytest.raises(RequiredStatusChecksError, match="must be a single bare command"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
 @pytest.mark.parametrize(
     "run_command",
     [
-        "make security-audit | tee report.txt",
-        "make security-audit && true",
-        "make security-audit 2>&1",
-        "make security-audit &> report.txt",
-        "set -euo pipefail\nmake security-audit",
-        "set -e\nmake security-audit",
-        "set -o pipefail\nmake security-audit",
-        "make -s security-audit",
-        "make -j2 security-audit",
         "make security-audit",
+        "make quality-workflow-governance-gate",
+        "make ${{ matrix.target }}",
+        "python scripts/development/update_ci_tooling_lock.py --check --platform windows",
     ],
 )
-def test_blocking_policy_accepts_fail_propagating_shell_forms(run_command: str) -> None:
+def test_blocking_policy_accepts_single_bare_enforcement_commands(run_command: str) -> None:
     workflow = {
         "jobs": {
             "security": {
