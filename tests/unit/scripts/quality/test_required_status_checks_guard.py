@@ -169,6 +169,14 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
             "not a declared phony Make target",
         ),
         (
+            "define environment-activated-authority\n"
+            ".PHONY: security-audit\n"
+            "endef\n"
+            "$(if $(filter C,$(LC_ALL)),$(eval $(environment-activated-authority)))\n"
+            "active:\n\t@true",
+            "not a declared phony Make target",
+        ),
+        (
             ".PHONY: FORGE = security-audit\nactive:\n\t@true",
             "Makefile phony authority must be static",
         ),
