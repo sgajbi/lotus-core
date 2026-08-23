@@ -32,7 +32,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
    classifies every governed workflow job, requires blocking jobs and enforcement commands to be
    unconditional and fail-propagating, limits conditional auxiliary steps to audited checkout,
    cache-save, and artifact-upload actions, requires every blocking job to retain at least one
-   unconditional substantive command or explicitly approved enforcement action, inventories advisory producers in global
+   command from the explicit governed Make/build/replay allowlist or an approved enforcement action,
+   validates canonical PR and merge-group triggers, rejects matrix axes omitted from job names and
+   ungoverned matrix targets, inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
    job-name expressions, requires every manifest entry to bind to the exact GitHub Actions
@@ -55,16 +57,19 @@ evidence must be explicit and cannot be mistaken for release authorization.
    an explicit empty legacy `contexts` array and the complete app-bound `checks` array. This avoids
    hand-copy drift, retained check-name-only authority, and making an absent context required before
    it has posted.
-7. Both governed required-check workflows subscribe to `merge_group`; required Quality Baseline
-   contexts therefore post on the synthetic merge-queue commit instead of deadlocking the queue.
+7. Both governed required-check workflows retain the canonical `pull_request` events for `main` and
+   subscribe to `merge_group` for `main`; required contexts therefore post on both PR heads and the
+   synthetic merge-queue commit instead of leaving branch protection waiting indefinitely.
 
 ## Meaningful Proof
 
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
 deterministically, the advisory context must be both declared and observed, blocking jobs cannot
 carry job-level conditions, conditional enforcement commands, or job/step failure tolerance;
-only audited auxiliary actions may be conditional, and empty, auxiliary-only, or unknown-action-only
-blocking jobs fail.
+only audited auxiliary actions may be conditional, and empty, auxiliary-only, setup-only,
+unknown-command-only, unknown-action-only, or ungoverned-matrix-target blocking jobs fail. Canonical
+PR and merge-group trigger mutations fail, and matrix axes omitted from the context name fail before
+ambiguous same-app checks can be emitted.
 Advisory and blocking producers cannot
 share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
 required context. Non-GitHub-Actions manifest authority, noncanonical repository/branch targets,
@@ -78,7 +83,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `92 passed`, with 92% branch-aware
+- focused workflow/manifest pack after final review hardening: `102 passed`, with 91.15% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability ranks A/A/B/A/A across the owned package and CLI; scoped MyPy, Bandit, and

@@ -7,8 +7,10 @@ contexts, strict mode,
 workflow sources, and the sole advisory `Quality Baseline / Report Only` context. A reusable guard
 expands matrix suites; requires every blocking job and enforcement command to be unconditional and
 fail-propagating; permits conditional steps only for audited checkout, cache-save, and
-artifact-upload actions; requires every blocking job to retain an unconditional substantive command
-or explicitly approved enforcement action; inventories advisory producers in global context-uniqueness proof; scans all
+artifact-upload actions; requires every blocking job to retain a command from the explicit governed
+Make/build/replay allowlist or an approved enforcement action; verifies canonical PR and merge-group
+triggers; rejects unnamed matrix axes and ungoverned matrix targets; inventories advisory producers
+in global context-uniqueness proof; scans all
 workflows for static or dynamic required-context collisions; rejects unsupported job-name
 expressions; pins the manifest to canonical `sgajbi/lotus-core` / `main` and GitHub Actions app
 `15368`; and rejects malformed, missing, stale, duplicate, ambiguous, advisory-as-required,
