@@ -12,6 +12,8 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 DEFAULT_MANIFEST_PATH = Path("contracts/ci/required-status-checks.v1.json")
+CANONICAL_REPOSITORY = "sgajbi/lotus-core"
+CANONICAL_BRANCH = "main"
 GITHUB_ACTIONS_APP_ID = 15368
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
@@ -71,6 +73,13 @@ def load_manifest(path: Path = DEFAULT_MANIFEST_PATH) -> RequiredChecksManifest:
         raise RequiredStatusChecksError("unsupported required-check manifest schema_version")
     if not isinstance(payload["strict"], bool):
         raise RequiredStatusChecksError("strict must be a boolean")
+    repository = _require_non_empty_string(payload["repository"], field="repository")
+    branch = _require_non_empty_string(payload["branch"], field="branch")
+    if repository != CANONICAL_REPOSITORY or branch != CANONICAL_BRANCH:
+        raise RequiredStatusChecksError(
+            "required-check manifest must target canonical protection authority: "
+            f"repository={CANONICAL_REPOSITORY}, branch={CANONICAL_BRANCH}"
+        )
 
     raw_policies = payload["workflow_policies"]
     if not isinstance(raw_policies, list) or not raw_policies:
@@ -132,8 +141,8 @@ def load_manifest(path: Path = DEFAULT_MANIFEST_PATH) -> RequiredChecksManifest:
         raise RequiredStatusChecksError("required check contexts must be unique")
 
     return RequiredChecksManifest(
-        repository=_require_non_empty_string(payload["repository"], field="repository"),
-        branch=_require_non_empty_string(payload["branch"], field="branch"),
+        repository=repository,
+        branch=branch,
         strict=payload["strict"],
         workflow_policies=tuple(policies),
         required_checks=tuple(checks),

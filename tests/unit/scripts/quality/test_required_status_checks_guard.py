@@ -185,6 +185,27 @@ def test_manifest_rejects_a_non_github_actions_app_binding(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("repository", "sgajbi/lotus-shadow"),
+        ("branch", "release-candidate"),
+    ],
+)
+def test_manifest_rejects_noncanonical_live_protection_authority(
+    tmp_path: Path,
+    field: str,
+    value: str,
+) -> None:
+    source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    source_manifest[field] = value
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+
+    with pytest.raises(RequiredStatusChecksError, match="canonical protection authority"):
+        load_manifest(manifest_path)
+
+
+@pytest.mark.parametrize(
     "unmanaged_workflow",
     [
         "jobs:\n  impostor:\n    name: Quality Baseline / Security Gate\n",
