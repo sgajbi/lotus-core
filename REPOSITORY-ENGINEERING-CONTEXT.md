@@ -4168,6 +4168,8 @@ Most relevant current governance:
      the default workflow token is known to lack that authority. Update branch protection only
      after the exact PR head has posted and passed the complete manifest-owned set, and apply
      app-bound checks atomically with an explicit empty legacy `contexts` array.
+     Live verification must also require that array to be present and empty; retained or malformed
+     legacy context state is protection drift and fails closed.
      Keep manifest/model parsing, workflow traversal, blocking-job execution policy, live
      protection I/O, and CLI orchestration in their owned required-check modules. The
      workflow-governance lane must enforce scoped Ruff

@@ -27,7 +27,8 @@ Bandit, and Vulture gates;
 Main Releasability performs read-only live parity through a dedicated fine-grained Administration-
 read-only secret because the default workflow token is known to lack that authority. The guard emits
 the exact atomic protection PATCH payload with an explicit empty legacy-context list and the full
-app-bound check list. Mutation tests prove undeclared Gate, conditional-job, conditional-enforcement,
+app-bound check list; live validation rejects a missing, malformed, or non-empty legacy list.
+Mutation tests prove undeclared Gate, conditional-job, conditional-enforcement,
 empty/auxiliary/unknown-action-only blocking job, conditional or auxiliary enforcement marker,
 unspecified/non-`bash` effective shell, path-filtered PR trigger, job/step
 failure-tolerance, advisory/blocking collision, cross-workflow collision, formatted-expression,
