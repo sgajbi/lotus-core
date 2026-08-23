@@ -119,7 +119,8 @@ after fencing Core repository roots.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
-   also appear in a repository-root `.PHONY:` declaration; a missing Makefile, an ordinary file,
+   also appear as active repository-root `.PHONY:` entries in GNU Make's effective database; a
+   missing Makefile, inactive conditional or unexpanded declaration, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for
@@ -147,7 +148,7 @@ after fencing Core repository roots.
    | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
    | `id: enforce` count is not one, or the marker is conditional, auxiliary, or non-executable | Put exactly one unconditional marker on the job's real non-auxiliary fail-propagating control; review the invoked command's semantics. |
-   | enforcement shell is unspecified/non-`bash`, its script is not one admitted bare invocation, or a static/resolved target is unsafe or non-phony | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into one reviewed target; keep every target bare and declared `.PHONY`. |
+   | enforcement shell is unspecified/non-`bash`, its script is not one admitted bare invocation, or a static/resolved target is unsafe or not effectively phony | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into one reviewed target; keep every target bare and actively declared `.PHONY`. |
    | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 
