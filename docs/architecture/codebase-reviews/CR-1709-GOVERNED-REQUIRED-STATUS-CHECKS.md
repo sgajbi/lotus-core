@@ -34,7 +34,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
    cache-save, and artifact-upload actions, requires every blocking job to retain exactly one
    unconditional executable `id: enforce` step, validates canonical PR and merge-group triggers,
    accepts only include-row matrices with cell-identifying names, pins strict mode and the exact two
-   governed workflow policies in code, and inventories advisory producers in global
+   governed workflow policies in code, rejects shell-level failure/dry-run suppression, requires
+   blocking-job dependencies to be validated blocking jobs, and inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
    job-name expressions, requires every manifest entry to bind to the exact GitHub Actions
@@ -69,8 +70,9 @@ carry job-level conditions, conditional enforcement commands, or job/step failur
 only audited auxiliary actions may be conditional, and zero/duplicate/conditional/non-executable
 `id: enforce` markers fail. Canonical PR and merge-group trigger mutations, non-strict manifests,
 governed-workflow-set drift, and non-include matrix shapes fail before ambiguous or weakened checks
-can be emitted. The marker proves an explicitly declared fail-propagating control exists; static
-validation cannot prove the command's business semantics, which remain code-review responsibility.
+can be emitted. Shell-level failure/dry-run suppression and dependencies on advisory or unknown jobs
+also fail. The marker proves an explicitly declared fail-propagating control exists; static validation
+cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
 share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
 required context. Non-GitHub-Actions manifest authority, noncanonical repository/branch targets,
@@ -84,7 +86,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `107 passed`, with 91.71% branch-aware
+- focused workflow/manifest pack after final review hardening: `114 passed`, with 91.28% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability ranks A/A/B/A/A across the owned package and CLI; scoped MyPy, Bandit, and

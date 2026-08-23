@@ -4151,7 +4151,8 @@ Most relevant current governance:
      artifact-upload actions, require exactly one unconditional executable `id: enforce` step in
      every blocking job, require canonical `pull_request` event/`main` branch and
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
-     pin strict mode and the exact two governed workflow policies in code,
+     reject shell-level failure/dry-run suppression, require every blocking-job dependency to be
+     another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
      static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
      manifest authority only to GitHub Actions app `15368`, and fail on missing, stale, duplicate,
