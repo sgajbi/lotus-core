@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess  # nosec B404 - fixed gh executable with argv, no shell
 from dataclasses import dataclass
@@ -150,7 +151,7 @@ def _expanded_job_contexts(job: Mapping[str, Any]) -> tuple[str, ...]:
         values.append(_require_non_empty_string(row[matrix_key], field=f"matrix.{matrix_key}"))
     if len(values) != len(set(values)):
         raise RequiredStatusChecksError(f"matrix values must be unique: {name}")
-    return tuple(_MATRIX_EXPRESSION.sub(value, name) for value in values)
+    return tuple(_MATRIX_EXPRESSION.sub(lambda _match: value, name) for value in values)
 
 
 def blocking_contexts_for_workflow(
@@ -230,8 +231,16 @@ def validate_live_protection(
             raise RequiredStatusChecksError("live required check must be an object")
         context = raw_check.get("context")
         app_id = raw_check.get("app_id")
-        if not isinstance(context, str) or not isinstance(app_id, int):
-            raise RequiredStatusChecksError("live required check has invalid context or app_id")
+        if (
+            not isinstance(context, str)
+            or not context.strip()
+            or not isinstance(app_id, int)
+            or isinstance(app_id, bool)
+            or app_id <= 0
+        ):
+            raise RequiredStatusChecksError(
+                f"live required check has invalid context or app_id: context={context!r}"
+            )
         live_checks.add(RequiredCheck(context=context, app_id=app_id))
     expected_checks = set(manifest.required_checks)
     if live_checks != expected_checks:
@@ -243,6 +252,8 @@ def validate_live_protection(
 
 
 def load_live_protection(*, repository: str, branch: str) -> Mapping[str, Any]:
+    if not os.environ.get("GH_TOKEN", "").strip():
+        raise RequiredStatusChecksError("LOTUS_BRANCH_PROTECTION_READ_TOKEN is not provisioned")
     command = ["gh", "api", f"repos/{repository}/branches/{branch}/protection"]
     try:
         completed = subprocess.run(  # nosec B603 - fixed executable and argument vector
@@ -252,12 +263,34 @@ def load_live_protection(*, repository: str, branch: str) -> Mapping[str, Any]:
             text=True,
             timeout=30,
         )
+    except subprocess.CalledProcessError as exc:
+        stderr_lines = [line.strip() for line in (exc.stderr or "").splitlines() if line.strip()]
+        first_line = stderr_lines[0][:200] if stderr_lines else "gh api failed"
+        raise RequiredStatusChecksError(
+            f"unable to read live branch protection: {first_line}"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RequiredStatusChecksError("live branch-protection read timed out") from exc
+    except OSError as exc:
+        raise RequiredStatusChecksError(
+            "unable to start the live branch-protection reader"
+        ) from exc
+    try:
         payload = json.loads(completed.stdout)
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
-        raise RequiredStatusChecksError("unable to read live branch protection") from exc
+    except json.JSONDecodeError as exc:
+        raise RequiredStatusChecksError("live branch protection returned malformed JSON") from exc
     if not isinstance(payload, dict):
         raise RequiredStatusChecksError("live branch protection response must be an object")
     return payload
+
+
+def desired_protection_payload(manifest: RequiredChecksManifest) -> dict[str, object]:
+    return {
+        "strict": manifest.strict,
+        "checks": [
+            {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
+        ],
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -265,6 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
     parser.add_argument("--repository-root", type=Path, default=Path("."))
     parser.add_argument("--verify-live", action="store_true")
+    parser.add_argument("--print-desired-protection", action="store_true")
     return parser
 
 
@@ -273,6 +307,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         manifest = load_manifest(args.manifest)
         validate_manifest_against_workflows(manifest, repository_root=args.repository_root)
+        if args.print_desired_protection:
+            print(json.dumps(desired_protection_payload(manifest), sort_keys=True))
+            return 0
         if args.verify_live:
             protection = load_live_protection(
                 repository=manifest.repository,
