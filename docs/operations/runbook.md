@@ -114,7 +114,8 @@ after fencing Core repository roots.
    remove fail-fast pipeline behavior. A named denylist rejects explicit escapes through
    failure-tolerance operators, Bash option clusters that disable `errexit` or `pipefail`, Make
    short-option clusters containing `-n`/`-q`, and effective workflow/job/step environment injection
-   through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`; it also rejects long dry-run flags and
+   through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`; it also rejects shell conditionals that can
+   mask control failure, long dry-run flags, and
    background execution (`&`, `nohup`, `setsid`, `coproc`, or `disown`). A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for
@@ -126,7 +127,7 @@ after fencing Core repository roots.
    two governed workflow policies are code-pinned. It inventories
    blocking and advisory producers so an
    advisory same-app check cannot satisfy required protection; scans every repository workflow for
-   static or dynamic required-context collisions; rejects unsupported job-name expressions;
+   static or dynamic required-context collisions, including empty matrix substitutions; rejects unsupported job-name expressions;
    requires every manifest entry to use GitHub Actions app `15368`; and fails on missing, stale,
    duplicate, ambiguous, advisory-as-required, or undeclared check authority. `make lint` includes
    this guard and the import-boundary gate.

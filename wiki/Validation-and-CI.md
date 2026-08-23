@@ -50,13 +50,13 @@ control, requires exact canonical PR keys and merge-group triggers for `main`, a
 include-row matrices with cell-identifying names, rejects path-filtered PR triggers, requires the
 effective shell of every marked run control to be exact `bash`, and rejects a named denylist of
 shell failure-tolerance, clustered Bash/Make disabling flags, effective workflow/job/step environment
-injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`, dry-run, and background-execution
+injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`, shell conditionals, dry-run, and background-execution
 escapes, requires blocking dependencies
 to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and
 inventories advisory producers
 when proving global same-app context uniqueness, and scans every repository workflow for static or
-dynamic required-context collisions. It rejects formatted or otherwise unsupported job-name
+dynamic required-context collisions, including empty matrix substitutions. It rejects formatted or otherwise unsupported job-name
 expressions and fails on a missing or stale check, undeclared gate/advisory job,
 advisory-as-required context, duplicate context, malformed/ambiguously named matrix, missing or
 duplicate enforcement marker, wrong application identity, or wrong manifest shape. The marker
