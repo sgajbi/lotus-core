@@ -21,6 +21,71 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/upload-artifact@",
 )
 _ENFORCEMENT_ACTION_PREFIXES = ("reviewdog/action-actionlint@",)
+_ENFORCEMENT_MAKE_TARGETS = frozenset(
+    {
+        "api-vocabulary-gate",
+        "architecture-guard",
+        "base-image-registry-evidence-check",
+        "coverage-gate",
+        "dependency-lock-replay-check",
+        "dependency-technology-inventory",
+        "lint",
+        "lotus-core-validate",
+        "migration-smoke",
+        "no-alias-gate",
+        "openapi-gate",
+        "quality-bandit-gate",
+        "quality-complexity-gate",
+        "quality-deptry-source-gate",
+        "quality-import-boundary-gate",
+        "quality-integration-lite-collection-gate",
+        "quality-maintainability-gate",
+        "quality-openapi-spectral-gate",
+        "quality-ruff-format-gate",
+        "quality-ruff-gate",
+        "quality-unit-collection-gate",
+        "quality-vulture-source-gate",
+        "quality-wiki-docs-gate",
+        "quality-workflow-governance-gate",
+        "security-audit",
+        "technology-governance-pilot-receipt-guard",
+        "test-critical-lifecycle-db",
+        "test-derived-state-recovery-gate",
+        "test-docker-smoke",
+        "test-e2e-smoke",
+        "test-fixed-income-book-cost-recovery-gate",
+        "test-integration-lite",
+        "test-latency-gate",
+        "test-ops-contract",
+        "test-performance-load-gate",
+        "test-transaction-buy-contract",
+        "test-transaction-dividend-contract",
+        "test-transaction-fx-contract",
+        "test-transaction-interest-contract",
+        "test-transaction-portfolio-flow-bundle-contract",
+        "test-transaction-processing-contract",
+        "test-transaction-sell-contract",
+        "test-unit",
+        "test-unit-db",
+        "typecheck",
+        "verify-dependencies",
+        "warning-gate",
+    }
+)
+_MAKE_COMMAND = re.compile(r"^\s*make\s+([^\s\\]+)", re.MULTILINE)
+_ENFORCEMENT_COMMAND_PATTERNS = (
+    re.compile(r"^\s*docker\s+buildx\s+bake(?:\s|$)", re.MULTILINE),
+    re.compile(
+        r"^\s*python\s+scripts/development/update_(?:ci_tooling|shared_runtime)_lock\.py"
+        r"\b[^\n]*--check\b",
+        re.MULTILINE,
+    ),
+    re.compile(
+        r"^\s*python\s+scripts/release/prebuild_ci_images\.py\b",
+        re.MULTILINE,
+    ),
+)
+_PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
 def _matrix_name_expressions(name: str) -> tuple[re.Match[str], ...]:
@@ -49,9 +114,33 @@ def _matrix_values(job: Mapping[str, Any], *, matrix_key: str, name: str) -> tup
     return tuple(values)
 
 
+def _validate_matrix_name_coverage(
+    job: Mapping[str, Any], *, name: str, expression_keys: set[str]
+) -> None:
+    strategy = job.get("strategy") or {}
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    if matrix is None:
+        return
+    if not isinstance(matrix, dict):
+        raise RequiredStatusChecksError(f"matrix must be an object: {name}")
+    matrix_axes = set(matrix) - {"include", "exclude"}
+    omitted_axes = sorted(matrix_axes - expression_keys)
+    if omitted_axes:
+        raise RequiredStatusChecksError(
+            f"matrix axes must appear in the job name: {name}; omitted={omitted_axes!r}"
+        )
+    if not expression_keys:
+        raise RequiredStatusChecksError(f"matrix job name must identify each cell: {name}")
+
+
 def _expanded_job_contexts(job: Mapping[str, Any]) -> tuple[str, ...]:
     name = require_non_empty_string(job.get("name"), field="workflow job name")
     expression_matches = _matrix_name_expressions(name)
+    _validate_matrix_name_coverage(
+        job,
+        name=name,
+        expression_keys={match.group(1) for match in expression_matches},
+    )
     if not expression_matches:
         return (name,)
     if len(expression_matches) != 1:
@@ -100,17 +189,42 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
     return tuple(contexts)
 
 
-def _step_is_enforcement(step: Mapping[str, Any]) -> bool:
+def _matrix_targets(job: Mapping[str, Any]) -> frozenset[str]:
+    strategy = job.get("strategy") or {}
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    include = matrix.get("include") if isinstance(matrix, dict) else None
+    if not isinstance(include, list):
+        return frozenset()
+    targets: set[str] = set()
+    for row in include:
+        if not isinstance(row, dict) or "target" not in row:
+            continue
+        target = row["target"]
+        if not isinstance(target, str) or not target:
+            return frozenset()
+        targets.add(target)
+    return frozenset(targets)
+
+
+def _step_is_enforcement(step: Mapping[str, Any], *, job: Mapping[str, Any]) -> bool:
     if "if" in step:
         return False
     run_command = step.get("run")
-    if isinstance(run_command, str) and run_command.strip():
-        return True
+    if isinstance(run_command, str):
+        make_targets = set(_MAKE_COMMAND.findall(run_command))
+        if "${{" in make_targets:
+            make_targets.remove("${{")
+            make_targets.update(_matrix_targets(job))
+        if make_targets and make_targets <= _ENFORCEMENT_MAKE_TARGETS:
+            return True
+        return any(pattern.search(run_command) for pattern in _ENFORCEMENT_COMMAND_PATTERNS)
     action = step.get("uses")
     return isinstance(action, str) and action.startswith(_ENFORCEMENT_ACTION_PREFIXES)
 
 
-def _validate_blocking_step(step: object, *, contexts: tuple[str, ...]) -> bool:
+def _validate_blocking_step(
+    step: object, *, job: Mapping[str, Any], contexts: tuple[str, ...]
+) -> bool:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
         raise RequiredStatusChecksError(
@@ -130,7 +244,7 @@ def _validate_blocking_step(step: object, *, contexts: tuple[str, ...]) -> bool:
                 f"blocking workflow enforcement steps must be unconditional: {context_text}; "
                 f"step={step_name!r}"
             )
-    return _step_is_enforcement(step)
+    return _step_is_enforcement(step, job=job)
 
 
 def _validate_blocking_job(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> None:
@@ -149,7 +263,7 @@ def _validate_blocking_job(job: Mapping[str, Any], *, contexts: tuple[str, ...])
             f"blocking workflow job steps must be a list: {context_text}"
         )
     enforcement_steps = sum(
-        _validate_blocking_step(step, contexts=contexts) for step in steps or ()
+        _validate_blocking_step(step, job=job, contexts=contexts) for step in steps or ()
     )
     if enforcement_steps == 0:
         raise RequiredStatusChecksError(
@@ -194,6 +308,33 @@ def _load_workflow(path: Path, *, display_path: Path) -> Mapping[str, Any]:
     return workflow
 
 
+def _validate_workflow_triggers(workflow: Mapping[str, Any], *, path: Path) -> None:
+    triggers = workflow.get("on")
+    if triggers is None:
+        triggers = next((value for key, value in workflow.items() if key is True), None)
+    if not isinstance(triggers, dict):
+        raise RequiredStatusChecksError(f"workflow triggers must be an object: {path}")
+    pull_request = triggers.get("pull_request")
+    expected_pull_request = {
+        "branches": ["main"],
+        "types": ["opened", "synchronize", "reopened", "ready_for_review"],
+    }
+    if not isinstance(pull_request, dict):
+        raise RequiredStatusChecksError(f"workflow must define pull_request triggers: {path}")
+    branches = pull_request.get("branches")
+    event_types = pull_request.get("types")
+    if branches != expected_pull_request["branches"] or not isinstance(event_types, list):
+        raise RequiredStatusChecksError(f"workflow pull_request triggers are noncanonical: {path}")
+    if (
+        not all(isinstance(event_type, str) for event_type in event_types)
+        or len(event_types) != len(set(event_types))
+        or set(event_types) != _PULL_REQUEST_EVENT_TYPES
+    ):
+        raise RequiredStatusChecksError(f"workflow pull_request triggers are noncanonical: {path}")
+    if triggers.get("merge_group") != {"branches": ["main"]}:
+        raise RequiredStatusChecksError(f"workflow merge_group triggers are noncanonical: {path}")
+
+
 def _workflow_jobs(workflow: Mapping[str, Any], *, path: Path) -> Mapping[str, Any]:
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
@@ -209,6 +350,7 @@ def _governed_contexts(
     all_producers: dict[str, list[str]] = {}
     for policy in manifest.workflow_policies:
         workflow = _load_workflow(repository_root / policy.path, display_path=policy.path)
+        _validate_workflow_triggers(workflow, path=policy.path)
         jobs = _workflow_jobs(workflow, path=policy.path)
         for job_id, job in jobs.items():
             if not isinstance(job, dict):
