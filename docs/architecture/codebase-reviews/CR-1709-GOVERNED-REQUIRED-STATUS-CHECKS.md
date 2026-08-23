@@ -42,9 +42,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
    targets are resolved from every include row and must each match the same bare target-name
    grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
    multi-target tokens fail closed. Every admitted static or resolved target must also be declared
-   by GNU Make's delimited effective repository-root `.PHONY` authority, so parse-time/recipe
-   output, inactive declarations, ordinary files, undeclared rules, and missing Makefile authority
-   fail closed. Enforcement working-directory overrides fail closed. It requires blocking-job
+   by GNU Make's delimited effective-database Files section, so parse-time/recipe output,
+   serialized variable bodies, inactive declarations, ordinary files, undeclared rules, and
+   missing Makefile authority fail closed. Enforcement working-directory overrides fail closed. It requires blocking-job
    dependencies to be validated blocking jobs, inventories advisory producers in global
    context-uniqueness checks, and scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -96,9 +96,9 @@ multi-command implementation is owned by `make build-runtime-image-set`, so its 
 invocation. Matrix expressions are not trusted as unresolved text: every referenced include-row
 value must match the same bare Make-target grammar, which excludes assignments, options, paths,
 special-target syntax, and multi-target tokens. Static and resolved targets must also appear in an
-active repository-root `.PHONY:` declaration in GNU Make's delimited effective database;
-parse-time/recipe output, inactive conditional or unexpanded declarations, existing files, and
-non-phony rules cannot authorize merge. The marker must run at repository root.
+active repository-root `.PHONY:` declaration in GNU Make's delimited effective-database Files
+section; parse-time/recipe output, serialized variable bodies, inactive declarations, existing
+files, and non-phony rules cannot authorize merge. The marker must run at repository root.
 The marker proves an explicitly declared fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
@@ -114,7 +114,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `209 passed`, with 91.54% branch-aware
+- focused workflow/manifest pack after final review hardening: `210 passed`, with 91.36% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;

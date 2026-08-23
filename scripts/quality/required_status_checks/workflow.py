@@ -33,6 +33,7 @@ _MAKE_DATABASE_COMMAND = (
 )
 _MAKE_DATABASE_START = "# Make data base, printed on "
 _MAKE_DATABASE_END = "# Finished Make data base on "
+_MAKE_DATABASE_FILES = "# Files"
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -170,8 +171,15 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
     ]
     if not database_starts or not database_ends or database_ends[-1] <= database_starts[-1]:
         raise RequiredStatusChecksError(f"unable to parse Makefile effective database: {path}")
+    files_sections = [
+        index
+        for index, line in enumerate(output_lines)
+        if line == _MAKE_DATABASE_FILES and database_starts[-1] < index < database_ends[-1]
+    ]
+    if not files_sections:
+        raise RequiredStatusChecksError(f"Makefile effective database has no Files section: {path}")
     targets: set[str] = set()
-    for line in output_lines[database_starts[-1] + 1 : database_ends[-1]]:
+    for line in output_lines[files_sections[-1] + 1 : database_ends[-1]]:
         match = _PHONY_DECLARATION.fullmatch(line)
         if match is None:
             continue
