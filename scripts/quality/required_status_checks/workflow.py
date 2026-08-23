@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -22,6 +23,13 @@ from scripts.quality.required_status_checks.model import (
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 _PHONY_DECLARATION = re.compile(r"^\.PHONY\s*:(.*)$")
+_MAKE_DATABASE_COMMAND = (
+    "make",
+    "--no-builtin-rules",
+    "--no-builtin-variables",
+    "--dry-run",
+    "--print-data-base",
+)
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -122,16 +130,35 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
 
 def _load_phony_make_targets(path: Path) -> frozenset[str]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        path.stat()
     except OSError as exc:
         raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
+    try:
+        result = subprocess.run(  # nosec B603
+            (*_MAKE_DATABASE_COMMAND, "--file", path.name),
+            cwd=path.parent,
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RequiredStatusChecksError(
+            f"timed out evaluating Makefile phony targets: {path}"
+        ) from exc
+    except OSError as exc:
+        raise RequiredStatusChecksError(
+            f"unable to evaluate Makefile phony targets: {path}"
+        ) from exc
+    if result.returncode != 0:
+        raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
     targets: set[str] = set()
-    for line in lines:
+    for line in result.stdout.splitlines():
         match = _PHONY_DECLARATION.fullmatch(line)
         if match is None:
             continue
-        declaration = match.group(1).split("#", maxsplit=1)[0]
-        targets.update(declaration.split())
+        targets.update(match.group(1).split())
     if not targets:
         raise RequiredStatusChecksError(f"Makefile has no declared phony targets: {path}")
     return frozenset(targets)

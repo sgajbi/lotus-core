@@ -96,6 +96,62 @@ def test_manifest_validation_fails_closed_without_phony_targets(tmp_path: Path) 
         validate_manifest_against_workflows(load_manifest(), repository_root=tmp_path)
 
 
+def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text("ifeq (\n", encoding="utf-8")
+
+    with pytest.raises(RequiredStatusChecksError, match="unable to evaluate Makefile"):
+        validate_manifest_against_workflows(load_manifest(), repository_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "inactive_declaration",
+    [
+        "ifeq (1,0)\n.PHONY: security-audit\nendif",
+        "define unused-declaration\n.PHONY: security-audit\nendef",
+    ],
+)
+def test_manifest_validation_rejects_inactive_phony_declarations(
+    tmp_path: Path, inactive_declaration: str
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        f".PHONY: active\nactive:\n\t@true\n{inactive_declaration}\nsecurity-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+    tmp_path.joinpath("security-audit").touch()
+    workflow_path = tmp_path / "quality.yml"
+    workflow_path.write_text(
+        _CANONICAL_TRIGGERS_YAML + "jobs:\n"
+        "  security:\n"
+        "    name: Quality Baseline / Security Gate\n"
+        "    steps:\n"
+        "      - id: enforce\n"
+        "        shell: bash\n"
+        "        run: make security-audit\n",
+        encoding="utf-8",
+    )
+    manifest = RequiredChecksManifest(
+        repository="sgajbi/lotus-core",
+        branch="main",
+        strict=True,
+        workflow_policies=(
+            WorkflowPolicy(
+                path=Path("quality.yml"),
+                policy="gate_jobs_blocking",
+                advisory_contexts=frozenset(),
+            ),
+        ),
+        required_checks=(RequiredCheck(context="Quality Baseline / Security Gate", app_id=15368),),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="not a declared phony Make target: security-audit",
+    ):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
 def test_matrix_contexts_expand_from_each_include_row() -> None:
     workflow = {
         "jobs": {
