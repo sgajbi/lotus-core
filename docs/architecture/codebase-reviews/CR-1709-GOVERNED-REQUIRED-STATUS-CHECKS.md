@@ -78,8 +78,9 @@ governed-workflow-set drift, and non-include matrix shapes fail before ambiguous
 can be emitted. Shell-level failure-tolerance, dry-run, and background-execution escapes plus
 dependencies on advisory or unknown jobs also fail. Exact `bash` supplies `pipefail`; the named
 denylist rejects `|| true`, `|| :`, Bash option clusters that disable `errexit` or `pipefail`, Make
-short-option clusters containing `-n`/`-q`, `MAKEFLAGS` assignments in scripts or workflow/job/step
-environments, long dry-run flags, standalone `&`, `nohup`, `setsid`, `coproc`, and `disown`. The marker proves an explicitly declared
+short-option clusters containing `-n`/`-q`, scripted Make flags, and effective workflow/job/step
+environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`; it also rejects long
+dry-run flags, standalone `&`, `nohup`, `setsid`, `coproc`, and `disown`. The marker proves an explicitly declared
 fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
@@ -95,7 +96,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `151 passed`, with 90.88% branch-aware
+- focused workflow/manifest pack after final review hardening: `158 passed`, with 90.97% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;
