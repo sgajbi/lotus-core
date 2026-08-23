@@ -174,6 +174,16 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
+def test_manifest_rejects_a_non_github_actions_app_binding(tmp_path: Path) -> None:
+    source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    source_manifest["required_checks"][0]["app_id"] = 1
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+
+    with pytest.raises(RequiredStatusChecksError, match="GitHub Actions application"):
+        load_manifest(manifest_path)
+
+
 @pytest.mark.parametrize(
     "unmanaged_workflow",
     [
@@ -216,6 +226,40 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
     manifest = load_manifest(manifest_path)
 
     with pytest.raises(RequiredStatusChecksError, match="unmanaged workflow"):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+def test_manifest_validation_rejects_an_unmanaged_formatted_name_expression(
+    tmp_path: Path,
+) -> None:
+    source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest_path = tmp_path / "manifest.json"
+    workflow_directory = tmp_path / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    governed_workflow_path = workflow_directory / "quality.yml"
+    unmanaged_workflow_path = workflow_directory / "unmanaged.yml"
+    source_manifest["workflow_policies"] = [
+        {
+            "path": ".github/workflows/quality.yml",
+            "policy": "gate_jobs_blocking",
+            "advisory_contexts": [],
+        }
+    ]
+    source_manifest["required_checks"] = [
+        {"context": "Quality Baseline / Security Gate", "app_id": 15368}
+    ]
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+    governed_workflow_path.write_text(
+        "jobs:\n  security:\n    name: Quality Baseline / Security Gate\n",
+        encoding="utf-8",
+    )
+    unmanaged_workflow_path.write_text(
+        "jobs:\n  impostor:\n    name: ${{ format('Quality Baseline / {0}', matrix.gate) }}\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(manifest_path)
+
+    with pytest.raises(RequiredStatusChecksError, match="unsupported workflow name expression"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
