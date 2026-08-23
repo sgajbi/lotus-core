@@ -45,7 +45,8 @@ manifest change cannot redirect certification to another repository or branch.
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
 blocking jobs and enforcement commands to be unconditional and fail-propagating, permits
 conditions only on audited checkout, cache-save, and artifact-upload actions, requires every
-blocking job to retain at least one unconditional substantive command or enforcement action, and
+blocking job to retain at least one unconditional substantive command or explicitly approved
+enforcement action, and
 inventories advisory producers
 when proving global same-app context uniqueness, and scans every repository workflow for static or
 dynamic required-context collisions. It rejects formatted or otherwise unsupported job-name

@@ -8,7 +8,7 @@ workflow sources, and the sole advisory `Quality Baseline / Report Only` context
 expands matrix suites; requires every blocking job and enforcement command to be unconditional and
 fail-propagating; permits conditional steps only for audited checkout, cache-save, and
 artifact-upload actions; requires every blocking job to retain an unconditional substantive command
-or enforcement action; inventories advisory producers in global context-uniqueness proof; scans all
+or explicitly approved enforcement action; inventories advisory producers in global context-uniqueness proof; scans all
 workflows for static or dynamic required-context collisions; rejects unsupported job-name
 expressions; pins the manifest to canonical `sgajbi/lotus-core` / `main` and GitHub Actions app
 `15368`; and rejects malformed, missing, stale, duplicate, ambiguous, advisory-as-required,
@@ -19,12 +19,12 @@ Main Releasability performs read-only live parity through a dedicated fine-grain
 read-only secret because the default workflow token is known to lack that authority. The guard emits
 the exact atomic protection PATCH payload with an explicit empty legacy-context list and the full
 app-bound check list. Mutation tests prove undeclared Gate, conditional-job, conditional-enforcement,
-empty/auxiliary-only blocking job, job/step
+empty/auxiliary/unknown-action-only blocking job, job/step
 failure-tolerance, advisory/blocking collision, cross-workflow collision, formatted-expression,
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 66 focused tests,
+deadlock. Local evidence is 68 focused tests,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
 reconciled to `strict=true`, 37 app-bound checks, and live read-back passed. No runtime,

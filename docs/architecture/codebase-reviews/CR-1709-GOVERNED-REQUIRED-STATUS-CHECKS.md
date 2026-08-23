@@ -32,7 +32,7 @@ evidence must be explicit and cannot be mistaken for release authorization.
    classifies every governed workflow job, requires blocking jobs and enforcement commands to be
    unconditional and fail-propagating, limits conditional auxiliary steps to audited checkout,
    cache-save, and artifact-upload actions, requires every blocking job to retain at least one
-   unconditional substantive command or enforcement action, inventories advisory producers in global
+   unconditional substantive command or explicitly approved enforcement action, inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
    job-name expressions, requires every manifest entry to bind to the exact GitHub Actions
@@ -59,7 +59,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
 deterministically, the advisory context must be both declared and observed, blocking jobs cannot
 carry job-level conditions, conditional enforcement commands, or job/step failure tolerance;
-only audited auxiliary actions may be conditional, and empty or auxiliary-only blocking jobs fail.
+only audited auxiliary actions may be conditional, and empty, auxiliary-only, or unknown-action-only
+blocking jobs fail.
 Advisory and blocking producers cannot
 share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
 required context. Non-GitHub-Actions manifest authority, noncanonical repository/branch targets,
