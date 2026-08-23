@@ -458,6 +458,87 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+@pytest.mark.parametrize(
+    "run_command",
+    [
+        "make security-audit || true",
+        "make security-audit || :",
+        "set +e\nmake security-audit",
+        "make security-audit --dry-run",
+        "make security-audit -n",
+    ],
+)
+def test_blocking_policy_rejects_shell_level_enforcement_suppression(
+    run_command: str,
+) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "run": run_command}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="suppresses command"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_a_dependency_on_an_advisory_job() -> None:
+    workflow = {
+        "jobs": {
+            "report": {
+                "name": "Quality Baseline / Report Only",
+                "if": False,
+            },
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "needs": "report",
+                "steps": [{"id": "enforce", "run": "make security-audit"}],
+            },
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset({"Quality Baseline / Report Only"}),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="depend only on blocking jobs"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_accepts_a_dependency_on_a_validated_blocking_job() -> None:
+    workflow = {
+        "jobs": {
+            "lint": {
+                "name": "PR Merge Gate / Lint Gate",
+                "steps": [{"id": "enforce", "run": "make lint"}],
+            },
+            "security": {
+                "name": "PR Merge Gate / Security Gate",
+                "needs": ["lint"],
+                "steps": [{"id": "enforce", "run": "make security-audit"}],
+            },
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="all_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "PR Merge Gate / Lint Gate",
+        "PR Merge Gate / Security Gate",
+    )
+
+
 def test_blocking_policy_accepts_an_explicitly_governed_enforcement_action() -> None:
     workflow = {
         "jobs": {

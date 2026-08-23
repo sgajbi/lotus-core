@@ -21,6 +21,11 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/upload-artifact@",
 )
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
+_SHELL_FAILURE_SUPPRESSION = re.compile(
+    r"(?:\|\|\s*(?:true|:)(?:\s|$)|(?:^|[;&]\s*)set\s+\+e(?:\s|$)|"
+    r"\bmake\b[^\n]*(?:\s-(?:n|q)(?:\s|$)|\s--(?:dry-run|just-print|recon|question)(?:\s|$)))",
+    re.MULTILINE,
+)
 
 
 def _matrix_name_expressions(name: str) -> tuple[re.Match[str], ...]:
@@ -140,11 +145,38 @@ def _validate_blocking_step(step: object, *, contexts: tuple[str, ...]) -> bool:
             )
     if step.get("id") != "enforce":
         return False
-    if not isinstance(step.get("run") or step.get("uses"), str):
+    executable = step.get("run") or step.get("uses")
+    if not isinstance(executable, str):
         raise RequiredStatusChecksError(
             f"blocking workflow enforce step must execute run or uses: {context_text}"
         )
+    run_command = step.get("run")
+    if isinstance(run_command, str) and _SHELL_FAILURE_SUPPRESSION.search(run_command):
+        raise RequiredStatusChecksError(
+            f"blocking workflow enforce step suppresses command execution or failure: {context_text}"
+        )
     return True
+
+
+def _dependency_ids(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> tuple[str, ...]:
+    needs = job.get("needs")
+    if needs is None:
+        return ()
+    if isinstance(needs, str):
+        dependency_ids = (needs,)
+    elif isinstance(needs, list) and all(isinstance(value, str) for value in needs):
+        dependency_ids = tuple(needs)
+    else:
+        raise RequiredStatusChecksError(
+            f"blocking workflow job needs must be a string or string list: {', '.join(contexts)}"
+        )
+    if len(dependency_ids) != len(set(dependency_ids)) or any(
+        not value for value in dependency_ids
+    ):
+        raise RequiredStatusChecksError(
+            f"blocking workflow job needs must be unique non-empty job ids: {', '.join(contexts)}"
+        )
+    return dependency_ids
 
 
 def _validate_blocking_job(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> None:
@@ -179,8 +211,13 @@ def blocking_contexts_for_workflow(
     if not isinstance(jobs, dict) or not jobs:
         raise RequiredStatusChecksError(f"workflow has no jobs: {policy.path}")
     blocking: list[str] = []
+    blocking_jobs: dict[str, tuple[Mapping[str, Any], tuple[str, ...]]] = {}
     observed_advisory: set[str] = set()
-    for job in jobs.values():
+    for job_id, job in jobs.items():
+        if not isinstance(job_id, str) or not job_id:
+            raise RequiredStatusChecksError(
+                f"workflow job id must be a non-empty string: {policy.path}"
+            )
         if not isinstance(job, dict):
             raise RequiredStatusChecksError(f"workflow job must be an object: {policy.path}")
         expanded_contexts = _expanded_job_contexts(job)
@@ -188,7 +225,19 @@ def blocking_contexts_for_workflow(
         contexts = _blocking_contexts(job, policy=policy)
         if contexts:
             _validate_blocking_job(job, contexts=contexts)
+            blocking_jobs[job_id] = (job, contexts)
             blocking.extend(contexts)
+    for job_id, (job, contexts) in blocking_jobs.items():
+        nonblocking_dependencies = sorted(
+            dependency
+            for dependency in _dependency_ids(job, contexts=contexts)
+            if dependency not in blocking_jobs
+        )
+        if nonblocking_dependencies:
+            raise RequiredStatusChecksError(
+                "blocking workflow jobs may depend only on blocking jobs: "
+                f"job={job_id!r}, dependencies={nonblocking_dependencies!r}"
+            )
     missing_advisory = policy.advisory_contexts - observed_advisory
     if missing_advisory:
         raise RequiredStatusChecksError(
