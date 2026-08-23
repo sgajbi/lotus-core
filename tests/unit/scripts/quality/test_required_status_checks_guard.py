@@ -1429,34 +1429,57 @@ def test_blocking_policy_rejects_unadmitted_environment_keys(scope: str, variabl
 
 
 @pytest.mark.parametrize(
-    ("scope", "variable"),
+    ("scope", "variable", "value"),
     [
-        ("workflow", "COMPOSE_DOCKER_CLI_BUILD"),
-        ("workflow", "DOCKER_BUILDKIT"),
-        ("workflow", "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24"),
-        ("workflow", "NODE_VERSION"),
-        ("workflow", "PIP_DISABLE_PIP_VERSION_CHECK"),
-        ("workflow", "PYTHONUNBUFFERED"),
-        ("workflow", "PYTHON_VERSION"),
-        ("job", "LOTUS_PLATFORM_ROOT"),
-        ("step", "DEMO_DATA_PACK_HISTORY_DAYS"),
-        ("step", "DEMO_DATA_PACK_INGEST_ONLY"),
-        ("step", "DEMO_DATA_PACK_PORTFOLIO_IDS"),
-        ("step", "E2E_INGESTION_URL"),
-        ("step", "E2E_QUERY_URL"),
-        ("step", "GH_TOKEN"),
-        ("step", "HOST_DATABASE_URL"),
-        ("step", "LOTUS_COVERAGE_CHANGED_BASE"),
-        ("step", "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID"),
-        ("step", "LOTUS_RUNTIME_IMAGE_SET_GROUP"),
-        ("step", "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL"),
-        ("step", "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH"),
-        ("step", "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA"),
-        ("step", "LOTUS_TESTS_COMPOSE_LOG_FILE"),
-        ("step", "LOTUS_TEST_ENV_PROFILE"),
+        ("workflow", "COMPOSE_DOCKER_CLI_BUILD", "1"),
+        ("workflow", "DOCKER_BUILDKIT", "1"),
+        ("workflow", "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24", "true"),
+        ("workflow", "NODE_VERSION", "22"),
+        ("workflow", "PIP_DISABLE_PIP_VERSION_CHECK", "1"),
+        ("workflow", "PYTHONUNBUFFERED", "1"),
+        ("workflow", "PYTHON_VERSION", "3.12"),
+        ("job", "LOTUS_PLATFORM_ROOT", "${{ github.workspace }}/lotus-platform"),
+        ("step", "DEMO_DATA_PACK_HISTORY_DAYS", "240"),
+        ("step", "DEMO_DATA_PACK_INGEST_ONLY", "true"),
+        ("step", "DEMO_DATA_PACK_PORTFOLIO_IDS", "DEMO_DPM_EUR_001"),
+        ("step", "E2E_INGESTION_URL", "http://localhost:8400"),
+        ("step", "E2E_QUERY_URL", "http://localhost:8401"),
+        ("step", "GH_TOKEN", "${{ github.token }}"),
+        (
+            "step",
+            "HOST_DATABASE_URL",
+            "postgresql://user:password@localhost:57432/portfolio_db",
+        ),
+        (
+            "step",
+            "LOTUS_COVERAGE_CHANGED_BASE",
+            "${{ github.event_name == 'pull_request' && "
+            "format('origin/{0}', github.base_ref) || 'HEAD~1' }}",
+        ),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID", "${{ github.run_id }}"),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_GROUP", "pr-runtime-image-set"),
+        (
+            "step",
+            "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL",
+            "${{ github.server_url }}/${{ github.repository }}",
+        ),
+        (
+            "step",
+            "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH",
+            "${{ github.head_ref || github.ref_name }}",
+        ),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA", "${{ github.sha }}"),
+        (
+            "step",
+            "LOTUS_TESTS_COMPOSE_LOG_FILE",
+            "output/e2e-smoke/e2e-smoke-logs.txt",
+        ),
+        ("step", "LOTUS_TEST_ENV_PROFILE", "e2e"),
     ],
 )
-def test_blocking_policy_accepts_inventoried_environment_key(scope: str, variable: str) -> None:
+def test_blocking_policy_accepts_inventoried_environment_value(
+    scope: str, variable: str, value: str
+) -> None:
     workflow: dict[str, Any] = {
         "jobs": {
             "security": {
@@ -1472,11 +1495,11 @@ def test_blocking_policy_accepts_inventoried_environment_key(scope: str, variabl
         },
     }
     if scope == "workflow":
-        workflow["env"] = {variable: "admitted"}
+        workflow["env"] = {variable: value}
     elif scope == "job":
-        workflow["jobs"]["security"]["env"] = {variable: "admitted"}
+        workflow["jobs"]["security"]["env"] = {variable: value}
     else:
-        workflow["jobs"]["security"]["steps"][0]["env"] = {variable: "admitted"}
+        workflow["jobs"]["security"]["steps"][0]["env"] = {variable: value}
     policy = WorkflowPolicy(
         path=Path("fixture.yml"),
         policy="gate_jobs_blocking",
@@ -1486,6 +1509,45 @@ def test_blocking_policy_accepts_inventoried_environment_key(scope: str, variabl
     assert blocking_contexts_for_workflow(workflow, policy=policy) == (
         "Quality Baseline / Security Gate",
     )
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("LOTUS_COVERAGE_CHANGED_BASE", "HEAD"),
+        (
+            "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA",
+            "${{ github.event.pull_request.head.sha }}",
+        ),
+        ("LOTUS_TEST_ENV_PROFILE", "local"),
+        ("PYTHON_VERSION", "3.11"),
+        ("LOTUS_PLATFORM_ROOT", "${{ github.workspace }}/foreign-platform"),
+        ("PYTHONUNBUFFERED", 1),
+    ],
+)
+def test_blocking_policy_rejects_unadmitted_environment_values(
+    variable: str, value: object
+) -> None:
+    workflow: dict[str, Any] = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "env": {variable: value},
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match=rf"environment value is not admitted: .*key={variable}",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
 
 
 def test_blocking_policy_rejects_a_malformed_workflow_environment() -> None:
