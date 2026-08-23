@@ -55,6 +55,7 @@ fail closed; pipelines and multi-command implementation belong inside a reviewed
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
 environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
 and enforcement working-directory overrides remain prohibited;
+pre-enforcement `GITHUB_ENV`/`GITHUB_PATH` mutation and ungoverned action steps also fail closed;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared

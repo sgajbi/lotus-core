@@ -483,7 +483,7 @@ def test_blocking_policy_rejects_an_auxiliary_action_enforcement_marker() -> Non
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="must not be an auxiliary action"):
+    with pytest.raises(RequiredStatusChecksError, match="unsupported action"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -572,8 +572,136 @@ def test_blocking_policy_rejects_an_unknown_action_as_the_only_control() -> None
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="exactly one unconditional id: enforce step",
+        match="unsupported auxiliary action",
     ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_an_unknown_enforcement_action() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "uses": "vendor/control@v1"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="unsupported action"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize(
+    "setup_command",
+    [
+        'echo "MAKEFLAGS=-n" >> "$GITHUB_ENV"',
+        'echo "/tmp/poison" >> "$GITHUB_PATH"',
+        'echo "::set-env name=MAKEFLAGS::-n"',
+        'echo "::add-path::/tmp/poison"',
+    ],
+)
+def test_blocking_policy_rejects_setup_runtime_poisoning(setup_command: str) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {"name": "Setup", "run": setup_command},
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    },
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="mutate enforcement runtime"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_allows_setup_output_without_runtime_mutation() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "id": "cache-key",
+                        "name": "Resolve cache key",
+                        "run": 'echo "key=value" >> "$GITHUB_OUTPUT"',
+                    },
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    },
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "Quality Baseline / Security Gate",
+    )
+
+
+@pytest.mark.parametrize(
+    ("setup_step", "match"),
+    [
+        ({"name": "Setup", "run": False}, "run must be a string"),
+        ({"name": "Setup", "uses": False}, "uses must be a string"),
+        (
+            {
+                "name": "Setup",
+                "run": "make install-ci",
+                "uses": "actions/checkout@v6",
+            },
+            "cannot define both run and uses",
+        ),
+    ],
+)
+def test_blocking_policy_rejects_malformed_setup_execution_shape(
+    setup_step: dict[str, object], match: str
+) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    setup_step,
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    },
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match=match):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 

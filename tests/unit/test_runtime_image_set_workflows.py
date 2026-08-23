@@ -92,8 +92,17 @@ def _assert_runtime_image_consumers(
         assert "prebuild_ci_images.py" not in commands
         assert "runtime_image_set.py load-verify" in commands
         assert '--expected-commit-sha "${GITHUB_SHA}"' in commands
-        assert "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" in commands
-        assert '>> "${GITHUB_ENV}"' in commands
+        assert "GITHUB_ENV" not in commands
+        runtime_controls = [
+            step
+            for step in _steps(job)
+            if str(step.get("run", "")).startswith("make ") and step.get("run") != "make install-ci"
+        ]
+        assert runtime_controls
+        assert all(
+            step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
+            for step in runtime_controls
+        )
         download = next(
             step for step in _steps(job) if step.get("name") == "Download runtime image set"
         )

@@ -13,6 +13,18 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/checkout@",
     "actions/upload-artifact@",
 )
+_AUXILIARY_ACTION_PREFIXES = (
+    "actions/cache@",
+    "actions/cache/restore@",
+    "actions/cache/save@",
+    "actions/checkout@",
+    "actions/download-artifact@",
+    "actions/setup-node@",
+    "actions/setup-python@",
+    "actions/upload-artifact@",
+    "docker/setup-buildx-action@",
+)
+_ENFORCEMENT_ACTION_PREFIXES = ("reviewdog/action-actionlint@",)
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset(
     {"BASH_ENV", "GNUMAKEFLAGS", "MAKEFILES", "MAKEFLAGS", "MFLAGS"}
@@ -29,6 +41,7 @@ _BARE_ENFORCEMENT_COMMAND = re.compile(
     r"python[ \t]+scripts/development/update_ci_tooling_lock\.py"
     r"[ \t]+--check[ \t]+--platform[ \t]+windows)$"
 )
+_RUNTIME_MUTATION_CHANNEL = re.compile(r"(?:GITHUB_ENV|GITHUB_PATH|::(?:add-path|set-env)(?::|\s))")
 
 
 def default_run_shell(configuration: Mapping[str, Any], *, scope: str) -> str | None:
@@ -74,9 +87,34 @@ def _validate_enforcement_action(
     step: Mapping[str, Any], *, context_text: str, step_name: object
 ) -> None:
     action = step.get("uses")
-    if isinstance(action, str) and action.startswith(_CONDITIONAL_AUXILIARY_ACTION_PREFIXES):
+    if action is not None and (
+        not isinstance(action, str) or not action.startswith(_ENFORCEMENT_ACTION_PREFIXES)
+    ):
         raise RequiredStatusChecksError(
-            f"blocking workflow enforce step must not be an auxiliary action: {context_text}; "
+            f"blocking workflow enforce step uses an unsupported action: {context_text}; "
+            f"step={step_name!r}"
+        )
+
+
+def _validate_non_enforcement_step(
+    step: Mapping[str, Any], *, before_enforcement: bool, context_text: str, step_name: object
+) -> None:
+    action = step.get("uses")
+    if action is not None and (
+        not isinstance(action, str) or not action.startswith(_AUXILIARY_ACTION_PREFIXES)
+    ):
+        raise RequiredStatusChecksError(
+            f"blocking workflow step uses an unsupported auxiliary action: {context_text}; "
+            f"step={step_name!r}"
+        )
+    run_command = step.get("run")
+    if (
+        before_enforcement
+        and isinstance(run_command, str)
+        and _RUNTIME_MUTATION_CHANNEL.search(run_command) is not None
+    ):
+        raise RequiredStatusChecksError(
+            f"blocking workflow setup step may mutate enforcement runtime: {context_text}; "
             f"step={step_name!r}"
         )
 
@@ -183,6 +221,7 @@ def _validate_blocking_step(
     phony_make_targets: frozenset[str],
     default_shell: str | None,
     default_environment: Mapping[str, Any],
+    before_enforcement: bool,
 ) -> bool:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
@@ -190,12 +229,33 @@ def _validate_blocking_step(
             f"blocking workflow job step must be an object: {context_text}"
         )
     step_name = step.get("name", "<unnamed step>")
+    run_command = step.get("run")
+    action = step.get("uses")
+    if run_command is not None and not isinstance(run_command, str):
+        raise RequiredStatusChecksError(
+            f"blocking workflow step run must be a string: {context_text}; step={step_name!r}"
+        )
+    if action is not None and not isinstance(action, str):
+        raise RequiredStatusChecksError(
+            f"blocking workflow step uses must be a string: {context_text}; step={step_name!r}"
+        )
+    if run_command is not None and action is not None:
+        raise RequiredStatusChecksError(
+            f"blocking workflow step cannot define both run and uses: {context_text}; "
+            f"step={step_name!r}"
+        )
     if "continue-on-error" in step:
         raise RequiredStatusChecksError(
             f"blocking workflow steps must not tolerate failure: {context_text}; step={step_name!r}"
         )
     _validate_step_condition(step, context_text=context_text, step_name=step_name)
     if step.get("id") != "enforce":
+        _validate_non_enforcement_step(
+            step,
+            before_enforcement=before_enforcement,
+            context_text=context_text,
+            step_name=step_name,
+        )
         return False
     _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
     if "working-directory" in step:
@@ -207,7 +267,6 @@ def _validate_blocking_step(
         raise RequiredStatusChecksError(
             f"blocking workflow enforce step must execute run or uses: {context_text}"
         )
-    run_command = step.get("run")
     if isinstance(run_command, str):
         environment = effective_environment(
             step,
@@ -281,17 +340,18 @@ def validate_blocking_job(
         inherited=workflow_environment,
         scope=f"blocking job {context_text}",
     )
-    enforcement_steps = sum(
-        _validate_blocking_step(
+    enforcement_steps = 0
+    for step in steps or ():
+        is_enforcement = _validate_blocking_step(
             step,
             job=job,
             contexts=contexts,
             phony_make_targets=phony_make_targets,
             default_shell=job_shell or workflow_shell,
             default_environment=job_environment,
+            before_enforcement=enforcement_steps == 0,
         )
-        for step in steps or ()
-    )
+        enforcement_steps += int(is_enforcement)
     if enforcement_steps != 1:
         raise RequiredStatusChecksError(
             "blocking workflow jobs must declare exactly one unconditional id: enforce step: "

@@ -44,7 +44,10 @@ evidence must be explicit and cannot be mistaken for release authorization.
    multi-target tokens fail closed. Every admitted static or resolved target must also be declared
    by GNU Make's delimited effective-database Files section, so parse-time/recipe output,
    serialized variable bodies, inactive declarations, ordinary files, undeclared rules, and
-   missing Makefile authority fail closed. Enforcement working-directory overrides fail closed. It requires blocking-job
+   missing Makefile authority fail closed. Enforcement working-directory overrides fail closed.
+   Pre-enforcement steps cannot mutate `GITHUB_ENV`/`GITHUB_PATH`, and actions are restricted to
+   governed auxiliary or enforcement families. Runtime-image verified state is bound directly to
+   post-verification control steps instead of persisted through `GITHUB_ENV`. It requires blocking-job
    dependencies to be validated blocking jobs, inventories advisory producers in global
    context-uniqueness checks, and scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -99,6 +102,8 @@ special-target syntax, and multi-target tokens. Static and resolved targets must
 active repository-root `.PHONY:` declaration in GNU Make's delimited effective-database Files
 section; parse-time/recipe output, serialized variable bodies, inactive declarations, existing
 files, and non-phony rules cannot authorize merge. The marker must run at repository root.
+Pre-enforcement steps cannot write `GITHUB_ENV`/`GITHUB_PATH`; only governed action families are
+accepted, and runtime-image consumers carry verified state only on post-verification control steps.
 The marker proves an explicitly declared fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
@@ -114,7 +119,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `210 passed`, with 91.36% branch-aware
+- focused workflow/manifest pack after final review hardening: `219 passed`, with 91.70% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;

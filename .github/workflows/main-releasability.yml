@@ -266,10 +266,11 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic docker endpoint smoke
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-docker-smoke
       - name: Upload smoke artifacts
         if: always()
@@ -305,11 +306,11 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run endpoint latency gate
         env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
           DEMO_DATA_PACK_HISTORY_DAYS: "240"
           DEMO_DATA_PACK_PORTFOLIO_IDS: "DEMO_DPM_EUR_001"
           DEMO_DATA_PACK_INGEST_ONLY: "true"
@@ -348,10 +349,11 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic performance load gate
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-performance-load-gate
       - name: Upload performance load artifacts
         if: always()
@@ -413,11 +415,11 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run full E2E suite
         env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
           LOTUS_TEST_ENV_PROFILE: e2e
           E2E_INGESTION_URL: http://localhost:8400
           E2E_QUERY_URL: http://localhost:8401
@@ -455,10 +457,11 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic full performance load gate
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-performance-load-gate-full
       - name: Upload full performance load artifacts
         if: always()
@@ -494,14 +497,19 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic failure recovery gate
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-failure-recovery-gate
       - name: Run fixed-income book-cost recovery gate
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-fixed-income-book-cost-recovery-gate
       - name: Run deterministic derived-state recovery gate
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-derived-state-recovery-gate
       - name: Upload failure recovery artifacts
         if: always()
@@ -545,10 +553,11 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
-          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run governed institutional completion gate
+        env:
+          LOTUS_RUNTIME_IMAGE_SET_VERIFIED: "true"
         run: make test-institutional-completion-gate
       - name: Upload institutional completion artifacts
         if: always()
