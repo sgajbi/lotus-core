@@ -4156,11 +4156,11 @@ Most relevant current governance:
      to exact `bash` so pipeline failures propagate, reject unspecified/non-`bash` shells and a
      named denylist of shell-level failure-tolerance, clustered Bash/Make disabling flags,
      effective workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or
-     `BASH_ENV`, plus dry-run and background-execution escapes,
+     `BASH_ENV`, plus dry-run, background-execution, and shell conditional escapes,
      require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
-     static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
+     static or dynamic required-context collisions including empty matrix substitutions, reject non-bare workflow name expressions, bind
      manifest authority only to GitHub Actions app `15368`, and fail on missing, stale, duplicate,
      ambiguous, redirected, advisory-as-required, or undeclared contexts. `make lint` must retain both the
      required-check guard and import-boundary enforcement. Main Releasability compares the manifest with live
