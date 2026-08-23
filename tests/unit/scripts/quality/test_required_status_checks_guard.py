@@ -356,6 +356,22 @@ def test_make_authority_rejects_execution_state_functions_in_recipes(
         required_checks_workflow._load_phony_make_targets(makefile_path)
 
 
+def test_make_authority_rejects_a_continued_authority_function_at_eof(
+    tmp_path: Path,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        ".PHONY: security-audit\nsecurity-audit:\n\t$(eval SHELL:=/bin/true); false \\",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile phony authority must be static: .*line=3",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
 @pytest.mark.parametrize(
     "execution_state",
     [
