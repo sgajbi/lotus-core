@@ -14,6 +14,7 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/upload-artifact@",
 )
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
+_DISABLING_ENVIRONMENT_VARIABLES = frozenset({"BASH_ENV", "GNUMAKEFLAGS", "MAKEFLAGS"})
 _SHELL_FAILURE_SUPPRESSION = re.compile(
     r"(?:\|\|\s*(?:true|:)(?:\s|$)|"
     r"(?:^|[;&]\s*)set\s+\+(?:[A-Za-z]*e[A-Za-z]*|o\s+(?:errexit|pipefail))(?:\s|$)|"
@@ -71,17 +72,30 @@ def _validate_enforcement_action(
         )
 
 
-def validate_enforcement_environment(configuration: Mapping[str, Any], *, scope: str) -> None:
+def effective_environment(
+    configuration: Mapping[str, Any],
+    *,
+    inherited: Mapping[str, Any] | None = None,
+    scope: str,
+) -> dict[str, Any]:
     environment = configuration.get("env")
+    effective = dict(inherited or {})
     if environment is None:
-        return
+        return effective
     if not isinstance(environment, dict):
         raise RequiredStatusChecksError(
             f"blocking workflow enforcement environment must be an object: {scope}"
         )
-    if "MAKEFLAGS" in environment:
+    effective.update(environment)
+    return effective
+
+
+def _validate_enforcement_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
+    disabling_variables = sorted(_DISABLING_ENVIRONMENT_VARIABLES & environment.keys())
+    if disabling_variables:
         raise RequiredStatusChecksError(
-            f"blocking workflow enforcement environment must not set MAKEFLAGS: {scope}"
+            "blocking workflow enforce step environment injects a disabling variable: "
+            f"{context_text}; variables={disabling_variables!r}"
         )
 
 
@@ -104,7 +118,11 @@ def _effective_enforcement_shell(
 
 
 def _validate_blocking_step(
-    step: object, *, contexts: tuple[str, ...], default_shell: str | None
+    step: object,
+    *,
+    contexts: tuple[str, ...],
+    default_shell: str | None,
+    default_environment: Mapping[str, Any],
 ) -> bool:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
@@ -120,7 +138,6 @@ def _validate_blocking_step(
     if step.get("id") != "enforce":
         return False
     _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
-    validate_enforcement_environment(step, scope=f"enforce step {context_text}")
     executable = step.get("run") or step.get("uses")
     if not isinstance(executable, str):
         raise RequiredStatusChecksError(
@@ -128,6 +145,12 @@ def _validate_blocking_step(
         )
     run_command = step.get("run")
     if isinstance(run_command, str):
+        environment = effective_environment(
+            step,
+            inherited=default_environment,
+            scope=f"enforce step {context_text}",
+        )
+        _validate_enforcement_environment(environment, context_text=context_text)
         effective_shell = _effective_enforcement_shell(
             step, default_shell=default_shell, context_text=context_text
         )
@@ -162,7 +185,11 @@ def dependency_ids(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> tupl
 
 
 def validate_blocking_job(
-    job: Mapping[str, Any], *, contexts: tuple[str, ...], workflow_shell: str | None
+    job: Mapping[str, Any],
+    *,
+    contexts: tuple[str, ...],
+    workflow_shell: str | None,
+    workflow_environment: Mapping[str, Any],
 ) -> None:
     context_text = ", ".join(contexts)
     if "if" in job:
@@ -173,18 +200,23 @@ def validate_blocking_job(
         raise RequiredStatusChecksError(
             f"blocking workflow jobs must not tolerate failure: {context_text}"
         )
-    validate_enforcement_environment(job, scope=f"blocking job {context_text}")
     steps = job.get("steps")
     if steps is not None and not isinstance(steps, list):
         raise RequiredStatusChecksError(
             f"blocking workflow job steps must be a list: {context_text}"
         )
     job_shell = default_run_shell(job, scope=f"blocking job {context_text}")
+    job_environment = effective_environment(
+        job,
+        inherited=workflow_environment,
+        scope=f"blocking job {context_text}",
+    )
     enforcement_steps = sum(
         _validate_blocking_step(
             step,
             contexts=contexts,
             default_shell=job_shell or workflow_shell,
+            default_environment=job_environment,
         )
         for step in steps or ()
     )
