@@ -113,8 +113,9 @@ after fencing Core repository roots.
    Linux default does not guarantee `pipefail`. Workflow-, job-, and step-level shell policy cannot
    remove fail-fast pipeline behavior. A named denylist rejects explicit escapes through
    failure-tolerance operators, Bash option clusters that disable `errexit` or `pipefail`, Make
-   short-option clusters containing `-n`/`-q`, `MAKEFLAGS` assignments, long dry-run flags, and
-   background execution (`&`, `nohup`, `setsid`, `coproc`, or `disown`). A
+   short-option clusters containing `-n`/`-q`, `MAKEFLAGS` assignments in scripts or effective
+   workflow/job/step environments, long dry-run flags, and background execution (`&`, `nohup`,
+   `setsid`, `coproc`, or `disown`). A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for
    the business semantics of the invoked command.
