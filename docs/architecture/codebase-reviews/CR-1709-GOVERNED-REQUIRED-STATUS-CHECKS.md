@@ -41,7 +41,11 @@ evidence must be explicit and cannot be mistaken for release authorization.
 3. Live verification requires GitHub's app-bound `checks` response, not legacy context strings.
    Missing, stale, wrong-app, malformed, or non-strict protection fails closed.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
-   workflow-governance target includes mutation-style manifest tests.
+   workflow-governance target includes mutation-style manifest tests. Manifest/model parsing,
+   workflow-policy analysis, live GitHub protection, and CLI orchestration are separate owned
+   modules; the same target hard-blocks Xenon complexity above `absolute C`, `module B`, or
+   `average B` and Radon maintainability below rank B for the package, then applies scoped MyPy,
+   Bandit, and Vulture checks before mutation tests with a 90% branch-aware coverage floor.
 5. Main Releasability performs the live comparison read-only. Repository history (CR-1087) proves
    `github.token` lacks branch-protection read authority, so the workflow requires a dedicated
    fine-grained `LOTUS_BRANCH_PROTECTION_READ_TOKEN` with Administration read-only permission.
@@ -74,7 +78,11 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `59 passed`;
+- focused workflow/manifest pack after final review hardening: `92 passed`, with 92% branch-aware
+  package coverage against a 90% hard floor;
+- required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
+  maintainability ranks A/A/B/A/A across the owned package and CLI; scoped MyPy, Bandit, and
+  Vulture passed;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;
