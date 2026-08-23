@@ -40,6 +40,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
 6. Live branch protection is reconciled only after the exact PR head has posted and passed all 37
    checks. The guard's `--print-desired-protection` mode emits the exact atomic PATCH body. This
    avoids hand-copy drift and making an absent context required before it has posted.
+7. Both governed required-check workflows subscribe to `merge_group`; required Quality Baseline
+   contexts therefore post on the synthetic merge-queue commit instead of deadlocking the queue.
 
 ## Meaningful Proof
 
@@ -53,7 +55,7 @@ is retained as characterization, not bypassed.
 
 Local evidence at signed head `2b4dca688`:
 
-- focused workflow/manifest pack after review hardening: `44 passed`;
+- focused workflow/manifest pack after review hardening: `45 passed`;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;

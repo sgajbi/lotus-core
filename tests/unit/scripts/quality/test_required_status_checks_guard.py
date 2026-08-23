@@ -295,3 +295,13 @@ def test_main_releasability_verifies_live_protection_read_only() -> None:
         "run": "make required-status-checks-live-guard",
     }
     assert workflow["permissions"] == {"actions": "read", "contents": "read"}
+
+
+def test_every_required_check_workflow_runs_for_merge_groups() -> None:
+    manifest = load_manifest()
+
+    for policy in manifest.workflow_policies:
+        workflow = yaml.safe_load(policy.path.read_text(encoding="utf-8"))
+        triggers = workflow.get("on", workflow.get(True))
+
+        assert triggers["merge_group"] == {"branches": ["main"]}, policy.path
