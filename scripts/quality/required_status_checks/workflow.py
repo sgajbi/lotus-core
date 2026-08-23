@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess  # nosec B404
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
 import yaml
 
@@ -35,6 +36,10 @@ _MAKE_DATABASE_COMMAND = (
 _MAKE_DATABASE_START = "# Make data base, printed on "
 _MAKE_DATABASE_END = "# Finished Make data base on "
 _MAKE_DATABASE_FILES = "# Files"
+_MAKE_CONDITIONAL_DIRECTIVE = re.compile(r"^(?:ifeq|ifneq|ifdef|ifndef|else|endif)(?:\s|$)")
+_MAKE_INCLUDE_DIRECTIVE = re.compile(r"^(?:-?include|sinclude)(?:\s|$)")
+_STATIC_PHONY_DECLARATION = re.compile(r"^\.PHONY:\s*(.*?)\s*$")
+_STATIC_PHONY_TARGET = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -166,26 +171,52 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
     return tuple(contexts)
 
 
-def _load_phony_make_targets(
-    path: Path, *, configured_environment: Mapping[str, Any] | None = None
-) -> frozenset[str]:
+def _static_phony_targets(path: Path) -> frozenset[str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
+    targets: set[str] = set()
+    for line_number, raw_line in enumerate(lines, start=1):
+        if raw_line.startswith("\t"):
+            continue
+        line = raw_line.strip()
+        if _MAKE_CONDITIONAL_DIRECTIVE.match(line) or _MAKE_INCLUDE_DIRECTIVE.match(line):
+            raise RequiredStatusChecksError(
+                f"Makefile phony authority must be static: {path}; line={line_number}"
+            )
+        declaration = _STATIC_PHONY_DECLARATION.match(line)
+        if declaration is None:
+            continue
+        target_text = declaration.group(1)
+        declared_targets = target_text.split()
+        if (
+            not declared_targets
+            or "$(" in target_text
+            or "${" in target_text
+            or target_text.endswith("\\")
+            or any(_STATIC_PHONY_TARGET.fullmatch(target) is None for target in declared_targets)
+        ):
+            raise RequiredStatusChecksError(
+                f"Makefile phony authority must be static: {path}; line={line_number}"
+            )
+        targets.update(declared_targets)
+    return frozenset(targets)
+
+
+def _load_phony_make_targets(path: Path) -> frozenset[str]:
     try:
         path.stat()
     except OSError as exc:
         raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
-    make_environment = os.environ.copy()
-    for variable in ("GNUMAKEFLAGS", "MAKEFILES", "MAKEFLAGS", "MFLAGS"):
-        make_environment.pop(variable, None)
-    for key, value in (configured_environment or {}).items():
-        if not isinstance(key, str) or not isinstance(value, str):
-            raise RequiredStatusChecksError(
-                f"blocking workflow Make environment must contain string entries: {path}"
-            )
-        make_environment[key] = value
-    make_environment["LC_ALL"] = "C"
+    static_targets = _static_phony_targets(path)
+    make_executable = shutil.which("make")
+    if make_executable is None:
+        raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
+    make_environment = {"PATH": os.environ.get("PATH", ""), "LC_ALL": "C"}
     try:
         result = subprocess.run(  # nosec B603
-            (*_MAKE_DATABASE_COMMAND, "--file", path.name),
+            (make_executable, *_MAKE_DATABASE_COMMAND[1:], "--file", path.name),
             cwd=path.parent,
             capture_output=True,
             check=False,
@@ -205,35 +236,13 @@ def _load_phony_make_targets(
     if result.returncode not in {0, 1}:
         raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
     output_lines = result.stdout.splitlines()
-    targets = _phony_targets_from_files_section(_make_database_files_lines(output_lines, path=path))
+    effective_targets = _phony_targets_from_files_section(
+        _make_database_files_lines(output_lines, path=path)
+    )
+    targets = effective_targets & static_targets
     if not targets:
         raise RequiredStatusChecksError(f"Makefile has no declared phony targets: {path}")
     return frozenset(targets)
-
-
-def _phony_target_resolver(
-    *, path: Path, fixed_targets: frozenset[str] | None
-) -> Callable[[Mapping[str, Any]], frozenset[str]]:
-    if fixed_targets is not None:
-        return lambda _environment: fixed_targets
-    cache: dict[tuple[tuple[str, str], ...], frozenset[str]] = {}
-
-    def resolve(environment: Mapping[str, Any]) -> frozenset[str]:
-        if not all(
-            isinstance(key, str) and isinstance(value, str) for key, value in environment.items()
-        ):
-            raise RequiredStatusChecksError(
-                f"blocking workflow Make environment must contain string entries: {path}"
-            )
-        cache_key = tuple(sorted(environment.items()))
-        if cache_key not in cache:
-            cache[cache_key] = _load_phony_make_targets(
-                path,
-                configured_environment=dict(cache_key),
-            )
-        return cache[cache_key]
-
-    return resolve
 
 
 def blocking_contexts_for_workflow(
@@ -251,9 +260,10 @@ def blocking_contexts_for_workflow(
     observed_advisory: set[str] = set()
     workflow_shell = default_run_shell(workflow, scope=f"workflow {policy.path}")
     workflow_environment = effective_environment(workflow, scope=f"workflow {policy.path}")
-    resolve_phony_make_targets = _phony_target_resolver(
-        path=makefile_path,
-        fixed_targets=phony_make_targets,
+    governed_phony_targets = (
+        phony_make_targets
+        if phony_make_targets is not None
+        else _load_phony_make_targets(makefile_path)
     )
     for job_id, job in jobs.items():
         if not isinstance(job_id, str) or not job_id:
@@ -269,7 +279,7 @@ def blocking_contexts_for_workflow(
             validate_blocking_job(
                 job,
                 contexts=contexts,
-                phony_make_targets_for_environment=resolve_phony_make_targets,
+                phony_make_targets=governed_phony_targets,
                 workflow_shell=workflow_shell,
                 workflow_environment=workflow_environment,
             )
@@ -343,7 +353,7 @@ def _governed_contexts(
     contexts: list[str] = []
     required_producers: dict[str, Path] = {}
     all_producers: dict[str, list[str]] = {}
-    _load_phony_make_targets(repository_root / "Makefile")
+    phony_make_targets = _load_phony_make_targets(repository_root / "Makefile")
     for policy in manifest.workflow_policies:
         workflow = _load_workflow(repository_root / policy.path, display_path=policy.path)
         _validate_workflow_triggers(workflow, path=policy.path)
@@ -356,7 +366,7 @@ def _governed_contexts(
         policy_contexts = blocking_contexts_for_workflow(
             workflow,
             policy=policy,
-            makefile_path=repository_root / "Makefile",
+            phony_make_targets=phony_make_targets,
         )
         contexts.extend(policy_contexts)
         required_producers.update(dict.fromkeys(policy_contexts, policy.path))

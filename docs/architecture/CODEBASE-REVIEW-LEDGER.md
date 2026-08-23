@@ -16,11 +16,11 @@ quoting, redirection, multiple lines, Make flags, and wrapper commands fail clos
 matrix targets are resolved from every include row and must each match the same bare target-name
 grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens fail closed. Every admitted static or resolved target must also carry GNU
-Make's exact per-target phony flag in the delimited effective-database Files section evaluated
-under that run step's inherited workflow/job/step environment. The evaluation is cached only for
-identical effective environments, so environment-dependent inactive declarations, parse-time/recipe
-output, serialized variable bodies, ordinary files, undeclared rules, and missing Makefile authority
-fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
+Make's exact per-target phony flag in the delimited effective-database Files section evaluated with
+only fixed `PATH` and `LC_ALL=C`, and must appear in a literal static `.PHONY` declaration. Make
+conditionals, includes, dynamic/continued declarations, inherited `MAKELEVEL`/`CI`/runner state,
+parse-time/recipe output, serialized variable bodies, ordinary files, undeclared rules, and missing
+Makefile authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
 `windows-latest` runners, so containers, services, deployment environments, self-hosted labels,
 and runner expressions cannot replace the execution boundary. Configured environment keys must
 come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`,
@@ -57,7 +57,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 274 focused tests with 93.11% branch-aware package coverage against a 90%
+deadlock. Local evidence is 278 focused tests with 92.96% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

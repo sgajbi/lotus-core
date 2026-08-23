@@ -68,9 +68,10 @@ every referenced matrix target is resolved from each include row and must be one
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared
 by GNU Make's exact per-target phony flag in the delimited effective-database Files section evaluated
-under the run step's inherited workflow/job/step environment, so parse-time/recipe output, serialized
-variable bodies, environment-dependent inactive declarations, ordinary files, non-phony rules, and
-missing Makefile authority fail closed. It
+with only fixed `PATH` and `LC_ALL=C`, and appear in a literal static `.PHONY` declaration. Conditional
+directives, includes, dynamic or continued phony declarations, inherited process environment,
+parse-time/recipe output, serialized variable bodies, ordinary files, non-phony rules, and missing
+Makefile authority fail closed. It
 requires blocking dependencies to be fully validated blocking jobs, pins strict mode and the exact
 two governed workflow policies in code, and
 inventories advisory producers
