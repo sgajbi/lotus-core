@@ -97,11 +97,20 @@ after fencing Core repository roots.
 
 ## CI Posture
 
-1. Existing feature and PR gates remain authoritative for merge readiness.
-2. `Quality Baseline Report` is report-only and should not block PRs yet; its quality-tool installs
-   and commands still use the same exact repository lock as blocking local and CI lanes.
-3. The baseline should ratchet from report-only to regression-only once collection and tool
-   availability are stable.
+1. `contracts/ci/required-status-checks.v1.json` is the versioned authority for every check that
+   must block merge to `main`, including its GitHub Actions application identity.
+2. Every Pull Request Merge Gate job and every Quality Baseline job named `... Gate` is blocking.
+   `Quality Baseline / Report Only` is the sole explicit advisory job and cannot authorize merge.
+3. `make required-status-checks-guard` expands workflow matrices and fails on missing, stale,
+   duplicate, ambiguous, or undeclared check authority. `make lint` includes this guard and the
+   import-boundary gate.
+4. Main Releasability runs `make required-status-checks-live-guard` with the dedicated
+   `LOTUS_BRANCH_PROTECTION_READ_TOKEN` secret. That credential must be a fine-grained token with
+   Administration read-only authority for this repository; never substitute `github.token` or a
+   broad personal token. Missing/inadequate authority and live manifest drift fail the lane closed.
+5. Change branch protection only after the exact PR head has posted and passed every manifest-owned
+   context. Apply the complete app-bound set atomically; do not add/remove checks incrementally or
+   leave a check-name-only legacy context.
 
 ## Health And Readiness
 

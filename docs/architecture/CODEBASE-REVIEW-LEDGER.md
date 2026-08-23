@@ -1,5 +1,19 @@
 # Codebase Review Ledger
 
+CR-1709 governed required status checks (2026-08-23): branch protection required only 18 contexts
+while five Pull Request Merge Gate jobs/suites and all 14 Quality Baseline Gate jobs remained
+bypassable by auto-merge. One versioned manifest now owns 37 sorted app-bound contexts, strict mode,
+workflow sources, and the sole advisory `Quality Baseline / Report Only` context. A reusable guard
+expands matrix suites and rejects malformed, missing, stale, duplicate, ambiguous, undeclared, or
+wrong-app authority. `make lint` now reaches both import-boundary and required-check enforcement;
+Main Releasability performs read-only live parity through a dedicated fine-grained Administration-
+read-only secret because the default workflow token is known to lack that authority. Mutation tests
+prove undeclared Gate, advisory, matrix, and live drift behavior. No runtime, API/OpenAPI, event,
+calculation, persistence, dependency, image, or topology contract changes. Status: fixed locally;
+protected PR, live branch-protection reconciliation, exact-main proof, wiki publication/parity,
+issue closure, and hygiene pending. Evidence:
+[CR-1709-GOVERNED-REQUIRED-STATUS-CHECKS.md](./codebase-reviews/CR-1709-GOVERNED-REQUIRED-STATUS-CHECKS.md).
+
 CR-1708 lot quantity restatement (2026-08-22): same-instrument equity corporate actions now restate
 FIFO and AVCO original/open lot quantities through one exact ratio while conserving local/base
 basis. Non-representable per-lot results reject before mutation; typed restatement authority crosses

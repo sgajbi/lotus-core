@@ -33,6 +33,26 @@ Code-changing `synchronize` events still invalidate stale-head work and run the 
 gate for the new immutable head. Opened, reopened, and ready-for-review events retain their current
 full-gate behavior; broader same-head evidence reuse is outside this bounded control.
 
+### Required Check Authority
+
+`contracts/ci/required-status-checks.v1.json` is the single versioned authority for branch
+protection. It binds each required context to the GitHub Actions application ID, expands every
+Pull Request Merge Gate matrix suite, and includes all 14 Quality Baseline `... Gate` jobs.
+`Quality Baseline / Report Only` is the sole explicit advisory context; it retains diagnostics but
+cannot authorize merge.
+
+`make required-status-checks-guard` compares that manifest with both governed workflows and fails
+on a missing or stale check, undeclared gate/advisory job, duplicate context, malformed matrix, or
+wrong manifest shape. It is part of `make lint`, alongside `make quality-import-boundary-gate`, so
+the local/Feature/PR/Main enforcement path cannot silently omit either control.
+
+Main Releasability additionally runs `make required-status-checks-live-guard`. The command uses a
+dedicated fine-grained `LOTUS_BRANCH_PROTECTION_READ_TOKEN` with repository Administration
+read-only authority and compares strict mode plus the complete `(context, app_id)` set. The default
+workflow token cannot read branch protection and must not be used; missing read authority or drift
+fails exact-main evidence closed. Operators update branch protection only after all manifest-owned
+contexts are green on the exact PR head.
+
 Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
 platform, installer, dependency/packaging manifests, locks, and the cache implementation. A verified
 miss is saved immediately after dependency proof rather than after unrelated job gates. Main and
@@ -172,7 +192,12 @@ used by release enforcement and does not replace protected PR or exact-main proo
 - `make ci-main`
   main push releasability parity
 - `make lint`
-  complete-repository Ruff check and format proof plus governed domain and contract guards
+  complete-repository Ruff/format/import-boundary proof plus required-check, domain, and contract
+  guards
+- `make required-status-checks-guard`
+  local manifest/workflow/matrix/advisory consistency proof
+- `make required-status-checks-live-guard`
+  exact-main read-only branch-protection `(context, app_id)` parity proof
 - `make test-institutional-release-gates`
   scheduled/manual institutional completion and sign-off parity
 - `make test-transaction-processing-contract`
