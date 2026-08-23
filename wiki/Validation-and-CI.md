@@ -52,8 +52,9 @@ effective shell of every run step to be exact `bash` and its script to be one ba
 invocation: one Make target, a governed matrix target, or the exact Windows lock-closure command.
 Operators, substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands
 fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. Only
-the audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint actions are
-admitted, and each action has an explicit `with:` key/value policy. Alternate checkout is limited
+ten exact audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint action
+references are admitted; setup-Python is runner-specific and each action has an explicit `with:`
+key/value policy. Alternate checkout is limited
 to the credential-free nested platform checkout; cache paths are exact audited directories; artifact
 paths are literal, expression-free destinations below `output/`. The
 Docker image-set producer uses `make build-runtime-image-set`. Every blocking `run` or `uses` step's

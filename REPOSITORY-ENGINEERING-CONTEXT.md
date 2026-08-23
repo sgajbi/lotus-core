@@ -4158,9 +4158,10 @@ Most relevant current governance:
      to exact `bash` and its script to be one bare invocation: one active phony Make target, a governed matrix
      target, or the exact Windows lock-closure command. Operators, substitutions, quoting,
      redirection, multiple lines, Make flags, wrapper commands, and other shell syntax belong
-     inside a reviewed Make target, not in workflow shell text. Permit action steps only from the
-     audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set, with
-     action-specific `with:` key/value policy that confines alternate checkout and cache paths and
+     inside a reviewed Make target, not in workflow shell text. Permit action steps only at the ten
+     exact audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint
+     references, with runner-specific setup-Python versions and action-specific `with:` key/value
+     policy that confines alternate checkout and cache paths and
      requires literal, expression-free artifact destinations below `output/`. Continue rejecting
      every blocking step's effective workflow/job/step environment keys or exact values outside the
      closed governed-workflow inventory, including `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, Make control variables,

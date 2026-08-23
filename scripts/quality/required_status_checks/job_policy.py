@@ -223,6 +223,7 @@ def _validate_blocking_step(
     phony_make_targets: frozenset[str],
     default_shell: str | None,
     default_environment: Mapping[str, Any],
+    runner: str,
 ) -> bool:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
@@ -256,6 +257,7 @@ def _validate_blocking_step(
         enforcement=is_enforcement,
         context_text=context_text,
         step_name=step_name,
+        runner=runner,
     )
     if "working-directory" in step:
         raise RequiredStatusChecksError(
@@ -335,6 +337,8 @@ def validate_blocking_job(
             "blocking workflow job uses an unsupported key: "
             f"{context_text}; keys={unsupported_keys!r}"
         )
+    runner = job.get("runs-on")
+    runner_text = runner if isinstance(runner, str) else ""
     steps = job.get("steps")
     if steps is not None and not isinstance(steps, list):
         raise RequiredStatusChecksError(
@@ -355,6 +359,7 @@ def validate_blocking_job(
             phony_make_targets=phony_make_targets,
             default_shell=job_shell or workflow_shell,
             default_environment=job_environment,
+            runner=runner_text,
         )
         enforcement_steps += int(is_enforcement)
     if enforcement_steps != 1:
@@ -362,8 +367,7 @@ def validate_blocking_job(
             "blocking workflow jobs must declare exactly one unconditional id: enforce step: "
             f"{context_text}; observed={enforcement_steps}"
         )
-    runner = job.get("runs-on")
-    if not isinstance(runner, str) or runner not in _AUDITED_BLOCKING_JOB_RUNNERS:
+    if runner_text not in _AUDITED_BLOCKING_JOB_RUNNERS:
         raise RequiredStatusChecksError(
             f"blocking workflow job runner is not audited: {context_text}; runner={runner!r}"
         )

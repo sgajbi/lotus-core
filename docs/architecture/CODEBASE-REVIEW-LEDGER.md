@@ -29,9 +29,9 @@ and runner expressions cannot replace the execution boundary. Every blocking `ru
 effective environment keys and exact values must come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`,
 `LD_PRELOAD`, `MAKE`, `CI`, Make control variables, alternate coverage bases, runtime-image
 identities, profiles, platform paths, and run-step working-directory overrides fail closed. The positive run-command grammar rejects direct or indirect environment/path
-writes, workspace mutation, and command chaining; action steps are restricted to the audited
-checkout, setup, cache, artifact, Docker Buildx, and actionlint set with action-specific input
-key/value policy. Artifact destinations must be literal expression-free paths beneath `output/`, so
+writes, workspace mutation, and command chaining; action steps are restricted to ten exact audited
+checkout, setup, cache, artifact, Docker Buildx, and actionlint references with runner-specific
+setup-Python versions and action-specific input key/value policy. Artifact destinations must be literal expression-free paths beneath `output/`, so
 expression resolution cannot turn an apparently confined download into a repository-root write.
 Runtime-image consumers bind verification in the Make graph: each control target
 depends on `runtime-image-set-load-verify`, whose exact-`GITHUB_SHA` receipt is written only after
@@ -61,7 +61,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 308 focused tests with 93.23% branch-aware package coverage against a 90%
+deadlock. Local evidence is 328 focused tests with 93.38% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
