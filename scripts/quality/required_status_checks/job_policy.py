@@ -17,7 +17,7 @@ _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset({"BASH_ENV", "GNUMAKEFLAGS", "MAKEFLAGS"})
 _SHELL_FAILURE_SUPPRESSION = re.compile(
     r"(?:(?:^|[;\n])\s*(?:if|while|until)\b|"
-    r"\|\|\s*(?:true|:)(?:\s|$)|"
+    r"\|\||"
     r"(?:^|[;&]\s*)set\s+\+(?:[A-Za-z]*e[A-Za-z]*|o\s+(?:errexit|pipefail))(?:\s|$)|"
     r"\bmake\b[^\n]*(?:\s-(?!-)[A-Za-z]*[nq][A-Za-z]*(?:\s|$)|"
     r"\s--(?:dry-run|just-print|recon|question)(?:\s|$))|"

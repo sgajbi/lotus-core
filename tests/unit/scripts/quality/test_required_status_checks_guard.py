@@ -536,6 +536,7 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
     [
         "make security-audit || true",
         "make security-audit || :",
+        "make security-audit || echo ignored",
         "set +e\nmake security-audit",
         "set +eo pipefail\nmake security-audit",
         "set +o errexit\nmake security-audit",

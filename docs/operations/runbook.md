@@ -112,7 +112,7 @@ after fencing Core repository roots.
    effective shell must resolve to exactly `bash`; an unspecified shell is unsafe because GitHub's
    Linux default does not guarantee `pipefail`. Workflow-, job-, and step-level shell policy cannot
    remove fail-fast pipeline behavior. A named denylist rejects explicit escapes through
-   failure-tolerance operators, Bash option clusters that disable `errexit` or `pipefail`, Make
+   failure-tolerance operators including arbitrary OR lists, Bash option clusters that disable `errexit` or `pipefail`, Make
    short-option clusters containing `-n`/`-q`, and effective workflow/job/step environment injection
    through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`; it also rejects shell conditionals that can
    mask control failure, long dry-run flags, and
