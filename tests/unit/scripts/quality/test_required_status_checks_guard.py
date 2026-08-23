@@ -116,6 +116,12 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
         "$(info .PHONY: security-audit)\n"
         "$(info # Finished Make data base on forged)\n"
         "active:\n\t@true",
+        "define forged-database-body\n"
+        "# Files\n"
+        ".PHONY: security-audit\n"
+        "ignored\n"
+        "endef\n"
+        "active:\n\t@true",
     ],
 )
 def test_manifest_validation_rejects_forged_or_inactive_phony_authority(

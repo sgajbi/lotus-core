@@ -58,9 +58,9 @@ and enforcement working-directory overrides remain prohibited;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared
-by GNU Make's delimited effective repository-root `.PHONY` authority, so parse-time/recipe output,
-inactive conditional or unexpanded declarations, ordinary files, non-phony rules, and missing
-Makefile authority fail closed. It
+by GNU Make's delimited effective-database Files section, so parse-time/recipe output, serialized
+variable bodies, inactive declarations, ordinary files, non-phony rules, and missing Makefile
+authority fail closed. It
 requires blocking dependencies to be fully validated blocking jobs, pins strict mode and the exact
 two governed workflow policies in code, and
 inventories advisory producers

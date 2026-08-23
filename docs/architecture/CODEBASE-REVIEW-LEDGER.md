@@ -16,9 +16,9 @@ quoting, redirection, multiple lines, Make flags, and wrapper commands fail clos
 matrix targets are resolved from every include row and must each match the same bare target-name
 grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens fail closed. Every admitted static or resolved target must also be declared by
-GNU Make's delimited effective repository-root `.PHONY` authority, so parse-time/recipe output,
-inactive declarations, ordinary files, undeclared rules, and missing Makefile authority fail
-closed. Enforcement working-directory overrides and Make control-variable injection also fail
+GNU Make's delimited effective-database Files section, so parse-time/recipe output, serialized
+variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
+authority fail closed. Enforcement working-directory overrides and Make control-variable injection also fail
 closed. The guard requires blocking
 dependencies to be validated blocking jobs; pins strict mode and the exact governed workflow set;
 inventories advisory producers in global context-uniqueness proof; scans all
@@ -45,7 +45,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 209 focused tests with 91.54% branch-aware package coverage against a 90%
+deadlock. Local evidence is 210 focused tests with 91.36% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
