@@ -18,7 +18,9 @@ grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-tar
 multi-target tokens fail closed. Every admitted static or resolved target must also carry GNU
 Make's exact per-target phony flag in the delimited effective-database Files section, so parse-time/recipe output, serialized
 variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
-authority fail closed. Run-step working-directory overrides and `GITHUB_SHA`/Make control-variable injection
+authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
+`windows-latest` runners, so containers, services, deployment environments, self-hosted labels,
+and runner expressions cannot replace the execution boundary. Run-step working-directory overrides and `CI`/`GITHUB_SHA`/Make control-variable injection
 also fail closed. The positive run-command grammar rejects direct or indirect environment/path
 writes, workspace mutation, and command chaining; action steps are restricted to the audited
 checkout, setup, cache, artifact, Docker Buildx, and actionlint set with action-specific input
@@ -50,7 +52,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 247 focused tests with 92.98% branch-aware package coverage against a 90%
+deadlock. Local evidence is 258 focused tests with 93.06% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

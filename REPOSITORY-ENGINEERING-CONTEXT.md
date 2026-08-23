@@ -4161,10 +4161,13 @@ Most relevant current governance:
      inside a reviewed Make target, not in workflow shell text. Permit action steps only from the
      audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set, with
      action-specific `with:` key/value policy that confines alternate checkout, cache, and artifact paths. Continue rejecting
-     workflow/job/step environment injection through `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
+     workflow/job/step environment injection through `CI`, `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
      `MFLAGS`, or `BASH_ENV`, and any run-step working-directory override; the positive bare-command
      grammar makes direct, indirect, or deprecated environment/path writes, workspace mutation,
      command chaining, and ungoverned actions fail closed,
+     allow blocking jobs to use only audited job keys and literal `ubuntu-latest` or
+     `windows-latest` runners; reject containers, services, deployment environments, self-hosted
+     labels, and runner expressions before they can replace the execution boundary,
      resolve every referenced `matrix.<key>` value from each include row and require it to be one
      bare Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`, and reject assignment-only targets
      such as `make FOO=bar` plus option, path, special-target, or multi-target syntax. Every admitted

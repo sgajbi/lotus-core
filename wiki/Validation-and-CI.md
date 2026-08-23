@@ -57,9 +57,12 @@ admitted, and each action has an explicit `with:` key/value policy. Alternate ch
 to the credential-free nested platform checkout; cache paths are exact audited directories; artifact
 paths stay below `output/`. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-environment injection through `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
+environment injection through `CI`, `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
 and run-step working-directory overrides remain prohibited. The positive command grammar rejects
 direct or indirect environment/path writes, workspace mutation, command chaining, and ungoverned actions;
+blocking jobs admit only the audited job keys and literal `ubuntu-latest` or `windows-latest`
+runners. Containers, services, deployment environments, self-hosted runner labels, and runner
+expressions fail closed before they can replace the execution boundary;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared

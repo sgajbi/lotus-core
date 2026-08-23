@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 from pathlib import Path
@@ -15,12 +16,14 @@ from scripts.quality.required_status_checks import (
     RequiredChecksManifest,
     RequiredStatusChecksError,
     WorkflowPolicy,
-    blocking_contexts_for_workflow,
     desired_protection_payload,
     load_live_protection,
     load_manifest,
     validate_live_protection,
     validate_manifest_against_workflows,
+)
+from scripts.quality.required_status_checks import (
+    blocking_contexts_for_workflow as _blocking_contexts_for_workflow,
 )
 
 _CANONICAL_TRIGGERS_YAML = (
@@ -31,6 +34,27 @@ _CANONICAL_TRIGGERS_YAML = (
     "  merge_group:\n"
     "    branches: [main]\n"
 )
+
+
+def blocking_contexts_for_workflow(
+    workflow: dict[str, Any],
+    *,
+    policy: WorkflowPolicy,
+    phony_make_targets: frozenset[str] | None = None,
+) -> tuple[str, ...]:
+    """Supply the audited default runner for focused fixtures not exercising job shape."""
+
+    normalized = copy.deepcopy(workflow)
+    jobs = normalized.get("jobs")
+    if isinstance(jobs, dict):
+        for job in jobs.values():
+            if isinstance(job, dict):
+                job.setdefault("runs-on", "ubuntu-latest")
+    return _blocking_contexts_for_workflow(
+        normalized,
+        policy=policy,
+        phony_make_targets=phony_make_targets,
+    )
 
 
 def _fixture_manifest(payload: dict[str, Any]) -> RequiredChecksManifest:
@@ -138,6 +162,7 @@ def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
         _CANONICAL_TRIGGERS_YAML + "jobs:\n"
         "  security:\n"
         "    name: Quality Baseline / Security Gate\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
@@ -177,6 +202,7 @@ def test_manifest_validation_accepts_target_specific_variable_on_real_phony_targ
         _CANONICAL_TRIGGERS_YAML + "jobs:\n"
         "  security:\n"
         "    name: Quality Baseline / Security Gate\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
@@ -1188,10 +1214,59 @@ def test_blocking_policy_rejects_a_missing_resolved_matrix_target() -> None:
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+@pytest.mark.parametrize(
+    ("job_patch", "error"),
+    [
+        ({"container": {"image": "python:3.13", "env": {"MAKEFLAGS": "-n"}}}, "unsupported key"),
+        ({"container": {"image": "someone/poisoned:latest"}}, "unsupported key"),
+        ({"container": {"image": "python:3.13", "options": "--privileged"}}, "unsupported key"),
+        ({"services": {"database": {"image": "postgres:18"}}}, "unsupported key"),
+        ({"runs-on": ["self-hosted", "linux"]}, "runner is not audited"),
+        ({"runs-on": "${{ matrix.os }}"}, "runner is not audited"),
+        ({"environment": "production"}, "unsupported key"),
+    ],
+)
+def test_blocking_policy_rejects_unaudited_job_shape(job_patch: dict[str, Any], error: str) -> None:
+    job: dict[str, Any] = {
+        "name": "Quality Baseline / Security Gate",
+        "runs-on": "ubuntu-latest",
+        "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+    }
+    job.update(job_patch)
+    workflow = {"jobs": {"security": job}}
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match=error):
+        _blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_requires_an_audited_literal_runner() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="runner is not audited"):
+        _blocking_contexts_for_workflow(workflow, policy=policy)
+
+
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])
 @pytest.mark.parametrize(
     "variable",
-    ["MAKEFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MFLAGS", "BASH_ENV", "GITHUB_SHA"],
+    ["MAKEFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MFLAGS", "BASH_ENV", "CI", "GITHUB_SHA"],
 )
 def test_blocking_policy_rejects_disabling_environment_at_every_scope(
     scope: str, variable: str
@@ -1434,12 +1509,14 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
         _CANONICAL_TRIGGERS_YAML + "jobs:\n"
         "  existing:\n"
         "    name: Quality Baseline / Existing Gate\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
         "        run: make security-audit\n"
         "  new_control:\n"
         "    name: Quality Baseline / New Control Gate\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
@@ -1482,6 +1559,7 @@ def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
         _CANONICAL_TRIGGERS_YAML + "jobs:\n"
         "  blocking:\n"
         "    name: Quality Baseline / Report Only\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
@@ -1618,6 +1696,7 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
         _CANONICAL_TRIGGERS_YAML + "jobs:\n"
         "  security:\n"
         "    name: Quality Baseline / Security Gate\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
@@ -1656,6 +1735,7 @@ def test_manifest_validation_rejects_an_unmanaged_formatted_name_expression(
         _CANONICAL_TRIGGERS_YAML + "jobs:\n"
         "  security:\n"
         "    name: Quality Baseline / Security Gate\n"
+        "    runs-on: ubuntu-latest\n"
         "    steps:\n"
         "      - id: enforce\n"
         "        shell: bash\n"
