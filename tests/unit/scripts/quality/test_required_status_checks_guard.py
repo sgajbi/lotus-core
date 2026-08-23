@@ -51,6 +51,7 @@ def test_matrix_contexts_expand_from_each_include_row() -> None:
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+                "steps": [{"name": "Run suite", "run": "make test"}],
                 "strategy": {
                     "matrix": {
                         "include": [
@@ -79,6 +80,7 @@ def test_matrix_context_expansion_treats_values_as_literal_text() -> None:
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+                "steps": [{"name": "Run suite", "run": "make test"}],
                 "strategy": {"matrix": {"include": [{"suite": r"windows\proof"}]}},
             }
         }
@@ -109,7 +111,10 @@ def test_gate_policy_rejects_an_undeclared_non_gate_job() -> None:
 def test_gate_policy_excludes_only_an_explicit_observed_advisory_context() -> None:
     workflow = {
         "jobs": {
-            "gate": {"name": "Quality Baseline / Security Gate"},
+            "gate": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"name": "Security audit", "run": "make security-audit"}],
+            },
             "report": {"name": "Quality Baseline / Report Only"},
         }
     }
@@ -239,7 +244,8 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
                         "name": "Upload evidence",
                         "if": "always()",
                         "uses": "actions/upload-artifact@v7",
-                    }
+                    },
+                    {"name": "Security audit", "run": "make security-audit"},
                 ],
             }
         }
@@ -253,6 +259,44 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
     assert blocking_contexts_for_workflow(workflow, policy=policy) == (
         "Quality Baseline / Security Gate",
     )
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [],
+        [
+            {
+                "name": "Upload evidence",
+                "if": False,
+                "uses": "actions/upload-artifact@v7",
+            }
+        ],
+        [{"name": "Upload evidence", "uses": "actions/upload-artifact@v7"}],
+    ],
+)
+def test_blocking_policy_requires_an_unconditional_enforcement_step(
+    steps: list[dict[str, object]],
+) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": steps,
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="at least one unconditional enforcement command or action",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
 
 
 def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_drift(
@@ -276,8 +320,12 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
         "jobs:\n"
         "  existing:\n"
         "    name: Quality Baseline / Existing Gate\n"
+        "    steps:\n"
+        "      - run: make existing-gate\n"
         "  new_control:\n"
-        "    name: Quality Baseline / New Control Gate\n",
+        "    name: Quality Baseline / New Control Gate\n"
+        "    steps:\n"
+        "      - run: make new-control-gate\n",
         encoding="utf-8",
     )
     manifest = load_manifest(manifest_path)
@@ -312,7 +360,11 @@ def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
     ]
     manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
     merge_workflow_path.write_text(
-        "jobs:\n  blocking:\n    name: Quality Baseline / Report Only\n",
+        "jobs:\n"
+        "  blocking:\n"
+        "    name: Quality Baseline / Report Only\n"
+        "    steps:\n"
+        "      - run: make blocking-report\n",
         encoding="utf-8",
     )
     quality_workflow_path.write_text(
@@ -416,7 +468,11 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
     ]
     manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
     governed_workflow_path.write_text(
-        "jobs:\n  security:\n    name: Quality Baseline / Security Gate\n",
+        "jobs:\n"
+        "  security:\n"
+        "    name: Quality Baseline / Security Gate\n"
+        "    steps:\n"
+        "      - run: make security-gate\n",
         encoding="utf-8",
     )
     colliding_workflow_path.write_text(unmanaged_workflow, encoding="utf-8")
@@ -447,7 +503,11 @@ def test_manifest_validation_rejects_an_unmanaged_formatted_name_expression(
     ]
     manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
     governed_workflow_path.write_text(
-        "jobs:\n  security:\n    name: Quality Baseline / Security Gate\n",
+        "jobs:\n"
+        "  security:\n"
+        "    name: Quality Baseline / Security Gate\n"
+        "    steps:\n"
+        "      - run: make security-gate\n",
         encoding="utf-8",
     )
     unmanaged_workflow_path.write_text(

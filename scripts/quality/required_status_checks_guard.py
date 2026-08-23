@@ -23,6 +23,14 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/checkout@",
     "actions/upload-artifact@",
 )
+_NON_ENFORCEMENT_ACTION_PREFIXES = (
+    "actions/cache/restore@",
+    "actions/cache/save@",
+    "actions/checkout@",
+    "actions/download-artifact@",
+    "actions/setup-python@",
+    "actions/upload-artifact@",
+)
 
 
 class RequiredStatusChecksError(RuntimeError):
@@ -253,6 +261,7 @@ def blocking_contexts_for_workflow(
                     "blocking workflow job steps must be a list: "
                     + ", ".join(job_blocking_contexts)
                 )
+            unconditional_enforcement_steps = 0
             for step in steps or ():
                 if not isinstance(step, dict):
                     raise RequiredStatusChecksError(
@@ -277,6 +286,20 @@ def blocking_contexts_for_workflow(
                             + ", ".join(job_blocking_contexts)
                             + f"; step={step_name!r}"
                         )
+                run_command = step.get("run")
+                action = step.get("uses")
+                has_enforcement_action = isinstance(action, str) and not action.startswith(
+                    _NON_ENFORCEMENT_ACTION_PREFIXES
+                )
+                if "if" not in step and (
+                    (isinstance(run_command, str) and run_command.strip()) or has_enforcement_action
+                ):
+                    unconditional_enforcement_steps += 1
+            if unconditional_enforcement_steps == 0:
+                raise RequiredStatusChecksError(
+                    "blocking workflow jobs must execute at least one unconditional enforcement "
+                    "command or action: " + ", ".join(job_blocking_contexts)
+                )
         blocking.extend(job_blocking_contexts)
     missing_advisory = policy.advisory_contexts - observed_advisory
     if missing_advisory:
