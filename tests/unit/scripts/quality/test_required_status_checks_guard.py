@@ -549,6 +549,11 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "make -sn security-audit",
         "make -sq security-audit",
         "make FOO=bar",
+        "make lint=1",
+        "make CFLAGS=-n",
+        "make @lint",
+        "make lint,typecheck",
+        "make lint:",
         "MAKEFLAGS=n make security-audit",
         "export MAKEFLAGS=-n\nmake security-audit",
         "make security-audit &",
@@ -649,14 +654,49 @@ def test_blocking_policy_accepts_bare_resolved_matrix_targets() -> None:
         "security-audit -n",
         "FOO=bar",
         "-n",
+        "lint; true",
+        "",
+        "@lint",
+        "lint,typecheck",
+        "lint:",
+        None,
     ],
 )
-def test_blocking_policy_rejects_non_bare_resolved_matrix_targets(target: str) -> None:
+def test_blocking_policy_rejects_non_bare_resolved_matrix_targets(target: object) -> None:
     workflow = {
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
                 "strategy": {"matrix": {"include": [{"suite": "unit", "target": target}]}},
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make ${{ matrix.target }}",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="all_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="matrix enforcement target must be a bare Make target",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_a_missing_resolved_matrix_target() -> None:
+    workflow = {
+        "jobs": {
+            "tests": {
+                "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+                "strategy": {"matrix": {"include": [{"suite": "unit"}]}},
                 "steps": [
                     {
                         "id": "enforce",

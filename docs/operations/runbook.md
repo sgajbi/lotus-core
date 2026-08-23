@@ -117,7 +117,8 @@ after fencing Core repository roots.
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
    environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` also fails closed.
    Every referenced matrix target is resolved from each include row and must itself be one bare
-   Make target; assignment-only values such as `FOO=bar` are not targets and fail closed. A
+   Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
+   special-target syntax, and multi-target tokens fail closed. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for
    the business semantics of the invoked command.
