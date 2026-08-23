@@ -539,6 +539,12 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "set +e\nmake security-audit",
         "make security-audit --dry-run",
         "make security-audit -n",
+        "make security-audit &",
+        "make security-audit & wait $!",
+        "nohup make security-audit",
+        "setsid make security-audit",
+        "coproc make security-audit",
+        "make security-audit\ndisown",
     ],
 )
 def test_blocking_policy_rejects_shell_level_enforcement_suppression(
@@ -560,6 +566,35 @@ def test_blocking_policy_rejects_shell_level_enforcement_suppression(
 
     with pytest.raises(RequiredStatusChecksError, match="suppresses command"):
         blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize(
+    "run_command",
+    [
+        "make security-audit | tee report.txt",
+        "make security-audit && true",
+        "make security-audit 2>&1",
+        "make security-audit &> report.txt",
+    ],
+)
+def test_blocking_policy_accepts_fail_propagating_shell_forms(run_command: str) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "shell": "bash", "run": run_command}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "Quality Baseline / Security Gate",
+    )
 
 
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])
