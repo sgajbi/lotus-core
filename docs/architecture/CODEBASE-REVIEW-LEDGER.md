@@ -9,7 +9,8 @@ wrong-app authority. `make lint` now reaches both import-boundary and required-c
 Main Releasability performs read-only live parity through a dedicated fine-grained Administration-
 read-only secret because the default workflow token is known to lack that authority. The guard emits
 the exact atomic protection PATCH payload. Mutation tests prove undeclared Gate, advisory, matrix,
-credential failure, and live drift behavior. Local evidence is 44 focused tests,
+credential failure, live drift, and merge-group trigger behavior. Both required-check workflows run
+for merge-group commits so queue protection cannot deadlock. Local evidence is 45 focused tests,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. No runtime, API/OpenAPI, event,
 calculation, persistence, dependency, image, or topology contract changes. Status: fixed locally;
