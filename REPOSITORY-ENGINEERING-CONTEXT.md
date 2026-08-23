@@ -4153,7 +4153,7 @@ Most relevant current governance:
      strict branch protection through a dedicated fine-grained Administration-read-only secret;
      the default workflow token is known to lack that authority. Update branch protection only
      after the exact PR head has posted and passed the complete manifest-owned set, and apply
-     app-bound checks atomically.
+     app-bound checks atomically with an explicit empty legacy `contexts` array.
 
 ## Context Maintenance Rule
 
