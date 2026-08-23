@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+import yaml
 
 from scripts.quality import required_status_checks_guard as cli
 from scripts.quality.required_status_checks import (
@@ -16,6 +17,7 @@ from scripts.quality.required_status_checks import (
     load_live_protection,
     load_manifest,
     validate_live_protection,
+    validate_manifest_against_workflows,
 )
 
 
@@ -119,6 +121,73 @@ def test_blocking_workflow_shape_mutations_fail_closed(job: dict[str, object], m
     )
     with pytest.raises(RequiredStatusChecksError, match=match):
         blocking_contexts_for_workflow({"jobs": {"gate": job}}, policy=policy)
+
+
+@pytest.mark.parametrize(
+    ("trigger_mutation", "match"),
+    [
+        ({"merge_group": {"branches": ["main"]}}, "pull_request triggers"),
+        (
+            {
+                "pull_request": {"branches": ["release"], "types": ["opened"]},
+                "merge_group": {"branches": ["main"]},
+            },
+            "pull_request triggers",
+        ),
+        (
+            {
+                "pull_request": {
+                    "branches": ["main"],
+                    "types": [
+                        "opened",
+                        "synchronize",
+                        "reopened",
+                        {"unexpected": "shape"},
+                    ],
+                },
+                "merge_group": {"branches": ["main"]},
+            },
+            "pull_request triggers",
+        ),
+        (
+            {
+                "pull_request": {
+                    "branches": ["main"],
+                    "types": ["opened", "synchronize", "reopened", "ready_for_review"],
+                },
+                "merge_group": {"branches": ["release"]},
+            },
+            "merge_group triggers",
+        ),
+    ],
+)
+def test_governed_workflow_trigger_mutations_fail_closed(
+    tmp_path: Path, trigger_mutation: dict[str, object], match: str
+) -> None:
+    payload = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    payload["workflow_policies"] = [
+        {
+            "path": "governed.yml",
+            "policy": "all_jobs_blocking",
+            "advisory_contexts": [],
+        }
+    ]
+    payload["required_checks"] = [{"context": "PR Merge Gate / Security Gate", "app_id": 15368}]
+    manifest = load_manifest(_write_manifest(tmp_path, payload))
+    workflow = {
+        "name": "Governed",
+        "on": trigger_mutation,
+        "jobs": {
+            "security": {
+                "name": "PR Merge Gate / Security Gate",
+                "steps": [{"run": "make security-audit"}],
+            }
+        },
+    }
+    (tmp_path / "governed.yml").write_text(yaml.safe_dump(workflow), encoding="utf-8")
+
+    with pytest.raises(RequiredStatusChecksError, match=match):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
 def test_live_protection_rejects_malformed_shapes() -> None:
