@@ -174,7 +174,7 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
             "endef\n"
             "$(if $(filter C,$(LC_ALL)),$(eval $(environment-activated-authority)))\n"
             "active:\n\t@true",
-            "not a declared phony Make target",
+            "Makefile phony authority must be static",
         ),
         (
             ".PHONY: FORGE = security-audit\nactive:\n\t@true",
@@ -272,6 +272,13 @@ def test_manifest_validation_accepts_target_specific_variable_on_real_phony_targ
         "TARGETS := security-audit\n.PHONY: $(TARGETS)",
         "TARGETS := security-audit\n.PHONY: ${TARGETS}",
         ".PHONY: security-audit \\",
+        "define BODY\n"
+        "dummy:\n"
+        "\tendef\n"
+        ".PHONY: security-audit\n"
+        "endef\n"
+        "$(if $(filter C,$(LC_ALL)),$(eval $(BODY)))",
+        "define BODY\n.PHONY: security-audit\nendef\n${eval ${BODY}}",
     ],
 )
 def test_blocking_policy_rejects_non_static_phony_authority(
@@ -312,6 +319,24 @@ def test_blocking_policy_rejects_non_static_phony_authority(
             policy=policy,
             makefile_path=tmp_path / "Makefile",
         )
+
+
+def test_make_authority_keeps_tab_indented_endef_inside_define_body(
+    tmp_path: Path,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "define BODY\n"
+        "dummy:\n"
+        "\tendef\n"
+        ".PHONY: security-audit\n"
+        "endef\n"
+        ".PHONY: active\n"
+        "active:\n\t@true\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset({"active"})
 
 
 def test_make_authority_evaluation_uses_only_fixed_minimal_environment(
