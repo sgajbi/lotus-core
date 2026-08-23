@@ -40,7 +40,7 @@ _MAKE_DATABASE_FILES = "# Files"
 _MAKE_CONDITIONAL_DIRECTIVE = re.compile(r"^(?:ifeq|ifneq|ifdef|ifndef|else|endif)(?:\s|$)")
 _MAKE_DEFINE_DIRECTIVE = re.compile(r"^(?:(?:export|override|private)\s+)*define(?:\s|$)")
 _MAKE_ENDEF_DIRECTIVE = re.compile(r"^endef(?:\s|$)")
-_MAKE_EVAL_FUNCTION = re.compile(r"\$(?:\(eval|\{eval)")
+_MAKE_AUTHORITY_FUNCTION = re.compile(r"\$(?:\(|\{)\s*(?:call|eval)(?=[\s,)}])")
 _MAKE_INCLUDE_DIRECTIVE = re.compile(r"^(?:-?include|sinclude)(?:\s|$)")
 _STATIC_PHONY_DECLARATION = re.compile(r"^\.PHONY:\s*(.*?)\s*$")
 _STATIC_PHONY_TARGET = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -184,7 +184,9 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
     define_depth = 0
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
-        if (define_depth or not raw_line.startswith("\t")) and _MAKE_EVAL_FUNCTION.search(raw_line):
+        if (define_depth or not raw_line.startswith("\t")) and _MAKE_AUTHORITY_FUNCTION.search(
+            raw_line
+        ):
             raise RequiredStatusChecksError(
                 f"Makefile phony authority must be static: {path}; line={line_number}"
             )

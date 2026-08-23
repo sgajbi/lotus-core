@@ -283,6 +283,9 @@ def test_manifest_validation_accepts_target_specific_variable_on_real_phony_targ
         "endef\n"
         "$(if $(filter C,$(LC_ALL)),$(eval $(BODY)))",
         "define BODY\n.PHONY: security-audit\nendef\n${eval ${BODY}}",
+        "X := $(call eval,.IGNORE: security-audit)",
+        "X := ${call eval,.IGNORE: security-audit}",
+        "FUNCTION := eval\nX := $(call $(FUNCTION),.IGNORE: security-audit)",
     ],
 )
 def test_blocking_policy_rejects_non_static_phony_authority(
