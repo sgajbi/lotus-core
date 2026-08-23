@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -28,32 +29,54 @@ from tests.test_support.runtime_env import prepare_test_runtime
 
 def test_should_build_images_default_false(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
-    monkeypatch.delenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
     monkeypatch.delenv("CI", raising=False)
     assert should_build_images() is False
 
 
 def test_should_build_images_defaults_true_in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
-    monkeypatch.delenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
     monkeypatch.setenv("CI", "true")
     assert should_build_images() is True
 
 
 def test_should_build_images_reuses_verified_runtime_image_set(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
-    monkeypatch.setenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", "true")
+    monkeypatch.chdir(tmp_path)
+    receipt = tmp_path / "output" / "runtime-image-set" / "verified-source-sha"
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text("a" * 40 + "\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
     monkeypatch.setenv("CI", "true")
     assert should_build_images() is False
 
 
-def test_should_build_images_explicit_true_overrides_verified_runtime_image_set(
-    monkeypatch: pytest.MonkeyPatch,
+def test_should_build_images_rejects_receipt_for_another_source_head(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.chdir(tmp_path)
+    receipt = tmp_path / "output" / "runtime-image-set" / "verified-source-sha"
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text("a" * 40 + "\n", encoding="utf-8")
+    monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
+    monkeypatch.setenv("GITHUB_SHA", "b" * 40)
+    monkeypatch.setenv("CI", "true")
+
+    assert should_build_images() is True
+
+
+def test_should_build_images_explicit_true_overrides_verified_runtime_image_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    receipt = tmp_path / "output" / "runtime-image-set" / "verified-source-sha"
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text("a" * 40 + "\n", encoding="utf-8")
     monkeypatch.setenv("LOTUS_TESTS_DOCKER_BUILD", "true")
-    monkeypatch.setenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", "true")
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
     monkeypatch.setenv("CI", "true")
     assert should_build_images() is True
 

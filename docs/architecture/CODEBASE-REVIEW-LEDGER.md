@@ -18,12 +18,13 @@ grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-tar
 multi-target tokens fail closed. Every admitted static or resolved target must also carry GNU
 Make's exact per-target phony flag in the delimited effective-database Files section, so parse-time/recipe output, serialized
 variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
-authority fail closed. Enforcement working-directory overrides and Make control-variable injection
+authority fail closed. Run-step working-directory overrides and `GITHUB_SHA`/Make control-variable injection
 also fail closed. The positive run-command grammar rejects direct or indirect environment/path
 writes, workspace mutation, and command chaining; action steps are restricted to the audited
-checkout, setup, cache, artifact, Docker Buildx, and actionlint set. Runtime-image consumers bind
-verified state directly to each control step only after `make runtime-image-set-load-verify`
-succeeds earlier in the same job. The guard requires blocking
+checkout, setup, cache, artifact, Docker Buildx, and actionlint set with action-specific input
+key/value policy. Runtime-image consumers bind verification in the Make graph: each control target
+depends on `runtime-image-set-load-verify`, whose exact-`GITHUB_SHA` receipt is written only after
+successful load verification. The guard requires blocking
 dependencies to be validated blocking jobs; pins strict mode and the exact governed workflow set;
 inventories advisory producers in global context-uniqueness proof; scans all
 workflows for static or dynamic required-context collisions; rejects unsupported job-name
@@ -49,7 +50,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 222 focused tests with 92.11% branch-aware package coverage against a 90%
+deadlock. Local evidence is 247 focused tests with 92.98% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

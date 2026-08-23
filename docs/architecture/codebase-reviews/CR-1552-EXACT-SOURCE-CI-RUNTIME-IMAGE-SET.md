@@ -24,9 +24,9 @@ Dockerfile but were built separately with identical metadata.
 - Expanded each workflow's existing `Validate Docker Build` job into the sole image-set producer.
 - Replaced per-consumer Buildx/cache/prebuild blocks with artifact download and exact-SHA
   `load-verify` steps across PR and main Docker-backed jobs.
-- Made workflow consumers export `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` only after artifact
-  verification succeeds. Runtime Make targets omit `--build` and `--runtime-build` only for that
-  explicit handoff; ordinary CI and local invocations retain build-by-default behavior.
+- Hardened workflow consumers so each Make control depends directly on
+  `runtime-image-set-load-verify`; its matching `GITHUB_SHA` receipt is written only after success,
+  eliminating workflow-asserted verification state and reorderable load steps.
 - Bound the E2E image set to every repo-built service started by `FULL_STACK_SERVICES`, including
   financial reconciliation, so no E2E service can be rebuilt outside the verified artifact.
 - Added manifest evidence for source commit, branch, repository, CI run, generated-at time, image
@@ -72,8 +72,8 @@ vendor images remain governed by bounded pull/inspection logic and are not copie
   aggregate/changed/critical coverage, and all local lane guards.
 - `make quality-workflow-governance-gate`: `20 passed`.
 - Workflow YAML parsing and `actionlint`: passed.
-- Make dry runs prove generic `CI=true` retains rebuild flags and only
-  `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` suppresses them.
+- Make-graph regressions prove every runtime consumer has the verification prerequisite and pytest
+  stack support suppresses rebuild only for a matching exact-head receipt.
 - Review regressions prove E2E image inventory equals all repo-built full-stack services.
 - Scoped Ruff lint/format and `git diff --check`: passed.
 - Wiki professional-page audit and repository documentation gates: passed.

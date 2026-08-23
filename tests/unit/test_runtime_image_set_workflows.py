@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -28,6 +27,19 @@ MAIN_RUNTIME_CONSUMERS = (
     "performance-load-gate-full",
     "failure-recovery-gate",
     "institutional-completion-gate",
+)
+RUNTIME_CONTROL_TARGETS = (
+    "lotus-core-validate",
+    "test-derived-state-recovery-gate",
+    "test-docker-smoke",
+    "test-e2e-all",
+    "test-e2e-smoke",
+    "test-failure-recovery-gate",
+    "test-fixed-income-book-cost-recovery-gate",
+    "test-institutional-completion-gate",
+    "test-latency-gate",
+    "test-performance-load-gate",
+    "test-performance-load-gate-full",
 )
 
 
@@ -89,33 +101,12 @@ def _assert_runtime_image_consumers(
         needs = job["needs"]
         assert "docker-build" in ([needs] if isinstance(needs, str) else needs)
         assert "Download runtime image set" in _step_names(job)
-        assert "Load and verify runtime image set" in _step_names(job)
-        steps = _steps(job)
+        assert "Load and verify runtime image set" not in _step_names(job)
         commands = _run_commands(job)
         assert "prebuild_ci_images.py" not in commands
-        assert "make runtime-image-set-load-verify" in commands
+        assert "make runtime-image-set-load-verify" not in commands
         assert "GITHUB_ENV" not in commands
-        runtime_controls = [
-            step
-            for step in _steps(job)
-            if str(step.get("run", "")).startswith("make ") and step.get("run") != "make install-ci"
-        ]
-        assert runtime_controls
-        verification_index = next(
-            index
-            for index, step in enumerate(steps)
-            if step.get("run") == "make runtime-image-set-load-verify"
-        )
-        assert all(
-            step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
-            for step in runtime_controls
-            if step.get("run") != "make runtime-image-set-load-verify"
-        )
-        assert all(
-            steps.index(step) > verification_index
-            for step in runtime_controls
-            if step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
-        )
+        assert "LOTUS_RUNTIME_IMAGE_SET_VERIFIED" not in str(job)
         download = next(
             step for step in _steps(job) if step.get("name") == "Download runtime image set"
         )
@@ -153,27 +144,24 @@ def test_main_workflow_builds_and_consumes_one_exact_source_runtime_image_set() 
     )
 
 
-def test_runtime_authority_contract_rejects_verification_moved_after_control() -> None:
-    workflow = deepcopy(_workflow(PR_WORKFLOW))
-    job = workflow["jobs"]["e2e-smoke"]  # type: ignore[index]
-    steps = _steps(job)  # type: ignore[arg-type]
-    verification = next(
-        step for step in steps if step.get("run") == "make runtime-image-set-load-verify"
-    )
-    steps.remove(verification)
-    control_index = next(
-        index
-        for index, step in enumerate(steps)
-        if step.get("env", {}).get("LOTUS_RUNTIME_IMAGE_SET_VERIFIED") == "true"  # type: ignore[union-attr]
-    )
-    steps.insert(control_index + 1, verification)
+def _assert_runtime_control_prerequisites(makefile: str) -> None:
+    for target in RUNTIME_CONTROL_TARGETS:
+        declaration = next(line for line in makefile.splitlines() if line.startswith(f"{target}:"))
+        assert declaration.split()[1:] == ["runtime-image-set-load-verify"]
 
+
+def test_runtime_control_targets_bind_verification_as_a_make_prerequisite() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    _assert_runtime_control_prerequisites(makefile)
+
+    mutated = makefile.replace(
+        "test-docker-smoke: runtime-image-set-load-verify",
+        "test-docker-smoke:",
+        1,
+    )
     with pytest.raises(AssertionError):
-        _assert_runtime_image_consumers(
-            workflow,
-            consumers=("e2e-smoke",),
-            artifact_name="pr-runtime-image-set",
-        )
+        _assert_runtime_control_prerequisites(mutated)
 
 
 def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -> None:
@@ -201,27 +189,24 @@ def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -
     assert 'test -n "$${GITHUB_SHA}"' in load_target
     assert "scripts/release/runtime_image_set.py load-verify" in load_target
     assert '--expected-commit-sha "$${GITHUB_SHA}"' in load_target
+    assert "printf '%s\\n' \"$${GITHUB_SHA}\"" in load_target
+    assert "output/runtime-image-set/verified-source-sha" in load_target
 
 
-def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:
+def test_verified_runtime_image_set_uses_prerequisites_not_workflow_assertions() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 
-    assert (
-        "RUNTIME_BUILD_ARGUMENT = "
-        "$(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--build)" in makefile
-    )
-    assert (
-        "CERTIFICATION_RUNTIME_BUILD_ARGUMENT = "
-        "$(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--runtime-build)" in makefile
-    )
+    assert "RUNTIME_BUILD_ARGUMENT" not in makefile
+    assert "CERTIFICATION_RUNTIME_BUILD_ARGUMENT" not in makefile
+    assert "LOTUS_RUNTIME_IMAGE_SET_VERIFIED" not in makefile
     assert "$(filter true,$(CI))" not in makefile
     for command in (
-        "docker_endpoint_smoke.py $(RUNTIME_BUILD_ARGUMENT)",
-        "latency_profile.py $(RUNTIME_BUILD_ARGUMENT)",
-        "performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT)",
-        "failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT)",
-        "scripts.operations.recovery.derived_state_gate $(RUNTIME_BUILD_ARGUMENT)",
-        "certify_lotus_core_app.py $(CERTIFICATION_RUNTIME_BUILD_ARGUMENT)",
+        "scripts/validation/docker_endpoint_smoke.py",
+        "scripts/operations/latency_profile.py --enforce",
+        "scripts/operations/performance_load_gate.py --profile-tier fast --enforce",
+        "scripts/operations/failure_recovery_gate.py --enforce",
+        "scripts.operations.recovery.derived_state_gate --enforce",
+        "scripts/validation/certify_lotus_core_app.py",
     ):
         assert command in makefile
 

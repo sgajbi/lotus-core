@@ -27,8 +27,9 @@ classification or underlying database contention has been corrected.
 make test-derived-state-poison-gate
 ```
 
-The target starts an isolated managed Compose project and builds the required image set unless
-`LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` truthfully identifies an already verified image set.
+The diagnostic target starts an isolated managed Compose project and builds the required images.
+Governed PR/main recovery controls use their separate exact-source targets, which depend on
+`runtime-image-set-load-verify` and accept only its matching `GITHUB_SHA` receipt.
 
 For diagnosis against an explicitly managed stack, provide `--skip-compose` and all generated
 endpoint and Kafka/database arguments directly to the module. Do not point it at a shared or

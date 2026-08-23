@@ -20,6 +20,8 @@ from confluent_kafka.admin import AdminClient
 
 from tests.test_support.runtime_env import PreparedTestRuntime
 
+RUNTIME_IMAGE_SET_VERIFICATION_RECEIPT = Path("output/runtime-image-set/verified-source-sha")
+
 
 class DockerStackError(RuntimeError):
     """Raised when docker stack bring-up or health checks fail."""
@@ -398,9 +400,16 @@ def should_build_images() -> bool:
             "on",
         }
 
-    verified_image_set = os.getenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", "")
-    if verified_image_set.strip().lower() == "true":
-        return False
+    expected_source_sha = os.getenv("GITHUB_SHA", "").strip()
+    if expected_source_sha:
+        try:
+            verified_source_sha = RUNTIME_IMAGE_SET_VERIFICATION_RECEIPT.read_text(
+                encoding="utf-8"
+            ).strip()
+        except OSError:
+            verified_source_sha = ""
+        if verified_source_sha == expected_source_sha:
+            return False
 
     return os.getenv("CI", "").strip().lower() in {
         "1",

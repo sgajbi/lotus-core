@@ -1068,12 +1068,14 @@ Most relevant current governance:
     workflow SHA. The existing `Validate Docker Build` job is the sole producer after coverage; it
     builds the ordered PR or main service union, coalesces services that use the same Dockerfile,
     exports one portable bundle, and publishes build timings plus a deterministic integrity
-    manifest. Every Docker-backed consumer must download and run `runtime_image_set.py load-verify`
-    against `GITHUB_SHA` before startup. Keep `kafka-topic-creator` and `migration-runner` in the
+    manifest. Every Docker-backed workflow consumer downloads the artifact, while its invoked Make
+    control declares `runtime-image-set-load-verify` as a prerequisite. That prerequisite verifies
+    against `GITHUB_SHA` and writes the exact-head receipt only after success. Keep
+    `kafka-topic-creator` and `migration-runner` in the
     runtime image set for Docker smoke, E2E, latency, performance, failure-recovery, and
     institutional-completion gates. Docker-backed pytest stacks use this image-build precedence:
-    an explicit `LOTUS_TESTS_DOCKER_BUILD` value wins; otherwise
-    `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` reuses the verified workflow bundle without rebuilding;
+    an explicit `LOTUS_TESTS_DOCKER_BUILD` value wins; otherwise a verification receipt matching
+    `GITHUB_SHA` reuses the verified workflow bundle without rebuilding;
     otherwise `CI=true` builds exact-source images; local execution defaults to reusing available
     images. This keeps database-backed CI tests source-correct while ensuring runtime gates exercise
     the exact bundle they verified. E2E diagnostics should be captured by the pytest fixture
@@ -4157,8 +4159,9 @@ Most relevant current governance:
      target, or the exact Windows lock-closure command. Operators, substitutions, quoting,
      redirection, multiple lines, Make flags, wrapper commands, and other shell syntax belong
      inside a reviewed Make target, not in workflow shell text. Permit action steps only from the
-     audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set. Continue rejecting
-     workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
+     audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set, with
+     action-specific `with:` key/value policy that confines alternate checkout, cache, and artifact paths. Continue rejecting
+     workflow/job/step environment injection through `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
      `MFLAGS`, or `BASH_ENV`, and any run-step working-directory override; the positive bare-command
      grammar makes direct, indirect, or deprecated environment/path writes, workspace mutation,
      command chaining, and ungoverned actions fail closed,
@@ -4169,8 +4172,8 @@ Most relevant current governance:
      per-target phony flag in GNU Make's delimited effective-database Files section;
      parse-time/recipe output, serialized variable bodies, missing Makefile authority, inactive
      declarations, ordinary files, and non-phony rules fail closed,
-     bind runtime-image verified state directly to control steps only after the same job has
-     successfully invoked `make runtime-image-set-load-verify`, never through `GITHUB_ENV`,
+     bind runtime-image verification as a prerequisite of every consuming Make control; the target
+     writes an exact-`GITHUB_SHA` receipt only after load verification, never through workflow environment assertion,
      require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
