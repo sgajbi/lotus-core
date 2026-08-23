@@ -49,8 +49,8 @@ blocking job to retain exactly one unconditional executable `id: enforce` step o
 control, requires exact canonical PR keys and merge-group triggers for `main`, accepts only
 include-row matrices with cell-identifying names, rejects path-filtered PR triggers, requires the
 effective shell of every marked run control to be exact `bash`, and rejects a named denylist of
-shell failure-tolerance, clustered Bash/Make disabling flags, `MAKEFLAGS` assignments, dry-run, and
-background-execution escapes, requires blocking dependencies
+shell failure-tolerance, clustered Bash/Make disabling flags, `MAKEFLAGS` assignments in scripts or
+workflow/job/step environments, dry-run, and background-execution escapes, requires blocking dependencies
 to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and
 inventories advisory producers
