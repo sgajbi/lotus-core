@@ -115,8 +115,9 @@ after fencing Core repository roots.
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-   environment injection through `CI`, `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
-   also fails closed, as does any run-step working-directory override. Every run step must be one
+   configured environment key must come from the closed inventory used by the governed workflows;
+   unlisted keys such as `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, or Make control
+   variables fail closed, as does any run-step working-directory override. Every run step must be one
    admitted bare command and every action must be on the audited allowlist with action-specific
    `with:` keys and constrained checkout/cache/artifact/setup values, so indirect environment or
    path writes, workspace mutation, command chaining, and unknown actions or inputs fail closed.

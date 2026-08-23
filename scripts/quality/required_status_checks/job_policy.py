@@ -27,16 +27,31 @@ _ALLOWED_BLOCKING_JOB_KEYS = frozenset(
     }
 )
 _AUDITED_BLOCKING_JOB_RUNNERS = frozenset({"ubuntu-latest", "windows-latest"})
-_DISABLING_ENVIRONMENT_VARIABLES = frozenset(
+_BLOCKING_ENVIRONMENT_KEYS = frozenset(
     {
-        "BASH_ENV",
-        "CI",
-        "GITHUB_SHA",
-        "GNUMAKEFLAGS",
-        "LOTUS_RUNTIME_IMAGE_SET_VERIFIED",
-        "MAKEFILES",
-        "MAKEFLAGS",
-        "MFLAGS",
+        "COMPOSE_DOCKER_CLI_BUILD",
+        "DEMO_DATA_PACK_HISTORY_DAYS",
+        "DEMO_DATA_PACK_INGEST_ONLY",
+        "DEMO_DATA_PACK_PORTFOLIO_IDS",
+        "DOCKER_BUILDKIT",
+        "E2E_INGESTION_URL",
+        "E2E_QUERY_URL",
+        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24",
+        "GH_TOKEN",
+        "HOST_DATABASE_URL",
+        "LOTUS_COVERAGE_CHANGED_BASE",
+        "LOTUS_PLATFORM_ROOT",
+        "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID",
+        "LOTUS_RUNTIME_IMAGE_SET_GROUP",
+        "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL",
+        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH",
+        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA",
+        "LOTUS_TESTS_COMPOSE_LOG_FILE",
+        "LOTUS_TEST_ENV_PROFILE",
+        "NODE_VERSION",
+        "PIP_DISABLE_PIP_VERSION_CHECK",
+        "PYTHONUNBUFFERED",
+        "PYTHON_VERSION",
     }
 )
 _MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
@@ -111,11 +126,14 @@ def effective_environment(
 
 
 def _validate_run_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
-    disabling_variables = sorted(_DISABLING_ENVIRONMENT_VARIABLES & environment.keys())
-    if disabling_variables:
+    unsupported_keys = sorted(
+        (key for key in environment if key not in _BLOCKING_ENVIRONMENT_KEYS),
+        key=repr,
+    )
+    if unsupported_keys:
+        key = unsupported_keys[0]
         raise RequiredStatusChecksError(
-            "blocking workflow run step environment injects a disabling variable: "
-            f"{context_text}; variables={disabling_variables!r}"
+            f"blocking workflow environment key is not admitted: {context_text}; key={key}"
         )
 
 
