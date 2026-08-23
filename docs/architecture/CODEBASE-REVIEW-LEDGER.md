@@ -18,8 +18,10 @@ grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-tar
 multi-target tokens fail closed. Every admitted static or resolved target must also be declared by
 GNU Make's delimited effective-database Files section, so parse-time/recipe output, serialized
 variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
-authority fail closed. Enforcement working-directory overrides and Make control-variable injection also fail
-closed. The guard requires blocking
+authority fail closed. Enforcement working-directory overrides and Make control-variable injection
+also fail closed. Pre-enforcement steps cannot mutate `GITHUB_ENV`/`GITHUB_PATH`, and action steps
+are restricted to governed auxiliary or enforcement actions. Runtime-image consumers bind verified
+state directly to each control step after successful load verification. The guard requires blocking
 dependencies to be validated blocking jobs; pins strict mode and the exact governed workflow set;
 inventories advisory producers in global context-uniqueness proof; scans all
 workflows for static or dynamic required-context collisions; rejects unsupported job-name
@@ -45,7 +47,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 210 focused tests with 91.36% branch-aware package coverage against a 90%
+deadlock. Local evidence is 219 focused tests with 91.70% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

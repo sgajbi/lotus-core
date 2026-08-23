@@ -117,6 +117,9 @@ after fencing Core repository roots.
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
    environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
    also fails closed, as does any enforcement working-directory override.
+   Pre-enforcement run steps must not write `GITHUB_ENV` or `GITHUB_PATH`, and action steps must use
+   a governed auxiliary or enforcement action. Runtime-image verification state belongs directly on
+   the post-verification control step, never in `GITHUB_ENV`.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
