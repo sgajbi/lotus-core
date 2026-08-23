@@ -123,6 +123,16 @@ after fencing Core repository roots.
    (`absolute C`, `module B`, `average B`) and Radon maintainability rank B across the required-check
    package and CLI, then applies scoped MyPy, Bandit, and Vulture checks before running mutation
    tests with branch-aware coverage hard-blocked below 90%.
+
+   | Guard failure | Required operator or implementer action |
+   | --- | --- |
+   | strict mode is not `true` | Restore `strict: true`; never reconcile weakened protection. |
+   | governed workflow set differs | Restore exactly the PR Merge Gate and Quality Baseline policies with their canonical classifications. |
+   | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
+   | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
+   | `id: enforce` count is not one, or the marker is conditional/non-executable | Put exactly one unconditional marker on the job's real fail-propagating control; review the invoked command's semantics. |
+   | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
+
 4. Main Releasability runs `make required-status-checks-live-guard` with the dedicated
    `LOTUS_BRANCH_PROTECTION_READ_TOKEN` secret. That credential must be a fine-grained token with
    Administration read-only authority for this repository; never substitute `github.token` or a
