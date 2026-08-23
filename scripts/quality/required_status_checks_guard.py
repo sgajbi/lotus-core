@@ -377,6 +377,7 @@ def load_live_protection(*, repository: str, branch: str) -> Mapping[str, Any]:
 def desired_protection_payload(manifest: RequiredChecksManifest) -> dict[str, object]:
     return {
         "strict": manifest.strict,
+        "contexts": [],
         "checks": [
             {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
         ],
