@@ -492,6 +492,28 @@ def test_make_authority_ignores_assignment_tokens_after_rule_boundaries(
     )
 
 
+@pytest.mark.parametrize(
+    "static_declaration",
+    [
+        "VALUE := $(shell echo safe)",
+        "security-audit: VALUE := $(strip safe)",
+    ],
+)
+def test_make_authority_accepts_expansions_after_static_declaration_separators(
+    tmp_path: Path,
+    static_declaration: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f"{static_declaration}\n.PHONY: security-audit\nsecurity-audit:\n\t@true\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
+
+
 def test_make_authority_evaluation_uses_only_fixed_minimal_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
