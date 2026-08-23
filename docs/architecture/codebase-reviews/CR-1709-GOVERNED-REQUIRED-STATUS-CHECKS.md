@@ -38,7 +38,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
    governed workflow policies in code, requires every marked run control's effective shell to be
    exact `bash` and its script to be one bare invocation: one Make target, a governed matrix
    target, or the exact Windows lock-closure command. Shell operators, substitutions, quoting,
-   redirection, multiple lines, Make flags, and wrapper commands fail closed; requires
+   redirection, multiple lines, Make flags, and wrapper commands fail closed. Referenced matrix
+   targets are resolved from every include row and must each be a bare Make target;
+   assignment-only targets such as `make FOO=bar` fail closed; requires
    blocking-job dependencies to be validated blocking jobs, and inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -86,7 +88,9 @@ conditions, redirects, multiple lines, Make options, assignments, and wrapper co
 open-ended shell denylist. Effective workflow/job/step environment injection through `MAKEFLAGS`,
 `GNUMAKEFLAGS`, or `BASH_ENV` remains independently prohibited. The Docker image-set producer's
 multi-command implementation is owned by `make build-runtime-image-set`, so its marker is one bare
-invocation. The marker proves an explicitly declared fail-propagating control exists;
+invocation. Matrix expressions are not trusted as unresolved text: every referenced include-row
+value must match the same bare Make-target grammar, which excludes assignment-only invocations.
+The marker proves an explicitly declared fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
 share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
@@ -101,7 +105,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `170 passed`, with 91.47% branch-aware
+- focused workflow/manifest pack after final review hardening: `175 passed`, with 91.50% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;

@@ -12,7 +12,9 @@ artifact-upload actions; requires every blocking job to retain exactly one uncon
 and merge-group triggers; accepts only include-row matrices with cell-identifying names; requires
 every marked run control to resolve to exact `bash` and one bare invocation: one Make target, a
 governed matrix target, or the exact Windows lock-closure command. Shell operators, substitutions,
-quoting, redirection, multiple lines, Make flags, and wrapper commands fail closed; requires
+quoting, redirection, multiple lines, Make flags, and wrapper commands fail closed. Referenced
+matrix targets are resolved from every include row and must each be a bare Make target;
+assignment-only targets fail closed; requires
 blocking dependencies
 to be validated blocking jobs; pins strict mode and the exact governed workflow set; inventories advisory producers
 in global context-uniqueness proof; scans all
@@ -39,7 +41,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 170 focused tests with 91.47% branch-aware package coverage against a 90%
+deadlock. Local evidence is 175 focused tests with 91.50% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

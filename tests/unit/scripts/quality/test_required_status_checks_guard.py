@@ -548,6 +548,7 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "make security-audit -n",
         "make -sn security-audit",
         "make -sq security-audit",
+        "make FOO=bar",
         "MAKEFLAGS=n make security-audit",
         "export MAKEFLAGS=-n\nmake security-audit",
         "make security-audit &",
@@ -591,7 +592,6 @@ def test_blocking_policy_rejects_non_bare_enforcement_commands(
     [
         "make security-audit",
         "make quality-workflow-governance-gate",
-        "make ${{ matrix.target }}",
         "python scripts/development/update_ci_tooling_lock.py --check --platform windows",
     ],
 )
@@ -613,6 +613,71 @@ def test_blocking_policy_accepts_single_bare_enforcement_commands(run_command: s
     assert blocking_contexts_for_workflow(workflow, policy=policy) == (
         "Quality Baseline / Security Gate",
     )
+
+
+def test_blocking_policy_accepts_bare_resolved_matrix_targets() -> None:
+    workflow = {
+        "jobs": {
+            "tests": {
+                "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+                "strategy": {"matrix": {"include": [{"suite": "unit", "target": "test-unit"}]}},
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make ${{ matrix.target }}",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="all_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "PR Merge Gate / Tests (unit)",
+    )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "security-audit || true",
+        "security-audit -n",
+        "FOO=bar",
+        "-n",
+    ],
+)
+def test_blocking_policy_rejects_non_bare_resolved_matrix_targets(target: str) -> None:
+    workflow = {
+        "jobs": {
+            "tests": {
+                "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+                "strategy": {"matrix": {"include": [{"suite": "unit", "target": target}]}},
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make ${{ matrix.target }}",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="all_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="matrix enforcement target must be a bare Make target",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
 
 
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])

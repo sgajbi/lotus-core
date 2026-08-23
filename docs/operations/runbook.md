@@ -115,7 +115,9 @@ after fencing Core repository roots.
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-   environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` also fails closed. A
+   environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` also fails closed.
+   Every referenced matrix target is resolved from each include row and must itself be one bare
+   Make target; assignment-only values such as `FOO=bar` are not targets and fail closed. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for
    the business semantics of the invoked command.
@@ -142,7 +144,7 @@ after fencing Core repository roots.
    | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
    | `id: enforce` count is not one, or the marker is conditional, auxiliary, or non-executable | Put exactly one unconditional marker on the job's real non-auxiliary fail-propagating control; review the invoked command's semantics. |
-   | enforcement shell is unspecified/non-`bash`, or its script is not one admitted bare invocation | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into a reviewed Make target. |
+   | enforcement shell is unspecified/non-`bash`, its script is not one admitted bare invocation, or a resolved matrix target is unsafe | Set the effective shell to exact `bash`; move pipelines, redirects, substitutions, options, wrappers, and multi-command logic into a reviewed Make target; keep every include-row target bare and assignment-free. |
    | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 
