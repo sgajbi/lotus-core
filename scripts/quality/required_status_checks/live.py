@@ -44,6 +44,13 @@ def validate_live_protection(
     live_checks = {_parse_live_check(raw_check) for raw_check in raw_checks}
     if len(live_checks) != len(raw_checks):
         raise RequiredStatusChecksError("live required checks must be unique")
+    legacy_contexts = required.get("contexts")
+    if not isinstance(legacy_contexts, list):
+        raise RequiredStatusChecksError("branch protection must expose legacy contexts as a list")
+    if legacy_contexts:
+        raise RequiredStatusChecksError(
+            f"live branch protection retains legacy contexts: {legacy_contexts!r}"
+        )
     expected_checks = set(manifest.required_checks)
     if live_checks != expected_checks:
         missing = sorted(expected_checks - live_checks)

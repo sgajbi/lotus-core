@@ -244,6 +244,20 @@ def test_live_protection_rejects_malformed_shapes() -> None:
             manifest,
             {"required_status_checks": {"strict": True, "checks": ["invalid"]}},
         )
+    live_checks = [
+        {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
+    ]
+    with pytest.raises(RequiredStatusChecksError, match="legacy contexts as a list"):
+        validate_live_protection(
+            manifest,
+            {
+                "required_status_checks": {
+                    "strict": True,
+                    "contexts": None,
+                    "checks": live_checks,
+                }
+            },
+        )
 
 
 @pytest.mark.parametrize(
