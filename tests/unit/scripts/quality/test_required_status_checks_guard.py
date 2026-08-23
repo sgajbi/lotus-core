@@ -82,7 +82,14 @@ def test_matrix_contexts_expand_from_each_include_row() -> None:
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
-                "steps": [{"id": "enforce", "name": "Run suite", "run": "make security-audit"}],
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "name": "Run suite",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    }
+                ],
                 "strategy": {
                     "matrix": {
                         "include": [
@@ -114,7 +121,14 @@ def test_matrix_context_expansion_treats_values_as_literal_text() -> None:
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
-                "steps": [{"id": "enforce", "name": "Run suite", "run": "make security-audit"}],
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "name": "Run suite",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    }
+                ],
                 "strategy": {"matrix": {"include": [{"suite": r"windows\proof"}]}},
             }
         }
@@ -173,7 +187,12 @@ def test_gate_policy_excludes_only_an_explicit_observed_advisory_context() -> No
             "gate": {
                 "name": "Quality Baseline / Security Gate",
                 "steps": [
-                    {"id": "enforce", "name": "Security audit", "run": "make security-audit"}
+                    {
+                        "id": "enforce",
+                        "name": "Security audit",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    }
                 ],
             },
             "report": {"name": "Quality Baseline / Report Only"},
@@ -277,6 +296,7 @@ def test_blocking_policy_rejects_conditional_enforcement_steps(condition: object
                         "id": "enforce",
                         "name": "Security audit",
                         "if": condition,
+                        "shell": "bash",
                         "run": "make security-audit",
                     }
                 ],
@@ -310,6 +330,7 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
                     {
                         "id": "enforce",
                         "name": "Security audit",
+                        "shell": "bash",
                         "run": "make security-audit",
                     },
                 ],
@@ -475,8 +496,8 @@ def test_blocking_policy_rejects_duplicate_enforcement_markers() -> None:
             "tests": {
                 "name": "PR Merge Gate / Tests",
                 "steps": [
-                    {"id": "enforce", "run": "make test-unit"},
-                    {"id": "enforce", "run": "make test-unit-db"},
+                    {"id": "enforce", "shell": "bash", "run": "make test-unit"},
+                    {"id": "enforce", "shell": "bash", "run": "make test-unit-db"},
                 ],
             }
         }
@@ -527,7 +548,7 @@ def test_blocking_policy_rejects_shell_level_enforcement_suppression(
         "jobs": {
             "security": {
                 "name": "Quality Baseline / Security Gate",
-                "steps": [{"id": "enforce", "run": run_command}],
+                "steps": [{"id": "enforce", "shell": "bash", "run": run_command}],
             }
         }
     }
@@ -568,6 +589,25 @@ def test_blocking_policy_rejects_unsupported_effective_shells(scope: str, shell:
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+def test_blocking_policy_rejects_an_unspecified_enforcement_shell() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "run": "make security-audit | tee report.txt"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="unsupported shell"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
 def test_blocking_policy_rejects_a_dependency_on_an_advisory_job() -> None:
     workflow = {
         "jobs": {
@@ -578,7 +618,7 @@ def test_blocking_policy_rejects_a_dependency_on_an_advisory_job() -> None:
             "security": {
                 "name": "Quality Baseline / Security Gate",
                 "needs": "report",
-                "steps": [{"id": "enforce", "run": "make security-audit"}],
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
             },
         }
     }
@@ -597,12 +637,12 @@ def test_blocking_policy_accepts_a_dependency_on_a_validated_blocking_job() -> N
         "jobs": {
             "lint": {
                 "name": "PR Merge Gate / Lint Gate",
-                "steps": [{"id": "enforce", "run": "make lint"}],
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make lint"}],
             },
             "security": {
                 "name": "PR Merge Gate / Security Gate",
                 "needs": ["lint"],
-                "steps": [{"id": "enforce", "run": "make security-audit"}],
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
             },
         }
     }
@@ -661,11 +701,13 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
         "    name: Quality Baseline / Existing Gate\n"
         "    steps:\n"
         "      - id: enforce\n"
+        "        shell: bash\n"
         "        run: make security-audit\n"
         "  new_control:\n"
         "    name: Quality Baseline / New Control Gate\n"
         "    steps:\n"
         "      - id: enforce\n"
+        "        shell: bash\n"
         "        run: make security-audit\n",
         encoding="utf-8",
     )
@@ -706,6 +748,7 @@ def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
         "    name: Quality Baseline / Report Only\n"
         "    steps:\n"
         "      - id: enforce\n"
+        "        shell: bash\n"
         "        run: make security-audit\n",
         encoding="utf-8",
     )
@@ -815,6 +858,7 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
         "    name: Quality Baseline / Security Gate\n"
         "    steps:\n"
         "      - id: enforce\n"
+        "        shell: bash\n"
         "        run: make security-audit\n",
         encoding="utf-8",
     )
@@ -851,6 +895,7 @@ def test_manifest_validation_rejects_an_unmanaged_formatted_name_expression(
         "    name: Quality Baseline / Security Gate\n"
         "    steps:\n"
         "      - id: enforce\n"
+        "        shell: bash\n"
         "        run: make security-audit\n",
         encoding="utf-8",
     )

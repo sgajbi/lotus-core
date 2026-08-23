@@ -47,6 +47,7 @@ jobs:
         run: python scripts/development/update_shared_runtime_lock.py --check --platform windows
       - name: Replay Windows CI tooling closure
         id: enforce
+        shell: bash
         run: python scripts/development/update_ci_tooling_lock.py --check --platform windows
 
   lint-typecheck-contracts-security:
@@ -128,6 +129,7 @@ jobs:
           retention-days: 30
       - name: Warning Gate
         id: enforce
+        shell: bash
         run: make warning-gate
 
   test-suites:
@@ -178,6 +180,7 @@ jobs:
         run: make install-ci
       - name: Run ${{ matrix.suite }}
         id: enforce
+        shell: bash
         run: make ${{ matrix.target }}
 
   coverage-gate:
@@ -197,6 +200,7 @@ jobs:
         run: make install-ci
       - name: Enforce combined coverage threshold
         id: enforce
+        shell: bash
         env:
           LOTUS_COVERAGE_CHANGED_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
         run: make coverage-gate
@@ -293,6 +297,7 @@ jobs:
         run: make install-ci
       - name: Run E2E smoke suite
         id: enforce
+        shell: bash
         env:
           LOTUS_TEST_ENV_PROFILE: e2e
           E2E_INGESTION_URL: http://localhost:8400
@@ -337,6 +342,7 @@ jobs:
         run: make install-ci
       - name: Run deterministic docker endpoint smoke
         id: enforce
+        shell: bash
         run: make test-docker-smoke
       - name: Upload smoke artifacts
         if: always()
@@ -385,6 +391,7 @@ jobs:
         run: make install-ci
       - name: Run lotus-core app validation gate
         id: enforce
+        shell: bash
         run: make lotus-core-validate
       - name: Upload lotus-core validation evidence
         if: always()
@@ -425,6 +432,7 @@ jobs:
         run: make install-ci
       - name: Run endpoint latency gate
         id: enforce
+        shell: bash
         env:
           DEMO_DATA_PACK_HISTORY_DAYS: "240"
           DEMO_DATA_PACK_PORTFOLIO_IDS: "DEMO_DPM_EUR_001"
@@ -469,6 +477,7 @@ jobs:
         run: make install-ci
       - name: Run deterministic performance load gate
         id: enforce
+        shell: bash
         run: make test-performance-load-gate
       - name: Upload performance load artifacts
         if: always()
@@ -511,6 +520,7 @@ jobs:
         run: make test-fixed-income-book-cost-recovery-gate
       - name: Run deterministic derived-state recovery gate
         id: enforce
+        shell: bash
         run: make test-derived-state-recovery-gate
       - name: Upload derived-state recovery artifacts
         if: always()

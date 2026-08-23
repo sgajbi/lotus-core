@@ -68,7 +68,7 @@ def _validate_enforcement_action(
 
 
 def _validate_enforcement_shell(shell: object, *, context_text: str) -> None:
-    if shell is not None and (not isinstance(shell, str) or shell not in _SAFE_ENFORCEMENT_SHELLS):
+    if not isinstance(shell, str) or shell not in _SAFE_ENFORCEMENT_SHELLS:
         raise RequiredStatusChecksError(
             f"blocking workflow enforce step uses an unsupported shell: {context_text}; "
             f"shell={shell!r}"
