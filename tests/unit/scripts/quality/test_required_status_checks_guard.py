@@ -611,7 +611,10 @@ def test_blocking_policy_accepts_fail_propagating_shell_forms(run_command: str) 
 
 
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])
-def test_blocking_policy_rejects_makeflags_environment_at_every_scope(scope: str) -> None:
+@pytest.mark.parametrize("variable", ["MAKEFLAGS", "GNUMAKEFLAGS", "BASH_ENV"])
+def test_blocking_policy_rejects_disabling_environment_at_every_scope(
+    scope: str, variable: str
+) -> None:
     workflow: dict[str, Any] = {
         "jobs": {
             "security": {
@@ -620,20 +623,50 @@ def test_blocking_policy_rejects_makeflags_environment_at_every_scope(scope: str
             }
         }
     }
+    value = "disable-pipefail.sh" if variable == "BASH_ENV" else "-n"
     if scope == "workflow":
-        workflow["env"] = {"MAKEFLAGS": "-n"}
+        workflow["env"] = {variable: value}
     elif scope == "job":
-        workflow["jobs"]["security"]["env"] = {"MAKEFLAGS": "-n"}
+        workflow["jobs"]["security"]["env"] = {variable: value}
     else:
-        workflow["jobs"]["security"]["steps"][0]["env"] = {"MAKEFLAGS": "-n"}
+        workflow["jobs"]["security"]["steps"][0]["env"] = {variable: value}
     policy = WorkflowPolicy(
         path=Path("fixture.yml"),
         policy="gate_jobs_blocking",
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="must not set MAKEFLAGS"):
+    with pytest.raises(RequiredStatusChecksError, match="injects a disabling variable"):
         blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_accepts_unrelated_environment_at_every_scope() -> None:
+    workflow = {
+        "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                        "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+                    }
+                ],
+            }
+        },
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "Quality Baseline / Security Gate",
+    )
 
 
 def test_blocking_policy_rejects_a_malformed_workflow_environment() -> None:

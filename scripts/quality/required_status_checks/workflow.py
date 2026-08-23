@@ -9,8 +9,8 @@ import yaml
 from scripts.quality.required_status_checks.job_policy import (
     default_run_shell,
     dependency_ids,
+    effective_environment,
     validate_blocking_job,
-    validate_enforcement_environment,
 )
 from scripts.quality.required_status_checks.model import (
     RequiredChecksManifest,
@@ -129,7 +129,7 @@ def blocking_contexts_for_workflow(
     blocking_jobs: dict[str, tuple[Mapping[str, Any], tuple[str, ...]]] = {}
     observed_advisory: set[str] = set()
     workflow_shell = default_run_shell(workflow, scope=f"workflow {policy.path}")
-    validate_enforcement_environment(workflow, scope=f"workflow {policy.path}")
+    workflow_environment = effective_environment(workflow, scope=f"workflow {policy.path}")
     for job_id, job in jobs.items():
         if not isinstance(job_id, str) or not job_id:
             raise RequiredStatusChecksError(
@@ -141,7 +141,12 @@ def blocking_contexts_for_workflow(
         observed_advisory.update(set(expanded_contexts) & policy.advisory_contexts)
         contexts = _blocking_contexts(job, policy=policy)
         if contexts:
-            validate_blocking_job(job, contexts=contexts, workflow_shell=workflow_shell)
+            validate_blocking_job(
+                job,
+                contexts=contexts,
+                workflow_shell=workflow_shell,
+                workflow_environment=workflow_environment,
+            )
             blocking_jobs[job_id] = (job, contexts)
             blocking.extend(contexts)
     for job_id, (job, contexts) in blocking_jobs.items():
