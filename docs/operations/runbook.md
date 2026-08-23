@@ -114,8 +114,9 @@ after fencing Core repository roots.
    target, a governed matrix target, or the exact Windows lock-closure command. Operators,
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
-   Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-   configured environment key and its exact value must come from the closed inventory used by the
+   Docker image-set producer uses `make build-runtime-image-set`. Every blocking `run` or `uses`
+   step's effective workflow/job/step-configured environment key and its exact value must come from
+   the closed inventory used by the
    governed workflows; unlisted keys such as `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, or
    Make control variables fail closed, as do alternate coverage bases, runtime-image identities,
    profiles, platform paths, non-string values, and any run-step working-directory override. Every run step must be one

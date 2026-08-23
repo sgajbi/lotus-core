@@ -48,8 +48,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
    serialized variable bodies, ordinary files, undeclared rules, and missing Makefile authority fail
    closed. Artifact destinations must be literal expression-free paths below
    `output/`, so expression resolution cannot traverse into the checkout. Enforcement
-   working-directory overrides fail closed. Effective workflow/job/step environment keys and exact
-   values must match the positive governed inventory; alternate coverage bases, runtime-image
+   working-directory overrides fail closed. Every blocking `run` or `uses` step's effective
+   workflow/job/step environment keys and exact values must match the positive governed inventory; alternate coverage bases, runtime-image
    identities, profiles, platform paths, and non-string values cannot weaken a blocking control.
    Pre-enforcement steps cannot mutate `GITHUB_ENV`/`GITHUB_PATH`, and actions are restricted to
    governed auxiliary or enforcement families. Runtime-image verified state is bound directly to
@@ -114,7 +114,8 @@ declarations inside GNU Make column-zero-scoped `define` bodies, `$(eval)`/`${ev
 serialized variable bodies, existing files, and non-phony rules cannot authorize merge. Artifact paths containing expressions fail before an action
 can resolve them into a destination outside `output/`. The marker must run at repository root.
 Pre-enforcement steps cannot write `GITHUB_ENV`/`GITHUB_PATH`; only governed action families are
-accepted, and runtime-image consumers carry verified state only on post-verification control steps.
+accepted, every action step receives the same effective-environment validation as a run step, and
+runtime-image consumers carry verified state only on post-verification control steps.
 The marker proves an explicitly declared fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
