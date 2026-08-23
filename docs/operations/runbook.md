@@ -122,7 +122,10 @@ after fencing Core repository roots.
    path writes, workspace mutation, command chaining, and unknown actions or inputs fail closed.
    Runtime-image verification belongs to the Make graph: every consuming control declares
    `runtime-image-set-load-verify` as a prerequisite, which emits an exact-`GITHUB_SHA` receipt only
-   after successful verification. Workflow environment cannot assert or reorder that authority.
+   after successful verification. CI fails closed when the source SHA or artifact is absent. A local
+   invocation without a runtime image-set manifest emits no receipt and retains the control's
+   build-from-source behavior; a locally present manifest must verify against `GITHUB_SHA` or the
+   current Git head. Workflow environment cannot assert or reorder that authority.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must

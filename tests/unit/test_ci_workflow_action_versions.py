@@ -293,7 +293,9 @@ def test_python_quality_tools_use_the_exact_ci_lock_in_make_and_workflows() -> N
     for tool in ("import-linter", "radon"):
         assert f"scripts/quality/ci_tooling.py verify {tool}" in makefile_text
     assert "install-ci-tooling:" in makefile_text
-    assert "python -m pip install -r requirements/ci-tooling.lock.txt" in makefile_text
+    assert (
+        "$(REPOSITORY_PYTHON) -m pip install -r requirements/ci-tooling.lock.txt" in makefile_text
+    )
     assert "run: make install-ci-tooling" in workflow_text
     for unpinned_install in (
         "python -m pip install ruff",
