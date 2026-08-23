@@ -20,71 +20,6 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/checkout@",
     "actions/upload-artifact@",
 )
-_ENFORCEMENT_ACTION_PREFIXES = ("reviewdog/action-actionlint@",)
-_ENFORCEMENT_MAKE_TARGETS = frozenset(
-    {
-        "api-vocabulary-gate",
-        "architecture-guard",
-        "base-image-registry-evidence-check",
-        "coverage-gate",
-        "dependency-lock-replay-check",
-        "dependency-technology-inventory",
-        "lint",
-        "lotus-core-validate",
-        "migration-smoke",
-        "no-alias-gate",
-        "openapi-gate",
-        "quality-bandit-gate",
-        "quality-complexity-gate",
-        "quality-deptry-source-gate",
-        "quality-import-boundary-gate",
-        "quality-integration-lite-collection-gate",
-        "quality-maintainability-gate",
-        "quality-openapi-spectral-gate",
-        "quality-ruff-format-gate",
-        "quality-ruff-gate",
-        "quality-unit-collection-gate",
-        "quality-vulture-source-gate",
-        "quality-wiki-docs-gate",
-        "quality-workflow-governance-gate",
-        "security-audit",
-        "technology-governance-pilot-receipt-guard",
-        "test-critical-lifecycle-db",
-        "test-derived-state-recovery-gate",
-        "test-docker-smoke",
-        "test-e2e-smoke",
-        "test-fixed-income-book-cost-recovery-gate",
-        "test-integration-lite",
-        "test-latency-gate",
-        "test-ops-contract",
-        "test-performance-load-gate",
-        "test-transaction-buy-contract",
-        "test-transaction-dividend-contract",
-        "test-transaction-fx-contract",
-        "test-transaction-interest-contract",
-        "test-transaction-portfolio-flow-bundle-contract",
-        "test-transaction-processing-contract",
-        "test-transaction-sell-contract",
-        "test-unit",
-        "test-unit-db",
-        "typecheck",
-        "verify-dependencies",
-        "warning-gate",
-    }
-)
-_MAKE_COMMAND = re.compile(r"^\s*make\s+([^\s\\]+)", re.MULTILINE)
-_ENFORCEMENT_COMMAND_PATTERNS = (
-    re.compile(r"^\s*docker\s+buildx\s+bake(?:\s|$)", re.MULTILINE),
-    re.compile(
-        r"^\s*python\s+scripts/development/update_(?:ci_tooling|shared_runtime)_lock\.py"
-        r"\b[^\n]*--check\b",
-        re.MULTILINE,
-    ),
-    re.compile(
-        r"^\s*python\s+scripts/release/prebuild_ci_images\.py\b",
-        re.MULTILINE,
-    ),
-)
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -114,32 +49,26 @@ def _matrix_values(job: Mapping[str, Any], *, matrix_key: str, name: str) -> tup
     return tuple(values)
 
 
-def _validate_matrix_name_coverage(
-    job: Mapping[str, Any], *, name: str, expression_keys: set[str]
-) -> None:
+def _validate_matrix_shape(job: Mapping[str, Any], *, name: str, has_name_expression: bool) -> None:
     strategy = job.get("strategy") or {}
     matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
     if matrix is None:
         return
     if not isinstance(matrix, dict):
         raise RequiredStatusChecksError(f"matrix must be an object: {name}")
-    matrix_axes = set(matrix) - {"include", "exclude"}
-    omitted_axes = sorted(matrix_axes - expression_keys)
-    if omitted_axes:
-        raise RequiredStatusChecksError(
-            f"matrix axes must appear in the job name: {name}; omitted={omitted_axes!r}"
-        )
-    if not expression_keys:
+    if set(matrix) != {"include"}:
+        raise RequiredStatusChecksError(f"matrix job has unsupported matrix shape: {name}")
+    if not has_name_expression:
         raise RequiredStatusChecksError(f"matrix job name must identify each cell: {name}")
 
 
 def _expanded_job_contexts(job: Mapping[str, Any]) -> tuple[str, ...]:
     name = require_non_empty_string(job.get("name"), field="workflow job name")
     expression_matches = _matrix_name_expressions(name)
-    _validate_matrix_name_coverage(
+    _validate_matrix_shape(
         job,
         name=name,
-        expression_keys={match.group(1) for match in expression_matches},
+        has_name_expression=bool(expression_matches),
     )
     if not expression_matches:
         return (name,)
@@ -189,42 +118,7 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
     return tuple(contexts)
 
 
-def _matrix_targets(job: Mapping[str, Any]) -> frozenset[str]:
-    strategy = job.get("strategy") or {}
-    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
-    include = matrix.get("include") if isinstance(matrix, dict) else None
-    if not isinstance(include, list):
-        return frozenset()
-    targets: set[str] = set()
-    for row in include:
-        if not isinstance(row, dict) or "target" not in row:
-            continue
-        target = row["target"]
-        if not isinstance(target, str) or not target:
-            return frozenset()
-        targets.add(target)
-    return frozenset(targets)
-
-
-def _step_is_enforcement(step: Mapping[str, Any], *, job: Mapping[str, Any]) -> bool:
-    if "if" in step:
-        return False
-    run_command = step.get("run")
-    if isinstance(run_command, str):
-        make_targets = set(_MAKE_COMMAND.findall(run_command))
-        if "${{" in make_targets:
-            make_targets.remove("${{")
-            make_targets.update(_matrix_targets(job))
-        if make_targets and make_targets <= _ENFORCEMENT_MAKE_TARGETS:
-            return True
-        return any(pattern.search(run_command) for pattern in _ENFORCEMENT_COMMAND_PATTERNS)
-    action = step.get("uses")
-    return isinstance(action, str) and action.startswith(_ENFORCEMENT_ACTION_PREFIXES)
-
-
-def _validate_blocking_step(
-    step: object, *, job: Mapping[str, Any], contexts: tuple[str, ...]
-) -> bool:
+def _validate_blocking_step(step: object, *, contexts: tuple[str, ...]) -> bool:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
         raise RequiredStatusChecksError(
@@ -244,7 +138,13 @@ def _validate_blocking_step(
                 f"blocking workflow enforcement steps must be unconditional: {context_text}; "
                 f"step={step_name!r}"
             )
-    return _step_is_enforcement(step, job=job)
+    if step.get("id") != "enforce":
+        return False
+    if not isinstance(step.get("run") or step.get("uses"), str):
+        raise RequiredStatusChecksError(
+            f"blocking workflow enforce step must execute run or uses: {context_text}"
+        )
+    return True
 
 
 def _validate_blocking_job(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> None:
@@ -263,12 +163,12 @@ def _validate_blocking_job(job: Mapping[str, Any], *, contexts: tuple[str, ...])
             f"blocking workflow job steps must be a list: {context_text}"
         )
     enforcement_steps = sum(
-        _validate_blocking_step(step, job=job, contexts=contexts) for step in steps or ()
+        _validate_blocking_step(step, contexts=contexts) for step in steps or ()
     )
-    if enforcement_steps == 0:
+    if enforcement_steps != 1:
         raise RequiredStatusChecksError(
-            "blocking workflow jobs must execute at least one unconditional enforcement "
-            f"command or action: {context_text}"
+            "blocking workflow jobs must declare exactly one unconditional id: enforce step: "
+            f"{context_text}; observed={enforcement_steps}"
         )
 
 

@@ -12,6 +12,7 @@ import yaml
 from scripts.quality.required_status_checks import (
     DEFAULT_MANIFEST_PATH,
     RequiredCheck,
+    RequiredChecksManifest,
     RequiredStatusChecksError,
     WorkflowPolicy,
     blocking_contexts_for_workflow,
@@ -30,6 +31,26 @@ _CANONICAL_TRIGGERS_YAML = (
     "  merge_group:\n"
     "    branches: [main]\n"
 )
+
+
+def _fixture_manifest(payload: dict[str, Any]) -> RequiredChecksManifest:
+    return RequiredChecksManifest(
+        repository=payload["repository"],
+        branch=payload["branch"],
+        strict=payload["strict"],
+        workflow_policies=tuple(
+            WorkflowPolicy(
+                path=Path(policy["path"]),
+                policy=policy["policy"],
+                advisory_contexts=frozenset(policy["advisory_contexts"]),
+            )
+            for policy in payload["workflow_policies"]
+        ),
+        required_checks=tuple(
+            RequiredCheck(context=check["context"], app_id=check["app_id"])
+            for check in payload["required_checks"]
+        ),
+    )
 
 
 def test_repository_manifest_matches_expanded_blocking_workflow_contexts() -> None:
@@ -61,7 +82,7 @@ def test_matrix_contexts_expand_from_each_include_row() -> None:
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
-                "steps": [{"name": "Run suite", "run": "make security-audit"}],
+                "steps": [{"id": "enforce", "name": "Run suite", "run": "make security-audit"}],
                 "strategy": {
                     "matrix": {
                         "include": [
@@ -93,7 +114,7 @@ def test_matrix_context_expansion_treats_values_as_literal_text() -> None:
         "jobs": {
             "tests": {
                 "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
-                "steps": [{"name": "Run suite", "run": "make security-audit"}],
+                "steps": [{"id": "enforce", "name": "Run suite", "run": "make security-audit"}],
                 "strategy": {"matrix": {"include": [{"suite": r"windows\proof"}]}},
             }
         }
@@ -130,7 +151,7 @@ def test_matrix_context_expansion_rejects_an_axis_omitted_from_the_job_name() ->
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="matrix axes.*omitted=.*python"):
+    with pytest.raises(RequiredStatusChecksError, match="unsupported matrix shape"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -151,7 +172,9 @@ def test_gate_policy_excludes_only_an_explicit_observed_advisory_context() -> No
         "jobs": {
             "gate": {
                 "name": "Quality Baseline / Security Gate",
-                "steps": [{"name": "Security audit", "run": "make security-audit"}],
+                "steps": [
+                    {"id": "enforce", "name": "Security audit", "run": "make security-audit"}
+                ],
             },
             "report": {"name": "Quality Baseline / Report Only"},
         }
@@ -251,6 +274,7 @@ def test_blocking_policy_rejects_conditional_enforcement_steps(condition: object
                 "name": "Quality Baseline / Security Gate",
                 "steps": [
                     {
+                        "id": "enforce",
                         "name": "Security audit",
                         "if": condition,
                         "run": "make security-audit",
@@ -283,7 +307,11 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
                         "if": "always()",
                         "uses": "actions/upload-artifact@v7",
                     },
-                    {"name": "Security audit", "run": "make security-audit"},
+                    {
+                        "id": "enforce",
+                        "name": "Security audit",
+                        "run": "make security-audit",
+                    },
                 ],
             }
         }
@@ -332,7 +360,7 @@ def test_blocking_policy_requires_an_unconditional_enforcement_step(
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="at least one unconditional enforcement command or action",
+        match="exactly one unconditional id: enforce step",
     ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
@@ -363,7 +391,7 @@ def test_blocking_policy_does_not_treat_setup_commands_as_enforcement(
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="unconditional enforcement"):
+    with pytest.raises(RequiredStatusChecksError, match="id: enforce"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -384,18 +412,20 @@ def test_blocking_policy_rejects_an_unknown_action_as_the_only_control() -> None
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="at least one unconditional enforcement command or action",
+        match="exactly one unconditional id: enforce step",
     ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
-def test_blocking_policy_rejects_an_ungoverned_matrix_target() -> None:
+def test_blocking_policy_rejects_duplicate_enforcement_markers() -> None:
     workflow = {
         "jobs": {
             "tests": {
-                "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
-                "strategy": {"matrix": {"include": [{"suite": "unit", "target": "noop"}]}},
-                "steps": [{"run": "make ${{ matrix.target }}"}],
+                "name": "PR Merge Gate / Tests",
+                "steps": [
+                    {"id": "enforce", "run": "make test-unit"},
+                    {"id": "enforce", "run": "make test-unit-db"},
+                ],
             }
         }
     }
@@ -405,7 +435,26 @@ def test_blocking_policy_rejects_an_ungoverned_matrix_target() -> None:
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="unconditional enforcement"):
+    with pytest.raises(RequiredStatusChecksError, match="observed=2"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "name": "Marker only"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="must execute run or uses"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -414,7 +463,7 @@ def test_blocking_policy_accepts_an_explicitly_governed_enforcement_action() -> 
         "jobs": {
             "workflow_lint": {
                 "name": "PR Merge Gate / Workflow Lint",
-                "steps": [{"uses": "reviewdog/action-actionlint@v1"}],
+                "steps": [{"id": "enforce", "uses": "reviewdog/action-actionlint@v1"}],
             }
         }
     }
@@ -451,14 +500,16 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
         "  existing:\n"
         "    name: Quality Baseline / Existing Gate\n"
         "    steps:\n"
-        "      - run: make security-audit\n"
+        "      - id: enforce\n"
+        "        run: make security-audit\n"
         "  new_control:\n"
         "    name: Quality Baseline / New Control Gate\n"
         "    steps:\n"
-        "      - run: make security-audit\n",
+        "      - id: enforce\n"
+        "        run: make security-audit\n",
         encoding="utf-8",
     )
-    manifest = load_manifest(manifest_path)
+    manifest = _fixture_manifest(source_manifest)
 
     with pytest.raises(RequiredStatusChecksError, match="New Control Gate"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
@@ -494,14 +545,15 @@ def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
         "  blocking:\n"
         "    name: Quality Baseline / Report Only\n"
         "    steps:\n"
-        "      - run: make security-audit\n",
+        "      - id: enforce\n"
+        "        run: make security-audit\n",
         encoding="utf-8",
     )
     quality_workflow_path.write_text(
         _CANONICAL_TRIGGERS_YAML + "jobs:\n  report:\n    name: Quality Baseline / Report Only\n",
         encoding="utf-8",
     )
-    manifest = load_manifest(manifest_path)
+    manifest = _fixture_manifest(source_manifest)
 
     with pytest.raises(RequiredStatusChecksError, match="globally unique.*Report Only"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
@@ -526,7 +578,7 @@ def test_manifest_validation_rejects_required_advisory_context(tmp_path: Path) -
         _CANONICAL_TRIGGERS_YAML + "jobs:\n  report:\n    name: Quality Baseline / Report Only\n",
         encoding="utf-8",
     )
-    manifest = load_manifest(manifest_path)
+    manifest = _fixture_manifest(source_manifest)
 
     with pytest.raises(RequiredStatusChecksError, match="must not use declared advisory"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
@@ -602,11 +654,12 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
         "  security:\n"
         "    name: Quality Baseline / Security Gate\n"
         "    steps:\n"
-        "      - run: make security-audit\n",
+        "      - id: enforce\n"
+        "        run: make security-audit\n",
         encoding="utf-8",
     )
     colliding_workflow_path.write_text(unmanaged_workflow, encoding="utf-8")
-    manifest = load_manifest(manifest_path)
+    manifest = _fixture_manifest(source_manifest)
 
     with pytest.raises(RequiredStatusChecksError, match="unmanaged workflow"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
@@ -637,14 +690,15 @@ def test_manifest_validation_rejects_an_unmanaged_formatted_name_expression(
         "  security:\n"
         "    name: Quality Baseline / Security Gate\n"
         "    steps:\n"
-        "      - run: make security-audit\n",
+        "      - id: enforce\n"
+        "        run: make security-audit\n",
         encoding="utf-8",
     )
     unmanaged_workflow_path.write_text(
         "jobs:\n  impostor:\n    name: ${{ format('Quality Baseline / {0}', matrix.gate) }}\n",
         encoding="utf-8",
     )
-    manifest = load_manifest(manifest_path)
+    manifest = _fixture_manifest(source_manifest)
 
     with pytest.raises(RequiredStatusChecksError, match="unsupported workflow name expression"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
