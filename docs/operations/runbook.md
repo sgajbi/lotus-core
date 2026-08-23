@@ -138,8 +138,9 @@ after fencing Core repository roots.
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
    also carry GNU Make's exact per-target phony flag in the repository-root effective database's
    delimited Files section evaluated with only fixed `PATH` and `LC_ALL=C`, and appear in a literal
-   static `.PHONY` declaration. Conditional directives, includes, declarations inside `define`
-   bodies, dynamic or continued phony declarations, inherited `MAKELEVEL`/`CI`/runner state, parse-time/recipe output, serialized
+   static `.PHONY` declaration. Conditional directives, includes, declarations inside GNU Make
+   column-zero-scoped `define` bodies, `$(eval)`/`${eval}` outside recipes, dynamic or continued
+   phony declarations, inherited `MAKELEVEL`/`CI`/runner state, parse-time/recipe output, serialized
    variable bodies, a missing Makefile, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
