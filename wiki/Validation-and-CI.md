@@ -43,10 +43,12 @@ cannot authorize merge. Live validation is pinned to canonical `sgajbi/lotus-cor
 manifest change cannot redirect certification to another repository or branch.
 
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
-blocking jobs to be unconditional, and scans every repository workflow for static or dynamic
-required-context collisions. It rejects formatted or otherwise unsupported job-name expressions
-and fails on a missing or stale check, undeclared gate/advisory job, duplicate context, malformed
-matrix, wrong application identity, or wrong manifest shape. It is part of `make lint`,
+blocking jobs and steps to be unconditional and fail-propagating, inventories advisory producers
+when proving global same-app context uniqueness, and scans every repository workflow for static or
+dynamic required-context collisions. It rejects formatted or otherwise unsupported job-name
+expressions and fails on a missing or stale check, undeclared gate/advisory job,
+advisory-as-required context, duplicate context, malformed matrix, wrong application identity, or
+wrong manifest shape. It is part of `make lint`,
 alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enforcement path cannot
 silently omit, skip, or impersonate either control.
 

@@ -29,11 +29,12 @@ evidence must be explicit and cannot be mistaken for release authorization.
    guard pins repository/branch authority to canonical `sgajbi/lotus-core` / `main`; manifest edits
    cannot redirect live certification to another protection target.
 2. `required_status_checks_guard.py` validates the closed manifest shape, expands matrix suites,
-   classifies every governed workflow job, requires blocking jobs to be unconditional, scans every
+   classifies every governed workflow job, requires blocking jobs and steps to be unconditional and
+   fail-propagating, inventories advisory producers in global context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
    job-name expressions, requires every manifest entry to bind to the exact GitHub Actions
-   application ID `15368`, and compares exact sets. New, renamed, skipped, or impersonated jobs
-   cannot silently authorize merge.
+   application ID `15368`, and compares exact sets. New, renamed, skipped, failure-tolerant,
+   advisory-colliding, or impersonated jobs cannot silently authorize merge.
 3. Live verification requires GitHub's app-bound `checks` response, not legacy context strings.
    Missing, stale, wrong-app, malformed, or non-strict protection fails closed.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
@@ -54,10 +55,11 @@ evidence must be explicit and cannot be mistaken for release authorization.
 
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
 deterministically, the advisory context must be both declared and observed, blocking jobs cannot
-carry job-level conditions, and unmanaged static or dynamic workflow names cannot collide with a
+carry job-level conditions or job/step failure tolerance, advisory and blocking producers cannot
+share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
 required context. Non-GitHub-Actions manifest authority, noncanonical repository/branch targets,
-and formatted or otherwise unsupported job-name expressions fail before they can impersonate or
-redirect a required check. An undeclared new Gate fails before protection can drift, and live
+advisory-as-required authority, and formatted or otherwise unsupported job-name expressions fail
+before they can impersonate or redirect a required check. An undeclared new Gate fails before protection can drift, and live
 parity rejects missing, stale, wrong-app, and wrong strict-mode authority. Workflow tests prove
 import-boundary and required-check guards are reachable from `make lint`, and Main uses only the
 dedicated read credential. The pre-remediation live guard characterized exactly 19 missing
@@ -66,7 +68,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `53 passed`;
+- focused workflow/manifest pack after final review hardening: `59 passed`;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;
