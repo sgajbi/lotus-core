@@ -36,15 +36,16 @@ full-gate behavior; broader same-head evidence reuse is outside this bounded con
 ### Required Check Authority
 
 `contracts/ci/required-status-checks.v1.json` is the single versioned authority for branch
-protection. It binds each required context to the GitHub Actions application ID, expands every
+protection. It binds each required context to GitHub Actions application ID `15368`, expands every
 Pull Request Merge Gate matrix suite, and includes all 14 Quality Baseline `... Gate` jobs.
 `Quality Baseline / Report Only` is the sole explicit advisory context; it retains diagnostics but
 cannot authorize merge.
 
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
 blocking jobs to be unconditional, and scans every repository workflow for static or dynamic
-required-context collisions. It also fails on a missing or stale check, undeclared gate/advisory
-job, duplicate context, malformed matrix, or wrong manifest shape. It is part of `make lint`,
+required-context collisions. It rejects formatted or otherwise unsupported job-name expressions
+and fails on a missing or stale check, undeclared gate/advisory job, duplicate context, malformed
+matrix, wrong application identity, or wrong manifest shape. It is part of `make lint`,
 alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enforcement path cannot
 silently omit, skip, or impersonate either control.
 
