@@ -202,6 +202,20 @@ def test_live_protection_rejects_boolean_app_identity() -> None:
         )
 
 
+def test_live_protection_rejects_duplicate_context_app_bindings() -> None:
+    manifest = load_manifest()
+    live_checks = [
+        {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
+    ]
+    live_checks.append(live_checks[0].copy())
+
+    with pytest.raises(RequiredStatusChecksError, match="live required checks must be unique"):
+        validate_live_protection(
+            manifest,
+            {"required_status_checks": {"strict": True, "checks": live_checks}},
+        )
+
+
 def test_desired_payload_is_app_bound_and_ready_for_atomic_update() -> None:
     manifest = load_manifest()
 

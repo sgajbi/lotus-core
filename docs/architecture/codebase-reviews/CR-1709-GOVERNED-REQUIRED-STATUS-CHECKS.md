@@ -53,9 +53,9 @@ from `make lint`, and Main uses only the dedicated read credential. The live gua
 against the pre-remediation 18-context protection with the exact 19 missing contexts; that failure
 is retained as characterization, not bypassed.
 
-Local evidence at signed head `2b4dca688`:
+Local feature-branch evidence:
 
-- focused workflow/manifest pack after review hardening: `45 passed`;
+- focused workflow/manifest pack after review hardening: `46 passed`;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;
