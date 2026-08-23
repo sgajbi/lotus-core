@@ -54,6 +54,8 @@ Operators, substitutions, quoting, redirection, multiple lines, Make flags, and 
 fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
 environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` remains prohibited;
+every referenced matrix target is resolved from each include row and must be one bare Make target,
+with assignment-only values such as `FOO=bar` rejected;
 requires blocking dependencies
 to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and

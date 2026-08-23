@@ -15,8 +15,13 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
 )
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset({"BASH_ENV", "GNUMAKEFLAGS", "MAKEFLAGS"})
+_MAKE_TARGET_TEXT = r"[A-Za-z0-9_./:@,+][A-Za-z0-9_./:@,+-]*"
+_MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
+_MATRIX_ENFORCEMENT_COMMAND = re.compile(
+    r"^make[ \t]+\$\{\{[ \t]*matrix\.([A-Za-z_][A-Za-z0-9_]*)[ \t]*\}\}$"
+)
 _BARE_ENFORCEMENT_COMMAND = re.compile(
-    r"^(?:make[ \t]+(?:[A-Za-z0-9_./=:@,+][A-Za-z0-9_./=:@,+-]*|"
+    rf"^(?:make[ \t]+(?:{_MAKE_TARGET_TEXT}|"
     r"\$\{\{[ \t]*matrix\.[A-Za-z_][A-Za-z0-9_]*[ \t]*\}\})|"
     r"python[ \t]+scripts/development/update_ci_tooling_lock\.py"
     r"[ \t]+--check[ \t]+--platform[ \t]+windows)$"
@@ -104,6 +109,29 @@ def _validate_enforcement_shell(shell: object, *, context_text: str) -> None:
         )
 
 
+def _validate_matrix_enforcement_targets(
+    job: Mapping[str, Any], *, run_command: str, context_text: str
+) -> None:
+    expression = _MATRIX_ENFORCEMENT_COMMAND.fullmatch(run_command)
+    if expression is None:
+        return
+    strategy = job.get("strategy")
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    include = matrix.get("include") if isinstance(matrix, dict) else None
+    if not isinstance(include, list) or not include:
+        raise RequiredStatusChecksError(
+            f"blocking workflow matrix enforce step has no include rows: {context_text}"
+        )
+    matrix_key = expression.group(1)
+    for row_index, row in enumerate(include):
+        value = row.get(matrix_key) if isinstance(row, dict) else None
+        if not isinstance(value, str) or _MAKE_TARGET.fullmatch(value) is None:
+            raise RequiredStatusChecksError(
+                "blocking workflow matrix enforcement target must be a bare Make target: "
+                f"{context_text}; matrix.{matrix_key}; row={row_index}"
+            )
+
+
 def _effective_enforcement_shell(
     step: Mapping[str, Any], *, default_shell: str | None, context_text: str
 ) -> str | None:
@@ -117,6 +145,7 @@ def _effective_enforcement_shell(
 def _validate_blocking_step(
     step: object,
     *,
+    job: Mapping[str, Any],
     contexts: tuple[str, ...],
     default_shell: str | None,
     default_environment: Mapping[str, Any],
@@ -156,6 +185,11 @@ def _validate_blocking_step(
             raise RequiredStatusChecksError(
                 f"blocking workflow enforce step must be a single bare command: {context_text}"
             )
+        _validate_matrix_enforcement_targets(
+            job,
+            run_command=run_command,
+            context_text=context_text,
+        )
     return True
 
 
@@ -210,6 +244,7 @@ def validate_blocking_job(
     enforcement_steps = sum(
         _validate_blocking_step(
             step,
+            job=job,
             contexts=contexts,
             default_shell=job_shell or workflow_shell,
             default_environment=job_environment,
