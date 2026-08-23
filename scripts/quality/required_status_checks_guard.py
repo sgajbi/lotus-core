@@ -23,14 +23,7 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/checkout@",
     "actions/upload-artifact@",
 )
-_NON_ENFORCEMENT_ACTION_PREFIXES = (
-    "actions/cache/restore@",
-    "actions/cache/save@",
-    "actions/checkout@",
-    "actions/download-artifact@",
-    "actions/setup-python@",
-    "actions/upload-artifact@",
-)
+_ENFORCEMENT_ACTION_PREFIXES = ("reviewdog/action-actionlint@",)
 
 
 class RequiredStatusChecksError(RuntimeError):
@@ -288,8 +281,8 @@ def blocking_contexts_for_workflow(
                         )
                 run_command = step.get("run")
                 action = step.get("uses")
-                has_enforcement_action = isinstance(action, str) and not action.startswith(
-                    _NON_ENFORCEMENT_ACTION_PREFIXES
+                has_enforcement_action = isinstance(action, str) and action.startswith(
+                    _ENFORCEMENT_ACTION_PREFIXES
                 )
                 if "if" not in step and (
                     (isinstance(run_command, str) and run_command.strip()) or has_enforcement_action

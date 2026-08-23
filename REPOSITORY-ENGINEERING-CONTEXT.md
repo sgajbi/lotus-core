@@ -4148,8 +4148,8 @@ Most relevant current governance:
      Pin live authority to canonical `sgajbi/lotus-core` / `main`, expand matrix suites before
      comparison, require blocking jobs and their enforcement commands to be unconditional and
      fail-propagating, limit conditional auxiliary steps to audited checkout, cache-save, and
-     artifact-upload actions, require at least one unconditional substantive command or enforcement
-     action in every blocking job,
+     artifact-upload actions, require at least one unconditional substantive command or explicitly
+     approved enforcement action in every blocking job,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
      static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
      manifest authority only to GitHub Actions app `15368`, and fail on missing, stale, duplicate,

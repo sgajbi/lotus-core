@@ -299,6 +299,48 @@ def test_blocking_policy_requires_an_unconditional_enforcement_step(
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
+def test_blocking_policy_rejects_an_unknown_action_as_the_only_control() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"name": "Unknown control", "uses": "vendor/control@v1"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="at least one unconditional enforcement command or action",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_accepts_an_explicitly_governed_enforcement_action() -> None:
+    workflow = {
+        "jobs": {
+            "workflow_lint": {
+                "name": "PR Merge Gate / Workflow Lint",
+                "steps": [{"uses": "reviewdog/action-actionlint@v1"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="all_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "PR Merge Gate / Workflow Lint",
+    )
+
+
 def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_drift(
     tmp_path: Path,
 ) -> None:
