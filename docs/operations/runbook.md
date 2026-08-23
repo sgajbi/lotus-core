@@ -115,7 +115,7 @@ after fencing Core repository roots.
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-   environment injection through `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
+   environment injection through `CI`, `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
    also fails closed, as does any run-step working-directory override. Every run step must be one
    admitted bare command and every action must be on the audited allowlist with action-specific
    `with:` keys and constrained checkout/cache/artifact/setup values, so indirect environment or
@@ -126,6 +126,9 @@ after fencing Core repository roots.
    invocation without a runtime image-set manifest emits no receipt and retains the control's
    build-from-source behavior; a locally present manifest must verify against `GITHUB_SHA` or the
    current Git head. Workflow environment cannot assert or reorder that authority.
+   Blocking jobs may use only the audited job keys and literal `ubuntu-latest` or
+   `windows-latest` runners; containers, services, environments, self-hosted runner labels, and
+   runner expressions fail closed before they can change the execution boundary.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must

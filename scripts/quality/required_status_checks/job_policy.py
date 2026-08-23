@@ -13,9 +13,24 @@ from scripts.quality.required_status_checks.model import (
 )
 
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
+_ALLOWED_BLOCKING_JOB_KEYS = frozenset(
+    {
+        "defaults",
+        "env",
+        "if",
+        "name",
+        "needs",
+        "runs-on",
+        "steps",
+        "strategy",
+        "timeout-minutes",
+    }
+)
+_AUDITED_BLOCKING_JOB_RUNNERS = frozenset({"ubuntu-latest", "windows-latest"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset(
     {
         "BASH_ENV",
+        "CI",
         "GITHUB_SHA",
         "GNUMAKEFLAGS",
         "LOTUS_RUNTIME_IMAGE_SET_VERIFIED",
@@ -284,6 +299,12 @@ def validate_blocking_job(
         raise RequiredStatusChecksError(
             f"blocking workflow jobs must not tolerate failure: {context_text}"
         )
+    unsupported_keys = sorted(set(job) - _ALLOWED_BLOCKING_JOB_KEYS)
+    if unsupported_keys:
+        raise RequiredStatusChecksError(
+            "blocking workflow job uses an unsupported key: "
+            f"{context_text}; keys={unsupported_keys!r}"
+        )
     steps = job.get("steps")
     if steps is not None and not isinstance(steps, list):
         raise RequiredStatusChecksError(
@@ -310,4 +331,9 @@ def validate_blocking_job(
         raise RequiredStatusChecksError(
             "blocking workflow jobs must declare exactly one unconditional id: enforce step: "
             f"{context_text}; observed={enforcement_steps}"
+        )
+    runner = job.get("runs-on")
+    if not isinstance(runner, str) or runner not in _AUDITED_BLOCKING_JOB_RUNNERS:
+        raise RequiredStatusChecksError(
+            f"blocking workflow job runner is not audited: {context_text}; runner={runner!r}"
         )
