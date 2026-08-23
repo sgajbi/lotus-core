@@ -4157,13 +4157,15 @@ Most relevant current governance:
      target, or the exact Windows lock-closure command. Operators, substitutions, quoting,
      redirection, multiple lines, Make flags, wrapper commands, and other shell syntax belong
      inside a reviewed Make target, not in the merge-authorizing marker. Continue rejecting
-     workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`,
+     workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
+     `MFLAGS`, or `BASH_ENV`, and any enforcement-step working-directory override,
      resolve every referenced `matrix.<key>` value from each include row and require it to be one
      bare Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`, and reject assignment-only targets
      such as `make FOO=bar` plus option, path, special-target, or multi-target syntax. Every admitted
      static or resolved matrix target must also be declared by a repository-root `Makefile`
-     active `.PHONY:` entry in GNU Make's effective database; missing Makefile authority, inactive
-     conditional or unexpanded declarations, ordinary files, and non-phony rules fail closed,
+     active `.PHONY:` entry in GNU Make's delimited effective database; parse-time/recipe output,
+     missing Makefile authority, inactive conditional or unexpanded declarations, ordinary files,
+     and non-phony rules fail closed,
      require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for

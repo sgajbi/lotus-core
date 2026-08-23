@@ -115,12 +115,14 @@ after fencing Core repository roots.
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-   environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` also fails closed.
+   environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
+   also fails closed, as does any enforcement working-directory override.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
-   also appear as active repository-root `.PHONY:` entries in GNU Make's effective database; a
-   missing Makefile, inactive conditional or unexpanded declaration, an ordinary file,
+   also appear as active repository-root `.PHONY:` entries in GNU Make's delimited effective
+   database; parse-time/recipe output, a missing Makefile, inactive conditional or unexpanded
+   declaration, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for

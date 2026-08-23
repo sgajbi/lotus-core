@@ -14,7 +14,9 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
     "actions/upload-artifact@",
 )
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
-_DISABLING_ENVIRONMENT_VARIABLES = frozenset({"BASH_ENV", "GNUMAKEFLAGS", "MAKEFLAGS"})
+_DISABLING_ENVIRONMENT_VARIABLES = frozenset(
+    {"BASH_ENV", "GNUMAKEFLAGS", "MAKEFILES", "MAKEFLAGS", "MFLAGS"}
+)
 _MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 _MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
 _STATIC_MAKE_ENFORCEMENT_COMMAND = re.compile(rf"^make[ \t]+({_MAKE_TARGET_TEXT})$")
@@ -40,6 +42,10 @@ def default_run_shell(configuration: Mapping[str, Any], *, scope: str) -> str | 
         return None
     if not isinstance(run_defaults, dict):
         raise RequiredStatusChecksError(f"workflow run defaults must be an object: {scope}")
+    if "working-directory" in run_defaults:
+        raise RequiredStatusChecksError(
+            f"blocking workflow enforce step must run at the repository root: {scope}"
+        )
     shell = run_defaults.get("shell")
     if shell is None:
         return None
@@ -192,6 +198,10 @@ def _validate_blocking_step(
     if step.get("id") != "enforce":
         return False
     _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
+    if "working-directory" in step:
+        raise RequiredStatusChecksError(
+            f"blocking workflow enforce step must run at the repository root: {context_text}"
+        )
     executable = step.get("run") or step.get("uses")
     if not isinstance(executable, str):
         raise RequiredStatusChecksError(
