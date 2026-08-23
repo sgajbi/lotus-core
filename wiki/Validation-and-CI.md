@@ -43,23 +43,25 @@ cannot authorize merge. Live validation is pinned to canonical `sgajbi/lotus-cor
 manifest change cannot redirect certification to another repository or branch.
 
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
-blocking jobs and enforcement commands to be unconditional and fail-propagating, permits
+blocking jobs and all executable steps to be unconditional and fail-propagating, permits
 conditions only on audited checkout, cache-save, and artifact-upload actions, requires every
 blocking job to retain exactly one unconditional executable `id: enforce` step on a non-auxiliary
 control, requires exact canonical PR keys and merge-group triggers for `main`, accepts only
 include-row matrices with cell-identifying names, rejects path-filtered PR triggers, requires the
-effective shell of every marked run control to be exact `bash` and its script to be one bare
+effective shell of every run step to be exact `bash` and its script to be one bare
 invocation: one Make target, a governed matrix target, or the exact Windows lock-closure command.
 Operators, substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands
-fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. The
+fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. Only
+the audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint actions are
+admitted. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
 environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
-and enforcement working-directory overrides remain prohibited;
-pre-enforcement `GITHUB_ENV`/`GITHUB_PATH` mutation and ungoverned action steps also fail closed;
+and run-step working-directory overrides remain prohibited. The positive command grammar rejects
+direct or indirect environment/path writes, workspace mutation, command chaining, and ungoverned actions;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
 multi-target tokens are rejected. Every admitted static or resolved target must also be declared
-by GNU Make's delimited effective-database Files section, so parse-time/recipe output, serialized
+by GNU Make's exact per-target phony flag in the delimited effective-database Files section, so parse-time/recipe output, serialized
 variable bodies, inactive declarations, ordinary files, non-phony rules, and missing Makefile
 authority fail closed. It
 requires blocking dependencies to be fully validated blocking jobs, pins strict mode and the exact
@@ -125,7 +127,8 @@ PR Merge Gate and Main Releasability each use one exact-source runtime image set
 `Validate Docker Build` job builds the workflow's service union once, records build timings, and
 uploads a one-day transport bundle. Docker smoke, E2E, latency, load, validation, recovery, and
 institutional jobs load that bundle instead of rebuilding overlapping images.
-Workflow consumers set `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` only after this handoff succeeds;
+Workflow consumers invoke `make runtime-image-set-load-verify`, then—and only then—set
+`LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` on downstream controls;
 that explicit proof suppresses runtime rebuild flags, while ordinary CI and local commands retain
 their normal build behavior. The E2E image inventory is checked against every repo-built full-stack
 service so a newly started service cannot bypass exact-source verification.

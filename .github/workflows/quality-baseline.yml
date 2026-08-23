@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -30,7 +34,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install Ruff
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Ruff regression gate
         id: enforce
         shell: bash
@@ -47,7 +51,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install Ruff
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Ruff format gate
         id: enforce
         shell: bash
@@ -64,7 +68,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install import-linter
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Import boundary gate
         id: enforce
         shell: bash
@@ -86,13 +90,11 @@ jobs:
           cache: npm
           cache-dependency-path: tools/api_governance/package-lock.json
       - name: Install repository
-        run: |
-          python -m pip install -U pip
-          python scripts/development/bootstrap_dev.py
+        run: make install-ci
       - name: OpenAPI quality gate
-        run: python scripts/quality/openapi_quality_gate.py
+        run: make openapi-gate
       - name: API vocabulary gate
-        run: python scripts/quality/api_vocabulary_inventory.py --validate-only
+        run: make api-vocabulary-gate
       - name: OpenAPI Spectral gate
         id: enforce
         shell: bash
@@ -109,7 +111,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install mypy
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Typecheck gate
         id: enforce
         shell: bash
@@ -126,7 +128,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install Bandit
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Bandit security gate
         id: enforce
         shell: bash
@@ -143,7 +145,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install Vulture
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Vulture source dead-code gate
         id: enforce
         shell: bash
@@ -160,7 +162,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install deptry
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Deptry source dependency gate
         id: enforce
         shell: bash
@@ -177,7 +179,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install Radon
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Maintainability gate
         id: enforce
         shell: bash
@@ -194,7 +196,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install Xenon
-        run: python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Complexity gate
         id: enforce
         shell: bash
@@ -211,9 +213,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install repository
-        run: |
-          python -m pip install -U pip
-          python scripts/development/bootstrap_dev.py
+        run: make install-ci
       - name: Unit collection gate
         id: enforce
         shell: bash
@@ -230,9 +230,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install repository
-        run: |
-          python -m pip install -U pip
-          python scripts/development/bootstrap_dev.py
+        run: make install-ci
       - name: Integration lite collection gate
         id: enforce
         shell: bash

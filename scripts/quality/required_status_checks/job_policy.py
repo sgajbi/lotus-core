@@ -31,17 +31,18 @@ _DISABLING_ENVIRONMENT_VARIABLES = frozenset(
 )
 _MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 _MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
-_STATIC_MAKE_ENFORCEMENT_COMMAND = re.compile(rf"^make[ \t]+({_MAKE_TARGET_TEXT})$")
-_MATRIX_ENFORCEMENT_COMMAND = re.compile(
+_STATIC_MAKE_COMMAND = re.compile(rf"^make[ \t]+({_MAKE_TARGET_TEXT})$")
+_MATRIX_MAKE_COMMAND = re.compile(
     r"^make[ \t]+\$\{\{[ \t]*matrix\.([A-Za-z_][A-Za-z0-9_]*)[ \t]*\}\}$"
 )
-_BARE_ENFORCEMENT_COMMAND = re.compile(
+_BARE_RUN_COMMAND = re.compile(
     rf"^(?:make[ \t]+(?:{_MAKE_TARGET_TEXT}|"
     r"\$\{\{[ \t]*matrix\.[A-Za-z_][A-Za-z0-9_]*[ \t]*\}\})|"
-    r"python[ \t]+scripts/development/update_ci_tooling_lock\.py"
+    r"python[ \t]+scripts/development/update_(?:ci_tooling|shared_runtime)_lock\.py"
     r"[ \t]+--check[ \t]+--platform[ \t]+windows)$"
 )
-_RUNTIME_MUTATION_CHANNEL = re.compile(r"(?:GITHUB_ENV|GITHUB_PATH|::(?:add-path|set-env)(?::|\s))")
+_RUNTIME_IMAGE_AUTHORITY = "LOTUS_RUNTIME_IMAGE_SET_VERIFIED"
+_RUNTIME_IMAGE_VERIFY_COMMAND = "make runtime-image-set-load-verify"
 
 
 def default_run_shell(configuration: Mapping[str, Any], *, scope: str) -> str | None:
@@ -57,7 +58,7 @@ def default_run_shell(configuration: Mapping[str, Any], *, scope: str) -> str | 
         raise RequiredStatusChecksError(f"workflow run defaults must be an object: {scope}")
     if "working-directory" in run_defaults:
         raise RequiredStatusChecksError(
-            f"blocking workflow enforce step must run at the repository root: {scope}"
+            f"blocking workflow run steps must execute at the repository root: {scope}"
         )
     shell = run_defaults.get("shell")
     if shell is None:
@@ -96,8 +97,8 @@ def _validate_enforcement_action(
         )
 
 
-def _validate_non_enforcement_step(
-    step: Mapping[str, Any], *, before_enforcement: bool, context_text: str, step_name: object
+def _validate_auxiliary_action(
+    step: Mapping[str, Any], *, context_text: str, step_name: object
 ) -> None:
     action = step.get("uses")
     if action is not None and (
@@ -105,16 +106,6 @@ def _validate_non_enforcement_step(
     ):
         raise RequiredStatusChecksError(
             f"blocking workflow step uses an unsupported auxiliary action: {context_text}; "
-            f"step={step_name!r}"
-        )
-    run_command = step.get("run")
-    if (
-        before_enforcement
-        and isinstance(run_command, str)
-        and _RUNTIME_MUTATION_CHANNEL.search(run_command) is not None
-    ):
-        raise RequiredStatusChecksError(
-            f"blocking workflow setup step may mutate enforcement runtime: {context_text}; "
             f"step={step_name!r}"
         )
 
@@ -137,30 +128,29 @@ def effective_environment(
     return effective
 
 
-def _validate_enforcement_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
+def _validate_run_environment(environment: Mapping[str, Any], *, context_text: str) -> None:
     disabling_variables = sorted(_DISABLING_ENVIRONMENT_VARIABLES & environment.keys())
     if disabling_variables:
         raise RequiredStatusChecksError(
-            "blocking workflow enforce step environment injects a disabling variable: "
+            "blocking workflow run step environment injects a disabling variable: "
             f"{context_text}; variables={disabling_variables!r}"
         )
 
 
-def _validate_enforcement_shell(shell: object, *, context_text: str) -> None:
+def _validate_run_shell(shell: object, *, context_text: str) -> None:
     if not isinstance(shell, str) or shell not in _SAFE_ENFORCEMENT_SHELLS:
         raise RequiredStatusChecksError(
-            f"blocking workflow enforce step uses an unsupported shell: {context_text}; "
-            f"shell={shell!r}"
+            f"blocking workflow run step uses an unsupported shell: {context_text}; shell={shell!r}"
         )
 
 
-def _enforcement_make_targets(
+def _run_make_targets(
     job: Mapping[str, Any], *, run_command: str, context_text: str
 ) -> tuple[str, ...]:
-    static_target = _STATIC_MAKE_ENFORCEMENT_COMMAND.fullmatch(run_command)
+    static_target = _STATIC_MAKE_COMMAND.fullmatch(run_command)
     if static_target is not None:
         return (static_target.group(1),)
-    expression = _MATRIX_ENFORCEMENT_COMMAND.fullmatch(run_command)
+    expression = _MATRIX_MAKE_COMMAND.fullmatch(run_command)
     if expression is None:
         return ()
     strategy = job.get("strategy")
@@ -168,7 +158,7 @@ def _enforcement_make_targets(
     include = matrix.get("include") if isinstance(matrix, dict) else None
     if not isinstance(include, list) or not include:
         raise RequiredStatusChecksError(
-            f"blocking workflow matrix enforce step has no include rows: {context_text}"
+            f"blocking workflow matrix run step has no include rows: {context_text}"
         )
     matrix_key = expression.group(1)
     targets: list[str] = []
@@ -176,21 +166,21 @@ def _enforcement_make_targets(
         value = row.get(matrix_key) if isinstance(row, dict) else None
         if not isinstance(value, str) or _MAKE_TARGET.fullmatch(value) is None:
             raise RequiredStatusChecksError(
-                "blocking workflow matrix enforcement target must be a bare Make target: "
+                "blocking workflow matrix run target must be a bare Make target: "
                 f"{context_text}; matrix.{matrix_key}; row={row_index}"
             )
         targets.append(value)
     return tuple(targets)
 
 
-def _validate_enforcement_make_targets(
+def _validate_run_make_targets(
     job: Mapping[str, Any],
     *,
     run_command: str,
     context_text: str,
     phony_make_targets: frozenset[str],
 ) -> None:
-    targets = _enforcement_make_targets(
+    targets = _run_make_targets(
         job,
         run_command=run_command,
         context_text=context_text,
@@ -198,18 +188,18 @@ def _validate_enforcement_make_targets(
     undeclared_targets = sorted(set(targets) - phony_make_targets)
     if undeclared_targets:
         raise RequiredStatusChecksError(
-            "blocking workflow enforce target is not a declared phony Make target: "
+            "blocking workflow run target is not a declared phony Make target: "
             + ", ".join(undeclared_targets)
         )
 
 
-def _effective_enforcement_shell(
+def _effective_run_shell(
     step: Mapping[str, Any], *, default_shell: str | None, context_text: str
 ) -> str | None:
     if "shell" not in step:
         return default_shell
     return require_non_empty_string(
-        step.get("shell"), field=f"blocking workflow enforce step shell: {context_text}"
+        step.get("shell"), field=f"blocking workflow run step shell: {context_text}"
     )
 
 
@@ -221,8 +211,8 @@ def _validate_blocking_step(
     phony_make_targets: frozenset[str],
     default_shell: str | None,
     default_environment: Mapping[str, Any],
-    before_enforcement: bool,
-) -> bool:
+    runtime_image_verified: bool,
+) -> tuple[bool, bool]:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
         raise RequiredStatusChecksError(
@@ -249,46 +239,57 @@ def _validate_blocking_step(
             f"blocking workflow steps must not tolerate failure: {context_text}; step={step_name!r}"
         )
     _validate_step_condition(step, context_text=context_text, step_name=step_name)
-    if step.get("id") != "enforce":
-        _validate_non_enforcement_step(
-            step,
-            before_enforcement=before_enforcement,
-            context_text=context_text,
-            step_name=step_name,
-        )
-        return False
-    _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
+    is_enforcement = step.get("id") == "enforce"
+    if is_enforcement:
+        _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
+    else:
+        _validate_auxiliary_action(step, context_text=context_text, step_name=step_name)
     if "working-directory" in step:
         raise RequiredStatusChecksError(
-            f"blocking workflow enforce step must run at the repository root: {context_text}"
+            f"blocking workflow run step must execute at the repository root: {context_text}"
         )
     executable = step.get("run") or step.get("uses")
     if not isinstance(executable, str):
         raise RequiredStatusChecksError(
-            f"blocking workflow enforce step must execute run or uses: {context_text}"
+            f"blocking workflow step must execute run or uses: {context_text}"
         )
     if isinstance(run_command, str):
         environment = effective_environment(
             step,
             inherited=default_environment,
-            scope=f"enforce step {context_text}",
+            scope=f"blocking step {context_text}",
         )
-        _validate_enforcement_environment(environment, context_text=context_text)
-        effective_shell = _effective_enforcement_shell(
+        _validate_run_environment(environment, context_text=context_text)
+        effective_shell = _effective_run_shell(
             step, default_shell=default_shell, context_text=context_text
         )
-        _validate_enforcement_shell(effective_shell, context_text=context_text)
-        if _BARE_ENFORCEMENT_COMMAND.fullmatch(run_command) is None:
+        _validate_run_shell(effective_shell, context_text=context_text)
+        if _BARE_RUN_COMMAND.fullmatch(run_command) is None:
             raise RequiredStatusChecksError(
-                f"blocking workflow enforce step must be a single bare command: {context_text}"
+                f"blocking workflow run step must be a single bare command: {context_text}; "
+                f"step={step_name!r}"
             )
-        _validate_enforcement_make_targets(
+        _validate_run_make_targets(
             job,
             run_command=run_command,
             context_text=context_text,
             phony_make_targets=phony_make_targets,
         )
-    return True
+        grants_runtime_authority = _RUNTIME_IMAGE_AUTHORITY in environment
+        if grants_runtime_authority and environment[_RUNTIME_IMAGE_AUTHORITY] != "true":
+            raise RequiredStatusChecksError(
+                "blocking workflow runtime image authority must be exact string true: "
+                f"{context_text}; step={step_name!r}"
+            )
+        if grants_runtime_authority and not runtime_image_verified:
+            raise RequiredStatusChecksError(
+                "blocking workflow step grants runtime image authority before verification: "
+                f"{context_text}; step={step_name!r}"
+            )
+        runtime_image_verified = (
+            runtime_image_verified or run_command == _RUNTIME_IMAGE_VERIFY_COMMAND
+        )
+    return is_enforcement, runtime_image_verified
 
 
 def dependency_ids(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> tuple[str, ...]:
@@ -341,15 +342,16 @@ def validate_blocking_job(
         scope=f"blocking job {context_text}",
     )
     enforcement_steps = 0
+    runtime_image_verified = False
     for step in steps or ():
-        is_enforcement = _validate_blocking_step(
+        is_enforcement, runtime_image_verified = _validate_blocking_step(
             step,
             job=job,
             contexts=contexts,
             phony_make_targets=phony_make_targets,
             default_shell=job_shell or workflow_shell,
             default_environment=job_environment,
-            before_enforcement=enforcement_steps == 0,
+            runtime_image_verified=runtime_image_verified,
         )
         enforcement_steps += int(is_enforcement)
     if enforcement_steps != 1:

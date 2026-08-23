@@ -16,6 +16,10 @@ permissions:
   actions: read
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -67,10 +71,7 @@ jobs:
         run: make install-ci
       - name: Resolve dependency health cache key
         id: dependency-health-cache-key
-        run: |
-          key="$(python scripts/validation/dependency_health_check.py --print-cache-key)"
-          [[ "$key" =~ ^[0-9a-f]{64}$ ]]
-          echo "key=$key" >> "$GITHUB_OUTPUT"
+        run: make dependency-health-cache-key
       - name: Restore dependency health cache
         id: dependency-health-cache
         uses: actions/cache/restore@v5
@@ -219,9 +220,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install CI tooling
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements/ci-tooling.lock.txt
+        run: make install-ci-tooling
       - name: Restore Docker build cache
         uses: actions/cache@v5
         with:
@@ -240,11 +239,9 @@ jobs:
           LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID: ${{ github.run_id }}
         run: make build-runtime-image-set
       - name: Generate runtime SBOM
-        run: |
-          python scripts/release/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json
+        run: make generate-runtime-sbom
       - name: Write build provenance manifest
-        run: |
-          python scripts/release/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
+        run: make write-runtime-build-provenance
       - name: Upload build evidence
         uses: actions/upload-artifact@v7
         with:
@@ -280,11 +277,7 @@ jobs:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run E2E smoke suite
@@ -325,11 +318,7 @@ jobs:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run deterministic docker endpoint smoke
@@ -375,11 +364,7 @@ jobs:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run lotus-core app validation gate
@@ -417,11 +402,7 @@ jobs:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run endpoint latency gate
@@ -462,11 +443,7 @@ jobs:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run deterministic performance load gate
@@ -504,11 +481,7 @@ jobs:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Load and verify runtime image set
-        run: |
-          python scripts/release/runtime_image_set.py load-verify \
-            --manifest output/runtime-image-set/manifest.json \
-            --bundle output/runtime-image-set/images.tar \
-            --expected-commit-sha "${GITHUB_SHA}"
+        run: make runtime-image-set-load-verify
       - name: Install
         run: make install-ci
       - name: Run fixed-income book-cost recovery gate

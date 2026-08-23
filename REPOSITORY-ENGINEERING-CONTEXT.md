@@ -4146,30 +4146,31 @@ Most relevant current governance:
      application identity. Every Pull Request Merge Gate job and every Quality Baseline `... Gate`
      job is blocking; `Quality Baseline / Report Only` is the sole explicit advisory context.
      Pin live authority to canonical `sgajbi/lotus-core` / `main`, expand matrix suites before
-     comparison, require blocking jobs and their enforcement commands to be unconditional and
-     fail-propagating, limit conditional auxiliary steps to audited checkout, cache-save, and
+     comparison, require blocking jobs and every executable step to be unconditional and
+     fail-propagating except audited conditional checkout, cache-save, and
      artifact-upload actions, require exactly one unconditional executable `id: enforce` step on a
      non-auxiliary control in every blocking job, require exact canonical `pull_request`
      event/`main` branch keys with no path filters and
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
-     require every marked run control's workflow-, job-, or step-level effective shell to resolve
-     to exact `bash` and its script to be one bare invocation: one Make target, a governed matrix
+     require every run step's workflow-, job-, or step-level effective shell to resolve
+     to exact `bash` and its script to be one bare invocation: one active phony Make target, a governed matrix
      target, or the exact Windows lock-closure command. Operators, substitutions, quoting,
      redirection, multiple lines, Make flags, wrapper commands, and other shell syntax belong
-     inside a reviewed Make target, not in the merge-authorizing marker. Continue rejecting
+     inside a reviewed Make target, not in workflow shell text. Permit action steps only from the
+     audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set. Continue rejecting
      workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
-     `MFLAGS`, or `BASH_ENV`, and any enforcement-step working-directory override,
-     pre-enforcement `GITHUB_ENV`/`GITHUB_PATH` mutation, and ungoverned auxiliary or enforcement
-     actions fail closed,
+     `MFLAGS`, or `BASH_ENV`, and any run-step working-directory override; the positive bare-command
+     grammar makes direct, indirect, or deprecated environment/path writes, workspace mutation,
+     command chaining, and ungoverned actions fail closed,
      resolve every referenced `matrix.<key>` value from each include row and require it to be one
      bare Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`, and reject assignment-only targets
      such as `make FOO=bar` plus option, path, special-target, or multi-target syntax. Every admitted
      static or resolved matrix target must also be declared by a repository-root `Makefile`
-     active `.PHONY:` entry in GNU Make's delimited effective-database Files section;
+     per-target phony flag in GNU Make's delimited effective-database Files section;
      parse-time/recipe output, serialized variable bodies, missing Makefile authority, inactive
      declarations, ordinary files, and non-phony rules fail closed,
-     bind runtime-image verified state directly to post-verification control steps instead of
-     persisting it through `GITHUB_ENV`,
+     bind runtime-image verified state directly to control steps only after the same job has
+     successfully invoked `make runtime-image-set-load-verify`, never through `GITHUB_ENV`,
      require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for

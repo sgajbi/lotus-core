@@ -23,7 +23,8 @@ from scripts.quality.required_status_checks.model import (
 
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
-_PHONY_DECLARATION = re.compile(r"^\.PHONY\s*:(.*)$")
+_MAKE_TARGET_RECORD = re.compile(r"^([^\s#][^\s:]*):")
+_PHONY_TARGET_FLAG = "#  Phony target (prerequisite of .PHONY)."
 _MAKE_DATABASE_COMMAND = (
     "make",
     "--no-builtin-rules",
@@ -35,6 +36,39 @@ _MAKE_DATABASE_START = "# Make data base, printed on "
 _MAKE_DATABASE_END = "# Finished Make data base on "
 _MAKE_DATABASE_FILES = "# Files"
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
+
+
+def _make_database_files_lines(output_lines: list[str], *, path: Path) -> list[str]:
+    database_starts = [
+        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_START)
+    ]
+    database_ends = [
+        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_END)
+    ]
+    if not database_starts or not database_ends or database_ends[-1] <= database_starts[-1]:
+        raise RequiredStatusChecksError(f"unable to parse Makefile effective database: {path}")
+    files_sections = [
+        index
+        for index, line in enumerate(output_lines)
+        if line == _MAKE_DATABASE_FILES and database_starts[-1] < index < database_ends[-1]
+    ]
+    if not files_sections:
+        raise RequiredStatusChecksError(f"Makefile effective database has no Files section: {path}")
+    return output_lines[files_sections[-1] + 1 : database_ends[-1]]
+
+
+def _phony_targets_from_files_section(lines: list[str]) -> frozenset[str]:
+    targets: set[str] = set()
+    current_target: str | None = None
+    for line in lines:
+        record = _MAKE_TARGET_RECORD.match(line)
+        if record is not None:
+            current_target = record.group(1)
+            continue
+        if line == _PHONY_TARGET_FLAG and current_target is not None:
+            targets.add(current_target)
+        current_target = None
+    return frozenset(targets)
 
 
 def _matrix_name_expressions(name: str) -> tuple[re.Match[str], ...]:
@@ -163,27 +197,7 @@ def _load_phony_make_targets(path: Path) -> frozenset[str]:
     if result.returncode not in {0, 1}:
         raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
     output_lines = result.stdout.splitlines()
-    database_starts = [
-        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_START)
-    ]
-    database_ends = [
-        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_END)
-    ]
-    if not database_starts or not database_ends or database_ends[-1] <= database_starts[-1]:
-        raise RequiredStatusChecksError(f"unable to parse Makefile effective database: {path}")
-    files_sections = [
-        index
-        for index, line in enumerate(output_lines)
-        if line == _MAKE_DATABASE_FILES and database_starts[-1] < index < database_ends[-1]
-    ]
-    if not files_sections:
-        raise RequiredStatusChecksError(f"Makefile effective database has no Files section: {path}")
-    targets: set[str] = set()
-    for line in output_lines[files_sections[-1] + 1 : database_ends[-1]]:
-        match = _PHONY_DECLARATION.fullmatch(line)
-        if match is None:
-            continue
-        targets.update(match.group(1).split())
+    targets = _phony_targets_from_files_section(_make_database_files_lines(output_lines, path=path))
     if not targets:
         raise RequiredStatusChecksError(f"Makefile has no declared phony targets: {path}")
     return frozenset(targets)

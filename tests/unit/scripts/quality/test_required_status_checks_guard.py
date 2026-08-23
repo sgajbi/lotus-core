@@ -122,6 +122,7 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
         "ignored\n"
         "endef\n"
         "active:\n\t@true",
+        ".PHONY: FORGE = security-audit\nactive:\n\t@true",
     ],
 )
 def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
@@ -162,6 +163,41 @@ def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
         match="not a declared phony Make target: security-audit",
     ):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+def test_manifest_validation_accepts_target_specific_variable_on_real_phony_target(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        ".PHONY: security-audit\nsecurity-audit: MODE = strict\nsecurity-audit:\n\t@true\n",
+        encoding="utf-8",
+    )
+    workflow_path = tmp_path / "quality.yml"
+    workflow_path.write_text(
+        _CANONICAL_TRIGGERS_YAML + "jobs:\n"
+        "  security:\n"
+        "    name: Quality Baseline / Security Gate\n"
+        "    steps:\n"
+        "      - id: enforce\n"
+        "        shell: bash\n"
+        "        run: make security-audit\n",
+        encoding="utf-8",
+    )
+    manifest = RequiredChecksManifest(
+        repository="sgajbi/lotus-core",
+        branch="main",
+        strict=True,
+        workflow_policies=(
+            WorkflowPolicy(
+                path=Path("quality.yml"),
+                policy="gate_jobs_blocking",
+                advisory_contexts=frozenset(),
+            ),
+        ),
+        required_checks=(RequiredCheck(context="Quality Baseline / Security Gate", app_id=15368),),
+    )
+
+    validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
 def test_matrix_contexts_expand_from_each_include_row() -> None:
@@ -525,23 +561,12 @@ def test_blocking_policy_requires_an_unconditional_enforcement_step(
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
-@pytest.mark.parametrize(
-    "setup_command",
-    [
-        "make install-ci",
-        "make noop",
-        "python -m pip install -r requirements/ci-tooling.lock.txt",
-        "python scripts/development/bootstrap_dev.py",
-    ],
-)
-def test_blocking_policy_does_not_treat_setup_commands_as_enforcement(
-    setup_command: str,
-) -> None:
+def test_blocking_policy_does_not_treat_setup_commands_as_enforcement() -> None:
     workflow = {
         "jobs": {
             "security": {
                 "name": "Quality Baseline / Security Gate",
-                "steps": [{"name": "Setup", "run": setup_command}],
+                "steps": [{"name": "Setup", "shell": "bash", "run": "make install-ci"}],
             }
         }
     }
@@ -600,9 +625,11 @@ def test_blocking_policy_rejects_an_unknown_enforcement_action() -> None:
     "setup_command",
     [
         'echo "MAKEFLAGS=-n" >> "$GITHUB_ENV"',
+        "python -c \"from pathlib import Path; Path('Makefile').write_text('x:\\n\\t@true\\n')\"",
         'echo "/tmp/poison" >> "$GITHUB_PATH"',
         'echo "::set-env name=MAKEFLAGS::-n"',
         'echo "::add-path::/tmp/poison"',
+        "make security-audit || true",
     ],
 )
 def test_blocking_policy_rejects_setup_runtime_poisoning(setup_command: str) -> None:
@@ -611,7 +638,7 @@ def test_blocking_policy_rejects_setup_runtime_poisoning(setup_command: str) -> 
             "security": {
                 "name": "Quality Baseline / Security Gate",
                 "steps": [
-                    {"name": "Setup", "run": setup_command},
+                    {"name": "Setup", "shell": "bash", "run": setup_command},
                     {
                         "id": "enforce",
                         "shell": "bash",
@@ -627,20 +654,20 @@ def test_blocking_policy_rejects_setup_runtime_poisoning(setup_command: str) -> 
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="mutate enforcement runtime"):
+    with pytest.raises(RequiredStatusChecksError, match="single bare command"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
-def test_blocking_policy_allows_setup_output_without_runtime_mutation() -> None:
+def test_blocking_policy_allows_declared_phony_setup_command() -> None:
     workflow = {
         "jobs": {
             "security": {
                 "name": "Quality Baseline / Security Gate",
                 "steps": [
                     {
-                        "id": "cache-key",
-                        "name": "Resolve cache key",
-                        "run": 'echo "key=value" >> "$GITHUB_OUTPUT"',
+                        "name": "Install",
+                        "shell": "bash",
+                        "run": "make install-ci",
                     },
                     {
                         "id": "enforce",
@@ -660,6 +687,65 @@ def test_blocking_policy_allows_setup_output_without_runtime_mutation() -> None:
     assert blocking_contexts_for_workflow(workflow, policy=policy) == (
         "Quality Baseline / Security Gate",
     )
+
+
+def test_blocking_policy_binds_runtime_authority_to_preceding_verification() -> None:
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+    workflow = {
+        "defaults": {"run": {"shell": "bash"}},
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "env": {"LOTUS_RUNTIME_IMAGE_SET_VERIFIED": "true"},
+                        "run": "make security-audit",
+                    },
+                    {"run": "make runtime-image-set-load-verify"},
+                ],
+            }
+        },
+    }
+
+    with pytest.raises(RequiredStatusChecksError, match="before verification"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+    workflow["jobs"]["security"]["steps"].reverse()  # type: ignore[index]
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "Quality Baseline / Security Gate",
+    )
+
+
+def test_blocking_policy_rejects_noncanonical_runtime_authority_value() -> None:
+    workflow = {
+        "defaults": {"run": {"shell": "bash"}},
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {"run": "make runtime-image-set-load-verify"},
+                    {
+                        "id": "enforce",
+                        "env": {"LOTUS_RUNTIME_IMAGE_SET_VERIFIED": True},
+                        "run": "make security-audit",
+                    },
+                ],
+            }
+        },
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="exact string true"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
 
 
 @pytest.mark.parametrize(
@@ -964,7 +1050,7 @@ def test_blocking_policy_rejects_non_bare_resolved_matrix_targets(target: object
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="matrix enforcement target must be a bare Make target",
+        match="matrix run target must be a bare Make target",
     ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
@@ -993,7 +1079,7 @@ def test_blocking_policy_rejects_a_missing_resolved_matrix_target() -> None:
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="matrix enforcement target must be a bare Make target",
+        match="matrix run target must be a bare Make target",
     ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
@@ -1128,7 +1214,7 @@ def test_blocking_policy_requires_enforcement_at_repository_root(scope: str) -> 
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="run at the repository root"):
+    with pytest.raises(RequiredStatusChecksError, match="execute at the repository root"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
