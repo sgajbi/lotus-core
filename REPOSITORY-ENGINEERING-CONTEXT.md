@@ -4153,10 +4153,11 @@ Most relevant current governance:
      event/`main` branch keys with no path filters and
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
      require every marked run control's workflow-, job-, or step-level effective shell to resolve
-     to exact `bash` so pipeline failures propagate, reject unspecified/non-`bash` shells and a
-     named denylist of shell-level failure-tolerance including arbitrary OR lists, clustered Bash/Make disabling flags,
-     effective workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or
-     `BASH_ENV`, plus dry-run, background-execution, and shell conditional escapes,
+     to exact `bash` and its script to be one bare invocation: one Make target, a governed matrix
+     target, or the exact Windows lock-closure command. Operators, substitutions, quoting,
+     redirection, multiple lines, Make flags, wrapper commands, and other shell syntax belong
+     inside a reviewed Make target, not in the merge-authorizing marker. Continue rejecting
+     workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV`,
      require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for

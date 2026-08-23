@@ -15,15 +15,11 @@ _CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
 )
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset({"BASH_ENV", "GNUMAKEFLAGS", "MAKEFLAGS"})
-_SHELL_FAILURE_SUPPRESSION = re.compile(
-    r"(?:(?:^|[;\n])\s*(?:if|while|until)\b|"
-    r"\|\||"
-    r"(?:^|[;&]\s*)set\s+\+(?:[A-Za-z]*e[A-Za-z]*|o\s+(?:errexit|pipefail))(?:\s|$)|"
-    r"\bmake\b[^\n]*(?:\s-(?!-)[A-Za-z]*[nq][A-Za-z]*(?:\s|$)|"
-    r"\s--(?:dry-run|just-print|recon|question)(?:\s|$))|"
-    r"\bMAKEFLAGS\s*=|"
-    r"(?<![&<>])&(?![&>])|\b(?:nohup|setsid|coproc|disown)\b)",
-    re.MULTILINE,
+_BARE_ENFORCEMENT_COMMAND = re.compile(
+    r"^(?:make[ \t]+(?:[A-Za-z0-9_./=:@,+][A-Za-z0-9_./=:@,+-]*|"
+    r"\$\{\{[ \t]*matrix\.[A-Za-z_][A-Za-z0-9_]*[ \t]*\}\})|"
+    r"python[ \t]+scripts/development/update_ci_tooling_lock\.py"
+    r"[ \t]+--check[ \t]+--platform[ \t]+windows)$"
 )
 
 
@@ -156,10 +152,9 @@ def _validate_blocking_step(
             step, default_shell=default_shell, context_text=context_text
         )
         _validate_enforcement_shell(effective_shell, context_text=context_text)
-        if _SHELL_FAILURE_SUPPRESSION.search(run_command):
+        if _BARE_ENFORCEMENT_COMMAND.fullmatch(run_command) is None:
             raise RequiredStatusChecksError(
-                "blocking workflow enforce step suppresses command execution or failure: "
-                f"{context_text}"
+                f"blocking workflow enforce step must be a single bare command: {context_text}"
             )
     return True
 
