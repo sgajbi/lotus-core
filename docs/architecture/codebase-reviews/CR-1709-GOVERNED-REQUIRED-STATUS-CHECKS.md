@@ -44,9 +44,10 @@ evidence must be explicit and cannot be mistaken for release authorization.
    job-name expressions, requires every manifest entry to bind to the exact GitHub Actions
    application ID `15368`, and compares exact sets. New, renamed, skipped, failure-tolerant,
    advisory-colliding, or impersonated jobs cannot silently authorize merge.
-3. Live verification requires GitHub's app-bound `checks` response and a present, empty legacy
-   `contexts` array. Missing, retained legacy, stale, wrong-app, malformed, or non-strict protection
-   fails closed.
+3. Live verification requires GitHub's app-bound `checks` response and a present `contexts` list
+   set-equal to those check names. Missing, inconsistent, stale, wrong-app, malformed, or non-strict
+   protection fails closed. The atomic PATCH still sends `contexts: []` to remove independent
+   check-name-only authority; GitHub mirrors the app-bound names back in its GET response.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
    workflow-governance target includes mutation-style manifest tests. Manifest/model parsing,
    workflow traversal, blocking-job execution policy, live GitHub protection, and CLI

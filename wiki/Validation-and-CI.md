@@ -80,8 +80,9 @@ fails exact-main evidence closed. Operators update branch protection only after 
 contexts are green on the exact PR head. Generate the atomic PATCH body with
 `required_status_checks_guard.py --print-desired-protection`; never hand-assemble or incrementally
 mutate the 37-entry set. The generated body explicitly sends an empty legacy `contexts` array so
-check-name-only authority cannot survive alongside the 37 app-bound checks. Live verification
-rejects that legacy array when it is missing, malformed, or non-empty.
+check-name-only authority cannot survive alongside the 37 app-bound checks. GitHub mirrors those
+app-bound names into `contexts` on reads, so live verification requires the mirrored list to be
+present, well formed, and set-equal to the check names.
 
 Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
 platform, installer, dependency/packaging manifests, locks, and the cache implementation. A verified
