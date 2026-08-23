@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 import yaml
 
-from scripts.quality.required_status_checks_guard import (
+from scripts.quality.required_status_checks import (
     DEFAULT_MANIFEST_PATH,
     RequiredCheck,
     RequiredStatusChecksError,
@@ -567,7 +568,7 @@ def test_live_protection_requires_exact_context_app_binding_and_strict_mode() ->
     live_checks = [
         {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
     ]
-    protection = {"required_status_checks": {"strict": True, "checks": live_checks}}
+    protection: dict[str, Any] = {"required_status_checks": {"strict": True, "checks": live_checks}}
 
     validate_live_protection(manifest, protection)
 
@@ -697,9 +698,20 @@ def test_required_local_gates_are_reachable_from_lint_and_workflow_governance() 
 
     assert "quality-import-boundary-gate" in dependencies["lint"]
     assert "required-status-checks-guard" in dependencies["lint"]
+    assert (
+        "required-status-checks-code-quality-gate"
+        in dependencies["quality-workflow-governance-gate"]
+    )
     assert "required-status-checks-guard:" in makefile_text
     assert "required-status-checks-live-guard:" in makefile_text
     assert "test_required_status_checks_guard.py" in makefile_text
+    assert "test_required_status_checks_fail_closed.py" in makefile_text
+    assert "--max-absolute C --max-modules B --max-average B" in makefile_text
+    assert "--max-allowed-rank B" in makefile_text
+    assert "mypy --config-file mypy.ini scripts/quality/required_status_checks" in makefile_text
+    assert "bandit -r scripts/quality/required_status_checks" in makefile_text
+    assert "vulture scripts/quality/required_status_checks" in makefile_text
+    assert "--cov-branch --cov-report=term-missing --cov-fail-under=90" in makefile_text
 
 
 def test_main_releasability_verifies_live_protection_read_only() -> None:
