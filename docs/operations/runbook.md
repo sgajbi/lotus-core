@@ -153,7 +153,8 @@ after fencing Core repository roots.
 5. Change branch protection only after the exact PR head has posted and passed every manifest-owned
    context. Apply the complete app-bound set atomically; do not add/remove checks incrementally or
    leave a check-name-only legacy context. The generated PATCH body explicitly sends `contexts: []`
-   alongside the full app-bound `checks` list.
+   alongside the full app-bound `checks` list. Live verification rejects a missing, malformed, or
+   non-empty legacy `contexts` list even when every app-bound check matches.
 
 Generate the exact reviewed update payload from repository authority; do not hand-copy 37 checks:
 
