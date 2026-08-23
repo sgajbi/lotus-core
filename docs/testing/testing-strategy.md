@@ -218,9 +218,10 @@ once by the workflow's `Validate Docker Build` producer, exported as one portabl
 loaded by each Docker-backed consumer. Every consumer verifies the bundle digest, manifest content
 hash, source SHA, compose and dependency-lock hashes, dependency-closure hash, image IDs, and OCI
 source labels before stack startup. The producer also emits per-service and total build timings.
-Workflow consumers invoke `make runtime-image-set-load-verify`; only later controls in that same job
-may set `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` and make targets omit runtime rebuild flags.
-Ordinary CI and local invocations keep their build defaults. The
+Every runtime-consuming Make control depends on `runtime-image-set-load-verify`. That prerequisite
+writes an exact-`GITHUB_SHA` receipt only after bundle verification; shared pytest stack support
+omits rebuilds only when the receipt matches the current head. Workflow environment cannot assert
+verified state or reorder the dependency. The
 E2E service-set contract must equal every repo-built image started by `FULL_STACK_SERVICES`; adding a
 service to the test stack without adding it to the image set is a blocking regression.
 

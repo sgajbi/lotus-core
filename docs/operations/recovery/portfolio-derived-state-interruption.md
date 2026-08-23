@@ -33,8 +33,8 @@ Use the module directly only when explicit local endpoint or timeout overrides a
 python -m scripts.operations.recovery.derived_state_gate --build --enforce
 ```
 
-CI loads the exact Git-SHA image set before calling the Make target, so the target omits `--build`
-when `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true`.
+The CI Make target depends on `runtime-image-set-load-verify`, so exact-`GITHUB_SHA` load proof is
+part of the same Make graph and `--build` is omitted only on that governed artifact-consumer path.
 
 ## Enforced Invariants
 

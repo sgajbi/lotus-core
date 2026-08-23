@@ -10,8 +10,6 @@
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
-RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--build)
-CERTIFICATION_RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--runtime-build)
 REPOSITORY_PYTHON := python scripts/development/repository_python.py
 TRANSACTION_RELEASE_OUTPUT ?= output/task-runs/transaction-processing-release-rehearsal.json
 TRANSACTION_RELEASE_PULL_IMAGES ?= false
@@ -432,8 +430,8 @@ api-vocabulary-gate:
 live-dpm-source-validate:
 	$(REPOSITORY_PYTHON) scripts/validation/validate_live_dpm_source_products.py --control-base-url $${LOTUS_CORE_CONTROL_BASE_URL:-http://core-control.dev.lotus}
 
-lotus-core-validate:
-	$(REPOSITORY_PYTHON) scripts/validation/certify_lotus_core_app.py $(CERTIFICATION_RUNTIME_BUILD_ARGUMENT)
+lotus-core-validate: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) scripts/validation/certify_lotus_core_app.py
 
 migration-smoke:
 	$(REPOSITORY_PYTHON) scripts/quality/migration_contract_check.py --mode alembic-sql
@@ -524,23 +522,23 @@ test-transaction-portfolio-flow-bundle-contract:
 test-transaction-processing-contract:
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-processing-contract --quiet
 
-test-e2e-smoke:
+test-e2e-smoke: runtime-image-set-load-verify
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite e2e-smoke --quiet
 
-test-e2e-all:
+test-e2e-all: runtime-image-set-load-verify
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite e2e-all --quiet
 
-test-docker-smoke:
-	$(REPOSITORY_PYTHON) scripts/validation/docker_endpoint_smoke.py $(RUNTIME_BUILD_ARGUMENT)
+test-docker-smoke: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) scripts/validation/docker_endpoint_smoke.py
 
-test-latency-gate:
-	$(REPOSITORY_PYTHON) scripts/operations/latency_profile.py $(RUNTIME_BUILD_ARGUMENT) --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
+test-latency-gate: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) scripts/operations/latency_profile.py --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
 
-test-performance-load-gate:
-	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT) --profile-tier fast --enforce
+test-performance-load-gate: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py --profile-tier fast --enforce
 
-test-performance-load-gate-full:
-	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT) --profile-tier full --enforce
+test-performance-load-gate-full: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py --profile-tier full --enforce
 
 profile-cost-history-capacity:
 	$(REPOSITORY_PYTHON) scripts/operations/cost_history_capacity_profile.py --output output/cost-history-capacity-profile.json
@@ -548,8 +546,8 @@ profile-cost-history-capacity:
 profile-cost-processing-modes:
 	$(REPOSITORY_PYTHON) scripts/operations/cost_processing_mode_capacity_profile.py --output output/cost-processing-mode-capacity-profile.json
 
-test-failure-recovery-gate:
-	$(REPOSITORY_PYTHON) scripts/operations/failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT) --enforce
+test-failure-recovery-gate: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) scripts/operations/failure_recovery_gate.py --enforce
 
 transaction-release-rehearsal-plan:
 	$(if $(strip $(TRANSACTION_RELEASE_CANDIDATE_MANIFEST)),,$(error TRANSACTION_RELEASE_CANDIDATE_MANIFEST is required))
@@ -568,37 +566,37 @@ transaction-release-rehearsal:
 		--output "$(TRANSACTION_RELEASE_OUTPUT)" \
 		--execute $(if $(filter true,$(TRANSACTION_RELEASE_PULL_IMAGES)),--pull-images,)
 
-test-fixed-income-book-cost-recovery-gate:
+test-fixed-income-book-cost-recovery-gate: runtime-image-set-load-verify
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite fixed-income-book-cost-recovery --quiet
 
-test-derived-state-recovery-gate:
-	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_gate $(RUNTIME_BUILD_ARGUMENT) --enforce
+test-derived-state-recovery-gate: runtime-image-set-load-verify
+	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_gate --enforce
 
 test-kafka-restart-recovery-gate:
 	$(REPOSITORY_PYTHON) -m scripts.validation.kafka_restart_recovery
 
 test-derived-state-poison-gate:
-	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_poison_gate $(RUNTIME_BUILD_ARGUMENT) --enforce
+	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_poison_gate --build --enforce
 
 test-derived-state-workload-smoke:
-	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate $(RUNTIME_BUILD_ARGUMENT) --diagnostic-smoke
+	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate --build --diagnostic-smoke
 
 profile-derived-state-daily:
-	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate $(RUNTIME_BUILD_ARGUMENT) --profile daily
+	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate --build --profile daily
 
 profile-derived-state-fan-in:
-	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate $(RUNTIME_BUILD_ARGUMENT) --profile fan-in
+	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate --build --profile fan-in
 
 profile-derived-state-price-burst:
-	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate $(RUNTIME_BUILD_ARGUMENT) --profile price-burst
+	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate --build --profile price-burst
 
 profile-derived-state-price-restatement:
-	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate $(RUNTIME_BUILD_ARGUMENT) --profile price-restatement
+	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate --build --profile price-restatement
 
 profile-derived-state-fx-restatement:
-	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate $(RUNTIME_BUILD_ARGUMENT) --profile fx-restatement
+	$(REPOSITORY_PYTHON) -m scripts.operations.performance.derived_state_workload_gate --build --profile fx-restatement
 
-test-institutional-completion-gate:
+test-institutional-completion-gate: runtime-image-set-load-verify
 	$(REPOSITORY_PYTHON) scripts/validation/institutional_completion_gate.py
 
 test-institutional-signoff-pack:
@@ -676,6 +674,7 @@ write-runtime-build-provenance:
 runtime-image-set-load-verify:
 	@test -n "$${GITHUB_SHA}"
 	$(REPOSITORY_PYTHON) scripts/release/runtime_image_set.py load-verify --manifest output/runtime-image-set/manifest.json --bundle output/runtime-image-set/images.tar --expected-commit-sha "$${GITHUB_SHA}"
+	@printf '%s\n' "$${GITHUB_SHA}" > output/runtime-image-set/verified-source-sha
 
 clean:
 	$(REPOSITORY_PYTHON) scripts/development/clean_generated_artifacts.py

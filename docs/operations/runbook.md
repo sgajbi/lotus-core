@@ -115,12 +115,14 @@ after fencing Core repository roots.
    substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands fail
    closed. Put pipelines and other implementation detail inside a reviewed Make target; the
    Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-   environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
+   environment injection through `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
    also fails closed, as does any run-step working-directory override. Every run step must be one
-   admitted bare command and every action must be on the audited allowlist, so indirect environment
-   or path writes, workspace mutation, command chaining, and unknown actions fail closed.
-   Runtime-image verification state belongs directly on a control step only after
-   `make runtime-image-set-load-verify` succeeded earlier in that job, never in `GITHUB_ENV`.
+   admitted bare command and every action must be on the audited allowlist with action-specific
+   `with:` keys and constrained checkout/cache/artifact/setup values, so indirect environment or
+   path writes, workspace mutation, command chaining, and unknown actions or inputs fail closed.
+   Runtime-image verification belongs to the Make graph: every consuming control declares
+   `runtime-image-set-load-verify` as a prerequisite, which emits an exact-`GITHUB_SHA` receipt only
+   after successful verification. Workflow environment cannot assert or reorder that authority.
    Every referenced matrix target is resolved from each include row and must itself be one bare
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must

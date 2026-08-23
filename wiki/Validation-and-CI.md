@@ -53,9 +53,11 @@ invocation: one Make target, a governed matrix target, or the exact Windows lock
 Operators, substitutions, quoting, redirection, multiple lines, Make flags, and wrapper commands
 fail closed; pipelines and multi-command implementation belong inside a reviewed Make target. Only
 the audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint actions are
-admitted. The
+admitted, and each action has an explicit `with:` key/value policy. Alternate checkout is limited
+to the credential-free nested platform checkout; cache paths are exact audited directories; artifact
+paths stay below `output/`. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
+environment injection through `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
 and run-step working-directory overrides remain prohibited. The positive command grammar rejects
 direct or indirect environment/path writes, workspace mutation, command chaining, and ungoverned actions;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
@@ -127,10 +129,10 @@ PR Merge Gate and Main Releasability each use one exact-source runtime image set
 `Validate Docker Build` job builds the workflow's service union once, records build timings, and
 uploads a one-day transport bundle. Docker smoke, E2E, latency, load, validation, recovery, and
 institutional jobs load that bundle instead of rebuilding overlapping images.
-Workflow consumers invoke `make runtime-image-set-load-verify`, then—and only then—set
-`LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` on downstream controls;
-that explicit proof suppresses runtime rebuild flags, while ordinary CI and local commands retain
-their normal build behavior. The E2E image inventory is checked against every repo-built full-stack
+Every consuming Make control declares `runtime-image-set-load-verify` as a prerequisite. The
+prerequisite verifies the bundle against `GITHUB_SHA` and writes a matching exact-head receipt only
+after success; pytest stack support reuses images only when that receipt matches. Workflow environment
+cannot assert verified state or reorder the prerequisite. The E2E image inventory is checked against every repo-built full-stack
 service so a newly started service cannot bypass exact-source verification.
 
 Each Compose-backed suite also owns a unique `PreparedTestRuntime`, subprocess environment, and

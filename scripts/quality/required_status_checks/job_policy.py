@@ -3,31 +3,26 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from scripts.quality.required_status_checks.action_policy import (
+    is_conditional_auxiliary_action,
+    validate_step_action,
+)
 from scripts.quality.required_status_checks.model import (
     RequiredStatusChecksError,
     require_non_empty_string,
 )
 
-_CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
-    "actions/cache/save@",
-    "actions/checkout@",
-    "actions/upload-artifact@",
-)
-_AUXILIARY_ACTION_PREFIXES = (
-    "actions/cache@",
-    "actions/cache/restore@",
-    "actions/cache/save@",
-    "actions/checkout@",
-    "actions/download-artifact@",
-    "actions/setup-node@",
-    "actions/setup-python@",
-    "actions/upload-artifact@",
-    "docker/setup-buildx-action@",
-)
-_ENFORCEMENT_ACTION_PREFIXES = ("reviewdog/action-actionlint@",)
 _SAFE_ENFORCEMENT_SHELLS = frozenset({"bash"})
 _DISABLING_ENVIRONMENT_VARIABLES = frozenset(
-    {"BASH_ENV", "GNUMAKEFLAGS", "MAKEFILES", "MAKEFLAGS", "MFLAGS"}
+    {
+        "BASH_ENV",
+        "GITHUB_SHA",
+        "GNUMAKEFLAGS",
+        "LOTUS_RUNTIME_IMAGE_SET_VERIFIED",
+        "MAKEFILES",
+        "MAKEFLAGS",
+        "MFLAGS",
+    }
 )
 _MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 _MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
@@ -41,8 +36,6 @@ _BARE_RUN_COMMAND = re.compile(
     r"python[ \t]+scripts/development/update_(?:ci_tooling|shared_runtime)_lock\.py"
     r"[ \t]+--check[ \t]+--platform[ \t]+windows)$"
 )
-_RUNTIME_IMAGE_AUTHORITY = "LOTUS_RUNTIME_IMAGE_SET_VERIFIED"
-_RUNTIME_IMAGE_VERIFY_COMMAND = "make runtime-image-set-load-verify"
 
 
 def default_run_shell(configuration: Mapping[str, Any], *, scope: str) -> str | None:
@@ -77,35 +70,9 @@ def _validate_step_condition(
             f"step={step_name!r}"
         )
     action = step.get("uses")
-    if not isinstance(action, str) or not action.startswith(_CONDITIONAL_AUXILIARY_ACTION_PREFIXES):
+    if not is_conditional_auxiliary_action(action):
         raise RequiredStatusChecksError(
             f"blocking workflow enforcement steps must be unconditional: {context_text}; "
-            f"step={step_name!r}"
-        )
-
-
-def _validate_enforcement_action(
-    step: Mapping[str, Any], *, context_text: str, step_name: object
-) -> None:
-    action = step.get("uses")
-    if action is not None and (
-        not isinstance(action, str) or not action.startswith(_ENFORCEMENT_ACTION_PREFIXES)
-    ):
-        raise RequiredStatusChecksError(
-            f"blocking workflow enforce step uses an unsupported action: {context_text}; "
-            f"step={step_name!r}"
-        )
-
-
-def _validate_auxiliary_action(
-    step: Mapping[str, Any], *, context_text: str, step_name: object
-) -> None:
-    action = step.get("uses")
-    if action is not None and (
-        not isinstance(action, str) or not action.startswith(_AUXILIARY_ACTION_PREFIXES)
-    ):
-        raise RequiredStatusChecksError(
-            f"blocking workflow step uses an unsupported auxiliary action: {context_text}; "
             f"step={step_name!r}"
         )
 
@@ -211,8 +178,7 @@ def _validate_blocking_step(
     phony_make_targets: frozenset[str],
     default_shell: str | None,
     default_environment: Mapping[str, Any],
-    runtime_image_verified: bool,
-) -> tuple[bool, bool]:
+) -> bool:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
         raise RequiredStatusChecksError(
@@ -240,10 +206,12 @@ def _validate_blocking_step(
         )
     _validate_step_condition(step, context_text=context_text, step_name=step_name)
     is_enforcement = step.get("id") == "enforce"
-    if is_enforcement:
-        _validate_enforcement_action(step, context_text=context_text, step_name=step_name)
-    else:
-        _validate_auxiliary_action(step, context_text=context_text, step_name=step_name)
+    validate_step_action(
+        step,
+        enforcement=is_enforcement,
+        context_text=context_text,
+        step_name=step_name,
+    )
     if "working-directory" in step:
         raise RequiredStatusChecksError(
             f"blocking workflow run step must execute at the repository root: {context_text}"
@@ -275,21 +243,7 @@ def _validate_blocking_step(
             context_text=context_text,
             phony_make_targets=phony_make_targets,
         )
-        grants_runtime_authority = _RUNTIME_IMAGE_AUTHORITY in environment
-        if grants_runtime_authority and environment[_RUNTIME_IMAGE_AUTHORITY] != "true":
-            raise RequiredStatusChecksError(
-                "blocking workflow runtime image authority must be exact string true: "
-                f"{context_text}; step={step_name!r}"
-            )
-        if grants_runtime_authority and not runtime_image_verified:
-            raise RequiredStatusChecksError(
-                "blocking workflow step grants runtime image authority before verification: "
-                f"{context_text}; step={step_name!r}"
-            )
-        runtime_image_verified = (
-            runtime_image_verified or run_command == _RUNTIME_IMAGE_VERIFY_COMMAND
-        )
-    return is_enforcement, runtime_image_verified
+    return is_enforcement
 
 
 def dependency_ids(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> tuple[str, ...]:
@@ -342,16 +296,14 @@ def validate_blocking_job(
         scope=f"blocking job {context_text}",
     )
     enforcement_steps = 0
-    runtime_image_verified = False
     for step in steps or ():
-        is_enforcement, runtime_image_verified = _validate_blocking_step(
+        is_enforcement = _validate_blocking_step(
             step,
             job=job,
             contexts=contexts,
             phony_make_targets=phony_make_targets,
             default_shell=job_shell or workflow_shell,
             default_environment=job_environment,
-            runtime_image_verified=runtime_image_verified,
         )
         enforcement_steps += int(is_enforcement)
     if enforcement_steps != 1:

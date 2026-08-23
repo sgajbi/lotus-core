@@ -449,6 +449,7 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
                         "name": "Upload evidence",
                         "if": "always()",
                         "uses": "actions/upload-artifact@v7",
+                        "with": {"name": "evidence", "path": "output/evidence.json"},
                     },
                     {
                         "id": "enforce",
@@ -532,9 +533,16 @@ def test_blocking_policy_rejects_an_auxiliary_action_enforcement_marker() -> Non
                 "name": "Upload evidence",
                 "if": False,
                 "uses": "actions/upload-artifact@v7",
+                "with": {"name": "evidence", "path": "output/evidence.json"},
             }
         ],
-        [{"name": "Upload evidence", "uses": "actions/upload-artifact@v7"}],
+        [
+            {
+                "name": "Upload evidence",
+                "uses": "actions/upload-artifact@v7",
+                "with": {"name": "evidence", "path": "output/evidence.json"},
+            }
+        ],
     ],
 )
 def test_blocking_policy_requires_an_unconditional_enforcement_step(
@@ -689,12 +697,7 @@ def test_blocking_policy_allows_declared_phony_setup_command() -> None:
     )
 
 
-def test_blocking_policy_binds_runtime_authority_to_preceding_verification() -> None:
-    policy = WorkflowPolicy(
-        path=Path("fixture.yml"),
-        policy="gate_jobs_blocking",
-        advisory_contexts=frozenset(),
-    )
+def test_blocking_policy_rejects_workflow_asserted_runtime_image_authority() -> None:
     workflow = {
         "defaults": {"run": {"shell": "bash"}},
         "jobs": {
@@ -706,34 +709,6 @@ def test_blocking_policy_binds_runtime_authority_to_preceding_verification() -> 
                         "env": {"LOTUS_RUNTIME_IMAGE_SET_VERIFIED": "true"},
                         "run": "make security-audit",
                     },
-                    {"run": "make runtime-image-set-load-verify"},
-                ],
-            }
-        },
-    }
-
-    with pytest.raises(RequiredStatusChecksError, match="before verification"):
-        blocking_contexts_for_workflow(workflow, policy=policy)
-
-    workflow["jobs"]["security"]["steps"].reverse()  # type: ignore[index]
-    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
-        "Quality Baseline / Security Gate",
-    )
-
-
-def test_blocking_policy_rejects_noncanonical_runtime_authority_value() -> None:
-    workflow = {
-        "defaults": {"run": {"shell": "bash"}},
-        "jobs": {
-            "security": {
-                "name": "Quality Baseline / Security Gate",
-                "steps": [
-                    {"run": "make runtime-image-set-load-verify"},
-                    {
-                        "id": "enforce",
-                        "env": {"LOTUS_RUNTIME_IMAGE_SET_VERIFIED": True},
-                        "run": "make security-audit",
-                    },
                 ],
             }
         },
@@ -744,7 +719,136 @@ def test_blocking_policy_rejects_noncanonical_runtime_authority_value() -> None:
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="exact string true"):
+    with pytest.raises(RequiredStatusChecksError, match="disabling variable"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize(
+    ("action", "inputs", "match"),
+    [
+        (
+            "actions/checkout@v6",
+            {"repository": "someone/other", "path": "other"},
+            "alternate checkout",
+        ),
+        ("actions/checkout@v6", {"ref": "unreviewed"}, "unsupported with keys"),
+        (
+            "actions/download-artifact@v8",
+            {"name": "runtime", "path": "."},
+            "stay under output",
+        ),
+        (
+            "actions/cache@v5",
+            {"key": "poison", "path": "Makefile"},
+            "cache path is not audited",
+        ),
+        (
+            "actions/setup-python@v6",
+            {"python-version": "${{ matrix.python }}"},
+            "version is not audited",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "Makefile"},
+            "stay under output",
+        ),
+        ("actions/checkout@v6", {"fetch-depth": 1}, "fetch-depth must be 0"),
+        (
+            "actions/checkout@v6",
+            {"persist-credentials": True},
+            "persist-credentials must be false",
+        ),
+        ("actions/checkout@v6", {"path": "nested"}, "path requires repository"),
+        (
+            "actions/cache@v5",
+            {"key": "", "path": ".buildx-cache"},
+            "cache key must be non-empty",
+        ),
+        (
+            "actions/cache@v5",
+            {"key": "key", "path": ".buildx-cache", "restore-keys": ""},
+            "restore-keys must be non-empty",
+        ),
+        (
+            "actions/download-artifact@v8",
+            {"name": "runtime", "path": "output/runtime", "pattern": ""},
+            "pattern must be non-empty",
+        ),
+        (
+            "actions/download-artifact@v8",
+            {"name": "runtime", "path": "output/runtime", "merge-multiple": "yes"},
+            "merge-multiple must be boolean",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "", "path": "output/evidence"},
+            "name must be one non-empty line",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "", "retention-days": 14},
+            "path must be non-empty",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "output/evidence", "if-no-files-found": "pass"},
+            "if-no-files-found value is not audited",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "output/evidence", "retention-days": 0},
+            "retention-days must be between 1 and 30",
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "output/evidence", "compression-level": 10},
+            "compression-level must be between 0 and 9",
+        ),
+        (
+            "actions/setup-python@v6",
+            {"python-version": "3.11", "cache": "npm"},
+            "setup-python cache must be pip",
+        ),
+        (
+            "actions/setup-node@v6",
+            {
+                "node-version": "20",
+                "cache": "npm",
+                "cache-dependency-path": "tools/api_governance/package-lock.json",
+            },
+            "setup-node version is not audited",
+        ),
+        (
+            "actions/setup-node@v6",
+            {"node-version": "${{ env.NODE_VERSION }}", "cache": "pip"},
+            "setup-node cache inputs are not audited",
+        ),
+        ("actions/checkout@v6", [], "with must be an object"),
+        ("actions/checkout@v6", {1: "value"}, "with keys must be strings"),
+    ],
+)
+def test_blocking_policy_rejects_unsafe_action_inputs(
+    action: str, inputs: object, match: str
+) -> None:
+    workflow = {
+        "defaults": {"run": {"shell": "bash"}},
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {"name": "Setup", "uses": action, "with": inputs},
+                    {"id": "enforce", "run": "make security-audit"},
+                ],
+            }
+        },
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match=match):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -1086,7 +1190,8 @@ def test_blocking_policy_rejects_a_missing_resolved_matrix_target() -> None:
 
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])
 @pytest.mark.parametrize(
-    "variable", ["MAKEFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MFLAGS", "BASH_ENV"]
+    "variable",
+    ["MAKEFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MFLAGS", "BASH_ENV", "GITHUB_SHA"],
 )
 def test_blocking_policy_rejects_disabling_environment_at_every_scope(
     scope: str, variable: str
