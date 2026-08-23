@@ -45,9 +45,10 @@ manifest change cannot redirect certification to another repository or branch.
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
 blocking jobs and enforcement commands to be unconditional and fail-propagating, permits
 conditions only on audited checkout, cache-save, and artifact-upload actions, requires every
-blocking job to retain exactly one unconditional executable `id: enforce` step, requires canonical
-PR and merge-group triggers for `main`, accepts only include-row matrices with cell-identifying
-names, rejects shell failure/dry-run suppression, requires blocking dependencies to be fully
+blocking job to retain exactly one unconditional executable `id: enforce` step on a non-auxiliary
+control, requires exact canonical PR keys and merge-group triggers for `main`, accepts only
+include-row matrices with cell-identifying names, rejects path-filtered PR triggers and effective
+shell overrides as well as shell failure/dry-run suppression, requires blocking dependencies to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and
 inventories advisory producers
 when proving global same-app context uniqueness, and scans every repository workflow for static or
@@ -60,7 +61,8 @@ It is part of `make lint`,
 alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enforcement path cannot
 silently omit, skip, or impersonate either control.
 
-The required-check implementation is separated into manifest/model, workflow-policy, live GitHub
+The required-check implementation is separated into manifest/model, workflow traversal,
+blocking-job execution policy, live GitHub
 protection, and CLI modules. `make quality-workflow-governance-gate` runs scoped Ruff lint/format checks and hard-blocks complexity above
 Xenon `absolute C`, `module B`, or `average B`, and maintainability below Radon rank B for this
 package. Scoped MyPy, Bandit, and Vulture checks also run before its mutation tests, whose

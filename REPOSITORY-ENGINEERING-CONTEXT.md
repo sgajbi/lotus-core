@@ -4148,10 +4148,12 @@ Most relevant current governance:
      Pin live authority to canonical `sgajbi/lotus-core` / `main`, expand matrix suites before
      comparison, require blocking jobs and their enforcement commands to be unconditional and
      fail-propagating, limit conditional auxiliary steps to audited checkout, cache-save, and
-     artifact-upload actions, require exactly one unconditional executable `id: enforce` step in
-     every blocking job, require canonical `pull_request` event/`main` branch and
+     artifact-upload actions, require exactly one unconditional executable `id: enforce` step on a
+     non-auxiliary control in every blocking job, require exact canonical `pull_request`
+     event/`main` branch keys with no path filters and
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
-     reject shell-level failure/dry-run suppression, require every blocking-job dependency to be
+     reject workflow-, job-, or step-level effective-shell overrides outside the default or exact
+     `bash` as well as shell-level failure/dry-run suppression, require every blocking-job dependency to be
      another validated blocking job, and pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
      static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
@@ -4162,8 +4164,9 @@ Most relevant current governance:
      the default workflow token is known to lack that authority. Update branch protection only
      after the exact PR head has posted and passed the complete manifest-owned set, and apply
      app-bound checks atomically with an explicit empty legacy `contexts` array.
-     Keep manifest/model parsing, workflow-policy analysis, live protection I/O, and CLI orchestration
-     in their owned required-check modules. The workflow-governance lane must enforce scoped Ruff
+     Keep manifest/model parsing, workflow traversal, blocking-job execution policy, live
+     protection I/O, and CLI orchestration in their owned required-check modules. The
+     workflow-governance lane must enforce scoped Ruff
      lint/format checks and Xenon
      `absolute C` / `module B` / `average B`, Radon maintainability rank B, scoped MyPy, Bandit,
      and Vulture for that package and its tests, plus at least 90% branch-aware package coverage.
