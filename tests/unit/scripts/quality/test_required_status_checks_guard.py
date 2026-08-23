@@ -611,6 +611,52 @@ def test_blocking_policy_accepts_fail_propagating_shell_forms(run_command: str) 
 
 
 @pytest.mark.parametrize("scope", ["workflow", "job", "step"])
+def test_blocking_policy_rejects_makeflags_environment_at_every_scope(scope: str) -> None:
+    workflow: dict[str, Any] = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+            }
+        }
+    }
+    if scope == "workflow":
+        workflow["env"] = {"MAKEFLAGS": "-n"}
+    elif scope == "job":
+        workflow["jobs"]["security"]["env"] = {"MAKEFLAGS": "-n"}
+    else:
+        workflow["jobs"]["security"]["steps"][0]["env"] = {"MAKEFLAGS": "-n"}
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="must not set MAKEFLAGS"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_a_malformed_workflow_environment() -> None:
+    workflow = {
+        "env": ["MAKEFLAGS=-n"],
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+            }
+        },
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="environment must be an object"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize("scope", ["workflow", "job", "step"])
 @pytest.mark.parametrize("shell", ["bash {0} || true", "pwsh"])
 def test_blocking_policy_rejects_unsupported_effective_shells(scope: str, shell: str) -> None:
     workflow: dict[str, Any] = {
