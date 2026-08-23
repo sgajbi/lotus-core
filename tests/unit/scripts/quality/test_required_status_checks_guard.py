@@ -327,6 +327,58 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
     )
 
 
+def test_blocking_policy_rejects_a_conditional_auxiliary_enforcement_marker() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "if": False,
+                        "uses": "actions/upload-artifact@v7",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="enforcement steps must be unconditional",
+    ):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+def test_blocking_policy_rejects_an_auxiliary_action_enforcement_marker() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "uses": "actions/checkout@v4",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="must not be an auxiliary action"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
 @pytest.mark.parametrize(
     "steps",
     [
@@ -486,6 +538,33 @@ def test_blocking_policy_rejects_shell_level_enforcement_suppression(
     )
 
     with pytest.raises(RequiredStatusChecksError, match="suppresses command"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize("scope", ["workflow", "job", "step"])
+@pytest.mark.parametrize("shell", ["bash {0} || true", "pwsh"])
+def test_blocking_policy_rejects_unsupported_effective_shells(scope: str, shell: str) -> None:
+    workflow: dict[str, Any] = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "run": "make security-audit"}],
+            }
+        }
+    }
+    if scope == "workflow":
+        workflow["defaults"] = {"run": {"shell": shell}}
+    elif scope == "job":
+        workflow["jobs"]["security"]["defaults"] = {"run": {"shell": shell}}
+    else:
+        workflow["jobs"]["security"]["steps"][0]["shell"] = shell
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="unsupported shell"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 

@@ -173,6 +173,17 @@ def test_blocking_workflow_shape_mutations_fail_closed(job: dict[str, object], m
                 "pull_request": {
                     "branches": ["main"],
                     "types": ["opened", "synchronize", "reopened", "ready_for_review"],
+                    "paths-ignore": ["docs/**"],
+                },
+                "merge_group": {"branches": ["main"]},
+            },
+            "pull_request triggers",
+        ),
+        (
+            {
+                "pull_request": {
+                    "branches": ["main"],
+                    "types": ["opened", "synchronize", "reopened", "ready_for_review"],
                 },
                 "merge_group": {"branches": ["release"]},
             },
