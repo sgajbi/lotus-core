@@ -537,8 +537,12 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "make security-audit || true",
         "make security-audit || :",
         "set +e\nmake security-audit",
+        "set +eo pipefail\nmake security-audit",
+        "set +o errexit\nmake security-audit",
         "make security-audit --dry-run",
         "make security-audit -n",
+        "make -sn security-audit",
+        "make -sq security-audit",
         "make security-audit &",
         "make security-audit & wait $!",
         "nohup make security-audit",
@@ -575,6 +579,8 @@ def test_blocking_policy_rejects_shell_level_enforcement_suppression(
         "make security-audit && true",
         "make security-audit 2>&1",
         "make security-audit &> report.txt",
+        "set -euo pipefail\nmake security-audit",
+        "make -s security-audit",
     ],
 )
 def test_blocking_policy_accepts_fail_propagating_shell_forms(run_command: str) -> None:
