@@ -1042,7 +1042,11 @@ def test_live_protection_requires_exact_context_app_binding_and_strict_mode() ->
         {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
     ]
     protection: dict[str, Any] = {
-        "required_status_checks": {"strict": True, "contexts": [], "checks": live_checks}
+        "required_status_checks": {
+            "strict": True,
+            "contexts": [check["context"] for check in live_checks],
+            "checks": live_checks,
+        }
     }
 
     validate_live_protection(manifest, protection)
@@ -1070,30 +1074,58 @@ def test_live_protection_rejects_missing_and_stale_contexts() -> None:
             {
                 "required_status_checks": {
                     "strict": True,
-                    "contexts": [],
+                    "contexts": [check["context"] for check in live_checks],
                     "checks": live_checks,
                 }
             },
         )
 
 
-def test_live_protection_rejects_legacy_contexts() -> None:
+@pytest.mark.parametrize("legacy_context_variant", ["extra", "missing", "empty"])
+def test_live_protection_rejects_context_check_mismatch(
+    legacy_context_variant: str,
+) -> None:
     manifest = load_manifest()
     live_checks = [
         {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
     ]
 
-    with pytest.raises(RequiredStatusChecksError, match="retains legacy contexts"):
+    live_contexts = [check["context"] for check in live_checks]
+    variants = {
+        "extra": [*live_contexts, "Legacy / Impostor"],
+        "missing": live_contexts[1:],
+        "empty": [],
+    }
+
+    with pytest.raises(RequiredStatusChecksError, match="contexts/checks mismatch"):
         validate_live_protection(
             manifest,
             {
                 "required_status_checks": {
                     "strict": True,
-                    "contexts": ["Legacy / Impostor"],
+                    "contexts": variants[legacy_context_variant],
                     "checks": live_checks,
                 }
             },
         )
+
+
+def test_live_protection_accepts_reordered_consistent_contexts() -> None:
+    manifest = load_manifest()
+    live_checks = [
+        {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
+    ]
+
+    validate_live_protection(
+        manifest,
+        {
+            "required_status_checks": {
+                "strict": True,
+                "contexts": list(reversed([check["context"] for check in live_checks])),
+                "checks": live_checks,
+            }
+        },
+    )
 
 
 def test_live_protection_rejects_boolean_app_identity() -> None:
@@ -1109,7 +1141,7 @@ def test_live_protection_rejects_boolean_app_identity() -> None:
             {
                 "required_status_checks": {
                     "strict": True,
-                    "contexts": [],
+                    "contexts": [check["context"] for check in live_checks],
                     "checks": live_checks,
                 }
             },
@@ -1129,7 +1161,7 @@ def test_live_protection_rejects_duplicate_context_app_bindings() -> None:
             {
                 "required_status_checks": {
                     "strict": True,
-                    "contexts": [],
+                    "contexts": [check["context"] for check in live_checks],
                     "checks": live_checks,
                 }
             },

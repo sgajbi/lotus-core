@@ -47,9 +47,18 @@ def validate_live_protection(
     legacy_contexts = required.get("contexts")
     if not isinstance(legacy_contexts, list):
         raise RequiredStatusChecksError("branch protection must expose legacy contexts as a list")
-    if legacy_contexts:
+    if not all(isinstance(context, str) and context.strip() for context in legacy_contexts):
         raise RequiredStatusChecksError(
-            f"live branch protection retains legacy contexts: {legacy_contexts!r}"
+            "branch protection legacy contexts must be non-empty strings"
+        )
+    live_contexts = {check.context for check in live_checks}
+    legacy_context_set = set(legacy_contexts)
+    if legacy_context_set != live_contexts:
+        context_extra = sorted(legacy_context_set - live_contexts)
+        context_missing = sorted(live_contexts - legacy_context_set)
+        raise RequiredStatusChecksError(
+            "live branch-protection contexts/checks mismatch: "
+            f"extra={context_extra!r}, missing={context_missing!r}"
         )
     expected_checks = set(manifest.required_checks)
     if live_checks != expected_checks:
