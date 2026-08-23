@@ -136,9 +136,10 @@ after fencing Core repository roots.
    Make target matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths,
    special-target syntax, and multi-target tokens fail closed. Every static or resolved target must
    also carry GNU Make's exact per-target phony flag in the repository-root effective database's
-   delimited Files section evaluated under that run step's inherited workflow/job/step environment;
-   parse-time/recipe output, serialized variable bodies, a
-   missing Makefile, an inactive declaration, an ordinary file,
+   delimited Files section evaluated with only fixed `PATH` and `LC_ALL=C`, and appear in a literal
+   static `.PHONY` declaration. Conditional directives, includes, dynamic or continued phony
+   declarations, inherited `MAKELEVEL`/`CI`/runner state, parse-time/recipe output, serialized
+   variable bodies, a missing Makefile, an ordinary file,
    or an undeclared/non-phony rule cannot emit merge authority. A
    blocking job may depend only on another fully validated blocking job. This static marker proves
    that a declared control remains present and fail-propagating; reviewers remain responsible for

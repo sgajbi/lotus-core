@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
 from scripts.quality.required_status_checks.action_policy import (
     is_conditional_auxiliary_action,
@@ -178,17 +178,13 @@ def _validate_run_make_targets(
     *,
     run_command: str,
     context_text: str,
-    environment: Mapping[str, Any],
-    phony_make_targets_for_environment: Callable[[Mapping[str, Any]], frozenset[str]],
+    phony_make_targets: frozenset[str],
 ) -> None:
     targets = _run_make_targets(
         job,
         run_command=run_command,
         context_text=context_text,
     )
-    if not targets:
-        return
-    phony_make_targets = phony_make_targets_for_environment(environment)
     undeclared_targets = sorted(set(targets) - phony_make_targets)
     if undeclared_targets:
         raise RequiredStatusChecksError(
@@ -212,7 +208,7 @@ def _validate_blocking_step(
     *,
     job: Mapping[str, Any],
     contexts: tuple[str, ...],
-    phony_make_targets_for_environment: Callable[[Mapping[str, Any]], frozenset[str]],
+    phony_make_targets: frozenset[str],
     default_shell: str | None,
     default_environment: Mapping[str, Any],
 ) -> bool:
@@ -278,8 +274,7 @@ def _validate_blocking_step(
             job,
             run_command=run_command,
             context_text=context_text,
-            environment=environment,
-            phony_make_targets_for_environment=phony_make_targets_for_environment,
+            phony_make_targets=phony_make_targets,
         )
     return is_enforcement
 
@@ -309,7 +304,7 @@ def validate_blocking_job(
     job: Mapping[str, Any],
     *,
     contexts: tuple[str, ...],
-    phony_make_targets_for_environment: Callable[[Mapping[str, Any]], frozenset[str]],
+    phony_make_targets: frozenset[str],
     workflow_shell: str | None,
     workflow_environment: Mapping[str, Any],
 ) -> None:
@@ -345,7 +340,7 @@ def validate_blocking_job(
             step,
             job=job,
             contexts=contexts,
-            phony_make_targets_for_environment=phony_make_targets_for_environment,
+            phony_make_targets=phony_make_targets,
             default_shell=job_shell or workflow_shell,
             default_environment=job_environment,
         )

@@ -25,6 +25,7 @@ from scripts.quality.required_status_checks import (
 from scripts.quality.required_status_checks import (
     blocking_contexts_for_workflow as _blocking_contexts_for_workflow,
 )
+from scripts.quality.required_status_checks import workflow as required_checks_workflow
 
 _CANONICAL_TRIGGERS_YAML = (
     "on:\n"
@@ -123,34 +124,60 @@ def test_manifest_validation_fails_closed_without_phony_targets(tmp_path: Path) 
 def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
     tmp_path: Path,
 ) -> None:
-    tmp_path.joinpath("Makefile").write_text("ifeq (\n", encoding="utf-8")
+    tmp_path.joinpath("Makefile").write_text(
+        ".PHONY: lint\nlint:\nthis is not a recipe\n",
+        encoding="utf-8",
+    )
 
     with pytest.raises(RequiredStatusChecksError, match="unable to evaluate Makefile"):
         validate_manifest_against_workflows(load_manifest(), repository_root=tmp_path)
 
 
 @pytest.mark.parametrize(
-    "makefile_authority_forgery",
+    ("makefile_authority_forgery", "error"),
     [
-        "active:\n\t@true\nifeq (1,0)\n.PHONY: security-audit\nendif",
-        "active:\n\t@true\ndefine unused-declaration\n.PHONY: security-audit\nendef",
-        "$(info .PHONY: security-audit)\nactive:\n\t@true",
-        "active:\n\t@$(info .PHONY: security-audit)\n\t@true",
-        "$(info # Make data base, printed on forged)\n"
-        "$(info .PHONY: security-audit)\n"
-        "$(info # Finished Make data base on forged)\n"
-        "active:\n\t@true",
-        "define forged-database-body\n"
-        "# Files\n"
-        ".PHONY: security-audit\n"
-        "ignored\n"
-        "endef\n"
-        "active:\n\t@true",
-        ".PHONY: FORGE = security-audit\nactive:\n\t@true",
+        (
+            "active:\n\t@true\nifeq (1,0)\n.PHONY: security-audit\nendif",
+            "Makefile phony authority must be static",
+        ),
+        (
+            "active:\n\t@true\ndefine unused-declaration\n.PHONY: security-audit\nendef",
+            "not a declared phony Make target",
+        ),
+        (
+            "$(info .PHONY: security-audit)\nactive:\n\t@true",
+            "not a declared phony Make target",
+        ),
+        (
+            "active:\n\t@$(info .PHONY: security-audit)\n\t@true",
+            "not a declared phony Make target",
+        ),
+        (
+            "$(info # Make data base, printed on forged)\n"
+            "$(info .PHONY: security-audit)\n"
+            "$(info # Finished Make data base on forged)\n"
+            "active:\n\t@true",
+            "not a declared phony Make target",
+        ),
+        (
+            "define forged-database-body\n"
+            "# Files\n"
+            ".PHONY: security-audit\n"
+            "ignored\n"
+            "endef\n"
+            "active:\n\t@true",
+            "not a declared phony Make target",
+        ),
+        (
+            ".PHONY: FORGE = security-audit\nactive:\n\t@true",
+            "Makefile phony authority must be static",
+        ),
     ],
 )
 def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
-    tmp_path: Path, makefile_authority_forgery: str
+    tmp_path: Path,
+    makefile_authority_forgery: str,
+    error: str,
 ) -> None:
     tmp_path.joinpath("Makefile").write_text(
         f".PHONY: active\n{makefile_authority_forgery}\nsecurity-audit:\n\t@false\n",
@@ -185,7 +212,7 @@ def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="not a declared phony Make target: security-audit",
+        match=error,
     ):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
@@ -226,66 +253,25 @@ def test_manifest_validation_accepts_target_specific_variable_on_real_phony_targ
     validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
-@pytest.mark.parametrize("environment_scope", ["workflow", "job", "step"])
-def test_blocking_policy_evaluates_phony_authority_under_effective_run_environment(
+@pytest.mark.parametrize(
+    "unsafe_authority",
+    [
+        "ifneq ($(MAKELEVEL),0)\n.PHONY: security-audit\nendif",
+        "ifneq ($(DEMO_DATA_PACK_INGEST_ONLY),true)\n.PHONY: security-audit\nendif",
+        "include phony-authority.mk\n.PHONY: security-audit",
+        "-include phony-authority.mk\n.PHONY: security-audit",
+        "sinclude phony-authority.mk\n.PHONY: security-audit",
+        "TARGETS := security-audit\n.PHONY: $(TARGETS)",
+        "TARGETS := security-audit\n.PHONY: ${TARGETS}",
+        ".PHONY: security-audit \\",
+    ],
+)
+def test_blocking_policy_rejects_non_static_phony_authority(
     tmp_path: Path,
-    environment_scope: str,
+    unsafe_authority: str,
 ) -> None:
     tmp_path.joinpath("Makefile").write_text(
-        ".PHONY: active\n"
-        "active:\n\t@true\n"
-        "ifndef DEMO_DATA_PACK_INGEST_ONLY\n"
-        ".PHONY: security-audit\n"
-        "endif\n"
-        "security-audit:\n\t@false\n",
-        encoding="utf-8",
-    )
-    step: dict[str, Any] = {
-        "id": "enforce",
-        "shell": "bash",
-        "run": "make security-audit",
-    }
-    job: dict[str, Any] = {
-        "name": "Quality Baseline / Security Gate",
-        "runs-on": "ubuntu-latest",
-        "steps": [step],
-    }
-    workflow: dict[str, Any] = {"jobs": {"security": job}}
-    environment = {"DEMO_DATA_PACK_INGEST_ONLY": "true"}
-    if environment_scope == "workflow":
-        workflow["env"] = environment
-    elif environment_scope == "job":
-        job["env"] = environment
-    else:
-        step["env"] = environment
-    policy = WorkflowPolicy(
-        path=Path("fixture.yml"),
-        policy="gate_jobs_blocking",
-        advisory_contexts=frozenset(),
-    )
-
-    with pytest.raises(
-        RequiredStatusChecksError,
-        match="not a declared phony Make target: security-audit",
-    ):
-        _blocking_contexts_for_workflow(
-            workflow,
-            policy=policy,
-            makefile_path=tmp_path / "Makefile",
-        )
-
-
-def test_blocking_policy_resolves_phony_authority_for_each_run_step_environment(
-    tmp_path: Path,
-) -> None:
-    tmp_path.joinpath("Makefile").write_text(
-        "ifeq ($(DEMO_DATA_PACK_INGEST_ONLY),setup)\n"
-        ".PHONY: lint\n"
-        "endif\n"
-        "ifeq ($(DEMO_DATA_PACK_INGEST_ONLY),enforce)\n"
-        ".PHONY: security-audit\n"
-        "endif\n"
-        "lint security-audit:\n\t@true\n",
+        f"{unsafe_authority}\nsecurity-audit:\n\t@false\n",
         encoding="utf-8",
     )
     workflow = {
@@ -293,44 +279,6 @@ def test_blocking_policy_resolves_phony_authority_for_each_run_step_environment(
             "security": {
                 "name": "Quality Baseline / Security Gate",
                 "runs-on": "ubuntu-latest",
-                "steps": [
-                    {
-                        "name": "Setup",
-                        "shell": "bash",
-                        "run": "make lint",
-                        "env": {"DEMO_DATA_PACK_INGEST_ONLY": "setup"},
-                    },
-                    {
-                        "id": "enforce",
-                        "shell": "bash",
-                        "run": "make security-audit",
-                        "env": {"DEMO_DATA_PACK_INGEST_ONLY": "enforce"},
-                    },
-                ],
-            }
-        }
-    }
-    policy = WorkflowPolicy(
-        path=Path("fixture.yml"),
-        policy="gate_jobs_blocking",
-        advisory_contexts=frozenset(),
-    )
-
-    assert _blocking_contexts_for_workflow(
-        workflow,
-        policy=policy,
-        makefile_path=tmp_path / "Makefile",
-    ) == ("Quality Baseline / Security Gate",)
-
-
-def test_blocking_policy_rejects_non_string_make_environment_values(tmp_path: Path) -> None:
-    _write_fixture_makefile(tmp_path)
-    workflow = {
-        "jobs": {
-            "security": {
-                "name": "Quality Baseline / Security Gate",
-                "runs-on": "ubuntu-latest",
-                "env": {"DEMO_DATA_PACK_INGEST_ONLY": True},
                 "steps": [
                     {
                         "id": "enforce",
@@ -349,13 +297,36 @@ def test_blocking_policy_rejects_non_string_make_environment_values(tmp_path: Pa
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="Make environment must contain string entries",
+        match="Makefile phony authority must be static: .*line=",
     ):
         _blocking_contexts_for_workflow(
             workflow,
             policy=policy,
             makefile_path=tmp_path / "Makefile",
         )
+
+
+def test_make_authority_evaluation_uses_only_fixed_minimal_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_fixture_makefile(tmp_path)
+    observed_environments: list[dict[str, str]] = []
+    real_run = required_checks_workflow.subprocess.run
+
+    def record_environment(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        observed_environments.append(dict(kwargs["env"]))
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setenv("MAKELEVEL", "1")
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setattr(required_checks_workflow.subprocess, "run", record_environment)
+
+    required_checks_workflow._load_phony_make_targets(tmp_path / "Makefile")
+
+    assert len(observed_environments) == 1
+    assert set(observed_environments[0]) == {"LC_ALL", "PATH"}
+    assert observed_environments[0]["LC_ALL"] == "C"
 
 
 def test_matrix_contexts_expand_from_each_include_row() -> None:
