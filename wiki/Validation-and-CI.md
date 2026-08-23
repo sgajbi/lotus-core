@@ -51,7 +51,9 @@ dedicated fine-grained `LOTUS_BRANCH_PROTECTION_READ_TOKEN` with repository Admi
 read-only authority and compares strict mode plus the complete `(context, app_id)` set. The default
 workflow token cannot read branch protection and must not be used; missing read authority or drift
 fails exact-main evidence closed. Operators update branch protection only after all manifest-owned
-contexts are green on the exact PR head.
+contexts are green on the exact PR head. Generate the atomic PATCH body with
+`required_status_checks_guard.py --print-desired-protection`; never hand-assemble or incrementally
+mutate the 37-entry set.
 
 Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
 platform, installer, dependency/packaging manifests, locks, and the cache implementation. A verified
