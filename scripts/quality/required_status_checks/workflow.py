@@ -184,9 +184,7 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
     define_depth = 0
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
-        if (define_depth or not raw_line.startswith("\t")) and _MAKE_AUTHORITY_FUNCTION.search(
-            raw_line
-        ):
+        if _MAKE_AUTHORITY_FUNCTION.search(raw_line):
             raise RequiredStatusChecksError(
                 f"Makefile phony authority must be static: {path}; line={line_number}"
             )
