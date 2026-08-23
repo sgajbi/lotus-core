@@ -53,6 +53,13 @@ def _fixture_manifest(payload: dict[str, Any]) -> RequiredChecksManifest:
     )
 
 
+def _write_fixture_makefile(repository_root: Path) -> None:
+    repository_root.joinpath("Makefile").write_text(
+        ".PHONY: security-audit\nsecurity-audit:\n\t@true\n",
+        encoding="utf-8",
+    )
+
+
 def test_repository_manifest_matches_expanded_blocking_workflow_contexts() -> None:
     manifest = load_manifest()
 
@@ -75,6 +82,18 @@ def test_repository_manifest_matches_expanded_blocking_workflow_contexts() -> No
     assert all(
         check.context != "Quality Baseline / Report Only" for check in manifest.required_checks
     )
+
+
+def test_manifest_validation_fails_closed_without_makefile_authority(tmp_path: Path) -> None:
+    with pytest.raises(RequiredStatusChecksError, match="unable to load Makefile phony targets"):
+        validate_manifest_against_workflows(load_manifest(), repository_root=tmp_path)
+
+
+def test_manifest_validation_fails_closed_without_phony_targets(tmp_path: Path) -> None:
+    tmp_path.joinpath("Makefile").write_text("lint:\n\t@true\n", encoding="utf-8")
+
+    with pytest.raises(RequiredStatusChecksError, match="Makefile has no declared phony targets"):
+        validate_manifest_against_workflows(load_manifest(), repository_root=tmp_path)
 
 
 def test_matrix_contexts_expand_from_each_include_row() -> None:
@@ -649,6 +668,69 @@ def test_blocking_policy_accepts_bare_resolved_matrix_targets() -> None:
 
 @pytest.mark.parametrize(
     "target",
+    ["README.md", "Makefile", "pyproject.toml", "no-such-target-xyz"],
+)
+def test_blocking_policy_rejects_non_phony_static_make_targets(target: str) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": [{"id": "enforce", "shell": "bash", "run": f"make {target}"}],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="target is not a declared phony Make target",
+    ):
+        blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            phony_make_targets=frozenset({"security-audit"}),
+        )
+
+
+def test_blocking_policy_rejects_a_non_phony_resolved_matrix_target() -> None:
+    workflow = {
+        "jobs": {
+            "tests": {
+                "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+                "strategy": {"matrix": {"include": [{"suite": "unit", "target": "README.md"}]}},
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make ${{ matrix.target }}",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="all_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="target is not a declared phony Make target",
+    ):
+        blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            phony_make_targets=frozenset({"test-unit"}),
+        )
+
+
+@pytest.mark.parametrize(
+    "target",
     [
         "security-audit || true",
         "security-audit -n",
@@ -918,6 +1000,7 @@ def test_blocking_policy_accepts_an_explicitly_governed_enforcement_action() -> 
 def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_drift(
     tmp_path: Path,
 ) -> None:
+    _write_fixture_makefile(tmp_path)
     source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_path = tmp_path / "manifest.json"
     workflow_path = tmp_path / "quality.yml"
@@ -957,6 +1040,7 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
 def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
     tmp_path: Path,
 ) -> None:
+    _write_fixture_makefile(tmp_path)
     source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_path = tmp_path / "manifest.json"
     workflow_directory = tmp_path / ".github" / "workflows"
@@ -1000,6 +1084,7 @@ def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
 
 
 def test_manifest_validation_rejects_required_advisory_context(tmp_path: Path) -> None:
+    _write_fixture_makefile(tmp_path)
     source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_path = tmp_path / "manifest.json"
     workflow_path = tmp_path / "quality.yml"
@@ -1096,6 +1181,7 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
     tmp_path: Path,
     unmanaged_workflow: str,
 ) -> None:
+    _write_fixture_makefile(tmp_path)
     source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_path = tmp_path / "manifest.json"
     workflow_directory = tmp_path / ".github" / "workflows"
@@ -1133,6 +1219,7 @@ def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanag
 def test_manifest_validation_rejects_an_unmanaged_formatted_name_expression(
     tmp_path: Path,
 ) -> None:
+    _write_fixture_makefile(tmp_path)
     source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_path = tmp_path / "manifest.json"
     workflow_directory = tmp_path / ".github" / "workflows"

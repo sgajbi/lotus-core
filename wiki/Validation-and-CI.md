@@ -56,7 +56,9 @@ Docker image-set producer uses `make build-runtime-image-set`. Effective workflo
 environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or `BASH_ENV` remains prohibited;
 every referenced matrix target is resolved from each include row and must be one bare Make target,
 matching `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
-multi-target tokens are rejected;
+multi-target tokens are rejected. Every admitted static or resolved target must also be declared
+by the repository-root Makefile's `.PHONY` authority, so ordinary files, non-phony rules, and
+missing Makefile authority fail closed;
 requires blocking dependencies
 to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and

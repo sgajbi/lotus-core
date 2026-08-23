@@ -21,6 +21,7 @@ from scripts.quality.required_status_checks.model import (
 
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+_PHONY_DECLARATION = re.compile(r"^\.PHONY\s*:(.*)$")
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -119,8 +120,28 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
     return tuple(contexts)
 
 
+def _load_phony_make_targets(path: Path) -> frozenset[str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
+    targets: set[str] = set()
+    for line in lines:
+        match = _PHONY_DECLARATION.fullmatch(line)
+        if match is None:
+            continue
+        declaration = match.group(1).split("#", maxsplit=1)[0]
+        targets.update(declaration.split())
+    if not targets:
+        raise RequiredStatusChecksError(f"Makefile has no declared phony targets: {path}")
+    return frozenset(targets)
+
+
 def blocking_contexts_for_workflow(
-    workflow: Mapping[str, Any], *, policy: WorkflowPolicy
+    workflow: Mapping[str, Any],
+    *,
+    policy: WorkflowPolicy,
+    phony_make_targets: frozenset[str] | None = None,
 ) -> tuple[str, ...]:
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
@@ -130,6 +151,11 @@ def blocking_contexts_for_workflow(
     observed_advisory: set[str] = set()
     workflow_shell = default_run_shell(workflow, scope=f"workflow {policy.path}")
     workflow_environment = effective_environment(workflow, scope=f"workflow {policy.path}")
+    governed_phony_targets = (
+        phony_make_targets
+        if phony_make_targets is not None
+        else _load_phony_make_targets(Path("Makefile"))
+    )
     for job_id, job in jobs.items():
         if not isinstance(job_id, str) or not job_id:
             raise RequiredStatusChecksError(
@@ -144,6 +170,7 @@ def blocking_contexts_for_workflow(
             validate_blocking_job(
                 job,
                 contexts=contexts,
+                phony_make_targets=governed_phony_targets,
                 workflow_shell=workflow_shell,
                 workflow_environment=workflow_environment,
             )
@@ -217,6 +244,7 @@ def _governed_contexts(
     contexts: list[str] = []
     required_producers: dict[str, Path] = {}
     all_producers: dict[str, list[str]] = {}
+    phony_make_targets = _load_phony_make_targets(repository_root / "Makefile")
     for policy in manifest.workflow_policies:
         workflow = _load_workflow(repository_root / policy.path, display_path=policy.path)
         _validate_workflow_triggers(workflow, path=policy.path)
@@ -226,7 +254,11 @@ def _governed_contexts(
                 raise RequiredStatusChecksError(f"workflow job must be an object: {policy.path}")
             for context in _expanded_job_contexts(job):
                 all_producers.setdefault(context, []).append(f"{policy.path}:{job_id}")
-        policy_contexts = blocking_contexts_for_workflow(workflow, policy=policy)
+        policy_contexts = blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            phony_make_targets=phony_make_targets,
+        )
         contexts.extend(policy_contexts)
         required_producers.update(dict.fromkeys(policy_contexts, policy.path))
     return contexts, required_producers, all_producers
