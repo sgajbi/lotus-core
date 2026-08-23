@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "repository": "sgajbi/lotus-core",
+  "branch": "main",
+  "strict": true,
+  "workflow_policies": [
+    {
+      "path": ".github/workflows/pr-merge-gate.yml",
+      "policy": "all_jobs_blocking",
+      "advisory_contexts": []
+    },
+    {
+      "path": ".github/workflows/quality-baseline.yml",
+      "policy": "gate_jobs_blocking",
+      "advisory_contexts": [
+        "Quality Baseline / Report Only"
+      ]
+    }
+  ],
+  "required_checks": [
+    {
+      "context": "PR Merge Gate / Coverage Gate (Combined)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Derived-State Recovery Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Docker Smoke Contract",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / E2E Smoke",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Latency Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Lint Typecheck Contracts Security",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Lotus Core Validation Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Performance Load Gate (Fast)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (critical-lifecycle-db)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (integration-lite)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (ops-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-buy-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-dividend-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-fx-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-interest-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-portfolio-flow-bundle-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-processing-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (transaction-sell-contract)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (unit)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Tests (unit-db)",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Validate Docker Build",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Windows Lock Closure Replay",
+      "app_id": 15368
+    },
+    {
+      "context": "PR Merge Gate / Workflow Lint",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / API Governance Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Bandit Security Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Complexity Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Deptry Source Dependency Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Import Boundary Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Integration Lite Collection Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Maintainability Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Ruff Format Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Ruff Regression Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Typecheck Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Unit Collection Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Vulture Source Dead-Code Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Wiki Docs Gate",
+      "app_id": 15368
+    },
+    {
+      "context": "Quality Baseline / Workflow Governance Gate",
+      "app_id": 15368
+    }
+  ]
+}
