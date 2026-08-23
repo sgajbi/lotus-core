@@ -95,7 +95,7 @@ def _required_context_collisions(
         pattern_parts: list[str] = []
         cursor = 0
         for expression in expressions:
-            pattern_parts.extend((re.escape(name[cursor : expression.start()]), ".+"))
+            pattern_parts.extend((re.escape(name[cursor : expression.start()]), ".*"))
             cursor = expression.end()
         pattern_parts.append(re.escape(name[cursor:]))
         context_pattern = re.compile("".join(pattern_parts))
