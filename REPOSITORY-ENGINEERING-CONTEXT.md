@@ -4148,10 +4148,10 @@ Most relevant current governance:
      Pin live authority to canonical `sgajbi/lotus-core` / `main`, expand matrix suites before
      comparison, require blocking jobs and their enforcement commands to be unconditional and
      fail-propagating, limit conditional auxiliary steps to audited checkout, cache-save, and
-     artifact-upload actions, require at least one unconditional command from the explicit
-     governed Make/build/replay allowlist or an approved enforcement action in every blocking job,
-     require canonical `pull_request` event/`main` branch and `merge_group`/`main` triggers, reject
-     matrix axes omitted from job names and ungoverned matrix targets,
+     artifact-upload actions, require exactly one unconditional executable `id: enforce` step in
+     every blocking job, require canonical `pull_request` event/`main` branch and
+     `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
+     pin strict mode and the exact two governed workflow policies in code,
      inventory advisory producers when checking global context uniqueness, scan every workflow for
      static or dynamic required-context collisions, reject non-bare workflow name expressions, bind
      manifest authority only to GitHub Actions app `15368`, and fail on missing, stale, duplicate,
