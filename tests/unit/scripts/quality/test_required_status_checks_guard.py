@@ -552,6 +552,9 @@ def test_blocking_policy_rejects_a_non_executable_enforcement_marker() -> None:
         "setsid make security-audit",
         "coproc make security-audit",
         "make security-audit\ndisown",
+        "if make security-audit; then echo passed; fi",
+        "while make security-audit; do echo retrying; done",
+        "until make security-audit; do echo retrying; done",
     ],
 )
 def test_blocking_policy_rejects_shell_level_enforcement_suppression(
@@ -953,6 +956,30 @@ def test_manifest_rejects_noncanonical_live_protection_authority(
             "jobs:\n"
             "  impostor:\n"
             "    name: Quality Baseline / ${{ matrix.gate }}\n"
+            "    strategy:\n"
+            "      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}\n"
+        ),
+        (
+            "jobs:\n"
+            "  impostor:\n"
+            "    name: Quality Baseline / Security Gate${{ matrix.suffix }}\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            "        suffix: ['']\n"
+        ),
+        (
+            "jobs:\n"
+            "  impostor:\n"
+            "    name: Quality Baseline / Security Gate${{ matrix.suffix }}\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            "        include:\n"
+            "          - suffix: ''\n"
+        ),
+        (
+            "jobs:\n"
+            "  impostor:\n"
+            "    name: Quality Baseline / Security Gate${{ matrix.suffix }}\n"
             "    strategy:\n"
             "      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}\n"
         ),
