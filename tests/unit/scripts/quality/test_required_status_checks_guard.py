@@ -339,10 +339,12 @@ def test_blocking_policy_rejects_non_static_phony_authority(
         "define SHELL\n/bin/true\nendef",
         "define SHELL :=\n/bin/true\nendef",
         "override define MAKEFLAGS\n-n\nendef",
+        "$(strip SHELL\\\n) := /bin/true",
         "security-audit: private .SHELLFLAGS ::= -c",
         ".DEFAULT:",
         ".EXPORT_ALL_VARIABLES:",
         ".IGNORE:",
+        "dummy .IGNORE: security-audit",
         ".ONESHELL:",
         ".POSIX:",
         ".SILENT:",
@@ -458,6 +460,28 @@ def test_make_authority_keeps_tab_indented_endef_inside_define_body(
     )
 
     assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset({"active"})
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "security-audit: $(DEPS) # documented=x\n\t@true",
+        'security-audit: $(DEPS); printf "key=value"',
+    ],
+)
+def test_make_authority_ignores_assignment_tokens_after_rule_boundaries(
+    tmp_path: Path,
+    rule: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f"DEPS =\n.PHONY: security-audit\n{rule}\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
 
 
 def test_make_authority_evaluation_uses_only_fixed_minimal_environment(
