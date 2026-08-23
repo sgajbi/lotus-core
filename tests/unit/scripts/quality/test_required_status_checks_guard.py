@@ -321,6 +321,67 @@ def test_blocking_policy_rejects_non_static_phony_authority(
         )
 
 
+@pytest.mark.parametrize(
+    "execution_state",
+    [
+        ".RECIPEPREFIX := $(if $(PYTHON_VERSION),.,)",
+        ".SHELLFLAGS := -c",
+        "GNUMAKEFLAGS += -n",
+        "MAKE := /bin/true",
+        "MAKEFILES ?= alternate.mk",
+        "MAKEFLAGS += -n",
+        "SHELL := /bin/true",
+        "VPATH = shadow",
+        "security-audit: private .SHELLFLAGS ::= -c",
+        ".DEFAULT:",
+        ".EXPORT_ALL_VARIABLES:",
+        ".IGNORE:",
+        ".ONESHELL:",
+        ".POSIX:",
+        ".SILENT:",
+        "vpath %.py shadow",
+    ],
+)
+def test_blocking_policy_rejects_mutable_make_execution_state(
+    tmp_path: Path,
+    execution_state: str,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        f"{execution_state}\n.PHONY: security-audit\nsecurity-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {
+                        "id": "enforce",
+                        "shell": "bash",
+                        "run": "make security-audit",
+                    }
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        _blocking_contexts_for_workflow(
+            workflow,
+            policy=policy,
+            makefile_path=tmp_path / "Makefile",
+        )
+
+
 def test_make_authority_keeps_tab_indented_endef_inside_define_body(
     tmp_path: Path,
 ) -> None:

@@ -4179,7 +4179,8 @@ Most relevant current governance:
      only fixed `PATH` and `LC_ALL=C`, and must appear in a literal static `.PHONY` declaration;
      conditional directives, includes, declarations inside GNU Make column-zero-scoped `define`
      bodies, `$(eval)`/`${eval}`
-     outside recipes, dynamic or continued phony declarations, inherited process environment, parse-time/recipe output, serialized
+     outside recipes, parser/execution-variable assignments, special execution targets, `vpath`,
+     dynamic or continued phony declarations, inherited process environment, parse-time/recipe output, serialized
      variable bodies, missing Makefile authority,
      ordinary files, and non-phony rules fail closed,
      bind runtime-image verification as a prerequisite of every consuming Make control; the target
