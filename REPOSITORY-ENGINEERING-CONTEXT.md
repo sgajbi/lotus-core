@@ -4161,8 +4161,9 @@ Most relevant current governance:
      inside a reviewed Make target, not in workflow shell text. Permit action steps only from the
      audited checkout, Python/Node setup, cache, artifact, Docker Buildx, and actionlint set, with
      action-specific `with:` key/value policy that confines alternate checkout, cache, and artifact paths. Continue rejecting
-     workflow/job/step environment injection through `CI`, `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`,
-     `MFLAGS`, or `BASH_ENV`, and any run-step working-directory override; the positive bare-command
+     workflow/job/step environment keys outside the closed governed-workflow inventory, including
+     `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, and Make control variables, and any run-step
+     working-directory override; the positive bare-command
      grammar makes direct, indirect, or deprecated environment/path writes, workspace mutation,
      command chaining, and ungoverned actions fail closed,
      allow blocking jobs to use only audited job keys and literal `ubuntu-latest` or

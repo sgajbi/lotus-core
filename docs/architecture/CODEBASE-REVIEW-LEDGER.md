@@ -20,8 +20,9 @@ Make's exact per-target phony flag in the delimited effective-database Files sec
 variable bodies, inactive declarations, ordinary files, undeclared rules, and missing Makefile
 authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
 `windows-latest` runners, so containers, services, deployment environments, self-hosted labels,
-and runner expressions cannot replace the execution boundary. Run-step working-directory overrides and `CI`/`GITHUB_SHA`/Make control-variable injection
-also fail closed. The positive run-command grammar rejects direct or indirect environment/path
+and runner expressions cannot replace the execution boundary. Configured environment keys must
+come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`,
+`CI`, Make control variables, and run-step working-directory overrides fail closed. The positive run-command grammar rejects direct or indirect environment/path
 writes, workspace mutation, and command chaining; action steps are restricted to the audited
 checkout, setup, cache, artifact, Docker Buildx, and actionlint set with action-specific input
 key/value policy. Runtime-image consumers bind verification in the Make graph: each control target
@@ -52,7 +53,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 258 focused tests with 93.06% branch-aware package coverage against a 90%
+deadlock. Local evidence is 267 focused tests with 93.07% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

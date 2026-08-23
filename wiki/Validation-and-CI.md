@@ -57,8 +57,9 @@ admitted, and each action has an explicit `with:` key/value policy. Alternate ch
 to the credential-free nested platform checkout; cache paths are exact audited directories; artifact
 paths stay below `output/`. The
 Docker image-set producer uses `make build-runtime-image-set`. Effective workflow/job/step
-environment injection through `CI`, `GITHUB_SHA`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MAKEFILES`, `MFLAGS`, or `BASH_ENV`
-and run-step working-directory overrides remain prohibited. The positive command grammar rejects
+configured environment keys must come from the closed inventory used by the governed workflows;
+unlisted keys such as `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, and Make control variables,
+plus run-step working-directory overrides, remain prohibited. The positive command grammar rejects
 direct or indirect environment/path writes, workspace mutation, command chaining, and ungoverned actions;
 blocking jobs admit only the audited job keys and literal `ubuntu-latest` or `windows-latest`
 runners. Containers, services, deployment environments, self-hosted runner labels, and runner

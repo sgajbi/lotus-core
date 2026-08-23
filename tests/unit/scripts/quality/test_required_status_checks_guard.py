@@ -745,7 +745,10 @@ def test_blocking_policy_rejects_workflow_asserted_runtime_image_authority() -> 
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="disabling variable"):
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="environment key is not admitted.*LOTUS_RUNTIME_IMAGE_SET_VERIFIED",
+    ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -1263,14 +1266,20 @@ def test_blocking_policy_requires_an_audited_literal_runner() -> None:
         _blocking_contexts_for_workflow(workflow, policy=policy)
 
 
-@pytest.mark.parametrize("scope", ["workflow", "job", "step"])
 @pytest.mark.parametrize(
-    "variable",
-    ["MAKEFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MFLAGS", "BASH_ENV", "CI", "GITHUB_SHA"],
+    ("scope", "variable"),
+    [
+        ("job", "PATH"),
+        ("step", "PATH"),
+        ("step", "PYTHONPATH"),
+        ("step", "PYTHONSTARTUP"),
+        ("step", "LD_PRELOAD"),
+        ("step", "MAKE"),
+        ("workflow", "CI"),
+        ("job", "MAKEFLAGS"),
+    ],
 )
-def test_blocking_policy_rejects_disabling_environment_at_every_scope(
-    scope: str, variable: str
-) -> None:
+def test_blocking_policy_rejects_unadmitted_environment_keys(scope: str, variable: str) -> None:
     workflow: dict[str, Any] = {
         "jobs": {
             "security": {
@@ -1279,41 +1288,74 @@ def test_blocking_policy_rejects_disabling_environment_at_every_scope(
             }
         }
     }
-    value = "disable-pipefail.sh" if variable in {"BASH_ENV", "MAKEFILES"} else "-n"
     if scope == "workflow":
-        workflow["env"] = {variable: value}
+        workflow["env"] = {variable: "untrusted"}
     elif scope == "job":
-        workflow["jobs"]["security"]["env"] = {variable: value}
+        workflow["jobs"]["security"]["env"] = {variable: "untrusted"}
     else:
-        workflow["jobs"]["security"]["steps"][0]["env"] = {variable: value}
+        workflow["jobs"]["security"]["steps"][0]["env"] = {variable: "untrusted"}
     policy = WorkflowPolicy(
         path=Path("fixture.yml"),
         policy="gate_jobs_blocking",
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="injects a disabling variable"):
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match=rf"environment key is not admitted: .*key={variable}",
+    ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
-def test_blocking_policy_accepts_unrelated_environment_at_every_scope() -> None:
-    workflow = {
-        "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+@pytest.mark.parametrize(
+    ("scope", "variable"),
+    [
+        ("workflow", "COMPOSE_DOCKER_CLI_BUILD"),
+        ("workflow", "DOCKER_BUILDKIT"),
+        ("workflow", "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24"),
+        ("workflow", "NODE_VERSION"),
+        ("workflow", "PIP_DISABLE_PIP_VERSION_CHECK"),
+        ("workflow", "PYTHONUNBUFFERED"),
+        ("workflow", "PYTHON_VERSION"),
+        ("job", "LOTUS_PLATFORM_ROOT"),
+        ("step", "DEMO_DATA_PACK_HISTORY_DAYS"),
+        ("step", "DEMO_DATA_PACK_INGEST_ONLY"),
+        ("step", "DEMO_DATA_PACK_PORTFOLIO_IDS"),
+        ("step", "E2E_INGESTION_URL"),
+        ("step", "E2E_QUERY_URL"),
+        ("step", "GH_TOKEN"),
+        ("step", "HOST_DATABASE_URL"),
+        ("step", "LOTUS_COVERAGE_CHANGED_BASE"),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID"),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_GROUP"),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL"),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH"),
+        ("step", "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA"),
+        ("step", "LOTUS_TESTS_COMPOSE_LOG_FILE"),
+        ("step", "LOTUS_TEST_ENV_PROFILE"),
+    ],
+)
+def test_blocking_policy_accepts_inventoried_environment_key(scope: str, variable: str) -> None:
+    workflow: dict[str, Any] = {
         "jobs": {
             "security": {
                 "name": "Quality Baseline / Security Gate",
-                "env": {"PYTHONDONTWRITEBYTECODE": "1"},
                 "steps": [
                     {
                         "id": "enforce",
                         "shell": "bash",
                         "run": "make security-audit",
-                        "env": {"PYTHONDONTWRITEBYTECODE": "1"},
                     }
                 ],
             }
         },
     }
+    if scope == "workflow":
+        workflow["env"] = {variable: "admitted"}
+    elif scope == "job":
+        workflow["jobs"]["security"]["env"] = {variable: "admitted"}
+    else:
+        workflow["jobs"]["security"]["steps"][0]["env"] = {variable: "admitted"}
     policy = WorkflowPolicy(
         path=Path("fixture.yml"),
         policy="gate_jobs_blocking",
