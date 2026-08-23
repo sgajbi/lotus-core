@@ -77,9 +77,10 @@ path-filtered PR triggers, unspecified/non-`bash` effective shells, non-strict m
 governed-workflow-set drift, and non-include matrix shapes fail before ambiguous or weakened checks
 can be emitted. Shell-level failure-tolerance, dry-run, and background-execution escapes plus
 dependencies on advisory or unknown jobs also fail. Exact `bash` supplies `pipefail`; the named
-denylist rejects `|| true`, `|| :`, Bash option clusters that disable `errexit`, Make short-option
-clusters containing `-n`/`-q`, long dry-run flags, standalone `&`, `nohup`, `setsid`, `coproc`, and
-`disown`. The marker proves an explicitly declared fail-propagating control exists;
+denylist rejects `|| true`, `|| :`, Bash option clusters that disable `errexit` or `pipefail`, Make
+short-option clusters containing `-n`/`-q`, `MAKEFLAGS` assignments, long dry-run flags, standalone
+`&`, `nohup`, `setsid`, `coproc`, and `disown`. The marker proves an explicitly declared
+fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
 share one same-app context, and unmanaged static or dynamic workflow names cannot collide with a
@@ -94,7 +95,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `140 passed`, with 90.65% branch-aware
+- focused workflow/manifest pack after final review hardening: `147 passed`, with 90.65% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;
