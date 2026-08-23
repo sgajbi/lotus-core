@@ -46,7 +46,7 @@ evidence must be explicit and cannot be mistaken for release authorization.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
    workflow-governance target includes mutation-style manifest tests. Manifest/model parsing,
    workflow-policy analysis, live GitHub protection, and CLI orchestration are separate owned
-   modules; the same target hard-blocks Xenon complexity above `absolute C`, `module B`, or
+   modules; the same target runs scoped Ruff lint/format checks and hard-blocks Xenon complexity above `absolute C`, `module B`, or
    `average B` and Radon maintainability below rank B for the package, then applies scoped MyPy,
    Bandit, and Vulture checks before mutation tests with a 90% branch-aware coverage floor.
 5. Main Releasability performs the live comparison read-only. Repository history (CR-1087) proves

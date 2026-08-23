@@ -153,7 +153,8 @@ def _validate_blocking_step(step: object, *, contexts: tuple[str, ...]) -> bool:
     run_command = step.get("run")
     if isinstance(run_command, str) and _SHELL_FAILURE_SUPPRESSION.search(run_command):
         raise RequiredStatusChecksError(
-            f"blocking workflow enforce step suppresses command execution or failure: {context_text}"
+            "blocking workflow enforce step suppresses command execution or failure: "
+            f"{context_text}"
         )
     return True
 

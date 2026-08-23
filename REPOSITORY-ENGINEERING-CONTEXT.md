@@ -4163,7 +4163,8 @@ Most relevant current governance:
      after the exact PR head has posted and passed the complete manifest-owned set, and apply
      app-bound checks atomically with an explicit empty legacy `contexts` array.
      Keep manifest/model parsing, workflow-policy analysis, live protection I/O, and CLI orchestration
-     in their owned required-check modules. The workflow-governance lane must enforce Xenon
+     in their owned required-check modules. The workflow-governance lane must enforce scoped Ruff
+     lint/format checks and Xenon
      `absolute C` / `module B` / `average B`, Radon maintainability rank B, scoped MyPy, Bandit,
      and Vulture for that package and its tests, plus at least 90% branch-aware package coverage.
 

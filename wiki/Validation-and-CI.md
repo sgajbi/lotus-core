@@ -61,7 +61,7 @@ alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enfo
 silently omit, skip, or impersonate either control.
 
 The required-check implementation is separated into manifest/model, workflow-policy, live GitHub
-protection, and CLI modules. `make quality-workflow-governance-gate` hard-blocks complexity above
+protection, and CLI modules. `make quality-workflow-governance-gate` runs scoped Ruff lint/format checks and hard-blocks complexity above
 Xenon `absolute C`, `module B`, or `average B`, and maintainability below Radon rank B for this
 package. Scoped MyPy, Bandit, and Vulture checks also run before its mutation tests, whose
 branch-aware package coverage is hard-blocked below 90%.
