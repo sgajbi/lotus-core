@@ -120,8 +120,9 @@ after fencing Core repository roots.
    governed workflows; unlisted keys such as `PATH`, `PYTHONPATH`, `LD_PRELOAD`, `MAKE`, `CI`, or
    Make control variables fail closed, as do alternate coverage bases, runtime-image identities,
    profiles, platform paths, non-string values, and any run-step working-directory override. Every run step must be one
-   admitted bare command and every action must be on the audited allowlist with action-specific
-   `with:` keys and constrained checkout/cache/artifact/setup values. Artifact destinations must be
+   admitted bare command and every action must use one of ten exact audited references with
+   action-specific `with:` keys, runner-specific setup-Python versions, and constrained
+   checkout/cache/artifact/setup values. Artifact destinations must be
    literal, expression-free paths below `output/`, so expression resolution cannot traverse into
    the checkout. These controls make indirect environment or path writes, workspace mutation,
    command chaining, and unknown actions or inputs fail closed.

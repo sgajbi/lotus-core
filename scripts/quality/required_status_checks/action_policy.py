@@ -4,45 +4,30 @@ from typing import Any, Mapping
 
 from scripts.quality.required_status_checks.model import RequiredStatusChecksError
 
-_CONDITIONAL_AUXILIARY_ACTION_PREFIXES = (
-    "actions/cache/save@",
-    "actions/checkout@",
-    "actions/upload-artifact@",
-)
-_AUXILIARY_ACTION_PREFIXES = (
-    "actions/cache@",
-    "actions/cache/restore@",
-    "actions/cache/save@",
-    "actions/checkout@",
-    "actions/download-artifact@",
-    "actions/setup-node@",
-    "actions/setup-python@",
-    "actions/upload-artifact@",
-    "docker/setup-buildx-action@",
-)
-_ENFORCEMENT_ACTION_PREFIXES = ("reviewdog/action-actionlint@",)
 _ACTION_INPUT_KEYS = {
-    "actions/cache@": frozenset({"key", "path", "restore-keys"}),
-    "actions/cache/restore@": frozenset({"key", "path", "restore-keys"}),
-    "actions/cache/save@": frozenset({"key", "path"}),
-    "actions/checkout@": frozenset({"fetch-depth", "path", "persist-credentials", "repository"}),
-    "actions/download-artifact@": frozenset({"merge-multiple", "name", "path", "pattern"}),
-    "actions/setup-node@": frozenset({"cache", "cache-dependency-path", "node-version"}),
-    "actions/setup-python@": frozenset({"cache", "python-version"}),
-    "actions/upload-artifact@": frozenset(
+    "actions/cache@v5": frozenset({"key", "path", "restore-keys"}),
+    "actions/cache/restore@v5": frozenset({"key", "path", "restore-keys"}),
+    "actions/cache/save@v5": frozenset({"key", "path"}),
+    "actions/checkout@v6": frozenset({"fetch-depth", "path", "persist-credentials", "repository"}),
+    "actions/download-artifact@v8": frozenset({"merge-multiple", "name", "path", "pattern"}),
+    "actions/setup-node@v6": frozenset({"cache", "cache-dependency-path", "node-version"}),
+    "actions/setup-python@v6": frozenset({"cache", "python-version"}),
+    "actions/upload-artifact@v7": frozenset(
         {"compression-level", "if-no-files-found", "name", "path", "retention-days"}
     ),
-    "docker/setup-buildx-action@": frozenset(),
-    "reviewdog/action-actionlint@": frozenset(),
+    "docker/setup-buildx-action@v4": frozenset(),
+    "reviewdog/action-actionlint@v1": frozenset(),
 }
+_AUDITED_ACTIONS = frozenset(_ACTION_INPUT_KEYS)
+_ENFORCEMENT_ACTIONS = frozenset({"reviewdog/action-actionlint@v1"})
+_AUXILIARY_ACTIONS = _AUDITED_ACTIONS - _ENFORCEMENT_ACTIONS
+_CONDITIONAL_AUXILIARY_ACTIONS = frozenset(
+    {"actions/cache/save@v5", "actions/checkout@v6", "actions/upload-artifact@v7"}
+)
 
 
 def is_conditional_auxiliary_action(action: object) -> bool:
-    return isinstance(action, str) and action.startswith(_CONDITIONAL_AUXILIARY_ACTION_PREFIXES)
-
-
-def _action_prefix(action: str) -> str | None:
-    return next((prefix for prefix in _ACTION_INPUT_KEYS if action.startswith(prefix)), None)
+    return isinstance(action, str) and action in _CONDITIONAL_AUXILIARY_ACTIONS
 
 
 def _require_relative_output_path(value: object, *, field: str) -> None:
@@ -92,14 +77,14 @@ def _validate_cache_inputs(inputs: Mapping[str, Any]) -> None:
         raise RequiredStatusChecksError("blocking workflow cache restore-keys must be non-empty")
 
 
-def _validate_artifact_inputs(prefix: str, inputs: Mapping[str, Any]) -> None:
+def _validate_artifact_inputs(action: str, inputs: Mapping[str, Any]) -> None:
     name = inputs.get("name")
     if not isinstance(name, str) or not name.strip() or "\n" in name:
         raise RequiredStatusChecksError(
             "blocking workflow artifact name must be one non-empty line"
         )
     _require_relative_output_path(inputs.get("path"), field="artifact path")
-    if prefix == "actions/download-artifact@":
+    if action == "actions/download-artifact@v8":
         if "pattern" in inputs and (
             not isinstance(inputs["pattern"], str) or not inputs["pattern"].strip()
         ):
@@ -133,9 +118,10 @@ def _validate_bounded_integer(
         )
 
 
-def _validate_setup_inputs(prefix: str, inputs: Mapping[str, Any]) -> None:
-    if prefix == "actions/setup-python@":
-        if inputs.get("python-version") not in {"3.11", "${{ env.PYTHON_VERSION }}"}:
+def _validate_setup_inputs(action: str, inputs: Mapping[str, Any], *, runner: str) -> None:
+    if action == "actions/setup-python@v6":
+        expected_version = "3.11" if runner == "windows-latest" else "${{ env.PYTHON_VERSION }}"
+        if inputs.get("python-version") != expected_version:
             raise RequiredStatusChecksError("blocking workflow setup-python version is not audited")
         if "cache" in inputs and inputs["cache"] != "pip":
             raise RequiredStatusChecksError("blocking workflow setup-python cache must be pip")
@@ -148,7 +134,7 @@ def _validate_setup_inputs(prefix: str, inputs: Mapping[str, Any]) -> None:
         raise RequiredStatusChecksError("blocking workflow setup-node cache inputs are not audited")
 
 
-def _action_inputs(step: Mapping[str, Any], *, prefix: str) -> Mapping[str, Any]:
+def _action_inputs(step: Mapping[str, Any], *, action: str) -> Mapping[str, Any]:
     raw_inputs = step.get("with")
     if raw_inputs is None:
         inputs: Mapping[str, Any] = {}
@@ -158,7 +144,7 @@ def _action_inputs(step: Mapping[str, Any], *, prefix: str) -> Mapping[str, Any]
         inputs = raw_inputs
     if not all(isinstance(key, str) for key in inputs):
         raise RequiredStatusChecksError("blocking workflow action with keys must be strings")
-    unknown_keys = sorted(set(inputs) - _ACTION_INPUT_KEYS[prefix])
+    unknown_keys = sorted(set(inputs) - _ACTION_INPUT_KEYS[action])
     if unknown_keys:
         raise RequiredStatusChecksError(
             f"blocking workflow action uses unsupported with keys: {unknown_keys!r}"
@@ -166,19 +152,16 @@ def _action_inputs(step: Mapping[str, Any], *, prefix: str) -> Mapping[str, Any]
     return inputs
 
 
-def _validate_action_inputs(action: str, step: Mapping[str, Any]) -> None:
-    prefix = _action_prefix(action)
-    if prefix is None:
-        return
-    inputs = _action_inputs(step, prefix=prefix)
-    if prefix == "actions/checkout@":
+def _validate_action_inputs(action: str, step: Mapping[str, Any], *, runner: str) -> None:
+    inputs = _action_inputs(step, action=action)
+    if action == "actions/checkout@v6":
         _validate_checkout_inputs(inputs)
-    elif prefix.startswith("actions/cache"):
+    elif action in {"actions/cache@v5", "actions/cache/restore@v5", "actions/cache/save@v5"}:
         _validate_cache_inputs(inputs)
-    elif prefix in {"actions/download-artifact@", "actions/upload-artifact@"}:
-        _validate_artifact_inputs(prefix, inputs)
-    elif prefix in {"actions/setup-node@", "actions/setup-python@"}:
-        _validate_setup_inputs(prefix, inputs)
+    elif action in {"actions/download-artifact@v8", "actions/upload-artifact@v7"}:
+        _validate_artifact_inputs(action, inputs)
+    elif action in {"actions/setup-node@v6", "actions/setup-python@v6"}:
+        _validate_setup_inputs(action, inputs, runner=runner)
 
 
 def validate_step_action(
@@ -187,15 +170,14 @@ def validate_step_action(
     enforcement: bool,
     context_text: str,
     step_name: object,
+    runner: str,
 ) -> None:
     action = step.get("uses")
-    prefixes = _ENFORCEMENT_ACTION_PREFIXES if enforcement else _AUXILIARY_ACTION_PREFIXES
-    if action is not None and (not isinstance(action, str) or not action.startswith(prefixes)):
-        message = (
-            "blocking workflow enforce step uses an unsupported action"
-            if enforcement
-            else "blocking workflow step uses an unsupported auxiliary action"
+    admitted_actions = _ENFORCEMENT_ACTIONS if enforcement else _AUXILIARY_ACTIONS
+    if action is not None and (not isinstance(action, str) or action not in admitted_actions):
+        raise RequiredStatusChecksError(
+            "blocking workflow step uses an unaudited action reference: "
+            f"{context_text}; step={step_name!r}; uses={action!r}"
         )
-        raise RequiredStatusChecksError(f"{message}: {context_text}; step={step_name!r}")
     if isinstance(action, str):
-        _validate_action_inputs(action, step)
+        _validate_action_inputs(action, step, runner=runner)

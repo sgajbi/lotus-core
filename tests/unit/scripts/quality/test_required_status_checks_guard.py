@@ -743,7 +743,7 @@ def test_blocking_policy_rejects_an_auxiliary_action_enforcement_marker() -> Non
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="unsupported action"):
+    with pytest.raises(RequiredStatusChecksError, match="unaudited action reference"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -828,7 +828,7 @@ def test_blocking_policy_rejects_an_unknown_action_as_the_only_control() -> None
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="unsupported auxiliary action",
+        match="unaudited action reference",
     ):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
@@ -848,7 +848,7 @@ def test_blocking_policy_rejects_an_unknown_enforcement_action() -> None:
         advisory_contexts=frozenset(),
     )
 
-    with pytest.raises(RequiredStatusChecksError, match="unsupported action"):
+    with pytest.raises(RequiredStatusChecksError, match="unaudited action reference"):
         blocking_contexts_for_workflow(workflow, policy=policy)
 
 
@@ -1042,7 +1042,7 @@ def test_blocking_policy_rejects_workflow_asserted_runtime_image_authority() -> 
         ),
         (
             "actions/setup-python@v6",
-            {"python-version": "3.11", "cache": "npm"},
+            {"python-version": "${{ env.PYTHON_VERSION }}", "cache": "npm"},
             "setup-python cache must be pip",
         ),
         (
@@ -1086,6 +1086,161 @@ def test_blocking_policy_rejects_unsafe_action_inputs(
 
     with pytest.raises(RequiredStatusChecksError, match=match):
         blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize(
+    ("runner", "python_version", "accepted"),
+    [
+        ("ubuntu-latest", "${{ env.PYTHON_VERSION }}", True),
+        ("ubuntu-latest", "3.11", False),
+        ("windows-latest", "3.11", True),
+        ("windows-latest", "${{ env.PYTHON_VERSION }}", False),
+    ],
+)
+def test_blocking_policy_pins_setup_python_version_to_runner(
+    runner: str,
+    python_version: str,
+    accepted: bool,
+) -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "runs-on": runner,
+                "steps": [
+                    {
+                        "name": "Setup Python",
+                        "uses": "actions/setup-python@v6",
+                        "with": {"python-version": python_version},
+                    },
+                    {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+                ],
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    if accepted:
+        assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+            "Quality Baseline / Security Gate",
+        )
+    else:
+        with pytest.raises(RequiredStatusChecksError, match="version is not audited"):
+            blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize(
+    ("action", "enforcement"),
+    [
+        ("actions/checkout@main", False),
+        ("actions/checkout@0123456789abcdef0123456789abcdef01234567", False),
+        ("actions/checkout@v5", False),
+        ("reviewdog/action-actionlint@main", True),
+        ("reviewdog/action-actionlint@0123456789abcdef0123456789abcdef01234567", True),
+        ("reviewdog/action-actionlint@v0", True),
+    ],
+)
+def test_blocking_policy_rejects_unpinned_action_references(
+    action: str,
+    enforcement: bool,
+) -> None:
+    action_step: dict[str, Any] = {"uses": action}
+    if enforcement:
+        action_step["id"] = "enforce"
+        steps = [action_step]
+    else:
+        steps = [
+            action_step,
+            {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+        ]
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": steps,
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="unaudited action reference"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
+@pytest.mark.parametrize(
+    ("action", "inputs", "enforcement"),
+    [
+        ("actions/cache@v5", {"key": "key", "path": ".buildx-cache"}, False),
+        ("actions/cache/restore@v5", {"key": "key", "path": ".buildx-cache"}, False),
+        ("actions/cache/save@v5", {"key": "key", "path": ".buildx-cache"}, False),
+        ("actions/checkout@v6", {}, False),
+        (
+            "actions/download-artifact@v8",
+            {"name": "runtime", "path": "output/runtime"},
+            False,
+        ),
+        (
+            "actions/setup-node@v6",
+            {
+                "node-version": "${{ env.NODE_VERSION }}",
+                "cache": "npm",
+                "cache-dependency-path": "tools/api_governance/package-lock.json",
+            },
+            False,
+        ),
+        (
+            "actions/setup-python@v6",
+            {"python-version": "${{ env.PYTHON_VERSION }}"},
+            False,
+        ),
+        (
+            "actions/upload-artifact@v7",
+            {"name": "evidence", "path": "output/evidence"},
+            False,
+        ),
+        ("docker/setup-buildx-action@v4", {}, False),
+        ("reviewdog/action-actionlint@v1", {}, True),
+    ],
+)
+def test_blocking_policy_accepts_exact_audited_action_references(
+    action: str,
+    inputs: dict[str, object],
+    enforcement: bool,
+) -> None:
+    action_step: dict[str, Any] = {"uses": action, "with": inputs}
+    if enforcement:
+        action_step["id"] = "enforce"
+        steps = [action_step]
+    else:
+        steps = [
+            action_step,
+            {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+        ]
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "steps": steps,
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    assert blocking_contexts_for_workflow(workflow, policy=policy) == (
+        "Quality Baseline / Security Gate",
+    )
 
 
 @pytest.mark.parametrize(
