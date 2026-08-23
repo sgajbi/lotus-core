@@ -8,8 +8,9 @@ workflow sources, and the sole advisory `Quality Baseline / Report Only` context
 expands matrix suites; requires every blocking job and enforcement command to be unconditional and
 fail-propagating; permits conditional steps only for audited checkout, cache-save, and
 artifact-upload actions; requires every blocking job to retain exactly one unconditional executable
-`id: enforce` step; verifies canonical PR and merge-group triggers; accepts only include-row matrices
-with cell-identifying names; rejects shell failure/dry-run suppression; requires blocking dependencies
+`id: enforce` step on a non-auxiliary control; verifies exact canonical PR keys without path filters
+and merge-group triggers; accepts only include-row matrices with cell-identifying names; rejects
+effective-shell overrides and shell failure/dry-run suppression; requires blocking dependencies
 to be validated blocking jobs; pins strict mode and the exact governed workflow set; inventories advisory producers
 in global context-uniqueness proof; scans all
 workflows for static or dynamic required-context collisions; rejects unsupported job-name
@@ -18,19 +19,20 @@ expressions; pins the manifest to canonical `sgajbi/lotus-core` / `main` and Git
 undeclared, redirected, or wrong-app authority.
 `make lint` now reaches both import-boundary and
 required-check enforcement;
-manifest/model parsing, workflow-policy analysis, live-protection I/O, and CLI orchestration have
-separate modules with hard Xenon `absolute C` / `module B` / `average B`, Radon rank-B, MyPy,
+manifest/model parsing, workflow traversal, blocking-job execution policy, live-protection I/O, and
+CLI orchestration have separate modules with hard Xenon `absolute C` / `module B` / `average B`, Radon rank-B, MyPy,
 Bandit, and Vulture gates;
 Main Releasability performs read-only live parity through a dedicated fine-grained Administration-
 read-only secret because the default workflow token is known to lack that authority. The guard emits
 the exact atomic protection PATCH payload with an explicit empty legacy-context list and the full
 app-bound check list. Mutation tests prove undeclared Gate, conditional-job, conditional-enforcement,
-empty/auxiliary/unknown-action-only blocking job, job/step
+empty/auxiliary/unknown-action-only blocking job, conditional or auxiliary enforcement marker,
+effective-shell override, path-filtered PR trigger, job/step
 failure-tolerance, advisory/blocking collision, cross-workflow collision, formatted-expression,
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 92 focused tests with 92% branch-aware package coverage against a 90%
+deadlock. Local evidence is 123 focused tests with 90.65% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically

@@ -107,11 +107,15 @@ after fencing Core repository roots.
    conditional enforcement commands, and job/step `continue-on-error` on blocking jobs. Conditional
    steps are limited to the audited checkout, cache-save, and artifact-upload actions. The guard
    also requires every blocking job to retain exactly one unconditional executable `id: enforce`
-   step; a missing, duplicate, conditional, failure-tolerant, or non-executable marker cannot emit
-   merge authority. Common shell failure suppression and Make dry-run flags also fail, and a
+   step on a non-auxiliary control; a missing, duplicate, conditional, auxiliary,
+   failure-tolerant, or non-executable marker cannot emit merge authority. An enforce step's
+   effective shell must be the default or exactly `bash`; workflow-, job-, and step-level custom
+   shells cannot remove fail-fast behavior. Common shell failure suppression and Make dry-run flags also fail, and a
    blocking job may depend only on another fully validated blocking job. This static marker proves that a declared control remains present and
    fail-propagating; reviewers remain responsible for the business semantics of the invoked command.
-   Canonical PR events and `main` branch filters plus the `merge_group` `main` filter are mandatory;
+   Canonical PR events and the exact `main` branch filter plus the `merge_group` `main` filter are
+   mandatory; extra `paths`, `paths-ignore`, or alternative branch keys fail closed so required
+   contexts cannot silently stop posting;
    only include-row matrices with cell-identifying names are supported. Strict mode and the exact
    two governed workflow policies are code-pinned. It inventories
    blocking and advisory producers so an
@@ -131,8 +135,8 @@ after fencing Core repository roots.
    | governed workflow set differs | Restore exactly the PR Merge Gate and Quality Baseline policies with their canonical classifications. |
    | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
-   | `id: enforce` count is not one, or the marker is conditional/non-executable | Put exactly one unconditional marker on the job's real fail-propagating control; review the invoked command's semantics. |
-   | enforcement shell suppression or dry-run detected | Remove the suppression/dry-run flag and retain normal shell failure propagation. |
+   | `id: enforce` count is not one, or the marker is conditional, auxiliary, or non-executable | Put exactly one unconditional marker on the job's real non-auxiliary fail-propagating control; review the invoked command's semantics. |
+   | enforcement shell override, suppression, or dry-run detected | Remove the unsupported effective shell or suppression/dry-run flag and retain default or exact-`bash` failure propagation. |
    | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 

@@ -32,9 +32,11 @@ evidence must be explicit and cannot be mistaken for release authorization.
    classifies every governed workflow job, requires blocking jobs and enforcement commands to be
    unconditional and fail-propagating, limits conditional auxiliary steps to audited checkout,
    cache-save, and artifact-upload actions, requires every blocking job to retain exactly one
-   unconditional executable `id: enforce` step, validates canonical PR and merge-group triggers,
+   unconditional executable `id: enforce` step on a non-auxiliary control, validates exact
+   canonical PR keys without path filters and canonical merge-group triggers,
    accepts only include-row matrices with cell-identifying names, pins strict mode and the exact two
-   governed workflow policies in code, rejects shell-level failure/dry-run suppression, requires
+   governed workflow policies in code, rejects effective-shell overrides outside the default or
+   exact `bash` and shell-level failure/dry-run suppression, requires
    blocking-job dependencies to be validated blocking jobs, and inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -45,7 +47,8 @@ evidence must be explicit and cannot be mistaken for release authorization.
    Missing, stale, wrong-app, malformed, or non-strict protection fails closed.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
    workflow-governance target includes mutation-style manifest tests. Manifest/model parsing,
-   workflow-policy analysis, live GitHub protection, and CLI orchestration are separate owned
+   workflow traversal, blocking-job execution policy, live GitHub protection, and CLI
+   orchestration are separate owned
    modules; the same target runs scoped Ruff lint/format checks and hard-blocks Xenon complexity above `absolute C`, `module B`, or
    `average B` and Radon maintainability below rank B for the package, then applies scoped MyPy,
    Bandit, and Vulture checks before mutation tests with a 90% branch-aware coverage floor.
@@ -67,8 +70,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
 deterministically, the advisory context must be both declared and observed, blocking jobs cannot
 carry job-level conditions, conditional enforcement commands, or job/step failure tolerance;
-only audited auxiliary actions may be conditional, and zero/duplicate/conditional/non-executable
-`id: enforce` markers fail. Canonical PR and merge-group trigger mutations, non-strict manifests,
+only audited auxiliary actions may be conditional, and zero/duplicate/conditional/auxiliary/
+non-executable `id: enforce` markers fail. Canonical PR and merge-group trigger mutations,
+path-filtered PR triggers, unsupported effective-shell overrides, non-strict manifests,
 governed-workflow-set drift, and non-include matrix shapes fail before ambiguous or weakened checks
 can be emitted. Shell-level failure/dry-run suppression and dependencies on advisory or unknown jobs
 also fail. The marker proves an explicitly declared fail-propagating control exists; static validation
@@ -86,10 +90,11 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `114 passed`, with 91.28% branch-aware
+- focused workflow/manifest pack after final review hardening: `123 passed`, with 90.65% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
-  maintainability ranks A/A/B/A/A across the owned package and CLI; scoped MyPy, Bandit, and
+  maintainability is A for every owned module except the B-ranked workflow traversal module;
+  scoped MyPy, Bandit, and
   Vulture passed;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
