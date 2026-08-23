@@ -38,7 +38,6 @@ _EXECUTION_DEFINE = re.compile(
     + r")(?=\s|$|::=|:=|\+=|\?=|!=|=)"
 )
 _VPATH_DIRECTIVE = re.compile(r"^vpath(?:\s|$)")
-_DEFINE_DIRECTIVE = re.compile(r"^(?:(?:export|override|private)\s+)*define\s+(\S+)")
 _SAFE_DIAGNOSTIC_EXPANSION = re.compile(r"^\$\((?:error|info|warning)(?:\s|$).*\)$")
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")
 
@@ -66,32 +65,8 @@ def _first_unexpanded_token(line: str, tokens: tuple[str, ...]) -> int | None:
     return None
 
 
-def _has_computed_declaration_name(line: str) -> bool:
-    boundaries = (
-        boundary
-        for boundary in (
-            _first_unexpanded_token(line, ("#",)),
-            _first_unexpanded_token(line, (";",)),
-        )
-        if boundary is not None
-    )
-    declaration = line[: min(boundaries, default=len(line))]
-    assignment = _first_unexpanded_token(declaration, _ASSIGNMENT_OPERATORS)
-    if assignment is not None and "$" in declaration[:assignment]:
-        return True
-    target_separator = _first_unexpanded_token(declaration, (":",))
-    if (
-        target_separator is not None
-        and (assignment is None or target_separator < assignment)
-        and "$" in declaration[:target_separator]
-    ):
-        return True
-    define = _DEFINE_DIRECTIVE.match(declaration)
-    return define is not None and "$" in define.group(1)
-
-
 def _has_expansion_dependent_declaration(line: str) -> bool:
-    """Reject lines whose expansions can supply an otherwise invisible separator."""
+    """Reject declarations whose structure depends on expanding a Make variable."""
 
     boundaries = (
         boundary
@@ -104,10 +79,13 @@ def _has_expansion_dependent_declaration(line: str) -> bool:
     declaration = line[: min(boundaries, default=len(line))].strip()
     if "$" not in declaration or _SAFE_DIAGNOSTIC_EXPANSION.fullmatch(declaration):
         return False
-    return (
-        _first_unexpanded_token(declaration, _ASSIGNMENT_OPERATORS) is None
-        and _first_unexpanded_token(declaration, (":",)) is None
-    )
+    assignment = _first_unexpanded_token(declaration, _ASSIGNMENT_OPERATORS)
+    if assignment is not None:
+        return "$" in declaration[:assignment]
+    target_separator = _first_unexpanded_token(declaration, (":",))
+    if target_separator is not None:
+        return "$" in declaration[:target_separator]
+    return True
 
 
 def _has_execution_special_target(line: str) -> bool:
@@ -123,7 +101,6 @@ def validate_make_execution_state(line: str, *, path: Path, line_number: int) ->
 
     mutable_state = (
         (line.endswith("\\") and not line.startswith(".PHONY:"))
-        or _has_computed_declaration_name(line)
         or _has_expansion_dependent_declaration(line)
         or _has_execution_special_target(line)
         or any(
