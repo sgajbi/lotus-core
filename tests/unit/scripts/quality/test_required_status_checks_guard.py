@@ -331,6 +331,7 @@ def test_desired_payload_is_app_bound_and_ready_for_atomic_update() -> None:
 
     assert payload == {
         "strict": True,
+        "contexts": [],
         "checks": [
             {"context": check.context, "app_id": check.app_id} for check in manifest.required_checks
         ],
