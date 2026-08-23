@@ -194,6 +194,10 @@ def test_blocking_workflow_shape_mutations_fail_closed(job: dict[str, object], m
 def test_governed_workflow_trigger_mutations_fail_closed(
     tmp_path: Path, trigger_mutation: dict[str, object], match: str
 ) -> None:
+    (tmp_path / "Makefile").write_text(
+        ".PHONY: security-audit\nsecurity-audit:\n\t@true\n",
+        encoding="utf-8",
+    )
     payload = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
     payload["workflow_policies"] = [
         {

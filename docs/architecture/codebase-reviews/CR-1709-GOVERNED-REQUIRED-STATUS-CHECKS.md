@@ -41,7 +41,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
    redirection, multiple lines, Make flags, and wrapper commands fail closed. Referenced matrix
    targets are resolved from every include row and must each match the same bare target-name
    grammar, `[A-Za-z0-9_][A-Za-z0-9_.-]*`; assignments, options, paths, special-target syntax, and
-   multi-target tokens fail closed; requires
+   multi-target tokens fail closed. Every admitted static or resolved target must also be declared
+   by the repository-root Makefile's `.PHONY` authority, so ordinary files, undeclared rules, and
+   missing Makefile authority fail closed; requires
    blocking-job dependencies to be validated blocking jobs, and inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -91,7 +93,8 @@ open-ended shell denylist. Effective workflow/job/step environment injection thr
 multi-command implementation is owned by `make build-runtime-image-set`, so its marker is one bare
 invocation. Matrix expressions are not trusted as unresolved text: every referenced include-row
 value must match the same bare Make-target grammar, which excludes assignments, options, paths,
-special-target syntax, and multi-target tokens.
+special-target syntax, and multi-target tokens. Static and resolved targets must also appear in a
+repository-root `.PHONY:` declaration; existing files and non-phony rules cannot authorize merge.
 The marker proves an explicitly declared fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
@@ -107,7 +110,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `187 passed`, with 91.50% branch-aware
+- focused workflow/manifest pack after final review hardening: `194 passed`, with 91.93% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;
