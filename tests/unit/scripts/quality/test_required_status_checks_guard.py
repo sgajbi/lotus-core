@@ -188,7 +188,7 @@ def test_main_releasability_verifies_live_protection_read_only() -> None:
 
     assert parity_step == {
         "name": "Verify live required status checks",
-        "env": {"GH_TOKEN": "${{ github.token }}"},
+        "env": {"GH_TOKEN": "${{ secrets.LOTUS_BRANCH_PROTECTION_READ_TOKEN }}"},
         "run": "make required-status-checks-live-guard",
     }
     assert workflow["permissions"] == {"actions": "read", "contents": "read"}

@@ -77,7 +77,7 @@ jobs:
         run: make lint
       - name: Verify live required status checks
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LOTUS_BRANCH_PROTECTION_READ_TOKEN }}
         run: make required-status-checks-live-guard
       - name: Verify Technology Governance Receipts
         env:
