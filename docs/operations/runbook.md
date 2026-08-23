@@ -106,7 +106,9 @@ after fencing Core repository roots.
 3. `make required-status-checks-guard` expands workflow matrices; rejects job-level conditions,
    conditional enforcement commands, and job/step `continue-on-error` on blocking jobs. Conditional
    steps are limited to the audited checkout, cache-save, and artifact-upload actions. The guard
-   inventories blocking and advisory producers so an
+   also requires every blocking job to retain at least one unconditional substantive command or
+   enforcement action; an empty or auxiliary-only job cannot emit merge authority. It inventories
+   blocking and advisory producers so an
    advisory same-app check cannot satisfy required protection; scans every repository workflow for
    static or dynamic required-context collisions; rejects unsupported job-name expressions;
    requires every manifest entry to use GitHub Actions app `15368`; and fails on missing, stale,
