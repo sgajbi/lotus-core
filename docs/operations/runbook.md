@@ -108,7 +108,8 @@ after fencing Core repository roots.
    steps are limited to the audited checkout, cache-save, and artifact-upload actions. The guard
    also requires every blocking job to retain exactly one unconditional executable `id: enforce`
    step; a missing, duplicate, conditional, failure-tolerant, or non-executable marker cannot emit
-   merge authority. This static marker proves that a declared control remains present and
+   merge authority. Common shell failure suppression and Make dry-run flags also fail, and a
+   blocking job may depend only on another fully validated blocking job. This static marker proves that a declared control remains present and
    fail-propagating; reviewers remain responsible for the business semantics of the invoked command.
    Canonical PR events and `main` branch filters plus the `merge_group` `main` filter are mandatory;
    only include-row matrices with cell-identifying names are supported. Strict mode and the exact
@@ -131,6 +132,8 @@ after fencing Core repository roots.
    | PR or merge-group triggers are noncanonical | Restore the governed `main` branch filters and PR event set before rerunning CI. |
    | matrix shape or cell name is unsupported | Use include-only rows and ensure the job name identifies each emitted cell. |
    | `id: enforce` count is not one, or the marker is conditional/non-executable | Put exactly one unconditional marker on the job's real fail-propagating control; review the invoked command's semantics. |
+   | enforcement shell suppression or dry-run detected | Remove the suppression/dry-run flag and retain normal shell failure propagation. |
+   | blocking job depends on advisory or unknown job | Remove the dependency or promote and fully validate the prerequisite as a blocking job. |
    | manifest/workflow/live context drift | Correct repository truth first; reconcile live protection atomically only after the exact PR head posts every check. |
 
 4. Main Releasability runs `make required-status-checks-live-guard` with the dedicated
