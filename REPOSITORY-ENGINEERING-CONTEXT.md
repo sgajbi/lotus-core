@@ -4154,7 +4154,7 @@ Most relevant current governance:
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
      require every marked run control's workflow-, job-, or step-level effective shell to resolve
      to exact `bash` so pipeline failures propagate, reject unspecified/non-`bash` shells and a
-     named denylist of shell-level failure-tolerance, clustered Bash/Make disabling flags,
+     named denylist of shell-level failure-tolerance including arbitrary OR lists, clustered Bash/Make disabling flags,
      effective workflow/job/step environment injection through `MAKEFLAGS`, `GNUMAKEFLAGS`, or
      `BASH_ENV`, plus dry-run, background-execution, and shell conditional escapes,
      require every blocking-job dependency to be
