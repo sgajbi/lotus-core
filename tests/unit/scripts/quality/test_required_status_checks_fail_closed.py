@@ -258,6 +258,17 @@ def test_live_protection_rejects_malformed_shapes() -> None:
                 }
             },
         )
+    with pytest.raises(RequiredStatusChecksError, match="non-empty strings"):
+        validate_live_protection(
+            manifest,
+            {
+                "required_status_checks": {
+                    "strict": True,
+                    "contexts": [None],
+                    "checks": live_checks,
+                }
+            },
+        )
 
 
 @pytest.mark.parametrize(
