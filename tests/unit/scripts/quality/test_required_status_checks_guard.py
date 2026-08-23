@@ -334,6 +334,9 @@ def test_blocking_policy_rejects_non_static_phony_authority(
         "$(eval SHELL:=/bin/true)",
         "${eval SHELL:=/bin/true}",
         "$(call eval,SHELL:=/bin/true)",
+        "$(eval\\\n\tSHELL:=/bin/true)",
+        "${eval\\\n\tSHELL:=/bin/true}",
+        "$(call\\\n\teval,SHELL:=/bin/true)",
     ],
 )
 def test_make_authority_rejects_execution_state_functions_in_recipes(
