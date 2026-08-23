@@ -37,11 +37,6 @@ _EXECUTION_DEFINE = re.compile(
     + "|".join(re.escape(variable) for variable in sorted(_EXECUTION_VARIABLES))
     + r")(?=\s|$|::=|:=|\+=|\?=|!=|=)"
 )
-_EXECUTION_SPECIAL_TARGET = re.compile(
-    r"^(?:"
-    + "|".join(re.escape(target) for target in sorted(_EXECUTION_SPECIAL_TARGETS))
-    + r")\s*:"
-)
 _VPATH_DIRECTIVE = re.compile(r"^vpath(?:\s|$)")
 _DEFINE_DIRECTIVE = re.compile(r"^(?:(?:export|override|private)\s+)*define\s+(\S+)")
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")
@@ -71,30 +66,51 @@ def _first_unexpanded_token(line: str, tokens: tuple[str, ...]) -> int | None:
 
 
 def _has_computed_declaration_name(line: str) -> bool:
-    assignment = _first_unexpanded_token(line, _ASSIGNMENT_OPERATORS)
-    if assignment is not None and "$" in line[:assignment]:
+    boundaries = (
+        boundary
+        for boundary in (
+            _first_unexpanded_token(line, ("#",)),
+            _first_unexpanded_token(line, (";",)),
+        )
+        if boundary is not None
+    )
+    declaration = line[: min(boundaries, default=len(line))]
+    assignment = _first_unexpanded_token(declaration, _ASSIGNMENT_OPERATORS)
+    if assignment is not None and "$" in declaration[:assignment]:
         return True
-    target_separator = _first_unexpanded_token(line, (":",))
+    target_separator = _first_unexpanded_token(declaration, (":",))
     if (
         target_separator is not None
         and (assignment is None or target_separator < assignment)
-        and "$" in line[:target_separator]
+        and "$" in declaration[:target_separator]
     ):
         return True
-    define = _DEFINE_DIRECTIVE.match(line)
+    define = _DEFINE_DIRECTIVE.match(declaration)
     return define is not None and "$" in define.group(1)
+
+
+def _has_execution_special_target(line: str) -> bool:
+    target_separator = _first_unexpanded_token(line, (":",))
+    assignment = _first_unexpanded_token(line, _ASSIGNMENT_OPERATORS)
+    if target_separator is None or (assignment is not None and target_separator >= assignment):
+        return False
+    return bool(set(line[:target_separator].split()) & _EXECUTION_SPECIAL_TARGETS)
 
 
 def validate_make_execution_state(line: str, *, path: Path, line_number: int) -> None:
     """Reject Make syntax that can alter parsing or execution of governed targets."""
 
-    mutable_state = _has_computed_declaration_name(line) or any(
-        pattern.match(line)
-        for pattern in (
-            _EXECUTION_ASSIGNMENT,
-            _EXECUTION_DEFINE,
-            _EXECUTION_SPECIAL_TARGET,
-            _VPATH_DIRECTIVE,
+    mutable_state = (
+        (line.endswith("\\") and not line.startswith(".PHONY:"))
+        or _has_computed_declaration_name(line)
+        or _has_execution_special_target(line)
+        or any(
+            pattern.match(line)
+            for pattern in (
+                _EXECUTION_ASSIGNMENT,
+                _EXECUTION_DEFINE,
+                _VPATH_DIRECTIVE,
+            )
         )
     )
     if mutable_state:
