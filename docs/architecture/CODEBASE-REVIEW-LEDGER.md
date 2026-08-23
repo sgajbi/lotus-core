@@ -19,7 +19,8 @@ multi-target tokens fail closed. Every admitted static or resolved target must a
 Make's exact per-target phony flag in the delimited effective-database Files section evaluated with
 only fixed `PATH` and `LC_ALL=C`, and must appear in a literal static `.PHONY` declaration. Make
 conditionals, includes, declarations serialized inside GNU Make column-zero-scoped `define` bodies,
-`$(eval)`/`${eval}` outside recipes, dynamic/continued declarations, inherited
+`$(eval)`/`${eval}` outside recipes, parser/execution-variable assignments, special execution
+targets, `vpath`, dynamic/continued declarations, inherited
 `MAKELEVEL`/`CI`/runner state,
 parse-time/recipe output, serialized variable bodies, ordinary files, undeclared rules, and missing
 Makefile authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
@@ -43,8 +44,8 @@ expressions; pins the manifest to canonical `sgajbi/lotus-core` / `main` and Git
 undeclared, redirected, or wrong-app authority.
 `make lint` now reaches both import-boundary and
 required-check enforcement;
-manifest/model parsing, workflow traversal, blocking-job execution policy, live-protection I/O, and
-CLI orchestration have separate modules with hard Xenon `absolute C` / `module B` / `average B`, Radon rank-B, MyPy,
+manifest/model parsing, workflow traversal, Make execution-state policy, blocking-job execution
+policy, live-protection I/O, and CLI orchestration have separate modules with hard Xenon `absolute C` / `module B` / `average B`, Radon rank-B, MyPy,
 Bandit, and Vulture gates;
 Main Releasability performs read-only live parity through a dedicated fine-grained Administration-
 read-only secret because the default workflow token is known to lack that authority. The guard emits
@@ -60,7 +61,7 @@ failure-tolerance, advisory/blocking collision, cross-workflow collision, format
 redirected-repository/branch, wrong-manifest-app, advisory-as-required, matrix, credential
 failure, live drift, and merge-group trigger
 behavior. Both required-check workflows run for merge-group commits so queue protection cannot
-deadlock. Local evidence is 292 focused tests with 93.13% branch-aware package coverage against a 90%
+deadlock. Local evidence is 308 focused tests with 93.23% branch-aware package coverage against a 90%
 hard floor,
 complete lint, MyPy across 323 source files, architecture guards, wiki/docs gates, and a zero-failure
 documentation evidence pack. All 37 contexts passed at `b4badf4f6`; protection was atomically
