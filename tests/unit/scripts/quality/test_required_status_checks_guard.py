@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.quality.required_status_checks_guard import (
     DEFAULT_MANIFEST_PATH,
@@ -157,3 +158,37 @@ def test_live_protection_rejects_missing_and_stale_contexts() -> None:
             manifest,
             {"required_status_checks": {"strict": True, "checks": live_checks}},
         )
+
+
+def test_required_local_gates_are_reachable_from_lint_and_workflow_governance() -> None:
+    makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
+    dependencies = {
+        target: values.split()
+        for line in makefile_lines
+        if ":" in line and not line.startswith(("\t", "#", "."))
+        for target, values in (line.split(":", maxsplit=1),)
+    }
+    makefile_text = "\n".join(makefile_lines)
+
+    assert "quality-import-boundary-gate" in dependencies["lint"]
+    assert "required-status-checks-guard" in dependencies["lint"]
+    assert "required-status-checks-guard:" in makefile_text
+    assert "required-status-checks-live-guard:" in makefile_text
+    assert "test_required_status_checks_guard.py" in makefile_text
+
+
+def test_main_releasability_verifies_live_protection_read_only() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+    parity_step = next(
+        step for step in steps if step.get("name") == "Verify live required status checks"
+    )
+
+    assert parity_step == {
+        "name": "Verify live required status checks",
+        "env": {"GH_TOKEN": "${{ github.token }}"},
+        "run": "make required-status-checks-live-guard",
+    }
+    assert workflow["permissions"] == {"actions": "read", "contents": "read"}

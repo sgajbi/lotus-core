@@ -75,6 +75,10 @@ jobs:
         run: make dependency-technology-inventory
       - name: Lint
         run: make lint
+      - name: Verify live required status checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make required-status-checks-live-guard
       - name: Verify Technology Governance Receipts
         env:
           GH_TOKEN: ${{ github.token }}
