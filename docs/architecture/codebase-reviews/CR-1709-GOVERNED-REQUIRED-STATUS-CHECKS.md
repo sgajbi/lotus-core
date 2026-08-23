@@ -35,8 +35,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
    unconditional executable `id: enforce` step on a non-auxiliary control, validates exact
    canonical PR keys without path filters and canonical merge-group triggers,
    accepts only include-row matrices with cell-identifying names, pins strict mode and the exact two
-   governed workflow policies in code, rejects effective-shell overrides outside the default or
-   exact `bash` and shell-level failure/dry-run suppression, requires
+   governed workflow policies in code, requires every marked run control's effective shell to be
+   exact `bash`, and rejects unspecified/non-`bash` shells plus shell-level failure/dry-run
+   suppression, requires
    blocking-job dependencies to be validated blocking jobs, and inventories advisory producers in global
    context-uniqueness checks, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -72,7 +73,7 @@ deterministically, the advisory context must be both declared and observed, bloc
 carry job-level conditions, conditional enforcement commands, or job/step failure tolerance;
 only audited auxiliary actions may be conditional, and zero/duplicate/conditional/auxiliary/
 non-executable `id: enforce` markers fail. Canonical PR and merge-group trigger mutations,
-path-filtered PR triggers, unsupported effective-shell overrides, non-strict manifests,
+path-filtered PR triggers, unspecified/non-`bash` effective shells, non-strict manifests,
 governed-workflow-set drift, and non-include matrix shapes fail before ambiguous or weakened checks
 can be emitted. Shell-level failure/dry-run suppression and dependencies on advisory or unknown jobs
 also fail. The marker proves an explicitly declared fail-propagating control exists; static validation
@@ -90,7 +91,7 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `123 passed`, with 90.65% branch-aware
+- focused workflow/manifest pack after final review hardening: `124 passed`, with 90.65% branch-aware
   package coverage against a 90% hard floor;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;

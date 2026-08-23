@@ -47,8 +47,9 @@ blocking jobs and enforcement commands to be unconditional and fail-propagating,
 conditions only on audited checkout, cache-save, and artifact-upload actions, requires every
 blocking job to retain exactly one unconditional executable `id: enforce` step on a non-auxiliary
 control, requires exact canonical PR keys and merge-group triggers for `main`, accepts only
-include-row matrices with cell-identifying names, rejects path-filtered PR triggers and effective
-shell overrides as well as shell failure/dry-run suppression, requires blocking dependencies to be fully
+include-row matrices with cell-identifying names, rejects path-filtered PR triggers, requires the
+effective shell of every marked run control to be exact `bash`, and rejects shell failure/dry-run
+suppression, requires blocking dependencies to be fully
 validated blocking jobs, pins strict mode and the exact two governed workflow policies in code, and
 inventories advisory producers
 when proving global same-app context uniqueness, and scans every repository workflow for static or
