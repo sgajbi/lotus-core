@@ -98,7 +98,9 @@ after fencing Core repository roots.
 ## CI Posture
 
 1. `contracts/ci/required-status-checks.v1.json` is the versioned authority for every check that
-   must block merge to `main`, including its GitHub Actions application identity.
+   must block merge to `main`, including its GitHub Actions application identity. The guard pins
+   the live target to `sgajbi/lotus-core` / `main`; do not repurpose this manifest for another
+   repository or branch.
 2. Every Pull Request Merge Gate job and every Quality Baseline job named `... Gate` is blocking.
    `Quality Baseline / Report Only` is the sole explicit advisory job and cannot authorize merge.
 3. `make required-status-checks-guard` expands workflow matrices, rejects job-level conditions on
