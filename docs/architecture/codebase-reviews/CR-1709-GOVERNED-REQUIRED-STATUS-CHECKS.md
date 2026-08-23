@@ -25,7 +25,9 @@ evidence must be explicit and cannot be mistaken for release authorization.
 ## Design
 
 1. `contracts/ci/required-status-checks.v1.json` owns strict mode, repository/branch identity,
-   workflow policy, the one advisory context, and 37 sorted `(context, app_id)` requirements.
+   workflow policy, the one advisory context, and 37 sorted `(context, app_id)` requirements. The
+   guard pins repository/branch authority to canonical `sgajbi/lotus-core` / `main`; manifest edits
+   cannot redirect live certification to another protection target.
 2. `required_status_checks_guard.py` validates the closed manifest shape, expands matrix suites,
    classifies every governed workflow job, requires blocking jobs to be unconditional, scans every
    repository workflow for static or dynamic required-context collisions, rejects unsupported
@@ -53,17 +55,18 @@ evidence must be explicit and cannot be mistaken for release authorization.
 Focused tests prove the repository manifest matches 37 expanded contexts, matrix values expand
 deterministically, the advisory context must be both declared and observed, blocking jobs cannot
 carry job-level conditions, and unmanaged static or dynamic workflow names cannot collide with a
-required context. Non-GitHub-Actions manifest authority and formatted or otherwise unsupported
-job-name expressions fail before they can impersonate a required check. An undeclared new Gate
-fails before protection can drift, and live parity rejects missing, stale, wrong-app, and wrong
-strict-mode authority. Workflow tests prove import-boundary and required-check guards are reachable
-from `make lint`, and Main uses only the dedicated read credential. The pre-remediation live guard
-characterized exactly 19 missing contexts; after all 37 contexts passed on PR head `b4badf4f6`,
-branch protection was updated atomically and live read-back passed with `strict=true`, `checks=37`.
+required context. Non-GitHub-Actions manifest authority, noncanonical repository/branch targets,
+and formatted or otherwise unsupported job-name expressions fail before they can impersonate or
+redirect a required check. An undeclared new Gate fails before protection can drift, and live
+parity rejects missing, stale, wrong-app, and wrong strict-mode authority. Workflow tests prove
+import-boundary and required-check guards are reachable from `make lint`, and Main uses only the
+dedicated read credential. The pre-remediation live guard characterized exactly 19 missing
+contexts; after all 37 contexts passed on PR head `b4badf4f6`, branch protection was updated
+atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `51 passed`;
+- focused workflow/manifest pack after final review hardening: `53 passed`;
 - `make lint`: passed, including repository-wide Ruff/format, import-linter, the 37-check manifest
   guard, financial/data/security/contract guards, and no warning suppression;
 - `make typecheck`: `Success: no issues found in 323 source files`;

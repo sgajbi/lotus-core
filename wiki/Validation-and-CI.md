@@ -39,7 +39,8 @@ full-gate behavior; broader same-head evidence reuse is outside this bounded con
 protection. It binds each required context to GitHub Actions application ID `15368`, expands every
 Pull Request Merge Gate matrix suite, and includes all 14 Quality Baseline `... Gate` jobs.
 `Quality Baseline / Report Only` is the sole explicit advisory context; it retains diagnostics but
-cannot authorize merge.
+cannot authorize merge. Live validation is pinned to canonical `sgajbi/lotus-core` / `main`; a
+manifest change cannot redirect certification to another repository or branch.
 
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
 blocking jobs to be unconditional, and scans every repository workflow for static or dynamic
