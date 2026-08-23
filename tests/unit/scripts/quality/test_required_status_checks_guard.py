@@ -124,6 +124,25 @@ def test_gate_policy_excludes_only_an_explicit_observed_advisory_context() -> No
     )
 
 
+def test_blocking_policy_rejects_a_conditional_required_job() -> None:
+    workflow = {
+        "jobs": {
+            "security": {
+                "name": "Quality Baseline / Security Gate",
+                "if": False,
+            }
+        }
+    }
+    policy = WorkflowPolicy(
+        path=Path("fixture.yml"),
+        policy="gate_jobs_blocking",
+        advisory_contexts=frozenset(),
+    )
+
+    with pytest.raises(RequiredStatusChecksError, match="must be unconditional"):
+        blocking_contexts_for_workflow(workflow, policy=policy)
+
+
 def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_drift(
     tmp_path: Path,
 ) -> None:
@@ -152,6 +171,51 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
     manifest = load_manifest(manifest_path)
 
     with pytest.raises(RequiredStatusChecksError, match="New Control Gate"):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "unmanaged_workflow",
+    [
+        "jobs:\n  impostor:\n    name: Quality Baseline / Security Gate\n",
+        (
+            "jobs:\n"
+            "  impostor:\n"
+            "    name: Quality Baseline / ${{ matrix.gate }}\n"
+            "    strategy:\n"
+            "      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}\n"
+        ),
+    ],
+)
+def test_manifest_validation_rejects_a_possible_required_context_from_an_unmanaged_workflow(
+    tmp_path: Path,
+    unmanaged_workflow: str,
+) -> None:
+    source_manifest = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest_path = tmp_path / "manifest.json"
+    workflow_directory = tmp_path / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    governed_workflow_path = workflow_directory / "quality.yml"
+    colliding_workflow_path = workflow_directory / "unmanaged.yml"
+    source_manifest["workflow_policies"] = [
+        {
+            "path": ".github/workflows/quality.yml",
+            "policy": "gate_jobs_blocking",
+            "advisory_contexts": [],
+        }
+    ]
+    source_manifest["required_checks"] = [
+        {"context": "Quality Baseline / Security Gate", "app_id": 15368}
+    ]
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+    governed_workflow_path.write_text(
+        "jobs:\n  security:\n    name: Quality Baseline / Security Gate\n",
+        encoding="utf-8",
+    )
+    colliding_workflow_path.write_text(unmanaged_workflow, encoding="utf-8")
+    manifest = load_manifest(manifest_path)
+
+    with pytest.raises(RequiredStatusChecksError, match="unmanaged workflow"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
