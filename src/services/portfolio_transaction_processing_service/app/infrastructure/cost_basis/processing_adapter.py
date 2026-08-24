@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from ...application import TransactionProcessingError, build_settlement_cash_rejection
+from ...application import (
+    TransactionProcessingError,
+    TransactionProcessingRejected,
+    build_settlement_cash_rejection,
+)
 from ...application.cost_basis_processing import (
     FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
@@ -11,7 +15,11 @@ from ...application.cost_basis_processing import (
 )
 from ...application.settlement_processing import UpstreamCashLegUnavailableError
 from ...domain import BookedTransaction
-from ...domain.transaction import SettlementCashValidationError
+from ...domain.transaction import (
+    CashAccountRequiredValidationError,
+    CashAccountRequiredValidationReasonCode,
+    SettlementCashValidationError,
+)
 from ...ports import (
     AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
@@ -92,6 +100,8 @@ class CostBasisProcessingAdapter:
             transaction,
             cost_basis_method=portfolio.cost_basis_method,
             instrument_reference_available=instrument is not None,
+            instrument_product_type=(instrument.product_type if instrument is not None else None),
+            instrument_asset_class=(instrument.asset_class if instrument is not None else None),
         )
         return await self._processor.execute(
             prepared=prepared,
@@ -129,6 +139,26 @@ class CostBasisProcessingAdapter:
             )
         except SettlementCashValidationError as exc:
             raise build_settlement_cash_rejection(transaction, exc) from exc
+        except CashAccountRequiredValidationError as exc:
+            detail = {
+                "portfolio_id": transaction.portfolio_id,
+                "transaction_id": transaction.transaction_id,
+                "transaction_type": exc.transaction_type,
+                "field": exc.field,
+            }
+            if exc.reason_code is (
+                CashAccountRequiredValidationReasonCode.INSTRUMENT_AUTHORITY_UNAVAILABLE
+            ):
+                raise TransactionProcessingError(
+                    reason_code=exc.reason_code.value,
+                    detail=detail,
+                    retryable=True,
+                ) from exc
+            raise TransactionProcessingRejected(
+                reason_code=exc.reason_code.value,
+                detail=detail,
+                retryable=False,
+            ) from exc
         except (
             FxRateNotFoundError,
             InstrumentReferenceUnavailableError,

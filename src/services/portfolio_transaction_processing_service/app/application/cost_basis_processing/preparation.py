@@ -11,7 +11,11 @@ from portfolio_common.domain.transaction_control_codes import (
 )
 
 from ...domain import BookedTransaction
-from ...domain.transaction import assert_cash_entry_mode_supported, enrich_booking_metadata
+from ...domain.transaction import (
+    assert_cash_account_required_instrument,
+    assert_cash_entry_mode_supported,
+    enrich_booking_metadata,
+)
 from ...domain.transaction.corporate_action import (
     assert_bundle_a_corporate_action_valid,
     is_bundle_a_corporate_action,
@@ -63,6 +67,8 @@ def prepare_cost_transaction(
     *,
     cost_basis_method: str | CostBasisMethod,
     instrument_reference_available: bool,
+    instrument_product_type: str | None = None,
+    instrument_asset_class: str | None = None,
 ) -> PreparedCostTransaction:
     """Apply deterministic booking policy and select the canonical cost-processing route."""
 
@@ -73,6 +79,12 @@ def prepare_cost_transaction(
     )
     prepared_transaction = enrich_fx_transaction_metadata(prepared_transaction)
     transaction_type = normalize_transaction_control_code(prepared_transaction.transaction_type)
+    assert_cash_account_required_instrument(
+        transaction_type,
+        instrument_reference_available=instrument_reference_available,
+        product_type=instrument_product_type,
+        asset_class=instrument_asset_class,
+    )
     assert_cash_entry_mode_supported(prepared_transaction)
     assert_redemption_settlement_date(
         transaction_type=transaction_type,
