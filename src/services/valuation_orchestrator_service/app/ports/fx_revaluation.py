@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable, Protocol, Sequence
 
+from portfolio_common.reprocessing_job_repository import ReprocessingJobTransitionOutcome
 from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 
 from ..domain.fx_revaluation import (
@@ -81,5 +82,5 @@ class ReprocessingJobStatusWriter(Protocol):
         *,
         lease_token: str,
         failure_reason: str | None = None,
-    ) -> bool:
+    ) -> ReprocessingJobTransitionOutcome:
         """Apply a transition only while the caller retains job ownership."""

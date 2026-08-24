@@ -1,9 +1,11 @@
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobRepository,
+    ReprocessingJobTransitionOutcome,
     ResetWatermarksStageOutcome,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -694,12 +696,14 @@ async def test_update_job_status_requires_processing_ownership(
 ) -> None:
     update_result = MagicMock()
     update_result.rowcount = 0
-    mock_db_session.execute.return_value = update_result
+    ownership_result = MagicMock()
+    ownership_result.one_or_none.return_value = None
+    mock_db_session.execute.side_effect = [update_result, ownership_result]
 
-    updated = await repository.update_job_status(99, "COMPLETE", lease_token=LEASE_TOKEN)
+    outcome = await repository.update_job_status(99, "COMPLETE", lease_token=LEASE_TOKEN)
 
-    assert updated is False
-    stmt = mock_db_session.execute.await_args.args[0]
+    assert outcome is ReprocessingJobTransitionOutcome.NOT_FOUND
+    stmt = mock_db_session.execute.await_args_list[0].args[0]
     stmt_text = str(stmt)
     assert "reprocessing_jobs.status = :status_1" in stmt_text
     assert "reprocessing_jobs.lease_token = :lease_token_1" in stmt_text
@@ -707,10 +711,93 @@ async def test_update_job_status_requires_processing_ownership(
 
 
 @pytest.mark.parametrize(
+    ("status", "lease_token", "lease_expired", "expected"),
+    [
+        ("COMPLETE", LEASE_TOKEN, False, ReprocessingJobTransitionOutcome.NOT_PROCESSING),
+        (
+            "PROCESSING",
+            "b" * 32,
+            False,
+            ReprocessingJobTransitionOutcome.TOKEN_MISMATCH,
+        ),
+        ("PROCESSING", LEASE_TOKEN, True, ReprocessingJobTransitionOutcome.LEASE_EXPIRED),
+    ],
+)
+async def test_update_job_status_classifies_refused_transition(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+    status: str,
+    lease_token: str,
+    lease_expired: bool,
+    expected: ReprocessingJobTransitionOutcome,
+) -> None:
+    update_result = MagicMock()
+    update_result.rowcount = 0
+    ownership_result = MagicMock()
+    ownership_result.one_or_none.return_value = SimpleNamespace(
+        status=status,
+        lease_token=lease_token,
+        lease_expired=lease_expired,
+    )
+    mock_db_session.execute.side_effect = [update_result, ownership_result]
+
+    outcome = await repository.update_job_status(99, "COMPLETE", lease_token=LEASE_TOKEN)
+
+    assert outcome is expected
+
+
+async def test_renew_lease_uses_database_clock_and_exact_claim(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    update_result = MagicMock()
+    update_result.rowcount = 1
+    mock_db_session.execute.return_value = update_result
+
+    outcome = await repository.renew_lease(
+        99,
+        lease_token=LEASE_TOKEN,
+        lease_duration_seconds=120,
+    )
+
+    assert outcome is ReprocessingJobTransitionOutcome.APPLIED
+    statement = str(mock_db_session.execute.await_args.args[0])
+    assert "reprocessing_jobs.lease_token = :lease_token_1" in statement
+    assert "reprocessing_jobs.lease_expires_at > clock_timestamp()" in statement
+    assert "clock_timestamp() + make_interval" in statement
+
+
+@pytest.mark.parametrize(
+    ("lease_token", "lease_duration_seconds", "message"),
+    [
+        ("", 120, "token is required"),
+        (LEASE_TOKEN, 0, "duration must be positive"),
+    ],
+)
+async def test_renew_lease_rejects_invalid_authority(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+    lease_token: str,
+    lease_duration_seconds: int,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        await repository.renew_lease(
+            99,
+            lease_token=lease_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+
+    mock_db_session.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
     ("status", "failure_reason", "message"),
     [
         ("PROCESSING", None, "transition status"),
         ("COMPLETE", "unexpected", "failure reason"),
+        ("FAILED", None, "requires a failure reason"),
+        ("FAILED", " ", "requires a failure reason"),
     ],
 )
 async def test_update_job_status_rejects_invalid_owned_transition(
