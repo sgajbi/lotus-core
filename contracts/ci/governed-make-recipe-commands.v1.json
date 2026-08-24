@@ -1,0 +1,378 @@
+{
+  "schema_version": "governed-make-recipe-commands.v1",
+  "targets": {
+    "aggregation-scheduler-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/aggregation_scheduler_boundary_guard.py"
+    ],
+    "analytics-input-consumer-contract-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/analytics_input_consumer_contract_guard.py"
+    ],
+    "api-example-catalog-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/api_example_catalog_guard.py"
+    ],
+    "api-mapper-pattern-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/api_mapper_pattern_guard.py"
+    ],
+    "api-vocabulary-gate": [
+      "$(REPOSITORY_PYTHON) scripts/generators/generate_api_route_catalog.py --check",
+      "$(REPOSITORY_PYTHON) scripts/quality/api_vocabulary_inventory.py --validate-only"
+    ],
+    "application-command-result-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/application_command_result_guard.py"
+    ],
+    "application-dependency-inversion-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/application_dependency_inversion_guard.py"
+    ],
+    "application-error-taxonomy-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/application_error_taxonomy_guard.py"
+    ],
+    "application-layer-contract-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/application_layer_contract_guard.py"
+    ],
+    "application-port-catalog-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/application_port_catalog_guard.py"
+    ],
+    "application-workflow-policy-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/application_workflow_policy_guard.py"
+    ],
+    "architecture-docs-catalog-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/architecture_documentation_catalog_guard.py"
+    ],
+    "architecture-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/architecture_boundary_guard.py --strict"
+    ],
+    "base-image-lifecycle-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/base_image_lifecycle_guard.py"
+    ],
+    "base-image-registry-evidence-check": [
+      "$(REPOSITORY_PYTHON) scripts/development/update_base_image_manifest_evidence.py --check"
+    ],
+    "bond-quote-authority-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/bond_quote_authority_guard.py"
+    ],
+    "build-runtime-image-set": [
+      "$(REPOSITORY_PYTHON) scripts/release/build_runtime_image_set.py"
+    ],
+    "calculated-output-policy-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/calculated_output_policy_guard.py"
+    ],
+    "command-api-behavior-certification-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/command_api_behavior_certification_guard.py"
+    ],
+    "concurrency-duplicate-delivery-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/concurrency_duplicate_delivery_guard.py"
+    ],
+    "config-access-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/config_access_guard.py"
+    ],
+    "coverage-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py"
+    ],
+    "critical-path-coverage-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/critical_path_coverage_guard.py --contract-only"
+    ],
+    "cross-product-golden-regression-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/cross_product_golden_regression_guard.py"
+    ],
+    "dependency-health-cache-key": [
+      "$(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py --write-github-output"
+    ],
+    "dependency-lock-replay-check": [
+      "$(REPOSITORY_PYTHON) scripts/development/update_ci_tooling_lock.py --check --platform linux",
+      "$(REPOSITORY_PYTHON) scripts/development/update_shared_runtime_lock.py --check --platform linux"
+    ],
+    "dependency-technology-inventory": [
+      "$(REPOSITORY_PYTHON) scripts/quality/dependency_technology_inventory_guard.py"
+    ],
+    "domain-layer-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/domain_layer_guard.py"
+    ],
+    "e2e-test-value-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/e2e_test_value_guard.py"
+    ],
+    "endpoint-consolidation-watchlist-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/endpoint_consolidation_watchlist_guard.py"
+    ],
+    "event-contract-test-pack-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/event_contract_test_pack_guard.py"
+    ],
+    "event-publisher-port-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/event_publisher_port_guard.py"
+    ],
+    "event-runtime-contract-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/event_runtime_contract_guard.py"
+    ],
+    "financial-numeric-persistence-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/financial_numeric_persistence_guard.py"
+    ],
+    "generate-runtime-sbom": [
+      "$(REPOSITORY_PYTHON) scripts/release/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json"
+    ],
+    "generated-artifact-tracking-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/generated_artifact_tracking_guard.py"
+    ],
+    "image-provenance-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/image_provenance_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/release/vulnerability_exception_policy.py"
+    ],
+    "in-process-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/in_process_boundary_guard.py"
+    ],
+    "in-process-modularity-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/in_process_modularity_guard.py"
+    ],
+    "infrastructure-adapter-layer-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/infrastructure_adapter_layer_guard.py"
+    ],
+    "ingestion-contract-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ingestion_endpoint_contract_gate.py"
+    ],
+    "ingestion-gateway-rate-limit-policy-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ingestion_gateway_rate_limit_policy_guard.py"
+    ],
+    "ingestion-rate-limit-scope-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ingestion_rate_limit_scope_guard.py"
+    ],
+    "ingestion-service-framework-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ingestion_service_framework_guard.py"
+    ],
+    "ingestion-store-port-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ingestion_store_port_guard.py"
+    ],
+    "install-ci": [
+      "$(REPOSITORY_PYTHON) scripts/development/bootstrap_dev.py"
+    ],
+    "install-ci-tooling": [
+      "$(REPOSITORY_PYTHON) -m pip install -r requirements/ci-tooling.lock.txt"
+    ],
+    "lotus-core-validate": [
+      "$(REPOSITORY_PYTHON) scripts/validation/certify_lotus_core_app.py $(LOCAL_CERTIFICATION_BUILD_ARGUMENT)"
+    ],
+    "mapping-anti-corruption-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/mapping_anti_corruption_guard.py"
+    ],
+    "metric-vocabulary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/metric_vocabulary_guard.py"
+    ],
+    "migration-smoke": [
+      "$(REPOSITORY_PYTHON) scripts/quality/migration_contract_check.py --mode alembic-sql"
+    ],
+    "monetary-float-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/check_monetary_float_usage.py"
+    ],
+    "no-alias-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/no_alias_contract_guard.py"
+    ],
+    "observability-contract-test-pack-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/observability_contract_test_pack_guard.py"
+    ],
+    "openapi-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/openapi_quality_gate.py"
+    ],
+    "outbox-capacity-profile-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/outbox_capacity_profile_guard.py"
+    ],
+    "position-reducer-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/position_reducer_boundary_guard.py"
+    ],
+    "proof-builder-pattern-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/proof_builder_pattern_guard.py"
+    ],
+    "qcp-problem-details-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/qcp_problem_details_guard.py"
+    ],
+    "quality-bandit-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run bandit -r src -c pyproject.toml"
+    ],
+    "quality-complexity-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run xenon --max-absolute E --max-modules C --max-average A src"
+    ],
+    "quality-deptry-source-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run deptry src --extend-exclude \"src/services/query_service/build\" --extend-exclude \".*/tests/\""
+    ],
+    "quality-import-boundary-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py verify import-linter",
+      "$(REPOSITORY_PYTHON) scripts/quality/import_boundary_gate.py"
+    ],
+    "quality-integration-lite-collection-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite integration-lite --collect-only --quiet"
+    ],
+    "quality-maintainability-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py verify radon",
+      "$(REPOSITORY_PYTHON) scripts/quality/maintainability_gate.py src"
+    ],
+    "quality-openapi-spectral-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/openapi_spectral_gate.py --output-dir $(OPENAPI_ARTIFACT_DIR)"
+    ],
+    "quality-ruff-format-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff format --check ."
+    ],
+    "quality-ruff-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check . --statistics"
+    ],
+    "quality-unit-collection-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite unit --collect-only --quiet"
+    ],
+    "quality-vulture-source-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run vulture src --exclude \"*/tests/*\" --min-confidence 80"
+    ],
+    "quality-wiki-docs-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/architecture_documentation_catalog_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/front_door_sync_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/incident_playbook_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/rfc_status_ledger_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/supported_features_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/wiki_validation_guard.py"
+    ],
+    "quality-workflow-governance-gate": [
+      "$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q"
+    ],
+    "repository-output-shape-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/repository_output_shape_guard.py"
+    ],
+    "repository-port-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/repository_port_guard.py"
+    ],
+    "repository-transaction-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/repository_transaction_boundary_guard.py"
+    ],
+    "required-status-checks-code-quality-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run bandit -r scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py -c pyproject.toml",
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run mypy --config-file mypy.ini scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff format --check scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run vulture scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py --min-confidence 80",
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run xenon --max-absolute C --max-modules B --max-average B scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py",
+      "$(REPOSITORY_PYTHON) scripts/quality/maintainability_gate.py scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py --max-allowed-rank B"
+    ],
+    "required-status-checks-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/required_status_checks_guard.py"
+    ],
+    "rfc0083-closure-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/rfc0083_closure_guard.py"
+    ],
+    "route-contract-family-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/route_contract_family_guard.py"
+    ],
+    "runtime-boundary-decision-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/runtime_boundary_decision_guard.py"
+    ],
+    "runtime-image-set-load-verify": [
+      "$(REPOSITORY_PYTHON) scripts/release/verify_runtime_image_set.py"
+    ],
+    "runtime-provider-port-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/runtime_provider_port_guard.py"
+    ],
+    "security-audit": [
+      "$(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py"
+    ],
+    "security-control-coverage-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/security_control_coverage_guard.py"
+    ],
+    "source-data-product-contract-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/source_data_product_contract_guard.py"
+    ],
+    "structured-log-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/structured_log_guard.py"
+    ],
+    "supported-features-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/supported_features_guard.py"
+    ],
+    "synthetic-fixture-leakage-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/synthetic_fixture_leakage_guard.py"
+    ],
+    "technology-governance-pilot-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/technology_governance_pilot_guard.py"
+    ],
+    "technology-governance-pilot-receipt-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/technology_governance_pilot_guard.py --verify-github"
+    ],
+    "temporal-vocabulary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/temporal_vocabulary_guard.py"
+    ],
+    "test-critical-lifecycle-db": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite critical-lifecycle-db --quiet"
+    ],
+    "test-derived-state-recovery-gate": [
+      "$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_gate $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce"
+    ],
+    "test-docker-smoke": [
+      "$(REPOSITORY_PYTHON) scripts/validation/docker_endpoint_smoke.py $(LOCAL_RUNTIME_BUILD_ARGUMENT)"
+    ],
+    "test-e2e-smoke": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite e2e-smoke --quiet"
+    ],
+    "test-fixed-income-book-cost-recovery-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite fixed-income-book-cost-recovery --quiet"
+    ],
+    "test-import-root-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_import_root_guard.py"
+    ],
+    "test-integration-lite": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite integration-lite --quiet"
+    ],
+    "test-lane-governance-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_lane_governance_guard.py"
+    ],
+    "test-latency-gate": [
+      "$(REPOSITORY_PYTHON) scripts/operations/latency_profile.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)"
+    ],
+    "test-ops-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite ops-contract --quiet"
+    ],
+    "test-performance-load-gate": [
+      "$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --profile-tier fast --enforce"
+    ],
+    "test-transaction-buy-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-buy-contract --quiet"
+    ],
+    "test-transaction-dividend-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-dividend-contract --quiet"
+    ],
+    "test-transaction-fx-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet"
+    ],
+    "test-transaction-interest-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-interest-contract --quiet"
+    ],
+    "test-transaction-portfolio-flow-bundle-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-portfolio-flow-bundle-contract --quiet"
+    ],
+    "test-transaction-processing-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-processing-contract --quiet"
+    ],
+    "test-transaction-sell-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-sell-contract --quiet"
+    ],
+    "test-unit": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite unit --quiet"
+    ],
+    "test-unit-db": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite unit-db --quiet"
+    ],
+    "testability-architecture-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/testability_architecture_guard.py"
+    ],
+    "transaction-capability-catalog-guard": [
+      "$(REPOSITORY_PYTHON) scripts/transaction_processing/validate_capability_catalog.py"
+    ],
+    "transaction-replay-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/transaction_replay_boundary_guard.py"
+    ],
+    "typecheck": [
+      "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run mypy --config-file mypy.ini"
+    ],
+    "upload-component-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/upload_component_boundary_guard.py"
+    ],
+    "verify-dependencies": [
+      "$(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py --skip-audit"
+    ],
+    "warning-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/warning_budget_gate.py --suite unit --max-warnings 0 --quiet"
+    ],
+    "write-runtime-build-provenance": [
+      "$(REPOSITORY_PYTHON) scripts/release/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json"
+    ]
+  }
+}

@@ -68,8 +68,9 @@ passes. The existing `Validate Docker Build` job is the sole producer for that w
    hashes, compose hash, dependency-lock hash, dependency-closure hash, bundle digest, and content
    hash.
 3. Docker-backed jobs download the same one-day transport artifact. Every consuming Make control
-   declares `runtime-image-set-load-verify` as a prerequisite; it verifies against `GITHUB_SHA` and
-   writes the exact-head receipt only after success, so workflow ordering cannot bypass the handoff.
+   declares `runtime-image-set-load-verify` as a prerequisite. Its checked Python orchestrator
+   verifies against `GITHUB_SHA` and writes the exact-head receipt only after success, so workflow
+   ordering or shell failure masking cannot bypass the handoff.
 4. Verification fails before test execution on source-SHA, bundle, manifest, dependency, image-ID,
    or OCI-label mismatch.
 

@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -165,6 +166,41 @@ def test_dependency_health_cli_prints_canonical_cache_key_only() -> None:
     assert result.returncode == 0, result.stderr
     assert len(result.stdout.strip()) == 64
     assert set(result.stdout.strip()) <= set("0123456789abcdef")
+
+
+def test_dependency_health_cli_writes_validated_github_output(tmp_path: Path) -> None:
+    output_path = tmp_path / "github-output.txt"
+    output_path.write_text("existing=value\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validation/dependency_health_check.py",
+            "--write-github-output",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GITHUB_OUTPUT": str(output_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    output_lines = output_path.read_text(encoding="utf-8").splitlines()
+    assert output_lines[0] == "existing=value"
+    name, cache_key = output_lines[1].split("=", maxsplit=1)
+    assert name == "key"
+    assert len(cache_key) == 64
+    assert set(cache_key) <= set("0123456789abcdef")
+
+
+def test_dependency_health_github_output_rejects_an_invalid_cache_key(tmp_path: Path) -> None:
+    output_path = tmp_path / "github-output.txt"
+
+    with pytest.raises(ValueError, match="64 lowercase hexadecimal"):
+        dependency_health_check.append_github_cache_key_output(output_path, "not-a-digest")
+
+    assert not output_path.exists()
 
 
 def test_dependency_health_cache_miss_builds_and_publishes_verified_environment(

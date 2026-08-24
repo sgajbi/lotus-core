@@ -28,10 +28,7 @@ install-ci-tooling:
 	$(REPOSITORY_PYTHON) -m pip install -r requirements/ci-tooling.lock.txt
 
 dependency-health-cache-key:
-	@key="$$( $(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py --print-cache-key)"; \
-	test "$${#key}" -eq 64; \
-	case "$${key}" in *[!0-9a-f]*) exit 1;; esac; \
-	echo "key=$${key}" >> "$${GITHUB_OUTPUT}"
+	$(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py --write-github-output
 
 verify-dependencies:
 	$(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py --skip-audit
@@ -660,14 +657,7 @@ docker-prebuild-ci:
 	$(REPOSITORY_PYTHON) scripts/release/prebuild_ci_images.py
 
 build-runtime-image-set:
-	@test -n "$${LOTUS_RUNTIME_IMAGE_SET_GROUP}"
-	@test -n "$${LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA}"
-	@test -n "$${LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH}"
-	@test -n "$${LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL}"
-	@test -n "$${LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID}"
-	@build_timestamp="$$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; \
-	LOTUS_BUILD_TIMESTAMP="$${build_timestamp}" $(REPOSITORY_PYTHON) scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group "$${LOTUS_RUNTIME_IMAGE_SET_GROUP}" --metrics-output output/runtime-image-set/build-metrics.json && \
-	$(REPOSITORY_PYTHON) scripts/release/runtime_image_set.py create --group "$${LOTUS_RUNTIME_IMAGE_SET_GROUP}" --manifest output/runtime-image-set/manifest.json --bundle output/runtime-image-set/images.tar --source-commit-sha "$${LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA}" --source-branch "$${LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH}" --repository-url "$${LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL}" --ci-run-id "$${LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID}" --generated-at-utc "$${build_timestamp}"
+	$(REPOSITORY_PYTHON) scripts/release/build_runtime_image_set.py
 
 generate-runtime-sbom:
 	$(REPOSITORY_PYTHON) scripts/release/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json
@@ -676,18 +666,7 @@ write-runtime-build-provenance:
 	$(REPOSITORY_PYTHON) scripts/release/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
 
 runtime-image-set-load-verify:
-	@if [ -n "$(CI_IS_TRUE)" ]; then \
-		test -n "$${GITHUB_SHA:-}" || { printf '%s\n' 'GITHUB_SHA is required in CI' >&2; exit 1; }; \
-		expected_sha="$${GITHUB_SHA}"; \
-	elif [ ! -f output/runtime-image-set/manifest.json ]; then \
-		rm -f output/runtime-image-set/verified-source-sha; \
-		printf '%s\n' 'No runtime image set present; controls build from source.'; \
-		exit 0; \
-	else \
-		expected_sha="$${GITHUB_SHA:-$$(git rev-parse HEAD)}"; \
-	fi; \
-	$(REPOSITORY_PYTHON) scripts/release/runtime_image_set.py load-verify --manifest output/runtime-image-set/manifest.json --bundle output/runtime-image-set/images.tar --expected-commit-sha "$${expected_sha}" && \
-	printf '%s\n' "$${expected_sha}" > output/runtime-image-set/verified-source-sha
+	$(REPOSITORY_PYTHON) scripts/release/verify_runtime_image_set.py
 
 clean:
 	$(REPOSITORY_PYTHON) scripts/development/clean_generated_artifacts.py

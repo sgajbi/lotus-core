@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.release.runtime_image_set import RuntimeImageSetError
+from scripts.release.verify_runtime_image_set import verify_runtime_image_set_for_current_source
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PR_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pr-merge-gate.yml"
 MAIN_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "main-releasability.yml"
@@ -197,13 +200,13 @@ def test_local_runtime_control_without_an_image_set_builds_from_source(tmp_path:
     assert dry_run.returncode == 0, dry_run.stderr
     assert "docker_endpoint_smoke.py --build" in dry_run.stdout
 
-    verification = _run_runtime_make_target(
-        "runtime-image-set-load-verify",
-        working_directory=tmp_path,
+    messages: list[str] = []
+    assert not verify_runtime_image_set_for_current_source(
         environment=environment,
+        workspace=tmp_path,
+        output=messages.append,
     )
-    assert verification.returncode == 0, verification.stderr
-    assert "No runtime image set present; controls build from source." in verification.stdout
+    assert messages == ["No runtime image set present; controls build from source."]
     assert not (tmp_path / "output/runtime-image-set/verified-source-sha").exists()
 
 
@@ -221,13 +224,11 @@ def test_explicit_false_ci_runtime_control_builds_from_source(tmp_path: Path) ->
     assert dry_run.returncode == 0, dry_run.stderr
     assert "docker_endpoint_smoke.py --build" in dry_run.stdout
 
-    verification = _run_runtime_make_target(
-        "runtime-image-set-load-verify",
-        working_directory=tmp_path,
+    assert not verify_runtime_image_set_for_current_source(
         environment=environment,
+        workspace=tmp_path,
+        output=lambda _message: None,
     )
-    assert verification.returncode == 0, verification.stderr
-    assert "No runtime image set present; controls build from source." in verification.stdout
 
 
 def test_ci_runtime_verification_requires_the_exact_github_sha(tmp_path: Path) -> None:
@@ -235,45 +236,27 @@ def test_ci_runtime_verification_requires_the_exact_github_sha(tmp_path: Path) -
     environment["CI"] = "true"
     environment.pop("GITHUB_SHA", None)
 
-    verification = _run_runtime_make_target(
-        "runtime-image-set-load-verify",
-        working_directory=tmp_path,
-        environment=environment,
-    )
-    assert verification.returncode != 0
-    assert "GITHUB_SHA is required in CI" in verification.stderr
+    with pytest.raises(RuntimeImageSetError, match="GITHUB_SHA is required in CI"):
+        verify_runtime_image_set_for_current_source(
+            environment=environment,
+            workspace=tmp_path,
+        )
 
 
-def test_runtime_image_set_make_target_owns_the_multi_command_build_boundary() -> None:
+def test_runtime_image_set_make_target_delegates_to_one_fail_fast_control() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     target = makefile.split("build-runtime-image-set:\n", maxsplit=1)[1].split(
-        "\nclean:", maxsplit=1
+        "\ngenerate-runtime-sbom:", maxsplit=1
     )[0]
 
-    for variable in (
-        "LOTUS_RUNTIME_IMAGE_SET_GROUP",
-        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA",
-        "LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH",
-        "LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL",
-        "LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID",
-    ):
-        assert f'test -n "$${{{variable}}}"' in target
-    assert "scripts/release/prebuild_ci_images.py" in target
-    assert "scripts/release/runtime_image_set.py create" in target
-    assert 'LOTUS_BUILD_TIMESTAMP="$${build_timestamp}"' in target
-    assert "&&" in target
+    assert target.strip() == "$(REPOSITORY_PYTHON) scripts/release/build_runtime_image_set.py"
 
     load_target = makefile.split("runtime-image-set-load-verify:\n", maxsplit=1)[1].split(
         "\nclean:", maxsplit=1
     )[0]
-    assert 'test -n "$${GITHUB_SHA:-}"' in load_target
-    assert 'if [ -n "$(CI_IS_TRUE)" ]' in load_target
-    assert "No runtime image set present; controls build from source." in load_target
-    assert 'expected_sha="$${GITHUB_SHA:-$$(git rev-parse HEAD)}"' in load_target
-    assert "scripts/release/runtime_image_set.py load-verify" in load_target
-    assert '--expected-commit-sha "$${expected_sha}"' in load_target
-    assert "printf '%s\\n' \"$${expected_sha}\"" in load_target
-    assert "output/runtime-image-set/verified-source-sha" in load_target
+    assert load_target.strip() == (
+        "$(REPOSITORY_PYTHON) scripts/release/verify_runtime_image_set.py"
+    )
 
 
 def test_verified_runtime_image_set_uses_prerequisites_not_workflow_assertions() -> None:

@@ -145,10 +145,15 @@ after fencing Core repository roots.
    assignments including computed names, multiline `define` forms, and non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic
    phony declarations, inherited `MAKELEVEL`/`CI`/runner state, parse-time/recipe output, serialized
    variable bodies, a missing Makefile, an ordinary file,
-   or an undeclared/non-phony rule cannot emit merge authority. A
-   blocking job may depend only on another fully validated blocking job. This static marker proves
-   that a declared control remains present and fail-propagating; reviewers remain responsible for
-   the business semantics of the invoked command.
+   or an undeclared/non-phony rule cannot emit merge authority. Every Make target referenced by a
+   blocking-job step must also expose an effective recipe or validated static phony prerequisite
+   chain. The designated enforcement target's authoritative commands must start with the exact
+   static `$(REPOSITORY_PYTHON)` identity. Noncanonical Make expansions, mutation or removal of
+   governed execution variables, shell control operators, executable substitutions, backticks,
+   incomplete continuation, and empty control fail closed. Move any necessary multi-command implementation into a checked Python orchestrator;
+   do not reconstruct shell composition in the Make target. A blocking job may depend only on
+   another fully validated blocking job. This proves executable authority and failure propagation;
+   reviewers remain responsible for the business semantics of the invoked Python control.
    Canonical PR events and the exact `main` branch filter plus the `merge_group` `main` filter are
    mandatory; extra `paths`, `paths-ignore`, or alternative branch keys fail closed so required
    contexts cannot silently stop posting;

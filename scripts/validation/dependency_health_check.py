@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -44,6 +45,7 @@ TOOLING_LOCK_FILE = (
 PIP_AUDIT_IGNORED_VULNERABILITIES: tuple[str, ...] = ()
 DEFAULT_CACHE_ROOT = ROOT / ".cache" / "dependency-health"
 DEFAULT_REPORT_FILE = ROOT / "output" / "dependency-health" / "report.json"
+_CACHE_KEY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -140,6 +142,15 @@ def dependency_health_identity(
         installer_version=installer_version or version("pip"),
         implementation_files=_cache_implementation_files(resolved_root),
     )
+
+
+def append_github_cache_key_output(output_path: Path, cache_key: str) -> None:
+    """Append a validated dependency-health cache key to a GitHub output file."""
+
+    if _CACHE_KEY_PATTERN.fullmatch(cache_key) is None:
+        raise ValueError("dependency-health cache key must be 64 lowercase hexadecimal characters")
+    with output_path.open("a", encoding="utf-8", newline="\n") as output_file:
+        output_file.write(f"key={cache_key}\n")
 
 
 def _build_environment(
@@ -397,15 +408,27 @@ def main() -> int:
         type=Path,
         help="Override the machine-readable dependency-health report path.",
     )
-    parser.add_argument(
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
         "--print-cache-key",
         action="store_true",
         help="Print the canonical cache key without creating or validating an environment.",
+    )
+    output_group.add_argument(
+        "--write-github-output",
+        action="store_true",
+        help="Append the canonical cache key to the runner-provided GITHUB_OUTPUT file.",
     )
     args = parser.parse_args()
 
     if args.print_cache_key:
         print(dependency_health_identity().key)
+        return 0
+    if args.write_github_output:
+        github_output = os.environ.get("GITHUB_OUTPUT")
+        if not github_output:
+            parser.error("--write-github-output requires a non-empty GITHUB_OUTPUT")
+        append_github_cache_key_output(Path(github_output), dependency_health_identity().key)
         return 0
 
     run_dependency_health(

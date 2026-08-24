@@ -24,7 +24,14 @@ conditionals, includes, declarations serialized inside GNU Make column-zero-scop
 targets, `vpath`, dynamic/continued declarations, inherited
 `MAKELEVEL`/`CI`/runner state,
 parse-time/recipe output, serialized variable bodies, ordinary files, undeclared rules, and missing
-Makefile authority fail closed. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
+Makefile authority fail closed. Every Make target referenced by a blocking-job step must
+additionally own executable authority through a direct recipe or validated static phony
+prerequisite chain. Designated enforcement targets require each authoritative recipe command to
+begin with the exact static `$(REPOSITORY_PYTHON)` identity and reject noncanonical Make
+expansions, mutation or removal of governed execution variables, shell control operators, command
+substitutions, backticks, incomplete continuations, and empty controls;
+the runtime image-set build-and-package sequence is consequently owned by one checked Python
+orchestrator rather than inline shell composition. Blocking jobs admit only audited job keys and literal `ubuntu-latest` or
 `windows-latest` runners, so containers, services, deployment environments, self-hosted labels,
 and runner expressions cannot replace the execution boundary. Every blocking `run` or `uses` step's
 effective environment keys and exact values must come from the closed governed-workflow inventory, so `PATH`, `PYTHONPATH`,
@@ -45,7 +52,7 @@ expressions; pins the manifest to canonical `sgajbi/lotus-core` / `main` and Git
 undeclared, redirected, or wrong-app authority.
 `make lint` now reaches both import-boundary and
 required-check enforcement;
-manifest/model parsing, workflow traversal, Make execution-state policy, blocking-job execution
+manifest/model parsing, workflow traversal, effective Make target authority, Make execution-state policy, blocking-job execution
 policy, live-protection I/O, and CLI orchestration have separate modules with hard Xenon `absolute C` / `module B` / `average B`, Radon rank-B, MyPy,
 Bandit, and Vulture gates;
 Main Releasability performs read-only live parity through a dedicated fine-grained Administration-

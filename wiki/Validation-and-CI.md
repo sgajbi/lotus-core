@@ -43,8 +43,11 @@ cannot authorize merge. Live validation is pinned to canonical `sgajbi/lotus-cor
 manifest change cannot redirect certification to another repository or branch.
 
 `make required-status-checks-guard` compares that manifest with both governed workflows, requires
-blocking jobs and all executable steps to be unconditional and fail-propagating, permits
-conditions only on audited checkout, cache-save, and artifact-upload actions, requires every
+blocking jobs and all executable steps to be unconditional and fail-propagating. Conditional
+checkout is limited to the exact complementary `unit`/non-`unit` primary-repository pair over
+include-row matrices; alternate checkout must be unconditional, and actionlint requires effective
+primary checkout before enforcement. Other conditions are permitted only on audited cache-save and
+artifact-upload actions. The guard requires every
 blocking job to retain exactly one unconditional executable `id: enforce` step on a non-auxiliary
 control, requires exact canonical PR keys and merge-group triggers for `main`, accepts only
 include-row matrices with cell-identifying names, rejects path-filtered PR triggers, requires the
@@ -73,10 +76,29 @@ multi-target tokens are rejected. Every admitted static or resolved target must 
 by GNU Make's exact per-target phony flag in the delimited effective-database Files section evaluated
 with only fixed `PATH` and `LC_ALL=C`, and appear in a literal static `.PHONY` declaration. Conditional
 directives, includes, declarations inside GNU Make column-zero-scoped `define` bodies,
-`$(eval)`/`${eval}` outside recipes, literal or computed parser/execution-variable assignments including multiline
-`define` forms and non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic phony declarations, inherited process environment,
-parse-time/recipe output, serialized variable bodies, ordinary files, non-phony rules, and missing
-Makefile authority fail closed. It
+command-executing or file-mutating Make functions (`call`, `eval`, `shell`, `file`, and `guile`),
+native-extension `load`/`-load` directives, assignments absent from the exact repository-owned
+declaration inventory, target-specific assignments, `export`/`unexport`, `define`/`undefine`,
+non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic phony declarations, inherited process environment (including `PATH`, Python startup/import variables, and loader variables),
+parse-time/recipe output, serialized variable bodies, ordinary files, non-phony rules, repeated
+effective-database target records, and missing
+Makefile authority fail closed. Every Make target referenced by a blocking-job step must also
+resolve to effective executable authority through its own recipe or a validated static phony
+prerequisite chain, including statically named recursive-Make edges. Validation traverses that
+complete execution closure even when a parent also owns recipes. Every recipe uses a canonical
+direct identity: a repository Python script/module, one static recursive Make target, or an admitted
+Make precondition/diagnostic. Noncanonical expansions, nested interpreters, shell control operators,
+executable substitutions, backticks, incomplete continuations, empty controls, and mutation or
+removal of governed execution variables fail closed. The guard reconstructs continued physical
+recipes into their logical shell command before those checks, preventing tokens such as command
+substitutions from being hidden across a continuation boundary. Governed and unmanaged workflow
+definitions are parsed and retained before GNU Make authority evaluation, so parse-time mutation cannot replace
+the workflow content being certified. Multi-command operations such as
+runtime image-set construction, exact-source load/receipt verification, and dependency-health
+cache-key output belong behind one checked Python orchestration boundary. It
+also binds every repository Python invocation to its owning Make target through
+`contracts/ci/governed-make-recipe-commands.v1.json`; unapproved modes such as help/version,
+cross-target borrowing, and stale contract entries fail closed. It
 requires blocking dependencies to be fully validated blocking jobs, pins strict mode and the exact
 two governed workflow policies in code, and
 inventories advisory producers
@@ -91,7 +113,7 @@ alongside `make quality-import-boundary-gate`, so the local/Feature/PR/Main enfo
 silently omit, skip, or impersonate either control.
 
 The required-check implementation is separated into manifest/model, workflow traversal,
-blocking-job execution policy, live GitHub
+effective Make target authority, blocking-job execution policy, live GitHub
 protection, and CLI modules. `make quality-workflow-governance-gate` runs scoped Ruff lint/format checks and hard-blocks complexity above
 Xenon `absolute C`, `module B`, or `average B`, and maintainability below Radon rank B for this
 package. Scoped MyPy, Bandit, and Vulture checks also run before its mutation tests, whose
@@ -181,7 +203,7 @@ polling records the reason and stops without another wait cycle.
 | Build timing | `output/runtime-image-set/build-metrics.json` | Compare unique builds, reused tags, and total producer time. |
 | Image-set manifest | `output/runtime-image-set/manifest.json` | Source, dependency, image, or bundle identity is incomplete or mismatched. |
 | Portable bundle | `output/runtime-image-set/images.tar` | Ephemeral same-workflow transport only; never a promoted release image. |
-| Consumer verification | `runtime_image_set.py load-verify` | Fails before stack startup on wrong SHA, tampering, stale images, or OCI-label drift. |
+| Consumer verification | `verify_runtime_image_set.py` delegating to `runtime_image_set.py load-verify` | Fails before stack startup on missing/wrong SHA, tampering, stale images, OCI-label drift, or receipt-publication failure. |
 
 The manifest identifies Git commit, branch, repository, CI run, generated-at time, service image
 IDs, Dockerfile hashes, Compose hash, dependency-lock hash, dependency-closure hash, bundle digest,
