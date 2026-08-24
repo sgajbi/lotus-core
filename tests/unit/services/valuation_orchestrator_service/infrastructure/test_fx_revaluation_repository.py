@@ -148,6 +148,8 @@ async def test_claim_pending_jobs_uses_fx_queue_type() -> None:
     jobs.return_value.find_and_claim_jobs.assert_awaited_once_with(
         "RESET_FX_WATERMARKS",
         25,
+        lease_owner=None,
+        lease_duration_seconds=900,
     )
 
 
@@ -163,6 +165,7 @@ async def test_claim_pending_jobs_maps_orm_payload_to_domain_work() -> None:
         },
         correlation_id="corr-71",
         attempt_count=2,
+        lease_token="d" * 32,
     )
 
     with patch(
@@ -178,6 +181,7 @@ async def test_claim_pending_jobs_maps_orm_payload_to_domain_work() -> None:
             job_id=71,
             pair=DirectCurrencyPair("USD", "SGD"),
             earliest_impacted_date=date(2026, 4, 10),
+            lease_token="d" * 32,
             correlation_id="corr-71",
             attempt_count=2,
         )
@@ -191,6 +195,7 @@ async def test_claim_pending_jobs_returns_rejected_work_for_invalid_payload() ->
         id=72,
         payload={"from_currency": "USD"},
         correlation_id="corr-72",
+        lease_token="e" * 32,
     )
 
     with patch(
@@ -204,4 +209,5 @@ async def test_claim_pending_jobs_returns_rejected_work_for_invalid_payload() ->
     assert len(claimed) == 1
     assert isinstance(claimed[0], RejectedFxRevaluationJob)
     assert claimed[0].job_id == 72
+    assert claimed[0].lease_token == "e" * 32
     assert "to_currency" in claimed[0].rejection_reason

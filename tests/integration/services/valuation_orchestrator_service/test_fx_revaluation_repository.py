@@ -467,7 +467,9 @@ async def test_stale_fx_replay_coalesces_with_newer_pending_pair_job(
         status="PROCESSING",
         attempt_count=2,
         correlation_id="corr-stale-earliest",
-        updated_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+        lease_owner="stale-fx-worker",
+        lease_token="3" * 32,
+        lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=30),
     )
     pending_job = ReprocessingJob(
         job_type="RESET_FX_WATERMARKS",
@@ -486,7 +488,7 @@ async def test_stale_fx_replay_coalesces_with_newer_pending_pair_job(
     await async_db_session.commit()
 
     recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
-        timeout_minutes=15, max_attempts=3
+        max_attempts=3
     )
     await async_db_session.commit()
     async_db_session.expire_all()
@@ -539,17 +541,25 @@ async def test_malformed_fx_replay_is_claimed_and_failed_supportably(
 
     revaluation = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
     claimed = await revaluation.claim_pending_jobs(batch_size=1)
+    await async_db_session.commit()
 
     assert len(claimed) == 1
     assert isinstance(claimed[0], RejectedFxRevaluationJob)
     assert claimed[0].job_id == job_id
     assert "Invalid isoformat string" in claimed[0].rejection_reason
 
-    await FxRevaluationJobProcessor().process(
+    processor = FxRevaluationJobProcessor()
+    with pytest.raises(ValueError, match="invalid_fx_revaluation_job_payload"):
+        await processor.process(
+            job=claimed[0],
+            jobs=ReprocessingJobRepository(async_db_session),
+            watermarks=PositionStateRepository(async_db_session),
+            revaluation=revaluation,
+        )
+    await processor.mark_failed(
         job=claimed[0],
         jobs=ReprocessingJobRepository(async_db_session),
-        watermarks=PositionStateRepository(async_db_session),
-        revaluation=revaluation,
+        exc=ValueError(claimed[0].rejection_reason),
     )
     await async_db_session.commit()
     async_db_session.expire_all()
@@ -672,6 +682,9 @@ async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
         },
         status="PROCESSING",
         correlation_id="corr-fx-worker",
+        lease_owner="fx-integration-worker",
+        lease_token="c" * 32,
+        lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
     )
     async_db_session.add(claimed_job)
     await async_db_session.flush()
@@ -680,6 +693,7 @@ async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
         job_id=claimed_job.id,
         pair=DirectCurrencyPair("USD", "SGD"),
         earliest_impacted_date=date(2026, 4, 10),
+        lease_token="c" * 32,
         correlation_id="corr-fx-worker",
     )
 

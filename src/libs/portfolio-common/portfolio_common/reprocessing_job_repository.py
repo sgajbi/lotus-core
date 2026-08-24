@@ -1,9 +1,10 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
+import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from enum import StrEnum
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, Optional, cast
 
 from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,8 +23,11 @@ from .utils import async_timed
 logger = logging.getLogger(__name__)
 
 EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset({"RESET_WATERMARKS", "RESET_FX_WATERMARKS"})
-_STALE_FAILED_RESERVED_BINDS = 4
-_STALE_RESET_RESERVED_BINDS = 3
+_STALE_FAILED_RESERVED_BINDS = 7
+_STALE_RESET_RESERVED_BINDS = 5
+_LEASE_OWNER_MAX_LENGTH = 128
+_DEFAULT_LEASE_DURATION_SECONDS = 15 * 60
+_OWNED_TRANSITION_STATUSES = frozenset({"PENDING", "COMPLETE", "FAILED"})
 
 
 class ResetWatermarksStageOutcome(StrEnum):
@@ -41,6 +45,23 @@ class ResetWatermarksStageResult:
     outcome: ResetWatermarksStageOutcome
 
 
+@dataclass(frozen=True, slots=True)
+class ClaimedReprocessingJob:
+    """Immutable work authority that remains valid outside the claim transaction."""
+
+    id: int
+    job_type: str
+    payload: dict[str, Any]
+    status: str
+    correlation_id: str | None
+    correlation_missing_reason: str | None
+    alternate_lookup_key: str | None
+    attempt_count: int
+    created_at: datetime
+    lease_token: str
+    lease_expires_at: datetime
+
+
 def _claim_pending_jobs_query(job_type: str):
     if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
         return text(
@@ -49,7 +70,11 @@ def _claim_pending_jobs_query(job_type: str):
             SET status = 'PROCESSING',
                 updated_at = now(),
                 last_attempted_at = now(),
-                attempt_count = attempt_count + 1
+                attempt_count = attempt_count + 1,
+                lease_owner = :lease_owner,
+                lease_token = :lease_token,
+                lease_expires_at = clock_timestamp()
+                    + make_interval(secs => :lease_duration_seconds)
             WHERE status = 'PENDING'
               AND job_type = :job_type
               AND id IN (
@@ -70,7 +95,11 @@ def _claim_pending_jobs_query(job_type: str):
         SET status = 'PROCESSING',
             updated_at = now(),
             last_attempted_at = now(),
-            attempt_count = attempt_count + 1
+            attempt_count = attempt_count + 1,
+            lease_owner = :lease_owner,
+            lease_token = :lease_token,
+            lease_expires_at = clock_timestamp()
+                + make_interval(secs => :lease_duration_seconds)
         WHERE status = 'PENDING'
           AND job_type = :job_type
           AND id IN (
@@ -89,6 +118,7 @@ def _claim_pending_jobs_query(job_type: str):
 class ReprocessingJobRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._default_lease_owner = f"reprocessing-repository-{uuid.uuid4().hex}"
 
     async def normalize_pending_reset_watermarks_duplicates(self) -> int:
         """
@@ -514,11 +544,24 @@ class ReprocessingJobRepository:
         return ResetWatermarksStageResult(job=job, outcome=outcome)
 
     @async_timed(repository="ReprocessingJobRepository", method="find_and_claim_jobs")
-    async def find_and_claim_jobs(self, job_type: str, batch_size: int) -> List[ReprocessingJob]:
+    async def find_and_claim_jobs(
+        self,
+        job_type: str,
+        batch_size: int,
+        *,
+        lease_owner: str | None = None,
+        lease_duration_seconds: int = _DEFAULT_LEASE_DURATION_SECONDS,
+    ) -> list[ClaimedReprocessingJob]:
         """
         Finds PENDING jobs, atomically claims them by updating their
         status to PROCESSING, and returns the claimed jobs.
         """
+        resolved_lease_owner = (lease_owner or self._default_lease_owner).strip()
+        if not resolved_lease_owner or len(resolved_lease_owner) > _LEASE_OWNER_MAX_LENGTH:
+            raise ValueError("reprocessing lease owner must contain 1 to 128 characters")
+        if lease_duration_seconds < 1:
+            raise ValueError("reprocessing lease duration must be positive")
+
         if job_type == "RESET_WATERMARKS":
             normalized_count = await self.normalize_pending_reset_watermarks_duplicates()
             if normalized_count:
@@ -528,15 +571,19 @@ class ReprocessingJobRepository:
                 )
 
         query = _claim_pending_jobs_query(job_type)
+        lease_token = uuid.uuid4().hex
         result = await self.db.execute(
             query,
             {
                 "job_type": job_type,
                 "batch_size": batch_size,
+                "lease_owner": resolved_lease_owner,
+                "lease_token": lease_token,
+                "lease_duration_seconds": lease_duration_seconds,
             },
         )
         claimed_jobs = result.mappings().all()
-        jobs = [ReprocessingJob(**job) for job in claimed_jobs]
+        jobs = [_claimed_reprocessing_job(job) for job in claimed_jobs]
         if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
             jobs.sort(key=_effective_date_job_priority)
         else:
@@ -544,17 +591,15 @@ class ReprocessingJobRepository:
         return jobs
 
     @async_timed(repository="ReprocessingJobRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(
-        self, timeout_minutes: int = 15, max_attempts: int = 3
-    ) -> int:
-        stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_rows = await self._find_stale_job_rows(stale_cutoff)
+    async def find_and_reset_stale_jobs(self, max_attempts: int = 3) -> int:
+        """Recover jobs whose database-clock lease has expired."""
+
+        stale_rows = await self._find_stale_job_rows()
         if not stale_rows:
             return 0
 
         handled_job_ids, recovered_count = await self._recover_retryable_stale_coalesced_jobs(
             stale_rows,
-            stale_cutoff=stale_cutoff,
             max_attempts=max_attempts,
         )
 
@@ -567,20 +612,18 @@ class ReprocessingJobRepository:
 
         await self._mark_over_limit_stale_jobs_failed(
             failed_job_ids,
-            stale_cutoff,
             max_attempts,
         )
-        reset_count = await self._reset_retryable_stale_jobs(reset_job_ids, stale_cutoff)
+        reset_count = await self._reset_retryable_stale_jobs(reset_job_ids)
         return recovered_count + reset_count
 
-    async def _find_stale_job_rows(self, stale_cutoff: datetime) -> list[Any]:
-        return (await self.db.execute(_stale_reprocessing_jobs_stmt(stale_cutoff))).all()
+    async def _find_stale_job_rows(self) -> list[Any]:
+        return (await self.db.execute(_stale_reprocessing_jobs_stmt())).all()
 
     async def _recover_retryable_stale_coalesced_jobs(
         self,
         stale_rows: list[Any],
         *,
-        stale_cutoff: datetime,
         max_attempts: int,
     ) -> tuple[set[int], int]:
         handled_job_ids: set[int] = set()
@@ -629,8 +672,11 @@ class ReprocessingJobRepository:
                     },
                 )
                 result = await self.db.execute(
-                    _stale_jobs_update_stmt([row.id], stale_cutoff).values(
+                    _stale_jobs_update_stmt([row.id]).values(
                         status="FAILED",
+                        lease_owner=None,
+                        lease_token=None,
+                        lease_expires_at=None,
                         failure_reason="Malformed effective-dated replay during stale recovery",
                         updated_at=func.now(),
                     )
@@ -640,8 +686,11 @@ class ReprocessingJobRepository:
                 continue
 
             result = await self.db.execute(
-                _stale_jobs_update_stmt([row.id], stale_cutoff).values(
+                _stale_jobs_update_stmt([row.id]).values(
                     status="COMPLETE",
+                    lease_owner=None,
+                    lease_token=None,
+                    lease_expires_at=None,
                     failure_reason=completion_reason,
                     updated_at=func.now(),
                 )
@@ -654,7 +703,6 @@ class ReprocessingJobRepository:
     async def _mark_over_limit_stale_jobs_failed(
         self,
         failed_job_ids: list[int],
-        stale_cutoff: datetime,
         max_attempts: int,
     ) -> None:
         normalized_job_ids = sorted(set(failed_job_ids))
@@ -671,7 +719,7 @@ class ReprocessingJobRepository:
             binds_per_row=1,
             reserved_binds=_STALE_FAILED_RESERVED_BINDS,
         ):
-            await self.db.execute(_failed_stale_jobs_update_stmt(list(job_id_chunk), stale_cutoff))
+            await self.db.execute(_failed_stale_jobs_update_stmt(list(job_id_chunk)))
         logger.warning(
             "Marked stale reprocessing jobs as FAILED after max attempts.",
             extra={
@@ -687,7 +735,6 @@ class ReprocessingJobRepository:
     async def _reset_retryable_stale_jobs(
         self,
         reset_job_ids: list[int],
-        stale_cutoff: datetime,
     ) -> int:
         normalized_job_ids = sorted(set(reset_job_ids))
         if not normalized_job_ids:
@@ -704,9 +751,7 @@ class ReprocessingJobRepository:
             binds_per_row=1,
             reserved_binds=_STALE_RESET_RESERVED_BINDS,
         ):
-            result = await self.db.execute(
-                _reset_stale_jobs_update_stmt(list(job_id_chunk), stale_cutoff)
-            )
+            result = await self.db.execute(_reset_stale_jobs_update_stmt(list(job_id_chunk)))
             reset_count += int(result.rowcount or 0)
         return reset_count
 
@@ -730,10 +775,28 @@ class ReprocessingJobRepository:
 
     @async_timed(repository="ReprocessingJobRepository", method="update_job_status")
     async def update_job_status(
-        self, job_id: int, status: str, failure_reason: Optional[str] = None
+        self,
+        job_id: int,
+        status: str,
+        *,
+        lease_token: str,
+        failure_reason: Optional[str] = None,
     ) -> bool:
-        """Updates the status of a specific job, optionally with a failure reason."""
-        values_to_update = {"status": status, "updated_at": datetime.now(timezone.utc)}
+        """Apply a transition only for the exact, still-live database claim."""
+
+        if not lease_token:
+            raise ValueError("reprocessing lease token is required")
+        if status not in _OWNED_TRANSITION_STATUSES:
+            raise ValueError("reprocessing owned transition status is invalid")
+        if failure_reason is not None and status != "FAILED":
+            raise ValueError("reprocessing failure reason requires FAILED status")
+        values_to_update = {
+            "status": status,
+            "lease_owner": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "updated_at": func.now(),
+        }
         if failure_reason:
             values_to_update["failure_reason"] = failure_reason
 
@@ -742,6 +805,8 @@ class ReprocessingJobRepository:
             .where(
                 ReprocessingJob.id == job_id,
                 ReprocessingJob.status == "PROCESSING",
+                ReprocessingJob.lease_token == lease_token,
+                ReprocessingJob.lease_expires_at > func.clock_timestamp(),
             )
             .values(**values_to_update)
         )
@@ -757,7 +822,25 @@ def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[
     return [row.id for row in stale_rows if row.attempt_count < max_attempts]
 
 
-def _effective_date_job_priority(job: ReprocessingJob) -> tuple[bool, str, datetime, int]:
+def _claimed_reprocessing_job(row: Any) -> ClaimedReprocessingJob:
+    return ClaimedReprocessingJob(
+        id=int(row["id"]),
+        job_type=str(row["job_type"]),
+        payload=dict(row["payload"]),
+        status=str(row["status"]),
+        correlation_id=row.get("correlation_id"),
+        correlation_missing_reason=row.get("correlation_missing_reason"),
+        alternate_lookup_key=row.get("alternate_lookup_key"),
+        attempt_count=int(row["attempt_count"]),
+        created_at=cast(datetime, row["created_at"]),
+        lease_token=str(row["lease_token"]),
+        lease_expires_at=cast(datetime, row["lease_expires_at"]),
+    )
+
+
+def _effective_date_job_priority(
+    job: ClaimedReprocessingJob,
+) -> tuple[bool, str, datetime, int]:
     payload: dict[str, Any] = job.payload if isinstance(job.payload, dict) else {}
     raw_effective_date = payload.get("earliest_impacted_date")
     return (
@@ -768,7 +851,7 @@ def _effective_date_job_priority(job: ReprocessingJob) -> tuple[bool, str, datet
     )
 
 
-def _stale_reprocessing_jobs_stmt(stale_cutoff: datetime):
+def _stale_reprocessing_jobs_stmt():
     return (
         select(
             ReprocessingJob.id,
@@ -778,21 +861,26 @@ def _stale_reprocessing_jobs_stmt(stale_cutoff: datetime):
             ReprocessingJob.correlation_id,
             ReprocessingJob.correlation_missing_reason,
             ReprocessingJob.alternate_lookup_key,
+            ReprocessingJob.lease_token,
         )
         .where(
             ReprocessingJob.status == "PROCESSING",
-            ReprocessingJob.updated_at < stale_cutoff,
+            ReprocessingJob.lease_expires_at <= func.clock_timestamp(),
         )
-        .order_by(ReprocessingJob.id.asc())
+        .order_by(ReprocessingJob.lease_expires_at.asc(), ReprocessingJob.id.asc())
         .limit(POSTGRES_STATEMENT_ROW_LIMIT)
+        .with_for_update(skip_locked=True)
     )
 
 
-def _failed_stale_jobs_update_stmt(failed_job_ids: list[int], stale_cutoff: datetime):
+def _failed_stale_jobs_update_stmt(failed_job_ids: list[int]):
     return (
-        _stale_jobs_update_stmt(failed_job_ids, stale_cutoff)
+        _stale_jobs_update_stmt(failed_job_ids)
         .values(
             status="FAILED",
+            lease_owner=None,
+            lease_token=None,
+            lease_expires_at=None,
             failure_reason="Stale processing timeout exceeded max attempts",
             updated_at=func.now(),
         )
@@ -800,19 +888,25 @@ def _failed_stale_jobs_update_stmt(failed_job_ids: list[int], stale_cutoff: date
     )
 
 
-def _reset_stale_jobs_update_stmt(reset_job_ids: list[int], stale_cutoff: datetime):
+def _reset_stale_jobs_update_stmt(reset_job_ids: list[int]):
     return (
-        _stale_jobs_update_stmt(reset_job_ids, stale_cutoff)
-        .values(status="PENDING", updated_at=func.now())
+        _stale_jobs_update_stmt(reset_job_ids)
+        .values(
+            status="PENDING",
+            lease_owner=None,
+            lease_token=None,
+            lease_expires_at=None,
+            updated_at=func.now(),
+        )
         .execution_options(synchronize_session=False)
     )
 
 
-def _stale_jobs_update_stmt(job_ids: list[int], stale_cutoff: datetime):
+def _stale_jobs_update_stmt(job_ids: list[int]):
     return update(ReprocessingJob).where(
         ReprocessingJob.id.in_(job_ids),
         ReprocessingJob.status == "PROCESSING",
-        ReprocessingJob.updated_at < stale_cutoff,
+        ReprocessingJob.lease_expires_at <= func.clock_timestamp(),
     )
 
 

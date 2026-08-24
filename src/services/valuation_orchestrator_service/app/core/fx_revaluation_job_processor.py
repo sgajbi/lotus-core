@@ -28,6 +28,10 @@ from ..ports.fx_revaluation import (
 logger = logging.getLogger(__name__)
 
 
+class FxRevaluationJobOwnershipLostError(RuntimeError):
+    """Abort transaction-scoped mutations after a fenced terminal write loses authority."""
+
+
 class FxRevaluationJobProcessor:
     """Apply one claimed FX replay job and record its owned terminal transition."""
 
@@ -44,7 +48,7 @@ class FxRevaluationJobProcessor:
         watermarks: PositionWatermarkWriter,
         revaluation: FxRevaluationRepository,
     ) -> None:
-        """Process one job without leaking failure or lineage across jobs."""
+        """Process one job; the worker owns rollback and fresh-transaction failure state."""
         correlation_token = None
         try:
             if job.correlation_id:
@@ -59,8 +63,6 @@ class FxRevaluationJobProcessor:
                 earliest_impacted_date=job.earliest_impacted_date,
             )
             await self._record_execution(job=job, jobs=jobs, execution=execution)
-        except Exception as exc:
-            await self._mark_failed(job=job, jobs=jobs, exc=exc)
         finally:
             if correlation_token is not None:
                 correlation_id_var.reset(correlation_token)
@@ -128,7 +130,11 @@ class FxRevaluationJobProcessor:
         jobs: ReprocessingJobStatusWriter,
         status: str,
     ) -> None:
-        if await jobs.update_job_status(job.job_id, status):
+        if await jobs.update_job_status(
+            job.job_id,
+            status,
+            lease_token=job.lease_token,
+        ):
             if status == "COMPLETE":
                 observe_reprocessing_worker_jobs_completed(FX_REVALUATION_JOB_TYPE)
             return
@@ -147,9 +153,12 @@ class FxRevaluationJobProcessor:
                 requested_status=status,
             ),
         )
+        raise FxRevaluationJobOwnershipLostError(
+            f"FX revaluation job {job.job_id} lease authority was lost"
+        )
 
     @staticmethod
-    async def _mark_failed(
+    async def mark_failed(
         *,
         job: ClaimedFxRevaluationJob | RejectedFxRevaluationJob,
         jobs: ReprocessingJobStatusWriter,
@@ -167,7 +176,12 @@ class FxRevaluationJobProcessor:
                 error_type=type(exc).__name__,
             ),
         )
-        if await jobs.update_job_status(job.job_id, "FAILED", failure_reason=str(exc)):
+        if await jobs.update_job_status(
+            job.job_id,
+            "FAILED",
+            lease_token=job.lease_token,
+            failure_reason=str(exc),
+        ):
             observe_reprocessing_worker_jobs_failed(FX_REVALUATION_JOB_TYPE)
         else:
             observe_reprocessing_stale_skips("fx_revaluation_failed_ownership_lost", 1)

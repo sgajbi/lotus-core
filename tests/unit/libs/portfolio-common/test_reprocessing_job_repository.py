@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
 
+LEASE_TOKEN = "a" * 32
+LEASE_EXPIRES_AT = datetime(2026, 8, 25, 1, 0, tzinfo=timezone.utc)
+
 
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
@@ -43,7 +46,37 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     assert "RETURNING *" in query_text
     assert params["job_type"] == "RESET_WATERMARKS"
     assert params["batch_size"] == 25
+    assert params["lease_owner"].startswith("reprocessing-repository-")
+    assert len(params["lease_token"]) == 32
+    assert params["lease_duration_seconds"] == 900
+    assert "lease_expires_at = clock_timestamp()" in query_text
+    assert "make_interval(secs => :lease_duration_seconds)" in query_text
     assert "(payload->>'earliest_impacted_date') ASC" in query_text
+
+
+@pytest.mark.parametrize(
+    ("lease_owner", "lease_duration_seconds", "message"),
+    [
+        (" ", 900, "lease owner"),
+        ("worker", 0, "lease duration"),
+    ],
+)
+async def test_find_and_claim_jobs_rejects_invalid_lease_authority(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+    lease_owner: str,
+    lease_duration_seconds: int,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        await repository.find_and_claim_jobs(
+            "RESET_WATERMARKS",
+            batch_size=1,
+            lease_owner=lease_owner,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_find_and_claim_jobs_uses_default_created_at_order_for_other_job_types(
@@ -97,6 +130,8 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
             "failure_reason": None,
             "created_at": None,
             "updated_at": None,
+            "lease_token": LEASE_TOKEN,
+            "lease_expires_at": LEASE_EXPIRES_AT,
         },
         {
             "id": 10,
@@ -112,6 +147,8 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
             "failure_reason": None,
             "created_at": None,
             "updated_at": None,
+            "lease_token": LEASE_TOKEN,
+            "lease_expires_at": LEASE_EXPIRES_AT,
         },
     ]
     mock_db_session.execute.return_value = mock_result
@@ -119,6 +156,7 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
     claimed = await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=2)
 
     assert [job.id for job in claimed] == [10, 20]
+    assert all(job.lease_token == LEASE_TOKEN for job in claimed)
 
 
 async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_cleanup(
@@ -191,6 +229,8 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
             "failure_reason": None,
             "created_at": None,
             "updated_at": None,
+            "lease_token": LEASE_TOKEN,
+            "lease_expires_at": LEASE_EXPIRES_AT,
         }
     ]
     mock_db_session.execute.return_value = mock_result
@@ -200,6 +240,8 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
     assert len(claimed) == 1
     assert claimed[0].id == 10
     assert claimed[0].status == "PROCESSING"
+    with pytest.raises((AttributeError, TypeError)):
+        claimed[0].status = "COMPLETE"  # type: ignore[misc]
 
 
 async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
@@ -220,6 +262,8 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
             "failure_reason": None,
             "created_at": None,
             "updated_at": None,
+            "lease_token": LEASE_TOKEN,
+            "lease_expires_at": LEASE_EXPIRES_AT,
         },
         {
             "id": 20,
@@ -231,6 +275,8 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
             "failure_reason": None,
             "created_at": None,
             "updated_at": None,
+            "lease_token": LEASE_TOKEN,
+            "lease_expires_at": LEASE_EXPIRES_AT,
         },
     ]
     mock_db_session.execute.side_effect = [normalize_result, claim_result]
@@ -253,16 +299,19 @@ async def test_find_and_reset_stale_jobs_resets_processing_rows(
     mock_update_result.rowcount = 2
     mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
 
-    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
+    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert reset_count == 2
     assert mock_db_session.execute.await_count == 2
     select_stmt = mock_db_session.execute.await_args_list[0].args[0]
     update_stmt = mock_db_session.execute.await_args_list[1].args[0]
     assert "SELECT reprocessing_jobs.id" in str(select_stmt)
+    assert "FOR UPDATE" in str(select_stmt)
+    assert select_stmt._for_update_arg.skip_locked is True
+    assert "lease_expires_at <= clock_timestamp()" in str(select_stmt)
     assert "UPDATE reprocessing_jobs SET status=:status" in str(update_stmt)
     assert "reprocessing_jobs.status = :status_1" in str(update_stmt)
-    assert "reprocessing_jobs.updated_at < :updated_at_1" in str(update_stmt)
+    assert "reprocessing_jobs.lease_expires_at <= clock_timestamp()" in str(update_stmt)
 
 
 async def test_stale_reprocessing_recovery_bounds_selection_and_chunks_reset_updates(
@@ -272,12 +321,7 @@ async def test_stale_reprocessing_recovery_bounds_selection_and_chunks_reset_upd
     first_result = MagicMock(rowcount=1_000)
     second_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [first_result, second_result]
-    stale_cutoff = datetime(2026, 8, 20, tzinfo=timezone.utc)
-
-    reset_count = await repository._reset_retryable_stale_jobs(
-        list(range(1_001, 0, -1)),
-        stale_cutoff,
-    )
+    reset_count = await repository._reset_retryable_stale_jobs(list(range(1_001, 0, -1)))
 
     assert reset_count == 1_001
     assert mock_db_session.execute.await_count == 2
@@ -286,18 +330,21 @@ async def test_stale_reprocessing_recovery_bounds_selection_and_chunks_reset_upd
         for call in mock_db_session.execute.await_args_list
     ]
     assert statement_lengths == [1_000, 1]
-    assert len(mock_db_session.execute.await_args_list[0].args[0].compile().params) == 4
+    assert len(mock_db_session.execute.await_args_list[0].args[0].compile().params) == 6
 
     select_result = MagicMock()
     select_result.all.return_value = []
     mock_db_session.reset_mock()
     mock_db_session.execute.side_effect = None
     mock_db_session.execute.return_value = select_result
-    await repository._find_stale_job_rows(stale_cutoff)
+    await repository._find_stale_job_rows()
     compiled_select = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "ORDER BY reprocessing_jobs.id ASC" in compiled_select
+    assert (
+        "ORDER BY reprocessing_jobs.lease_expires_at ASC, reprocessing_jobs.id ASC"
+        in compiled_select
+    )
     assert "LIMIT 1000" in compiled_select
 
 
@@ -310,7 +357,6 @@ async def test_stale_reprocessing_recovery_logs_counts_without_identifier_collec
     with patch("portfolio_common.reprocessing_job_repository.logger.warning") as warning:
         await repository._mark_over_limit_stale_jobs_failed(
             [3, 2, 2, 1],
-            datetime(2026, 8, 20, tzinfo=timezone.utc),
             max_attempts=3,
         )
 
@@ -327,7 +373,7 @@ async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
     mock_select_result.all.return_value = []
     mock_db_session.execute.return_value = mock_select_result
 
-    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30)
+    reset_count = await repository.find_and_reset_stale_jobs()
 
     assert reset_count == 0
     assert mock_db_session.execute.await_count == 1
@@ -376,7 +422,7 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
         mock_reset_result,
     ]
 
-    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
+    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert reset_count == 1
 
@@ -391,13 +437,13 @@ async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
     mock_update_result.rowcount = 0
     mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
 
-    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=30, max_attempts=3)
+    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert reset_count == 0
     update_stmt = mock_db_session.execute.await_args_list[1].args[0]
     stmt_text = str(update_stmt)
     assert "reprocessing_jobs.status = :status_1" in stmt_text
-    assert "reprocessing_jobs.updated_at < :updated_at_1" in stmt_text
+    assert "reprocessing_jobs.lease_expires_at <= clock_timestamp()" in stmt_text
 
 
 async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
@@ -432,10 +478,7 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
         complete_result,
     ]
 
-    recovered_count = await repository.find_and_reset_stale_jobs(
-        timeout_minutes=30,
-        max_attempts=3,
-    )
+    recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert recovered_count == 1
     assert mock_db_session.execute.await_count == 4
@@ -469,10 +512,7 @@ async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
     failed_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [stale_result, failed_result]
 
-    recovered_count = await repository.find_and_reset_stale_jobs(
-        timeout_minutes=30,
-        max_attempts=3,
-    )
+    recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert recovered_count == 0
     assert mock_db_session.execute.await_count == 2
@@ -656,9 +696,36 @@ async def test_update_job_status_requires_processing_ownership(
     update_result.rowcount = 0
     mock_db_session.execute.return_value = update_result
 
-    updated = await repository.update_job_status(99, "COMPLETE")
+    updated = await repository.update_job_status(99, "COMPLETE", lease_token=LEASE_TOKEN)
 
     assert updated is False
     stmt = mock_db_session.execute.await_args.args[0]
     stmt_text = str(stmt)
     assert "reprocessing_jobs.status = :status_1" in stmt_text
+    assert "reprocessing_jobs.lease_token = :lease_token_1" in stmt_text
+    assert "reprocessing_jobs.lease_expires_at > clock_timestamp()" in stmt_text
+
+
+@pytest.mark.parametrize(
+    ("status", "failure_reason", "message"),
+    [
+        ("PROCESSING", None, "transition status"),
+        ("COMPLETE", "unexpected", "failure reason"),
+    ],
+)
+async def test_update_job_status_rejects_invalid_owned_transition(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+    status: str,
+    failure_reason: str | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        await repository.update_job_status(
+            99,
+            status,
+            lease_token=LEASE_TOKEN,
+            failure_reason=failure_reason,
+        )
+
+    mock_db_session.execute.assert_not_awaited()
