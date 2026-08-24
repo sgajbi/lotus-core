@@ -145,6 +145,34 @@ def test_upgrade_requires_quiescence_and_enforces_atomic_lease_state(db_engine) 
                 )
             partial_claim.rollback()
 
+            for lease_owner, lease_token in (
+                (" ", "c" * 32),
+                (" padded-owner ", "c" * 32),
+                ("valid-owner", "C" * 32),
+                ("valid-owner", "c" * 31),
+                ("valid-owner", "c" * 33),
+            ):
+                invalid_claim = connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    connection.execute(
+                        text(
+                            """
+                            UPDATE reprocessing_jobs
+                            SET status = 'PROCESSING',
+                                lease_owner = :lease_owner,
+                                lease_token = :lease_token,
+                                lease_expires_at = clock_timestamp() + INTERVAL '15 minutes'
+                            WHERE id = :job_id
+                            """
+                        ),
+                        {
+                            "job_id": legacy_processing_id,
+                            "lease_owner": lease_owner,
+                            "lease_token": lease_token,
+                        },
+                    )
+                invalid_claim.rollback()
+
             connection.execute(
                 text(
                     """
@@ -175,6 +203,12 @@ def test_upgrade_requires_quiescence_and_enforces_atomic_lease_state(db_engine) 
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 True,
             )
+
+            guarded_downgrade = connection.begin_nested()
+            with pytest.raises(DBAPIError, match="requires a drained PROCESSING queue"):
+                migration["downgrade"]()
+            guarded_downgrade.rollback()
+            assert LEASE_COLUMNS <= _columns(connection)
 
             connection.execute(
                 text(
