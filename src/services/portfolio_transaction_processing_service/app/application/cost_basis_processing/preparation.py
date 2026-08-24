@@ -15,6 +15,7 @@ from ...domain.transaction import (
     assert_cash_account_required_instrument,
     assert_cash_entry_mode_supported,
     enrich_booking_metadata,
+    resolve_effective_processing_transaction_type,
 )
 from ...domain.transaction.corporate_action import (
     assert_bundle_a_corporate_action_valid,
@@ -79,8 +80,9 @@ def prepare_cost_transaction(
     )
     prepared_transaction = enrich_fx_transaction_metadata(prepared_transaction)
     transaction_type = normalize_transaction_control_code(prepared_transaction.transaction_type)
+    effective_transaction_type = resolve_effective_processing_transaction_type(prepared_transaction)
     assert_cash_account_required_instrument(
-        transaction_type,
+        effective_transaction_type,
         instrument_reference_available=instrument_reference_available,
         product_type=instrument_product_type,
         asset_class=instrument_asset_class,

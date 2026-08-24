@@ -124,6 +124,49 @@ def test_prepare_cash_account_booking_accepts_authoritative_cash_metadata() -> N
     assert prepared.transaction_type == "FEE"
 
 
+@pytest.mark.parametrize(
+    "component_type",
+    ["FX_CASH_SETTLEMENT_BUY", "FX_CASH_SETTLEMENT_SELL"],
+)
+def test_prepare_fx_cash_component_rejects_non_cash_instrument_authority(
+    component_type: str,
+) -> None:
+    transaction = replace(
+        _transaction("FX_SPOT"),
+        component_type=component_type,
+    )
+
+    with pytest.raises(CashAccountRequiredValidationError) as raised:
+        cost_basis_processing.prepare_cost_transaction(
+            transaction,
+            cost_basis_method=CostBasisMethod.FIFO,
+            instrument_reference_available=True,
+            instrument_product_type="EQUITY",
+            instrument_asset_class="EQUITY",
+        )
+
+    assert raised.value.reason_code is CashAccountRequiredValidationReasonCode.NON_CASH_INSTRUMENT
+    assert raised.value.transaction_type == component_type
+
+
+def test_prepare_fx_cash_component_fails_closed_without_instrument_authority() -> None:
+    transaction = replace(
+        _transaction("FX_FORWARD"),
+        component_type="FX_CASH_SETTLEMENT_BUY",
+    )
+
+    with pytest.raises(CashAccountRequiredValidationError) as raised:
+        cost_basis_processing.prepare_cost_transaction(
+            transaction,
+            cost_basis_method=CostBasisMethod.FIFO,
+            instrument_reference_available=False,
+        )
+
+    assert raised.value.reason_code is (
+        CashAccountRequiredValidationReasonCode.INSTRUMENT_AUTHORITY_UNAVAILABLE
+    )
+
+
 _REDEMPTION_TYPES = (
     "MATURITY_REDEMPTION",
     "CALL_REDEMPTION",
