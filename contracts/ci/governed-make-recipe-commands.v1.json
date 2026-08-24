@@ -56,6 +56,9 @@
     "calculated-output-policy-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/calculated_output_policy_guard.py"
     ],
+    "cash-instrument-authority-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/cash_instrument_authority_guard.py"
+    ],
     "command-api-behavior-certification-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/command_api_behavior_certification_guard.py"
     ],
