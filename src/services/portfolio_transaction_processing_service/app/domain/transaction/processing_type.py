@@ -19,6 +19,7 @@ class ProcessingTypeSource(Protocol):
 
         ...
 
+
 FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CONTRACT_OPEN",
     "FX_CONTRACT_CLOSE",

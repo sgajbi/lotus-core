@@ -23,7 +23,6 @@ from portfolio_common.domain.transaction.type_registry import (
 )
 
 from ...transaction.cash_instrument import is_cash_instrument
-from ...transaction.processing_type import resolve_effective_processing_transaction_type
 from ...transaction.fx import (
     FxCanonicalTransaction,
     FxTransactionSource,
@@ -31,6 +30,7 @@ from ...transaction.fx import (
     build_fx_baseline_processing_update,
     validate_fx_transaction,
 )
+from ...transaction.processing_type import resolve_effective_processing_transaction_type
 from ...transaction.redemption import (
     RedemptionCalculationError,
     RedemptionCalculationReasonCode,

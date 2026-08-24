@@ -12,4 +12,5 @@ def is_cash_instrument(*, product_type: object, asset_class: object) -> bool:
 
     return bool(_is_cash_instrument(product_type=product_type, asset_class=asset_class))
 
+
 __all__ = ["is_cash_instrument"]
