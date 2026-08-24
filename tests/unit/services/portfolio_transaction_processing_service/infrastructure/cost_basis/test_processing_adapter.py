@@ -296,6 +296,39 @@ async def test_cost_adapter_retries_cash_booking_without_instrument_authority() 
     processor.execute.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "component_type",
+    ["FX_CASH_SETTLEMENT_BUY", "FX_CASH_SETTLEMENT_SELL"],
+)
+async def test_cost_adapter_validates_effective_fx_cash_component_type(
+    component_type: str,
+) -> None:
+    transaction = replace(
+        _cash_account_booking("FX_SPOT"),
+        component_type=component_type,
+    )
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
+    adapter = _cash_account_adapter(
+        processor=processor,
+        instrument=CostBasisInstrumentReference(
+            security_id=transaction.security_id,
+            product_type="EQUITY",
+            asset_class="EQUITY",
+        ),
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await adapter.process(transaction, correlation_id="corr-001", traceparent=None)
+
+    assert raised.value.reason_code == (
+        CashAccountRequiredValidationReasonCode.NON_CASH_INSTRUMENT.value
+    )
+    assert raised.value.detail["transaction_type"] == component_type
+    assert raised.value.retryable is False
+    processor.execute.assert_not_awaited()
+
+
 def _cash_account_booking(transaction_type: str) -> BookedTransaction:
     return BookedTransaction(
         transaction_id=f"TX-{transaction_type}-001",
