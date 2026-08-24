@@ -372,6 +372,24 @@ def test_make_authority_rejects_a_continued_authority_function_at_eof(
         required_checks_workflow._load_phony_make_targets(makefile_path)
 
 
+@pytest.mark.parametrize("recipe", ["-false", "@-false", "-@false", "+-false"])
+def test_make_authority_rejects_ignored_recipe_errors(
+    tmp_path: Path,
+    recipe: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f".PHONY: security-audit\nsecurity-audit:\n\t{recipe}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=3",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
 @pytest.mark.parametrize(
     "execution_state",
     [
