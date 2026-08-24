@@ -550,7 +550,7 @@ async def test_expired_claim_is_recovered_reclaimed_and_fences_late_terminal_wri
                 "COMPLETE",
                 lease_token=first_claim.lease_token,
             )
-            is ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+            is ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
         )
 
     async with session_factory() as current_session, current_session.begin():
