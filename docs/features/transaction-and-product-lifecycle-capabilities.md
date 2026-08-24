@@ -48,7 +48,7 @@ instrument using that transaction type has complete lifecycle coverage.
 | Product family | Lifecycle support | Status | Important limitation or issue |
 | --- | --- | --- | --- |
 | Listed equities, ETFs, bonds, funds, and structured instruments | Purchase and sale through `BUY` and `SELL` | `supported_via_generic_transaction_semantics` | Trade economics do not certify product-specific maturity, exercise, payoff, or distribution behavior. |
-| Cash and deposits | Deposit, withdrawal, and interest through `DEPOSIT`, `WITHDRAWAL`, and `INTEREST` | `supported_via_generic_transaction_semantics` | No separately certified term-deposit maturity event. |
+| Cash and deposits | Deposit, withdrawal, and interest through `DEPOSIT`, `WITHDRAWAL`, and `INTEREST` | `supported_via_generic_transaction_semantics` | `DEPOSIT` and `WITHDRAWAL` require server-owned cash product metadata; missing authority or non-cash instruments are rejected before financial mutation. No separately certified term-deposit maturity event. |
 | Foreign exchange | Spot, forward, and swap | `supported` | Non-zero embedded fees and withholding taxes are rejected; supported fees/taxes are separate postings linked to the FX event/group. |
 | Listed funds | Subscription, redemption, distribution, and reinvestment through generic trade/income legs | `limited` | Mixed income and return-of-capital distribution is owned by [#448](https://github.com/sgajbi/lotus-core/issues/448). |
 | Fixed income | Purchase, sale, coupon, and accrued-interest semantics | `supported_via_generic_transaction_semantics` | Dedicated redemption types exist; broader amortized-cost release certification remains issue-owned. |
@@ -63,7 +63,7 @@ instrument using that transaction type has complete lifecycle coverage.
 | Convertibles, warrants, and options | Conversion, exercise, and strike payment | `target_not_implemented` | [#479](https://github.com/sgajbi/lotus-core/issues/479) |
 | Structured products | Trade and generic coupon legs | `limited` | Observation, barrier, autocall, payoff, and physical settlement: [#758](https://github.com/sgajbi/lotus-core/issues/758) |
 | Private markets | Commitment, capital call, contribution, distribution, return of capital, and recallable capital | `target_not_implemented` | [#759](https://github.com/sgajbi/lotus-core/issues/759) |
-| Charges and tax | Fee and tax cash posting | `limited` | Component allocation and product attribution remain bounded by [#448](https://github.com/sgajbi/lotus-core/issues/448) and [#719](https://github.com/sgajbi/lotus-core/issues/719). |
+| Charges and tax | Fee and tax cash posting | `limited` | `FEE` and `TAX` require server-owned cash product metadata; missing authority or non-cash instruments are rejected before financial mutation with stable `CASH_ACCOUNT_001_*` or `CASH_ACCOUNT_002_*` reasons. Component allocation and product attribution remain bounded by [#448](https://github.com/sgajbi/lotus-core/issues/448) and [#719](https://github.com/sgajbi/lotus-core/issues/719). |
 | Corrections | Economic reversal, rebook, and restatement through adjustment semantics | `limited` | First-class cancellation and corporate-action correction state remain under [#480](https://github.com/sgajbi/lotus-core/issues/480) and [#719](https://github.com/sgajbi/lotus-core/issues/719). |
 
 ## Corporate Action Coverage

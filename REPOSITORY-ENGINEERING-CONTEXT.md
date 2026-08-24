@@ -4235,6 +4235,19 @@ Most relevant current governance:
      `absolute C` / `module B` / `average B`, Radon maintainability rank B, scoped MyPy, Bandit,
      and Vulture for that package and its tests, plus at least 90% branch-aware package coverage.
 
+255. Every transaction type whose canonical registry settlement behavior is
+     `cash_account_required` must be validated after instrument enrichment and before any cost,
+     position, cashflow, readiness, or outbox mutation. Cash authority comes only from
+     server-owned `product_type` or `asset_class` metadata; instrument and security identifiers,
+     including `CASH_*` prefixes, are never classification authority. Missing classification must
+     fail closed with `CASH_ACCOUNT_001_INSTRUMENT_AUTHORITY_UNAVAILABLE`; authoritative non-cash
+     classification must fail with `CASH_ACCOUNT_002_NON_CASH_INSTRUMENT`. Apply this registry
+     policy to both public cash movements (`DEPOSIT`, `WITHDRAWAL`, `FEE`, `TAX`) and internally
+     generated FX cash settlement legs. Keep the cost engine defensive against bypass and require
+     the position reducer to reject booked-cost signs that contradict cash inflow/outflow
+     economics. Preserve rollback, replay/idempotency, source-safe detail, and no-financial-effect
+     behavior for every rejected booking.
+
 ## Context Maintenance Rule
 
 Update this document when:
