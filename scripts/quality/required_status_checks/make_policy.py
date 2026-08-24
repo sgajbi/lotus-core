@@ -40,6 +40,7 @@ _EXECUTION_DEFINE = re.compile(
 _VPATH_DIRECTIVE = re.compile(r"^vpath(?:\s|$)")
 _AUTHORITY_FUNCTION = re.compile(r"\$(?:\(|\{)\s*(?:call|eval)(?=[\s,)}\\]|$)")
 _SAFE_DIAGNOSTIC_EXPANSION = re.compile(r"^\$\((?:error|info|warning)(?:\s|$).*\)$")
+_IGNORED_RECIPE_PREFIX = re.compile(r"^[ \t@+]*-")
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")
 
 
@@ -105,6 +106,37 @@ def validate_make_authority_functions(lines: list[str], *, path: Path) -> None:
             raise RequiredStatusChecksError(
                 f"Makefile phony authority must be static: {path}; line={line_number}"
             )
+
+
+def validate_make_recipe_failure_propagation(
+    line: str,
+    *,
+    path: Path,
+    line_number: int,
+    previous_line_continues: bool,
+) -> None:
+    """Reject ignored-error prefixes at physical and inline recipe starts."""
+
+    if previous_line_continues:
+        return
+    if line.startswith("\t"):
+        recipe = line[1:]
+    else:
+        inline_recipe = _first_unexpanded_token(line, (";",))
+        target_separator = _first_unexpanded_token(line, (":",))
+        assignment = _first_unexpanded_token(line, _ASSIGNMENT_OPERATORS)
+        if (
+            inline_recipe is None
+            or target_separator is None
+            or target_separator >= inline_recipe
+            or (assignment is not None and target_separator >= assignment)
+        ):
+            return
+        recipe = line[inline_recipe + 1 :]
+    if _IGNORED_RECIPE_PREFIX.match(recipe):
+        raise RequiredStatusChecksError(
+            f"Makefile execution state must be static: {path}; line={line_number}"
+        )
 
 
 def validate_make_execution_state(line: str, *, path: Path, line_number: int) -> None:

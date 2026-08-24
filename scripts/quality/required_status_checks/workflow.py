@@ -18,6 +18,7 @@ from scripts.quality.required_status_checks.job_policy import (
 from scripts.quality.required_status_checks.make_policy import (
     validate_make_authority_functions,
     validate_make_execution_state,
+    validate_make_recipe_failure_propagation,
 )
 from scripts.quality.required_status_checks.model import (
     RequiredChecksManifest,
@@ -46,7 +47,6 @@ _MAKE_ENDEF_DIRECTIVE = re.compile(r"^endef(?:\s|$)")
 _MAKE_INCLUDE_DIRECTIVE = re.compile(r"^(?:-?include|sinclude)(?:\s|$)")
 _STATIC_PHONY_DECLARATION = re.compile(r"^\.PHONY:\s*(.*?)\s*$")
 _STATIC_PHONY_TARGET = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
-_IGNORED_RECIPE_PREFIX = re.compile(r"^\t[ \t@+]*-")
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -189,10 +189,12 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
         previous_line_continues = line_number > 1 and lines[line_number - 2].endswith("\\")
-        if not previous_line_continues and _IGNORED_RECIPE_PREFIX.match(raw_line):
-            raise RequiredStatusChecksError(
-                f"Makefile execution state must be static: {path}; line={line_number}"
-            )
+        validate_make_recipe_failure_propagation(
+            raw_line,
+            path=path,
+            line_number=line_number,
+            previous_line_continues=previous_line_continues,
+        )
         if _MAKE_DEFINE_DIRECTIVE.match(raw_line):
             validate_make_execution_state(line, path=path, line_number=line_number)
             define_depth += 1
