@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -14,13 +14,17 @@ from portfolio_common.monitoring import (
     observe_reprocessing_worker_jobs_completed,
     observe_reprocessing_worker_jobs_failed,
     observe_reprocessing_worker_jobs_noop,
+    observe_reprocessing_worker_lease_renewal,
     reprocessing_worker_batch_timer,
     set_control_queue_failed_stored,
     set_control_queue_oldest_pending_age_seconds,
     set_control_queue_pending,
 )
 from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.reprocessing_job_repository import (
+    ReprocessingJobRepository,
+    ReprocessingJobTransitionOutcome,
+)
 
 from ..domain.fx_revaluation import FX_REVALUATION_JOB_TYPE
 from ..infrastructure.repositories.fx_revaluation_repository import (
@@ -32,6 +36,7 @@ from .fx_revaluation_job_processor import (
     FxRevaluationJobOwnershipLostError,
     FxRevaluationJobProcessor,
 )
+from .reprocessing_failure import reprocessing_failure_reason
 from .reprocessing_worker_dependencies import ReprocessingWorkerRepositoryFactory
 
 logger = logging.getLogger(__name__)
@@ -108,6 +113,7 @@ class ReprocessingWorker:
         self._batch_size = runtime_settings.reprocessing_worker_batch_size
         self._stale_timeout_minutes = runtime_settings.reprocessing_worker_stale_timeout_minutes
         self._lease_duration_seconds = self._stale_timeout_minutes * 60
+        self._lease_renewal_interval_seconds = max(1.0, self._lease_duration_seconds / 3)
         self._lease_owner = f"valuation-reprocessing-{uuid.uuid4().hex}"
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
@@ -211,18 +217,11 @@ class ReprocessingWorker:
         try:
             if job.correlation_id:
                 correlation_token = correlation_id_var.set(job.correlation_id)
-            async for db in self._open_session():
-                async with db.begin():
-                    should_complete_job, _security_id = await self._reset_impacted_watermarks(
-                        job=job,
-                        state_repo=self._repository_factory.position_states(db),
-                        valuation_repo=self._repository_factory.valuations(db),
-                    )
-                    await self._update_reset_watermark_job_terminal_status(
-                        job=job,
-                        job_repo=self._repository_factory.reprocessing_jobs(db),
-                        should_complete_job=should_complete_job,
-                    )
+            await self._process_with_lease_renewal(
+                job=job,
+                job_type="RESET_WATERMARKS",
+                operation=lambda: self._execute_reset_watermark_job(job),
+            )
         except ReprocessingJobOwnershipLostError:
             pass
         except Exception as exc:
@@ -230,6 +229,112 @@ class ReprocessingWorker:
         finally:
             if correlation_token is not None:
                 correlation_id_var.reset(correlation_token)
+
+    async def _execute_reset_watermark_job(self, job) -> None:
+        async for db in self._open_session():
+            async with db.begin():
+                should_complete_job, _security_id = await self._reset_impacted_watermarks(
+                    job=job,
+                    state_repo=self._repository_factory.position_states(db),
+                    valuation_repo=self._repository_factory.valuations(db),
+                )
+                await self._update_reset_watermark_job_terminal_status(
+                    job=job,
+                    job_repo=self._repository_factory.reprocessing_jobs(db),
+                    should_complete_job=should_complete_job,
+                )
+
+    async def _process_with_lease_renewal(
+        self,
+        *,
+        job,
+        job_type: str,
+        operation: Callable[[], Awaitable[None]],
+    ) -> None:
+        stop_renewal = asyncio.Event()
+
+        async def run_operation() -> None:
+            try:
+                await operation()
+            finally:
+                # Set before this task becomes done, so a renewal unblocked by the
+                # terminal commit cannot misclassify that terminal state as lease loss.
+                stop_renewal.set()
+
+        operation_task = asyncio.create_task(run_operation())
+        renewal_task = asyncio.create_task(
+            self._renew_lease_while_processing(
+                job=job,
+                job_type=job_type,
+                stop_event=stop_renewal,
+            )
+        )
+        try:
+            done, _pending = await asyncio.wait(
+                {operation_task, renewal_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if renewal_task in done:
+                await renewal_task
+            await operation_task
+        finally:
+            stop_renewal.set()
+            if not operation_task.done():
+                operation_task.cancel()
+            await asyncio.gather(operation_task, renewal_task, return_exceptions=True)
+
+    async def _renew_lease_while_processing(
+        self,
+        *,
+        job,
+        job_type: str,
+        stop_event: asyncio.Event,
+    ) -> None:
+        while True:
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(),
+                    timeout=self._lease_renewal_interval_seconds,
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+
+            outcome = ReprocessingJobTransitionOutcome.NOT_FOUND
+            async for db in self._open_session():
+                async with db.begin():
+                    outcome = await self._repository_factory.reprocessing_jobs(db).renew_lease(
+                        self._job_id(job),
+                        lease_token=job.lease_token,
+                        lease_duration_seconds=self._lease_duration_seconds,
+                    )
+            if stop_event.is_set():
+                return
+            if outcome is ReprocessingJobTransitionOutcome.APPLIED:
+                observe_reprocessing_worker_lease_renewal(job_type, "renewed")
+                continue
+
+            observe_reprocessing_worker_lease_renewal(job_type, "ownership_lost")
+            logger.warning(
+                "Cancelling replay work after lease renewal lost ownership.",
+                extra=operation_log_extra(
+                    event_name="valuation.reprocessing.lease_renewal_ownership_lost",
+                    operation="valuation.reprocessing.lease_renewal",
+                    status="cancelled",
+                    reason_code=outcome.value.lower(),
+                    job_id=self._job_id(job),
+                    job_type=job_type,
+                    transition_outcome=outcome.value,
+                ),
+            )
+            raise ReprocessingJobOwnershipLostError(
+                f"reprocessing job {self._job_id(job)} lease renewal lost ownership: "
+                f"{outcome.value}"
+            )
+
+    @staticmethod
+    def _job_id(job) -> int:
+        return int(job.job_id if hasattr(job, "job_id") else job.id)
 
     async def _reset_impacted_watermarks(
         self,
@@ -306,11 +411,12 @@ class ReprocessingWorker:
         should_complete_job: bool,
     ) -> None:
         terminal_status = "COMPLETE" if should_complete_job else "PENDING"
-        if await job_repo.update_job_status(
+        outcome = await job_repo.update_job_status(
             job.id,
             terminal_status,
             lease_token=job.lease_token,
-        ):
+        )
+        if outcome is ReprocessingJobTransitionOutcome.APPLIED:
             if should_complete_job:
                 observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
             return
@@ -331,6 +437,7 @@ class ReprocessingWorker:
                 reason_code=ownership_lost_reason,
                 job_id=job.id,
                 terminal_status=terminal_status,
+                transition_outcome=outcome.value,
             ),
         )
         raise ReprocessingJobOwnershipLostError(
@@ -355,31 +462,31 @@ class ReprocessingWorker:
                 error_type=type(exc).__name__,
             ),
         )
-        updated = False
+        outcome = ReprocessingJobTransitionOutcome.NOT_FOUND
         async for db in self._open_session():
             async with db.begin():
-                updated = await self._repository_factory.reprocessing_jobs(db).update_job_status(
+                outcome = await self._repository_factory.reprocessing_jobs(db).update_job_status(
                     job.id,
                     "FAILED",
                     lease_token=job.lease_token,
-                    failure_reason=str(exc),
+                    failure_reason=reprocessing_failure_reason(exc),
                 )
-        if updated:
+        if outcome is ReprocessingJobTransitionOutcome.APPLIED:
             observe_reprocessing_worker_jobs_failed("RESET_WATERMARKS")
         else:
-            observe_reprocessing_stale_skips("reset_watermarks_terminal_ownership_lost", 1)
+            observe_reprocessing_stale_skips(
+                f"reset_watermarks_failed_{outcome.value.lower()}",
+                1,
+            )
 
     async def _process_fx_revaluation_job(self, *, job) -> None:
         try:
-            async for db in self._open_session():
-                async with db.begin():
-                    await self._fx_job_processor.process(
-                        job=job,
-                        jobs=self._repository_factory.reprocessing_jobs(db),
-                        watermarks=self._repository_factory.position_states(db),
-                        revaluation=self._repository_factory.fx_revaluations(db),
-                    )
-        except FxRevaluationJobOwnershipLostError:
+            await self._process_with_lease_renewal(
+                job=job,
+                job_type=FX_REVALUATION_JOB_TYPE,
+                operation=lambda: self._execute_fx_revaluation_job(job),
+            )
+        except (FxRevaluationJobOwnershipLostError, ReprocessingJobOwnershipLostError):
             pass
         except Exception as exc:
             async for db in self._open_session():
@@ -389,6 +496,16 @@ class ReprocessingWorker:
                         jobs=self._repository_factory.reprocessing_jobs(db),
                         exc=exc,
                     )
+
+    async def _execute_fx_revaluation_job(self, job) -> None:
+        async for db in self._open_session():
+            async with db.begin():
+                await self._fx_job_processor.process(
+                    job=job,
+                    jobs=self._repository_factory.reprocessing_jobs(db),
+                    watermarks=self._repository_factory.position_states(db),
+                    revaluation=self._repository_factory.fx_revaluations(db),
+                )
 
     async def run(self):
         logger.info(

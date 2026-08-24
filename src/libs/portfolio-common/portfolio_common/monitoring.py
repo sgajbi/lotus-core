@@ -555,6 +555,12 @@ REPROCESSING_WORKER_JOBS_FAILED_TOTAL = Counter(
     ["job_type"],
 )
 
+REPROCESSING_WORKER_LEASE_RENEWALS_TOTAL = Counter(
+    "reprocessing_worker_lease_renewals_total",
+    "Total number of reprocessing worker lease renewal attempts by bounded outcome.",
+    ["job_type", "outcome"],
+)
+
 REPROCESSING_WORKER_BATCH_SECONDS = Histogram(
     "reprocessing_worker_batch_seconds",
     "Time taken to claim and process one reprocessing worker batch.",
@@ -784,6 +790,13 @@ def observe_reprocessing_worker_jobs_noop(job_type: str, reason: str, count: int
 
 def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> None:
     REPROCESSING_WORKER_JOBS_FAILED_TOTAL.labels(job_type).inc(count)
+
+
+def observe_reprocessing_worker_lease_renewal(job_type: str, outcome: str) -> None:
+    """Observe a lease heartbeat without exposing job or portfolio identifiers."""
+    if outcome not in {"renewed", "ownership_lost"}:
+        raise ValueError("reprocessing lease renewal outcome is invalid")
+    REPROCESSING_WORKER_LEASE_RENEWALS_TOTAL.labels(job_type, outcome).inc()
 
 
 def reprocessing_worker_batch_timer():
