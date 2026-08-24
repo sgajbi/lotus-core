@@ -5,9 +5,11 @@ bookings inferred cash from identifier prefixes, allowing a security-tagged fee/
 and position mutation. One metadata-only predicate and one registry-driven validator now govern all
 public and internal generated cash-account types after enrichment. Missing and non-cash authority
 fail with stable reason codes before financial effects; cost and position domains retain defensive
-checks. Golden vectors preserve the #731 regression family, atomic tests prove rollback/no commit,
-and a CI architecture guard blocks identifier-prefix inference across all production services.
-The same-pattern review also removed the remaining Query Control Plane analytics fallback. No
+checks, including effective FX component validation during historical rebuild. Golden vectors
+preserve the #731 regression family, atomic tests prove rollback/no commit, and a CI architecture
+guard blocks identifier-prefix inference across all production services. The same-pattern review
+also removed the remaining Query Control Plane analytics fallback and projects both product type
+and asset class into one shared metadata classifier, preserving valid cash-book analytics. No
 API/OpenAPI, event/Kafka, schema/migration, dependency, image, datastore, topology, or
 wiki contract changed. Evidence:
 [CR-1710-CASH-INSTRUMENT-SETTLEMENT-AUTHORITY.md](./codebase-reviews/CR-1710-CASH-INSTRUMENT-SETTLEMENT-AUTHORITY.md).
