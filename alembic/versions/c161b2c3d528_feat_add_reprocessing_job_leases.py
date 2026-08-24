@@ -21,6 +21,7 @@ _LEASE_CUTOVER_GUARD = sa.text(
     """
     DO $$
     BEGIN
+        LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
         IF EXISTS (
             SELECT 1
             FROM reprocessing_jobs
@@ -47,7 +48,7 @@ def upgrade() -> None:
 
     op.execute(_LEASE_CUTOVER_GUARD)
     op.add_column(_TABLE_NAME, sa.Column("lease_owner", sa.String(128), nullable=True))
-    op.add_column(_TABLE_NAME, sa.Column("lease_token", sa.String(64), nullable=True))
+    op.add_column(_TABLE_NAME, sa.Column("lease_token", sa.String(32), nullable=True))
     op.add_column(
         _TABLE_NAME,
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),

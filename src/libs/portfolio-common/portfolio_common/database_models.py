@@ -5155,7 +5155,7 @@ class ReprocessingJob(Base):
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
     lease_owner = Column(String(128), nullable=True)
-    lease_token = Column(String(64), nullable=True)
+    lease_token = Column(String(32), nullable=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
