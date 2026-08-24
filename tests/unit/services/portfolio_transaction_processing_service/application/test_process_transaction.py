@@ -1061,3 +1061,40 @@ async def test_use_case_rolls_back_complete_unit_of_work_on_module_failure(
         TransactionProcessingOperation.TRANSACTION,
         TransactionProcessingOutcome.FAILED,
     )
+
+
+@pytest.mark.asyncio
+async def test_non_cash_account_rejection_rolls_back_before_financial_effects() -> None:
+    calls: list[str] = []
+    rejection = TransactionProcessingRejected(
+        reason_code="CASH_ACCOUNT_002_NON_CASH_INSTRUMENT",
+        detail={
+            "portfolio_id": "PB-001",
+            "transaction_id": "TX-001",
+            "transaction_type": "FEE",
+            "field": "instrument_reference",
+        },
+        retryable=False,
+    )
+    unit_of_work = _UnitOfWork(calls=calls, cost_error=rejection)
+    observer = _RecordingObserver()
+    command = replace(
+        _command(),
+        transaction=replace(_transaction(), transaction_type="FEE"),
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await ProcessTransactionUseCase(
+            lambda: unit_of_work,
+            observer=observer,
+        ).execute(command)
+
+    assert raised.value is rejection
+    assert raised.value.retryable is False
+    assert calls == ["enter", "idempotency", "cost:TX-001", "rollback"]
+    assert unit_of_work.committed is False
+    assert unit_of_work.rolled_back is True
+    assert observer.records[-1] == (
+        TransactionProcessingOperation.TRANSACTION,
+        TransactionProcessingOutcome.REJECTED,
+    )
