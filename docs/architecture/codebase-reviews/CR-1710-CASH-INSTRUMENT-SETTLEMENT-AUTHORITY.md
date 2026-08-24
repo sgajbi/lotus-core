@@ -32,8 +32,9 @@ retry and replay.
 4. Cost calculation validates independently and no longer assigns generic strategies to public
    cash-account transaction types. Ordering uses the same metadata predicate.
 5. Position reduction rejects booked-cost signs that contradict cash inflow/outflow economics.
-6. A CI architecture guard scans the complete transaction-processing domain and rejects
-   instrument/security identifier-prefix cash inference.
+6. A CI architecture guard scans all production service source and rejects instrument/security
+   identifier-prefix cash inference. The same-pattern scan removed the remaining Query Control
+   Plane analytics fallback, so cash-book classification also uses authoritative asset class.
 
 ## Meaningful Proof
 

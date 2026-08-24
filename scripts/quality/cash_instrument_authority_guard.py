@@ -4,7 +4,7 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
-DOMAIN_ROOT = Path("src/services/portfolio_transaction_processing_service/app/domain")
+SERVICES_ROOT = Path("src/services")
 IDENTIFIER_FIELDS = ("instrument_id", "security_id")
 
 
@@ -20,17 +20,17 @@ def find_cash_instrument_authority_findings(
     root: Path,
 ) -> list[CashInstrumentAuthorityFinding]:
     findings: list[CashInstrumentAuthorityFinding] = []
-    domain_root = root / DOMAIN_ROOT
-    if not domain_root.exists():
+    services_root = root / SERVICES_ROOT
+    if not services_root.exists():
         return [
             CashInstrumentAuthorityFinding(
-                path=DOMAIN_ROOT.as_posix(),
+                path=SERVICES_ROOT.as_posix(),
                 line_no=0,
                 expression="<missing-directory>",
-                reason="transaction-processing domain boundary is missing",
+                reason="production service source boundary is missing",
             )
         ]
-    for path in sorted(domain_root.rglob("*.py")):
+    for path in sorted(services_root.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
         for node in ast.walk(tree):

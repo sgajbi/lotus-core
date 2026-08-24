@@ -6,8 +6,9 @@ and position mutation. One metadata-only predicate and one registry-driven valid
 public and internal generated cash-account types after enrichment. Missing and non-cash authority
 fail with stable reason codes before financial effects; cost and position domains retain defensive
 checks. Golden vectors preserve the #731 regression family, atomic tests prove rollback/no commit,
-and a CI architecture guard blocks identifier-prefix inference across the transaction-processing
-domain. No API/OpenAPI, event/Kafka, schema/migration, dependency, image, datastore, topology, or
+and a CI architecture guard blocks identifier-prefix inference across all production services.
+The same-pattern review also removed the remaining Query Control Plane analytics fallback. No
+API/OpenAPI, event/Kafka, schema/migration, dependency, image, datastore, topology, or
 wiki contract changed. Evidence:
 [CR-1710-CASH-INSTRUMENT-SETTLEMENT-AUTHORITY.md](./codebase-reviews/CR-1710-CASH-INSTRUMENT-SETTLEMENT-AUTHORITY.md).
 

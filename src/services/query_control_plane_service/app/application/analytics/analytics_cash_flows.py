@@ -143,8 +143,7 @@ def effective_beginning_market_value(
 
 def is_cash_book_position(row: PositionValuationObservation) -> bool:
     asset_class = str(getattr(row, "asset_class", None) or "").strip().casefold()
-    security_id = row.security_id.strip().upper()
-    return asset_class == "cash" or security_id.startswith("CASH_")
+    return asset_class == "cash"
 
 
 def has_prior_eod_continuity(
