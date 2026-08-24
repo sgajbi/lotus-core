@@ -3,6 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
+from ...transaction.cash_instrument import is_cash_instrument
 from ...transaction.corporate_action.ordering import (
     corporate_action_dependency_rank,
     corporate_action_target_order_key,
@@ -88,15 +89,9 @@ def _cash_dependency_rank(txn: CostBasisTransaction) -> int:
 
 
 def _is_cash_transaction(txn: CostBasisTransaction) -> bool:
-    product_type = _normalize_sort_code(getattr(txn, "product_type", ""))
-    asset_class = _normalize_sort_code(getattr(txn, "asset_class", ""))
-    instrument_id = _normalize_sort_code(getattr(txn, "instrument_id", ""))
-    security_id = _normalize_sort_code(getattr(txn, "security_id", ""))
-    return (
-        product_type == "CASH"
-        or asset_class == "CASH"
-        or instrument_id.startswith("CASH")
-        or security_id.startswith("CASH")
+    return is_cash_instrument(
+        product_type=getattr(txn, "product_type", None),
+        asset_class=getattr(txn, "asset_class", None),
     )
 
 

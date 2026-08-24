@@ -425,6 +425,37 @@ def test_sort_cash_dependencies_normalize_source_vocabulary(sorter):
     assert [t.transaction_id for t in sorted_list] == ["t_deposit", "t_fee"]
 
 
+def test_sorter_does_not_infer_cash_authority_from_instrument_identifiers(sorter) -> None:
+    same_day = datetime(2025, 8, 28)
+    identifier_shaped_fee = _transaction(
+        transaction_id="t_fee",
+        transaction_date=same_day,
+        quantity=Decimal("5000"),
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="FEE",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
+    identifier_shaped_deposit = _transaction(
+        transaction_id="t_deposit",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="DEPOSIT",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
+
+    ordered = sorter.sort_transactions(
+        [],
+        [identifier_shaped_deposit, identifier_shaped_fee],
+    )
+
+    assert [transaction.transaction_id for transaction in ordered] == ["t_fee", "t_deposit"]
+
+
 def test_sort_cash_settlement_component_types_bound_same_timestamp(sorter):
     same_day = datetime(2025, 8, 28)
     settlement_sell = _transaction(
