@@ -45,6 +45,7 @@ class ReprocessingJobTransitionOutcome(StrEnum):
     TOKEN_MISMATCH = "TOKEN_MISMATCH"
     NOT_PROCESSING = "NOT_PROCESSING"
     NOT_FOUND = "NOT_FOUND"
+    RACED = "RACED"
 
 
 @dataclass(frozen=True)
@@ -889,7 +890,7 @@ class ReprocessingJobRepository:
             return ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
         if ownership.lease_expired:
             return ReprocessingJobTransitionOutcome.LEASE_EXPIRED
-        return ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+        return ReprocessingJobTransitionOutcome.RACED
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:

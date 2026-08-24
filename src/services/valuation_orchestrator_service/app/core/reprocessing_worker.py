@@ -220,7 +220,10 @@ class ReprocessingWorker:
             await self._process_with_lease_renewal(
                 job=job,
                 job_type="RESET_WATERMARKS",
-                operation=lambda: self._execute_reset_watermark_job(job),
+                operation=lambda terminal_started: self._execute_reset_watermark_job(
+                    job,
+                    terminal_started,
+                ),
             )
         except ReprocessingJobOwnershipLostError:
             pass
@@ -230,7 +233,11 @@ class ReprocessingWorker:
             if correlation_token is not None:
                 correlation_id_var.reset(correlation_token)
 
-    async def _execute_reset_watermark_job(self, job) -> None:
+    async def _execute_reset_watermark_job(
+        self,
+        job,
+        terminal_transition_started: asyncio.Event,
+    ) -> None:
         async for db in self._open_session():
             async with db.begin():
                 should_complete_job, _security_id = await self._reset_impacted_watermarks(
@@ -238,6 +245,7 @@ class ReprocessingWorker:
                     state_repo=self._repository_factory.position_states(db),
                     valuation_repo=self._repository_factory.valuations(db),
                 )
+                terminal_transition_started.set()
                 await self._update_reset_watermark_job_terminal_status(
                     job=job,
                     job_repo=self._repository_factory.reprocessing_jobs(db),
@@ -249,13 +257,14 @@ class ReprocessingWorker:
         *,
         job,
         job_type: str,
-        operation: Callable[[], Awaitable[None]],
+        operation: Callable[[asyncio.Event], Awaitable[None]],
     ) -> None:
         stop_renewal = asyncio.Event()
+        terminal_transition_started = asyncio.Event()
 
         async def run_operation() -> None:
             try:
-                await operation()
+                await operation(terminal_transition_started)
             finally:
                 # Set before this task becomes done, so a renewal unblocked by the
                 # terminal commit cannot misclassify that terminal state as lease loss.
@@ -267,6 +276,7 @@ class ReprocessingWorker:
                 job=job,
                 job_type=job_type,
                 stop_event=stop_renewal,
+                terminal_transition_started=terminal_transition_started,
             )
         )
         try:
@@ -289,6 +299,7 @@ class ReprocessingWorker:
         job,
         job_type: str,
         stop_event: asyncio.Event,
+        terminal_transition_started: asyncio.Event,
     ) -> None:
         while True:
             try:
@@ -308,7 +319,7 @@ class ReprocessingWorker:
                         lease_token=job.lease_token,
                         lease_duration_seconds=self._lease_duration_seconds,
                     )
-            if stop_event.is_set():
+            if stop_event.is_set() or terminal_transition_started.is_set():
                 return
             if outcome is ReprocessingJobTransitionOutcome.APPLIED:
                 observe_reprocessing_worker_lease_renewal(job_type, "renewed")
@@ -484,7 +495,10 @@ class ReprocessingWorker:
             await self._process_with_lease_renewal(
                 job=job,
                 job_type=FX_REVALUATION_JOB_TYPE,
-                operation=lambda: self._execute_fx_revaluation_job(job),
+                operation=lambda terminal_started: self._execute_fx_revaluation_job(
+                    job,
+                    terminal_started,
+                ),
             )
         except (FxRevaluationJobOwnershipLostError, ReprocessingJobOwnershipLostError):
             pass
@@ -497,7 +511,11 @@ class ReprocessingWorker:
                         exc=exc,
                     )
 
-    async def _execute_fx_revaluation_job(self, job) -> None:
+    async def _execute_fx_revaluation_job(
+        self,
+        job,
+        terminal_transition_started: asyncio.Event,
+    ) -> None:
         async for db in self._open_session():
             async with db.begin():
                 await self._fx_job_processor.process(
@@ -505,6 +523,7 @@ class ReprocessingWorker:
                     jobs=self._repository_factory.reprocessing_jobs(db),
                     watermarks=self._repository_factory.position_states(db),
                     revaluation=self._repository_factory.fx_revaluations(db),
+                    before_terminal_transition=terminal_transition_started.set,
                 )
 
     async def run(self):

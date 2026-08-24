@@ -721,6 +721,7 @@ async def test_update_job_status_requires_processing_ownership(
             ReprocessingJobTransitionOutcome.TOKEN_MISMATCH,
         ),
         ("PROCESSING", LEASE_TOKEN, True, ReprocessingJobTransitionOutcome.LEASE_EXPIRED),
+        ("PROCESSING", LEASE_TOKEN, False, ReprocessingJobTransitionOutcome.RACED),
     ],
 )
 async def test_update_job_status_classifies_refused_transition(

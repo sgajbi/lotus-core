@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from portfolio_common.logging_utils import correlation_id_var, operation_log_extra
 from portfolio_common.monitoring import (
@@ -49,6 +50,7 @@ class FxRevaluationJobProcessor:
         jobs: ReprocessingJobStatusWriter,
         watermarks: PositionWatermarkWriter,
         revaluation: FxRevaluationRepository,
+        before_terminal_transition: Callable[[], None] | None = None,
     ) -> None:
         """Process one job; the worker owns rollback and fresh-transaction failure state."""
         correlation_token = None
@@ -64,7 +66,12 @@ class FxRevaluationJobProcessor:
                 pair=job.pair,
                 earliest_impacted_date=job.earliest_impacted_date,
             )
-            await self._record_execution(job=job, jobs=jobs, execution=execution)
+            await self._record_execution(
+                job=job,
+                jobs=jobs,
+                execution=execution,
+                before_terminal_transition=before_terminal_transition,
+            )
         finally:
             if correlation_token is not None:
                 correlation_id_var.reset(correlation_token)
@@ -75,6 +82,7 @@ class FxRevaluationJobProcessor:
         job: ClaimedFxRevaluationJob,
         jobs: ReprocessingJobStatusWriter,
         execution: FxReplayExecution,
+        before_terminal_transition: Callable[[], None] | None,
     ) -> None:
         if execution.requeue_required:
             if job.attempt_count >= self._no_impact_attempt_limit:
@@ -95,7 +103,12 @@ class FxRevaluationJobProcessor:
                         earliest_impacted_date=execution.earliest_impacted_date.isoformat(),
                     ),
                 )
-                await self._transition(job=job, jobs=jobs, status="COMPLETE")
+                await self._transition(
+                    job=job,
+                    jobs=jobs,
+                    status="COMPLETE",
+                    before_terminal_transition=before_terminal_transition,
+                )
                 return
             observe_reprocessing_worker_jobs_noop(
                 FX_REVALUATION_JOB_TYPE,
@@ -115,7 +128,12 @@ class FxRevaluationJobProcessor:
                     earliest_impacted_date=execution.earliest_impacted_date.isoformat(),
                 ),
             )
-            await self._transition(job=job, jobs=jobs, status="PENDING")
+            await self._transition(
+                job=job,
+                jobs=jobs,
+                status="PENDING",
+                before_terminal_transition=before_terminal_transition,
+            )
             return
 
         if execution.updated_key_count != execution.targeted_key_count:
@@ -123,7 +141,12 @@ class FxRevaluationJobProcessor:
                 "fx_revaluation_watermark_already_lagging",
                 execution.targeted_key_count - execution.updated_key_count,
             )
-        await self._transition(job=job, jobs=jobs, status="COMPLETE")
+        await self._transition(
+            job=job,
+            jobs=jobs,
+            status="COMPLETE",
+            before_terminal_transition=before_terminal_transition,
+        )
 
     @staticmethod
     async def _transition(
@@ -131,7 +154,10 @@ class FxRevaluationJobProcessor:
         job: ClaimedFxRevaluationJob,
         jobs: ReprocessingJobStatusWriter,
         status: str,
+        before_terminal_transition: Callable[[], None] | None,
     ) -> None:
+        if before_terminal_transition is not None:
+            before_terminal_transition()
         outcome = await jobs.update_job_status(
             job.job_id,
             status,

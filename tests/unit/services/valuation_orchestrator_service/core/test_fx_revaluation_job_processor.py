@@ -1,7 +1,7 @@
 """Tests for durable FX revaluation job terminal semantics."""
 
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from portfolio_common.logging_utils import correlation_id_var
@@ -55,6 +55,7 @@ async def test_successful_replay_completes_under_job_correlation(
     dependencies: dict,
 ) -> None:
     observed_correlation: list[str] = []
+    before_terminal_transition = Mock()
 
     async def execute(**_kwargs):
         observed_correlation.append(correlation_id_var.get())
@@ -65,15 +66,24 @@ async def test_successful_replay_completes_under_job_correlation(
             updated_key_count=2,
         )
 
-    dependencies["jobs"].update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
+    async def update_status(*_args, **_kwargs):
+        assert before_terminal_transition.called
+        return ReprocessingJobTransitionOutcome.APPLIED
+
+    dependencies["jobs"].update_job_status.side_effect = update_status
     with patch(
         "src.services.valuation_orchestrator_service.app.core."
         "fx_revaluation_job_processor.ProcessFxRevaluationJob.execute",
         side_effect=execute,
     ):
-        await FxRevaluationJobProcessor().process(job=job(), **dependencies)
+        await FxRevaluationJobProcessor().process(
+            job=job(),
+            before_terminal_transition=before_terminal_transition,
+            **dependencies,
+        )
 
     assert observed_correlation == ["corr-fx-job"]
+    before_terminal_transition.assert_called_once_with()
     dependencies["jobs"].update_job_status.assert_awaited_once_with(
         41,
         "COMPLETE",
