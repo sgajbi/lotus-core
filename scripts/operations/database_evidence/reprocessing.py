@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,19 +47,16 @@ async def measure_reprocessing_stale_recovery(
 ) -> tuple[HotPathPlanResult, HotPathPlanResult]:
     """Measure exact stale selection and reset statements without retaining them."""
 
-    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
     scan_plan = await capture_and_explain_rolled_back_statement(
         session,
-        lambda evidence_session: ReprocessingJobRepository(evidence_session)._find_stale_job_rows(
-            stale_cutoff
-        ),
+        lambda evidence_session: ReprocessingJobRepository(evidence_session)._find_stale_job_rows(),
         statement_prefix="SELECT",
     )
     reset_plan = await capture_and_explain_rolled_back_statement(
         session,
         lambda evidence_session: ReprocessingJobRepository(
             evidence_session
-        )._reset_retryable_stale_jobs(list(reset_job_ids), stale_cutoff),
+        )._reset_retryable_stale_jobs(list(reset_job_ids)),
         statement_prefix="UPDATE",
     )
     return (
