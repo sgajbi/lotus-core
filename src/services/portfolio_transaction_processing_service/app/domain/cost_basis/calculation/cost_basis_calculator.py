@@ -37,6 +37,10 @@ from ...transaction.redemption import (
     assert_redemption_command_eligible,
     calculate_redemption_economics,
 )
+from ...transaction.validation import (
+    CashAccountRequiredValidationError,
+    assert_cash_account_required_instrument,
+)
 from ..corporate_action_cash_economics import (
     CorporateActionCashEconomics,
     CorporateActionCashEconomicsError,
@@ -1237,19 +1241,6 @@ class DefaultStrategy:
         )
 
 
-class UnsupportedTaxStrategy:
-    def calculate_costs(
-        self,
-        transaction: CostBasisTransaction,
-        disposition_engine: LotDispositionEngine,
-        error_reporter: CostCalculationErrorCollector,
-    ) -> None:
-        error_reporter.add_error(
-            transaction.transaction_id,
-            "TAX must be represented as a cash instrument outflow.",
-        )
-
-
 class FxBaselineStrategy:
     def calculate_costs(
         self,
@@ -1316,7 +1307,6 @@ class CostBasisCalculator:
             "FX_SWAP": FxBaselineStrategy(),
             "INTEREST": InterestStrategy(),
             "DIVIDEND": DividendStrategy(),
-            "DEPOSIT": CashInflowStrategy(),
             "TRANSFER_IN": SecurityInflowStrategy(),
             "TRANSFER_OUT": SecurityOutflowStrategy(),
             "MERGER_IN": SecurityInflowStrategy(),
@@ -1348,10 +1338,7 @@ class CostBasisCalculator:
             "RIGHTS_OVERSUBSCRIBE": SecurityOutflowStrategy(),
             "RIGHTS_REFUND": IncomeStrategy(),
             "RIGHTS_SHARE_DELIVERY": SecurityInflowStrategy(),
-            "WITHDRAWAL": SecurityOutflowStrategy(),
             "ADJUSTMENT": AdjustmentStrategy(),
-            "FEE": DefaultStrategy(),
-            "TAX": UnsupportedTaxStrategy(),
         }
 
     def _validate_fx(self, t: CostBasisTransaction) -> bool:
@@ -1372,6 +1359,19 @@ class CostBasisCalculator:
             self._error_reporter.add_error(
                 transaction.transaction_id,
                 f"Unknown transaction type '{transaction.transaction_type}'.",
+            )
+            return
+        try:
+            assert_cash_account_required_instrument(
+                transaction.transaction_type,
+                instrument_reference_available=True,
+                product_type=getattr(transaction, "product_type", None),
+                asset_class=getattr(transaction, "asset_class", None),
+            )
+        except CashAccountRequiredValidationError as exc:
+            self._error_reporter.add_error(
+                transaction.transaction_id,
+                f"{exc.reason_code.value}: {exc.message}",
             )
             return
         if _is_cash_instrument(transaction):
@@ -1420,6 +1420,8 @@ class CostBasisCalculator:
             return None
 
         if _is_cash_instrument(transaction):
+            if transaction_type == "DEPOSIT":
+                return CashInflowStrategy()
             if transaction_type in {
                 "SELL",
                 "WITHDRAWAL",
