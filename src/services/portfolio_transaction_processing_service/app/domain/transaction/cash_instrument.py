@@ -1,16 +1,15 @@
-"""Classify cash instruments from authoritative product metadata."""
+"""Transaction-domain compatibility import for shared instrument classification."""
 
 from __future__ import annotations
 
-from portfolio_common.domain.transaction_control_codes import (
-    normalize_transaction_control_code,
+from portfolio_common.domain.instrument_classification import (
+    is_cash_instrument as _is_cash_instrument,
 )
 
 
 def is_cash_instrument(*, product_type: object, asset_class: object) -> bool:
-    """Return whether server-owned instrument metadata classifies an instrument as cash."""
+    """Return the shared metadata-only cash classification with a typed service boundary."""
 
-    return "CASH" in {
-        normalize_transaction_control_code(product_type),
-        normalize_transaction_control_code(asset_class),
-    }
+    return bool(_is_cash_instrument(product_type=product_type, asset_class=asset_class))
+
+__all__ = ["is_cash_instrument"]

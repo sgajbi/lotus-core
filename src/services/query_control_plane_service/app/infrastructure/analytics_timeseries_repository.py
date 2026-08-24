@@ -61,6 +61,7 @@ def _position_valuation_observation(row: Any) -> PositionValuationObservation:
         epoch=cast(int, row.epoch),
         position_currency=cast(str, row.position_currency),
         asset_class=cast(str | None, row.asset_class),
+        product_type=cast(str | None, row.product_type),
         sector=cast(str | None, getattr(row, "sector", None)),
         country=cast(str | None, getattr(row, "country", None)),
     )
@@ -332,6 +333,7 @@ class AnalyticsTimeseriesRepository:
                 PositionTimeseries.fees.label("fees"),
                 PositionTimeseries.quantity.label("quantity"),
                 PositionTimeseries.epoch.label("epoch"),
+                Instrument.product_type.label("product_type"),
                 Instrument.asset_class.label("asset_class"),
                 Instrument.sector.label("sector"),
                 Instrument.country_of_risk.label("country"),
@@ -412,6 +414,7 @@ class AnalyticsTimeseriesRepository:
                 PositionTimeseries.fees.label("fees"),
                 PositionTimeseries.quantity.label("quantity"),
                 PositionTimeseries.epoch.label("epoch"),
+                Instrument.product_type.label("product_type"),
                 Instrument.asset_class.label("asset_class"),
                 Instrument.currency.label("position_currency"),
                 func.row_number()

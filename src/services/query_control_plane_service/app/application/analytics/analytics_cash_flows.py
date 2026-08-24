@@ -12,6 +12,7 @@ from portfolio_common.domain.analytics.cashflow_semantics import (
 )
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_zero
+from portfolio_common.domain.instrument_classification import is_cash_instrument
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.analytics_inputs import CashFlowObservation
@@ -142,8 +143,12 @@ def effective_beginning_market_value(
 
 
 def is_cash_book_position(row: PositionValuationObservation) -> bool:
-    asset_class = str(getattr(row, "asset_class", None) or "").strip().casefold()
-    return asset_class == "cash"
+    return bool(
+        is_cash_instrument(
+            product_type=getattr(row, "product_type", None),
+            asset_class=getattr(row, "asset_class", None),
+        )
+    )
 
 
 def has_prior_eod_continuity(

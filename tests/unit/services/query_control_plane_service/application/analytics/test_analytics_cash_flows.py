@@ -127,17 +127,48 @@ def test_effective_beginning_market_value_normalizes_cash_book_asset_class() -> 
 
 
 @pytest.mark.parametrize(
-    ("security_id", "asset_class", "expected"),
+    ("security_id", "product_type", "asset_class", "expected"),
     [
-        ("CASH_PREFIXED_EQUITY", "Equity", False),
-        ("OPERATING_ACCOUNT_USD", " cash ", True),
+        ("CASH_PREFIXED_EQUITY", "EQUITY", "Equity", False),
+        ("OPERATING_ACCOUNT_USD", None, " cash ", True),
+        ("OPERATING_ACCOUNT_USD", " cash ", None, True),
     ],
 )
 def test_cash_book_position_uses_product_metadata_not_identifier_shape(
     security_id: str,
-    asset_class: str,
+    product_type: str | None,
+    asset_class: str | None,
     expected: bool,
 ) -> None:
-    row = SimpleNamespace(security_id=security_id, asset_class=asset_class)
+    row = SimpleNamespace(
+        security_id=security_id,
+        product_type=product_type,
+        asset_class=asset_class,
+    )
 
     assert is_cash_book_position(row) is expected
+
+
+def test_product_type_cash_preserves_internal_cash_book_beginning_value() -> None:
+    row = SimpleNamespace(
+        security_id="OPERATING_ACCOUNT_USD",
+        product_type="CASH",
+        asset_class=None,
+        bod_market_value=Decimal("80"),
+        eod_market_value=Decimal("250"),
+        bod_cashflow_position=Decimal("200"),
+    )
+    internal_flow = CashFlowObservation(
+        amount=Decimal("-200"),
+        timing="bod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification="INVESTMENT_OUTFLOW",
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=Decimal("100"),
+        cash_flows=[internal_flow],
+        has_portfolio_external_flow=False,
+    ) == Decimal("250")
