@@ -1,0 +1,70 @@
+{
+  "pack_id": "cash-account-instrument-eligibility",
+  "pack_version": "1.0.0",
+  "policy": {
+    "authority": "server-owned-instrument-metadata",
+    "identifier_inference_allowed": false
+  },
+  "vectors": [
+    {
+      "vector_id": "security-tagged-fee-regression-731",
+      "transaction_type": "FEE",
+      "instrument_id": "SECURITY-731",
+      "instrument_reference_available": true,
+      "product_type": "EQUITY",
+      "asset_class": "EQUITY",
+      "expected_reason_code": "CASH_ACCOUNT_002_NON_CASH_INSTRUMENT",
+      "rationale": "A security-tagged fee must not create a cash position or positive default cost."
+    },
+    {
+      "vector_id": "cash-prefix-cannot-impersonate-authority",
+      "transaction_type": "TAX",
+      "instrument_id": "CASH_USD",
+      "instrument_reference_available": true,
+      "product_type": "EQUITY",
+      "asset_class": "EQUITY",
+      "expected_reason_code": "CASH_ACCOUNT_002_NON_CASH_INSTRUMENT",
+      "rationale": "Identifier shape is not financial classification authority."
+    },
+    {
+      "vector_id": "missing-instrument-authority-fails-closed",
+      "transaction_type": "WITHDRAWAL",
+      "instrument_id": "UNRESOLVED-001",
+      "instrument_reference_available": false,
+      "product_type": null,
+      "asset_class": null,
+      "expected_reason_code": "CASH_ACCOUNT_001_INSTRUMENT_AUTHORITY_UNAVAILABLE",
+      "rationale": "Missing server-owned classification cannot be treated as cash."
+    },
+    {
+      "vector_id": "authoritative-cash-deposit",
+      "transaction_type": "DEPOSIT",
+      "instrument_id": "ACCOUNT-USD-001",
+      "instrument_reference_available": true,
+      "product_type": "CASH",
+      "asset_class": "CASH",
+      "expected_reason_code": null,
+      "rationale": "A public cash movement remains valid with authoritative cash metadata."
+    },
+    {
+      "vector_id": "generated-fx-cash-buy-leg",
+      "transaction_type": "FX_CASH_SETTLEMENT_BUY",
+      "instrument_id": "ACCOUNT-EUR-001",
+      "instrument_reference_available": true,
+      "product_type": "CASH",
+      "asset_class": "CASH",
+      "expected_reason_code": null,
+      "rationale": "Internal generated FX cash inflows satisfy the same authority boundary."
+    },
+    {
+      "vector_id": "generated-fx-cash-sell-leg",
+      "transaction_type": "FX_CASH_SETTLEMENT_SELL",
+      "instrument_id": "ACCOUNT-USD-001",
+      "instrument_reference_available": true,
+      "product_type": "CASH",
+      "asset_class": "CASH",
+      "expected_reason_code": null,
+      "rationale": "Internal generated FX cash outflows satisfy the same authority boundary."
+    }
+  ]
+}
