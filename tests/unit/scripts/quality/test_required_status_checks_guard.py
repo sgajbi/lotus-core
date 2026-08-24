@@ -393,6 +393,40 @@ def test_make_authority_rejects_ignored_recipe_errors(
         required_checks_workflow._load_phony_make_targets(makefile_path)
 
 
+@pytest.mark.parametrize("recipe", ["; -false", "; @-false", ";-false"])
+def test_make_authority_rejects_ignored_inline_recipe_errors(
+    tmp_path: Path,
+    recipe: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f".PHONY: security-audit\nsecurity-audit: {recipe}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=2",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+@pytest.mark.parametrize("recipe", ["false", "printf 'key=value'"])
+def test_make_authority_accepts_fail_propagating_inline_recipes(
+    tmp_path: Path,
+    recipe: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f".PHONY: security-audit\nsecurity-audit: ; {recipe}\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
+
+
 @pytest.mark.parametrize("continuation_indent", ["\t", "  "])
 def test_make_authority_accepts_hyphenated_recipe_continuation_arguments(
     tmp_path: Path,
