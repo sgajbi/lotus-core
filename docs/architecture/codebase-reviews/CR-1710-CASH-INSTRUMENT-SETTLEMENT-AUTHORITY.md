@@ -24,17 +24,20 @@ retry and replay.
 
 ## Design
 
-1. One pure domain predicate classifies cash only from normalized `product_type` and `asset_class`.
+1. One shared pure-domain predicate classifies cash only from normalized `product_type` and
+   `asset_class`; transaction processing and analytics consume the same policy.
 2. One registry-driven validator covers all public and internal generated cash-account types and
    emits stable missing-authority and non-cash reason codes.
 3. Processing invokes the validator after repository enrichment and maps failures into governed
    retryable/non-retryable application errors with source-safe detail.
-4. Cost calculation validates independently and no longer assigns generic strategies to public
-   cash-account transaction types. Ordering uses the same metadata predicate.
+4. Cost calculation validates independently, including historical rebuild rows by their effective
+   FX component type, and no longer assigns generic strategies to public cash-account transaction
+   types. Ordering uses the same metadata predicate.
 5. Position reduction rejects booked-cost signs that contradict cash inflow/outflow economics.
 6. A CI architecture guard scans all production service source and rejects instrument/security
    identifier-prefix cash inference. The same-pattern scan removed the remaining Query Control
-   Plane analytics fallback, so cash-book classification also uses authoritative asset class.
+   Plane analytics fallback. Analytics now projects both authoritative product type and asset class,
+   preserving valid cash instruments when either supported metadata field is absent.
 
 ## Meaningful Proof
 
@@ -43,7 +46,10 @@ types, missing and non-cash authority, identifier-prefix impersonation, and vali
 legs. The #731 security-tagged-fee scenario is preserved in a governed golden vector pack.
 Application tests prove rejection occurs before downstream modules and that the unit of work rolls
 back without commit. Cost and position tests prove no positive default cost or contradictory cash
-balance can be materialized.
+balance can be materialized. Rebuild tests prove persisted FX cash buy/sell components cannot bypass
+the fence through their business transaction type. Analytics tests prove `product_type=CASH` with a
+null asset class retains internal cash-book beginning-value semantics while cash-prefixed securities
+remain non-cash.
 
 ## Compatibility And Scope
 
