@@ -9,8 +9,10 @@
 .PHONY: install-ci-tooling dependency-health-cache-key generate-runtime-sbom write-runtime-build-provenance runtime-image-set-load-verify
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
-LOCAL_CERTIFICATION_BUILD_ARGUMENT = $(if $(CI),,--runtime-build)
-LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI),,--build)
+CI_TRUTHY_VALUES := 1 true True TRUE yes Yes YES on On ON
+CI_IS_TRUE := $(filter $(CI_TRUTHY_VALUES),$(strip $(CI)))
+LOCAL_CERTIFICATION_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--runtime-build)
+LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--build)
 OPENAPI_ARTIFACT_DIR ?= output/openapi
 REPOSITORY_PYTHON := python scripts/development/repository_python.py
 TRANSACTION_RELEASE_OUTPUT ?= output/task-runs/transaction-processing-release-rehearsal.json
@@ -674,7 +676,7 @@ write-runtime-build-provenance:
 	$(REPOSITORY_PYTHON) scripts/release/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
 
 runtime-image-set-load-verify:
-	@if [ -n "$${CI:-}" ]; then \
+	@if [ -n "$(CI_IS_TRUE)" ]; then \
 		test -n "$${GITHUB_SHA:-}" || { printf '%s\n' 'GITHUB_SHA is required in CI' >&2; exit 1; }; \
 		expected_sha="$${GITHUB_SHA}"; \
 	elif [ ! -f output/runtime-image-set/manifest.json ]; then \
