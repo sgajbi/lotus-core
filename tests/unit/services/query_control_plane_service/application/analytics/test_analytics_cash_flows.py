@@ -10,6 +10,7 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     AnalyticsCashFlowError,
     build_cash_flow_observation,
     effective_beginning_market_value,
+    is_cash_book_position,
     portfolio_cash_flows_for_dates,
     position_cash_flows_for_keys,
 )
@@ -123,3 +124,20 @@ def test_effective_beginning_market_value_normalizes_cash_book_asset_class() -> 
     )
 
     assert result == Decimal("250")
+
+
+@pytest.mark.parametrize(
+    ("security_id", "asset_class", "expected"),
+    [
+        ("CASH_PREFIXED_EQUITY", "Equity", False),
+        ("OPERATING_ACCOUNT_USD", " cash ", True),
+    ],
+)
+def test_cash_book_position_uses_product_metadata_not_identifier_shape(
+    security_id: str,
+    asset_class: str,
+    expected: bool,
+) -> None:
+    row = SimpleNamespace(security_id=security_id, asset_class=asset_class)
+
+    assert is_cash_book_position(row) is expected
