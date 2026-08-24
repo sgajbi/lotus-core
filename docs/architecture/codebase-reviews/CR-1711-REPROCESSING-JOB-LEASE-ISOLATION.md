@@ -48,9 +48,10 @@ mutations. Claim attempts remain durable and auditable across recovery.
   the active operation.
 - `make typecheck`, architecture guard, repository transaction-boundary guard, and testability
   architecture guard passed.
-- `make database-hot-path-evidence` completed; all four reprocessing scenarios passed. The
-  report-only aggregate remains failed only on pre-existing normalization and transaction-ledger
-  scenarios outside #998.
+- `make database-hot-path-evidence` completed; the three #998 acceptance scenarios
+  (`reprocessing_job_claim`, `reprocessing_stale_scan`, and `reprocessing_stale_reset`) passed. The
+  report-only aggregate remains failed only on pre-existing claim-normalization (#988) and
+  transaction-ledger scenarios outside #998.
 
 ## Contract Decisions
 
