@@ -31,6 +31,13 @@ def test_effective_processing_type_defaults_to_transaction_type() -> None:
     assert resolve_effective_processing_transaction_type(_base_event()) == "FX_FORWARD"
 
 
+def test_effective_processing_type_supports_legacy_sources_without_component_field() -> None:
+    class LegacyTransaction:
+        transaction_type = "BUY"
+
+    assert resolve_effective_processing_transaction_type(LegacyTransaction()) == "BUY"  # type: ignore[arg-type]
+
+
 def test_effective_processing_type_normalizes_transaction_type() -> None:
     event = _base_event().model_copy(update={"transaction_type": " buy "})
     assert resolve_effective_processing_transaction_type(event) == "BUY"
