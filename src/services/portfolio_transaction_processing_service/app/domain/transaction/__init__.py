@@ -13,6 +13,7 @@ from .booking_metadata import (
     SELL_FIFO_POLICY_ID,
     enrich_booking_metadata,
 )
+from .cash_instrument import is_cash_instrument
 from .corporate_action import (
     IncompleteCorporateActionManifestIdentityError,
     corporate_action_manifest_child,
@@ -111,6 +112,7 @@ __all__ = [
     "build_transaction_semantic_identity",
     "corporate_action_manifest_child",
     "is_portfolio_level_cash_flow",
+    "is_cash_instrument",
     "is_upstream_provided_cash_entry_mode",
     "resolve_cash_entry_mode",
     "requires_cashflow_processing",
