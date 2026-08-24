@@ -11,6 +11,7 @@ from portfolio_common.monitoring import (
     observe_reprocessing_worker_jobs_failed,
     observe_reprocessing_worker_jobs_noop,
 )
+from portfolio_common.reprocessing_job_repository import ReprocessingJobTransitionOutcome
 
 from ..application.process_fx_revaluation_job import ProcessFxRevaluationJob
 from ..domain.fx_revaluation import (
@@ -24,6 +25,7 @@ from ..ports.fx_revaluation import (
     PositionWatermarkWriter,
     ReprocessingJobStatusWriter,
 )
+from .reprocessing_failure import reprocessing_failure_reason
 
 logger = logging.getLogger(__name__)
 
@@ -130,11 +132,12 @@ class FxRevaluationJobProcessor:
         jobs: ReprocessingJobStatusWriter,
         status: str,
     ) -> None:
-        if await jobs.update_job_status(
+        outcome = await jobs.update_job_status(
             job.job_id,
             status,
             lease_token=job.lease_token,
-        ):
+        )
+        if outcome is ReprocessingJobTransitionOutcome.APPLIED:
             if status == "COMPLETE":
                 observe_reprocessing_worker_jobs_completed(FX_REVALUATION_JOB_TYPE)
             return
@@ -151,6 +154,7 @@ class FxRevaluationJobProcessor:
                 reason_code="job_ownership_lost",
                 job_id=job.job_id,
                 requested_status=status,
+                transition_outcome=outcome.value,
             ),
         )
         raise FxRevaluationJobOwnershipLostError(
@@ -176,12 +180,16 @@ class FxRevaluationJobProcessor:
                 error_type=type(exc).__name__,
             ),
         )
-        if await jobs.update_job_status(
+        outcome = await jobs.update_job_status(
             job.job_id,
             "FAILED",
             lease_token=job.lease_token,
-            failure_reason=str(exc),
-        ):
+            failure_reason=reprocessing_failure_reason(exc),
+        )
+        if outcome is ReprocessingJobTransitionOutcome.APPLIED:
             observe_reprocessing_worker_jobs_failed(FX_REVALUATION_JOB_TYPE)
         else:
-            observe_reprocessing_stale_skips("fx_revaluation_failed_ownership_lost", 1)
+            observe_reprocessing_stale_skips(
+                f"fx_revaluation_failed_{outcome.value.lower()}",
+                1,
+            )

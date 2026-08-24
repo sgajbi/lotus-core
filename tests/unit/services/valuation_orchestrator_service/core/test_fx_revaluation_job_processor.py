@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.reprocessing_job_repository import (
+    ReprocessingJobRepository,
+    ReprocessingJobTransitionOutcome,
+)
 
 from src.services.valuation_orchestrator_service.app.core.fx_revaluation_job_processor import (
     FxRevaluationJobOwnershipLostError,
@@ -62,7 +65,7 @@ async def test_successful_replay_completes_under_job_correlation(
             updated_key_count=2,
         )
 
-    dependencies["jobs"].update_job_status.return_value = True
+    dependencies["jobs"].update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     with patch(
         "src.services.valuation_orchestrator_service.app.core."
         "fx_revaluation_job_processor.ProcessFxRevaluationJob.execute",
@@ -85,7 +88,7 @@ async def test_readiness_race_requeues_job_without_completing(dependencies: dict
         targeted_key_count=0,
         updated_key_count=0,
     )
-    dependencies["jobs"].update_job_status.return_value = True
+    dependencies["jobs"].update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     with patch(
         "src.services.valuation_orchestrator_service.app.core."
         "fx_revaluation_job_processor.ProcessFxRevaluationJob.execute",
@@ -117,7 +120,7 @@ async def test_no_affected_positions_complete_after_bounded_visibility_retry(
         correlation_id="corr-no-impact",
         attempt_count=3,
     )
-    dependencies["jobs"].update_job_status.return_value = True
+    dependencies["jobs"].update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     with patch(
         "src.services.valuation_orchestrator_service.app.core."
         "fx_revaluation_job_processor.ProcessFxRevaluationJob.execute",
@@ -151,7 +154,7 @@ async def test_invalid_payload_is_raised_for_fresh_transaction_failure_recording
 
 
 async def test_failure_record_uses_exact_claim_token(dependencies: dict) -> None:
-    dependencies["jobs"].update_job_status.return_value = True
+    dependencies["jobs"].update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
 
     await FxRevaluationJobProcessor.mark_failed(
         job=job(),
@@ -174,7 +177,9 @@ async def test_completion_ownership_loss_is_observed(dependencies: dict) -> None
         targeted_key_count=1,
         updated_key_count=1,
     )
-    dependencies["jobs"].update_job_status.return_value = False
+    dependencies[
+        "jobs"
+    ].update_job_status.return_value = ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
     with (
         patch(
             "src.services.valuation_orchestrator_service.app.core."

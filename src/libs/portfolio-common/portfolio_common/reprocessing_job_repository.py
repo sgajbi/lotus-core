@@ -37,6 +37,16 @@ class ResetWatermarksStageOutcome(StrEnum):
     COALESCED_PENDING = "coalesced_pending"
 
 
+class ReprocessingJobTransitionOutcome(StrEnum):
+    """Classify an exact owned transition without overstating lease authority."""
+
+    APPLIED = "APPLIED"
+    LEASE_EXPIRED = "LEASE_EXPIRED"
+    TOKEN_MISMATCH = "TOKEN_MISMATCH"
+    NOT_PROCESSING = "NOT_PROCESSING"
+    NOT_FOUND = "NOT_FOUND"
+
+
 @dataclass(frozen=True)
 class ResetWatermarksStageResult:
     """Durable job plus the exact pending-job upsert outcome."""
@@ -781,7 +791,7 @@ class ReprocessingJobRepository:
         *,
         lease_token: str,
         failure_reason: Optional[str] = None,
-    ) -> bool:
+    ) -> ReprocessingJobTransitionOutcome:
         """Apply a transition only for the exact, still-live database claim."""
 
         if not lease_token:
@@ -790,6 +800,8 @@ class ReprocessingJobRepository:
             raise ValueError("reprocessing owned transition status is invalid")
         if failure_reason is not None and status != "FAILED":
             raise ValueError("reprocessing failure reason requires FAILED status")
+        if status == "FAILED" and (failure_reason is None or not failure_reason.strip()):
+            raise ValueError("reprocessing FAILED transition requires a failure reason")
         values_to_update = {
             "status": status,
             "lease_owner": None,
@@ -811,7 +823,73 @@ class ReprocessingJobRepository:
             .values(**values_to_update)
         )
         result = await self.db.execute(stmt)
-        return result.rowcount == 1
+        if result.rowcount == 1:
+            return ReprocessingJobTransitionOutcome.APPLIED
+
+        return await self._classify_owned_transition_failure(job_id, lease_token)
+
+    @async_timed(repository="ReprocessingJobRepository", method="renew_lease")
+    async def renew_lease(
+        self,
+        job_id: int,
+        *,
+        lease_token: str,
+        lease_duration_seconds: int,
+    ) -> ReprocessingJobTransitionOutcome:
+        """Extend an exact live claim using only the PostgreSQL clock."""
+
+        if not lease_token:
+            raise ValueError("reprocessing lease token is required")
+        if lease_duration_seconds <= 0:
+            raise ValueError("reprocessing lease duration must be positive")
+
+        stmt = (
+            update(ReprocessingJob)
+            .where(
+                ReprocessingJob.id == job_id,
+                ReprocessingJob.status == "PROCESSING",
+                ReprocessingJob.lease_token == lease_token,
+                ReprocessingJob.lease_expires_at > func.clock_timestamp(),
+            )
+            .values(
+                lease_expires_at=func.clock_timestamp()
+                + func.make_interval(0, 0, 0, 0, 0, 0, lease_duration_seconds),
+                updated_at=func.now(),
+            )
+        )
+        result = await self.db.execute(stmt)
+        if result.rowcount == 1:
+            return ReprocessingJobTransitionOutcome.APPLIED
+
+        return await self._classify_owned_transition_failure(job_id, lease_token)
+
+    async def _classify_owned_transition_failure(
+        self,
+        job_id: int,
+        lease_token: str,
+    ) -> ReprocessingJobTransitionOutcome:
+        """Explain why an epoch-fenced write did not apply."""
+
+        ownership = (
+            await self.db.execute(
+                select(
+                    ReprocessingJob.status,
+                    ReprocessingJob.lease_token,
+                    (ReprocessingJob.lease_expires_at <= func.clock_timestamp()).label(
+                        "lease_expired"
+                    ),
+                ).where(ReprocessingJob.id == job_id)
+            )
+        ).one_or_none()
+        if ownership is None:
+            return ReprocessingJobTransitionOutcome.NOT_FOUND
+        if ownership.status != "PROCESSING":
+            return ReprocessingJobTransitionOutcome.NOT_PROCESSING
+        if ownership.lease_token != lease_token:
+            return ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+        if ownership.lease_expired:
+            return ReprocessingJobTransitionOutcome.LEASE_EXPIRED
+        return ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
