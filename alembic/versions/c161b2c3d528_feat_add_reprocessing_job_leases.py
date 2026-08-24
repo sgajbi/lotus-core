@@ -21,6 +21,7 @@ _LEASE_CUTOVER_GUARD = sa.text(
     """
     DO $$
     BEGIN
+        PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
         IF EXISTS (
             SELECT 1
