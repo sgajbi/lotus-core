@@ -11,6 +11,10 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     cost_basis_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    CashAccountRequiredValidationError,
+    CashAccountRequiredValidationReasonCode,
+)
 
 
 def _transaction(transaction_type: str = "BUY") -> BookedTransaction:
@@ -90,6 +94,34 @@ def test_prepare_cost_transaction_allows_portfolio_adjustment_without_reference(
 
     assert prepared.transaction_type == "ADJUSTMENT"
     assert prepared.route is cost_basis_processing.CostProcessingRoute.COST_BASIS
+
+
+@pytest.mark.parametrize("transaction_type", ["DEPOSIT", "WITHDRAWAL", "FEE", "TAX"])
+def test_prepare_cash_account_booking_requires_authoritative_cash_metadata(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(CashAccountRequiredValidationError) as raised:
+        cost_basis_processing.prepare_cost_transaction(
+            _transaction(transaction_type),
+            cost_basis_method=CostBasisMethod.FIFO,
+            instrument_reference_available=True,
+            instrument_product_type="EQUITY",
+            instrument_asset_class="EQUITY",
+        )
+
+    assert raised.value.reason_code is CashAccountRequiredValidationReasonCode.NON_CASH_INSTRUMENT
+
+
+def test_prepare_cash_account_booking_accepts_authoritative_cash_metadata() -> None:
+    prepared = cost_basis_processing.prepare_cost_transaction(
+        _transaction("FEE"),
+        cost_basis_method=CostBasisMethod.FIFO,
+        instrument_reference_available=True,
+        instrument_product_type="Cash",
+        instrument_asset_class="Cash",
+    )
+
+    assert prepared.transaction_type == "FEE"
 
 
 _REDEMPTION_TYPES = (
