@@ -1,13 +1,19 @@
 from pathlib import Path
 
 from scripts.quality.cash_instrument_authority_guard import (
-    SERVICES_ROOT,
+    PRODUCTION_SOURCE_ROOT,
     find_cash_instrument_authority_findings,
 )
 
 
 def _write_service_source(root: Path, source: str) -> None:
-    path = root / SERVICES_ROOT / "classification.py"
+    path = root / PRODUCTION_SOURCE_ROOT / "services" / "classification.py"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+
+
+def _write_shared_library_source(root: Path, source: str) -> None:
+    path = root / PRODUCTION_SOURCE_ROOT / "libs" / "portfolio-common" / "classification.py"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding="utf-8")
 
@@ -45,4 +51,17 @@ def test_guard_rejects_security_identifier_cash_prefix_inference(tmp_path: Path)
     findings = find_cash_instrument_authority_findings(tmp_path)
 
     assert len(findings) == 1
+    assert "security_id" in findings[0].expression
+
+
+def test_guard_rejects_cash_identifier_inference_in_shared_library(tmp_path: Path) -> None:
+    _write_shared_library_source(
+        tmp_path,
+        'def is_cash(security_id):\n    return security_id.startswith("CASH_")\n',
+    )
+
+    findings = find_cash_instrument_authority_findings(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].path.startswith("src/libs/")
     assert "security_id" in findings[0].expression
