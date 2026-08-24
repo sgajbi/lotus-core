@@ -29,6 +29,7 @@ def test_analytics_source_records_preserve_domain_fields() -> None:
         quantity=Decimal("10"),
         epoch=2,
         position_currency="USD",
+        product_type="EQUITY",
         asset_class="Equity",
         sector="Technology",
         country="US",
@@ -57,6 +58,7 @@ def test_analytics_source_records_preserve_domain_fields() -> None:
     )
 
     assert position.eod_market_value == Decimal("110")
+    assert position.product_type == "EQUITY"
     assert prior.valuation_date == date(2026, 4, 9)
     assert cashflow.is_position_flow is True
     assert fx_rate.rate == Decimal("1.35")

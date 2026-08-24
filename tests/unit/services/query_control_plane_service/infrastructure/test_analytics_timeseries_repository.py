@@ -49,6 +49,7 @@ def _position_row(**overrides: object) -> SimpleNamespace:
         "fees": Decimal("0"),
         "quantity": Decimal("10"),
         "epoch": 0,
+        "product_type": "EQUITY",
         "asset_class": "Equity",
         "sector": "Technology",
         "country": "US",
@@ -235,6 +236,7 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
     assert "JOIN position_state ON" in position_sql
     assert "position_timeseries.epoch = position_state.epoch" in position_sql
     assert "position_timeseries.quantity = (SELECT position_history.quantity" in position_sql
+    assert "instruments.product_type" in position_sql
     assert "position_history.position_date <= position_timeseries.date" in position_sql
 
 
@@ -313,6 +315,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     assert "JOIN position_state ON" in unpaged_sql
     assert "position_timeseries.quantity = (SELECT position_history.quantity" in unpaged_sql
     assert "instruments.asset_class" in unpaged_sql
+    assert "instruments.product_type" in unpaged_sql
     assert "ORDER BY anon_1.valuation_date ASC, anon_1.security_id ASC" in unpaged_sql
 
     prior_rows = await repo.list_latest_position_timeseries_before(

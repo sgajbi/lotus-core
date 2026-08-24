@@ -42,6 +42,7 @@ class PositionValuationObservation:
     asset_class: str | None
     sector: str | None
     country: str | None
+    product_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
