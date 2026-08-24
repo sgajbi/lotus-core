@@ -117,6 +117,8 @@ async def test_fx_and_separate_linked_fee_replay_without_inline_netting_or_doubl
                 name="US Dollar cash for linked FX fee proof",
                 isin="CASHUSDFXLINKEDFEE01",
                 currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
             ),
             canonical_transaction_record(fx_event),
             canonical_transaction_record(fee_event),
