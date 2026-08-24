@@ -254,7 +254,7 @@ async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership
     worker._lease_renewal_interval_seconds = 0.001
     jobs = mock_dependencies["repro_job_repo"]
     operation_cancelled = asyncio.Event()
-    jobs.renew_lease.return_value = ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+    jobs.renew_lease.return_value = ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
 
     async def operation(_terminal_transition_started):
         try:
@@ -270,7 +270,7 @@ async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership
         lease_token=LEASE_TOKEN,
     )
 
-    with pytest.raises(ReprocessingJobOwnershipLostError, match="TOKEN_MISMATCH"):
+    with pytest.raises(ReprocessingJobOwnershipLostError, match="CLAIM_MISMATCH"):
         await worker._process_with_lease_renewal(
             job=job,
             job_type="RESET_WATERMARKS",
@@ -709,7 +709,7 @@ async def test_worker_emits_requeue_ownership_metric_when_requeue_ownership_is_l
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
     mock_repro_job_repo.update_job_status.return_value = (
-        ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+        ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
     )
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
     mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = []

@@ -189,7 +189,7 @@ async def test_completion_ownership_loss_is_observed(dependencies: dict) -> None
     )
     dependencies[
         "jobs"
-    ].update_job_status.return_value = ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+    ].update_job_status.return_value = ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
     with (
         patch(
             "src.services.valuation_orchestrator_service.app.core."

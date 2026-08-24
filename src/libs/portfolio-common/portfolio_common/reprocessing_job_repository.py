@@ -42,7 +42,7 @@ class ReprocessingJobTransitionOutcome(StrEnum):
 
     APPLIED = "APPLIED"
     LEASE_EXPIRED = "LEASE_EXPIRED"
-    TOKEN_MISMATCH = "TOKEN_MISMATCH"
+    CLAIM_MISMATCH = "CLAIM_MISMATCH"
     NOT_PROCESSING = "NOT_PROCESSING"
     NOT_FOUND = "NOT_FOUND"
     RACED = "RACED"
@@ -803,16 +803,6 @@ class ReprocessingJobRepository:
             raise ValueError("reprocessing failure reason requires FAILED status")
         if status == "FAILED" and (failure_reason is None or not failure_reason.strip()):
             raise ValueError("reprocessing FAILED transition requires a failure reason")
-        values_to_update = {
-            "status": status,
-            "lease_owner": None,
-            "lease_token": None,
-            "lease_expires_at": None,
-            "updated_at": func.now(),
-        }
-        if failure_reason:
-            values_to_update["failure_reason"] = failure_reason
-
         stmt = (
             update(ReprocessingJob)
             .where(
@@ -821,8 +811,16 @@ class ReprocessingJobRepository:
                 ReprocessingJob.lease_token == lease_token,
                 ReprocessingJob.lease_expires_at > func.clock_timestamp(),
             )
-            .values(**values_to_update)
+            .values(
+                status=status,
+                lease_owner=None,
+                lease_token=None,
+                lease_expires_at=None,
+                updated_at=func.now(),
+            )
         )
+        if failure_reason is not None:
+            stmt = stmt.values(failure_reason=failure_reason)
         result = await self.db.execute(stmt)
         if result.rowcount == 1:
             return ReprocessingJobTransitionOutcome.APPLIED
@@ -887,7 +885,7 @@ class ReprocessingJobRepository:
         if ownership.status != "PROCESSING":
             return ReprocessingJobTransitionOutcome.NOT_PROCESSING
         if ownership.lease_token != lease_token:
-            return ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+            return ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
         if ownership.lease_expired:
             return ReprocessingJobTransitionOutcome.LEASE_EXPIRED
         return ReprocessingJobTransitionOutcome.RACED
