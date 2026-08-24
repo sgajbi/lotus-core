@@ -69,6 +69,10 @@ class BackdatedRecalculationDecision:
     reason: str
 
 
+class CashPositionEconomicsError(ValueError):
+    """Reject booked cash economics whose signs contradict their movement type."""
+
+
 _PositionUpdateHandler = Callable[
     [PositionBalanceState, BookedTransaction, str], PositionBalanceState
 ]
@@ -120,6 +124,7 @@ def normalize_position_code(value: str | None) -> str:
 def cash_position_deltas(
     transaction: BookedTransaction, txn_type: str
 ) -> tuple[Decimal, Decimal, Decimal]:
+    _assert_cash_position_economics(transaction, txn_type)
     quantity_delta = _cash_position_amount_delta(transaction, txn_type)
     use_quantity_fallback = txn_type == "ADJUSTMENT" or txn_type in (
         CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
@@ -138,6 +143,24 @@ def cash_position_deltas(
         else quantity_delta
     )
     return quantity_delta, cost_basis_delta, cost_basis_local_delta
+
+
+def _assert_cash_position_economics(transaction: BookedTransaction, txn_type: str) -> None:
+    if txn_type not in (
+        CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
+    ):
+        return
+    expects_inflow = txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES
+    for field_name in ("net_cost", "net_cost_local"):
+        amount = getattr(transaction, field_name)
+        if amount is None or amount.is_zero():
+            continue
+        contradicts_movement = amount < Decimal(0) if expects_inflow else amount > Decimal(0)
+        if contradicts_movement:
+            expected_sign = "non-negative" if expects_inflow else "non-positive"
+            raise CashPositionEconomicsError(
+                f"{txn_type} {field_name} must be {expected_sign}; received {amount}."
+            )
 
 
 def _position_update_handler(txn_type: str) -> _PositionUpdateHandler | None:

@@ -10,6 +10,7 @@ from .history import (
 )
 from .reducer import (
     BackdatedRecalculationDecision,
+    CashPositionEconomicsError,
     PositionBalanceState,
     calculate_next_position_state,
     cash_position_deltas,
@@ -18,6 +19,7 @@ from .reducer import (
 
 __all__ = [
     "BackdatedRecalculationDecision",
+    "CashPositionEconomicsError",
     "PositionBalanceState",
     "PositionHistoryInvariantError",
     "PositionHistoryRecord",

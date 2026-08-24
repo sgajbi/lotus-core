@@ -8,6 +8,7 @@ import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
+    CashPositionEconomicsError,
     PositionBalanceState,
     calculate_next_position_state,
     cash_position_deltas,
@@ -408,6 +409,53 @@ def test_cash_fee_uses_fee_inclusive_booked_cost() -> None:
         cost_basis=Decimal("73.25"),
         cost_basis_local=Decimal("73.25"),
     )
+
+
+@pytest.mark.parametrize("transaction_type", ["WITHDRAWAL", "FEE", "TAX"])
+@pytest.mark.parametrize("field_name", ["net_cost", "net_cost_local"])
+def test_cash_outflow_rejects_positive_booked_cost_without_mutating_state(
+    transaction_type: str,
+    field_name: str,
+) -> None:
+    initial_state = PositionBalanceState(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    transaction = _txn(
+        transaction_type,
+        gross_transaction_amount=Decimal("25"),
+        **{field_name: Decimal("25")},
+    )
+
+    with pytest.raises(
+        CashPositionEconomicsError,
+        match=rf"{transaction_type} {field_name} must be non-positive",
+    ):
+        calculate_next_position_state(initial_state, transaction)
+
+    assert initial_state == PositionBalanceState(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+
+
+@pytest.mark.parametrize("field_name", ["net_cost", "net_cost_local"])
+def test_cash_deposit_rejects_negative_booked_cost(
+    field_name: str,
+) -> None:
+    transaction = _txn(
+        "DEPOSIT",
+        gross_transaction_amount=Decimal("25"),
+        **{field_name: Decimal("-25")},
+    )
+
+    with pytest.raises(
+        CashPositionEconomicsError,
+        match=rf"DEPOSIT {field_name} must be non-negative",
+    ):
+        calculate_next_position_state(PositionBalanceState(), transaction)
 
 
 def test_foreign_currency_cash_flow_preserves_base_and_local_booked_costs() -> None:
