@@ -5154,6 +5154,9 @@ class ReprocessingJob(Base):
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
+    lease_owner = Column(String(128), nullable=True)
+    lease_token = Column(String(64), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -5201,6 +5204,12 @@ class ReprocessingJob(Base):
             "updated_at",
         ),
         Index(
+            "ix_reprocessing_jobs_processing_lease_recovery",
+            "lease_expires_at",
+            "id",
+            postgresql_where=text("status = 'PROCESSING'"),
+        ),
+        Index(
             "ix_reproc_resetwm_sec_status_created_id",
             text("trim(payload->>'security_id')"),
             "status",
@@ -5217,6 +5226,22 @@ class ReprocessingJob(Base):
             postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
         ),
         Index("ix_reprocessing_jobs_alternate_lookup_key", "alternate_lookup_key"),
+        CheckConstraint(
+            "(status = 'PROCESSING' AND lease_owner IS NOT NULL "
+            "AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR "
+            "(status <> 'PROCESSING' AND lease_owner IS NULL "
+            "AND lease_token IS NULL AND lease_expires_at IS NULL)",
+            name="ck_reprocessing_jobs_processing_lease",
+        ),
+        CheckConstraint(
+            "lease_owner IS NULL OR "
+            "(lease_owner = btrim(lease_owner) AND lease_owner <> '')",
+            name="ck_reprocessing_jobs_lease_owner_normalized",
+        ),
+        CheckConstraint(
+            "lease_token IS NULL OR lease_token ~ '^[0-9a-f]{32}$'",
+            name="ck_reprocessing_jobs_lease_token",
+        ),
     )
 
 
