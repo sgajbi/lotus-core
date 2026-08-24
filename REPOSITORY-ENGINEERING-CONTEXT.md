@@ -3987,9 +3987,13 @@ Most relevant current governance:
      `database_statement_batch` event with governed operation/status/reason values and bounded
      counts. Do not add per-chunk INFO logs, business identifiers, or a database-batch config knob;
      use temp tables or `COPY` only after plan/row-count evidence proves bounded statements are
-     inadequate. Expired valuation-claim and stale reprocessing-job recovery must also select a
-     deterministic bounded cohort per scheduler poll, defensively chunk any identifier update set,
-     and publish bounded counts/reasons rather than job-ID collections. Aggregation-owned expired
+     inadequate. Expired valuation-claim and reprocessing-claim recovery must select by
+     database-clock lease expiry, lock a deterministic bounded cohort per scheduler poll,
+     defensively chunk any identifier update set, and publish bounded counts/reasons rather than
+     job-ID collections. Reprocessing claims commit before execution; each reset-watermarks or FX
+     job uses an independent transaction, and terminal/requeue/failure writes require the exact
+     opaque token plus an unexpired lease. Never restore `updated_at` or application-clock ownership.
+     Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before
      authoritative metric aggregation and resolve them through the repository's set-based lateral

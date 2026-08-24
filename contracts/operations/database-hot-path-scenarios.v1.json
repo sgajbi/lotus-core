@@ -79,7 +79,7 @@
         "Seq Scan",
         "WindowAgg"
       ],
-      "rationale": "Reprocessing stale resets must update only the bounded expired cohort by indexed job identity.",
+      "rationale": "Reprocessing recovery must update only the bounded database-clock-expired lease cohort by indexed job identity.",
       "repository_method": "find_and_reset_stale_jobs.reset",
       "repository_owner": "ReprocessingJobRepository",
       "requires_indexed_access": true,
@@ -93,7 +93,7 @@
         "Seq Scan",
         "WindowAgg"
       ],
-      "rationale": "Reprocessing stale selection must stop at the deterministic recovery cohort without scanning retained history.",
+      "rationale": "Reprocessing expired-lease selection must stop at the deterministic recovery cohort without scanning retained history.",
       "repository_method": "find_and_reset_stale_jobs.scan",
       "repository_owner": "ReprocessingJobRepository",
       "requires_indexed_access": true,

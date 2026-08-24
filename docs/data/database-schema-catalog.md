@@ -1465,9 +1465,15 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `job_type` (String): Domain type discriminator used to branch processing behavior.
   - `payload` (JSON): JSON payload storing structured request/result or metadata content.
   - `status` (String): Current lifecycle status for the record/work item.
+  - `correlation_id` (String, nullable): Durable request/event lineage when source correlation is available.
+  - `correlation_missing_reason` (String, nullable): Governed explanation when correlation authority is unavailable.
+  - `alternate_lookup_key` (String, nullable): Stable support lookup when correlation is unavailable.
   - `attempt_count` (Integer): Domain attribute used by the owning module.
   - `last_attempted_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
   - `failure_reason` (Text): Human-readable reason for failure/exception status.
+  - `lease_owner` (String, nullable): Bounded worker identity owning a `PROCESSING` claim.
+  - `lease_token` (String, nullable): Opaque 32-character claim fence required for terminal writes.
+  - `lease_expires_at` (DateTime, nullable): Database-clock expiry after which recovery may reclaim work.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
