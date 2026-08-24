@@ -28,6 +28,9 @@ async def test_queue_health_excludes_completed_only_history(
                 job_type="ACTIVE_QUEUE",
                 payload={"scope": "processing"},
                 status="PROCESSING",
+                lease_owner="queue-health-worker",
+                lease_token="e" * 32,
+                lease_expires_at=now + timedelta(minutes=15),
             ),
             ReprocessingJob(
                 job_type="ACTIVE_QUEUE",
