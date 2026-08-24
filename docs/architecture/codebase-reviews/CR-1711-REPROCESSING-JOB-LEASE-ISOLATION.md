@@ -24,6 +24,10 @@ a late worker.
 - Commit claim/recovery separately, execute every reset or FX job in its own transaction, and write
   FAILED state in a fresh transaction after rollback.
 - Require exact token and unexpired PostgreSQL-clock lease for COMPLETE, PENDING, or FAILED writes.
+- Renew live claims every one-third lease interval in an independent transaction; cancel and roll
+  back active domain work immediately when renewal loses authority.
+- Return typed transition outcomes so expiry, token mismatch, missing work, and terminal-state races
+  remain operationally distinguishable; reject empty FAILED reasons.
 - Recover expired claims under deterministic `FOR UPDATE SKIP LOCKED` cohorts while preserving
   attempt count and existing effective-date coalescing semantics.
 
@@ -38,8 +42,10 @@ mutations. Claim attempts remain durable and auditable across recovery.
 - Real PostgreSQL migration upgrade/guard/constraint/downgrade proof.
 - Real PostgreSQL claim concurrency, expiry recovery, reclaim, token-fence, attempt, FX, and
   conversion regression tests.
-- Unit proof that a failed job exits its transaction with the source exception, records failure in
-  a fresh transaction, and does not prevent the sibling terminal commit.
+- Real PostgreSQL worker proof that a forced server-side division-by-zero abort exits the first job
+  transaction, records FAILED in a fresh session, and does not prevent the sibling terminal commit.
+- Unit proof that heartbeat renewal succeeds independently and that renewal ownership loss cancels
+  the active operation.
 - `make typecheck`, architecture guard, repository transaction-boundary guard, and testability
   architecture guard passed.
 - `make database-hot-path-evidence` completed; all four reprocessing scenarios passed. The

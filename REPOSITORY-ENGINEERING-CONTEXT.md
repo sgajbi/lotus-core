@@ -3992,7 +3992,10 @@ Most relevant current governance:
      defensively chunk any identifier update set, and publish bounded counts/reasons rather than
      job-ID collections. Reprocessing claims commit before execution; each reset-watermarks or FX
      job uses an independent transaction, and terminal/requeue/failure writes require the exact
-     opaque token plus an unexpired lease. Never restore `updated_at` or application-clock ownership.
+     opaque token plus an unexpired lease. A separate database transaction renews each live claim
+     every one-third of its configured lifetime; renewal loss must cancel and roll back the domain
+     transaction before authority can transfer. Never restore `updated_at` or application-clock
+     ownership.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before

@@ -221,12 +221,18 @@ Each reprocessing claim commits before execution. Every reset-watermarks or FX j
 independent transaction, so one failed job cannot roll back a sibling. Terminal writes require the
 exact opaque claim token and an unexpired lease; a late worker rolls its domain mutations back.
 `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` (default `15`) is the lease lifetime, measured by the
-PostgreSQL clock rather than `updated_at` or an application clock.
+PostgreSQL clock rather than `updated_at` or an application clock. The worker renews the lease every
+one-third of that lifetime in a separate transaction. If renewal reports expiry, token mismatch, or
+lost processing state, the worker cancels the job task and rolls back its domain transaction.
+`reprocessing_worker_lease_renewals_total{job_type,outcome}` exposes only `renewed` and
+`ownership_lost`; alert on ownership loss and use structured logs for job-level diagnosis.
 
 Migration `c161b2c3d528` requires a quiesced reprocessing queue. Stop old workers and ensure no
 `PROCESSING` rows remain before upgrade; the migration fails closed otherwise. For rollback, stop
 new workers and clear active work through governed recovery or terminal processing before
-downgrade. Never bypass the guard by editing lease fields, statuses, or Alembic revision state.
+downgrade. The cutover's exclusive table lock times out after five seconds. If it cannot be acquired,
+drain the lingering reader or writer and retry; do not leave the migration queued behind live table
+traffic. Never bypass the guard by editing lease fields, statuses, or Alembic revision state.
 
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply

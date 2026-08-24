@@ -779,7 +779,7 @@ Operational knobs:
 | `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE` | `100` | Maximum generated valuation backfill jobs written in one scheduler upsert chunk across states. |
 | `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` | Scheduler batch size (`100` by default; Compose uses `1000`) | Maximum durable valuation jobs allowed in `PROCESSING` across scheduler replicas. Claims use a PostgreSQL transaction-scoped lock so concurrent schedulers share the same cap. Size this below the number the active valuation workers can drain within `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS`. |
 | `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS` | `900` | Database-clock lifetime for one valuation claim. Terminal writes and dispatch recovery require the opaque token and an unexpired lease; expired claims are requeued or failed under the existing attempt ceiling. Size above the measured dispatch-plus-calculation bound and certify changes with reclaim race tests and the daily workload. |
-| `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` | `15` | Database-clock lease lifetime for one reset-watermarks or FX reprocessing claim. It no longer compares application timestamps. Size above the measured per-job execution bound; expiry permits deterministic recovery and fences late terminal writes. |
+| `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` | `15` | Database-clock lease lifetime for one reset-watermarks or FX reprocessing claim. The worker renews a live claim every one-third of this interval in a separate transaction. Expiry permits deterministic recovery and fences late writes; renewal loss cancels and rolls back the active domain transaction. |
 | `POSITION_VALUATION_WORKER_COUNT` | `1` (`8` in app-local Compose) | Number of serial Kafka valuation consumers in one position-valuation process. Do not configure more active workers than `valuation.job.requested` partitions. |
 
 ### Valuation lease schema cutover
@@ -818,14 +818,23 @@ budgets, and free of `Seq Scan` and `WindowAgg`.
 Migration `c161b2c3d528` is an intentional quiesced cutover for `reprocessing_jobs`; it is not safe
 for mixed old/new worker binaries. Before upgrade, stop every valuation reprocessing worker and
 verify no row remains `PROCESSING`. The migration fails closed when an in-flight row exists rather
-than inventing lease authority. Apply the migration, deploy the new valuation orchestrator worker,
-then resume polling and confirm pending work drains.
+than inventing lease authority. Its exclusive cutover lock has a five-second transaction-local
+timeout: if a lingering reader or writer prevents prompt acquisition, let the migration roll back,
+identify and drain that transaction, and retry instead of waiting behind the lock queue. Apply the
+migration, deploy the new valuation orchestrator worker, then resume polling and confirm pending
+work drains.
 
 For rollback, stop the new workers and drain, recover, or terminalize every `PROCESSING` row before
 downgrade. The downgrade fails closed while leased work exists. Never clear lease fields, rewrite
 status, or mark the Alembic revision manually to bypass either guard. After rollout, require
 `reprocessing_job_claim`, `reprocessing_stale_scan`, and `reprocessing_stale_reset` hot-path
 evidence to remain bounded and index-backed.
+
+During processing, `reprocessing_worker_lease_renewals_total{job_type,outcome}` records only the
+bounded outcomes `renewed` and `ownership_lost`. Alert on `ownership_lost`; use the correlated
+structured log to identify the job without adding business identifiers to metric labels. A lost
+renewal cancels the in-flight task so its database transaction rolls back before recovery can hand
+authority to another worker.
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
