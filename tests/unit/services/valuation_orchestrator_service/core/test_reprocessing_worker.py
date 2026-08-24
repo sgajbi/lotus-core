@@ -6,7 +6,10 @@ import pytest
 from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.reprocessing_job_repository import (
+    ReprocessingJobRepository,
+    ReprocessingJobTransitionOutcome,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.core import (
@@ -91,6 +94,9 @@ def mock_dependencies():
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_stale_skips"
         ) as mock_observe_stale_skips,
         patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_worker_lease_renewal"
+        ) as mock_observe_lease_renewal,
+        patch(
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.reprocessing_worker_batch_timer"
         ) as mock_batch_timer,
     ):
@@ -106,6 +112,7 @@ def mock_dependencies():
             "observe_failed": mock_observe_failed,
             "observe_noop": mock_observe_noop,
             "observe_stale_skips": mock_observe_stale_skips,
+            "observe_lease_renewal": mock_observe_lease_renewal,
             "batch_timer": mock_batch_timer,
             "db_session": mock_db_session,
         }
@@ -165,7 +172,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = True
+    mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1", "P2"]
     mock_state_repo.update_watermarks_if_older.return_value = 2
 
@@ -200,6 +207,115 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     )
 
 
+async def test_worker_renews_live_lease_until_job_operation_finishes(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 0.001
+    jobs = mock_dependencies["repro_job_repo"]
+    renewal_observed = asyncio.Event()
+
+    async def renew(*args, **kwargs):
+        renewal_observed.set()
+        return ReprocessingJobTransitionOutcome.APPLIED
+
+    async def operation():
+        await renewal_observed.wait()
+
+    jobs.renew_lease.side_effect = renew
+    job = ReprocessingJob(
+        id=101,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._process_with_lease_renewal(
+        job=job,
+        job_type="RESET_WATERMARKS",
+        operation=operation,
+    )
+
+    jobs.renew_lease.assert_awaited_once_with(
+        101,
+        lease_token=LEASE_TOKEN,
+        lease_duration_seconds=900,
+    )
+    mock_dependencies["observe_lease_renewal"].assert_called_once_with(
+        "RESET_WATERMARKS",
+        "renewed",
+    )
+
+
+async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 0.001
+    jobs = mock_dependencies["repro_job_repo"]
+    operation_cancelled = asyncio.Event()
+    jobs.renew_lease.return_value = ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+
+    async def operation():
+        try:
+            await asyncio.Event().wait()
+        finally:
+            operation_cancelled.set()
+
+    job = ReprocessingJob(
+        id=102,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    with pytest.raises(ReprocessingJobOwnershipLostError, match="TOKEN_MISMATCH"):
+        await worker._process_with_lease_renewal(
+            job=job,
+            job_type="RESET_WATERMARKS",
+            operation=operation,
+        )
+
+    assert operation_cancelled.is_set()
+    mock_dependencies["observe_lease_renewal"].assert_called_once_with(
+        "RESET_WATERMARKS",
+        "ownership_lost",
+    )
+
+
+async def test_worker_ignores_renewal_result_unblocked_by_terminal_commit(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 0.001
+    jobs = mock_dependencies["repro_job_repo"]
+    terminal_commit_reached = asyncio.Event()
+
+    async def renew(*_args, **_kwargs):
+        await terminal_commit_reached.wait()
+        return ReprocessingJobTransitionOutcome.NOT_PROCESSING
+
+    async def operation():
+        await asyncio.sleep(0.01)
+        terminal_commit_reached.set()
+
+    jobs.renew_lease.side_effect = renew
+    job = ReprocessingJob(
+        id=104,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._process_with_lease_renewal(
+        job=job,
+        job_type="RESET_WATERMARKS",
+        operation=operation,
+    )
+
+    jobs.renew_lease.assert_awaited_once()
+    mock_dependencies["observe_lease_renewal"].assert_not_called()
+
+
 async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     mock_repro_job_repo = mock_dependencies["repro_job_repo"]
@@ -218,7 +334,7 @@ async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dep
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = True
+    mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1", "P2"]
     mock_state_repo.update_watermarks_if_older.return_value = 1
 
@@ -260,7 +376,7 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = True
+    mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1"]
     mock_state_repo.update_watermarks_if_older.side_effect = RuntimeError("db write failed")
 
@@ -276,6 +392,28 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
     assert "db write failed" in kwargs["failure_reason"]
     transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
     assert transaction_exits.await_args_list[1].args[0] is RuntimeError
+
+
+async def test_worker_records_exception_type_when_failure_message_is_empty(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    jobs = mock_dependencies["repro_job_repo"]
+    jobs.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
+    job = ReprocessingJob(
+        id=103,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._mark_reset_watermark_job_failed(job=job, exc=RuntimeError())
+
+    jobs.update_job_status.assert_awaited_once_with(
+        103,
+        "FAILED",
+        lease_token=LEASE_TOKEN,
+        failure_reason="RuntimeError",
+    )
 
 
 async def test_failed_job_rolls_back_without_preventing_sibling_commit(mock_dependencies):
@@ -298,7 +436,7 @@ async def test_failed_job_rolls_back_without_preventing_sibling_commit(mock_depe
         lease_token=LEASE_TOKEN,
     )
     jobs.find_and_claim_jobs.return_value = [first, second]
-    jobs.update_job_status.return_value = True
+    jobs.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     valuations.find_portfolios_holding_security_on_date.return_value = ["P1"]
     states.update_watermarks_if_older.side_effect = [RuntimeError("first job failed"), 1]
 
@@ -402,7 +540,7 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = True
+    mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
     mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = []
 
@@ -442,7 +580,7 @@ async def test_worker_falls_back_to_later_first_holdings_before_requeueing(
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = True
+    mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
     mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = ["P_LATE"]
     mock_state_repo.update_watermarks_if_older.return_value = 1
@@ -488,7 +626,7 @@ async def test_worker_unions_current_and_later_holdings_for_replay_reset(
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = True
+    mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P_SHORT"]
     mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = [
         "P_LATE",
@@ -531,7 +669,9 @@ async def test_worker_skips_completion_metric_when_terminal_ownership_is_lost(mo
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = False
+    mock_repro_job_repo.update_job_status.return_value = (
+        ReprocessingJobTransitionOutcome.LEASE_EXPIRED
+    )
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = ["P1"]
     mock_state_repo.update_watermarks_if_older.return_value = 1
 
@@ -566,7 +706,9 @@ async def test_worker_emits_requeue_ownership_metric_when_requeue_ownership_is_l
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
-    mock_repro_job_repo.update_job_status.return_value = False
+    mock_repro_job_repo.update_job_status.return_value = (
+        ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
+    )
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
     mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = []
 

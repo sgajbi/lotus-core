@@ -1,12 +1,23 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 from portfolio_common.database_models import ReprocessingJob
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.reprocessing_job_repository import (
+    ReprocessingJobRepository,
+    ReprocessingJobTransitionOutcome,
+)
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from src.services.valuation_orchestrator_service.app.core.reprocessing_worker import (
+    ReprocessingWorker,
+)
+from src.services.valuation_orchestrator_service.app.core.reprocessing_worker_dependencies import (
+    ReprocessingWorkerRepositoryFactory,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -488,6 +499,21 @@ async def test_expired_claim_is_recovered_reclaimed_and_fences_late_terminal_wri
             )
         )[0]
 
+    original_expiry = first_claim.lease_expires_at
+    async with session_factory() as renewal_session, renewal_session.begin():
+        assert (
+            await ReprocessingJobRepository(renewal_session).renew_lease(
+                first_claim.id,
+                lease_token=first_claim.lease_token,
+                lease_duration_seconds=1800,
+            )
+            is ReprocessingJobTransitionOutcome.APPLIED
+        )
+    async with session_factory() as renewed_read_session:
+        renewed = await renewed_read_session.get(ReprocessingJob, first_claim.id)
+        assert renewed is not None
+        assert renewed.lease_expires_at > original_expiry
+
     async with session_factory() as expiry_session, expiry_session.begin():
         await expiry_session.execute(
             update(ReprocessingJob)
@@ -524,7 +550,7 @@ async def test_expired_claim_is_recovered_reclaimed_and_fences_late_terminal_wri
                 "COMPLETE",
                 lease_token=first_claim.lease_token,
             )
-            is False
+            is ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
         )
 
     async with session_factory() as current_session, current_session.begin():
@@ -534,7 +560,7 @@ async def test_expired_claim_is_recovered_reclaimed_and_fences_late_terminal_wri
                 "COMPLETE",
                 lease_token=second_claim.lease_token,
             )
-            is True
+            is ReprocessingJobTransitionOutcome.APPLIED
         )
 
     async_db_session.expire_all()
@@ -545,3 +571,95 @@ async def test_expired_claim_is_recovered_reclaimed_and_fences_late_terminal_wri
     assert persisted.lease_owner is None
     assert persisted.lease_token is None
     assert persisted.lease_expires_at is None
+
+
+async def test_worker_database_failure_isolated_from_sibling_and_failed_in_fresh_session(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """A PostgreSQL-aborted job transaction cannot poison its sibling or failure write."""
+
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "FAIL-SECURITY",
+                    "earliest_impacted_date": "2025-01-01",
+                },
+                status="PENDING",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "PASS-SECURITY",
+                    "earliest_impacted_date": "2025-01-02",
+                },
+                status="PENDING",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def session_provider():
+        async with session_factory() as session:
+            yield session
+
+    class Valuations:
+        async def find_portfolios_holding_security_on_date(self, *_args):
+            return ["PORTFOLIO-1"]
+
+        async def find_portfolios_first_holding_security_after_date(self, *_args):
+            return []
+
+    class PositionStates:
+        def __init__(self, db):
+            self.db = db
+
+        async def update_watermarks_if_older(self, *, keys, new_watermark_date):
+            del new_watermark_date
+            if keys[0][1] == "FAIL-SECURITY":
+                await self.db.execute(text("SELECT 1 / 0"))
+            return len(keys)
+
+    class FxRevaluations:
+        async def claim_pending_jobs(self, *_args, **_kwargs):
+            return []
+
+    repositories = ReprocessingWorkerRepositoryFactory(
+        reprocessing_job_repository_factory=ReprocessingJobRepository,
+        position_state_repository_factory=PositionStates,
+        valuation_repository_factory=lambda _db: Valuations(),
+        fx_revaluation_repository_factory=lambda _db: FxRevaluations(),
+    )
+    worker = ReprocessingWorker(
+        batch_size=2,
+        session_provider=session_provider,
+        repository_factory=repositories,
+    )
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_failed"
+    ) as observe_failed:
+        await worker._process_batch()
+
+    async_db_session.expire_all()
+    persisted = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob).where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    jobs_by_security = {job.payload["security_id"]: job for job in persisted}
+    failed = jobs_by_security["FAIL-SECURITY"]
+    succeeded = jobs_by_security["PASS-SECURITY"]
+    assert failed.status == "FAILED"
+    assert failed.attempt_count == 1
+    assert "division by zero" in failed.failure_reason
+    assert succeeded.status == "COMPLETE"
+    assert succeeded.attempt_count == 1
+    observe_failed.assert_called_once_with("RESET_WATERMARKS")

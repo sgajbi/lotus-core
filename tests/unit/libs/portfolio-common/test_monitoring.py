@@ -64,6 +64,15 @@ def test_instrument_trigger_conversion_metric_rejects_unknown_outcome():
         monitoring.observe_instrument_reprocessing_trigger_conversion("security-specific")
 
 
+def test_reprocessing_lease_renewal_metric_uses_bounded_labels_and_outcomes():
+    assert monitoring.REPROCESSING_WORKER_LEASE_RENEWALS_TOTAL._labelnames == (
+        "job_type",
+        "outcome",
+    )
+    with pytest.raises(ValueError, match="lease renewal outcome is invalid"):
+        monitoring.observe_reprocessing_worker_lease_renewal("RESET_WATERMARKS", "job-123")
+
+
 def test_kafka_consumer_metrics_use_bounded_labels():
     assert monitoring.KAFKA_CONSUMER_EVENTS_TOTAL._labelnames == (
         "service",
