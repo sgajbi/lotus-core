@@ -42,6 +42,13 @@ async def _seed_reprocessing_jobs(session: AsyncSession, *, count: int) -> None:
                     "last_attempted_at": REFERENCE_NOW - timedelta(hours=2),
                     "created_at": REFERENCE_NOW - timedelta(days=2, seconds=sequence),
                     "updated_at": REFERENCE_NOW - timedelta(hours=1),
+                    "lease_owner": (
+                        None if sequence < pending_count else "hot-path-evidence-worker"
+                    ),
+                    "lease_token": None if sequence < pending_count else f"{sequence:032x}",
+                    "lease_expires_at": (
+                        None if sequence < pending_count else REFERENCE_NOW - timedelta(hours=1)
+                    ),
                 }
                 for sequence in range(start, stop)
             ],
@@ -63,6 +70,9 @@ async def _reprocessing_authority_snapshot(
             ReprocessingJob.attempt_count,
             ReprocessingJob.last_attempted_at,
             ReprocessingJob.failure_reason,
+            ReprocessingJob.lease_owner,
+            ReprocessingJob.lease_token,
+            ReprocessingJob.lease_expires_at,
             ReprocessingJob.created_at,
             ReprocessingJob.updated_at,
         ).order_by(ReprocessingJob.id)
