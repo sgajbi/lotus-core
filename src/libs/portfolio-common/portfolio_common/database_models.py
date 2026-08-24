@@ -5234,8 +5234,7 @@ class ReprocessingJob(Base):
             name="ck_reprocessing_jobs_processing_lease",
         ),
         CheckConstraint(
-            "lease_owner IS NULL OR "
-            "(lease_owner = btrim(lease_owner) AND lease_owner <> '')",
+            "lease_owner IS NULL OR (lease_owner = btrim(lease_owner) AND lease_owner <> '')",
             name="ck_reprocessing_jobs_lease_owner_normalized",
         ),
         CheckConstraint(

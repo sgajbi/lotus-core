@@ -21,7 +21,9 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
         status="PROCESSING",
         attempt_count=2,
         correlation_id="corr-stale-earliest",
-        updated_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+        lease_owner="stale-security-worker",
+        lease_token="1" * 32,
+        lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=30),
     )
     pending_job = ReprocessingJob(
         job_type="RESET_WATERMARKS",
@@ -34,7 +36,7 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
     await async_db_session.commit()
 
     recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
-        timeout_minutes=15, max_attempts=3
+        max_attempts=3
     )
     await async_db_session.commit()
     async_db_session.expire_all()
@@ -368,6 +370,9 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S4", "earliest_impacted_date": "2025-01-05"},
         status="PROCESSING",
+        lease_owner="concurrent-completion-worker",
+        lease_token="2" * 32,
+        lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=20),
     )
     async_db_session.add(job)
     await async_db_session.flush()
@@ -375,7 +380,7 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
         text(
             """
             UPDATE reprocessing_jobs
-            SET updated_at = now() - interval '20 minutes'
+            SET lease_expires_at = clock_timestamp() - interval '20 minutes'
             WHERE id = :job_id
             """
         ),
@@ -383,26 +388,23 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
     )
     await async_db_session.commit()
 
-    repository = ReprocessingJobRepository(async_db_session)
-    original_execute = async_db_session.execute
-    execute_count = 0
     concurrent_session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    async with concurrent_session_factory() as session:
+        await session.execute(
+            update(ReprocessingJob)
+            .where(ReprocessingJob.id == job.id)
+            .values(
+                status="COMPLETE",
+                lease_owner=None,
+                lease_token=None,
+                lease_expires_at=None,
+            )
+        )
+        await session.commit()
 
-    async def execute_with_concurrent_completion(*args, **kwargs):
-        nonlocal execute_count
-        execute_count += 1
-        if execute_count == 2:
-            async with concurrent_session_factory() as session:
-                await session.execute(
-                    update(ReprocessingJob)
-                    .where(ReprocessingJob.id == job.id)
-                    .values(status="COMPLETE")
-                )
-                await session.commit()
-        return await original_execute(*args, **kwargs)
-
-    async_db_session.execute = execute_with_concurrent_completion
-    reset_count = await repository.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    reset_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        max_attempts=3
+    )
     await async_db_session.commit()
 
     assert reset_count == 0
@@ -461,3 +463,85 @@ async def test_find_and_claim_jobs_does_not_double_claim_under_concurrency(
     assert len(persisted_rows) == 1
     assert persisted_rows[0].status == "PROCESSING"
     assert persisted_rows[0].attempt_count == 1
+
+
+async def test_expired_claim_is_recovered_reclaimed_and_fences_late_terminal_write(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    pending = ReprocessingJob(
+        job_type="LEASE_LIFECYCLE_PROOF",
+        payload={"scope": "reprocessing-lease-lifecycle"},
+        status="PENDING",
+    )
+    async_db_session.add(pending)
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async with session_factory() as first_session, first_session.begin():
+        first_claim = (
+            await ReprocessingJobRepository(first_session).find_and_claim_jobs(
+                "LEASE_LIFECYCLE_PROOF",
+                batch_size=1,
+                lease_owner="first-reprocessing-worker",
+                lease_duration_seconds=900,
+            )
+        )[0]
+
+    async with session_factory() as expiry_session, expiry_session.begin():
+        await expiry_session.execute(
+            update(ReprocessingJob)
+            .where(ReprocessingJob.id == first_claim.id)
+            .values(lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+        )
+
+    async with session_factory() as recovery_session, recovery_session.begin():
+        assert (
+            await ReprocessingJobRepository(recovery_session).find_and_reset_stale_jobs(
+                max_attempts=3
+            )
+            == 1
+        )
+
+    async with session_factory() as second_session, second_session.begin():
+        second_claim = (
+            await ReprocessingJobRepository(second_session).find_and_claim_jobs(
+                "LEASE_LIFECYCLE_PROOF",
+                batch_size=1,
+                lease_owner="second-reprocessing-worker",
+                lease_duration_seconds=900,
+            )
+        )[0]
+
+    assert second_claim.id == first_claim.id
+    assert second_claim.attempt_count == 2
+    assert second_claim.lease_token != first_claim.lease_token
+
+    async with session_factory() as late_session, late_session.begin():
+        assert (
+            await ReprocessingJobRepository(late_session).update_job_status(
+                first_claim.id,
+                "COMPLETE",
+                lease_token=first_claim.lease_token,
+            )
+            is False
+        )
+
+    async with session_factory() as current_session, current_session.begin():
+        assert (
+            await ReprocessingJobRepository(current_session).update_job_status(
+                second_claim.id,
+                "COMPLETE",
+                lease_token=second_claim.lease_token,
+            )
+            is True
+        )
+
+    async_db_session.expire_all()
+    persisted = await async_db_session.get(ReprocessingJob, first_claim.id)
+    assert persisted is not None
+    assert persisted.status == "COMPLETE"
+    assert persisted.attempt_count == 2
+    assert persisted.lease_owner is None
+    assert persisted.lease_token is None
+    assert persisted.lease_expires_at is None

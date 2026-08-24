@@ -1,6 +1,6 @@
 import asyncio
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from portfolio_common.database_models import ReprocessingJob
@@ -13,6 +13,7 @@ from src.services.valuation_orchestrator_service.app.core import (
     fx_revaluation_job_processor,
 )
 from src.services.valuation_orchestrator_service.app.core.reprocessing_worker import (
+    ReprocessingJobOwnershipLostError,
     ReprocessingWorker,
 )
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
@@ -27,6 +28,8 @@ from src.services.valuation_orchestrator_service.app.repositories.valuation_repo
 )
 
 pytestmark = pytest.mark.asyncio
+
+LEASE_TOKEN = "a" * 32
 
 
 @pytest.fixture
@@ -104,6 +107,7 @@ def mock_dependencies():
             "observe_noop": mock_observe_noop,
             "observe_stale_skips": mock_observe_stale_skips,
             "batch_timer": mock_batch_timer,
+            "db_session": mock_db_session,
         }
 
 
@@ -118,13 +122,18 @@ async def test_worker_processes_fx_revaluation_jobs_in_shared_runtime(mock_depen
         job_id=40,
         pair=DirectCurrencyPair("USD", "SGD"),
         earliest_impacted_date=date(2026, 4, 10),
+        lease_token=LEASE_TOKEN,
     )
     mock_repro_job_repo.find_and_claim_jobs.return_value = []
     mock_fx_revaluation_repo.claim_pending_jobs.return_value = [pending_job]
 
     await worker._process_batch()
 
-    mock_fx_revaluation_repo.claim_pending_jobs.assert_awaited_once_with(10)
+    mock_fx_revaluation_repo.claim_pending_jobs.assert_awaited_once_with(
+        10,
+        lease_owner=ANY,
+        lease_duration_seconds=900,
+    )
     processor.process.assert_awaited_once_with(
         job=pending_job,
         jobs=mock_repro_job_repo,
@@ -151,6 +160,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
         job_type="RESET_WATERMARKS",
         payload=job_payload,
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -167,10 +177,14 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     mock_observe_failed.assert_not_called()
     mock_observe_noop.assert_not_called()
     mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
-        timeout_minutes=15,
         max_attempts=3,
     )
-    mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
+    mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with(
+        "RESET_WATERMARKS",
+        10,
+        lease_owner=ANY,
+        lease_duration_seconds=900,
+    )
     mock_valuation_repo.find_portfolios_holding_security_on_date.assert_awaited_once_with(
         "S1",
         date(2025, 8, 10),
@@ -179,7 +193,11 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
         keys=[("P1", "S1"), ("P2", "S1")],
         new_watermark_date=date(2025, 8, 9),
     )
-    mock_repro_job_repo.update_job_status.assert_awaited_once_with(1, "COMPLETE")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(
+        1,
+        "COMPLETE",
+        lease_token=LEASE_TOKEN,
+    )
 
 
 async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dependencies):
@@ -195,6 +213,7 @@ async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dep
         job_type="RESET_WATERMARKS",
         payload=job_payload,
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -214,7 +233,11 @@ async def test_worker_warns_when_some_watermark_resets_are_epoch_fenced(mock_dep
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
     mock_observe_stale_skips.assert_called_once_with("reset_watermarks_fanout", 1)
-    mock_repro_job_repo.update_job_status.assert_awaited_once_with(11, "COMPLETE")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(
+        11,
+        "COMPLETE",
+        lease_token=LEASE_TOKEN,
+    )
 
 
 async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
@@ -232,6 +255,7 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
         job_type="RESET_WATERMARKS",
         payload=job_payload,
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -248,7 +272,45 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
     mock_repro_job_repo.update_job_status.assert_awaited_once()
     args, kwargs = mock_repro_job_repo.update_job_status.await_args
     assert args[:2] == (2, "FAILED")
+    assert kwargs["lease_token"] == LEASE_TOKEN
     assert "db write failed" in kwargs["failure_reason"]
+    transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
+    assert transaction_exits.await_args_list[1].args[0] is RuntimeError
+
+
+async def test_failed_job_rolls_back_without_preventing_sibling_commit(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    jobs = mock_dependencies["repro_job_repo"]
+    valuations = mock_dependencies["valuation_repo"]
+    states = mock_dependencies["state_repo"]
+    first = ReprocessingJob(
+        id=31,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S-FAIL", "earliest_impacted_date": "2025-08-10"},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+    second = ReprocessingJob(
+        id=32,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S-COMMIT", "earliest_impacted_date": "2025-08-10"},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+    jobs.find_and_claim_jobs.return_value = [first, second]
+    jobs.update_job_status.return_value = True
+    valuations.find_portfolios_holding_security_on_date.return_value = ["P1"]
+    states.update_watermarks_if_older.side_effect = [RuntimeError("first job failed"), 1]
+
+    await worker._process_batch()
+
+    assert jobs.update_job_status.await_args_list[0].args == (31, "FAILED")
+    assert jobs.update_job_status.await_args_list[0].kwargs["lease_token"] == LEASE_TOKEN
+    assert jobs.update_job_status.await_args_list[1].args == (32, "COMPLETE")
+    assert jobs.update_job_status.await_args_list[1].kwargs == {"lease_token": LEASE_TOKEN}
+    assert mock_dependencies["db_session"].begin.call_count == 6
+    transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
+    assert transaction_exits.await_args_list[1].args[0] is RuntimeError
 
 
 async def test_worker_resets_stale_jobs_before_claiming(mock_dependencies):
@@ -261,10 +323,14 @@ async def test_worker_resets_stale_jobs_before_claiming(mock_dependencies):
     await worker._process_batch()
 
     mock_repro_job_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
-        timeout_minutes=15,
         max_attempts=3,
     )
-    mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with("RESET_WATERMARKS", 10)
+    mock_repro_job_repo.find_and_claim_jobs.assert_awaited_once_with(
+        "RESET_WATERMARKS",
+        10,
+        lease_owner=ANY,
+        lease_duration_seconds=900,
+    )
 
 
 async def test_worker_reads_poll_and_batch_from_environment(monkeypatch: pytest.MonkeyPatch):
@@ -331,6 +397,7 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -348,7 +415,11 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
     )
     mock_observe_completed.assert_not_called()
     mock_observe_stale_skips.assert_not_called()
-    mock_repro_job_repo.update_job_status.assert_awaited_once_with(19, "PENDING")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(
+        19,
+        "PENDING",
+        lease_token=LEASE_TOKEN,
+    )
 
 
 async def test_worker_falls_back_to_later_first_holdings_before_requeueing(
@@ -366,6 +437,7 @@ async def test_worker_falls_back_to_later_first_holdings_before_requeueing(
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -391,7 +463,11 @@ async def test_worker_falls_back_to_later_first_holdings_before_requeueing(
     )
     mock_observe_noop.assert_not_called()
     mock_observe_completed.assert_called_once_with("RESET_WATERMARKS")
-    mock_repro_job_repo.update_job_status.assert_awaited_once_with(20, "COMPLETE")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(
+        20,
+        "COMPLETE",
+        lease_token=LEASE_TOKEN,
+    )
 
 
 async def test_worker_unions_current_and_later_holdings_for_replay_reset(
@@ -407,6 +483,7 @@ async def test_worker_unions_current_and_later_holdings_for_replay_reset(
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -429,7 +506,11 @@ async def test_worker_unions_current_and_later_holdings_for_replay_reset(
         keys=[("P_LATE", "S1"), ("P_SHORT", "S1")],
         new_watermark_date=date(2025, 8, 9),
     )
-    mock_repro_job_repo.update_job_status.assert_awaited_once_with(23, "COMPLETE")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(
+        23,
+        "COMPLETE",
+        lease_token=LEASE_TOKEN,
+    )
 
 
 async def test_worker_skips_completion_metric_when_terminal_ownership_is_lost(mock_dependencies):
@@ -445,6 +526,7 @@ async def test_worker_skips_completion_metric_when_terminal_ownership_is_lost(mo
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -460,6 +542,8 @@ async def test_worker_skips_completion_metric_when_terminal_ownership_is_lost(mo
         "reset_watermarks_terminal_ownership_lost",
         1,
     )
+    transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
+    assert transaction_exits.await_args_list[1].args[0] is ReprocessingJobOwnershipLostError
 
 
 async def test_worker_emits_requeue_ownership_metric_when_requeue_ownership_is_lost(
@@ -477,6 +561,7 @@ async def test_worker_emits_requeue_ownership_metric_when_requeue_ownership_is_l
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
         status="PENDING",
+        lease_token=LEASE_TOKEN,
     )
 
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
@@ -514,6 +599,7 @@ async def test_worker_processes_job_under_job_correlation_context(mock_dependenc
             job_type="RESET_WATERMARKS",
             payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
             status="PENDING",
+            lease_token=LEASE_TOKEN,
             correlation_id="corr-reset-17",
         )
     ]

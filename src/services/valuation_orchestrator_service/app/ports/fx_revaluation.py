@@ -78,6 +78,8 @@ class ReprocessingJobStatusWriter(Protocol):
         self,
         job_id: int,
         status: str,
+        *,
+        lease_token: str,
         failure_reason: str | None = None,
     ) -> bool:
         """Apply a transition only while the caller retains job ownership."""

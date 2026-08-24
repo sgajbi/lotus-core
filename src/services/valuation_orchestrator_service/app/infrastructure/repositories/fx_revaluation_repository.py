@@ -12,10 +12,12 @@ from portfolio_common.database_models import (
     Portfolio,
     PositionHistory,
     PositionState,
-    ReprocessingJob,
 )
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.reprocessing_job_repository import (
+    ClaimedReprocessingJob,
+    ReprocessingJobRepository,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,17 +46,22 @@ class SqlAlchemyFxRevaluationRepository:
     async def claim_pending_jobs(
         self,
         batch_size: int,
+        *,
+        lease_owner: str | None = None,
+        lease_duration_seconds: int = 15 * 60,
     ) -> list[ClaimedFxRevaluationJob | RejectedFxRevaluationJob]:
         """Claim and map the oldest pending FX replay jobs to validated work."""
         claimed_rows = await ReprocessingJobRepository(self._db).find_and_claim_jobs(
             FX_REVALUATION_JOB_TYPE,
             batch_size,
+            lease_owner=lease_owner,
+            lease_duration_seconds=lease_duration_seconds,
         )
         return [self._map_claimed_job(row) for row in claimed_rows]
 
     @staticmethod
     def _map_claimed_job(
-        row: ReprocessingJob,
+        row: ClaimedReprocessingJob,
     ) -> ClaimedFxRevaluationJob | RejectedFxRevaluationJob:
         """Keep persistence payload parsing inside the infrastructure boundary."""
         try:
@@ -66,6 +73,7 @@ class SqlAlchemyFxRevaluationRepository:
                     payload["to_currency"],
                 ),
                 earliest_impacted_date=date.fromisoformat(payload["earliest_impacted_date"]),
+                lease_token=row.lease_token,
                 correlation_id=row.correlation_id,
                 attempt_count=int(row.attempt_count),
             )
@@ -73,6 +81,7 @@ class SqlAlchemyFxRevaluationRepository:
             return RejectedFxRevaluationJob(
                 job_id=row.id,
                 rejection_reason=f"invalid_fx_revaluation_job_payload: {exc}",
+                lease_token=row.lease_token,
                 correlation_id=row.correlation_id,
             )
 

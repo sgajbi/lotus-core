@@ -88,6 +88,7 @@ class ClaimedFxRevaluationJob:
     job_id: int
     pair: DirectCurrencyPair
     earliest_impacted_date: date
+    lease_token: str
     correlation_id: str | None = None
     attempt_count: int = 1
 
@@ -98,4 +99,5 @@ class RejectedFxRevaluationJob:
 
     job_id: int
     rejection_reason: str
+    lease_token: str
     correlation_id: str | None = None

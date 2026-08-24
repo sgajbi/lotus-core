@@ -1,7 +1,10 @@
 # src/services/valuation_orchestrator_service/app/core/reprocessing_worker.py
 import asyncio
 import logging
+import uuid
+from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timedelta, timezone
+from typing import Any, cast
 
 from portfolio_common.db import get_async_db_session
 from portfolio_common.logging_utils import correlation_id_var, operation_log_extra
@@ -25,9 +28,17 @@ from ..infrastructure.repositories.fx_revaluation_repository import (
 )
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
-from .fx_revaluation_job_processor import FxRevaluationJobProcessor
+from .fx_revaluation_job_processor import (
+    FxRevaluationJobOwnershipLostError,
+    FxRevaluationJobProcessor,
+)
+from .reprocessing_worker_dependencies import ReprocessingWorkerRepositoryFactory
 
 logger = logging.getLogger(__name__)
+
+
+class ReprocessingJobOwnershipLostError(RuntimeError):
+    """Abort a job transaction when its durable lease no longer authorizes completion."""
 
 
 def _reset_watermark_job_scope(job) -> tuple[str, date, date]:
@@ -86,6 +97,8 @@ class ReprocessingWorker:
         poll_interval: int = 10,
         batch_size: int = 10,
         fx_job_processor: FxRevaluationJobProcessor | None = None,
+        session_provider: Callable[[], AsyncIterator[Any]] | None = None,
+        repository_factory: ReprocessingWorkerRepositoryFactory | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             worker_poll_interval_default=poll_interval,
@@ -94,12 +107,26 @@ class ReprocessingWorker:
         self._poll_interval = runtime_settings.reprocessing_worker_poll_interval_seconds
         self._batch_size = runtime_settings.reprocessing_worker_batch_size
         self._stale_timeout_minutes = runtime_settings.reprocessing_worker_stale_timeout_minutes
+        self._lease_duration_seconds = self._stale_timeout_minutes * 60
+        self._lease_owner = f"valuation-reprocessing-{uuid.uuid4().hex}"
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
         self._stop_event = asyncio.Event()
         self._fx_job_processor = fx_job_processor or FxRevaluationJobProcessor(
             no_impact_attempt_limit=self._max_attempts
         )
+        self._session_provider = session_provider
+        self._repository_factory = repository_factory or ReprocessingWorkerRepositoryFactory(
+            reprocessing_job_repository_factory=lambda db: ReprocessingJobRepository(db),
+            position_state_repository_factory=lambda db: PositionStateRepository(db),
+            valuation_repository_factory=lambda db: ValuationRepository(db),
+            fx_revaluation_repository_factory=lambda db: SqlAlchemyFxRevaluationRepository(db),
+        )
+
+    def _open_session(self) -> AsyncIterator[Any]:
+        if self._session_provider is not None:
+            return cast(AsyncIterator[Any], self._session_provider())
+        return cast(AsyncIterator[Any], get_async_db_session())
 
     def stop(self):
         logger.info(
@@ -128,76 +155,78 @@ class ReprocessingWorker:
         set_control_queue_oldest_pending_age_seconds("reprocessing", max(age_seconds, 0.0))
 
     async def _process_batch(self):
-        """Processes one batch of pending RESET_WATERMARKS jobs."""
+        """Claim briefly, then commit or roll back every job independently."""
         with reprocessing_worker_batch_timer():
-            async for db in get_async_db_session():
-                async with db.begin():
-                    job_repo = ReprocessingJobRepository(db)
-                    state_repo = PositionStateRepository(db)
-                    valuation_repo = ValuationRepository(db)
+            claimed_jobs = await self._claim_reset_watermark_jobs()
+            for job in claimed_jobs:
+                await self._process_reset_watermark_job(job=job)
 
-                    claimed_jobs = await self._claim_reset_watermark_jobs(job_repo)
-                    for job in claimed_jobs:
-                        await self._process_reset_watermark_job(
-                            job=job,
-                            job_repo=job_repo,
-                            state_repo=state_repo,
-                            valuation_repo=valuation_repo,
-                        )
+            fx_jobs = await self._claim_fx_revaluation_jobs()
+            for job in fx_jobs:
+                await self._process_fx_revaluation_job(job=job)
 
-                    fx_revaluation_repo = SqlAlchemyFxRevaluationRepository(db)
-                    fx_jobs = await fx_revaluation_repo.claim_pending_jobs(self._batch_size)
-                    if fx_jobs:
-                        observe_reprocessing_worker_jobs_claimed(
-                            FX_REVALUATION_JOB_TYPE,
-                            len(fx_jobs),
-                        )
-                    for job in fx_jobs:
-                        await self._fx_job_processor.process(
-                            job=job,
-                            jobs=job_repo,
-                            watermarks=state_repo,
-                            revaluation=fx_revaluation_repo,
-                        )
+            await self._refresh_queue_metrics()
 
-    async def _claim_reset_watermark_jobs(self, job_repo: ReprocessingJobRepository):
-        await job_repo.find_and_reset_stale_jobs(
-            timeout_minutes=self._stale_timeout_minutes,
-            max_attempts=self._max_attempts,
-        )
-        await self._update_queue_metrics(job_repo)
-
-        claimed_jobs = await job_repo.find_and_claim_jobs("RESET_WATERMARKS", self._batch_size)
-        await self._update_queue_metrics(job_repo)
+    async def _claim_reset_watermark_jobs(self):
+        claimed_jobs = []
+        async for db in self._open_session():
+            async with db.begin():
+                job_repo = self._repository_factory.reprocessing_jobs(db)
+                await job_repo.find_and_reset_stale_jobs(max_attempts=self._max_attempts)
+                claimed_jobs = await job_repo.find_and_claim_jobs(
+                    "RESET_WATERMARKS",
+                    self._batch_size,
+                    lease_owner=self._lease_owner,
+                    lease_duration_seconds=self._lease_duration_seconds,
+                )
         if claimed_jobs:
             observe_reprocessing_worker_jobs_claimed("RESET_WATERMARKS", len(claimed_jobs))
         return claimed_jobs
+
+    async def _claim_fx_revaluation_jobs(self):
+        claimed_jobs = []
+        async for db in self._open_session():
+            async with db.begin():
+                repository = self._repository_factory.fx_revaluations(db)
+                claimed_jobs = await repository.claim_pending_jobs(
+                    self._batch_size,
+                    lease_owner=self._lease_owner,
+                    lease_duration_seconds=self._lease_duration_seconds,
+                )
+        if claimed_jobs:
+            observe_reprocessing_worker_jobs_claimed(FX_REVALUATION_JOB_TYPE, len(claimed_jobs))
+        return claimed_jobs
+
+    async def _refresh_queue_metrics(self) -> None:
+        async for db in self._open_session():
+            async with db.begin():
+                await self._update_queue_metrics(self._repository_factory.reprocessing_jobs(db))
 
     async def _process_reset_watermark_job(
         self,
         *,
         job,
-        job_repo: ReprocessingJobRepository,
-        state_repo: PositionStateRepository,
-        valuation_repo: ValuationRepository,
     ) -> None:
         correlation_token = None
         try:
             if job.correlation_id:
                 correlation_token = correlation_id_var.set(job.correlation_id)
-            should_complete_job, security_id = await self._reset_impacted_watermarks(
-                job=job,
-                state_repo=state_repo,
-                valuation_repo=valuation_repo,
-            )
-            await self._update_reset_watermark_job_terminal_status(
-                job=job,
-                job_repo=job_repo,
-                security_id=security_id,
-                should_complete_job=should_complete_job,
-            )
+            async for db in self._open_session():
+                async with db.begin():
+                    should_complete_job, _security_id = await self._reset_impacted_watermarks(
+                        job=job,
+                        state_repo=self._repository_factory.position_states(db),
+                        valuation_repo=self._repository_factory.valuations(db),
+                    )
+                    await self._update_reset_watermark_job_terminal_status(
+                        job=job,
+                        job_repo=self._repository_factory.reprocessing_jobs(db),
+                        should_complete_job=should_complete_job,
+                    )
+        except ReprocessingJobOwnershipLostError:
+            pass
         except Exception as exc:
-            await self._mark_reset_watermark_job_failed(job=job, job_repo=job_repo, exc=exc)
+            await self._mark_reset_watermark_job_failed(job=job, exc=exc)
         finally:
             if correlation_token is not None:
                 correlation_id_var.reset(correlation_token)
@@ -274,11 +303,14 @@ class ReprocessingWorker:
         *,
         job,
         job_repo: ReprocessingJobRepository,
-        security_id: str,
         should_complete_job: bool,
     ) -> None:
         terminal_status = "COMPLETE" if should_complete_job else "PENDING"
-        if await job_repo.update_job_status(job.id, terminal_status):
+        if await job_repo.update_job_status(
+            job.id,
+            terminal_status,
+            lease_token=job.lease_token,
+        ):
             if should_complete_job:
                 observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
             return
@@ -301,12 +333,14 @@ class ReprocessingWorker:
                 terminal_status=terminal_status,
             ),
         )
+        raise ReprocessingJobOwnershipLostError(
+            f"reprocessing job {job.id} lease expired before {terminal_status}"
+        )
 
-    @staticmethod
     async def _mark_reset_watermark_job_failed(
+        self,
         *,
         job,
-        job_repo: ReprocessingJobRepository,
         exc: Exception,
     ) -> None:
         logger.error(
@@ -321,11 +355,40 @@ class ReprocessingWorker:
                 error_type=type(exc).__name__,
             ),
         )
-        updated = await job_repo.update_job_status(job.id, "FAILED", failure_reason=str(exc))
+        updated = False
+        async for db in self._open_session():
+            async with db.begin():
+                updated = await self._repository_factory.reprocessing_jobs(db).update_job_status(
+                    job.id,
+                    "FAILED",
+                    lease_token=job.lease_token,
+                    failure_reason=str(exc),
+                )
         if updated:
             observe_reprocessing_worker_jobs_failed("RESET_WATERMARKS")
         else:
             observe_reprocessing_stale_skips("reset_watermarks_terminal_ownership_lost", 1)
+
+    async def _process_fx_revaluation_job(self, *, job) -> None:
+        try:
+            async for db in self._open_session():
+                async with db.begin():
+                    await self._fx_job_processor.process(
+                        job=job,
+                        jobs=self._repository_factory.reprocessing_jobs(db),
+                        watermarks=self._repository_factory.position_states(db),
+                        revaluation=self._repository_factory.fx_revaluations(db),
+                    )
+        except FxRevaluationJobOwnershipLostError:
+            pass
+        except Exception as exc:
+            async for db in self._open_session():
+                async with db.begin():
+                    await self._fx_job_processor.mark_failed(
+                        job=job,
+                        jobs=self._repository_factory.reprocessing_jobs(db),
+                        exc=exc,
+                    )
 
     async def run(self):
         logger.info(
