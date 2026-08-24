@@ -325,6 +325,33 @@ def test_fx_cash_settlement_buy_updates_cash_position() -> None:
 
 
 @pytest.mark.parametrize(
+    ("component_type", "contradictory_cost", "expected_sign"),
+    [
+        ("FX_CASH_SETTLEMENT_BUY", Decimal("-25"), "non-negative"),
+        ("FX_CASH_SETTLEMENT_SELL", Decimal("25"), "non-positive"),
+    ],
+)
+def test_fx_cash_settlement_rejects_contradictory_booked_cost(
+    component_type: str,
+    contradictory_cost: Decimal,
+    expected_sign: str,
+) -> None:
+    transaction = _txn(
+        "FX_SPOT",
+        gross_transaction_amount=Decimal("25"),
+        net_cost=contradictory_cost,
+        net_cost_local=contradictory_cost,
+        component_type=component_type,
+    )
+
+    with pytest.raises(
+        CashPositionEconomicsError,
+        match=rf"{component_type} net_cost must be {expected_sign}",
+    ):
+        calculate_next_position_state(PositionBalanceState(), transaction)
+
+
+@pytest.mark.parametrize(
     ("transaction_type", "gross_amount", "expected_balance"),
     [
         ("DEPOSIT", Decimal("25"), Decimal("125")),

@@ -15,12 +15,17 @@ from ..transaction.processing_type import resolve_effective_processing_transacti
 from ..transaction.redemption import REDEMPTION_TRANSACTION_TYPES
 from .numeric_policy import POSITION_HISTORY_LEDGER_OUTPUT_V1
 
-CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
-CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
+CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT", "FX_CASH_SETTLEMENT_BUY"}
+CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {
+    "WITHDRAWAL",
+    "FEE",
+    "TAX",
+    "FX_CASH_SETTLEMENT_SELL",
+}
 CASH_POSITION_DELTA_TRANSACTION_TYPES = (
     CASH_POSITION_INFLOW_TRANSACTION_TYPES
     | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
-    | {"ADJUSTMENT", "FX_CASH_SETTLEMENT_BUY", "FX_CASH_SETTLEMENT_SELL"}
+    | {"ADJUSTMENT"}
 )
 POSITION_TRANSFER_TRANSACTION_TYPES = {
     "TRANSFER_IN",
@@ -369,10 +374,7 @@ def _cash_position_amount_delta(transaction: BookedTransaction, txn_type: str) -
         net_cost_local = transaction.net_cost_local
         if net_cost_local is not None and not net_cost_local.is_zero():
             magnitude = abs(net_cost_local)
-    if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
-        "ADJUSTMENT",
-        "FX_CASH_SETTLEMENT_BUY",
-    }:
+    if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {"ADJUSTMENT"}:
         if txn_type == "ADJUSTMENT":
             movement_direction = normalize_position_code(transaction.movement_direction or "INFLOW")
             return -magnitude if movement_direction == "OUTFLOW" else magnitude
