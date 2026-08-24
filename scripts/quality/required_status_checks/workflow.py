@@ -46,6 +46,7 @@ _MAKE_ENDEF_DIRECTIVE = re.compile(r"^endef(?:\s|$)")
 _MAKE_INCLUDE_DIRECTIVE = re.compile(r"^(?:-?include|sinclude)(?:\s|$)")
 _STATIC_PHONY_DECLARATION = re.compile(r"^\.PHONY:\s*(.*?)\s*$")
 _STATIC_PHONY_TARGET = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+_IGNORED_RECIPE_PREFIX = re.compile(r"^\t[ @+]*-")
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
 
 
@@ -187,6 +188,10 @@ def _static_phony_targets(path: Path) -> frozenset[str]:
     define_depth = 0
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
+        if _IGNORED_RECIPE_PREFIX.match(raw_line):
+            raise RequiredStatusChecksError(
+                f"Makefile execution state must be static: {path}; line={line_number}"
+            )
         if _MAKE_DEFINE_DIRECTIVE.match(raw_line):
             validate_make_execution_state(line, path=path, line_number=line_number)
             define_depth += 1
