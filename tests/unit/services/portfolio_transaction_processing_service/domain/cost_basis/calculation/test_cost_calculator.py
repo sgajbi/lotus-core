@@ -1830,6 +1830,8 @@ def test_deposit_strategy_normalizes_blank_gross_amount_to_quantity_once(
         trade_currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
     )
     quantity = _StringCountedAmount("10000")
     deposit_transaction.gross_transaction_amount = " "
@@ -2231,6 +2233,8 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
         trade_currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
     )
 
     # Simulate the disposition engine returning the cost of the withdrawn cash

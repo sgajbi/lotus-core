@@ -22,6 +22,7 @@ from portfolio_common.domain.transaction.type_registry import (
     is_production_booking_transaction_type,
 )
 
+from ...transaction.cash_instrument import is_cash_instrument
 from ...transaction.fx import (
     FxCanonicalTransaction,
     FxTransactionSource,
@@ -146,15 +147,9 @@ def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
 
 
 def _is_cash_instrument(transaction: CostBasisTransaction) -> bool:
-    product_type = _normalize_code(getattr(transaction, "product_type", ""))
-    asset_class = _normalize_code(getattr(transaction, "asset_class", ""))
-    instrument_id = _normalize_code(getattr(transaction, "instrument_id", ""))
-    security_id = _normalize_code(getattr(transaction, "security_id", ""))
-    return (
-        product_type == "CASH"
-        or asset_class == "CASH"
-        or instrument_id.startswith("CASH")
-        or security_id.startswith("CASH")
+    return is_cash_instrument(
+        product_type=getattr(transaction, "product_type", None),
+        asset_class=getattr(transaction, "asset_class", None),
     )
 
 
