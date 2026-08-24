@@ -6,7 +6,10 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
-from portfolio_common.domain.transaction.type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
+from portfolio_common.domain.transaction.type_registry import (
+    PRODUCTION_BOOKING_TRANSACTION_TYPES,
+    TRANSACTION_TYPE_REGISTRY,
+)
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostBasisStrategy,
@@ -661,7 +664,17 @@ def test_cost_calculator_normalizes_transaction_type_before_strategy_resolution(
 def test_cost_calculator_has_explicit_strategies_for_production_booking_types(
     cost_calculator,
 ):
-    assert set(cost_calculator._strategies) == PRODUCTION_BOOKING_TRANSACTION_TYPES
+    cash_account_types = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.settlement_behavior == "cash_account_required"
+    }
+
+    assert set(cost_calculator._strategies) | cash_account_types == (
+        PRODUCTION_BOOKING_TRANSACTION_TYPES
+    )
+    assert set(cost_calculator._strategies).isdisjoint(cash_account_types)
     assert "OTHER" not in cost_calculator._strategies
 
 
@@ -1778,6 +1791,8 @@ def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
         trade_currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
     )
     cost_calculator.calculate_transaction_costs(deposit_transaction)
     assert deposit_transaction.net_cost == Decimal("10000")
@@ -1802,6 +1817,8 @@ def test_deposit_strategy_uses_quantity_when_gross_amount_is_zero(
         trade_currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
     )
 
     cost_calculator.calculate_transaction_costs(deposit_transaction)
@@ -1863,6 +1880,8 @@ def test_deposit_strategy_uses_magnitude_for_signed_legacy_cash_amount(
         trade_currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
     )
     deposit_transaction.gross_transaction_amount = Decimal("-10000")
 
@@ -2401,15 +2420,16 @@ def test_cash_fee_outflow_includes_fee_components(cost_calculator, mock_disposit
     assert fee_transaction.net_cost_local == Decimal("-26.75")
 
 
-def test_non_cash_tax_is_rejected_without_positive_default_cost(
-    cost_calculator, mock_disposition_engine, error_reporter
+@pytest.mark.parametrize("transaction_type", ["DEPOSIT", "WITHDRAWAL", "FEE", "TAX"])
+def test_non_cash_account_booking_is_rejected_without_default_cost(
+    transaction_type, cost_calculator, mock_disposition_engine, error_reporter
 ):
-    tax_transaction = CostBasisTransaction(
-        transaction_id="TAX_NON_CASH_01",
+    transaction = CostBasisTransaction(
+        transaction_id=f"{transaction_type}_NON_CASH_01",
         portfolio_id="P1",
         instrument_id="AAPL",
         security_id="AAPL",
-        transaction_type="TAX",
+        transaction_type=transaction_type,
         transaction_date=datetime(2023, 2, 20),
         quantity=Decimal("1"),
         price=Decimal("25"),
@@ -2421,13 +2441,15 @@ def test_non_cash_tax_is_rejected_without_positive_default_cost(
         asset_class="Equity",
     )
 
-    cost_calculator.calculate_transaction_costs(tax_transaction)
+    cost_calculator.calculate_transaction_costs(transaction)
 
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
-    assert error_reporter.has_errors_for("TAX_NON_CASH_01")
-    assert "cash instrument outflow" in error_reporter.get_errors()[0].error_reason
-    assert tax_transaction.net_cost is None
-    assert tax_transaction.net_cost_local is None
+    assert error_reporter.has_errors_for(f"{transaction_type}_NON_CASH_01")
+    assert error_reporter.get_errors()[0].error_reason.startswith(
+        "CASH_ACCOUNT_002_NON_CASH_INSTRUMENT:"
+    )
+    assert transaction.net_cost is None
+    assert transaction.net_cost_local is None
 
 
 def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
