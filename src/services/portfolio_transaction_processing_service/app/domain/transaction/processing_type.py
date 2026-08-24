@@ -8,20 +8,16 @@ from portfolio_common.domain.transaction_control_codes import normalize_transact
 
 
 class ProcessingTypeSource(Protocol):
-    """Structural transaction fields required by processing-type policies."""
+    """Structural transaction fields required by processing-type policies.
+
+    Legacy non-FX rows may omit ``component_type``; the resolver treats it as absent.
+    """
 
     @property
     def transaction_type(self) -> str:
         """Return the booked business transaction type."""
 
         ...
-
-    @property
-    def component_type(self) -> str | None:
-        """Return the concrete processing component type when present."""
-
-        ...
-
 
 FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CONTRACT_OPEN",
@@ -44,7 +40,7 @@ def resolve_effective_processing_transaction_type(transaction: ProcessingTypeSou
     For FX, transaction_type remains the business deal type while component_type
     identifies the concrete row behavior required by downstream processors.
     """
-    component_type = normalize_processing_type(transaction.component_type)
+    component_type = normalize_processing_type(getattr(transaction, "component_type", None))
     if component_type in FX_COMPONENT_PROCESSING_TYPES:
         return component_type
     return normalize_processing_type(transaction.transaction_type)

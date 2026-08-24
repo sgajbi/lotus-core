@@ -23,6 +23,7 @@ from portfolio_common.domain.transaction.type_registry import (
 )
 
 from ...transaction.cash_instrument import is_cash_instrument
+from ...transaction.processing_type import resolve_effective_processing_transaction_type
 from ...transaction.fx import (
     FxCanonicalTransaction,
     FxTransactionSource,
@@ -1363,7 +1364,7 @@ class CostBasisCalculator:
             return
         try:
             assert_cash_account_required_instrument(
-                transaction.transaction_type,
+                resolve_effective_processing_transaction_type(transaction),
                 instrument_reference_available=True,
                 product_type=getattr(transaction, "product_type", None),
                 asset_class=getattr(transaction, "asset_class", None),

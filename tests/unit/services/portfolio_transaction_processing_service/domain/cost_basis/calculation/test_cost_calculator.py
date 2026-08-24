@@ -977,6 +977,7 @@ def test_cash_consideration_strategy_rejects_malformed_persisted_price(
                 "linked_fx_cash_leg_id": "FX-SPOT-SELL-001",
                 "fx_cash_leg_role": "BUY",
                 "fx_contract_id": None,
+                "product_type": "CASH",
             },
         ),
         ("FX_FORWARD", "FX_CONTRACT_CLOSE", {}),
@@ -1017,6 +1018,45 @@ def test_fx_strategy_applies_baseline_processing_without_generic_pending_error(
     assert fx_transaction.realized_capital_pnl_local == Decimal("0")
     assert fx_transaction.realized_fx_pnl_local == Decimal("0")
     assert fx_transaction.realized_total_pnl_local == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("component_type", "metadata", "reason_code"),
+    [
+        (
+            "FX_CASH_SETTLEMENT_BUY",
+            {},
+            "CASH_ACCOUNT_001_INSTRUMENT_AUTHORITY_UNAVAILABLE",
+        ),
+        (
+            "FX_CASH_SETTLEMENT_SELL",
+            {"product_type": "EQUITY", "asset_class": "Equity"},
+            "CASH_ACCOUNT_002_NON_CASH_INSTRUMENT",
+        ),
+    ],
+)
+def test_fx_cash_component_rebuild_fails_closed_without_authoritative_cash_metadata(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+    component_type: str,
+    metadata: dict[str, str],
+    reason_code: str,
+) -> None:
+    fx_transaction = _canonical_fx_transaction(
+        transaction_id=f"FX-REBUILD-{component_type}",
+        transaction_type="FX_SPOT",
+        component_type=component_type,
+        **metadata,
+    )
+
+    cost_calculator.calculate_transaction_costs(fx_transaction)
+
+    assert error_reporter.has_errors_for(fx_transaction.transaction_id)
+    assert reason_code in error_reporter.get_errors()[0].error_reason
+    assert fx_transaction.net_cost is None
     mock_disposition_engine.add_buy_lot.assert_not_called()
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
