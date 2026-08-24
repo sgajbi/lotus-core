@@ -2,7 +2,7 @@
 .PHONY: profile-derived-state-price-restatement profile-derived-state-fx-restatement
 .PHONY: ingestion-gateway-rate-limit-policy-guard generated-artifact-tracking-guard technology-governance-pilot-guard technology-governance-pilot-receipt-guard dependency-lock-replay-check dependency-technology-inventory dependency-technology-certify refresh-dependency-technology-inventory base-image-lifecycle-guard base-image-registry-evidence-check refresh-base-image-manifest-evidence outbox-capacity-profile-guard test-outbox-capacity-acceptance
 .PHONY: test-critical-lifecycle-db test-kafka-restart-recovery-gate
-.PHONY: calculated-output-policy-guard bond-quote-authority-guard
+.PHONY: calculated-output-policy-guard bond-quote-authority-guard cash-instrument-authority-guard
 .PHONY: test-fixed-income-book-cost-recovery-gate
 .PHONY: test-import-root-guard
 .PHONY: transaction-release-rehearsal-plan transaction-release-rehearsal
@@ -270,6 +270,9 @@ aggregation-scheduler-boundary-guard:
 position-reducer-boundary-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/position_reducer_boundary_guard.py
 
+cash-instrument-authority-guard:
+	$(REPOSITORY_PYTHON) scripts/quality/cash_instrument_authority_guard.py
+
 infrastructure-adapter-layer-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/infrastructure_adapter_layer_guard.py
 
@@ -412,6 +415,7 @@ architecture-guard:
 	$(MAKE) transaction-replay-boundary-guard
 	$(MAKE) aggregation-scheduler-boundary-guard
 	$(MAKE) position-reducer-boundary-guard
+	$(MAKE) cash-instrument-authority-guard
 	$(MAKE) infrastructure-adapter-layer-guard
 	$(MAKE) repository-transaction-boundary-guard
 	$(MAKE) ingestion-store-port-guard
