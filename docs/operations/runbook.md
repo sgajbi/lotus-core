@@ -779,6 +779,7 @@ Operational knobs:
 | `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE` | `100` | Maximum generated valuation backfill jobs written in one scheduler upsert chunk across states. |
 | `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` | Scheduler batch size (`100` by default; Compose uses `1000`) | Maximum durable valuation jobs allowed in `PROCESSING` across scheduler replicas. Claims use a PostgreSQL transaction-scoped lock so concurrent schedulers share the same cap. Size this below the number the active valuation workers can drain within `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS`. |
 | `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS` | `900` | Database-clock lifetime for one valuation claim. Terminal writes and dispatch recovery require the opaque token and an unexpired lease; expired claims are requeued or failed under the existing attempt ceiling. Size above the measured dispatch-plus-calculation bound and certify changes with reclaim race tests and the daily workload. |
+| `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` | `15` | Database-clock lease lifetime for one reset-watermarks or FX reprocessing claim. It no longer compares application timestamps. Size above the measured per-job execution bound; expiry permits deterministic recovery and fences late terminal writes. |
 | `POSITION_VALUATION_WORKER_COUNT` | `1` (`8` in app-local Compose) | Number of serial Kafka valuation consumers in one position-valuation process. Do not configure more active workers than `valuation.job.requested` partitions. |
 
 ### Valuation lease schema cutover
@@ -811,6 +812,20 @@ serve the same stale-recovery predicate, and duplicate maintenance would increas
 job table. After rollout, run `make database-hot-path-evidence` and require `valuation_job_claim`,
 `valuation_stale_scan`, and `valuation_stale_reset` to remain indexed, within their governed row
 budgets, and free of `Seq Scan` and `WindowAgg`.
+
+### Reprocessing lease schema cutover
+
+Migration `c161b2c3d528` is an intentional quiesced cutover for `reprocessing_jobs`; it is not safe
+for mixed old/new worker binaries. Before upgrade, stop every valuation reprocessing worker and
+verify no row remains `PROCESSING`. The migration fails closed when an in-flight row exists rather
+than inventing lease authority. Apply the migration, deploy the new valuation orchestrator worker,
+then resume polling and confirm pending work drains.
+
+For rollback, stop the new workers and drain, recover, or terminalize every `PROCESSING` row before
+downgrade. The downgrade fails closed while leased work exists. Never clear lease fields, rewrite
+status, or mark the Alembic revision manually to bypass either guard. After rollout, require
+`reprocessing_job_claim`, `reprocessing_stale_scan`, and `reprocessing_stale_reset` hot-path
+evidence to remain bounded and index-backed.
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.

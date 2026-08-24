@@ -211,10 +211,22 @@ dispatch-loop exhaustion, ingestion operating-policy reporting, and Query Contro
 capacity. A larger legacy configured value remains startup-compatible but is exposed and executed
 as 1,000; dispatch rounds may continue after a full 1,000-row cohort until the configured round,
 poll-budget, dispatch-budget, in-flight, or producer-back-pressure boundary is reached.
-Expired valuation claims and stale reprocessing jobs are recovered in deterministic cohorts of at
+Expired valuation and reprocessing claims are recovered by database-clock lease expiry in
+deterministic cohorts of at
 most 1,000 per scheduler poll; subsequent polls drain any remaining backlog. Recovery evidence uses
 bounded counts and reason codes and never emits job-ID collections. Use the support APIs above for
 business-key drill-down.
+
+Each reprocessing claim commits before execution. Every reset-watermarks or FX job then owns an
+independent transaction, so one failed job cannot roll back a sibling. Terminal writes require the
+exact opaque claim token and an unexpired lease; a late worker rolls its domain mutations back.
+`REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` (default `15`) is the lease lifetime, measured by the
+PostgreSQL clock rather than `updated_at` or an application clock.
+
+Migration `c161b2c3d528` requires a quiesced reprocessing queue. Stop old workers and ensure no
+`PROCESSING` rows remain before upgrade; the migration fails closed otherwise. For rollback, stop
+new workers and clear active work through governed recovery or terminal processing before
+downgrade. Never bypass the guard by editing lease fields, statuses, or Alembic revision state.
 
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply
