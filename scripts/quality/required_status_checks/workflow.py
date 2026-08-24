@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
 import re
-import shutil
-import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -15,10 +12,18 @@ from scripts.quality.required_status_checks.job_policy import (
     effective_environment,
     validate_blocking_job,
 )
-from scripts.quality.required_status_checks.make_policy import (
-    validate_make_authority_functions,
-    validate_make_execution_state,
-    validate_make_recipe_failure_propagation,
+from scripts.quality.required_status_checks.make_authority import (
+    load_make_target_authority as _load_make_target_authority,
+)
+from scripts.quality.required_status_checks.make_authority import (
+    load_phony_make_targets as _load_phony_make_targets,
+)
+from scripts.quality.required_status_checks.make_authority import (
+    validate_make_targets_have_executable_authority as _validate_make_step_targets,
+)
+from scripts.quality.required_status_checks.make_command_contract import (
+    DEFAULT_MAKE_COMMAND_CONTRACT_PATH,
+    load_governed_make_recipe_commands,
 )
 from scripts.quality.required_status_checks.model import (
     RequiredChecksManifest,
@@ -29,58 +34,7 @@ from scripts.quality.required_status_checks.model import (
 
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
-_MAKE_TARGET_RECORD = re.compile(r"^([^\s#][^\s:]*):")
-_PHONY_TARGET_FLAG = "#  Phony target (prerequisite of .PHONY)."
-_MAKE_DATABASE_COMMAND = (
-    "make",
-    "--no-builtin-rules",
-    "--no-builtin-variables",
-    "--question",
-    "--print-data-base",
-)
-_MAKE_DATABASE_START = "# Make data base, printed on "
-_MAKE_DATABASE_END = "# Finished Make data base on "
-_MAKE_DATABASE_FILES = "# Files"
-_MAKE_CONDITIONAL_DIRECTIVE = re.compile(r"^(?:ifeq|ifneq|ifdef|ifndef|else|endif)(?:\s|$)")
-_MAKE_DEFINE_DIRECTIVE = re.compile(r"^(?:(?:export|override|private)\s+)*define(?:\s|$)")
-_MAKE_ENDEF_DIRECTIVE = re.compile(r"^endef(?:\s|$)")
-_MAKE_INCLUDE_DIRECTIVE = re.compile(r"^(?:-?include|sinclude)(?:\s|$)")
-_STATIC_PHONY_DECLARATION = re.compile(r"^\.PHONY:\s*(.*?)\s*$")
-_STATIC_PHONY_TARGET = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 _PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
-
-
-def _make_database_files_lines(output_lines: list[str], *, path: Path) -> list[str]:
-    database_starts = [
-        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_START)
-    ]
-    database_ends = [
-        index for index, line in enumerate(output_lines) if line.startswith(_MAKE_DATABASE_END)
-    ]
-    if not database_starts or not database_ends or database_ends[-1] <= database_starts[-1]:
-        raise RequiredStatusChecksError(f"unable to parse Makefile effective database: {path}")
-    files_sections = [
-        index
-        for index, line in enumerate(output_lines)
-        if line == _MAKE_DATABASE_FILES and database_starts[-1] < index < database_ends[-1]
-    ]
-    if not files_sections:
-        raise RequiredStatusChecksError(f"Makefile effective database has no Files section: {path}")
-    return output_lines[files_sections[-1] + 1 : database_ends[-1]]
-
-
-def _phony_targets_from_files_section(lines: list[str]) -> frozenset[str]:
-    targets: set[str] = set()
-    current_target: str | None = None
-    for line in lines:
-        record = _MAKE_TARGET_RECORD.match(line)
-        if record is not None:
-            current_target = record.group(1)
-            continue
-        if line == _PHONY_TARGET_FLAG and current_target is not None:
-            targets.add(current_target)
-        current_target = None
-    return frozenset(targets)
 
 
 def _matrix_name_expressions(name: str) -> tuple[re.Match[str], ...]:
@@ -178,108 +132,18 @@ def _blocking_contexts(job: Mapping[str, Any], *, policy: WorkflowPolicy) -> tup
     return tuple(contexts)
 
 
-def _static_phony_targets(path: Path) -> frozenset[str]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
-    validate_make_authority_functions(lines, path=path)
-    targets: set[str] = set()
-    define_depth = 0
-    for line_number, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        previous_line_continues = line_number > 1 and lines[line_number - 2].endswith("\\")
-        validate_make_recipe_failure_propagation(
-            raw_line,
-            path=path,
-            line_number=line_number,
-            previous_line_continues=previous_line_continues,
-        )
-        if _MAKE_DEFINE_DIRECTIVE.match(raw_line):
-            validate_make_execution_state(line, path=path, line_number=line_number)
-            define_depth += 1
-            continue
-        if _MAKE_ENDEF_DIRECTIVE.match(raw_line):
-            define_depth = max(0, define_depth - 1)
-            continue
-        if define_depth or raw_line.startswith("\t"):
-            continue
-        if _MAKE_CONDITIONAL_DIRECTIVE.match(line) or _MAKE_INCLUDE_DIRECTIVE.match(line):
-            raise RequiredStatusChecksError(
-                f"Makefile phony authority must be static: {path}; line={line_number}"
-            )
-        validate_make_execution_state(line, path=path, line_number=line_number)
-        declaration = _STATIC_PHONY_DECLARATION.match(line)
-        if declaration is None:
-            continue
-        target_text = declaration.group(1)
-        declared_targets = target_text.split()
-        if (
-            not declared_targets
-            or "$(" in target_text
-            or "${" in target_text
-            or target_text.endswith("\\")
-            or any(_STATIC_PHONY_TARGET.fullmatch(target) is None for target in declared_targets)
-        ):
-            raise RequiredStatusChecksError(
-                f"Makefile phony authority must be static: {path}; line={line_number}"
-            )
-        targets.update(declared_targets)
-    return frozenset(targets)
-
-
-def _load_phony_make_targets(path: Path) -> frozenset[str]:
-    try:
-        path.stat()
-    except OSError as exc:
-        raise RequiredStatusChecksError(f"unable to load Makefile phony targets: {path}") from exc
-    static_targets = _static_phony_targets(path)
-    make_executable = shutil.which("make")
-    if make_executable is None:
-        raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
-    make_environment = {"PATH": os.environ.get("PATH", ""), "LC_ALL": "C"}
-    try:
-        result = subprocess.run(  # nosec B603
-            (make_executable, *_MAKE_DATABASE_COMMAND[1:], "--file", path.name),
-            cwd=path.parent,
-            capture_output=True,
-            check=False,
-            encoding="utf-8",
-            env=make_environment,
-            errors="replace",
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RequiredStatusChecksError(
-            f"timed out evaluating Makefile phony targets: {path}"
-        ) from exc
-    except OSError as exc:
-        raise RequiredStatusChecksError(
-            f"unable to evaluate Makefile phony targets: {path}"
-        ) from exc
-    if result.returncode not in {0, 1}:
-        raise RequiredStatusChecksError(f"unable to evaluate Makefile phony targets: {path}")
-    output_lines = result.stdout.splitlines()
-    effective_targets = _phony_targets_from_files_section(
-        _make_database_files_lines(output_lines, path=path)
-    )
-    targets = effective_targets & static_targets
-    if not targets:
-        raise RequiredStatusChecksError(f"Makefile has no declared phony targets: {path}")
-    return frozenset(targets)
-
-
-def blocking_contexts_for_workflow(
+def _blocking_contexts_and_make_targets(
     workflow: Mapping[str, Any],
     *,
     policy: WorkflowPolicy,
     phony_make_targets: frozenset[str] | None = None,
     makefile_path: Path = Path("Makefile"),
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], frozenset[str]]:
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
         raise RequiredStatusChecksError(f"workflow has no jobs: {policy.path}")
     blocking: list[str] = []
+    all_make_targets: set[str] = set()
     blocking_jobs: dict[str, tuple[Mapping[str, Any], tuple[str, ...]]] = {}
     observed_advisory: set[str] = set()
     workflow_shell = default_run_shell(workflow, scope=f"workflow {policy.path}")
@@ -300,13 +164,14 @@ def blocking_contexts_for_workflow(
         observed_advisory.update(set(expanded_contexts) & policy.advisory_contexts)
         contexts = _blocking_contexts(job, policy=policy)
         if contexts:
-            validate_blocking_job(
+            job_make_targets = validate_blocking_job(
                 job,
                 contexts=contexts,
                 phony_make_targets=governed_phony_targets,
                 workflow_shell=workflow_shell,
                 workflow_environment=workflow_environment,
             )
+            all_make_targets.update(job_make_targets.all_targets)
             blocking_jobs[job_id] = (job, contexts)
             blocking.extend(contexts)
     for job_id, (job, contexts) in blocking_jobs.items():
@@ -326,7 +191,23 @@ def blocking_contexts_for_workflow(
             "declared advisory contexts are absent from workflow: "
             + ", ".join(sorted(missing_advisory))
         )
-    return tuple(blocking)
+    return tuple(blocking), frozenset(all_make_targets)
+
+
+def blocking_contexts_for_workflow(
+    workflow: Mapping[str, Any],
+    *,
+    policy: WorkflowPolicy,
+    phony_make_targets: frozenset[str] | None = None,
+    makefile_path: Path = Path("Makefile"),
+) -> tuple[str, ...]:
+    contexts, _all_targets = _blocking_contexts_and_make_targets(
+        workflow,
+        policy=policy,
+        phony_make_targets=phony_make_targets,
+        makefile_path=makefile_path,
+    )
+    return contexts
 
 
 def _load_workflow(path: Path, *, display_path: Path) -> Mapping[str, Any]:
@@ -337,6 +218,26 @@ def _load_workflow(path: Path, *, display_path: Path) -> Mapping[str, Any]:
     if not isinstance(workflow, dict):
         raise RequiredStatusChecksError(f"workflow must be a YAML object: {display_path}")
     return workflow
+
+
+def _load_repository_workflows(
+    manifest: RequiredChecksManifest, *, repository_root: Path
+) -> dict[Path, Mapping[str, Any]]:
+    """Snapshot every workflow before GNU Make authority evaluation can run."""
+
+    workflow_directory = repository_root / ".github" / "workflows"
+    relative_paths = {policy.path for policy in manifest.workflow_policies}
+    if workflow_directory.is_dir():
+        relative_paths.update(
+            path.relative_to(repository_root) for path in workflow_directory.glob("*.y*ml")
+        )
+    return {
+        relative_path: _load_workflow(
+            repository_root / relative_path,
+            display_path=relative_path,
+        )
+        for relative_path in sorted(relative_paths)
+    }
 
 
 def _validate_workflow_triggers(workflow: Mapping[str, Any], *, path: Path) -> None:
@@ -372,14 +273,20 @@ def _workflow_jobs(workflow: Mapping[str, Any], *, path: Path) -> Mapping[str, A
 
 
 def _governed_contexts(
-    manifest: RequiredChecksManifest, *, repository_root: Path
+    manifest: RequiredChecksManifest,
+    *,
+    repository_root: Path,
+    workflows: Mapping[Path, Mapping[str, Any]],
 ) -> tuple[list[str], dict[str, Path], dict[str, list[str]]]:
     contexts: list[str] = []
     required_producers: dict[str, Path] = {}
     all_producers: dict[str, list[str]] = {}
-    phony_make_targets = _load_phony_make_targets(repository_root / "Makefile")
+    makefile_path = repository_root / "Makefile"
+    make_target_authority = _load_make_target_authority(makefile_path)
+    phony_make_targets = frozenset(make_target_authority)
+    all_make_targets: set[str] = set()
     for policy in manifest.workflow_policies:
-        workflow = _load_workflow(repository_root / policy.path, display_path=policy.path)
+        workflow = workflows[policy.path]
         _validate_workflow_triggers(workflow, path=policy.path)
         jobs = _workflow_jobs(workflow, path=policy.path)
         for job_id, job in jobs.items():
@@ -387,13 +294,23 @@ def _governed_contexts(
                 raise RequiredStatusChecksError(f"workflow job must be an object: {policy.path}")
             for context in _expanded_job_contexts(job):
                 all_producers.setdefault(context, []).append(f"{policy.path}:{job_id}")
-        policy_contexts = blocking_contexts_for_workflow(
+        policy_contexts, policy_all_make_targets = _blocking_contexts_and_make_targets(
             workflow,
             policy=policy,
             phony_make_targets=phony_make_targets,
         )
+        all_make_targets.update(policy_all_make_targets)
         contexts.extend(policy_contexts)
         required_producers.update(dict.fromkeys(policy_contexts, policy.path))
+    governed_repository_commands = load_governed_make_recipe_commands(
+        repository_root / DEFAULT_MAKE_COMMAND_CONTRACT_PATH
+    )
+    _validate_make_step_targets(
+        frozenset(all_make_targets),
+        authority=make_target_authority,
+        path=makefile_path,
+        governed_repository_commands=governed_repository_commands,
+    )
     return contexts, required_producers, all_producers
 
 
@@ -440,18 +357,13 @@ def _validate_governed_contexts(
 def _scan_unmanaged_workflows(
     manifest: RequiredChecksManifest,
     *,
-    repository_root: Path,
     required_context_producers: Mapping[str, Path],
+    workflows: Mapping[Path, Mapping[str, Any]],
 ) -> None:
-    workflow_directory = repository_root / ".github" / "workflows"
-    if not workflow_directory.is_dir():
-        return
     governed_paths = {policy.path for policy in manifest.workflow_policies}
-    for workflow_path in sorted(workflow_directory.glob("*.y*ml")):
-        relative_path = workflow_path.relative_to(repository_root)
+    for relative_path, workflow in workflows.items():
         if relative_path in governed_paths:
             continue
-        workflow = _load_workflow(workflow_path, display_path=relative_path)
         for job in _workflow_jobs(workflow, path=relative_path).values():
             if not isinstance(job, dict):
                 raise RequiredStatusChecksError(f"workflow job must be an object: {relative_path}")
@@ -470,8 +382,11 @@ def _scan_unmanaged_workflows(
 def validate_manifest_against_workflows(
     manifest: RequiredChecksManifest, *, repository_root: Path = Path(".")
 ) -> None:
+    workflows = _load_repository_workflows(manifest, repository_root=repository_root)
     workflow_contexts, required_producers, all_producers = _governed_contexts(
-        manifest, repository_root=repository_root
+        manifest,
+        repository_root=repository_root,
+        workflows=workflows,
     )
     _validate_governed_contexts(
         manifest,
@@ -480,6 +395,6 @@ def validate_manifest_against_workflows(
     )
     _scan_unmanaged_workflows(
         manifest,
-        repository_root=repository_root,
         required_context_producers=required_producers,
+        workflows=workflows,
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from scripts.quality.required_status_checks.action_policy import (
@@ -27,6 +28,18 @@ _ALLOWED_BLOCKING_JOB_KEYS = frozenset(
     }
 )
 _AUDITED_BLOCKING_JOB_RUNNERS = frozenset({"ubuntu-latest", "windows-latest"})
+_PRIMARY_CHECKOUT_ACTION = "actions/checkout@v6"
+_ACTIONLINT_ENFORCEMENT_ACTION = "reviewdog/action-actionlint@v1"
+_AUDITED_MATRIX_CHECKOUT_CONDITIONS = frozenset(
+    {"matrix.suite != 'unit'", "matrix.suite == 'unit'"}
+)
+
+
+@dataclass(frozen=True)
+class BlockingJobMakeTargets:
+    all_targets: frozenset[str]
+
+
 _BLOCKING_ENVIRONMENT_VALUES = {
     "COMPOSE_DOCKER_CLI_BUILD": frozenset({"1"}),
     "DEMO_DATA_PACK_HISTORY_DAYS": frozenset({"240"}),
@@ -114,6 +127,119 @@ def _validate_step_condition(
         )
 
 
+def _is_primary_repository_checkout(step: Mapping[str, Any]) -> bool:
+    if step.get("uses") != _PRIMARY_CHECKOUT_ACTION:
+        return False
+    inputs = step.get("with")
+    return not isinstance(inputs, dict) or "repository" not in inputs
+
+
+def _require_exact_matrix_checkout_conditions(
+    conditional_checkouts: tuple[tuple[int, Mapping[str, Any]], ...],
+    *,
+    context_text: str,
+) -> None:
+    conditions = tuple(step.get("if") for _, step in conditional_checkouts)
+    conditions_are_exact = (
+        all(isinstance(condition, str) for condition in conditions)
+        and len(conditions) == len(_AUDITED_MATRIX_CHECKOUT_CONDITIONS)
+        and frozenset(conditions) == _AUDITED_MATRIX_CHECKOUT_CONDITIONS
+    )
+    if not conditions_are_exact:
+        raise RequiredStatusChecksError(
+            "blocking workflow conditional checkout authority must be the exact audited "
+            f"complementary matrix pair: {context_text}"
+        )
+
+
+def _matrix_checkout_suite_values(job: Mapping[str, Any], *, context_text: str) -> tuple[str, ...]:
+    strategy = job.get("strategy")
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    include = matrix.get("include") if isinstance(matrix, dict) else None
+    if not isinstance(include, list) or not include:
+        raise RequiredStatusChecksError(
+            "blocking workflow conditional checkout authority requires matrix include rows: "
+            + context_text
+        )
+    suite_values = tuple(row.get("suite") if isinstance(row, dict) else None for row in include)
+    if any(not isinstance(value, str) or not value for value in suite_values):
+        raise RequiredStatusChecksError(
+            "blocking workflow conditional checkout matrix requires non-empty suite values: "
+            + context_text
+        )
+    return tuple(value for value in suite_values if isinstance(value, str))
+
+
+def _require_audited_matrix_checkout_pair(
+    job: Mapping[str, Any],
+    *,
+    conditional_checkouts: tuple[tuple[int, Mapping[str, Any]], ...],
+    unconditional_primary_checkouts: tuple[int, ...],
+    context_text: str,
+) -> tuple[int, ...]:
+    if unconditional_primary_checkouts:
+        raise RequiredStatusChecksError(
+            "blocking workflow conditional checkout authority must use only the audited "
+            f"complementary matrix pair: {context_text}"
+        )
+    if any(not _is_primary_repository_checkout(step) for _, step in conditional_checkouts):
+        raise RequiredStatusChecksError(
+            "blocking workflow alternate checkout must be unconditional: " + context_text
+        )
+    _require_exact_matrix_checkout_conditions(
+        conditional_checkouts,
+        context_text=context_text,
+    )
+    suite_values = _matrix_checkout_suite_values(job, context_text=context_text)
+    if "unit" not in suite_values or not any(value != "unit" for value in suite_values):
+        raise RequiredStatusChecksError(
+            "blocking workflow conditional checkout matrix must contain unit and non-unit "
+            f"suite rows: {context_text}"
+        )
+    return tuple(index for index, _ in conditional_checkouts)
+
+
+def _validate_checkout_authority(
+    job: Mapping[str, Any],
+    *,
+    steps: tuple[Mapping[str, Any], ...],
+    context_text: str,
+) -> None:
+    conditional_checkouts = tuple(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("uses") == _PRIMARY_CHECKOUT_ACTION and "if" in step
+    )
+    unconditional_primary_checkouts = tuple(
+        index
+        for index, step in enumerate(steps)
+        if _is_primary_repository_checkout(step) and "if" not in step
+    )
+    if conditional_checkouts:
+        effective_primary_checkouts = _require_audited_matrix_checkout_pair(
+            job,
+            conditional_checkouts=conditional_checkouts,
+            unconditional_primary_checkouts=unconditional_primary_checkouts,
+            context_text=context_text,
+        )
+    else:
+        effective_primary_checkouts = unconditional_primary_checkouts
+
+    for enforcement_index, step in enumerate(steps):
+        if step.get("uses") != _ACTIONLINT_ENFORCEMENT_ACTION:
+            continue
+        checkout_precedes_enforcement = (
+            all(index < enforcement_index for index in effective_primary_checkouts)
+            if conditional_checkouts
+            else any(index < enforcement_index for index in effective_primary_checkouts)
+        )
+        if not checkout_precedes_enforcement:
+            raise RequiredStatusChecksError(
+                "blocking workflow actionlint enforcement requires effective primary-repository "
+                f"checkout before enforcement: {context_text}"
+            )
+
+
 def effective_environment(
     configuration: Mapping[str, Any],
     *,
@@ -191,7 +317,7 @@ def _validate_run_make_targets(
     run_command: str,
     context_text: str,
     phony_make_targets: frozenset[str],
-) -> None:
+) -> tuple[str, ...]:
     targets = _run_make_targets(
         job,
         run_command=run_command,
@@ -203,6 +329,7 @@ def _validate_run_make_targets(
             "blocking workflow run target is not a declared phony Make target: "
             + ", ".join(undeclared_targets)
         )
+    return targets
 
 
 def _effective_run_shell(
@@ -224,7 +351,7 @@ def _validate_blocking_step(
     default_shell: str | None,
     default_environment: Mapping[str, Any],
     runner: str,
-) -> bool:
+) -> tuple[Mapping[str, Any], bool, tuple[str, ...]]:
     context_text = ", ".join(contexts)
     if not isinstance(step, dict):
         raise RequiredStatusChecksError(
@@ -274,6 +401,7 @@ def _validate_blocking_step(
         scope=f"blocking step {context_text}",
     )
     _validate_step_environment(environment, context_text=context_text)
+    make_targets: tuple[str, ...] = ()
     if isinstance(run_command, str):
         effective_shell = _effective_run_shell(
             step, default_shell=default_shell, context_text=context_text
@@ -284,13 +412,13 @@ def _validate_blocking_step(
                 f"blocking workflow run step must be a single bare command: {context_text}; "
                 f"step={step_name!r}"
             )
-        _validate_run_make_targets(
+        make_targets = _validate_run_make_targets(
             job,
             run_command=run_command,
             context_text=context_text,
             phony_make_targets=phony_make_targets,
         )
-    return is_enforcement
+    return step, is_enforcement, make_targets
 
 
 def dependency_ids(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> tuple[str, ...]:
@@ -321,7 +449,7 @@ def validate_blocking_job(
     phony_make_targets: frozenset[str],
     workflow_shell: str | None,
     workflow_environment: Mapping[str, Any],
-) -> None:
+) -> BlockingJobMakeTargets:
     context_text = ", ".join(contexts)
     if "if" in job:
         raise RequiredStatusChecksError(
@@ -350,9 +478,11 @@ def validate_blocking_job(
         inherited=workflow_environment,
         scope=f"blocking job {context_text}",
     )
+    validated_steps: list[Mapping[str, Any]] = []
+    all_make_targets: set[str] = set()
     enforcement_steps = 0
     for step in steps or ():
-        is_enforcement = _validate_blocking_step(
+        validated_step, is_enforcement, make_targets = _validate_blocking_step(
             step,
             job=job,
             contexts=contexts,
@@ -361,13 +491,22 @@ def validate_blocking_job(
             default_environment=job_environment,
             runner=runner_text,
         )
-        enforcement_steps += int(is_enforcement)
+        all_make_targets.update(make_targets)
+        validated_steps.append(validated_step)
+        if is_enforcement:
+            enforcement_steps += 1
     if enforcement_steps != 1:
         raise RequiredStatusChecksError(
             "blocking workflow jobs must declare exactly one unconditional id: enforce step: "
             f"{context_text}; observed={enforcement_steps}"
         )
+    _validate_checkout_authority(
+        job,
+        steps=tuple(validated_steps),
+        context_text=context_text,
+    )
     if runner_text not in _AUDITED_BLOCKING_JOB_RUNNERS:
         raise RequiredStatusChecksError(
             f"blocking workflow job runner is not audited: {context_text}; runner={runner!r}"
         )
+    return BlockingJobMakeTargets(all_targets=frozenset(all_make_targets))

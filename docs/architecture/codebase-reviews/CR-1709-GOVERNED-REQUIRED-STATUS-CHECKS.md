@@ -30,8 +30,11 @@ evidence must be explicit and cannot be mistaken for release authorization.
    cannot redirect live certification to another protection target.
 2. `required_status_checks_guard.py` validates the closed manifest shape, expands matrix suites,
    classifies every governed workflow job, requires blocking jobs and enforcement commands to be
-   unconditional and fail-propagating, limits conditional auxiliary steps to audited checkout,
-   cache-save, and artifact-upload actions, requires every blocking job to retain exactly one
+   unconditional and fail-propagating, limits conditional checkout to the exact complementary
+   `unit`/non-`unit` primary-repository pair over include-row matrices, requires alternate checkout
+   to be unconditional, requires effective primary checkout before actionlint, permits other
+   conditional auxiliary steps only for audited cache-save and artifact-upload actions, and
+   requires every blocking job to retain exactly one
    unconditional executable `id: enforce` step on a non-auxiliary control, validates exact
    canonical PR keys without path filters and canonical merge-group triggers,
    accepts only include-row matrices with cell-identifying names, pins strict mode and the exact two
@@ -44,9 +47,32 @@ evidence must be explicit and cannot be mistaken for release authorization.
    multi-target tokens fail closed. Every admitted static or resolved target must also be declared
    by GNU Make's delimited effective-database Files section evaluated with only fixed `PATH` and
    `LC_ALL=C`, and must appear in a literal static `.PHONY` declaration. Conditional directives,
-   includes, declarations inside GNU Make column-zero-scoped `define` bodies, `$(eval)`/`${eval}` outside recipes, literal or computed parser/execution-variable assignments including multiline `define` forms and non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic declarations, inherited process state, parse-time/recipe output,
-   serialized variable bodies, ordinary files, undeclared rules, and missing Makefile authority fail
-   closed. Artifact destinations must be literal expression-free paths below
+   includes, declarations inside GNU Make column-zero-scoped `define` bodies, command-executing or file-mutating Make functions (`call`, `eval`, `shell`, `file`, and `guile`), native-extension `load`/`-load` directives, assignments absent from the exact repository-owned declaration inventory, target-specific assignments, `export`/`unexport`, `define`/`undefine`, non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic declarations, inherited process state (including `PATH`, Python startup/import variables, and loader variables), parse-time/recipe output,
+   serialized variable bodies, ordinary files, undeclared rules, repeated effective-database target
+   records, and missing Makefile authority fail
+   closed. Every Make target referenced by a step in a blocking job must also own effective
+   executable authority through its own recipe, a validated static phony prerequisite chain, or a
+   statically named recursive-Make edge. Validation traverses that complete execution closure even
+   when a parent also owns recipes. Every recipe in the closure uses a canonical direct identity:
+   a repository Python script/module, one static recursive Make target, or an admitted Make
+   precondition/diagnostic. Noncanonical expansions, nested interpreters, unquoted shell control
+   operators, shell command substitutions, backticks, incomplete continuations, empty controls,
+   and mutation or removal of governed execution variables fail closed. Continued physical recipes
+   are reconstructed into their logical shell command before expansion, control-syntax, and
+   command-identity validation, so a substitution token cannot be hidden across a continuation boundary.
+   The target-bound `contracts/ci/governed-make-recipe-commands.v1.json` contract owns every
+   admitted repository Python invocation, with or without arguments; unapproved modes,
+   cross-target borrowing, missing authority, and stale entries fail
+   closed against the full governed execution closure.
+   Governed and unmanaged
+   workflows are parsed and retained before GNU Make authority evaluation, so parse-time mutation
+   cannot replace the workflow content being certified. The runtime image-set build therefore delegates its former inline shell body to
+   `scripts/release/build_runtime_image_set.py`, which validates metadata and runs build then
+   packaging under one timestamp with checked subprocess failure propagation. Dependency-health
+   cache-key output is likewise serialized by the checked Python command instead of inline shell.
+   Exact-source runtime image loading, local fallback, and verified-source receipt publication use
+   `scripts/release/verify_runtime_image_set.py` as the final checked orchestration boundary.
+   Artifact destinations must be literal expression-free paths below
    `output/`, so expression resolution cannot traverse into the checkout. Enforcement
    working-directory overrides fail closed. Every blocking `run` or `uses` step's effective
    workflow/job/step environment keys and exact values must match the positive governed inventory; alternate coverage bases, runtime-image
@@ -67,7 +93,7 @@ evidence must be explicit and cannot be mistaken for release authorization.
    check-name-only authority; GitHub mirrors the app-bound names back in its GET response.
 4. `make lint` now includes both import-boundary and manifest/workflow enforcement. The focused
    workflow-governance target includes mutation-style manifest tests. Manifest/model parsing,
-   workflow traversal, Make execution-state policy, blocking-job execution policy, live GitHub protection, and CLI
+   workflow traversal, effective Make target authority, Make execution-state policy, blocking-job execution policy, live GitHub protection, and CLI
    orchestration are separate owned
    modules; the same target runs scoped Ruff lint/format checks and hard-blocks Xenon complexity above `absolute C`, `module B`, or
    `average B` and Radon maintainability below rank B for the package, then applies scoped MyPy,
@@ -111,13 +137,20 @@ value must match the same bare Make-target grammar, which excludes assignments, 
 special-target syntax, and multi-target tokens. Static and resolved targets must also appear in an
 active repository-root literal static `.PHONY:` declaration and GNU Make's delimited
 effective-database Files section under a fixed minimal environment. Conditional directives, includes,
-declarations inside GNU Make column-zero-scoped `define` bodies, `$(eval)`/`${eval}` outside recipes, literal or computed parser/execution-variable assignments including multiline `define` forms and non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic declarations, inherited `MAKELEVEL`/`CI`/runner state, parse-time/recipe output,
-serialized variable bodies, existing files, and non-phony rules cannot authorize merge. Artifact paths containing expressions fail before an action
+declarations inside GNU Make column-zero-scoped `define` bodies, command-executing or file-mutating Make functions (`call`, `eval`, `shell`, `file`, and `guile`), native-extension `load`/`-load` directives, assignments absent from the exact repository-owned declaration inventory, target-specific assignments, `export`/`unexport`, `define`/`undefine`, non-recipe continuations, special execution targets in any target-list position, `vpath`, dynamic declarations, inherited `MAKELEVEL`/`CI`/runner state (including `PATH`, Python startup/import variables, and loader variables), parse-time/recipe output,
+serialized variable bodies, existing files, non-phony rules, and repeated effective-database target
+records cannot authorize merge. The repository has no governed need for GNU Make double-colon rule
+multiplicity. Artifact paths containing expressions fail before an action
 can resolve them into a destination outside `output/`. The marker must run at repository root.
 Pre-enforcement steps cannot write `GITHUB_ENV`/`GITHUB_PATH`; only governed action families are
 accepted, every action step receives the same effective-environment validation as a run step,
 action versions are exact rather than prefix-matched, setup-Python is runner-specific, and
 runtime-image consumers carry verified state only on post-verification control steps.
+Checkout-authority mutations prove that `if: false`, arbitrary conditions, incomplete pairs,
+missing include rows, alternate-repository checkout, and checkout after actionlint cannot create a
+green empty-workspace lint result. The only conditional checkout authority is the exact
+complementary `unit`/non-`unit` pair, and every matrix branch must establish primary-repository
+authority before actionlint enforcement.
 The marker proves an explicitly declared fail-propagating control exists;
 static validation cannot prove the command's business semantics, which remain code-review responsibility.
 Advisory and blocking producers cannot
@@ -133,8 +166,10 @@ atomically and live read-back passed with `strict=true`, `checks=37`.
 
 Local feature-branch evidence:
 
-- focused workflow/manifest pack after final review hardening: `219 passed`, with 91.70% branch-aware
+- focused workflow/manifest pack after final review hardening: `503 passed`, with 94.11% branch-aware
   package coverage against a 90% hard floor;
+- focused required-check guard file: `441 passed`, including disabled-checkout, exact complementary
+  matrix checkout, alternate-repository non-authority, and actionlint ordering mutations;
 - required-check code quality: Xenon maximum function C, maximum module B, average B; Radon
   maintainability is A for every owned module except the B-ranked workflow traversal module;
   scoped MyPy, Bandit, and
@@ -156,10 +191,12 @@ becomes stricter. Change-aware lane selection (#749), umbrella auto-close (#783)
 
 ## Skills And Context Decision
 
-No central skill change is required. `lotus-ci-enforcement-governance` already requires repository-
-native guards, mutation proof, stable required-check policy, and fail-closed validation. The missing
-authority was repository-local, so this slice updates the Core manifest, Make targets, workflow,
-repository context, operator runbook, wiki source, review note, and ledger.
+No central skill source is changed from the Core branch. `lotus-ci-enforcement-governance` already
+requires repository-native guards, mutation proof, stable required-check policy, and fail-closed
+validation. Core owns the immediate guard, tests, repository context, operator runbook, wiki source,
+review note, and ledger. The reusable scaffold/validator gap for action-based enforcement is
+durably assigned to `sgajbi/lotus-platform#723`, including primary-checkout authority, matrix
+coverage, generator/template mutations, and proportional skill/context reconciliation.
 
 ## Pending Delivery Evidence
 

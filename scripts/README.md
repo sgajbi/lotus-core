@@ -13,9 +13,11 @@ points; Python module paths are implementation details governed with the reposit
    runner composes warning-budget and coverage evidence from one unit-suite execution for local
    parity; the standalone warning runner remains available to hosted lanes for early feedback.
 5. `release/` - image build, exact-source CI image-set transport, SBOM, provenance, and
-   release-manifest automation. `prebuild_ci_images.py` owns reusable local builds and timing
+   release-manifest automation. `build_runtime_image_set.py` owns the fail-fast build-and-package
+   boundary, while `prebuild_ci_images.py` owns reusable local builds and timing
    evidence; `runtime_image_set.py` owns portable bundle creation, integrity manifests, load, and
-   exact-source verification.
+   exact-source verification, and `verify_runtime_image_set.py` owns current-source selection,
+   optional local fallback, and atomic verified-source receipt publication.
 6. `transaction_processing/` - deterministic transaction capability catalog generation and
    validation owned by the unified transaction-processing domain.
 7. `validation/` - application certification and environment-backed validation.

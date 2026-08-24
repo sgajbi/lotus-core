@@ -25,6 +25,12 @@ from scripts.quality.required_status_checks import (
 from scripts.quality.required_status_checks import (
     blocking_contexts_for_workflow as _blocking_contexts_for_workflow,
 )
+from scripts.quality.required_status_checks import job_policy as required_checks_job_policy
+from scripts.quality.required_status_checks import make_authority as required_checks_make_authority
+from scripts.quality.required_status_checks import (
+    make_command_contract as required_checks_make_command_contract,
+)
+from scripts.quality.required_status_checks import make_policy as required_checks_make_policy
 from scripts.quality.required_status_checks import workflow as required_checks_workflow
 
 _CANONICAL_TRIGGERS_YAML = (
@@ -78,11 +84,45 @@ def _fixture_manifest(payload: dict[str, Any]) -> RequiredChecksManifest:
     )
 
 
-def _write_fixture_makefile(repository_root: Path) -> None:
-    repository_root.joinpath("Makefile").write_text(
-        ".PHONY: security-audit\nsecurity-audit:\n\t@true\n",
+def _write_make_command_contract(
+    repository_root: Path,
+    *,
+    targets: dict[str, list[str]] | None = None,
+) -> None:
+    contract_path = (
+        repository_root / required_checks_make_command_contract.DEFAULT_MAKE_COMMAND_CONTRACT_PATH
+    )
+    contract_path.parent.mkdir(parents=True, exist_ok=True)
+    contract_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "governed-make-recipe-commands.v1",
+                "targets": {} if targets is None else targets,
+            }
+        ),
         encoding="utf-8",
     )
+
+
+def _write_fixture_makefile(repository_root: Path) -> None:
+    repository_root.joinpath("Makefile").write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        "security-audit:\n"
+        "\t$(REPOSITORY_PYTHON) control.py\n",
+        encoding="utf-8",
+    )
+    _write_make_command_contract(
+        repository_root,
+        targets={"security-audit": ["$(REPOSITORY_PYTHON) control.py"]},
+    )
+
+
+def _write_governed_workflow_fixtures(repository_root: Path) -> None:
+    for policy in load_manifest().workflow_policies:
+        destination = repository_root / policy.path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(policy.path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def test_repository_manifest_matches_expanded_blocking_workflow_contexts() -> None:
@@ -110,11 +150,14 @@ def test_repository_manifest_matches_expanded_blocking_workflow_contexts() -> No
 
 
 def test_manifest_validation_fails_closed_without_makefile_authority(tmp_path: Path) -> None:
+    _write_governed_workflow_fixtures(tmp_path)
+
     with pytest.raises(RequiredStatusChecksError, match="unable to load Makefile phony targets"):
         validate_manifest_against_workflows(load_manifest(), repository_root=tmp_path)
 
 
 def test_manifest_validation_fails_closed_without_phony_targets(tmp_path: Path) -> None:
+    _write_governed_workflow_fixtures(tmp_path)
     tmp_path.joinpath("Makefile").write_text("lint:\n\t@true\n", encoding="utf-8")
 
     with pytest.raises(RequiredStatusChecksError, match="Makefile has no declared phony targets"):
@@ -124,6 +167,7 @@ def test_manifest_validation_fails_closed_without_phony_targets(tmp_path: Path) 
 def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
     tmp_path: Path,
 ) -> None:
+    _write_governed_workflow_fixtures(tmp_path)
     tmp_path.joinpath("Makefile").write_text(
         ".PHONY: lint\nlint:\nthis is not a recipe\n",
         encoding="utf-8",
@@ -142,7 +186,7 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
         ),
         (
             "active:\n\t@true\ndefine unused-declaration\n.PHONY: security-audit\nendef",
-            "not a declared phony Make target",
+            "Makefile execution state must be static",
         ),
         (
             "$(info .PHONY: security-audit)\nactive:\n\t@true",
@@ -170,7 +214,7 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
             "ignored\n"
             "endef\n"
             "active:\n\t@true",
-            "not a declared phony Make target",
+            "Makefile execution state must be static",
         ),
         (
             "define environment-activated-authority\n"
@@ -178,11 +222,11 @@ def test_manifest_validation_fails_closed_when_makefile_cannot_be_evaluated(
             "endef\n"
             "$(if $(filter C,$(LC_ALL)),$(eval $(environment-activated-authority)))\n"
             "active:\n\t@true",
-            "Makefile phony authority must be static",
+            "Makefile (?:phony authority|execution state) must be static",
         ),
         (
             ".PHONY: FORGE = security-audit\nactive:\n\t@true",
-            "Makefile phony authority must be static",
+            "Makefile execution state must be static",
         ),
     ],
 )
@@ -229,11 +273,15 @@ def test_manifest_validation_rejects_forged_or_inactive_phony_authority(
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
-def test_manifest_validation_accepts_target_specific_variable_on_real_phony_target(
+def test_manifest_validation_rejects_target_specific_variable_on_real_phony_target(
     tmp_path: Path,
 ) -> None:
     tmp_path.joinpath("Makefile").write_text(
-        ".PHONY: security-audit\nsecurity-audit: MODE = strict\nsecurity-audit:\n\t@true\n",
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        "security-audit: MODE = strict\n"
+        "security-audit:\n"
+        "\t$(REPOSITORY_PYTHON) control.py\n",
         encoding="utf-8",
     )
     workflow_path = tmp_path / "quality.yml"
@@ -262,7 +310,61 @@ def test_manifest_validation_accepts_target_specific_variable_on_real_phony_targ
         required_checks=(RequiredCheck(context="Quality Baseline / Security Gate", app_id=15368),),
     )
 
-    validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=3",
+    ):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+def test_manifest_validation_rejects_an_empty_non_enforcement_make_step(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("Makefile").write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit warning-gate\n"
+        "security-audit:\n"
+        "warning-gate:\n"
+        "\t$(REPOSITORY_PYTHON) warning_control.py\n",
+        encoding="utf-8",
+    )
+    _write_make_command_contract(
+        tmp_path,
+        targets={"warning-gate": ["$(REPOSITORY_PYTHON) warning_control.py"]},
+    )
+    tmp_path.joinpath("quality.yml").write_text(
+        _CANONICAL_TRIGGERS_YAML + "jobs:\n"
+        "  security:\n"
+        "    name: Quality Baseline / Security Gate\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: Security audit\n"
+        "        shell: bash\n"
+        "        run: make security-audit\n"
+        "      - id: enforce\n"
+        "        shell: bash\n"
+        "        run: make warning-gate\n",
+        encoding="utf-8",
+    )
+    manifest = RequiredChecksManifest(
+        repository="sgajbi/lotus-core",
+        branch="main",
+        strict=True,
+        workflow_policies=(
+            WorkflowPolicy(
+                path=Path("quality.yml"),
+                policy="gate_jobs_blocking",
+                advisory_contexts=frozenset(),
+            ),
+        ),
+        required_checks=(RequiredCheck(context="Quality Baseline / Security Gate", app_id=15368),),
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="governed Make target has no executable control: .*target=security-audit",
+    ):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -319,7 +421,7 @@ def test_blocking_policy_rejects_non_static_phony_authority(
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="Makefile phony authority must be static: .*line=",
+        match="Makefile (?:phony authority|execution state) must be static: .*line=",
     ):
         _blocking_contexts_for_workflow(
             workflow,
@@ -334,6 +436,12 @@ def test_blocking_policy_rejects_non_static_phony_authority(
         "$(eval SHELL:=/bin/true)",
         "${eval SHELL:=/bin/true}",
         "$(call eval,SHELL:=/bin/true)",
+        "$(shell echo pwned)",
+        "${shell echo pwned}",
+        "$(file >side-effect.txt,pwned)",
+        "${file >side-effect.txt,pwned}",
+        '$(guile (system "echo pwned"))',
+        '${guile (system "echo pwned")}',
         "$(eval\\\n\tSHELL:=/bin/true)",
         "${eval\\\n\tSHELL:=/bin/true}",
         "$(call\\\n\teval,SHELL:=/bin/true)",
@@ -354,6 +462,43 @@ def test_make_authority_rejects_execution_state_functions_in_recipes(
         match="Makefile phony authority must be static: .*line=3",
     ):
         required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+@pytest.mark.parametrize("assignment_operator", [":=", "="])
+def test_make_authority_rejects_parse_time_shell_assignments(
+    tmp_path: Path,
+    assignment_operator: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f"PAYLOAD {assignment_operator} $(shell echo pwned)\n"
+        ".PHONY: security-audit\nsecurity-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile phony authority must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+def test_make_authority_rejects_file_function_before_make_evaluation(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    side_effect_path = tmp_path / "certification-side-effect.txt"
+    makefile_path.write_text(
+        "PAYLOAD := $(file >certification-side-effect.txt,pwned)\n"
+        ".PHONY: security-audit\nsecurity-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile phony authority must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+    assert not side_effect_path.exists()
 
 
 def test_make_authority_rejects_a_continued_authority_function_at_eof(
@@ -427,6 +572,835 @@ def test_make_authority_accepts_fail_propagating_inline_recipes(
     )
 
 
+@pytest.mark.parametrize(
+    "recipe",
+    ["$(DASH)false", "${DASH}false", "@$(DASH)false", "$(subst x,-,x)false"],
+)
+@pytest.mark.parametrize("inline", [False, True])
+def test_make_authority_rejects_expansion_produced_recipe_prefixes(
+    tmp_path: Path,
+    recipe: str,
+    inline: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    rule = f"security-audit: ; {recipe}" if inline else f"\t{recipe}"
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        required_checks_make_policy.validate_make_recipe_failure_propagation(
+            rule,
+            path=makefile_path,
+            line_number=1,
+            previous_line_continues=False,
+            static_command_variables=frozenset({"MAKE", "REPOSITORY_PYTHON"}),
+        )
+
+
+@pytest.mark.parametrize("inline", [False, True])
+def test_make_authority_accepts_the_static_repository_command_variable(
+    tmp_path: Path,
+    inline: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    recipe = '$(REPOSITORY_PYTHON) -c "raise SystemExit(1)"'
+    rule = f"security-audit: ; {recipe}" if inline else f"security-audit:\n\t{recipe}"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        f".PHONY: security-audit\n{rule}\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
+
+
+def test_make_authority_rejects_a_mutated_repository_command_variable(
+    tmp_path: Path,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := -\n"
+        ".PHONY: security-audit\nsecurity-audit:\n\t$(REPOSITORY_PYTHON)false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+@pytest.mark.parametrize(
+    "recipe",
+    [
+        "$(MAKE) --ignore-errors failing",
+        "$(MAKE) -i failing",
+        "${MAKE} --ignore-errors failing",
+        "${MAKE} -i failing",
+        "$(MAKE) first second",
+        "$(MAKE) MODE=strict",
+        "$($(COMMAND)) -i failing",
+    ],
+)
+@pytest.mark.parametrize("inline", [False, True])
+def test_make_authority_rejects_unsafe_recursive_make_arguments(
+    tmp_path: Path,
+    recipe: str,
+    inline: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    rule = f"security-audit: ; {recipe}" if inline else f"security-audit:\n\t{recipe}"
+    makefile_path.write_text(
+        f".PHONY: security-audit failing first\n{rule}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match=f"Makefile execution state must be static: .*line={2 if inline else 3}",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+@pytest.mark.parametrize("recipe", ["$(MAKE) failing", "${MAKE} failing"])
+@pytest.mark.parametrize("inline", [False, True])
+def test_make_authority_accepts_one_recursive_make_target(
+    tmp_path: Path,
+    recipe: str,
+    inline: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    rule = f"security-audit: ; {recipe}" if inline else f"security-audit:\n\t{recipe}"
+    makefile_path.write_text(
+        f".PHONY: security-audit failing\n{rule}\nfailing:\n\t@false\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"failing", "security-audit"}
+    )
+
+
+@pytest.mark.parametrize(
+    "recipe",
+    ["printf x; $(MAKE) failing", "echo x && ${MAKE} failing"],
+)
+@pytest.mark.parametrize("inline", [False, True])
+def test_make_authority_accepts_safe_recursive_make_after_a_shell_separator(
+    tmp_path: Path,
+    recipe: str,
+    inline: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    rule = f"security-audit: ; {recipe}" if inline else f"security-audit:\n\t{recipe}"
+    makefile_path.write_text(
+        f".PHONY: security-audit failing\n{rule}\nfailing:\n\t@false\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"failing", "security-audit"}
+    )
+
+
+@pytest.mark.parametrize(
+    "recipes",
+    [
+        ("false | true", "$(REPOSITORY_PYTHON) control.py"),
+        ("$(REPOSITORY_PYTHON) control.py", "false | true"),
+    ],
+)
+def test_make_authority_rejects_repeated_double_colon_target_records(
+    tmp_path: Path,
+    recipes: tuple[str, str],
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        f"security-audit::\n\t{recipes[0]}\n"
+        f"security-audit::\n\t{recipes[1]}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile effective database contains repeated target authority: "
+        ".*target=security-audit",
+    ):
+        required_checks_workflow._load_make_target_authority(makefile_path)
+
+
+@pytest.mark.parametrize(
+    "recipe",
+    [
+        "$(REPOSITORY_PYTHON) control.py || true",
+        "$(REPOSITORY_PYTHON) control.py; true",
+        "$(REPOSITORY_PYTHON) control.py | cat",
+        "$(REPOSITORY_PYTHON) control.py &",
+        "$(REPOSITORY_PYTHON) control.py $$(false)",
+        "printf x; $M --ignore-errors failing",
+        "echo x; $($(M)) -i failing",
+        "$(MAKE) failing || true",
+    ],
+)
+def test_governed_make_authority_rejects_shell_composition_and_dynamic_commands(
+    tmp_path: Path,
+    recipe: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        "security-audit:\n"
+        f"\t{recipe}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="(?:blocking Make target recipe must not use shell control syntax|"
+        "blocking Make target recipe uses a noncanonical Make expansion|"
+        "Makefile execution state must be static)",
+    ):
+        authority = required_checks_workflow._load_make_target_authority(makefile_path)
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+@pytest.mark.parametrize("recipe", ["false | true", "echo $(MASK)"])
+@pytest.mark.parametrize("delegated", [False, True])
+def test_blocking_make_authority_rejects_unsafe_non_enforcement_recipes(
+    tmp_path: Path,
+    recipe: str,
+    delegated: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    target_rule = "security-audit: implementation\n" if delegated else "security-audit:\n"
+    implementation_rule = f"implementation:\n\t{recipe}\n" if delegated else f"\t{recipe}\n"
+    makefile_path.write_text(
+        f".PHONY: security-audit implementation\n{target_rule}{implementation_rule}",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="(?:blocking Make target recipe must not use shell control syntax|"
+        "blocking Make target recipe uses a noncanonical Make expansion)",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+@pytest.mark.parametrize(
+    "recipe",
+    [
+        "sh -c 'false || true'",
+        'bash -c "false || true"',
+        "python -c 'raise SystemExit(0)'",
+        "$(REPOSITORY_PYTHON) -c 'raise SystemExit(0)'",
+    ],
+)
+@pytest.mark.parametrize("delegated", [False, True])
+def test_blocking_make_authority_rejects_nested_interpreters(
+    tmp_path: Path,
+    recipe: str,
+    delegated: bool,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    target_rule = "security-audit: implementation\n" if delegated else "security-audit:\n"
+    implementation_rule = f"implementation:\n\t{recipe}\n" if delegated else f"\t{recipe}\n"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        f".PHONY: security-audit implementation\n{target_rule}{implementation_rule}",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target must use a canonical direct command identity",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+def test_blocking_make_authority_traverses_recursive_make_commands(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        ".PHONY: security-audit hidden-control\n"
+        "security-audit:\n"
+        "\t$(MAKE) hidden-control\n"
+        "hidden-control:\n"
+        "\tfalse | true\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target recipe must not use shell control syntax",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+def test_blocking_make_authority_rejects_an_unauthorized_recursive_target() -> None:
+    authority = {
+        "security-audit": required_checks_make_authority.MakeTargetAuthority(
+            prerequisites=(), recipes=("$(MAKE) missing-control",), phony=True
+        )
+    }
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="governed Make target lacks static phony authority.*missing-control",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=Path("Makefile"),
+        )
+
+
+@pytest.mark.parametrize(
+    "prerequisite",
+    [
+        "required-status-checks-code-quality-gate",
+        "required-status-checks-guard",
+        "runtime-image-set-load-verify",
+    ],
+)
+@pytest.mark.parametrize(
+    "unsafe_recipe",
+    ["false | true", "$(REPOSITORY_PYTHON) control.py || true"],
+)
+def test_blocking_make_authority_traverses_prerequisites_when_parent_has_a_recipe(
+    tmp_path: Path,
+    prerequisite: str,
+    unsafe_recipe: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        f".PHONY: blocking-target {prerequisite}\n"
+        f"blocking-target: {prerequisite}\n"
+        "\t$(REPOSITORY_PYTHON) parent-control.py\n"
+        f"{prerequisite}:\n"
+        f"\t{unsafe_recipe}\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target recipe must not use shell control syntax",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"blocking-target"}),
+            authority=authority,
+            path=makefile_path,
+            governed_repository_commands={
+                "blocking-target": frozenset({"$(REPOSITORY_PYTHON) parent-control.py"})
+            },
+        )
+
+
+def test_governed_make_authority_rejects_control_syntax_from_a_make_expansion(
+    tmp_path: Path,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        "security-audit:\n"
+        "\t$(REPOSITORY_PYTHON) missing-control.py $(MASK)\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target recipe uses a noncanonical Make expansion",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+def test_governed_make_authority_rejects_a_target_without_a_control(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        ".PHONY: security-audit\nsecurity-audit:\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="governed Make target has no executable control",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+def test_governed_make_authority_accepts_a_validated_prerequisite_chain(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit control\n"
+        "security-audit: control\n"
+        "control:\n"
+        "\t$(REPOSITORY_PYTHON) control.py\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    required_checks_make_authority.validate_make_targets_have_executable_authority(
+        frozenset({"security-audit"}),
+        authority=authority,
+        path=makefile_path,
+        governed_repository_commands={"control": frozenset({"$(REPOSITORY_PYTHON) control.py"})},
+    )
+
+
+def test_governed_make_authority_rejects_a_prerequisite_cycle() -> None:
+    authority = {
+        "security-audit": required_checks_make_authority.MakeTargetAuthority(
+            prerequisites=("control",), recipes=(), phony=True
+        ),
+        "control": required_checks_make_authority.MakeTargetAuthority(
+            prerequisites=("security-audit",), recipes=(), phony=True
+        ),
+    }
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="governed Make target execution cycle is not executable authority",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=Path("Makefile"),
+        )
+
+
+def test_governed_make_authority_rejects_an_incomplete_control_command() -> None:
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="governed Make target has no complete executable control",
+    ):
+        required_checks_make_policy.validate_governed_recipe_commands(
+            ("$(REPOSITORY_PYTHON) control.py \\",),
+            path=Path("Makefile"),
+            target="security-audit",
+        )
+
+
+@pytest.mark.parametrize(
+    "substitution",
+    [
+        "printf -- --help",
+        "python --version",
+    ],
+)
+def test_governed_make_authority_rejects_command_substitution_split_across_continuation(
+    substitution: str,
+) -> None:
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target recipe must not use shell control syntax",
+    ):
+        required_checks_make_policy.validate_governed_recipe_commands(
+            ("$(REPOSITORY_PYTHON) control.py $$\\", f"({substitution})"),
+            path=Path("Makefile"),
+            target="security-audit",
+        )
+
+
+def test_blocking_make_authority_rejects_command_substitution_split_in_effective_recipe(
+    tmp_path: Path,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        "security-audit:\n"
+        "\t$(REPOSITORY_PYTHON) control.py $$\\\n"
+        "\t(printf -- --help)\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target recipe must not use shell control syntax",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+def test_governed_make_authority_accepts_a_canonical_continued_command() -> None:
+    command = '$(REPOSITORY_PYTHON) control.py --label "governed release"'
+    required_checks_make_policy.validate_governed_recipe_commands(
+        (
+            "$(REPOSITORY_PYTHON) control.py \\",
+            '\t--label "governed release"',
+        ),
+        path=Path("Makefile"),
+        target="security-audit",
+        governed_repository_commands={"security-audit": frozenset({command})},
+    )
+
+
+def test_governed_make_authority_allows_shell_characters_inside_quoted_arguments() -> None:
+    command = '$(REPOSITORY_PYTHON) control.py --label "a;b|c&d"'
+    required_checks_make_policy.validate_governed_recipe_commands(
+        (command,),
+        path=Path("Makefile"),
+        target="security-audit",
+        governed_repository_commands={"security-audit": frozenset({command})},
+    )
+
+
+def test_governed_make_authority_allows_a_canonical_argument_expansion() -> None:
+    command = "$(REPOSITORY_PYTHON) control.py $(LOCAL_RUNTIME_BUILD_ARGUMENT)"
+    required_checks_make_policy.validate_governed_recipe_commands(
+        (command,),
+        path=Path("Makefile"),
+        target="security-audit",
+        governed_repository_commands={"security-audit": frozenset({command})},
+    )
+
+
+@pytest.mark.parametrize("argument", ["--help", "--version"])
+@pytest.mark.parametrize(
+    "identity",
+    [
+        "$(REPOSITORY_PYTHON) scripts/control.py",
+        "$(REPOSITORY_PYTHON) -m scripts.control",
+    ],
+)
+def test_governed_make_authority_rejects_unapproved_repository_python_arguments(
+    identity: str,
+    argument: str,
+) -> None:
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target must use a canonical direct command identity",
+    ):
+        required_checks_make_policy.validate_governed_recipe_commands(
+            (f"{identity} {argument}",),
+            path=Path("Makefile"),
+            target="security-audit",
+        )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "$(REPOSITORY_PYTHON) scripts/control.py",
+        "$(REPOSITORY_PYTHON) scripts/control.py --enforce",
+    ],
+)
+def test_governed_make_authority_binds_repository_commands_to_the_owning_target(
+    command: str,
+) -> None:
+    required_checks_make_policy.validate_governed_recipe_commands(
+        (command,),
+        path=Path("Makefile"),
+        target="security-audit",
+        governed_repository_commands={"security-audit": frozenset({command})},
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target must use a canonical direct command identity",
+    ):
+        required_checks_make_policy.validate_governed_recipe_commands(
+            (command,),
+            path=Path("Makefile"),
+            target="security-audit",
+            governed_repository_commands={"other-target": frozenset({command})},
+        )
+
+
+def test_governed_make_authority_rejects_a_zero_argument_control_substitution() -> None:
+    admitted_command = "$(REPOSITORY_PYTHON) scripts/validation/dependency_health_check.py"
+    replacement_command = "$(REPOSITORY_PYTHON) scripts/quality/required_status_checks_guard.py"
+    authority = {
+        "security-audit": required_checks_make_authority.MakeTargetAuthority(
+            prerequisites=(), recipes=(replacement_command,), phony=True
+        )
+    }
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target must use a canonical direct command identity",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=Path("Makefile"),
+            governed_repository_commands={"security-audit": frozenset({admitted_command})},
+        )
+
+
+def test_governed_make_command_contract_rejects_stale_authority() -> None:
+    command = "$(REPOSITORY_PYTHON) control.py --enforce"
+    authority = {
+        "security-audit": required_checks_make_authority.MakeTargetAuthority(
+            prerequisites=(), recipes=(command,), phony=True
+        )
+    }
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="governed Make recipe command contract differs from execution closure",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=Path("Makefile"),
+            governed_repository_commands={
+                "security-audit": frozenset({command}),
+                "stale-target": frozenset({"$(REPOSITORY_PYTHON) stale.py --enforce"}),
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"schema_version": "governed-make-recipe-commands.v1", "targets": {}, "extra": True},
+        {"schema_version": "wrong", "targets": {"security-audit": ["command"]}},
+        {"schema_version": "governed-make-recipe-commands.v1", "targets": []},
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"z-target": ["command"], "a-target": ["command"]},
+        },
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"invalid target": ["command"]},
+        },
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"security-audit": []},
+        },
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"security-audit": [1]},
+        },
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"security-audit": [" command"]},
+        },
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"security-audit": ["z", "a"]},
+        },
+        {
+            "schema_version": "governed-make-recipe-commands.v1",
+            "targets": {"security-audit": ["command", "command"]},
+        },
+    ],
+)
+def test_governed_make_command_contract_rejects_noncanonical_authority(
+    tmp_path: Path,
+    payload: dict[str, Any],
+) -> None:
+    contract_path = tmp_path / "commands.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RequiredStatusChecksError):
+        required_checks_make_command_contract.load_governed_make_recipe_commands(contract_path)
+
+
+@pytest.mark.parametrize("contents", [None, "not-json"])
+def test_governed_make_command_contract_fails_closed_when_unreadable(
+    tmp_path: Path, contents: str | None
+) -> None:
+    contract_path = tmp_path / "commands.json"
+    if contents is not None:
+        contract_path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="unable to load governed Make recipe command contract",
+    ):
+        required_checks_make_command_contract.load_governed_make_recipe_commands(contract_path)
+
+
+def test_governed_make_command_contract_loads_target_bound_authority(tmp_path: Path) -> None:
+    contract_path = tmp_path / "commands.json"
+    contract_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "governed-make-recipe-commands.v1",
+                "targets": {
+                    "security-audit": ["$(REPOSITORY_PYTHON) scripts/security/audit.py --enforce"]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert required_checks_make_command_contract.load_governed_make_recipe_commands(
+        contract_path
+    ) == {"security-audit": frozenset({"$(REPOSITORY_PYTHON) scripts/security/audit.py --enforce"})}
+
+
+def test_governed_make_authority_rejects_a_non_inventoried_command(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        ".PHONY: security-audit\nsecurity-audit:\n\tfalse\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking Make target must use a canonical direct command identity",
+    ):
+        required_checks_make_authority.validate_make_targets_have_executable_authority(
+            frozenset({"security-audit"}),
+            authority=authority,
+            path=makefile_path,
+        )
+
+
+@pytest.mark.parametrize(
+    "recipe",
+    [
+        "$(REPOSITORY_PYTHON) scripts/control.py",
+        "$(REPOSITORY_PYTHON) -m scripts.control",
+        "$(MAKE) control",
+    ],
+)
+def test_blocking_make_authority_accepts_canonical_command_identities(
+    tmp_path: Path,
+    recipe: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit control\n"
+        "security-audit:\n"
+        f"\t{recipe}\n"
+        "control:\n"
+        "\t$(REPOSITORY_PYTHON) scripts/control.py\n",
+        encoding="utf-8",
+    )
+
+    authority = required_checks_workflow._load_make_target_authority(makefile_path)
+    governed_repository_commands = {
+        ("control" if recipe == "$(MAKE) control" else "security-audit"): frozenset(
+            {"$(REPOSITORY_PYTHON) scripts/control.py" if recipe == "$(MAKE) control" else recipe}
+        )
+    }
+    required_checks_make_authority.validate_make_targets_have_executable_authority(
+        frozenset({"security-audit"}),
+        authority=authority,
+        path=makefile_path,
+        governed_repository_commands=governed_repository_commands,
+    )
+
+
+def test_make_authority_rejects_a_stored_recursive_make_command(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "DELEGATE = $(MAKE) --ignore-errors failing\n"
+        ".PHONY: security-audit failing\n"
+        "security-audit: ; printf x; $(DELEGATE)\n"
+        "failing:\n\t@false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+def test_make_authority_accepts_escaped_shell_command_substitution(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        ".PHONY: security-audit\n"
+        "security-audit:\n"
+        '\t@value="$$( $(REPOSITORY_PYTHON) --version)"; printf \'%s\\n\' "$$value"\n',
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
+
+
+def test_make_authority_accepts_a_hyphen_after_a_shell_separator(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        ".PHONY: security-audit\nsecurity-audit: ; printf x; -false\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
+    result = subprocess.run(  # noqa: S603
+        ("make", "--file", str(makefile_path), "security-audit"),
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode != 0
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "security-audit: # note ; -not-a-recipe",
+        "security-audit: MODE := strict ; -not-a-recipe",
+    ],
+)
+def test_make_authority_does_not_treat_declaration_text_as_an_inline_recipe(
+    tmp_path: Path,
+    rule: str,
+) -> None:
+    required_checks_make_policy.validate_make_recipe_failure_propagation(
+        rule,
+        path=tmp_path / "Makefile",
+        line_number=1,
+        previous_line_continues=False,
+        static_command_variables=frozenset({"MAKE"}),
+    )
+
+
 @pytest.mark.parametrize("continuation_indent", ["\t", "  "])
 def test_make_authority_accepts_hyphenated_recipe_continuation_arguments(
     tmp_path: Path,
@@ -475,11 +1449,25 @@ def test_make_authority_accepts_a_fail_propagating_recipe(tmp_path: Path) -> Non
         "MAKE := /bin/true",
         "MAKEFILES ?= alternate.mk",
         "MAKEFLAGS += -n",
+        "undefine REPOSITORY_PYTHON",
+        "override undefine REPOSITORY_PYTHON",
         "SHELL := /bin/true",
         "VPATH = shadow",
         "define SHELL\n/bin/true\nendef",
         "define SHELL :=\n/bin/true\nendef",
         "override define MAKEFLAGS\n-n\nendef",
+        "define ARBITRARY\nsafe\nendef",
+        "undefine ARBITRARY",
+        "PATH := /tmp/bin",
+        "export PATH := /tmp/bin",
+        "security-audit: PATH := /tmp/bin",
+        "security-audit: export PATH := /tmp/bin",
+        "export PYTHONPATH := /tmp/evil",
+        "export PYTHONSTARTUP := /tmp/startup.py",
+        "export LD_PRELOAD := /tmp/evil.so",
+        "export PYTHONHOME := /tmp/evil",
+        "export PATH",
+        "unexport PATH",
         "$(strip SHELL\\\n) := /bin/true",
         "security-audit: private .SHELLFLAGS ::= -c",
         ".DEFAULT:",
@@ -530,6 +1518,74 @@ def test_blocking_policy_rejects_mutable_make_execution_state(
             policy=policy,
             makefile_path=tmp_path / "Makefile",
         )
+
+
+@pytest.mark.parametrize(
+    "parse_time_execution",
+    [
+        "PAYLOAD != echo unsafe",
+        "export PAYLOAD != echo unsafe",
+        "security-audit: PAYLOAD != echo unsafe",
+        "load plugin.so",
+        "-load plugin.so",
+    ],
+)
+def test_make_authority_rejects_parse_time_execution_before_make_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parse_time_execution: str,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        f"{parse_time_execution}\n.PHONY: security-audit\nsecurity-audit:\n\t@false\n",
+        encoding="utf-8",
+    )
+    make_run = Mock(side_effect=AssertionError("GNU Make must not run"))
+    monkeypatch.setattr(required_checks_make_authority.subprocess, "run", make_run)
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+    make_run.assert_not_called()
+
+
+def test_make_authority_rejects_uninventoried_immediate_recursive_assignment(
+    tmp_path: Path,
+) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "PAYLOAD ::= safe != literal\n.PHONY: security-audit\nsecurity-audit:\n\t@true\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
+
+
+def test_make_authority_accepts_the_complete_assignment_inventory(tmp_path: Path) -> None:
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "TRANSACTION_RELEASE_OUTPUT ?= "
+        "output/task-runs/transaction-processing-release-rehearsal.json\n"
+        "TRANSACTION_RELEASE_PULL_IMAGES ?= false\n"
+        "CI_GATES := lint no-alias-gate typecheck architecture-guard openapi-gate "
+        "api-vocabulary-gate warning-gate migration-smoke test-pr-suites coverage-gate "
+        "security-audit test-pr-runtime-gates\n"
+        ".PHONY: security-audit\n"
+        "security-audit:\n"
+        "\t@true\n",
+        encoding="utf-8",
+    )
+
+    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset(
+        {"security-audit"}
+    )
 
 
 @pytest.mark.parametrize(
@@ -584,7 +1640,7 @@ def test_blocking_policy_rejects_computed_make_execution_state_names(
 
     with pytest.raises(
         RequiredStatusChecksError,
-        match="Makefile execution state must be static: .*line=2",
+        match="Makefile execution state must be static: .*line=1",
     ):
         _blocking_contexts_for_workflow(
             workflow,
@@ -593,7 +1649,7 @@ def test_blocking_policy_rejects_computed_make_execution_state_names(
         )
 
 
-def test_make_authority_keeps_tab_indented_endef_inside_define_body(
+def test_make_authority_rejects_define_before_parsing_its_body(
     tmp_path: Path,
 ) -> None:
     makefile_path = tmp_path / "Makefile"
@@ -608,14 +1664,18 @@ def test_make_authority_keeps_tab_indented_endef_inside_define_body(
         encoding="utf-8",
     )
 
-    assert required_checks_workflow._load_phony_make_targets(makefile_path) == frozenset({"active"})
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="Makefile execution state must be static: .*line=1",
+    ):
+        required_checks_workflow._load_phony_make_targets(makefile_path)
 
 
 @pytest.mark.parametrize(
     "rule",
     [
-        "security-audit: $(DEPS) # documented=x\n\t@true",
-        'security-audit: $(DEPS); printf "key=value"',
+        "security-audit: # documented=x\n\t@true",
+        'security-audit: ; printf "key=value"',
     ],
 )
 def test_make_authority_ignores_assignment_tokens_after_rule_boundaries(
@@ -624,7 +1684,7 @@ def test_make_authority_ignores_assignment_tokens_after_rule_boundaries(
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        f"DEPS =\n.PHONY: security-audit\n{rule}\n",
+        f".PHONY: security-audit\n{rule}\n",
         encoding="utf-8",
     )
 
@@ -633,20 +1693,13 @@ def test_make_authority_ignores_assignment_tokens_after_rule_boundaries(
     )
 
 
-@pytest.mark.parametrize(
-    "static_declaration",
-    [
-        "VALUE := $(shell echo safe)",
-        "security-audit: VALUE := $(strip safe)",
-    ],
-)
-def test_make_authority_accepts_expansions_after_static_declaration_separators(
+def test_make_authority_accepts_inventory_expansions_after_assignment_separator(
     tmp_path: Path,
-    static_declaration: str,
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        f"{static_declaration}\n.PHONY: security-audit\nsecurity-audit:\n\t@true\n",
+        "CI_IS_TRUE := $(filter $(CI_TRUTHY_VALUES),$(strip $(CI)))\n"
+        ".PHONY: security-audit\nsecurity-audit:\n\t@true\n",
         encoding="utf-8",
     )
 
@@ -661,7 +1714,7 @@ def test_make_authority_evaluation_uses_only_fixed_minimal_environment(
 ) -> None:
     _write_fixture_makefile(tmp_path)
     observed_environments: list[dict[str, str]] = []
-    real_run = required_checks_workflow.subprocess.run
+    real_run = required_checks_make_authority.subprocess.run
 
     def record_environment(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         observed_environments.append(dict(kwargs["env"]))
@@ -669,7 +1722,7 @@ def test_make_authority_evaluation_uses_only_fixed_minimal_environment(
 
     monkeypatch.setenv("MAKELEVEL", "1")
     monkeypatch.setenv("CI", "true")
-    monkeypatch.setattr(required_checks_workflow.subprocess, "run", record_environment)
+    monkeypatch.setattr(required_checks_make_authority.subprocess, "run", record_environment)
 
     required_checks_workflow._load_phony_make_targets(tmp_path / "Makefile")
 
@@ -948,6 +2001,217 @@ def test_blocking_policy_allows_conditional_audited_auxiliary_steps() -> None:
     assert blocking_contexts_for_workflow(workflow, policy=policy) == (
         "Quality Baseline / Security Gate",
     )
+
+
+def _checkout_authority_contexts(
+    steps: list[dict[str, object]],
+    *,
+    name: str = "PR Merge Gate / Workflow Lint",
+    strategy: dict[str, object] | None = None,
+) -> tuple[str, ...]:
+    job: dict[str, object] = {"name": name, "steps": steps}
+    if strategy is not None:
+        job["strategy"] = strategy
+    return blocking_contexts_for_workflow(
+        {"jobs": {"governed": job}},
+        policy=WorkflowPolicy(
+            path=Path("fixture.yml"),
+            policy="all_jobs_blocking",
+            advisory_contexts=frozenset(),
+        ),
+    )
+
+
+def _complementary_checkout_steps() -> list[dict[str, object]]:
+    return [
+        {"if": "matrix.suite != 'unit'", "uses": "actions/checkout@v6"},
+        {
+            "if": "matrix.suite == 'unit'",
+            "uses": "actions/checkout@v6",
+            "with": {"fetch-depth": 0},
+        },
+    ]
+
+
+def _suite_matrix(*suites: str) -> dict[str, object]:
+    return {"matrix": {"include": [{"suite": suite} for suite in suites]}}
+
+
+@pytest.mark.parametrize("condition", [False, "always()", "matrix.suite == 'other'"])
+def test_blocking_policy_rejects_unaudited_conditional_checkout(
+    condition: object,
+) -> None:
+    steps: list[dict[str, object]] = [
+        {"if": condition, "uses": "actions/checkout@v6"},
+        {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+    ]
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="conditional checkout authority must be the exact audited complementary matrix pair",
+    ):
+        _checkout_authority_contexts(steps)
+
+
+def test_blocking_policy_accepts_exact_complementary_matrix_checkout_authority() -> None:
+    contexts = _checkout_authority_contexts(
+        _complementary_checkout_steps()
+        + [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+        name="PR Merge Gate / Tests (${{ matrix.suite }})",
+        strategy=_suite_matrix("unit", "integration"),
+    )
+
+    assert contexts == (
+        "PR Merge Gate / Tests (unit)",
+        "PR Merge Gate / Tests (integration)",
+    )
+
+
+@pytest.mark.parametrize(
+    ("steps", "strategy", "match"),
+    [
+        (
+            _complementary_checkout_steps()
+            + [
+                {"uses": "actions/checkout@v6"},
+                {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+            ],
+            _suite_matrix("unit", "integration"),
+            "conditional checkout authority must use only the audited complementary matrix pair",
+        ),
+        (
+            [
+                {
+                    "if": "matrix.suite != 'unit'",
+                    "uses": "actions/checkout@v6",
+                    "with": {
+                        "repository": "sgajbi/lotus-platform",
+                        "path": "lotus-platform",
+                        "persist-credentials": False,
+                    },
+                },
+                _complementary_checkout_steps()[1],
+                {"id": "enforce", "shell": "bash", "run": "make security-audit"},
+            ],
+            _suite_matrix("unit", "integration"),
+            "alternate checkout must be unconditional",
+        ),
+        (
+            _complementary_checkout_steps()
+            + [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+            _suite_matrix("unit"),
+            "conditional checkout matrix must contain unit and non-unit suite rows",
+        ),
+    ],
+)
+def test_blocking_policy_rejects_ambiguous_matrix_checkout_authority(
+    steps: list[dict[str, object]],
+    strategy: dict[str, object],
+    match: str,
+) -> None:
+    with pytest.raises(RequiredStatusChecksError, match=match):
+        _checkout_authority_contexts(
+            steps,
+            name="PR Merge Gate / Tests (${{ matrix.suite }})",
+            strategy=strategy,
+        )
+
+
+def test_blocking_job_policy_rejects_matrix_checkout_row_without_suite_authority() -> None:
+    job = {
+        "name": "PR Merge Gate / Tests (${{ matrix.suite }})",
+        "runs-on": "ubuntu-latest",
+        "strategy": {"matrix": {"include": [{}]}},
+        "steps": _complementary_checkout_steps()
+        + [{"id": "enforce", "shell": "bash", "run": "make security-audit"}],
+    }
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="conditional checkout matrix requires non-empty suite values",
+    ):
+        required_checks_job_policy.validate_blocking_job(
+            job,
+            contexts=("PR Merge Gate / Tests",),
+            phony_make_targets=frozenset({"security-audit"}),
+            workflow_shell="bash",
+            workflow_environment={},
+        )
+
+
+def test_blocking_policy_rejects_complementary_checkout_without_matrix_authority() -> None:
+    steps = _complementary_checkout_steps() + [
+        {"id": "enforce", "shell": "bash", "run": "make security-audit"}
+    ]
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="conditional checkout authority requires matrix include rows",
+    ):
+        _checkout_authority_contexts(steps)
+
+
+def test_blocking_policy_rejects_disabled_actionlint_checkout() -> None:
+    steps: list[dict[str, object]] = [
+        {"if": False, "uses": "actions/checkout@v6"},
+        {"id": "enforce", "uses": "reviewdog/action-actionlint@v1"},
+    ]
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="conditional checkout authority must be the exact audited complementary matrix pair",
+    ):
+        _checkout_authority_contexts(steps)
+
+
+def test_blocking_policy_requires_every_matrix_checkout_before_actionlint() -> None:
+    conditional_steps = _complementary_checkout_steps()
+    steps: list[dict[str, object]] = [
+        conditional_steps[0],
+        {"id": "enforce", "uses": "reviewdog/action-actionlint@v1"},
+        conditional_steps[1],
+    ]
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="actionlint enforcement requires effective primary-repository checkout",
+    ):
+        _checkout_authority_contexts(
+            steps,
+            name="PR Merge Gate / Workflow Lint (${{ matrix.suite }})",
+            strategy=_suite_matrix("unit", "integration"),
+        )
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [{"id": "enforce", "uses": "reviewdog/action-actionlint@v1"}],
+        [
+            {
+                "uses": "actions/checkout@v6",
+                "with": {
+                    "repository": "sgajbi/lotus-platform",
+                    "path": "lotus-platform",
+                    "persist-credentials": False,
+                },
+            },
+            {"id": "enforce", "uses": "reviewdog/action-actionlint@v1"},
+        ],
+        [
+            {"id": "enforce", "uses": "reviewdog/action-actionlint@v1"},
+            {"uses": "actions/checkout@v6"},
+        ],
+    ],
+)
+def test_blocking_policy_requires_primary_checkout_before_actionlint(
+    steps: list[dict[str, object]],
+) -> None:
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="actionlint enforcement requires effective primary-repository checkout",
+    ):
+        _checkout_authority_contexts(steps)
 
 
 def test_blocking_policy_rejects_a_conditional_auxiliary_enforcement_marker() -> None:
@@ -1473,7 +2737,7 @@ def test_blocking_policy_accepts_exact_audited_action_references(
     action_step: dict[str, Any] = {"uses": action, "with": inputs}
     if enforcement:
         action_step["id"] = "enforce"
-        steps = [action_step]
+        steps = [{"uses": "actions/checkout@v6"}, action_step]
     else:
         steps = [
             action_step,
@@ -2262,7 +3526,10 @@ def test_blocking_policy_accepts_an_explicitly_governed_enforcement_action() -> 
         "jobs": {
             "workflow_lint": {
                 "name": "PR Merge Gate / Workflow Lint",
-                "steps": [{"id": "enforce", "uses": "reviewdog/action-actionlint@v1"}],
+                "steps": [
+                    {"uses": "actions/checkout@v6"},
+                    {"id": "enforce", "uses": "reviewdog/action-actionlint@v1"},
+                ],
             }
         }
     }
@@ -2317,6 +3584,66 @@ def test_manifest_validation_rejects_a_new_workflow_gate_before_protection_can_d
 
     with pytest.raises(RequiredStatusChecksError, match="New Control Gate"):
         validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+
+def test_manifest_validation_snapshots_workflows_before_make_evaluation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflow_directory = tmp_path / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    workflow_path = workflow_directory / "quality.yml"
+    bypassed_workflow = (
+        _CANONICAL_TRIGGERS_YAML + "jobs:\n"
+        "  security:\n"
+        "    name: Quality Baseline / Security Gate\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - id: enforce\n"
+        "        shell: bash\n"
+        "        run: make security-audit || true\n"
+    )
+    decoy_workflow = bypassed_workflow.replace("make security-audit || true", "make security-audit")
+    workflow_path.write_text(bypassed_workflow, encoding="utf-8")
+    manifest = RequiredChecksManifest(
+        repository="sgajbi/lotus-core",
+        branch="main",
+        strict=True,
+        workflow_policies=(
+            WorkflowPolicy(
+                path=Path(".github/workflows/quality.yml"),
+                policy="gate_jobs_blocking",
+                advisory_contexts=frozenset(),
+            ),
+        ),
+        required_checks=(RequiredCheck(context="Quality Baseline / Security Gate", app_id=15368),),
+    )
+
+    def mutate_workflow_during_make(
+        _path: Path,
+    ) -> dict[str, required_checks_make_authority.MakeTargetAuthority]:
+        workflow_path.write_text(decoy_workflow, encoding="utf-8")
+        return {
+            "security-audit": required_checks_make_authority.MakeTargetAuthority(
+                prerequisites=(),
+                recipes=("$(REPOSITORY_PYTHON) control.py",),
+                phony=True,
+            )
+        }
+
+    monkeypatch.setattr(
+        required_checks_workflow,
+        "_load_make_target_authority",
+        mutate_workflow_during_make,
+    )
+
+    with pytest.raises(
+        RequiredStatusChecksError,
+        match="blocking workflow run step must be a single bare command",
+    ):
+        validate_manifest_against_workflows(manifest, repository_root=tmp_path)
+
+    assert workflow_path.read_text(encoding="utf-8") == decoy_workflow
 
 
 def test_manifest_validation_rejects_advisory_collision_with_blocking_context(
@@ -2386,6 +3713,7 @@ def test_manifest_validation_rejects_required_advisory_context(tmp_path: Path) -
         _CANONICAL_TRIGGERS_YAML + "jobs:\n  report:\n    name: Quality Baseline / Report Only\n",
         encoding="utf-8",
     )
+    _write_make_command_contract(tmp_path)
     manifest = _fixture_manifest(source_manifest)
 
     with pytest.raises(RequiredStatusChecksError, match="must not use declared advisory"):

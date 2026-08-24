@@ -1090,7 +1090,9 @@ Most relevant current governance:
     runtime profile, started-at time, and uptime for safe incident diagnostics.
     `scripts/release/prebuild_ci_images.py` supplies build args and timing evidence in CI,
     `scripts/release/runtime_image_set.py` owns ephemeral cross-job transport and exact-source
-    verification, and `scripts/release/write_build_provenance.py` records matching build evidence.
+    verification, `scripts/release/verify_runtime_image_set.py` owns current-source selection,
+    optional local fallback, and atomic verified-source receipt publication, and
+    `scripts/release/write_build_provenance.py` records matching build evidence.
     `.github/workflows/image-release.yml` remains the only image-push path. One preparation job
     validates and digest-binds CISA KEV plus the pinned Platform exception schema to the exact
     workflow attempt; all 13 image jobs consume that same authority. Before signing, it uses
@@ -4149,8 +4151,11 @@ Most relevant current governance:
      job is blocking; `Quality Baseline / Report Only` is the sole explicit advisory context.
      Pin live authority to canonical `sgajbi/lotus-core` / `main`, expand matrix suites before
      comparison, require blocking jobs and every executable step to be unconditional and
-     fail-propagating except audited conditional checkout, cache-save, and
-     artifact-upload actions, require exactly one unconditional executable `id: enforce` step on a
+     fail-propagating except audited conditional cache-save and artifact-upload actions plus the
+     exact complementary `unit`/non-`unit` primary-checkout pair over include-row matrices. Reject
+     every other conditional checkout, require alternate-repository checkout to be unconditional,
+     and require effective primary-repository checkout before actionlint enforcement. Require
+     exactly one unconditional executable `id: enforce` step on a
      non-auxiliary control in every blocking job, require exact canonical `pull_request`
      event/`main` branch keys with no path filters and
      `merge_group`/`main` triggers, accept only include-row matrices with cell-identifying names,
@@ -4179,12 +4184,34 @@ Most relevant current governance:
      per-target phony flag in GNU Make's delimited effective-database Files section evaluated with
      only fixed `PATH` and `LC_ALL=C`, and must appear in a literal static `.PHONY` declaration;
      conditional directives, includes, declarations inside GNU Make column-zero-scoped `define`
-     bodies, `$(eval)`/`${eval}`
-     outside recipes, literal or computed parser/execution-variable assignments including multiline `define` forms and non-recipe continuations,
+     bodies, and command-executing or file-mutating Make functions (`call`, `eval`, `shell`,
+     `file`, and `guile`), native-extension `load`/`-load` directives, every assignment not present
+     verbatim in the repository-owned declaration inventory, target-specific assignments,
+     `export`/`unexport`, `define`/`undefine`, and non-recipe continuations,
      special execution targets, `vpath`,
-     dynamic or continued phony declarations, inherited process environment, parse-time/recipe output, serialized
+     dynamic or continued phony declarations, inherited process environment (including `PATH`,
+     Python startup/import variables, and loader variables), parse-time/recipe output, serialized
      variable bodies, missing Makefile authority,
-     ordinary files, and non-phony rules fail closed,
+     ordinary files, non-phony rules, and repeated effective-database target records fail closed;
+     the repository has no governed need for GNU Make double-colon rule multiplicity,
+     require every Make target referenced by any step in a blocking job to own executable
+     authority through a direct recipe, validated static phony prerequisite chain, or statically
+     named recursive-Make edge. Traverse that complete execution closure even when a parent owns
+     recipes. Every recipe must use a canonical direct identity: a repository Python script/module,
+     one static recursive Make target, or an admitted Make precondition/diagnostic. Noncanonical
+     expansions, nested interpreters, shell control operators, executable substitutions, backticks,
+     incomplete continuations, empty controls, and mutation or removal of governed execution
+     variables fail closed. Reconstruct every continued physical recipe as the logical shell command
+     before applying those checks; a token split across a continuation is not separate authority.
+     Every repository Python invocation, with or without arguments, must match its owning target in
+     `contracts/ci/governed-make-recipe-commands.v1.json`, and missing, borrowed, or stale entries
+     fail closed against the complete governed execution closure.
+     Parse and retain governed and unmanaged workflow definitions before GNU
+     Make authority evaluation so parse-time mutation cannot substitute a decoy for the workflow
+     content being certified. Put
+     necessary multi-command behavior behind a checked Python orchestrator rather than inline Make
+     shell composition, including dependency-health GitHub output serialization and exact-source
+     runtime image load/receipt verification,
      bind runtime-image verification as a prerequisite of every consuming Make control; the target
      writes an exact-`GITHUB_SHA` receipt only after load verification, never through workflow environment assertion,
      require every blocking-job dependency to be
@@ -4200,7 +4227,8 @@ Most relevant current governance:
      app-bound checks atomically with an explicit empty legacy `contexts` array.
      GitHub's read response mirrors app-bound check names into `contexts`; live verification must
      require that list to be present, well formed, and set-equal to the app-bound check names.
-     Keep manifest/model parsing, workflow traversal, blocking-job execution policy, live
+     Keep manifest/model parsing, workflow traversal, effective Make target authority,
+     blocking-job execution policy, live
      protection I/O, and CLI orchestration in their owned required-check modules. The
      workflow-governance lane must enforce scoped Ruff
      lint/format checks and Xenon
