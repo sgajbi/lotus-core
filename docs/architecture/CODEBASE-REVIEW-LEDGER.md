@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1710 cash instrument settlement authority (2026-08-25): issue #1008 showed cash-account
+bookings inferred cash from identifier prefixes, allowing a security-tagged fee/tax to reach cost
+and position mutation. One metadata-only predicate and one registry-driven validator now govern all
+public and internal generated cash-account types after enrichment. Missing and non-cash authority
+fail with stable reason codes before financial effects; cost and position domains retain defensive
+checks. Golden vectors preserve the #731 regression family, atomic tests prove rollback/no commit,
+and a CI architecture guard blocks identifier-prefix inference across the transaction-processing
+domain. No API/OpenAPI, event/Kafka, schema/migration, dependency, image, datastore, topology, or
+wiki contract changed. Evidence:
+[CR-1710-CASH-INSTRUMENT-SETTLEMENT-AUTHORITY.md](./codebase-reviews/CR-1710-CASH-INSTRUMENT-SETTLEMENT-AUTHORITY.md).
+
 CR-1709 governed required status checks (2026-08-23): branch protection required only 18 contexts
 while five Pull Request Merge Gate jobs/suites and all 14 Quality Baseline Gate jobs remained
 bypassable by auto-merge. One versioned manifest now owns 37 sorted GitHub-Actions-app-bound
