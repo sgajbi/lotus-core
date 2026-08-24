@@ -62,6 +62,7 @@ def test_reprocessing_job_lease_migration_is_constrained_reversible_and_linear(
     migration["upgrade"]()
     assert operations[0][0] == "execute"
     cutover_guard = str(operations[0][1])
+    assert "set_config('lock_timeout', '5s', true)" in cutover_guard
     assert "LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE" in cutover_guard
     assert "requires a drained PROCESSING queue" in cutover_guard
     added_columns = [entry[2] for entry in operations if entry[0] == "add_column"]
