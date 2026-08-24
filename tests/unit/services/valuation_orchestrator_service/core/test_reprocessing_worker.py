@@ -146,6 +146,7 @@ async def test_worker_processes_fx_revaluation_jobs_in_shared_runtime(mock_depen
         jobs=mock_repro_job_repo,
         watermarks=mock_state_repo,
         revaluation=mock_fx_revaluation_repo,
+        before_terminal_transition=ANY,
     )
     mock_observe_claimed.assert_called_once_with("RESET_FX_WATERMARKS", 1)
 
@@ -217,7 +218,7 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
         renewal_observed.set()
         return ReprocessingJobTransitionOutcome.APPLIED
 
-    async def operation():
+    async def operation(_terminal_transition_started):
         await renewal_observed.wait()
 
     jobs.renew_lease.side_effect = renew
@@ -255,7 +256,7 @@ async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership
     operation_cancelled = asyncio.Event()
     jobs.renew_lease.return_value = ReprocessingJobTransitionOutcome.TOKEN_MISMATCH
 
-    async def operation():
+    async def operation(_terminal_transition_started):
         try:
             await asyncio.Event().wait()
         finally:
@@ -293,8 +294,9 @@ async def test_worker_ignores_renewal_result_unblocked_by_terminal_commit(mock_d
         await terminal_commit_reached.wait()
         return ReprocessingJobTransitionOutcome.NOT_PROCESSING
 
-    async def operation():
+    async def operation(terminal_transition_started):
         await asyncio.sleep(0.01)
+        terminal_transition_started.set()
         terminal_commit_reached.set()
 
     jobs.renew_lease.side_effect = renew
