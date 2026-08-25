@@ -286,7 +286,12 @@ def test_recover_reprocessing_activity_for_test_cleanup_resets_only_replay_table
 
         assert snapshot["reprocessing_jobs_active"] == 1
         executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
-        assert any("UPDATE reprocessing_jobs" in sql for sql in executed_sql)
+        reprocessing_update = next(
+            sql for sql in executed_sql if "UPDATE reprocessing_jobs" in sql
+        )
+        assert "lease_owner = NULL" in reprocessing_update
+        assert "lease_token = NULL" in reprocessing_update
+        assert "lease_expires_at = NULL" in reprocessing_update
         assert any("UPDATE position_state" in sql for sql in executed_sql)
         assert any("DELETE FROM instrument_reprocessing_state" in sql for sql in executed_sql)
     finally:
