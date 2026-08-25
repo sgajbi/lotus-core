@@ -22,6 +22,29 @@ from src.services.valuation_orchestrator_service.app.core.reprocessing_worker_de
 pytestmark = pytest.mark.asyncio
 
 
+async def _wait_for_backend_advisory_lock(
+    *, session_factory: async_sessionmaker[AsyncSession], backend_pid: int
+) -> None:
+    for _ in range(100):
+        async with session_factory() as observer:
+            wait_event = (
+                await observer.execute(
+                    text(
+                        """
+                        SELECT wait_event_type, wait_event
+                        FROM pg_stat_activity
+                        WHERE pid = :backend_pid
+                        """
+                    ),
+                    {"backend_pid": backend_pid},
+                )
+            ).one_or_none()
+        if wait_event is not None and tuple(wait_event) == ("Lock", "advisory"):
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"backend {backend_pid} did not enter an advisory-lock wait")
+
+
 async def test_stale_security_replay_coalesces_with_newer_pending_job(
     clean_db,
     async_db_session: AsyncSession,
@@ -760,6 +783,86 @@ async def test_concurrent_staging_waits_for_owned_requeue_identity_lock(
     assert rows[0].status == "PENDING"
     assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
     assert rows[0].correlation_id == "corr-concurrent"
+
+
+async def test_stale_recovery_waits_for_owned_requeue_without_lock_inversion(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-STALE-RACE", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-stale-race",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.execute(
+        text(
+            """
+            UPDATE reprocessing_jobs
+            SET lease_expires_at = clock_timestamp() - interval '1 second'
+            WHERE id = :job_id
+            """
+        ),
+        {"job_id": claimed.id},
+    )
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    recovery_pid_ready: asyncio.Future[int] = asyncio.get_running_loop().create_future()
+
+    async def recover_stale_job() -> int:
+        async with session_factory() as recovery_session, recovery_session.begin():
+            recovery_pid = int(await recovery_session.scalar(text("SELECT pg_backend_pid()")))
+            recovery_pid_ready.set_result(recovery_pid)
+            return await ReprocessingJobRepository(recovery_session).find_and_reset_stale_jobs(
+                max_attempts=3
+            )
+
+    recovery_task = None
+    async with session_factory() as requeue_session, requeue_session.begin():
+        await requeue_session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended('RESET_WATERMARKS|12:S-STALE-RACE', 0))"
+            )
+        )
+        recovery_task = asyncio.create_task(recover_stale_job())
+        recovery_pid = await asyncio.wait_for(recovery_pid_ready, timeout=5)
+        await _wait_for_backend_advisory_lock(
+            session_factory=session_factory,
+            backend_pid=recovery_pid,
+        )
+        assert not recovery_task.done()
+        await requeue_session.execute(
+            text(
+                """
+                UPDATE reprocessing_jobs
+                SET lease_expires_at = clock_timestamp() + interval '5 minutes'
+                WHERE id = :job_id
+                """
+            ),
+            {"job_id": claimed.id},
+        )
+        outcome = await ReprocessingJobRepository(
+            requeue_session
+        ).requeue_owned_effective_dated_job(
+            claimed.id,
+            lease_token=claimed.lease_token,
+        )
+        assert outcome is ReprocessingJobTransitionOutcome.REQUEUED
+
+    assert recovery_task is not None
+    assert await asyncio.wait_for(recovery_task, timeout=5) == 0
+    async_db_session.expire_all()
+    row = (
+        await async_db_session.execute(
+            select(ReprocessingJob).where(ReprocessingJob.id == claimed.id)
+        )
+    ).scalar_one()
+    assert row.status == "PENDING"
+    assert row.failure_reason is None
+    assert row.payload["earliest_impacted_date"] == "2025-01-07"
 
 
 async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(

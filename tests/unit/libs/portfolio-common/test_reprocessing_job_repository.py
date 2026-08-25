@@ -366,8 +366,7 @@ async def test_find_and_reset_stale_jobs_resets_processing_rows(
     select_stmt = mock_db_session.execute.await_args_list[0].args[0]
     update_stmt = mock_db_session.execute.await_args_list[1].args[0]
     assert "SELECT reprocessing_jobs.id" in str(select_stmt)
-    assert "FOR UPDATE" in str(select_stmt)
-    assert select_stmt._for_update_arg.skip_locked is True
+    assert "FOR UPDATE" not in str(select_stmt)
     assert "lease_expires_at <= clock_timestamp()" in str(select_stmt)
     assert "UPDATE reprocessing_jobs SET status=:status" in str(update_stmt)
     assert "reprocessing_jobs.status = :status_1" in str(update_stmt)
@@ -406,6 +405,7 @@ async def test_stale_reprocessing_recovery_bounds_selection_and_chunks_reset_upd
         in compiled_select
     )
     assert "LIMIT 1000" in compiled_select
+    assert "FOR UPDATE" not in compiled_select
 
 
 async def test_stale_reprocessing_recovery_logs_counts_without_identifier_collections(
@@ -526,13 +526,18 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             correlation_id="corr-stale",
             correlation_missing_reason=None,
             alternate_lookup_key=None,
+            lease_token=LEASE_TOKEN,
         )
     ]
+    locked_result = MagicMock()
+    locked_result.one_or_none.return_value = stale_result.all.return_value[0]
     quarantine_result = MagicMock()
     coalesce_result = MagicMock()
     complete_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [
         stale_result,
+        MagicMock(),
+        locked_result,
         MagicMock(),
         quarantine_result,
         coalesce_result,
@@ -542,15 +547,22 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert recovered_count == 1
-    assert mock_db_session.execute.await_count == 5
+    assert mock_db_session.execute.await_count == 7
     lock_statement = mock_db_session.execute.await_args_list[1].args[0]
     assert "pg_advisory_xact_lock" in str(lock_statement)
-    quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
+    locked_row_statement = mock_db_session.execute.await_args_list[2].args[0]
+    compiled_locked_row = str(locked_row_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "FOR UPDATE" in compiled_locked_row
+    assert "lease_token" in compiled_locked_row
+    assert "lease_expires_at <= clock_timestamp()" in compiled_locked_row
+    repeated_lock_statement = mock_db_session.execute.await_args_list[3].args[0]
+    assert "pg_advisory_xact_lock" in str(repeated_lock_statement)
+    quarantine_statement = mock_db_session.execute.await_args_list[4].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[3].args
+    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[5].args
     assert "GREATEST" in str(coalesce_statement)
     assert coalesce_parameters["attempt_count"] == 2
-    complete_statement = mock_db_session.execute.await_args_list[4].args[0]
+    complete_statement = mock_db_session.execute.await_args_list[6].args[0]
     compiled_complete = str(complete_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "Coalesced into pending FX replay during stale recovery" in compiled_complete
 

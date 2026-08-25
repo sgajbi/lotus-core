@@ -682,9 +682,35 @@ class ReprocessingJobRepository:
                 continue
             if row.attempt_count >= max_attempts:
                 continue
+            handled_job_ids.add(int(row.id))
             try:
-                payload = row.payload
-                if row.job_type == "RESET_FX_WATERMARKS":
+                candidate_identity = _validated_effective_dated_replay_identity(
+                    job_type=str(row.job_type),
+                    payload=row.payload,
+                    attempt_count=int(row.attempt_count),
+                    correlation_id=row.correlation_id,
+                    correlation_missing_reason=row.correlation_missing_reason,
+                    alternate_lookup_key=row.alternate_lookup_key,
+                )
+                await self._lock_effective_dated_replay_identity(candidate_identity.identity_key)
+                locked_row = await self._lock_stale_effective_dated_job(
+                    job_id=int(row.id),
+                    lease_token=row.lease_token,
+                )
+                if locked_row is None:
+                    continue
+                identity = _validated_effective_dated_replay_identity(
+                    job_type=str(locked_row.job_type),
+                    payload=locked_row.payload,
+                    attempt_count=int(locked_row.attempt_count),
+                    correlation_id=locked_row.correlation_id,
+                    correlation_missing_reason=locked_row.correlation_missing_reason,
+                    alternate_lookup_key=locked_row.alternate_lookup_key,
+                )
+                if identity.identity_key != candidate_identity.identity_key:
+                    continue
+                payload = identity.payload
+                if identity.job_type == "RESET_FX_WATERMARKS":
                     await self.stage_pending_fx_revaluation_job(
                         from_currency=payload["from_currency"],
                         to_currency=payload["to_currency"],
@@ -693,18 +719,18 @@ class ReprocessingJobRepository:
                         ),
                         content_hash=payload["content_hash"],
                         generated_at=payload["generated_at"],
-                        correlation_id=row.correlation_id,
-                        correlation_missing_reason=row.correlation_missing_reason,
-                        alternate_lookup_key=row.alternate_lookup_key,
-                        attempt_count=int(row.attempt_count),
+                        correlation_id=identity.correlation_id,
+                        correlation_missing_reason=identity.correlation_missing_reason,
+                        alternate_lookup_key=identity.alternate_lookup_key,
+                        attempt_count=identity.attempt_count,
                     )
                     completion_reason = "Coalesced into pending FX replay during stale recovery"
                 else:
                     await self.create_job(
-                        row.job_type,
+                        identity.job_type,
                         payload,
-                        correlation_id=row.correlation_id,
-                        attempt_count=int(row.attempt_count),
+                        correlation_id=identity.correlation_id,
+                        attempt_count=identity.attempt_count,
                     )
                     completion_reason = (
                         "Coalesced into pending security replay during stale recovery"
@@ -720,7 +746,7 @@ class ReprocessingJobRepository:
                         "job_type": row.job_type,
                     },
                 )
-                result = await self.db.execute(
+                await self.db.execute(
                     _stale_jobs_update_stmt([row.id]).values(
                         status="FAILED",
                         lease_owner=None,
@@ -730,8 +756,6 @@ class ReprocessingJobRepository:
                         updated_at=func.now(),
                     )
                 )
-                if int(result.rowcount or 0) == 1:
-                    handled_job_ids.add(int(row.id))
                 continue
 
             result = await self.db.execute(
@@ -745,9 +769,36 @@ class ReprocessingJobRepository:
                 )
             )
             if int(result.rowcount or 0) == 1:
-                handled_job_ids.add(int(row.id))
                 recovered_count += 1
         return handled_job_ids, recovered_count
+
+    async def _lock_stale_effective_dated_job(
+        self,
+        *,
+        job_id: int,
+        lease_token: str | None,
+    ) -> Any | None:
+        """Revalidate and row-lock one stale lease after its identity lock is held."""
+
+        return (
+            await self.db.execute(
+                select(
+                    ReprocessingJob.job_type,
+                    ReprocessingJob.payload,
+                    ReprocessingJob.attempt_count,
+                    ReprocessingJob.correlation_id,
+                    ReprocessingJob.correlation_missing_reason,
+                    ReprocessingJob.alternate_lookup_key,
+                )
+                .where(
+                    ReprocessingJob.id == job_id,
+                    ReprocessingJob.status == "PROCESSING",
+                    ReprocessingJob.lease_token == lease_token,
+                    ReprocessingJob.lease_expires_at <= func.clock_timestamp(),
+                )
+                .with_for_update()
+            )
+        ).one_or_none()
 
     async def _mark_over_limit_stale_jobs_failed(
         self,
@@ -1203,7 +1254,6 @@ def _stale_reprocessing_jobs_stmt():
         )
         .order_by(ReprocessingJob.lease_expires_at.asc(), ReprocessingJob.id.asc())
         .limit(POSTGRES_STATEMENT_ROW_LIMIT)
-        .with_for_update(skip_locked=True)
     )
 
 
