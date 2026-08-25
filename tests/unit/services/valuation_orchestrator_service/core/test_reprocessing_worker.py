@@ -146,8 +146,18 @@ async def test_worker_processes_fx_revaluation_jobs_in_shared_runtime(mock_depen
 
     mock_fx_revaluation_repo.claim_pending_jobs.assert_has_awaits(
         [
-            call(1, lease_owner=ANY, lease_duration_seconds=900),
-            call(1, lease_owner=ANY, lease_duration_seconds=900),
+            call(
+                1,
+                lease_owner=ANY,
+                lease_duration_seconds=900,
+                excluded_job_ids=(),
+            ),
+            call(
+                1,
+                lease_owner=ANY,
+                lease_duration_seconds=900,
+                excluded_job_ids=(40,),
+            ),
         ]
     )
     processor.process.assert_awaited_once_with(
@@ -203,12 +213,14 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
                 1,
                 lease_owner=ANY,
                 lease_duration_seconds=900,
+                excluded_job_ids=(),
             ),
             call(
                 "RESET_WATERMARKS",
                 1,
                 lease_owner=ANY,
                 lease_duration_seconds=900,
+                excluded_job_ids=(1,),
             ),
         ]
     )
@@ -508,6 +520,75 @@ async def test_worker_claims_each_job_only_after_the_previous_job_finishes(mock_
     assert all(call_args.args[1] == 1 for call_args in jobs.find_and_claim_jobs.await_args_list)
 
 
+async def test_worker_processes_each_requeued_reset_job_at_most_once_per_poll(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1, batch_size=2)
+    jobs = mock_dependencies["repro_job_repo"]
+    first = ReprocessingJob(id=61, job_type="RESET_WATERMARKS", payload={})
+    second = ReprocessingJob(id=62, job_type="RESET_WATERMARKS", payload={})
+
+    async def claim_next(*_args, excluded_job_ids, **_kwargs):
+        if first.id not in excluded_job_ids:
+            return [first]
+        if second.id not in excluded_job_ids:
+            return [second]
+        return []
+
+    jobs.find_and_claim_jobs.side_effect = claim_next
+    worker._process_reset_watermark_job = AsyncMock()  # type: ignore[method-assign]
+
+    await worker._process_batch()
+
+    assert [
+        awaited.kwargs["excluded_job_ids"] for awaited in jobs.find_and_claim_jobs.await_args_list
+    ] == [(), (first.id,)]
+    assert [
+        awaited.kwargs["job"].id for awaited in worker._process_reset_watermark_job.await_args_list
+    ] == [first.id, second.id]
+
+
+async def test_worker_processes_each_requeued_fx_job_at_most_once_per_poll(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1, batch_size=2)
+    reset_jobs = mock_dependencies["repro_job_repo"]
+    fx_jobs = mock_dependencies["fx_revaluation_repo"]
+    reset_jobs.find_and_claim_jobs.return_value = []
+    first = ClaimedFxRevaluationJob(
+        job_id=71,
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+        lease_token=LEASE_TOKEN,
+    )
+    second = ClaimedFxRevaluationJob(
+        job_id=72,
+        pair=DirectCurrencyPair("EUR", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+        lease_token=LEASE_TOKEN,
+    )
+
+    async def claim_next(*_args, excluded_job_ids, **_kwargs):
+        if first.job_id not in excluded_job_ids:
+            return [first]
+        if second.job_id not in excluded_job_ids:
+            return [second]
+        return []
+
+    fx_jobs.claim_pending_jobs.side_effect = claim_next
+    worker._process_fx_revaluation_job = AsyncMock()  # type: ignore[method-assign]
+
+    await worker._process_batch()
+
+    assert [
+        awaited.kwargs["excluded_job_ids"] for awaited in fx_jobs.claim_pending_jobs.await_args_list
+    ] == [(), (first.job_id,)]
+    assert [
+        awaited.kwargs["job"].job_id
+        for awaited in worker._process_fx_revaluation_job.await_args_list
+    ] == [first.job_id, second.job_id]
+
+
 async def test_malformed_reset_payload_fails_without_blocking_valid_sibling(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1, batch_size=2)
     jobs = mock_dependencies["repro_job_repo"]
@@ -560,6 +641,7 @@ async def test_worker_resets_stale_jobs_before_claiming(mock_dependencies):
         1,
         lease_owner=ANY,
         lease_duration_seconds=900,
+        excluded_job_ids=(),
     )
 
 

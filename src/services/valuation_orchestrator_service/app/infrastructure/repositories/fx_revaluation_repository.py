@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import date
 from typing import cast
 
@@ -49,6 +50,7 @@ class SqlAlchemyFxRevaluationRepository:
         *,
         lease_owner: str | None = None,
         lease_duration_seconds: int = 15 * 60,
+        excluded_job_ids: Collection[int] = (),
     ) -> list[ClaimedFxRevaluationJob | RejectedFxRevaluationJob]:
         """Claim and map the oldest pending FX replay jobs to validated work."""
         claimed_rows = await ReprocessingJobRepository(self._db).find_and_claim_jobs(
@@ -56,6 +58,7 @@ class SqlAlchemyFxRevaluationRepository:
             batch_size,
             lease_owner=lease_owner,
             lease_duration_seconds=lease_duration_seconds,
+            excluded_job_ids=excluded_job_ids,
         )
         return [self._map_claimed_job(row) for row in claimed_rows]
 
