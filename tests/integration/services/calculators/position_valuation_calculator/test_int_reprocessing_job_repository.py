@@ -133,6 +133,49 @@ async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     assert {row.payload["security_id"] for row in remaining_rows} == {"S1", "S2", "S3"}
 
 
+async def test_find_and_claim_jobs_batch_size_one_updates_exactly_one_row(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S-FIRST", "earliest_impacted_date": "2025-01-05"},
+                status="PENDING",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S-SECOND", "earliest_impacted_date": "2025-01-06"},
+                status="PENDING",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    claimed = await ReprocessingJobRepository(async_db_session).find_and_claim_jobs(
+        "RESET_WATERMARKS",
+        batch_size=1,
+    )
+    await async_db_session.commit()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(claimed) == 1
+    assert claimed[0].payload["security_id"] == "S-FIRST"
+    assert [row.status for row in rows] == ["PROCESSING", "PENDING"]
+    assert [row.attempt_count for row in rows] == [1, 0]
+
+
 async def test_find_and_claim_jobs_keeps_malformed_payload_from_blocking_valid_sibling(
     clean_db,
     async_db_session: AsyncSession,

@@ -1,6 +1,7 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -77,7 +78,17 @@ def _claim_pending_jobs_query(job_type: str):
     if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
         return text(
             """
-            UPDATE reprocessing_jobs
+            WITH candidates AS MATERIALIZED (
+                SELECT id
+                FROM reprocessing_jobs
+                WHERE status = 'PENDING'
+                  AND job_type = :job_type
+                  AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
+                ORDER BY (payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC
+                LIMIT :batch_size
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE reprocessing_jobs AS target
             SET status = 'PROCESSING',
                 updated_at = now(),
                 last_attempted_at = now(),
@@ -86,23 +97,27 @@ def _claim_pending_jobs_query(job_type: str):
                 lease_token = :lease_token,
                 lease_expires_at = clock_timestamp()
                     + make_interval(secs => :lease_duration_seconds)
-            WHERE status = 'PENDING'
-              AND job_type = :job_type
-              AND id IN (
-                SELECT id
-                FROM reprocessing_jobs
-                WHERE status = 'PENDING' AND job_type = :job_type
-                ORDER BY (payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC
-                LIMIT :batch_size
-                FOR UPDATE SKIP LOCKED
-            )
-            RETURNING *;
+            FROM candidates
+            WHERE target.id = candidates.id
+              AND target.status = 'PENDING'
+              AND target.job_type = :job_type
+            RETURNING target.*;
             """
         )
 
     return text(
         """
-        UPDATE reprocessing_jobs
+        WITH candidates AS MATERIALIZED (
+            SELECT id
+            FROM reprocessing_jobs
+            WHERE status = 'PENDING'
+              AND job_type = :job_type
+              AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
+            ORDER BY created_at ASC, id ASC
+            LIMIT :batch_size
+            FOR UPDATE SKIP LOCKED
+        )
+        UPDATE reprocessing_jobs AS target
         SET status = 'PROCESSING',
             updated_at = now(),
             last_attempted_at = now(),
@@ -111,17 +126,11 @@ def _claim_pending_jobs_query(job_type: str):
             lease_token = :lease_token,
             lease_expires_at = clock_timestamp()
                 + make_interval(secs => :lease_duration_seconds)
-        WHERE status = 'PENDING'
-          AND job_type = :job_type
-          AND id IN (
-            SELECT id
-            FROM reprocessing_jobs
-            WHERE status = 'PENDING' AND job_type = :job_type
-            ORDER BY created_at ASC, id ASC
-            LIMIT :batch_size
-            FOR UPDATE SKIP LOCKED
-        )
-        RETURNING *;
+        FROM candidates
+        WHERE target.id = candidates.id
+          AND target.status = 'PENDING'
+          AND target.job_type = :job_type
+        RETURNING target.*;
         """
     )
 
@@ -562,6 +571,7 @@ class ReprocessingJobRepository:
         *,
         lease_owner: str | None = None,
         lease_duration_seconds: int = _DEFAULT_LEASE_DURATION_SECONDS,
+        excluded_job_ids: Collection[int] = (),
     ) -> list[ClaimedReprocessingJob]:
         """
         Finds PENDING jobs, atomically claims them by updating their
@@ -591,6 +601,7 @@ class ReprocessingJobRepository:
                 "lease_owner": resolved_lease_owner,
                 "lease_token": lease_token,
                 "lease_duration_seconds": lease_duration_seconds,
+                "excluded_job_ids": sorted(set(excluded_job_ids)),
             },
         )
         claimed_jobs = result.mappings().all()
