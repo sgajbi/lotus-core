@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -449,6 +449,317 @@ async def test_create_job_preserves_existing_correlation_when_earlier_date_has_n
     assert len(rows) == 1
     assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
     assert rows[0].correlation_id == "corr-existing"
+
+
+@pytest.mark.parametrize(
+    ("claimed_date", "sibling_date", "expected_date", "expected_correlation"),
+    [
+        ("2025-01-05", "2025-01-07", "2025-01-05", "corr-claimed"),
+        ("2025-01-07", "2025-01-05", "2025-01-05", "corr-sibling"),
+        ("2025-01-05", "2025-01-05", "2025-01-05", "corr-sibling"),
+    ],
+)
+async def test_owned_reset_requeue_coalesces_pending_sibling_without_narrowing_boundary(
+    clean_db,
+    async_db_session: AsyncSession,
+    claimed_date: str,
+    sibling_date: str,
+    expected_date: str,
+    expected_correlation: str,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-OWNED", "earliest_impacted_date": claimed_date},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-OWNED", "earliest_impacted_date": sibling_date},
+        correlation_id="corr-sibling",
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "PENDING"]
+    assert rows[1].payload["earliest_impacted_date"] == expected_date
+    assert rows[1].correlation_id == expected_correlation
+    assert rows[0].lease_token is None
+    assert rows[0].lease_expires_at is None
+
+
+async def test_owned_reset_requeue_without_sibling_reuses_claimed_row(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    staged = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-DIRECT", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-direct",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
+    assert outcome is ReprocessingJobTransitionOutcome.REQUEUED
+    assert len(rows) == 1
+    assert rows[0].id == staged.id
+    assert rows[0].status == "PENDING"
+    assert rows[0].lease_token is None
+
+
+async def test_owned_reset_requeue_rejects_stale_token_without_touching_sibling(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-FENCED", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-FENCED", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-sibling",
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token="f" * 32,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
+    assert rows[0].status == "PROCESSING"
+    assert rows[0].lease_token == claimed.lease_token
+    assert rows[1].status == "PENDING"
+    assert rows[1].payload["earliest_impacted_date"] == "2025-01-05"
+
+
+async def test_owned_fx_requeue_preserves_earliest_date_and_latest_source_lineage(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="SGD",
+        earliest_impacted_date=date(2025, 1, 7),
+        content_hash="sha256:" + ("a" * 64),
+        generated_at="2025-01-07T00:00:00+00:00",
+        correlation_id="corr-claimed",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await repository.stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="SGD",
+        earliest_impacted_date=date(2025, 1, 5),
+        content_hash="sha256:" + ("b" * 64),
+        generated_at="2025-01-08T00:00:00+00:00",
+        correlation_id="corr-sibling",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "PENDING"]
+    assert rows[1].payload["earliest_impacted_date"] == "2025-01-05"
+    assert rows[1].payload["content_hash"] == "sha256:" + ("b" * 64)
+    assert rows[1].payload["generated_at"] == "2025-01-08T00:00:00+00:00"
+    assert rows[1].correlation_id == "corr-sibling"
+
+
+async def test_owned_requeue_outer_rollback_restores_claim_and_sibling(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-ROLLBACK", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-ROLLBACK", "earliest_impacted_date": "2025-01-09"},
+        correlation_id="corr-sibling",
+    )
+    await async_db_session.commit()
+
+    assert (
+        await repository.requeue_owned_effective_dated_job(
+            claimed.id,
+            lease_token=claimed.lease_token,
+        )
+        is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    )
+    await async_db_session.rollback()
+    async_db_session.expire_all()
+
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert [row.status for row in rows] == ["PROCESSING", "PENDING"]
+    assert rows[0].lease_token == claimed.lease_token
+    assert rows[1].payload["earliest_impacted_date"] == "2025-01-09"
+    assert rows[1].correlation_id == "corr-sibling"
+
+
+async def test_owned_requeue_replay_is_idempotent_after_direct_requeue(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-REPLAY", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-replay",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+
+    assert (
+        await repository.requeue_owned_effective_dated_job(
+            claimed.id,
+            lease_token=claimed.lease_token,
+        )
+        is ReprocessingJobTransitionOutcome.REQUEUED
+    )
+    await async_db_session.commit()
+    repeated = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
+    assert repeated is ReprocessingJobTransitionOutcome.NOT_PROCESSING
+    assert len(rows) == 1
+    assert rows[0].status == "PENDING"
+    assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
+
+
+async def test_concurrent_staging_waits_for_owned_requeue_identity_lock(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S-CONCURRENT", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def stage_earlier_sibling() -> None:
+        async with session_factory() as sibling_session, sibling_session.begin():
+            await ReprocessingJobRepository(sibling_session).create_job(
+                "RESET_WATERMARKS",
+                {
+                    "security_id": "S-CONCURRENT",
+                    "earliest_impacted_date": "2025-01-05",
+                },
+                correlation_id="corr-concurrent",
+            )
+
+    stage_task = None
+    async with session_factory() as requeue_session, requeue_session.begin():
+        await requeue_session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended('RESET_WATERMARKS|12:S-CONCURRENT', 0))"
+            )
+        )
+        stage_task = asyncio.create_task(stage_earlier_sibling())
+        await asyncio.sleep(0.1)
+        assert not stage_task.done()
+        outcome = await ReprocessingJobRepository(
+            requeue_session
+        ).requeue_owned_effective_dated_job(
+            claimed.id,
+            lease_token=claimed.lease_token,
+        )
+        assert outcome is ReprocessingJobTransitionOutcome.REQUEUED
+    await stage_task
+
+    async_db_session.expire_all()
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].status == "PENDING"
+    assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
+    assert rows[0].correlation_id == "corr-concurrent"
 
 
 async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
