@@ -214,6 +214,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
                 lease_owner=ANY,
                 lease_duration_seconds=900,
                 excluded_job_ids=(),
+                normalize_reset_watermark_duplicates=True,
             ),
             call(
                 "RESET_WATERMARKS",
@@ -221,6 +222,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
                 lease_owner=ANY,
                 lease_duration_seconds=900,
                 excluded_job_ids=(1,),
+                normalize_reset_watermark_duplicates=False,
             ),
         ]
     )
@@ -518,6 +520,10 @@ async def test_worker_claims_each_job_only_after_the_previous_job_finishes(mock_
 
     assert events == ["claim-41", "process-41", "claim-42", "process-42"]
     assert all(call_args.args[1] == 1 for call_args in jobs.find_and_claim_jobs.await_args_list)
+    assert [
+        call_args.kwargs["normalize_reset_watermark_duplicates"]
+        for call_args in jobs.find_and_claim_jobs.await_args_list
+    ] == [True, False]
 
 
 async def test_worker_processes_each_requeued_reset_job_at_most_once_per_poll(
@@ -543,6 +549,10 @@ async def test_worker_processes_each_requeued_reset_job_at_most_once_per_poll(
     assert [
         awaited.kwargs["excluded_job_ids"] for awaited in jobs.find_and_claim_jobs.await_args_list
     ] == [(), (first.id,)]
+    assert [
+        awaited.kwargs["normalize_reset_watermark_duplicates"]
+        for awaited in jobs.find_and_claim_jobs.await_args_list
+    ] == [True, False]
     assert [
         awaited.kwargs["job"].id for awaited in worker._process_reset_watermark_job.await_args_list
     ] == [first.id, second.id]
@@ -642,6 +652,7 @@ async def test_worker_resets_stale_jobs_before_claiming(mock_dependencies):
         lease_owner=ANY,
         lease_duration_seconds=900,
         excluded_job_ids=(),
+        normalize_reset_watermark_duplicates=True,
     )
 
 
