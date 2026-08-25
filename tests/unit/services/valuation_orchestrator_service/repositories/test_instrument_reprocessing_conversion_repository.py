@@ -58,6 +58,10 @@ async def test_convert_pending_triggers_reports_created_and_coalesced_outcomes()
         coalesced_pending_count=1,
     )
     trigger_repository.claim_instrument_reprocessing_triggers.assert_awaited_once_with(25)
+    job_repository.lock_reset_watermarks_replay_identities.assert_awaited_once_with(
+        ["BOND-1", "BOND-2"]
+    )
+    assert job_repository.mock_calls[0].args == (["BOND-1", "BOND-2"],)
     assert job_repository.stage_reset_watermarks_job.await_count == 2
 
 
@@ -75,6 +79,7 @@ async def test_convert_pending_triggers_returns_zero_result_without_job_writes()
     result = await repository.convert_pending_triggers(batch_size=10)
 
     assert result == conversion_repository.InstrumentTriggerConversionResult(0, 0, 0)
+    job_repository.lock_reset_watermarks_replay_identities.assert_not_awaited()
     job_repository.stage_reset_watermarks_job.assert_not_awaited()
 
 

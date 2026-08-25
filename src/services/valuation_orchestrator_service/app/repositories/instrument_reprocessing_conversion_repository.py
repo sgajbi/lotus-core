@@ -36,6 +36,10 @@ class InstrumentReprocessingConversionRepository:
         created_count = 0
         coalesced_pending_count = 0
 
+        if triggers:
+            await self._job_repository.lock_reset_watermarks_replay_identities(
+                [trigger.security_id for trigger in triggers]
+            )
         for trigger in triggers:
             result = await self._job_repository.stage_reset_watermarks_job(
                 security_id=trigger.security_id,
