@@ -904,6 +904,9 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
     mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
     _claim_reset_jobs_in_order(mock_repro_job_repo, pending_job)
     mock_repro_job_repo.update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
+    mock_repro_job_repo.requeue_owned_effective_dated_job.return_value = (
+        ReprocessingJobTransitionOutcome.REQUEUED
+    )
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
     mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = []
 
@@ -916,9 +919,9 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
     )
     mock_observe_completed.assert_not_called()
     mock_observe_stale_skips.assert_not_called()
-    mock_repro_job_repo.update_job_status.assert_awaited_once_with(
+    mock_repro_job_repo.update_job_status.assert_not_awaited()
+    mock_repro_job_repo.requeue_owned_effective_dated_job.assert_awaited_once_with(
         19,
-        "PENDING",
         lease_token=LEASE_TOKEN,
     )
 

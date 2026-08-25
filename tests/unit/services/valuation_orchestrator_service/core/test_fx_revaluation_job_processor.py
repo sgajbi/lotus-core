@@ -99,6 +99,9 @@ async def test_readiness_race_requeues_job_without_completing(dependencies: dict
         updated_key_count=0,
     )
     dependencies["jobs"].update_job_status.return_value = ReprocessingJobTransitionOutcome.APPLIED
+    dependencies[
+        "jobs"
+    ].requeue_owned_effective_dated_job.return_value = ReprocessingJobTransitionOutcome.REQUEUED
     with patch(
         "src.services.valuation_orchestrator_service.app.core."
         "fx_revaluation_job_processor.ProcessFxRevaluationJob.execute",
@@ -106,9 +109,9 @@ async def test_readiness_race_requeues_job_without_completing(dependencies: dict
     ):
         await FxRevaluationJobProcessor().process(job=job(), **dependencies)
 
-    dependencies["jobs"].update_job_status.assert_awaited_once_with(
+    dependencies["jobs"].update_job_status.assert_not_awaited()
+    dependencies["jobs"].requeue_owned_effective_dated_job.assert_awaited_once_with(
         41,
-        "PENDING",
         lease_token=LEASE_TOKEN,
     )
 
