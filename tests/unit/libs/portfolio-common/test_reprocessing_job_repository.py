@@ -533,6 +533,7 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     complete_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [
         stale_result,
+        MagicMock(),
         quarantine_result,
         coalesce_result,
         complete_result,
@@ -541,13 +542,15 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert recovered_count == 1
-    assert mock_db_session.execute.await_count == 4
-    quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert mock_db_session.execute.await_count == 5
+    lock_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert "pg_advisory_xact_lock" in str(lock_statement)
+    quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[2].args
+    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[3].args
     assert "GREATEST" in str(coalesce_statement)
     assert coalesce_parameters["attempt_count"] == 2
-    complete_statement = mock_db_session.execute.await_args_list[3].args[0]
+    complete_statement = mock_db_session.execute.await_args_list[4].args[0]
     compiled_complete = str(complete_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "Coalesced into pending FX replay during stale recovery" in compiled_complete
 
@@ -612,7 +615,7 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 1
+    assert mock_db_session.execute.await_count == 2
 
 
 async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
@@ -644,7 +647,7 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 1
+    assert mock_db_session.execute.await_count == 2
 
 
 async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
@@ -712,6 +715,9 @@ async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
 
     assert result.job.id == 12
     assert result.outcome is expected_outcome
+    lock_statement, lock_parameters = mock_db_session.execute.await_args_list[0].args
+    assert "pg_advisory_xact_lock" in str(lock_statement)
+    assert lock_parameters == {"identity_key": "RESET_WATERMARKS|6:BOND-1"}
     statement = str(mock_db_session.execute.await_args.args[0])
     assert "(xmax = 0) AS was_inserted" in statement
 
@@ -766,6 +772,90 @@ async def test_update_job_status_requires_processing_ownership(
     assert "reprocessing_jobs.status = :status_1" in stmt_text
     assert "reprocessing_jobs.lease_token = :lease_token_1" in stmt_text
     assert "reprocessing_jobs.lease_expires_at > clock_timestamp()" in stmt_text
+
+
+async def test_owned_requeue_uses_repository_policy_for_direct_requeue(
+    repository: ReprocessingJobRepository,
+) -> None:
+    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
+    repository._lock_effective_dated_replay_identity = AsyncMock()
+    repository._lock_live_owned_job = AsyncMock(return_value=True)
+    repository._pending_replay_sibling_exists = AsyncMock(return_value=False)
+    repository._apply_owned_transition = AsyncMock(
+        return_value=ReprocessingJobTransitionOutcome.APPLIED
+    )
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        99,
+        lease_token=LEASE_TOKEN,
+    )
+
+    assert outcome is ReprocessingJobTransitionOutcome.REQUEUED
+    repository._lock_effective_dated_replay_identity.assert_awaited_once_with(identity.identity_key)
+    repository._apply_owned_transition.assert_awaited_once_with(
+        99,
+        "PENDING",
+        lease_token=LEASE_TOKEN,
+    )
+
+
+async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    savepoint = AsyncMock()
+    mock_db_session.begin_nested.return_value = savepoint
+    repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
+    repository._lock_effective_dated_replay_identity = AsyncMock()
+    repository._lock_live_owned_job = AsyncMock(return_value=True)
+    repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
+    repository._coalesce_pending_replay = AsyncMock()
+    repository._apply_owned_transition = AsyncMock(
+        return_value=ReprocessingJobTransitionOutcome.APPLIED
+    )
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        99,
+        lease_token=LEASE_TOKEN,
+    )
+
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    repository._coalesce_pending_replay.assert_awaited_once_with(identity)
+    repository._apply_owned_transition.assert_awaited_once_with(
+        99,
+        "COMPLETE",
+        lease_token=LEASE_TOKEN,
+    )
+    savepoint.commit.assert_awaited_once()
+    savepoint.rollback.assert_not_awaited()
+
+
+async def test_owned_requeue_rolls_back_sibling_change_after_lease_loss(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    savepoint = AsyncMock()
+    mock_db_session.begin_nested.return_value = savepoint
+    repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
+    repository._lock_effective_dated_replay_identity = AsyncMock()
+    repository._lock_live_owned_job = AsyncMock(return_value=True)
+    repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
+    repository._coalesce_pending_replay = AsyncMock()
+    repository._apply_owned_transition = AsyncMock(
+        return_value=ReprocessingJobTransitionOutcome.LEASE_EXPIRED
+    )
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        99,
+        lease_token=LEASE_TOKEN,
+    )
+
+    assert outcome is ReprocessingJobTransitionOutcome.LEASE_EXPIRED
+    savepoint.rollback.assert_awaited_once()
+    savepoint.commit.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -854,6 +944,7 @@ async def test_renew_lease_rejects_invalid_authority(
     ("status", "failure_reason", "message"),
     [
         ("PROCESSING", None, "transition status"),
+        ("PENDING", None, "transition status"),
         ("COMPLETE", "unexpected", "failure reason"),
         ("FAILED", None, "requires a failure reason"),
         ("FAILED", " ", "requires a failure reason"),

@@ -28,7 +28,7 @@ _STALE_FAILED_RESERVED_BINDS = 7
 _STALE_RESET_RESERVED_BINDS = 5
 _LEASE_OWNER_MAX_LENGTH = 128
 _DEFAULT_LEASE_DURATION_SECONDS = 15 * 60
-_OWNED_TRANSITION_STATUSES = frozenset({"PENDING", "COMPLETE", "FAILED"})
+_OWNED_TRANSITION_STATUSES = frozenset({"COMPLETE", "FAILED"})
 
 
 class ResetWatermarksStageOutcome(StrEnum):
@@ -42,6 +42,8 @@ class ReprocessingJobTransitionOutcome(StrEnum):
     """Classify an exact owned transition without overstating lease authority."""
 
     APPLIED = "APPLIED"
+    REQUEUED = "REQUEUED"
+    COALESCED_PENDING = "COALESCED_PENDING"
     LEASE_EXPIRED = "LEASE_EXPIRED"
     CLAIM_MISMATCH = "CLAIM_MISMATCH"
     NOT_PROCESSING = "NOT_PROCESSING"
@@ -72,6 +74,19 @@ class ClaimedReprocessingJob:
     created_at: datetime
     lease_token: str
     lease_expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class _EffectiveDatedReplayIdentity:
+    """Validated identity needed to serialize one effective-dated replay family."""
+
+    job_type: str
+    identity_key: str
+    payload: dict[str, Any]
+    attempt_count: int
+    correlation_id: str | None
+    correlation_missing_reason: str | None
+    alternate_lookup_key: str | None
 
 
 def _claim_pending_jobs_query(job_type: str):
@@ -213,6 +228,14 @@ class ReprocessingJobRepository:
         attempt_count: int = 0,
     ) -> None:
         """Quarantine malformed pair work, then coalesce one valid pending FX replay."""
+
+        await self._lock_effective_dated_replay_identity(
+            _effective_dated_replay_identity_key(
+                "RESET_FX_WATERMARKS",
+                from_currency,
+                to_currency,
+            )
+        )
 
         quarantine_statement = text(
             """
@@ -442,6 +465,9 @@ class ReprocessingJobRepository:
         attempt_count: int = 0,
     ) -> ResetWatermarksStageResult:
         """Create or coalesce one pending reset job without committing the caller's UoW."""
+        await self._lock_effective_dated_replay_identity(
+            _effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+        )
         payload = {
             "security_id": security_id,
             "earliest_impacted_date": earliest_impacted_date.isoformat(),
@@ -796,6 +822,161 @@ class ReprocessingJobRepository:
             "oldest_pending_created_at": row.oldest_pending_created_at,
         }
 
+    @async_timed(
+        repository="ReprocessingJobRepository",
+        method="requeue_owned_effective_dated_job",
+    )
+    async def requeue_owned_effective_dated_job(
+        self,
+        job_id: int,
+        *,
+        lease_token: str,
+    ) -> ReprocessingJobTransitionOutcome:
+        """Requeue a live claim and preserve any pending sibling's earliest replay boundary."""
+
+        if not lease_token:
+            raise ValueError("reprocessing lease token is required")
+        identity = await self._effective_dated_replay_identity(job_id)
+        if identity is None:
+            return ReprocessingJobTransitionOutcome.NOT_FOUND
+
+        await self._lock_effective_dated_replay_identity(identity.identity_key)
+        if not await self._lock_live_owned_job(job_id=job_id, lease_token=lease_token):
+            return await self._classify_owned_transition_failure(job_id, lease_token)
+
+        if not await self._pending_replay_sibling_exists(
+            job_id=job_id,
+            identity=identity,
+        ):
+            outcome = await self._apply_owned_transition(
+                job_id,
+                "PENDING",
+                lease_token=lease_token,
+            )
+            return (
+                ReprocessingJobTransitionOutcome.REQUEUED
+                if outcome is ReprocessingJobTransitionOutcome.APPLIED
+                else outcome
+            )
+
+        savepoint = self.db.begin_nested()
+        try:
+            await self._coalesce_pending_replay(identity)
+            outcome = await self._apply_owned_transition(
+                job_id,
+                "COMPLETE",
+                lease_token=lease_token,
+            )
+            if outcome is not ReprocessingJobTransitionOutcome.APPLIED:
+                await savepoint.rollback()
+                return outcome
+            await savepoint.commit()
+        except Exception:
+            await savepoint.rollback()
+            raise
+        return ReprocessingJobTransitionOutcome.COALESCED_PENDING
+
+    async def _effective_dated_replay_identity(
+        self,
+        job_id: int,
+    ) -> _EffectiveDatedReplayIdentity | None:
+        row = (
+            await self.db.execute(
+                select(
+                    ReprocessingJob.job_type,
+                    ReprocessingJob.payload,
+                    ReprocessingJob.attempt_count,
+                    ReprocessingJob.correlation_id,
+                    ReprocessingJob.correlation_missing_reason,
+                    ReprocessingJob.alternate_lookup_key,
+                ).where(ReprocessingJob.id == job_id)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return _validated_effective_dated_replay_identity(
+            job_type=str(row.job_type),
+            payload=row.payload,
+            attempt_count=int(row.attempt_count),
+            correlation_id=row.correlation_id,
+            correlation_missing_reason=row.correlation_missing_reason,
+            alternate_lookup_key=row.alternate_lookup_key,
+        )
+
+    async def _lock_effective_dated_replay_identity(self, identity_key: str) -> None:
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"),
+            {"identity_key": identity_key},
+        )
+
+    async def _lock_live_owned_job(self, *, job_id: int, lease_token: str) -> bool:
+        owned_job_id = (
+            await self.db.execute(
+                select(ReprocessingJob.id)
+                .where(
+                    ReprocessingJob.id == job_id,
+                    ReprocessingJob.status == "PROCESSING",
+                    ReprocessingJob.lease_token == lease_token,
+                    ReprocessingJob.lease_expires_at > func.clock_timestamp(),
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        return owned_job_id is not None
+
+    async def _pending_replay_sibling_exists(
+        self,
+        *,
+        job_id: int,
+        identity: _EffectiveDatedReplayIdentity,
+    ) -> bool:
+        predicates = [
+            ReprocessingJob.id != job_id,
+            ReprocessingJob.job_type == identity.job_type,
+            ReprocessingJob.status == "PENDING",
+        ]
+        if identity.job_type == "RESET_WATERMARKS":
+            predicates.append(
+                ReprocessingJob.payload["security_id"].as_string()
+                == identity.payload["security_id"]
+            )
+        else:
+            predicates.extend(
+                (
+                    ReprocessingJob.payload["from_currency"].as_string()
+                    == identity.payload["from_currency"],
+                    ReprocessingJob.payload["to_currency"].as_string()
+                    == identity.payload["to_currency"],
+                )
+            )
+        sibling_id = (
+            await self.db.execute(select(ReprocessingJob.id).where(*predicates).with_for_update())
+        ).scalar_one_or_none()
+        return sibling_id is not None
+
+    async def _coalesce_pending_replay(self, identity: _EffectiveDatedReplayIdentity) -> None:
+        payload = identity.payload
+        earliest_impacted_date = date.fromisoformat(payload["earliest_impacted_date"])
+        if identity.job_type == "RESET_WATERMARKS":
+            await self.stage_reset_watermarks_job(
+                security_id=payload["security_id"],
+                earliest_impacted_date=earliest_impacted_date,
+                correlation_id=identity.correlation_id,
+                attempt_count=identity.attempt_count,
+            )
+            return
+        await self.stage_pending_fx_revaluation_job(
+            from_currency=payload["from_currency"],
+            to_currency=payload["to_currency"],
+            earliest_impacted_date=earliest_impacted_date,
+            content_hash=payload["content_hash"],
+            generated_at=payload["generated_at"],
+            correlation_id=identity.correlation_id,
+            correlation_missing_reason=identity.correlation_missing_reason,
+            alternate_lookup_key=identity.alternate_lookup_key,
+            attempt_count=identity.attempt_count,
+        )
+
     @async_timed(repository="ReprocessingJobRepository", method="update_job_status")
     async def update_job_status(
         self,
@@ -815,6 +996,21 @@ class ReprocessingJobRepository:
             raise ValueError("reprocessing failure reason requires FAILED status")
         if status == "FAILED" and (failure_reason is None or not failure_reason.strip()):
             raise ValueError("reprocessing FAILED transition requires a failure reason")
+        return await self._apply_owned_transition(
+            job_id,
+            status,
+            lease_token=lease_token,
+            failure_reason=failure_reason,
+        )
+
+    async def _apply_owned_transition(
+        self,
+        job_id: int,
+        status: str,
+        *,
+        lease_token: str,
+        failure_reason: str | None = None,
+    ) -> ReprocessingJobTransitionOutcome:
         stmt = (
             update(ReprocessingJob)
             .where(
@@ -901,6 +1097,51 @@ class ReprocessingJobRepository:
         if ownership.lease_expired:
             return ReprocessingJobTransitionOutcome.LEASE_EXPIRED
         return ReprocessingJobTransitionOutcome.RACED
+
+
+def _validated_effective_dated_replay_identity(
+    *,
+    job_type: str,
+    payload: Any,
+    attempt_count: int,
+    correlation_id: str | None,
+    correlation_missing_reason: str | None,
+    alternate_lookup_key: str | None,
+) -> _EffectiveDatedReplayIdentity:
+    if job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES or not isinstance(payload, dict):
+        raise ValueError("owned requeue requires a supported effective-dated replay payload")
+    earliest_impacted_date = _required_replay_payload_text(payload, "earliest_impacted_date")
+    date.fromisoformat(earliest_impacted_date)
+    if job_type == "RESET_WATERMARKS":
+        components = (_required_replay_payload_text(payload, "security_id"),)
+    else:
+        components = (
+            _required_replay_payload_text(payload, "from_currency"),
+            _required_replay_payload_text(payload, "to_currency"),
+        )
+        _required_replay_payload_text(payload, "content_hash")
+        _required_replay_payload_text(payload, "generated_at")
+    return _EffectiveDatedReplayIdentity(
+        job_type=job_type,
+        identity_key=_effective_dated_replay_identity_key(job_type, *components),
+        payload=cast(dict[str, Any], payload),
+        attempt_count=attempt_count,
+        correlation_id=correlation_id,
+        correlation_missing_reason=correlation_missing_reason,
+        alternate_lookup_key=alternate_lookup_key,
+    )
+
+
+def _required_replay_payload_text(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"effective-dated replay payload requires {key}")
+    return value
+
+
+def _effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
+    encoded_components = "|".join(f"{len(component)}:{component}" for component in components)
+    return f"{job_type}|{encoded_components}"
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
