@@ -411,6 +411,40 @@ async def test_worker_retries_timed_out_renewal_before_next_heartbeat_delay(
     ]
 
 
+async def test_worker_bounds_fast_renewal_failures_within_lease_budget(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_duration_seconds = 0.6
+    worker._lease_renewal_interval_seconds = 0.2
+    worker._lease_renewal_io_timeout_seconds = 0.1
+    jobs = mock_dependencies["repro_job_repo"]
+    jobs.renew_lease.side_effect = ConnectionRefusedError("database unavailable")
+
+    async def operation(_terminal_transition_started):
+        await asyncio.Event().wait()
+
+    job = ReprocessingJob(
+        id=107,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    with pytest.raises(ReprocessingJobOwnershipLostError, match="deadline was exhausted"):
+        await worker._process_with_lease_renewal(
+            job=job,
+            job_type="RESET_WATERMARKS",
+            operation=operation,
+        )
+
+    assert 1 <= jobs.renew_lease.await_count <= 5
+    assert mock_dependencies["observe_lease_renewal"].call_count == jobs.renew_lease.await_count
+    mock_dependencies["observe_lease_renewal"].assert_called_with(
+        "RESET_WATERMARKS",
+        "renewal_error",
+    )
+
+
 async def test_worker_lease_renewal_timing_fails_closed_on_unsafe_ordering():
     with pytest.raises(RuntimeConfigurationError, match="I/O timeout < interval < lease"):
         _validate_lease_renewal_timing(
