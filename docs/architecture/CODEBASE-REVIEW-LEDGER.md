@@ -1,5 +1,21 @@
 # Codebase Review Ledger
 
+CR-1712 lease-fenced effective-dated replay requeue (2026-08-26): issue #1032 showed that a
+claimed Reset or FX replay could attempt a generic `PROCESSING -> PENDING` transition after a new
+pending sibling was staged. The partial unique index then rejected the transition and the older
+claimed row could fail without contributing its earlier authoritative replay date, leaving a
+financially material interval unreplayed. One repository-owned operation now serializes staging
+and requeue by security or direct FX pair, revalidates the exact token and database-clock lease,
+and either requeues the same row or atomically coalesces it into the pending sibling while
+preserving the minimum date and required lineage. Both callers use the typed policy; the generic
+status writer no longer accepts `PENDING`. Real PostgreSQL tests cover every date ordering, stale
+authority, repeat replay, rollback, direct requeue, and concurrent staging. A deterministic CI
+guard scans all production source for another literal generic pending transition and verifies both
+owning callers retain the repository policy. No API/OpenAPI, schema/migration, event, dependency,
+or runtime-topology contract changed; this is design modularity inside the existing deployable.
+Evidence:
+[CR-1712-LEASE-FENCED-EFFECTIVE-DATED-REPLAY-REQUEUE.md](./codebase-reviews/CR-1712-LEASE-FENCED-EFFECTIVE-DATED-REPLAY-REQUEUE.md).
+
 CR-1710 cash instrument settlement authority (2026-08-25): issue #1008 showed cash-account
 bookings inferred cash from identifier prefixes, allowing a security-tagged fee/tax to reach cost
 and position mutation. One metadata-only predicate and one registry-driven validator now govern all
