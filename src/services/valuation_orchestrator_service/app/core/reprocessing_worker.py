@@ -167,7 +167,8 @@ class ReprocessingWorker:
             processed_reset_job_ids: set[int] = set()
             for _ in range(self._batch_size):
                 job = await self._claim_next_reset_watermark_job(
-                    excluded_job_ids=tuple(sorted(processed_reset_job_ids))
+                    excluded_job_ids=tuple(sorted(processed_reset_job_ids)),
+                    normalize_reset_watermark_duplicates=not processed_reset_job_ids,
                 )
                 if job is None:
                     break
@@ -194,7 +195,10 @@ class ReprocessingWorker:
                 )
 
     async def _claim_next_reset_watermark_job(
-        self, *, excluded_job_ids: tuple[int, ...]
+        self,
+        *,
+        excluded_job_ids: tuple[int, ...],
+        normalize_reset_watermark_duplicates: bool,
     ) -> Any | None:
         claimed_jobs = []
         async for db in self._open_session():
@@ -207,6 +211,7 @@ class ReprocessingWorker:
                     lease_owner=self._lease_owner,
                     lease_duration_seconds=self._lease_duration_seconds,
                     excluded_job_ids=excluded_job_ids,
+                    normalize_reset_watermark_duplicates=(normalize_reset_watermark_duplicates),
                 )
         if claimed_jobs:
             observe_reprocessing_worker_jobs_claimed("RESET_WATERMARKS", 1)

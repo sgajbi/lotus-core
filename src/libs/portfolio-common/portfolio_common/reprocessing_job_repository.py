@@ -572,6 +572,7 @@ class ReprocessingJobRepository:
         lease_owner: str | None = None,
         lease_duration_seconds: int = _DEFAULT_LEASE_DURATION_SECONDS,
         excluded_job_ids: Collection[int] = (),
+        normalize_reset_watermark_duplicates: bool = True,
     ) -> list[ClaimedReprocessingJob]:
         """
         Finds PENDING jobs, atomically claims them by updating their
@@ -583,7 +584,7 @@ class ReprocessingJobRepository:
         if lease_duration_seconds < 1:
             raise ValueError("reprocessing lease duration must be positive")
 
-        if job_type == "RESET_WATERMARKS":
+        if job_type == "RESET_WATERMARKS" and normalize_reset_watermark_duplicates:
             normalized_count = await self.normalize_pending_reset_watermarks_duplicates()
             if normalized_count:
                 logger.info(

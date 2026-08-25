@@ -217,6 +217,25 @@ async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before
     assert "UPDATE reprocessing_jobs" in str(claim_stmt)
 
 
+async def test_find_and_claim_jobs_can_skip_repeated_reset_watermark_normalization(
+    mock_db_session,
+) -> None:
+    repository = ReprocessingJobRepository(mock_db_session)
+    claim_result = MagicMock()
+    claim_result.mappings.return_value.all.return_value = []
+    mock_db_session.execute.return_value = claim_result
+
+    await repository.find_and_claim_jobs(
+        "RESET_WATERMARKS",
+        batch_size=1,
+        normalize_reset_watermark_duplicates=False,
+    )
+
+    mock_db_session.execute.assert_awaited_once()
+    claim_stmt = mock_db_session.execute.await_args.args[0]
+    assert "WITH candidates AS MATERIALIZED" in str(claim_stmt)
+
+
 async def test_find_and_claim_jobs_maps_rows_to_models(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
