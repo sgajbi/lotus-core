@@ -150,6 +150,7 @@ async def test_claim_pending_jobs_uses_fx_queue_type() -> None:
         25,
         lease_owner=None,
         lease_duration_seconds=900,
+        excluded_job_ids=(),
     )
 
 
