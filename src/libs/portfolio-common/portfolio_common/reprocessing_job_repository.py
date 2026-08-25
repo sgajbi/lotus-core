@@ -860,6 +860,7 @@ class ReprocessingJobRepository:
             )
 
         savepoint = self.db.begin_nested()
+        await savepoint.start()
         try:
             await self._coalesce_pending_replay(identity)
             outcome = await self._apply_owned_transition(

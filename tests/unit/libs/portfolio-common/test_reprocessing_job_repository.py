@@ -806,12 +806,16 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
 ) -> None:
     identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
     savepoint = AsyncMock()
+    call_order: list[str] = []
+    savepoint.start.side_effect = lambda: call_order.append("savepoint_started")
     mock_db_session.begin_nested.return_value = savepoint
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
     repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
-    repository._coalesce_pending_replay = AsyncMock()
+    repository._coalesce_pending_replay = AsyncMock(
+        side_effect=lambda _identity: call_order.append("sibling_coalesced")
+    )
     repository._apply_owned_transition = AsyncMock(
         return_value=ReprocessingJobTransitionOutcome.APPLIED
     )
@@ -822,6 +826,8 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     )
 
     assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert call_order == ["savepoint_started", "sibling_coalesced"]
+    savepoint.start.assert_awaited_once_with()
     repository._coalesce_pending_replay.assert_awaited_once_with(identity)
     repository._apply_owned_transition.assert_awaited_once_with(
         99,
@@ -854,6 +860,7 @@ async def test_owned_requeue_rolls_back_sibling_change_after_lease_loss(
     )
 
     assert outcome is ReprocessingJobTransitionOutcome.LEASE_EXPIRED
+    savepoint.start.assert_awaited_once_with()
     savepoint.rollback.assert_awaited_once()
     savepoint.commit.assert_not_awaited()
 
