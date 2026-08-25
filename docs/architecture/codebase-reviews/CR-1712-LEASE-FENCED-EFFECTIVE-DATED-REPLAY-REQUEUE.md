@@ -51,7 +51,9 @@ Make recipe contract, preventing the same bypass and CI-command drift from recur
 ## Meaningful Proof
 
 - Repository units prove direct requeue, sibling coalescing, savepoint commit/rollback, lease-loss
-  classification, malformed payload failure, and rejection of generic `PENDING`.
+  classification, malformed payload failure, and rejection of generic `PENDING`. The regression
+  proof also asserts that the nested transaction is started before sibling coalescing, so a
+  coalescing failure can be rolled back without invalid transaction lifecycle calls.
 - Application units prove both Reset and FX callers use the owned operation and cannot fall back to
   the generic writer.
 - Real PostgreSQL integration tests cover earlier/equal/later siblings, correlation ownership, FX
@@ -59,8 +61,9 @@ Make recipe contract, preventing the same bypass and CI-command drift from recur
   staging under the identity lock.
 - Guard pass/fail tests cover positional and keyword bypasses plus missing owner wiring.
 - Local exact-tree evidence: 83 focused unit/fitness tests, 56 critical-lifecycle PostgreSQL tests,
-  MyPy across 325 source files, architecture guard, wiki/docs gates, and the required-status
-  workflow-governance suite with 529 tests and 94.27% branch-aware coverage.
+  and 9 explicitly selected real-PostgreSQL owned-requeue/coalescing tests; MyPy across 325 source
+  files; architecture guard; wiki/docs gates; and the required-status workflow-governance suite
+  with 529 tests and 94.27% branch-aware coverage.
 
 ## Compatibility And Scope
 
