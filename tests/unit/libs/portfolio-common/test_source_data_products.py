@@ -136,6 +136,34 @@ def test_advisor_book_product_approves_implemented_consumers() -> None:
     } <= set(product.required_metadata_fields)
 
 
+def test_gateway_approvals_cover_implemented_rfc_0084_reads() -> None:
+    expected_products = {
+        "PortfolioAnalyticsReference",
+        "BenchmarkAssignment",
+        "BenchmarkDefinition",
+        "DataQualityCoverageReport",
+        "DpmSourceReadiness",
+        "ExternalOrderExecutionAcknowledgement",
+        "HoldingsAsOf",
+        "IngestionEvidenceBundle",
+        "InstrumentReferenceBundle",
+        "PortfolioCashMovementSummary",
+        "PortfolioCashflowProjection",
+        "PortfolioLiquidityLadder",
+        "PortfolioManagerBookMembership",
+        "PortfolioMaturitySummary",
+        "PortfolioPartyRoleAssignment",
+        "PortfolioRealizedTaxSummary",
+        "PortfolioStateSnapshot",
+        "ReconciliationEvidenceBundle",
+        "TransactionLedgerWindow",
+    }
+
+    gateway_products = {product.product_name for product in products_for_consumer("lotus-gateway")}
+
+    assert gateway_products == expected_products
+
+
 def test_catalog_keeps_performance_snapshot_outputs_out_of_core() -> None:
     product_names = {product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG}
     performance_products = products_for_consumer("lotus-performance")
