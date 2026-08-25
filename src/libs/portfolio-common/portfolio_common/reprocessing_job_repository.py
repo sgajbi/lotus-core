@@ -1,7 +1,7 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -589,6 +589,17 @@ class ReprocessingJobRepository:
         )
         return ResetWatermarksStageResult(job=job, outcome=outcome)
 
+    async def lock_reset_watermarks_replay_identities(
+        self,
+        security_ids: Collection[str],
+    ) -> None:
+        """Pre-lock a replay batch in the global identity order for this transaction."""
+
+        await self._lock_effective_dated_replay_identities(
+            _effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+            for security_id in security_ids
+        )
+
     @async_timed(repository="ReprocessingJobRepository", method="find_and_claim_jobs")
     async def find_and_claim_jobs(
         self,
@@ -677,6 +688,7 @@ class ReprocessingJobRepository:
     ) -> tuple[set[int], int]:
         handled_job_ids: set[int] = set()
         recovered_count = 0
+        candidates: list[tuple[Any, _EffectiveDatedReplayIdentity]] = []
         for row in stale_rows:
             if row.job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES:
                 continue
@@ -684,15 +696,27 @@ class ReprocessingJobRepository:
                 continue
             handled_job_ids.add(int(row.id))
             try:
-                candidate_identity = _validated_effective_dated_replay_identity(
-                    job_type=str(row.job_type),
-                    payload=row.payload,
-                    attempt_count=int(row.attempt_count),
-                    correlation_id=row.correlation_id,
-                    correlation_missing_reason=row.correlation_missing_reason,
-                    alternate_lookup_key=row.alternate_lookup_key,
+                candidates.append(
+                    (
+                        row,
+                        _validated_effective_dated_replay_identity(
+                            job_type=str(row.job_type),
+                            payload=row.payload,
+                            attempt_count=int(row.attempt_count),
+                            correlation_id=row.correlation_id,
+                            correlation_missing_reason=row.correlation_missing_reason,
+                            alternate_lookup_key=row.alternate_lookup_key,
+                        ),
+                    )
                 )
-                await self._lock_effective_dated_replay_identity(candidate_identity.identity_key)
+            except (KeyError, TypeError, ValueError):
+                await self._fail_malformed_stale_replay(row)
+
+        await self._lock_effective_dated_replay_identities(
+            identity.identity_key for _, identity in candidates
+        )
+        for row, candidate_identity in candidates:
+            try:
                 locked_row = await self._lock_stale_effective_dated_job(
                     job_id=int(row.id),
                     lease_token=row.lease_token,
@@ -736,26 +760,7 @@ class ReprocessingJobRepository:
                         "Coalesced into pending security replay during stale recovery"
                     )
             except (KeyError, TypeError, ValueError):
-                logger.warning(
-                    "Skipped malformed stale replay during identity coalescing.",
-                    extra={
-                        "event_name": "reprocessing_stale_recovery",
-                        "operation": "fail_malformed",
-                        "status": "staged",
-                        "reason_code": "malformed_effective_dated_payload",
-                        "job_type": row.job_type,
-                    },
-                )
-                await self.db.execute(
-                    _stale_jobs_update_stmt([row.id]).values(
-                        status="FAILED",
-                        lease_owner=None,
-                        lease_token=None,
-                        lease_expires_at=None,
-                        failure_reason="Malformed effective-dated replay during stale recovery",
-                        updated_at=func.now(),
-                    )
-                )
+                await self._fail_malformed_stale_replay(row)
                 continue
 
             result = await self.db.execute(
@@ -771,6 +776,28 @@ class ReprocessingJobRepository:
             if int(result.rowcount or 0) == 1:
                 recovered_count += 1
         return handled_job_ids, recovered_count
+
+    async def _fail_malformed_stale_replay(self, row: Any) -> None:
+        logger.warning(
+            "Skipped malformed stale replay during identity coalescing.",
+            extra={
+                "event_name": "reprocessing_stale_recovery",
+                "operation": "fail_malformed",
+                "status": "staged",
+                "reason_code": "malformed_effective_dated_payload",
+                "job_type": row.job_type,
+            },
+        )
+        await self.db.execute(
+            _stale_jobs_update_stmt([row.id]).values(
+                status="FAILED",
+                lease_owner=None,
+                lease_token=None,
+                lease_expires_at=None,
+                failure_reason="Malformed effective-dated replay during stale recovery",
+                updated_at=func.now(),
+            )
+        )
 
     async def _lock_stale_effective_dated_job(
         self,
@@ -960,6 +987,13 @@ class ReprocessingJobRepository:
             text("SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"),
             {"identity_key": identity_key},
         )
+
+    async def _lock_effective_dated_replay_identities(
+        self,
+        identity_keys: Iterable[str],
+    ) -> None:
+        for identity_key in sorted(set(identity_keys)):
+            await self._lock_effective_dated_replay_identity(identity_key)
 
     async def _lock_live_owned_job(self, *, job_id: int, lease_token: str) -> bool:
         owned_job_id = (

@@ -734,6 +734,24 @@ async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
     assert "(xmax = 0) AS was_inserted" in statement
 
 
+async def test_reset_watermarks_batch_locks_unique_identities_in_global_order(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock()
+
+    await repository.lock_reset_watermarks_replay_identities(["LONG", "A", "LONG"])
+
+    identity_keys = [
+        call.args[1]["identity_key"] for call in mock_db_session.execute.await_args_list
+    ]
+    assert identity_keys == ["RESET_WATERMARKS|1:A", "RESET_WATERMARKS|4:LONG"]
+    assert all(
+        "pg_advisory_xact_lock" in str(call.args[0])
+        for call in mock_db_session.execute.await_args_list
+    )
+
+
 async def test_create_job_sets_correlation_for_generic_jobs(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,

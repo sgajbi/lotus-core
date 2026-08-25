@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.database_models import (
@@ -41,24 +41,34 @@ async def _convert_pending_triggers(
 
 
 async def _wait_for_backend_lock(
-    *, session_factory: async_sessionmaker[AsyncSession], backend_pid: int
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    backend_pid: int,
+    expected_wait_event: str | None = None,
 ) -> None:
     for _ in range(100):
         async with session_factory() as observer:
-            wait_event_type = await observer.scalar(
-                text(
-                    """
-                    SELECT wait_event_type
-                    FROM pg_stat_activity
-                    WHERE pid = :backend_pid
-                    """
-                ),
-                {"backend_pid": backend_pid},
-            )
-        if wait_event_type == "Lock":
+            wait_state = (
+                await observer.execute(
+                    text(
+                        """
+                        SELECT wait_event_type, wait_event
+                        FROM pg_stat_activity
+                        WHERE pid = :backend_pid
+                        """
+                    ),
+                    {"backend_pid": backend_pid},
+                )
+            ).one_or_none()
+        if (
+            wait_state is not None
+            and wait_state.wait_event_type == "Lock"
+            and (expected_wait_event is None or wait_state.wait_event == expected_wait_event)
+        ):
             return
         await asyncio.sleep(0.02)
-    raise AssertionError(f"backend {backend_pid} did not enter a lock wait")
+    expected = "a lock" if expected_wait_event is None else f"a {expected_wait_event} lock"
+    raise AssertionError(f"backend {backend_pid} did not enter {expected} wait")
 
 
 async def _await_task_with_cleanup(task: asyncio.Task[None], *, timeout: float = 5) -> None:
@@ -175,6 +185,111 @@ async def test_conversion_preserves_earlier_update_arriving_while_trigger_is_loc
     assert jobs[0].status == "PENDING"
     assert jobs[0].payload["earliest_impacted_date"] == "2025-08-05"
     assert jobs[0].correlation_id == "corr-earlier"
+
+
+async def test_stale_recovery_and_trigger_conversion_share_global_identity_lock_order(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    now = datetime.now(timezone.utc)
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "BBBB", "earliest_impacted_date": "2025-08-10"},
+                status="PROCESSING",
+                attempt_count=1,
+                lease_owner="stale-b",
+                lease_token="b" * 32,
+                lease_expires_at=now - timedelta(minutes=2),
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "A", "earliest_impacted_date": "2025-08-09"},
+                status="PROCESSING",
+                attempt_count=1,
+                lease_owner="stale-a",
+                lease_token="a" * 32,
+                lease_expires_at=now - timedelta(minutes=1),
+            ),
+            InstrumentReprocessingState(
+                security_id="A",
+                earliest_impacted_date=date(2025, 8, 5),
+                correlation_id="corr-trigger-a",
+            ),
+            InstrumentReprocessingState(
+                security_id="BBBB",
+                earliest_impacted_date=date(2025, 8, 6),
+                correlation_id="corr-trigger-b",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    stale_locks_acquired = asyncio.Event()
+    release_stale_recovery = asyncio.Event()
+    conversion_pid_ready: asyncio.Future[int] = asyncio.get_running_loop().create_future()
+
+    class PausingStaleRecoveryRepository(ReprocessingJobRepository):
+        async def _lock_effective_dated_replay_identities(self, identity_keys):
+            await super()._lock_effective_dated_replay_identities(identity_keys)
+            stale_locks_acquired.set()
+            await release_stale_recovery.wait()
+
+    async def recover_stale_jobs() -> int:
+        async with session_factory() as session, session.begin():
+            return await PausingStaleRecoveryRepository(session).find_and_reset_stale_jobs(
+                max_attempts=3
+            )
+
+    async def convert_triggers() -> conversion_repository.InstrumentTriggerConversionResult:
+        async with session_factory() as session, session.begin():
+            conversion_pid_ready.set_result(
+                int(await session.scalar(text("SELECT pg_backend_pid()")))
+            )
+            return await _convert_pending_triggers(session)
+
+    stale_task = asyncio.create_task(recover_stale_jobs())
+    conversion_task = None
+    try:
+        await asyncio.wait_for(stale_locks_acquired.wait(), timeout=5)
+        conversion_task = asyncio.create_task(convert_triggers())
+        conversion_pid = await asyncio.wait_for(conversion_pid_ready, timeout=5)
+        await _wait_for_backend_lock(
+            session_factory=session_factory,
+            backend_pid=conversion_pid,
+            expected_wait_event="advisory",
+        )
+        release_stale_recovery.set()
+        assert await asyncio.wait_for(stale_task, timeout=5) == 2
+        result = await asyncio.wait_for(conversion_task, timeout=5)
+    finally:
+        release_stale_recovery.set()
+        for task in (stale_task, conversion_task):
+            if task is not None and not task.done():
+                task.cancel()
+            if task is not None:
+                await asyncio.gather(task, return_exceptions=True)
+
+    assert result == conversion_repository.InstrumentTriggerConversionResult(
+        claimed_count=2,
+        created_count=0,
+        coalesced_pending_count=2,
+    )
+    async_db_session.expire_all()
+    jobs = list(
+        (
+            await async_db_session.scalars(
+                select(ReprocessingJob).order_by(ReprocessingJob.id.asc())
+            )
+        ).all()
+    )
+    assert [job.status for job in jobs] == ["COMPLETE", "COMPLETE", "PENDING", "PENDING"]
+    pending_by_security = {
+        job.payload["security_id"]: job for job in jobs if job.status == "PENDING"
+    }
+    assert pending_by_security["A"].payload["earliest_impacted_date"] == "2025-08-05"
+    assert pending_by_security["BBBB"].payload["earliest_impacted_date"] == "2025-08-06"
 
 
 async def test_conversion_failure_rolls_trigger_deletion_back(
