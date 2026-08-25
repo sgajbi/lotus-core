@@ -8,6 +8,7 @@ from scripts.operations.database_evidence.contract import DatabaseEvidenceContra
 from scripts.operations.database_evidence.plan_capture import (
     CapturedDatabaseStatement,
     capture_and_explain_rolled_back_mutation,
+    capture_and_explain_rolled_back_statement,
     capture_single_production_statement,
     explain_captured_statement,
 )
@@ -52,5 +53,25 @@ async def test_mutation_capture_rejects_existing_caller_transaction() -> None:
         match="mutation_capture_requires_clean_session",
     ):
         await capture_and_explain_rolled_back_mutation(session, operation)
+
+    operation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_statement_capture_rejects_empty_marker_without_running_operation() -> None:
+    session = AsyncMock()
+    session.in_transaction = MagicMock(return_value=False)
+    operation = AsyncMock()
+
+    with pytest.raises(
+        DatabaseEvidenceContractError,
+        match="capture_statement_marker_invalid",
+    ):
+        await capture_and_explain_rolled_back_statement(
+            session,
+            operation,
+            statement_prefix="WITH",
+            statement_marker="  ",
+        )
 
     operation.assert_not_awaited()

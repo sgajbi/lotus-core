@@ -111,17 +111,21 @@ async def capture_and_explain_rolled_back_statement(
     operation: Callable[[AsyncSession], Awaitable[object]],
     *,
     statement_prefix: str,
+    statement_marker: str | None = None,
 ) -> object:
     """Explain one production statement while rolling back both executions."""
 
+    normalized_prefix = statement_prefix.strip().upper()
+    if not normalized_prefix or not normalized_prefix.isalpha():
+        raise DatabaseEvidenceContractError("capture_statement_prefix_invalid")
+    normalized_marker = statement_marker.strip().upper() if statement_marker is not None else None
+    if normalized_marker == "":
+        raise DatabaseEvidenceContractError("capture_statement_marker_invalid")
     if session.in_transaction():
         raise DatabaseEvidenceContractError("mutation_capture_requires_clean_session")
     bind = session.bind
     if not isinstance(bind, AsyncEngine):
         raise DatabaseEvidenceContractError("capture_session_unbound")
-    normalized_prefix = statement_prefix.strip().upper()
-    if not normalized_prefix or not normalized_prefix.isalpha():
-        raise DatabaseEvidenceContractError("capture_statement_prefix_invalid")
 
     async with bind.connect() as connection:
 
@@ -133,7 +137,10 @@ async def capture_and_explain_rolled_back_statement(
             _context,
             _executemany: bool,
         ) -> None:
-            if statement.lstrip().upper().startswith(normalized_prefix):
+            normalized_statement = statement.lstrip().upper()
+            if normalized_statement.startswith(normalized_prefix) and (
+                normalized_marker is None or normalized_marker in normalized_statement
+            ):
                 raise _StatementCaptured(CapturedDatabaseStatement(statement, parameters))
 
         sqlalchemy_event.listen(
