@@ -1,4 +1,4 @@
-"""SQL query policies for valuation and aggregation support jobs."""
+"""SQL query policies for durable support jobs."""
 
 from __future__ import annotations
 

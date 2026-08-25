@@ -2184,7 +2184,9 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     assert "anon_1.quantity != 0" in compiled
     assert "CASE WHEN (reprocessing_jobs.status = 'FAILED')" in compiled
     assert "upper(trim(reprocessing_jobs.status))" not in compiled
-    assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "reprocessing_jobs.lease_expires_at" in compiled
+    assert "<= '2025-08-31 12:00:00+00:00'" in compiled
+    assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" not in compiled
     assert "LIMIT 10 OFFSET 0" in compiled
 
 

@@ -1642,7 +1642,6 @@ class OperationsRepository:
         security_id: Optional[str] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
-        stale_minutes: int = 15,
         reference_now: Optional[datetime] = None,
         as_of: Optional[datetime] = None,
     ):
@@ -1653,7 +1652,6 @@ class OperationsRepository:
             return []
         job_scope = reprocessing_job_scope(portfolio_id)
         reference_now = reference_now or datetime.now(timezone.utc)
-        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = apply_reprocessing_job_scope(
             select(
                 ReprocessingJob.id,
@@ -1673,6 +1671,7 @@ class OperationsRepository:
                 ReprocessingJob.correlation_id,
                 ReprocessingJob.created_at,
                 ReprocessingJob.updated_at,
+                ReprocessingJob.lease_expires_at,
                 ReprocessingJob.failure_reason,
             ),
             job_scope=job_scope,
@@ -1686,8 +1685,9 @@ class OperationsRepository:
             stmt.order_by(
                 support_job_priority(
                     ReprocessingJob.status,
-                    ReprocessingJob.updated_at,
-                    stale_threshold,
+                    ReprocessingJob.lease_expires_at,
+                    reference_now,
+                    inclusive=True,
                 ).asc(),
                 job_scope.impacted_date_expr.asc(),
                 ReprocessingJob.created_at.asc(),

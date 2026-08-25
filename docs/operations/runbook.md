@@ -840,6 +840,10 @@ lease fence rejects any later terminal write if authority expires meanwhile. Ale
 `renewal_error` and `ownership_lost`; use the correlated structured log to identify the job without
 adding business identifiers to metric labels. A lost renewal cancels the in-flight task so its
 database transaction rolls back before recovery can hand authority to another worker.
+The reprocessing-job support listing projects this same `lease_expires_at` authority: a
+`PROCESSING` row is `STALE_PROCESSING` only when its database-clock lease has expired. The caller's
+`stale_threshold_minutes` never marks a live leased claim stale and remains applicable only to
+queues without authoritative lease expiry.
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
