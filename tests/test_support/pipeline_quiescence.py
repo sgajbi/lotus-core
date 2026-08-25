@@ -172,6 +172,9 @@ def recover_reprocessing_activity_for_test_cleanup(
                     UPDATE reprocessing_jobs
                     SET status = 'FAILED',
                         failure_reason = 'Reset by pytest cleanup after quiescence timeout',
+                        lease_owner = NULL,
+                        lease_token = NULL,
+                        lease_expires_at = NULL,
                         updated_at = now()
                     WHERE status IN ('PENDING', 'PROCESSING')
                     """
