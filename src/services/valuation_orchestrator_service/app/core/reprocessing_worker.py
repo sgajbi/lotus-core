@@ -419,7 +419,10 @@ class ReprocessingWorker:
                 )
                 if stop_event.is_set() or terminal_transition_started.is_set():
                     return
-                next_renewal_at = loop.time()
+                next_renewal_at = min(
+                    loop.time() + self._lease_renewal_io_timeout_seconds,
+                    lease_deadline,
+                )
                 continue
             if stop_event.is_set() or terminal_transition_started.is_set():
                 return

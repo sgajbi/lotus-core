@@ -223,8 +223,10 @@ exact opaque claim token and an unexpired lease; a late worker rolls its domain 
 `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` (default `15`) is the lease lifetime, measured by the
 PostgreSQL clock rather than `updated_at` or an application clock. The worker renews the lease every
 one-third of that lifetime in a separate transaction. Renewal I/O is bounded to half that interval;
-transport failures retry immediately against a monotonic lease budget rather than waiting another
-full interval. Startup fails closed unless I/O timeout < renewal interval < lease lifetime. If
+transport failures retry after a positive I/O-timeout floor against a monotonic lease budget rather
+than waiting another full interval. The floor bounds connection attempts and traceback logs during
+a database outage while still scheduling another attempt before authority expires. Startup fails
+closed unless I/O timeout < renewal interval < lease lifetime. If
 renewal reports expiry, token mismatch, or lost processing state, the worker cancels the job task
 and rolls back its domain transaction.
 `reprocessing_worker_lease_renewals_total{job_type,outcome}` exposes only `renewed`,
