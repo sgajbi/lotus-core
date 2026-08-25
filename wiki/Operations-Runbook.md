@@ -224,8 +224,10 @@ exact opaque claim token and an unexpired lease; a late worker rolls its domain 
 PostgreSQL clock rather than `updated_at` or an application clock. The worker renews the lease every
 one-third of that lifetime in a separate transaction. If renewal reports expiry, token mismatch, or
 lost processing state, the worker cancels the job task and rolls back its domain transaction.
-`reprocessing_worker_lease_renewals_total{job_type,outcome}` exposes only `renewed` and
-`ownership_lost`; alert on ownership loss and use structured logs for job-level diagnosis.
+`reprocessing_worker_lease_renewals_total{job_type,outcome}` exposes only `renewed`,
+`renewal_error`, and `ownership_lost`. A transient renewal transport error is logged and retried;
+the existing lease fence rejects any later terminal write if authority expires meanwhile. Alert on
+renewal errors and ownership loss, and use structured logs for job-level diagnosis.
 
 Migration `c161b2c3d528` requires a quiesced reprocessing queue. Stop old workers and ensure no
 `PROCESSING` rows remain before upgrade; the migration fails closed otherwise. For rollback, stop

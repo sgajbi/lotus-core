@@ -345,13 +345,30 @@ class ReprocessingWorker:
                 pass
 
             outcome = ReprocessingJobTransitionOutcome.NOT_FOUND
-            async for db in self._open_session():
-                async with db.begin():
-                    outcome = await self._repository_factory.reprocessing_jobs(db).renew_lease(
-                        self._job_id(job),
-                        lease_token=job.lease_token,
-                        lease_duration_seconds=self._lease_duration_seconds,
-                    )
+            try:
+                async for db in self._open_session():
+                    async with db.begin():
+                        outcome = await self._repository_factory.reprocessing_jobs(db).renew_lease(
+                            self._job_id(job),
+                            lease_token=job.lease_token,
+                            lease_duration_seconds=self._lease_duration_seconds,
+                        )
+            except Exception as exc:
+                observe_reprocessing_worker_lease_renewal(job_type, "renewal_error")
+                logger.warning(
+                    "Lease renewal failed; retrying under durable lease fencing.",
+                    exc_info=True,
+                    extra=operation_log_extra(
+                        event_name="valuation.reprocessing.lease_renewal_error",
+                        operation="valuation.reprocessing.lease_renewal",
+                        status="retrying",
+                        reason_code="renewal_error",
+                        job_id=self._job_id(job),
+                        job_type=job_type,
+                        error_type=type(exc).__name__,
+                    ),
+                )
+                continue
             if stop_event.is_set() or terminal_transition_started.is_set():
                 return
             if outcome is ReprocessingJobTransitionOutcome.APPLIED:
