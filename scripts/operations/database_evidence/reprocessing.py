@@ -31,6 +31,7 @@ async def measure_reprocessing_job_claim(
             batch_size=claim_scenario.max_root_actual_rows,
         ),
         statement_prefix="WITH",
+        statement_marker="WITH candidates AS MATERIALIZED",
     )
     return (
         evaluate_hot_path_plan(normalization_scenario, normalization_plan),
