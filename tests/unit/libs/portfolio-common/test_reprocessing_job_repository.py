@@ -45,9 +45,11 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
 
     assert "UPDATE reprocessing_jobs" in query_text
     assert "FOR UPDATE SKIP LOCKED" in query_text
-    assert "RETURNING *" in query_text
+    assert "WITH candidates AS MATERIALIZED" in query_text
+    assert "RETURNING target.*" in query_text
     assert params["job_type"] == "RESET_WATERMARKS"
     assert params["batch_size"] == 25
+    assert params["excluded_job_ids"] == []
     assert params["lease_owner"].startswith("reprocessing-repository-")
     assert len(params["lease_token"]) == 32
     assert params["lease_duration_seconds"] == 900
