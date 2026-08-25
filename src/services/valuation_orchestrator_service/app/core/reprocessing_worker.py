@@ -530,12 +530,27 @@ class ReprocessingWorker:
         should_complete_job: bool,
     ) -> None:
         terminal_status = "COMPLETE" if should_complete_job else "PENDING"
-        outcome = await job_repo.update_job_status(
-            job.id,
-            terminal_status,
-            lease_token=job.lease_token,
+        outcome = (
+            await job_repo.update_job_status(
+                job.id,
+                "COMPLETE",
+                lease_token=job.lease_token,
+            )
+            if should_complete_job
+            else await job_repo.requeue_owned_effective_dated_job(
+                job.id,
+                lease_token=job.lease_token,
+            )
         )
-        if outcome is ReprocessingJobTransitionOutcome.APPLIED:
+        successful_outcomes = (
+            {ReprocessingJobTransitionOutcome.APPLIED}
+            if should_complete_job
+            else {
+                ReprocessingJobTransitionOutcome.REQUEUED,
+                ReprocessingJobTransitionOutcome.COALESCED_PENDING,
+            }
+        )
+        if outcome in successful_outcomes:
             if should_complete_job:
                 observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
             return

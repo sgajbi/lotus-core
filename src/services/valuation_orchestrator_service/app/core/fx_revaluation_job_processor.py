@@ -158,12 +158,27 @@ class FxRevaluationJobProcessor:
     ) -> None:
         if before_terminal_transition is not None:
             before_terminal_transition()
-        outcome = await jobs.update_job_status(
-            job.job_id,
-            status,
-            lease_token=job.lease_token,
+        outcome = (
+            await jobs.requeue_owned_effective_dated_job(
+                job.job_id,
+                lease_token=job.lease_token,
+            )
+            if status == "PENDING"
+            else await jobs.update_job_status(
+                job.job_id,
+                status,
+                lease_token=job.lease_token,
+            )
         )
-        if outcome is ReprocessingJobTransitionOutcome.APPLIED:
+        successful_outcomes = (
+            {
+                ReprocessingJobTransitionOutcome.REQUEUED,
+                ReprocessingJobTransitionOutcome.COALESCED_PENDING,
+            }
+            if status == "PENDING"
+            else {ReprocessingJobTransitionOutcome.APPLIED}
+        )
+        if outcome in successful_outcomes:
             if status == "COMPLETE":
                 observe_reprocessing_worker_jobs_completed(FX_REVALUATION_JOB_TYPE)
             return

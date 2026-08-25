@@ -84,3 +84,11 @@ class ReprocessingJobStatusWriter(Protocol):
         failure_reason: str | None = None,
     ) -> ReprocessingJobTransitionOutcome:
         """Apply a transition only while the caller retains job ownership."""
+
+    async def requeue_owned_effective_dated_job(
+        self,
+        job_id: int,
+        *,
+        lease_token: str,
+    ) -> ReprocessingJobTransitionOutcome:
+        """Requeue or coalesce one effective-dated job under its live lease."""
