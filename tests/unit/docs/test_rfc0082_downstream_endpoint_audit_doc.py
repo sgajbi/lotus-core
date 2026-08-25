@@ -48,6 +48,27 @@ def test_downstream_endpoint_audit_records_validation_posture():
     assert missing_evidence == []
 
 
+def test_downstream_endpoint_audit_pins_gateway_consumer_rows_to_catalog() -> None:
+    audit_text = AUDIT_DOC.read_text(encoding="utf-8")
+    gateway_products = {
+        "PortfolioAnalyticsReference",
+        "BenchmarkAssignment",
+        "BenchmarkDefinition",
+        "ExternalOrderExecutionAcknowledgement",
+    }
+
+    rows = {
+        product: next(row for row in audit_text.splitlines() if row.startswith(f"| `{product}` |"))
+        for product in gateway_products
+    }
+
+    for product in SOURCE_DATA_PRODUCT_CATALOG:
+        if product.product_name not in gateway_products:
+            continue
+        intended_consumers_cell = rows[product.product_name].split("|")[3]
+        assert "lotus-gateway" in intended_consumers_cell
+
+
 def test_downstream_endpoint_audit_preserves_performance_output_boundary():
     audit_text = AUDIT_DOC.read_text(encoding="utf-8").lower()
 

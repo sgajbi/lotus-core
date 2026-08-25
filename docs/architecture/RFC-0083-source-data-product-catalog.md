@@ -55,11 +55,11 @@ evidence reference rather than omitting the concept.
 | `PortfolioLiquidityLadder` | Operational read | `query_service` | gateway, report, manage, advise | `/portfolios/{portfolio_id}/liquidity-ladder` |
 | `PositionTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries` |
 | `PortfolioTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` |
-| `PortfolioAnalyticsReference` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/reference` |
+| `PortfolioAnalyticsReference` | Analytics input | `query_control_plane_service` | performance, risk, gateway | `/integration/portfolios/{portfolio_id}/analytics/reference` |
 | `MarketDataWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/market-series` |
 | `InstrumentReferenceBundle` | Analytics input | `query_control_plane_service` | performance, risk, gateway, advise | `/integration/instruments/enrichment-bulk`, `/integration/reference/classification-taxonomy` |
-| `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report, manage, idea | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
-| `BenchmarkDefinition` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/definition` |
+| `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report, manage, idea, gateway | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
+| `BenchmarkDefinition` | Analytics input | `query_control_plane_service` | performance, risk, gateway | `/integration/benchmarks/{benchmark_id}/definition`, `/integration/benchmarks/catalog` |
 | `BenchmarkConstituentWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/composition-window` |
 | `IndexDefinition` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/catalog` |
 | `IndexSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/{index_id}/price-series`, `/integration/indices/{index_id}/return-series` |
@@ -70,7 +70,7 @@ evidence reference rather than omitting the concept.
 | `DpmPortfolioUniverseCandidate` | Analytics input | `query_control_plane_service` | manage | `/integration/dpm/portfolio-universe/candidates` |
 | `TransactionCostCurve` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolios/{portfolio_id}/transaction-cost-curve` |
 | `PerformanceComponentEconomics` | Analytics input | `query_control_plane_service` | performance | `/integration/portfolios/{portfolio_id}/performance-component-economics` |
-| `ExternalOrderExecutionAcknowledgement` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement` |
+| `ExternalOrderExecutionAcknowledgement` | Analytics input | `query_control_plane_service` | manage, gateway | `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement` |
 | `ReconciliationEvidenceBundle` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/support/portfolios/{portfolio_id}/reconciliation-runs`, `/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings` |
 | `DataQualityCoverageReport` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/integration/benchmarks/{benchmark_id}/coverage`, `/integration/reference/risk-free-series/coverage` |
 | `IngestionEvidenceBundle` | Control-plane and policy | `event_replay_service` | gateway, manage, report | `/ingestion/jobs/{job_id}/evidence` |
