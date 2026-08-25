@@ -1152,8 +1152,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     created_at = FIXED_GENERATED_AT - timedelta(hours=2)
     updated_at = FIXED_GENERATED_AT - timedelta(hours=1)
     lease_expires_at = FIXED_GENERATED_AT - timedelta(seconds=1)
-    mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
-    mock_ops_repo.get_reprocessing_jobs.return_value = [
+    jobs = [
         type(
             "ReprocessingJobStub",
             (),
@@ -1175,10 +1174,11 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         )()
     ]
 
-    with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_reprocessing_jobs(
-            "P1", skip=0, limit=20, status=" processing ", security_id="S1"
-        )
+    mock_ops_repo.get_reprocessing_jobs_snapshot.return_value = (FIXED_GENERATED_AT, 1, jobs)
+
+    response = await service.get_reprocessing_jobs(
+        "P1", skip=0, limit=20, status=" processing ", security_id="S1"
+    )
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -1199,15 +1199,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     assert response.items[0].failure_reason == "timed out once"
     assert response.items[0].is_terminal_failure is False
     assert response.items[0].operational_state == "STALE_PROCESSING"
-    mock_ops_repo.get_reprocessing_jobs_count.assert_awaited_once_with(
-        portfolio_id="P1",
-        status="PROCESSING",
-        security_id="S1",
-        job_id=None,
-        correlation_id=None,
-        as_of=response.generated_at_utc,
-    )
-    mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
+    mock_ops_repo.get_reprocessing_jobs_snapshot.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,
         limit=20,
@@ -1215,8 +1207,6 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         security_id="S1",
         job_id=None,
         correlation_id=None,
-        reference_now=response.generated_at_utc,
-        as_of=response.generated_at_utc,
     )
 
 
@@ -1226,8 +1216,7 @@ async def test_get_reprocessing_jobs_uses_live_lease_over_caller_stale_threshold
 ) -> None:
     old_update = FIXED_GENERATED_AT - timedelta(hours=1)
     live_lease = FIXED_GENERATED_AT + timedelta(seconds=1)
-    mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
-    mock_ops_repo.get_reprocessing_jobs.return_value = [
+    jobs = [
         type(
             "LiveReprocessingJobStub",
             (),
@@ -1249,13 +1238,14 @@ async def test_get_reprocessing_jobs_uses_live_lease_over_caller_stale_threshold
         )()
     ]
 
-    with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_reprocessing_jobs(
-            "P1",
-            skip=0,
-            limit=20,
-            stale_threshold_minutes=1,
-        )
+    mock_ops_repo.get_reprocessing_jobs_snapshot.return_value = (FIXED_GENERATED_AT, 1, jobs)
+
+    response = await service.get_reprocessing_jobs(
+        "P1",
+        skip=0,
+        limit=20,
+        stale_threshold_minutes=1,
+    )
 
     assert response.items[0].is_stale_processing is False
     assert response.items[0].operational_state == "PROCESSING"
@@ -1266,8 +1256,7 @@ async def test_get_fx_reprocessing_job_exposes_direct_pair(
     mock_ops_repo: AsyncMock,
 ) -> None:
     timestamp = datetime(2026, 4, 10, 9, tzinfo=timezone.utc)
-    mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
-    mock_ops_repo.get_reprocessing_jobs.return_value = [
+    jobs = [
         type(
             "FxReprocessingJobStub",
             (),
@@ -1288,6 +1277,8 @@ async def test_get_fx_reprocessing_job_exposes_direct_pair(
             },
         )()
     ]
+
+    mock_ops_repo.get_reprocessing_jobs_snapshot.return_value = (timestamp, 1, jobs)
 
     response = await service.get_reprocessing_jobs("P1", skip=0, limit=20)
 
@@ -2845,8 +2836,7 @@ async def test_get_reprocessing_keys_forwards_watermark_date_filter(
 async def test_get_reprocessing_jobs_forwards_correlation_filter(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
-    mock_ops_repo.get_reprocessing_jobs_count.return_value = 0
-    mock_ops_repo.get_reprocessing_jobs.return_value = []
+    mock_ops_repo.get_reprocessing_jobs_snapshot.return_value = (FIXED_GENERATED_AT, 0, [])
 
     response = await service.get_reprocessing_jobs(
         "P1",
@@ -2857,15 +2847,7 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
     )
 
     assert response.total == 0
-    mock_ops_repo.get_reprocessing_jobs_count.assert_awaited_once_with(
-        portfolio_id="P1",
-        status="PROCESSING",
-        security_id=None,
-        job_id=None,
-        correlation_id="corr-replay-303",
-        as_of=response.generated_at_utc,
-    )
-    mock_ops_repo.get_reprocessing_jobs.assert_awaited_once_with(
+    mock_ops_repo.get_reprocessing_jobs_snapshot.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,
         limit=20,
@@ -2873,8 +2855,6 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
         security_id=None,
         job_id=None,
         correlation_id="corr-replay-303",
-        reference_now=response.generated_at_utc,
-        as_of=response.generated_at_utc,
     )
 
 

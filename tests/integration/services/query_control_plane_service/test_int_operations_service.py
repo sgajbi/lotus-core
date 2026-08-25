@@ -25,11 +25,15 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
+from portfolio_common.reprocessing_job_repository import (
+    ReprocessingJobRepository,
+    ReprocessingJobTransitionOutcome,
+)
 from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
 from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
@@ -952,6 +956,8 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
 async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):
+    database_now = await async_db_session.scalar(select(func.statement_timestamp()))
+    assert database_now is not None
     async_db_session.add_all(
         [
             Portfolio(
@@ -1063,7 +1069,7 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
                 correlation_id="corr-job-old",
                 lease_owner="operations-snapshot-worker",
                 lease_token="d" * 32,
-                lease_expires_at=datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
+                lease_expires_at=database_now - timedelta(minutes=5),
                 created_at=datetime(2025, 8, 30, 9, 15, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
             ),
@@ -1077,7 +1083,7 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
                 correlation_id="corr-job-live-lease",
                 lease_owner="operations-live-snapshot-worker",
                 lease_token="e" * 32,
-                lease_expires_at=FIXED_GENERATED_AT + timedelta(minutes=5),
+                lease_expires_at=database_now + timedelta(minutes=5),
                 created_at=datetime(2025, 8, 30, 9, 16, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 8, 30, 10, 1, tzinfo=timezone.utc),
             ),
@@ -1138,14 +1144,28 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
     )
     await async_db_session.commit()
 
+    live_job_id = await async_db_session.scalar(
+        select(ReprocessingJob.id).where(ReprocessingJob.correlation_id == "corr-job-live-lease")
+    )
+    assert live_job_id is not None
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    async with session_factory() as renewal_session:
+        renewal_outcome = await ReprocessingJobRepository(renewal_session).renew_lease(
+            live_job_id,
+            lease_token="e" * 32,
+            lease_duration_seconds=300,
+        )
+        await renewal_session.commit()
+    assert renewal_outcome is ReprocessingJobTransitionOutcome.APPLIED
+
     service = OperationsService(OperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_reprocessing_jobs("P7", skip=0, limit=20)
 
-    assert response.generated_at_utc == FIXED_GENERATED_AT
-    assert response.total == 5
-    assert len(response.items) == 5
+    assert response.generated_at_utc > FIXED_GENERATED_AT
+    assert response.total == 6
+    assert len(response.items) == 6
     security_job = next(item for item in response.items if item.correlation_id == "corr-job-old")
     assert security_job.job_type == "RESET_WATERMARKS"
     assert security_job.security_id == "SEC-JOB-OLD"

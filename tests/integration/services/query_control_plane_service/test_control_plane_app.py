@@ -798,7 +798,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "valuation, aggregation, and reprocessing rows use their database-clock deadline."
     )
     assert support_jobs["properties"]["generated_at_utc"]["description"] == (
-        "UTC timestamp when this support job listing snapshot was generated."
+        "UTC timestamp when this support job listing snapshot was generated; reprocessing "
+        "listings use the PostgreSQL statement clock that governs lease classification."
     )
     support_job_record = components["SupportJobRecord"]
     assert "RESET_FX_WATERMARKS" in support_job_record["properties"]["job_type"]["enum"]

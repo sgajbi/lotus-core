@@ -22,7 +22,7 @@ from portfolio_common.database_models import (
     ReprocessingJob,
 )
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
-from sqlalchemy import and_, case, func, or_, select, true
+from sqlalchemy import and_, case, false, func, literal, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...application.operations.errors import OutboxRecoveryRejected
@@ -1607,33 +1607,7 @@ class OperationsRepository:
         )
         return list((await self.db.execute(stmt)).scalars().all())
 
-    async def get_reprocessing_jobs_count(
-        self,
-        portfolio_id: str,
-        status: Optional[str] = None,
-        security_id: Optional[str] = None,
-        job_id: Optional[int] = None,
-        correlation_id: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ) -> int:
-        normalized_security_id = (
-            normalize_security_id(security_id) if security_id is not None else None
-        )
-        if security_id is not None and not normalized_security_id:
-            return 0
-        job_scope = reprocessing_job_scope(portfolio_id)
-        stmt = apply_reprocessing_job_scope(
-            select(func.count()).select_from(ReprocessingJob),
-            job_scope=job_scope,
-            status=status,
-            normalized_security_id=normalized_security_id,
-            job_id=job_id,
-            correlation_id=correlation_id,
-            as_of=as_of,
-        )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
-
-    async def get_reprocessing_jobs(
+    async def get_reprocessing_jobs_snapshot(
         self,
         portfolio_id: str,
         skip: int,
@@ -1642,17 +1616,14 @@ class OperationsRepository:
         security_id: Optional[str] = None,
         job_id: Optional[int] = None,
         correlation_id: Optional[str] = None,
-        reference_now: Optional[datetime] = None,
-        as_of: Optional[datetime] = None,
-    ):
+    ) -> tuple[datetime, int, list]:
+        """Read database time, total, and page from one PostgreSQL statement snapshot."""
+
         normalized_security_id = (
             normalize_security_id(security_id) if security_id is not None else None
         )
-        if security_id is not None and not normalized_security_id:
-            return []
         job_scope = reprocessing_job_scope(portfolio_id)
-        reference_now = reference_now or datetime.now(timezone.utc)
-        stmt = apply_reprocessing_job_scope(
+        scoped_jobs = apply_reprocessing_job_scope(
             select(
                 ReprocessingJob.id,
                 ReprocessingJob.job_type,
@@ -1679,21 +1650,47 @@ class OperationsRepository:
             normalized_security_id=normalized_security_id,
             job_id=job_id,
             correlation_id=correlation_id,
-            as_of=as_of,
-        )
-        stmt = (
-            stmt.order_by(
-                support_job_priority(
-                    ReprocessingJob.status,
-                    ReprocessingJob.lease_expires_at,
-                    reference_now,
-                    inclusive=True,
-                ).asc(),
-                job_scope.impacted_date_expr.asc(),
-                ReprocessingJob.created_at.asc(),
-                ReprocessingJob.id.asc(),
+        ).cte("scoped_reprocessing_jobs")
+        if security_id is not None and not normalized_security_id:
+            scoped_jobs = select(*scoped_jobs.c).where(false()).cte("empty_reprocessing_jobs")
+
+        snapshot_now = func.statement_timestamp()
+        support_priority = support_job_priority(
+            scoped_jobs.c.status,
+            scoped_jobs.c.lease_expires_at,
+            snapshot_now,
+            inclusive=True,
+        ).label("support_priority")
+        paged_jobs = (
+            select(*scoped_jobs.c, support_priority)
+            .order_by(
+                support_priority.asc(),
+                scoped_jobs.c.business_date.asc(),
+                scoped_jobs.c.created_at.asc(),
+                scoped_jobs.c.id.asc(),
             )
             .offset(skip)
             .limit(limit)
+            .cte("paged_reprocessing_jobs")
         )
-        return list((await self.db.execute(stmt)).all())
+        total = select(func.count()).select_from(scoped_jobs).scalar_subquery()
+        anchor = select(literal(1).label("anchor")).subquery()
+        stmt = (
+            select(
+                snapshot_now.label("generated_at_utc"),
+                total.label("total"),
+                *paged_jobs.c,
+            )
+            .select_from(anchor)
+            .outerjoin(paged_jobs, true())
+            .order_by(
+                paged_jobs.c.support_priority.asc(),
+                paged_jobs.c.business_date.asc(),
+                paged_jobs.c.created_at.asc(),
+                paged_jobs.c.id.asc(),
+            )
+        )
+        rows = list((await self.db.execute(stmt)).all())
+        snapshot_row = rows[0]
+        jobs = [row for row in rows if row.id is not None]
+        return snapshot_row.generated_at_utc, int(snapshot_row.total or 0), jobs
