@@ -164,16 +164,24 @@ class ReprocessingWorker:
         """Claim each job immediately before its independently committed execution."""
         with reprocessing_worker_batch_timer():
             await self._recover_stale_jobs()
+            processed_reset_job_ids: set[int] = set()
             for _ in range(self._batch_size):
-                job = await self._claim_next_reset_watermark_job()
+                job = await self._claim_next_reset_watermark_job(
+                    excluded_job_ids=tuple(sorted(processed_reset_job_ids))
+                )
                 if job is None:
                     break
+                processed_reset_job_ids.add(job.id)
                 await self._process_reset_watermark_job(job=job)
 
+            processed_fx_job_ids: set[int] = set()
             for _ in range(self._batch_size):
-                job = await self._claim_next_fx_revaluation_job()
+                job = await self._claim_next_fx_revaluation_job(
+                    excluded_job_ids=tuple(sorted(processed_fx_job_ids))
+                )
                 if job is None:
                     break
+                processed_fx_job_ids.add(job.job_id)
                 await self._process_fx_revaluation_job(job=job)
 
             await self._refresh_queue_metrics()
@@ -185,7 +193,9 @@ class ReprocessingWorker:
                     max_attempts=self._max_attempts
                 )
 
-    async def _claim_next_reset_watermark_job(self) -> Any | None:
+    async def _claim_next_reset_watermark_job(
+        self, *, excluded_job_ids: tuple[int, ...]
+    ) -> Any | None:
         claimed_jobs = []
         async for db in self._open_session():
             async with db.begin():
@@ -196,13 +206,16 @@ class ReprocessingWorker:
                     1,
                     lease_owner=self._lease_owner,
                     lease_duration_seconds=self._lease_duration_seconds,
+                    excluded_job_ids=excluded_job_ids,
                 )
         if claimed_jobs:
             observe_reprocessing_worker_jobs_claimed("RESET_WATERMARKS", 1)
             return claimed_jobs[0]
         return None
 
-    async def _claim_next_fx_revaluation_job(self) -> Any | None:
+    async def _claim_next_fx_revaluation_job(
+        self, *, excluded_job_ids: tuple[int, ...]
+    ) -> Any | None:
         claimed_jobs = []
         async for db in self._open_session():
             async with db.begin():
@@ -211,6 +224,7 @@ class ReprocessingWorker:
                     1,
                     lease_owner=self._lease_owner,
                     lease_duration_seconds=self._lease_duration_seconds,
+                    excluded_job_ids=excluded_job_ids,
                 )
         if claimed_jobs:
             observe_reprocessing_worker_jobs_claimed(FX_REVALUATION_JOB_TYPE, 1)
