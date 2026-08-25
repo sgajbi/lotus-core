@@ -794,7 +794,7 @@ def observe_reprocessing_worker_jobs_failed(job_type: str, count: int = 1) -> No
 
 def observe_reprocessing_worker_lease_renewal(job_type: str, outcome: str) -> None:
     """Observe a lease heartbeat without exposing job or portfolio identifiers."""
-    if outcome not in {"renewed", "ownership_lost"}:
+    if outcome not in {"renewed", "ownership_lost", "renewal_error"}:
         raise ValueError("reprocessing lease renewal outcome is invalid")
     REPROCESSING_WORKER_LEASE_RENEWALS_TOTAL.labels(job_type, outcome).inc()
 

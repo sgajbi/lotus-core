@@ -317,6 +317,52 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
     )
 
 
+async def test_worker_retries_lease_renewal_error_without_failing_job(mock_dependencies):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 0.001
+    jobs = mock_dependencies["repro_job_repo"]
+    renewal_error_observed = asyncio.Event()
+
+    def observe_renewal(_job_type, outcome):
+        if outcome == "renewal_error":
+            renewal_error_observed.set()
+
+    async def operation(terminal_transition_started):
+        await renewal_error_observed.wait()
+        terminal_transition_started.set()
+        await jobs.update_job_status(
+            105,
+            "COMPLETE",
+            lease_token=LEASE_TOKEN,
+        )
+
+    jobs.renew_lease.side_effect = RuntimeError("transient heartbeat database timeout")
+    mock_dependencies["observe_lease_renewal"].side_effect = observe_renewal
+    job = ReprocessingJob(
+        id=105,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._process_with_lease_renewal(
+        job=job,
+        job_type="RESET_WATERMARKS",
+        operation=operation,
+    )
+
+    jobs.update_job_status.assert_awaited_once_with(
+        105,
+        "COMPLETE",
+        lease_token=LEASE_TOKEN,
+    )
+    mock_dependencies["observe_lease_renewal"].assert_called_once_with(
+        "RESET_WATERMARKS",
+        "renewal_error",
+    )
+
+
 async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership(
     mock_dependencies,
 ):

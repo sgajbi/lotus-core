@@ -69,6 +69,10 @@ def test_reprocessing_lease_renewal_metric_uses_bounded_labels_and_outcomes():
         "job_type",
         "outcome",
     )
+    monitoring.observe_reprocessing_worker_lease_renewal(
+        "RESET_WATERMARKS",
+        "renewal_error",
+    )
     with pytest.raises(ValueError, match="lease renewal outcome is invalid"):
         monitoring.observe_reprocessing_worker_lease_renewal("RESET_WATERMARKS", "job-123")
 
