@@ -239,6 +239,9 @@
     "repository-transaction-boundary-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/repository_transaction_boundary_guard.py"
     ],
+    "reprocessing-transition-boundary-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/reprocessing_transition_boundary_guard.py"
+    ],
     "required-status-checks-code-quality-gate": [
       "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run bandit -r scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py -c pyproject.toml",
       "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run mypy --config-file mypy.ini scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py",
