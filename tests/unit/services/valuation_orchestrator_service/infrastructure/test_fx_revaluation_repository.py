@@ -81,10 +81,16 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
         correlation_id="corr-fx",
     )
 
-    quarantine_statement, quarantine_parameters = session.execute.await_args_list[0].args
-    statement, parameters = session.execute.await_args_list[1].args
-    quarantine_sql = str(quarantine_statement)
-    sql = str(statement)
+    executions = [(str(call.args[0]), call.args[1]) for call in session.execute.await_args_list]
+    lock_sql, lock_parameters = next(
+        execution for execution in executions if "pg_advisory_xact_lock" in execution[0]
+    )
+    quarantine_sql, quarantine_parameters = next(
+        execution for execution in executions if "pg_input_is_valid" in execution[0]
+    )
+    sql, parameters = next(execution for execution in executions if "ON CONFLICT" in execution[0])
+    assert "hashtextextended(:identity_key, 0)" in lock_sql
+    assert lock_parameters == {"identity_key": "RESET_FX_WATERMARKS|3:USD|3:SGD"}
     assert "pg_input_is_valid" in quarantine_sql
     assert "status = 'FAILED'" in quarantine_sql
     assert quarantine_parameters == {
@@ -103,7 +109,7 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert parameters["content_hash"] == correction.content_hash
     assert parameters["attempt_count"] == 0
     assert parameters["correlation_id"] == "corr-fx"
-    assert session.execute.await_count == 2
+    assert len(executions) == 3
 
 
 async def test_affected_keys_include_open_and_later_positions_without_duplicates() -> None:
