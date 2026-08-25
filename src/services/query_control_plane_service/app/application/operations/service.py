@@ -1950,7 +1950,6 @@ class OperationsService:
     ) -> ReprocessingJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
-        stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await self._read_count_and_page(
             self.repo.get_reprocessing_jobs_count(
@@ -1969,7 +1968,6 @@ class OperationsService:
                 security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
-                stale_minutes=stale_minutes,
                 reference_now=generated_at_utc,
                 as_of=generated_at_utc,
             ),
@@ -2004,6 +2002,7 @@ class OperationsService:
                     to_currency=job.to_currency,
                     reference_now=generated_at_utc,
                     stale_threshold_minutes=stale_threshold_minutes,
+                    stale_deadline=job.lease_expires_at,
                 )
                 for index, job in enumerate(jobs)
             ],

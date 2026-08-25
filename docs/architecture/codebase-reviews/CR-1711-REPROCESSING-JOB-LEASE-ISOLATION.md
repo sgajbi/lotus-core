@@ -33,6 +33,8 @@ a late worker.
   remain operationally distinguishable; reject empty FAILED reasons.
 - Recover expired claims under deterministic `FOR UPDATE SKIP LOCKED` cohorts while preserving
   attempt count and existing effective-date coalescing semantics.
+- Project and prioritize support state from the same durable lease expiry so a caller-selected
+  fallback threshold cannot misclassify a live claim as stale.
 
 ## Result
 
@@ -55,6 +57,8 @@ across recovery.
   fails independently without blocking a valid sibling, and non-object FX JSON reaches the governed
   rejected-job path. PostgreSQL integration proof preserves JSON `null` in one claimed record while
   returning its valid sibling from the same claim.
+- Query-shape and real-PostgreSQL support proofs that an expired claim is stale while an old but
+  unexpired claim remains live, independent of the caller threshold.
 - `make typecheck`, architecture guard, repository transaction-boundary guard, and testability
   architecture guard passed.
 - `make database-hot-path-evidence` completed; the three #998 acceptance scenarios
@@ -64,8 +68,8 @@ across recovery.
 
 ## Contract Decisions
 
-- No API, OpenAPI, event, Kafka, calculation, dependency, image, datastore, framework, or runtime
-  topology change.
+- No API field shape, event, Kafka, calculation, dependency, image, datastore, framework, or runtime
+  topology change. OpenAPI descriptions now state the lease-authoritative stale semantics.
 - Repo-local operations and engineering context changed; wiki source changed and must be published
   after merge.
 - No new skill is required. Platform issue #677 already owns reusable database-clock lease guidance;

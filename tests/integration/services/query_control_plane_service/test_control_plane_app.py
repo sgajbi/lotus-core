@@ -795,7 +795,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert support_jobs["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used for queues without authoritative lease expiry; leased "
-        "valuation and aggregation rows use their database-clock deadline."
+        "valuation, aggregation, and reprocessing rows use their database-clock deadline."
     )
     assert support_jobs["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this support job listing snapshot was generated."
@@ -823,8 +823,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_job_record["properties"]["created_at"]["description"] == (
         "UTC timestamp when the durable job row was first created."
     )
-    assert support_job_record["properties"]["is_stale_processing"]["description"].startswith(
-        "True when the job is in PROCESSING state"
+    assert support_job_record["properties"]["is_stale_processing"]["description"] == (
+        "True when the job is in PROCESSING state and its authoritative database-clock lease "
+        "has expired, or, for queues without a lease, its last update is older than the requested "
+        "support stale threshold."
     )
     assert support_job_record["properties"]["is_terminal_failure"]["description"] == (
         "True when the durable job is in FAILED terminal state."

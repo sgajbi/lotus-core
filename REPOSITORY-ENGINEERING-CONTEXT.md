@@ -3995,7 +3995,9 @@ Most relevant current governance:
      opaque token plus an unexpired lease. A separate database transaction renews each live claim
      every one-third of its configured lifetime; renewal loss must cancel and roll back the domain
      transaction before authority can transfer. Never restore `updated_at` or application-clock
-     ownership.
+     ownership. Operator support projections and priority ordering must use the same durable
+     `lease_expires_at` boundary for leased `PROCESSING` rows; caller-selected stale thresholds are
+     fallback policy only for queues without authoritative lease expiry.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before

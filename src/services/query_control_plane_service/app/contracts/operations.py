@@ -1796,8 +1796,9 @@ class SupportJobRecord(BaseModel):
     is_stale_processing: bool = Field(
         ...,
         description=(
-            "True when the job is in PROCESSING state and its last update is older than the "
-            "support stale threshold (15 minutes)."
+            "True when the job is in PROCESSING state and its authoritative database-clock lease "
+            "has expired, or, for queues without a lease, its last update is older than the "
+            "requested support stale threshold."
         ),
         examples=[False],
     )
@@ -1831,7 +1832,8 @@ class SupportJobListResponse(BaseModel):
         ...,
         description=(
             "Threshold in minutes used for queues without authoritative lease expiry; "
-            "leased valuation and aggregation rows use their database-clock deadline."
+            "leased valuation, aggregation, and reprocessing rows use their database-clock "
+            "deadline."
         ),
         examples=[15],
     )

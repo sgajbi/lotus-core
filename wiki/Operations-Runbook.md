@@ -233,6 +233,9 @@ and rolls back its domain transaction.
 `renewal_error`, and `ownership_lost`. A transient renewal transport error is logged and retried;
 the existing lease fence rejects any later terminal write if authority expires meanwhile. Alert on
 renewal errors and ownership loss, and use structured logs for job-level diagnosis.
+The reprocessing-job support listing uses that same `lease_expires_at` deadline for
+`STALE_PROCESSING`. A caller-selected `stale_threshold_minutes` cannot classify an unexpired claim
+as stale; that threshold remains fallback policy only for queues without lease authority.
 
 Migration `c161b2c3d528` requires a quiesced reprocessing queue. Stop old workers and ensure no
 `PROCESSING` rows remain before upgrade; the migration fails closed otherwise. For rollback, stop

@@ -1,4 +1,4 @@
-"""Map valuation and aggregation jobs into support records."""
+"""Map durable leased and threshold-governed jobs into support records."""
 
 from __future__ import annotations
 

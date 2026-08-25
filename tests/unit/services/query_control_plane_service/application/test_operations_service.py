@@ -1149,8 +1149,9 @@ async def test_get_aggregation_jobs_uses_lease_expiry_over_custom_stale_threshol
 
 
 async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
-    created_at = datetime(2025, 8, 31, 9, 50, tzinfo=timezone.utc)
-    updated_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
+    created_at = FIXED_GENERATED_AT - timedelta(hours=2)
+    updated_at = FIXED_GENERATED_AT - timedelta(hours=1)
+    lease_expires_at = FIXED_GENERATED_AT - timedelta(seconds=1)
     mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
     mock_ops_repo.get_reprocessing_jobs.return_value = [
         type(
@@ -1168,14 +1169,16 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
                 "correlation_id": "corr-replay-303",
                 "created_at": created_at,
                 "updated_at": updated_at,
+                "lease_expires_at": lease_expires_at,
                 "failure_reason": "timed out once",
             },
         )()
     ]
 
-    response = await service.get_reprocessing_jobs(
-        "P1", skip=0, limit=20, status=" processing ", security_id="S1"
-    )
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_reprocessing_jobs(
+            "P1", skip=0, limit=20, status=" processing ", security_id="S1"
+        )
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -1212,10 +1215,50 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         security_id="S1",
         job_id=None,
         correlation_id=None,
-        stale_minutes=15,
         reference_now=response.generated_at_utc,
         as_of=response.generated_at_utc,
     )
+
+
+async def test_get_reprocessing_jobs_uses_live_lease_over_caller_stale_threshold(
+    service: OperationsService,
+    mock_ops_repo: AsyncMock,
+) -> None:
+    old_update = FIXED_GENERATED_AT - timedelta(hours=1)
+    live_lease = FIXED_GENERATED_AT + timedelta(seconds=1)
+    mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
+    mock_ops_repo.get_reprocessing_jobs.return_value = [
+        type(
+            "LiveReprocessingJobStub",
+            (),
+            {
+                "id": 304,
+                "job_type": "RESET_WATERMARKS",
+                "business_date": "2026-04-17",
+                "status": "PROCESSING",
+                "security_id": "S1",
+                "from_currency": None,
+                "to_currency": None,
+                "attempt_count": 1,
+                "correlation_id": "corr-replay-304",
+                "created_at": old_update,
+                "updated_at": old_update,
+                "lease_expires_at": live_lease,
+                "failure_reason": None,
+            },
+        )()
+    ]
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_reprocessing_jobs(
+            "P1",
+            skip=0,
+            limit=20,
+            stale_threshold_minutes=1,
+        )
+
+    assert response.items[0].is_stale_processing is False
+    assert response.items[0].operational_state == "PROCESSING"
 
 
 async def test_get_fx_reprocessing_job_exposes_direct_pair(
@@ -1240,6 +1283,7 @@ async def test_get_fx_reprocessing_job_exposes_direct_pair(
                 "correlation_id": "corr-fx-replay-404",
                 "created_at": timestamp,
                 "updated_at": timestamp,
+                "lease_expires_at": None,
                 "failure_reason": None,
             },
         )()
@@ -2829,7 +2873,6 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
         security_id=None,
         job_id=None,
         correlation_id="corr-replay-303",
-        stale_minutes=15,
         reference_now=response.generated_at_utc,
         as_of=response.generated_at_utc,
     )
