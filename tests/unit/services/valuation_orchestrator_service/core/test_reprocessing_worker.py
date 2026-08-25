@@ -10,6 +10,7 @@ from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobRepository,
     ReprocessingJobTransitionOutcome,
 )
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.core import (
@@ -18,6 +19,7 @@ from src.services.valuation_orchestrator_service.app.core import (
 from src.services.valuation_orchestrator_service.app.core.reprocessing_worker import (
     ReprocessingJobOwnershipLostError,
     ReprocessingWorker,
+    _validate_lease_renewal_timing,
 )
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
     ClaimedFxRevaluationJob,
@@ -281,6 +283,7 @@ async def test_worker_processes_reset_watermarks_job(mock_dependencies):
 async def test_worker_renews_live_lease_until_job_operation_finishes(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.001
+    worker._lease_renewal_io_timeout_seconds = 0.0005
     jobs = mock_dependencies["repro_job_repo"]
     renewal_observed = asyncio.Event()
 
@@ -320,6 +323,7 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
 async def test_worker_retries_lease_renewal_error_without_failing_job(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.001
+    worker._lease_renewal_io_timeout_seconds = 0.0005
     jobs = mock_dependencies["repro_job_repo"]
     renewal_error_observed = asyncio.Event()
 
@@ -363,11 +367,65 @@ async def test_worker_retries_lease_renewal_error_without_failing_job(mock_depen
     )
 
 
+async def test_worker_retries_timed_out_renewal_before_next_heartbeat_delay(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_duration_seconds = 0.6
+    worker._lease_renewal_interval_seconds = 0.2
+    worker._lease_renewal_io_timeout_seconds = 0.1
+    jobs = mock_dependencies["repro_job_repo"]
+    renewal_started_at: list[float] = []
+    second_renewal_observed = asyncio.Event()
+
+    async def renew(*_args, **_kwargs):
+        renewal_started_at.append(asyncio.get_running_loop().time())
+        if len(renewal_started_at) == 1:
+            await asyncio.Event().wait()
+        second_renewal_observed.set()
+        return ReprocessingJobTransitionOutcome.APPLIED
+
+    async def operation(_terminal_transition_started):
+        await second_renewal_observed.wait()
+
+    jobs.renew_lease.side_effect = renew
+    job = ReprocessingJob(
+        id=106,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._process_with_lease_renewal(
+        job=job,
+        job_type="RESET_WATERMARKS",
+        operation=operation,
+    )
+
+    assert len(renewal_started_at) == 2
+    assert renewal_started_at[1] - renewal_started_at[0] < 0.25
+    assert mock_dependencies["observe_lease_renewal"].call_args_list == [
+        call("RESET_WATERMARKS", "renewal_error"),
+        call("RESET_WATERMARKS", "renewed"),
+    ]
+
+
+async def test_worker_lease_renewal_timing_fails_closed_on_unsafe_ordering():
+    with pytest.raises(RuntimeConfigurationError, match="I/O timeout < interval < lease"):
+        _validate_lease_renewal_timing(
+            io_timeout_seconds=30,
+            interval_seconds=20,
+            lease_duration_seconds=60,
+        )
+
+
 async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership(
     mock_dependencies,
 ):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.001
+    worker._lease_renewal_io_timeout_seconds = 0.0005
     jobs = mock_dependencies["repro_job_repo"]
     operation_cancelled = asyncio.Event()
     jobs.renew_lease.return_value = ReprocessingJobTransitionOutcome.CLAIM_MISMATCH
@@ -402,16 +460,19 @@ async def test_worker_cancels_job_transaction_when_lease_renewal_loses_ownership
 
 async def test_worker_ignores_renewal_result_unblocked_by_terminal_commit(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
-    worker._lease_renewal_interval_seconds = 0.001
+    worker._lease_renewal_interval_seconds = 0.05
+    worker._lease_renewal_io_timeout_seconds = 0.025
     jobs = mock_dependencies["repro_job_repo"]
+    renewal_started = asyncio.Event()
     terminal_commit_reached = asyncio.Event()
 
     async def renew(*_args, **_kwargs):
+        renewal_started.set()
         await terminal_commit_reached.wait()
         return ReprocessingJobTransitionOutcome.NOT_PROCESSING
 
     async def operation(terminal_transition_started):
-        await asyncio.sleep(0.01)
+        await renewal_started.wait()
         terminal_transition_started.set()
         terminal_commit_reached.set()
 
