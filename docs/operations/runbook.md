@@ -848,6 +848,16 @@ page, and lease classification from one statement snapshot. Heartbeat changes to
 therefore cannot hide an active claim or split the reported total from the returned page, and host
 clock skew cannot disagree with the worker's database-time fence.
 
+When a live `RESET_WATERMARKS` or `RESET_FX_WATERMARKS` claim must retry, the repository owns the
+`PROCESSING -> PENDING` policy. It serializes the security or direct-currency-pair identity with a
+transaction-scoped PostgreSQL advisory lock and revalidates the exact token and database-clock
+lease before changing durable work. If another pending sibling exists, Core coalesces the claimed
+payload into that sibling in the same transaction, preserves the minimum `earliest_impacted_date`
+and required correlation/source lineage, and completes the superseded claimed row. Without a
+sibling, the same row returns to `PENDING`. Operators must not manually rewrite either row or delete
+the sibling to resolve a uniqueness error. Inspect the support listing and correlated structured
+logs; an unchanged pending sibling after a stale-token attempt is the expected fail-closed result.
+
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
 
