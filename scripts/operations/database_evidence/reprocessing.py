@@ -30,7 +30,7 @@ async def measure_reprocessing_job_claim(
             "RESET_WATERMARKS",
             batch_size=claim_scenario.max_root_actual_rows,
         ),
-        statement_prefix="UPDATE",
+        statement_prefix="WITH",
     )
     return (
         evaluate_hot_path_plan(normalization_scenario, normalization_plan),
