@@ -161,47 +161,61 @@ class ReprocessingWorker:
         set_control_queue_oldest_pending_age_seconds("reprocessing", max(age_seconds, 0.0))
 
     async def _process_batch(self):
-        """Claim briefly, then commit or roll back every job independently."""
+        """Claim each job immediately before its independently committed execution."""
         with reprocessing_worker_batch_timer():
-            claimed_jobs = await self._claim_reset_watermark_jobs()
-            for job in claimed_jobs:
+            await self._recover_stale_jobs()
+            for _ in range(self._batch_size):
+                job = await self._claim_next_reset_watermark_job()
+                if job is None:
+                    break
                 await self._process_reset_watermark_job(job=job)
 
-            fx_jobs = await self._claim_fx_revaluation_jobs()
-            for job in fx_jobs:
+            for _ in range(self._batch_size):
+                job = await self._claim_next_fx_revaluation_job()
+                if job is None:
+                    break
                 await self._process_fx_revaluation_job(job=job)
 
             await self._refresh_queue_metrics()
 
-    async def _claim_reset_watermark_jobs(self):
+    async def _recover_stale_jobs(self) -> None:
+        async for db in self._open_session():
+            async with db.begin():
+                await self._repository_factory.reprocessing_jobs(db).find_and_reset_stale_jobs(
+                    max_attempts=self._max_attempts
+                )
+
+    async def _claim_next_reset_watermark_job(self) -> Any | None:
         claimed_jobs = []
         async for db in self._open_session():
             async with db.begin():
-                job_repo = self._repository_factory.reprocessing_jobs(db)
-                await job_repo.find_and_reset_stale_jobs(max_attempts=self._max_attempts)
-                claimed_jobs = await job_repo.find_and_claim_jobs(
+                claimed_jobs = await self._repository_factory.reprocessing_jobs(
+                    db
+                ).find_and_claim_jobs(
                     "RESET_WATERMARKS",
-                    self._batch_size,
+                    1,
                     lease_owner=self._lease_owner,
                     lease_duration_seconds=self._lease_duration_seconds,
                 )
         if claimed_jobs:
-            observe_reprocessing_worker_jobs_claimed("RESET_WATERMARKS", len(claimed_jobs))
-        return claimed_jobs
+            observe_reprocessing_worker_jobs_claimed("RESET_WATERMARKS", 1)
+            return claimed_jobs[0]
+        return None
 
-    async def _claim_fx_revaluation_jobs(self):
+    async def _claim_next_fx_revaluation_job(self) -> Any | None:
         claimed_jobs = []
         async for db in self._open_session():
             async with db.begin():
                 repository = self._repository_factory.fx_revaluations(db)
                 claimed_jobs = await repository.claim_pending_jobs(
-                    self._batch_size,
+                    1,
                     lease_owner=self._lease_owner,
                     lease_duration_seconds=self._lease_duration_seconds,
                 )
         if claimed_jobs:
-            observe_reprocessing_worker_jobs_claimed(FX_REVALUATION_JOB_TYPE, len(claimed_jobs))
-        return claimed_jobs
+            observe_reprocessing_worker_jobs_claimed(FX_REVALUATION_JOB_TYPE, 1)
+            return claimed_jobs[0]
+        return None
 
     async def _refresh_queue_metrics(self) -> None:
         async for db in self._open_session():

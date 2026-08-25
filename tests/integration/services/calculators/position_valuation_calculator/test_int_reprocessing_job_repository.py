@@ -133,6 +133,40 @@ async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     assert {row.payload["security_id"] for row in remaining_rows} == {"S1", "S2", "S3"}
 
 
+async def test_find_and_claim_jobs_keeps_malformed_payload_from_blocking_valid_sibling(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status)
+            VALUES
+              ('RESET_WATERMARKS', CAST('null' AS JSON), 'PENDING'),
+              (
+                'RESET_WATERMARKS',
+                CAST('{"security_id":"S-VALID","earliest_impacted_date":"2025-01-05"}' AS JSON),
+                'PENDING'
+              )
+            """
+        )
+    )
+    await async_db_session.commit()
+
+    claimed = await ReprocessingJobRepository(async_db_session).find_and_claim_jobs(
+        "RESET_WATERMARKS",
+        batch_size=2,
+    )
+    await async_db_session.commit()
+
+    assert len(claimed) == 2
+    assert any(job.payload is None for job in claimed)
+    assert any(
+        isinstance(job.payload, dict) and job.payload.get("security_id") == "S-VALID"
+        for job in claimed
+    )
+
+
 async def test_find_and_claim_jobs_keeps_other_job_types_untouched(
     clean_db, async_db_session: AsyncSession
 ):

@@ -21,8 +21,11 @@ a late worker.
 - Made the schema cutover fail closed unless the old queue is quiesced; downgrade also rejects
   active leased work.
 - Return immutable claimed records instead of transaction-bound ORM instances.
-- Commit claim/recovery separately, execute every reset or FX job in its own transaction, and write
-  FAILED state in a fresh transaction after rollback.
+- Commit recovery separately; claim each reset or FX job immediately before execution; execute every
+  job in its own transaction; and write FAILED state in a fresh transaction after rollback. This
+  prevents serially waiting siblings from expiring before their work starts.
+- Preserve raw database JSON through claim mapping so a malformed legacy payload is rejected and
+  terminalized inside its own job boundary rather than rolling back the whole claim transaction.
 - Require exact token and unexpired PostgreSQL-clock lease for COMPLETE, PENDING, or FAILED writes.
 - Renew live claims every one-third lease interval in an independent transaction; cancel and roll
   back active domain work immediately when renewal loses authority.
@@ -33,9 +36,11 @@ a late worker.
 
 ## Result
 
-A failed job cannot roll back a sibling. Expired work can be deterministically recovered and
-reclaimed, while the former worker cannot commit either terminal state or transaction-scoped domain
-mutations. Claim attempts remain durable and auditable across recovery.
+A failed or malformed job cannot roll back or block a sibling. A lease begins only when its job is
+next to execute, eliminating expiry caused solely by waiting behind slower serial work. Expired work
+can be deterministically recovered and reclaimed, while the former worker cannot commit either
+terminal state or transaction-scoped domain mutations. Claim attempts remain durable and auditable
+across recovery.
 
 ## Evidence
 
@@ -46,6 +51,10 @@ mutations. Claim attempts remain durable and auditable across recovery.
   transaction, records FAILED in a fresh session, and does not prevent the sibling terminal commit.
 - Unit proof that heartbeat renewal succeeds independently and that renewal ownership loss cancels
   the active operation.
+- Unit proof that a second reset job is not claimed until the first finishes, malformed reset JSON
+  fails independently without blocking a valid sibling, and non-object FX JSON reaches the governed
+  rejected-job path. PostgreSQL integration proof preserves JSON `null` in one claimed record while
+  returning its valid sibling from the same claim.
 - `make typecheck`, architecture guard, repository transaction-boundary guard, and testability
   architecture guard passed.
 - `make database-hot-path-evidence` completed; the three #998 acceptance scenarios

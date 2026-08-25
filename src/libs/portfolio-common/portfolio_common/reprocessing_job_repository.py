@@ -62,7 +62,7 @@ class ClaimedReprocessingJob:
 
     id: int
     job_type: str
-    payload: dict[str, Any]
+    payload: object
     status: str
     correlation_id: str | None
     correlation_missing_reason: str | None
@@ -903,7 +903,10 @@ def _claimed_reprocessing_job(row: Any) -> ClaimedReprocessingJob:
     return ClaimedReprocessingJob(
         id=int(row["id"]),
         job_type=str(row["job_type"]),
-        payload=dict(row["payload"]),
+        # Preserve database JSON as-is so malformed legacy payloads are rejected
+        # inside their independently committed job execution, not while mapping
+        # the entire claim result.
+        payload=row["payload"],
         status=str(row["status"]),
         correlation_id=row.get("correlation_id"),
         correlation_missing_reason=row.get("correlation_missing_reason"),

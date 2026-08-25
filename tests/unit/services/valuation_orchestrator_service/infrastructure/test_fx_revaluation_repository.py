@@ -211,3 +211,28 @@ async def test_claim_pending_jobs_returns_rejected_work_for_invalid_payload() ->
     assert claimed[0].job_id == 72
     assert claimed[0].lease_token == "e" * 32
     assert "to_currency" in claimed[0].rejection_reason
+
+
+async def test_claim_pending_jobs_returns_rejected_work_for_non_mapping_payload() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+    row = MagicMock(
+        id=73,
+        payload=["USD", "SGD", "2026-04-10"],
+        correlation_id="corr-73",
+        lease_token="f" * 32,
+    )
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.infrastructure.repositories."
+        "fx_revaluation_repository.ReprocessingJobRepository",
+        autospec=ReprocessingJobRepository,
+    ) as jobs:
+        jobs.return_value.find_and_claim_jobs.return_value = [row]
+        claimed = await repository.claim_pending_jobs(batch_size=1)
+
+    assert len(claimed) == 1
+    assert isinstance(claimed[0], RejectedFxRevaluationJob)
+    assert claimed[0].job_id == 73
+    assert claimed[0].lease_token == "f" * 32
+    assert "payload must be a JSON object" in claimed[0].rejection_reason
