@@ -46,7 +46,9 @@ The production-source scan found the two issue-owned caller paths and no additio
 `update_job_status(..., "PENDING")` bypass in the effective-dated replay family. Existing stale-job
 recovery is a separate repository-owned database-clock policy and remains unchanged. The guard is
 registered under `architecture-guard` and its exact repository command is admitted by the governed
-Make recipe contract, preventing the same bypass and CI-command drift from recurring.
+Make recipe contract, preventing the same bypass and CI-command drift from recurring. The existing
+FX staging unit now identifies lock, quarantine, and upsert statements by SQL contract instead of
+fragile execution position, while explicitly proving the new pair-scoped identity lock.
 
 ## Meaningful Proof
 
@@ -60,7 +62,7 @@ Make recipe contract, preventing the same bypass and CI-command drift from recur
   source lineage, stale token, repeated replay, outer rollback, no-sibling reuse, and concurrent
   staging under the identity lock.
 - Guard pass/fail tests cover positional and keyword bypasses plus missing owner wiring.
-- Local exact-tree evidence: 83 focused unit/fitness tests, 56 critical-lifecycle PostgreSQL tests,
+- Local exact-tree evidence: 91 focused unit/fitness tests, 56 critical-lifecycle PostgreSQL tests,
   and 9 explicitly selected real-PostgreSQL owned-requeue/coalescing tests; MyPy across 325 source
   files; architecture guard; wiki/docs gates; and the required-status workflow-governance suite
   with 529 tests and 94.27% branch-aware coverage.
