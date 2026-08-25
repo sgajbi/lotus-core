@@ -66,6 +66,8 @@ class SqlAlchemyFxRevaluationRepository:
         """Keep persistence payload parsing inside the infrastructure boundary."""
         try:
             payload = row.payload
+            if not isinstance(payload, dict):
+                raise TypeError("payload must be a JSON object")
             return ClaimedFxRevaluationJob(
                 job_id=row.id,
                 pair=DirectCurrencyPair(

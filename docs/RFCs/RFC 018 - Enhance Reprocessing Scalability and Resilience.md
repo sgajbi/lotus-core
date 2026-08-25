@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2025-09-01 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-08-25 |
 | Owners | lotus-core calculators (`position_calculator`, `position_valuation_calculator`), `portfolio-common` |
 | Depends On | RFC 001, RFC 004 |
 | Scope | Durable fan-out for instrument reprocessing triggers and atomic replay trigger flow |
@@ -32,7 +32,9 @@ Original RFC 018 requested:
 Implemented behavior:
 1. Durable queue introduced: `reprocessing_jobs` table and repository claim/update workflow.
 2. `ValuationScheduler` converts instrument triggers into `RESET_WATERMARKS` jobs.
-3. `ReprocessingWorker` claims jobs in batches and applies watermark resets across affected portfolios.
+3. `ReprocessingWorker` processes a bounded number of jobs per poll, claiming each job immediately
+   before independently committed execution so queued siblings cannot consume their lease while
+   waiting for serial work.
 4. `instrument_reprocessing_triggers_pending` gauge is emitted from scheduler metric update path.
 5. `PositionCalculator` uses outbox-backed replay staging after epoch increment in a single transaction scope.
 
