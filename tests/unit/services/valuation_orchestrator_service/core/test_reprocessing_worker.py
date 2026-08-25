@@ -170,6 +170,43 @@ async def test_worker_processes_fx_revaluation_jobs_in_shared_runtime(mock_depen
     mock_observe_claimed.assert_called_once_with("RESET_FX_WATERMARKS", 1)
 
 
+async def test_worker_records_fx_failure_under_job_correlation_context(mock_dependencies):
+    processor = AsyncMock(spec=fx_revaluation_job_processor.FxRevaluationJobProcessor)
+    worker = ReprocessingWorker(poll_interval=0.1, fx_job_processor=processor)
+    pending_job = ClaimedFxRevaluationJob(
+        job_id=41,
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+        lease_token=LEASE_TOKEN,
+        correlation_id="corr-fx-failure",
+    )
+    observed_correlation_ids: list[str] = []
+
+    async def fail_processing(**_kwargs):
+        observed_correlation_ids.append(correlation_id_var.get())
+        raise ValueError("malformed persisted FX payload")
+
+    async def capture_failure(**_kwargs):
+        observed_correlation_ids.append(correlation_id_var.get())
+
+    processor.process.side_effect = fail_processing
+    processor.mark_failed.side_effect = capture_failure
+
+    token = correlation_id_var.set("caller-correlation")
+    try:
+        await worker._process_fx_revaluation_job(job=pending_job)
+        assert correlation_id_var.get() == "caller-correlation"
+    finally:
+        correlation_id_var.reset(token)
+
+    assert observed_correlation_ids == ["corr-fx-failure", "corr-fx-failure"]
+    processor.mark_failed.assert_awaited_once_with(
+        job=pending_job,
+        jobs=mock_dependencies["repro_job_repo"],
+        exc=ANY,
+    )
+
+
 async def test_worker_processes_reset_watermarks_job(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     mock_repro_job_repo = mock_dependencies["repro_job_repo"]
