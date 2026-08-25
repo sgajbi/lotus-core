@@ -25,6 +25,7 @@ from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobRepository,
     ReprocessingJobTransitionOutcome,
 )
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 from ..domain.fx_revaluation import FX_REVALUATION_JOB_TYPE
 from ..infrastructure.repositories.fx_revaluation_repository import (
@@ -40,6 +41,18 @@ from .reprocessing_failure import reprocessing_failure_reason
 from .reprocessing_worker_dependencies import ReprocessingWorkerRepositoryFactory
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_lease_renewal_timing(
+    *,
+    io_timeout_seconds: float,
+    interval_seconds: float,
+    lease_duration_seconds: float,
+) -> None:
+    if not 0 < io_timeout_seconds < interval_seconds < lease_duration_seconds:
+        raise RuntimeConfigurationError(
+            "Invalid reprocessing lease renewal timing: require I/O timeout < interval < lease"
+        )
 
 
 class ReprocessingJobOwnershipLostError(RuntimeError):
@@ -114,6 +127,12 @@ class ReprocessingWorker:
         self._stale_timeout_minutes = runtime_settings.reprocessing_worker_stale_timeout_minutes
         self._lease_duration_seconds = self._stale_timeout_minutes * 60
         self._lease_renewal_interval_seconds = max(1.0, self._lease_duration_seconds / 3)
+        self._lease_renewal_io_timeout_seconds = self._lease_renewal_interval_seconds / 2
+        _validate_lease_renewal_timing(
+            io_timeout_seconds=self._lease_renewal_io_timeout_seconds,
+            interval_seconds=self._lease_renewal_interval_seconds,
+            lease_duration_seconds=self._lease_duration_seconds,
+        )
         self._lease_owner = f"valuation-reprocessing-{uuid.uuid4().hex}"
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
@@ -334,25 +353,55 @@ class ReprocessingWorker:
         stop_event: asyncio.Event,
         terminal_transition_started: asyncio.Event,
     ) -> None:
+        loop = asyncio.get_running_loop()
+        lease_deadline = loop.time() + self._lease_duration_seconds
+        next_renewal_at = loop.time() + self._lease_renewal_interval_seconds
         while True:
+            wait_seconds = max(0.0, next_renewal_at - loop.time())
             try:
                 await asyncio.wait_for(
                     stop_event.wait(),
-                    timeout=self._lease_renewal_interval_seconds,
+                    timeout=wait_seconds,
                 )
                 return
             except asyncio.TimeoutError:
                 pass
 
+            if stop_event.is_set() or terminal_transition_started.is_set():
+                return
+            remaining_lease_seconds = lease_deadline - loop.time()
+            if remaining_lease_seconds <= 0:
+                logger.warning(
+                    "Cancelling replay work after lease renewal budget was exhausted.",
+                    extra=operation_log_extra(
+                        event_name="valuation.reprocessing.lease_renewal_deadline_exhausted",
+                        operation="valuation.reprocessing.lease_renewal",
+                        status="cancelled",
+                        reason_code="renewal_deadline_exhausted",
+                        job_id=self._job_id(job),
+                        job_type=job_type,
+                    ),
+                )
+                raise ReprocessingJobOwnershipLostError(
+                    f"reprocessing job {self._job_id(job)} lease renewal deadline was exhausted"
+                )
+
             outcome = ReprocessingJobTransitionOutcome.NOT_FOUND
             try:
-                async for db in self._open_session():
-                    async with db.begin():
-                        outcome = await self._repository_factory.reprocessing_jobs(db).renew_lease(
-                            self._job_id(job),
-                            lease_token=job.lease_token,
-                            lease_duration_seconds=self._lease_duration_seconds,
-                        )
+                renewal_timeout_seconds = min(
+                    self._lease_renewal_io_timeout_seconds,
+                    remaining_lease_seconds,
+                )
+                async with asyncio.timeout(renewal_timeout_seconds):
+                    async for db in self._open_session():
+                        async with db.begin():
+                            outcome = await self._repository_factory.reprocessing_jobs(
+                                db
+                            ).renew_lease(
+                                self._job_id(job),
+                                lease_token=job.lease_token,
+                                lease_duration_seconds=self._lease_duration_seconds,
+                            )
             except Exception as exc:
                 observe_reprocessing_worker_lease_renewal(job_type, "renewal_error")
                 logger.warning(
@@ -368,11 +417,17 @@ class ReprocessingWorker:
                         error_type=type(exc).__name__,
                     ),
                 )
+                if stop_event.is_set() or terminal_transition_started.is_set():
+                    return
+                next_renewal_at = loop.time()
                 continue
             if stop_event.is_set() or terminal_transition_started.is_set():
                 return
             if outcome is ReprocessingJobTransitionOutcome.APPLIED:
                 observe_reprocessing_worker_lease_renewal(job_type, "renewed")
+                renewed_at = loop.time()
+                lease_deadline = renewed_at + self._lease_duration_seconds
+                next_renewal_at = renewed_at + self._lease_renewal_interval_seconds
                 continue
 
             observe_reprocessing_worker_lease_renewal(job_type, "ownership_lost")

@@ -222,8 +222,11 @@ independent transaction, so one failed job cannot roll back a sibling. Terminal 
 exact opaque claim token and an unexpired lease; a late worker rolls its domain mutations back.
 `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` (default `15`) is the lease lifetime, measured by the
 PostgreSQL clock rather than `updated_at` or an application clock. The worker renews the lease every
-one-third of that lifetime in a separate transaction. If renewal reports expiry, token mismatch, or
-lost processing state, the worker cancels the job task and rolls back its domain transaction.
+one-third of that lifetime in a separate transaction. Renewal I/O is bounded to half that interval;
+transport failures retry immediately against a monotonic lease budget rather than waiting another
+full interval. Startup fails closed unless I/O timeout < renewal interval < lease lifetime. If
+renewal reports expiry, token mismatch, or lost processing state, the worker cancels the job task
+and rolls back its domain transaction.
 `reprocessing_worker_lease_renewals_total{job_type,outcome}` exposes only `renewed`,
 `renewal_error`, and `ownership_lost`. A transient renewal transport error is logged and retried;
 the existing lease fence rejects any later terminal write if authority expires meanwhile. Alert on

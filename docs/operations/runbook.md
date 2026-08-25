@@ -832,11 +832,12 @@ evidence to remain bounded and index-backed.
 
 During processing, `reprocessing_worker_lease_renewals_total{job_type,outcome}` records only the
 bounded outcomes `renewed`, `renewal_error`, and `ownership_lost`. A transient renewal transport
-error is logged and retried; the lease fence rejects any later terminal write if authority expires
-meanwhile. Alert on `renewal_error` and `ownership_lost`; use the correlated structured log to
-identify the job without adding business identifiers to metric labels. A lost renewal cancels the
-in-flight task so its database transaction rolls back before recovery can hand authority to another
-worker.
+error is logged and retried immediately against a monotonic lease budget; renewal I/O is capped at
+half the renewal interval, and startup requires I/O timeout < renewal interval < lease lifetime. The
+lease fence rejects any later terminal write if authority expires meanwhile. Alert on
+`renewal_error` and `ownership_lost`; use the correlated structured log to identify the job without
+adding business identifiers to metric labels. A lost renewal cancels the in-flight task so its
+database transaction rolls back before recovery can hand authority to another worker.
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
