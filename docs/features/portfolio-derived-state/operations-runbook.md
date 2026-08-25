@@ -30,7 +30,9 @@ The health of this service is critical for the availability of all performance a
 * **FX correction replay:** Monitor `RESET_FX_WATERMARKS` through
   `/support/portfolios/{portfolio_id}/reprocessing-jobs`, including direct pair, earliest impacted
   date, status, age, correlation, and affected-position count. One pending row is coalesced per
-  direct pair; repeated observations must not create an unbounded queue. A pair with no affected
+  direct pair; retry coalescing preserves the earliest effective date and source/correlation
+  lineage even when a new pending sibling arrives after an older row was claimed. Repeated
+  observations must not create an unbounded queue. A pair with no affected
   positions retries visibility only to the configured attempt limit and then completes as an
   observable successful no-op.
   A malformed durable replay date is returned as `business_date: null` with the job's status,

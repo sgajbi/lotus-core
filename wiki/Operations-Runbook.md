@@ -32,6 +32,13 @@ Guarded incident IDs: `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`, 
 `valuation-aggregation-lag`, `stale-source-data`, `reconciliation-failure`, `readiness-failure`,
 `database-connectivity`, `kafka-connectivity`, and `security-audit-denial-spikes`.
 
+Effective-dated Reset and FX replay retries are repository-owned. A live claim either returns to
+`PENDING` when it is the only row for its security/direct pair, or is atomically coalesced into an
+existing pending sibling while preserving the earliest impacted date and required lineage. The
+exact database-clock lease and token remain authoritative. Do not repair a retry by rewriting job
+status, deleting the sibling, or weakening a pending uniqueness constraint; inspect the support
+listing and correlated logs, then correct the source or ownership failure.
+
 ## Durable Enterprise Access Evidence
 
 Promoted profiles persist one typed access decision before protected work across ingestion, query,

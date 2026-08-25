@@ -3995,7 +3995,16 @@ Most relevant current governance:
      opaque token plus an unexpired lease. A separate database transaction renews each live claim
      every one-third of its configured lifetime; renewal loss must cancel and roll back the domain
      transaction before authority can transfer. Never restore `updated_at` or application-clock
-     ownership. Operator support projections and priority ordering must use the same durable
+     ownership. Effective-dated `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` requeue is a
+     repository-owned transition: serialize the security or direct-pair identity with a
+     transaction-scoped PostgreSQL advisory lock, revalidate the live database-clock lease, and
+     atomically coalesce any pending sibling while preserving the minimum `earliest_impacted_date`
+     plus required source/correlation lineage. Callers must not restore generic
+     `update_job_status(..., "PENDING")`, weaken the pending unique indexes, or delete a sibling to
+     make the transition succeed. `make reprocessing-transition-boundary-guard` is the static
+     boundary proof; the critical-lifecycle PostgreSQL lane owns concurrency, rollback, stale-token,
+     repeat-replay, and no-sibling behavioral proof. Operator support projections and priority
+     ordering must use the same durable
      `lease_expires_at` boundary for leased `PROCESSING` rows; caller-selected stale thresholds are
      fallback policy only for queues without authoritative lease expiry. Reprocessing support reads
      must return PostgreSQL statement time, count, ordered page, and classification from one SQL
