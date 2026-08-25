@@ -524,7 +524,10 @@ class ReprocessingWorker:
             )
 
     async def _process_fx_revaluation_job(self, *, job) -> None:
+        correlation_token = None
         try:
+            if job.correlation_id:
+                correlation_token = correlation_id_var.set(job.correlation_id)
             await self._process_with_lease_renewal(
                 job=job,
                 job_type=FX_REVALUATION_JOB_TYPE,
@@ -543,6 +546,9 @@ class ReprocessingWorker:
                         jobs=self._repository_factory.reprocessing_jobs(db),
                         exc=exc,
                     )
+        finally:
+            if correlation_token is not None:
+                correlation_id_var.reset(correlation_token)
 
     async def _execute_fx_revaluation_job(
         self,
