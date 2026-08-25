@@ -3997,7 +3997,10 @@ Most relevant current governance:
      transaction before authority can transfer. Never restore `updated_at` or application-clock
      ownership. Operator support projections and priority ordering must use the same durable
      `lease_expires_at` boundary for leased `PROCESSING` rows; caller-selected stale thresholds are
-     fallback policy only for queues without authoritative lease expiry.
+     fallback policy only for queues without authoritative lease expiry. Reprocessing support reads
+     must return PostgreSQL statement time, count, ordered page, and classification from one SQL
+     snapshot; never restore application-clock lease comparison or heartbeat-sensitive
+     `updated_at` visibility fencing.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before

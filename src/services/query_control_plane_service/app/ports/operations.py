@@ -329,16 +329,10 @@ class OperationsSupportRepository(Protocol):
         **filters: Any,
     ) -> list[Any]: ...
 
-    async def get_reprocessing_jobs_count(
-        self,
-        portfolio_id: str,
-        **filters: Any,
-    ) -> int: ...
-
-    async def get_reprocessing_jobs(
+    async def get_reprocessing_jobs_snapshot(
         self,
         portfolio_id: str,
         skip: int,
         limit: int,
         **filters: Any,
-    ) -> list[Any]: ...
+    ) -> tuple[datetime, int, list[Any]]: ...

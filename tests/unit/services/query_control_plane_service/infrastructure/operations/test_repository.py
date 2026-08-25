@@ -625,8 +625,6 @@ async def test_support_job_queries_honor_job_id_filters(
     scalar_result.scalar_one.return_value = 0
     scalars_result = MagicMock()
     scalars_result.scalars.return_value.all.return_value = []
-    rows_result = MagicMock()
-    rows_result.all.return_value = []
     mock_db_session.execute = AsyncMock(
         side_effect=[
             scalar_result,
@@ -635,8 +633,17 @@ async def test_support_job_queries_honor_job_id_filters(
             scalars_result,
             scalar_result,
             scalars_result,
-            scalar_result,
-            rows_result,
+            MagicMock(
+                **{
+                    "all.return_value": [
+                        SimpleNamespace(
+                            generated_at_utc=datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc),
+                            total=0,
+                            id=None,
+                        )
+                    ]
+                }
+            ),
         ]
     )
 
@@ -693,14 +700,7 @@ async def test_support_job_queries_honor_job_id_filters(
         request_fingerprint="pf-001:positions:csv",
         reference_now=reference_now,
     )
-    await repository.get_reprocessing_jobs_count(
-        "P1",
-        status="PROCESSING",
-        security_id=" SEC-US-IBM ",
-        job_id=303,
-        correlation_id="corr-replay-303",
-    )
-    await repository.get_reprocessing_jobs(
+    await repository.get_reprocessing_jobs_snapshot(
         "P1",
         skip=0,
         limit=10,
@@ -708,7 +708,6 @@ async def test_support_job_queries_honor_job_id_filters(
         security_id=" SEC-US-IBM ",
         job_id=303,
         correlation_id="corr-replay-303",
-        reference_now=reference_now,
     )
 
     compiled_statements = [
@@ -742,9 +741,6 @@ async def test_support_job_queries_honor_job_id_filters(
     assert "reprocessing_jobs.id = 303" in compiled_statements[6]
     assert "reprocessing_jobs.correlation_id = 'corr-replay-303'" in compiled_statements[6]
     assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled_statements[6]
-    assert "reprocessing_jobs.id = 303" in compiled_statements[7]
-    assert "reprocessing_jobs.correlation_id = 'corr-replay-303'" in compiled_statements[7]
-    assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled_statements[7]
 
 
 async def test_get_latest_transaction_date(
@@ -2144,26 +2140,32 @@ async def test_get_reprocessing_keys_query_honors_as_of(
     assert "position_state.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
 
 
-async def test_get_reprocessing_jobs_query_uses_reference_now(
+async def test_get_reprocessing_jobs_snapshot_uses_one_database_clock_statement(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
-    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    snapshot_time = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
-    mock_result.all.return_value = ["job1"]
+    snapshot_row = SimpleNamespace(generated_at_utc=snapshot_time, total=1, id=303)
+    mock_result.all.return_value = [snapshot_row]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_reprocessing_jobs(
+    generated_at_utc, total, jobs = await repository.get_reprocessing_jobs_snapshot(
         portfolio_id="P1",
         skip=0,
         limit=10,
         status="PROCESSING",
         security_id="SEC-US-IBM",
-        reference_now=reference_now,
     )
 
-    assert value == ["job1"]
+    assert generated_at_utc == snapshot_time
+    assert total == 1
+    assert jobs == [snapshot_row]
+    mock_db_session.execute.assert_awaited_once()
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "statement_timestamp()" in compiled
+    assert "count(*)" in compiled.lower()
+    assert "LEFT OUTER JOIN paged_reprocessing_jobs" in compiled
     assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
     assert "reprocessing_jobs.job_type = 'RESET_FX_WATERMARKS'" in compiled
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
@@ -2182,82 +2184,31 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     )
     assert "IS NOT true" in compiled
     assert "anon_1.quantity != 0" in compiled
-    assert "CASE WHEN (reprocessing_jobs.status = 'FAILED')" in compiled
+    assert "CASE WHEN (scoped_reprocessing_jobs.status = 'FAILED')" in compiled
     assert "upper(trim(reprocessing_jobs.status))" not in compiled
     assert "reprocessing_jobs.lease_expires_at" in compiled
-    assert "<= '2025-08-31 12:00:00+00:00'" in compiled
+    assert "reprocessing_jobs.lease_expires_at <= statement_timestamp()" in compiled
     assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" not in compiled
+    assert "reprocessing_jobs.updated_at <=" not in compiled
     assert "LIMIT 10 OFFSET 0" in compiled
 
 
-async def test_get_reprocessing_jobs_query_honors_as_of(
+async def test_get_reprocessing_jobs_snapshot_preserves_total_for_empty_page(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
-    reference_now = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    snapshot_time = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
     mock_result = MagicMock()
-    mock_result.all.return_value = ["job1"]
+    mock_result.all.return_value = [
+        SimpleNamespace(generated_at_utc=snapshot_time, total=2, id=None)
+    ]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    value = await repository.get_reprocessing_jobs(
+    generated_at_utc, total, jobs = await repository.get_reprocessing_jobs_snapshot(
         portfolio_id="P1",
-        skip=0,
+        skip=20,
         limit=10,
-        reference_now=reference_now,
-        as_of=reference_now,
     )
 
-    assert value == ["job1"]
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "reprocessing_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-
-
-async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 2)
-
-    value = await repository.get_reprocessing_jobs_count(
-        portfolio_id="P1",
-        status="PROCESSING",
-        security_id="SEC-US-IBM",
-    )
-
-    assert value == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "from reprocessing_jobs" in compiled.lower()
-    assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
-    assert "reprocessing_jobs.job_type = 'RESET_FX_WATERMARKS'" in compiled
-    assert "from position_history join position_state on" in compiled.lower()
-    assert "position_history.portfolio_id = 'P1'" in compiled
-    assert "position_history.position_date <=" in compiled.lower()
-    assert "position_history.position_date >" in compiled.lower()
-    assert "position_history.quantity != 0" in compiled.lower()
-    assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
-    assert (
-        "pg_input_is_valid(reprocessing_jobs.payload['earliest_impacted_date'], 'date')" in compiled
-    )
-    assert "IS NOT true" in compiled
-    assert "anon_1.quantity != 0" in compiled
-    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
-    assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled
-    assert "upper(trim(instruments.currency))" in compiled
-    assert "upper(trim(portfolios.base_currency))" in compiled
-
-
-async def test_get_reprocessing_jobs_count_honors_as_of(
-    repository: OperationsRepository, mock_db_session: AsyncMock
-):
-    mock_execute_scalar_one(mock_db_session, 2)
-    as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
-
-    value = await repository.get_reprocessing_jobs_count(
-        portfolio_id="P1",
-        as_of=as_of,
-    )
-
-    assert value == 2
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "reprocessing_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
+    assert generated_at_utc == snapshot_time
+    assert total == 2
+    assert jobs == []

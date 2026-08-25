@@ -1949,28 +1949,15 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> ReprocessingJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        generated_at_utc = datetime.now(timezone.utc)
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await self._read_count_and_page(
-            self.repo.get_reprocessing_jobs_count(
-                portfolio_id=portfolio_id,
-                status=normalized_status,
-                security_id=security_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_reprocessing_jobs(
-                portfolio_id=portfolio_id,
-                skip=skip,
-                limit=limit,
-                status=normalized_status,
-                security_id=security_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
+        generated_at_utc, total, jobs = await self.repo.get_reprocessing_jobs_snapshot(
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            status=normalized_status,
+            security_id=security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
         )
         job_business_dates = [parse_support_job_business_date(job.business_date) for job in jobs]
         return ReprocessingJobListResponse(

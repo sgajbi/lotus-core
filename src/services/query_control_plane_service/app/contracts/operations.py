@@ -1839,7 +1839,10 @@ class SupportJobListResponse(BaseModel):
     )
     generated_at_utc: datetime = Field(
         ...,
-        description="UTC timestamp when this support job listing snapshot was generated.",
+        description=(
+            "UTC timestamp when this support job listing snapshot was generated; reprocessing "
+            "listings use the PostgreSQL statement clock that governs lease classification."
+        ),
         examples=["2026-03-14T10:50:00Z"],
     )
     total: int = Field(..., description="Total jobs matching the filter.", examples=[42])

@@ -843,7 +843,10 @@ database transaction rolls back before recovery can hand authority to another wo
 The reprocessing-job support listing projects this same `lease_expires_at` authority: a
 `PROCESSING` row is `STALE_PROCESSING` only when its database-clock lease has expired. The caller's
 `stale_threshold_minutes` never marks a live leased claim stale and remains applicable only to
-queues without authoritative lease expiry.
+queues without authoritative lease expiry. PostgreSQL returns the listing timestamp, total, ordered
+page, and lease classification from one statement snapshot. Heartbeat changes to `updated_at`
+therefore cannot hide an active claim or split the reported total from the returned page, and host
+clock skew cannot disagree with the worker's database-time fence.
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.

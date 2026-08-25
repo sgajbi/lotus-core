@@ -35,6 +35,8 @@ a late worker.
   attempt count and existing effective-date coalescing semantics.
 - Project and prioritize support state from the same durable lease expiry so a caller-selected
   fallback threshold cannot misclassify a live claim as stale.
+- Read support timestamp, total, ordered page, and lease classification in one PostgreSQL statement
+  snapshot so heartbeat-mutated timestamps and host-clock skew cannot split operator truth.
 
 ## Result
 
@@ -58,7 +60,8 @@ across recovery.
   rejected-job path. PostgreSQL integration proof preserves JSON `null` in one claimed record while
   returning its valid sibling from the same claim.
 - Query-shape and real-PostgreSQL support proofs that an expired claim is stale while an old but
-  unexpired claim remains live, independent of the caller threshold.
+  unexpired heartbeat-renewed claim remains live, independent of the caller threshold or host
+  clock, and that total and page share one statement snapshot.
 - `make typecheck`, architecture guard, repository transaction-boundary guard, and testability
   architecture guard passed.
 - `make database-hot-path-evidence` completed; the three #998 acceptance scenarios
@@ -69,7 +72,8 @@ across recovery.
 ## Contract Decisions
 
 - No API field shape, event, Kafka, calculation, dependency, image, datastore, framework, or runtime
-  topology change. OpenAPI descriptions now state the lease-authoritative stale semantics.
+  topology change. OpenAPI descriptions now state the database-snapshot and lease-authoritative
+  stale semantics.
 - Repo-local operations and engineering context changed; wiki source changed and must be published
   after merge.
 - No new skill is required. Platform issue #677 already owns reusable database-clock lease guidance;

@@ -385,11 +385,8 @@ def apply_reprocessing_job_scope(
     normalized_security_id: str | None = None,
     job_id: int | None = None,
     correlation_id: str | None = None,
-    as_of: datetime | None = None,
 ):
     stmt = stmt.where(job_scope.portfolio_scope_exists)
-    if as_of is not None:
-        stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
     if status:
         stmt = stmt.where(support_job_status_filter(ReprocessingJob.status, status))
     stmt = apply_reprocessing_job_security_scope(
