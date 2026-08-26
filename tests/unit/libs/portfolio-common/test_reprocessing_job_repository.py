@@ -8,6 +8,7 @@ from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobTransitionOutcome,
     ResetWatermarksStageOutcome,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
@@ -350,24 +351,20 @@ async def test_find_and_reset_stale_jobs_resets_processing_rows(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_select_result = MagicMock()
-    mock_select_result.all.return_value = [
+    stale_rows = [
         MagicMock(id=10, attempt_count=1),
         MagicMock(id=11, attempt_count=2),
     ]
+    repository._claim_stale_job_cohort = AsyncMock(return_value=stale_rows)
     mock_update_result = MagicMock()
     mock_update_result.rowcount = 2
-    mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
+    mock_db_session.execute.return_value = mock_update_result
 
     reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert reset_count == 2
-    assert mock_db_session.execute.await_count == 2
-    select_stmt = mock_db_session.execute.await_args_list[0].args[0]
-    update_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    assert "SELECT reprocessing_jobs.id" in str(select_stmt)
-    assert "FOR UPDATE" not in str(select_stmt)
-    assert "lease_expires_at <= clock_timestamp()" in str(select_stmt)
+    assert mock_db_session.execute.await_count == 1
+    update_stmt = mock_db_session.execute.await_args.args[0]
     assert "UPDATE reprocessing_jobs SET status=:status" in str(update_stmt)
     assert "reprocessing_jobs.status = :status_1" in str(update_stmt)
     assert "reprocessing_jobs.lease_expires_at <= clock_timestamp()" in str(update_stmt)
@@ -408,6 +405,58 @@ async def test_stale_reprocessing_recovery_bounds_selection_and_chunks_reset_upd
     assert "FOR UPDATE" not in compiled_select
 
 
+async def test_stale_reprocessing_claim_locks_rows_only_after_identity_phase(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    stale_row = MagicMock(
+        id=10,
+        attempt_count=1,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "BOND-1", "earliest_impacted_date": "2026-08-01"},
+        correlation_id="corr-claim-order",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+        lease_expires_at=LEASE_EXPIRES_AT,
+    )
+    discovery_result = MagicMock()
+    discovery_result.all.return_value = [stale_row]
+    claim_result = MagicMock()
+    claim_result.all.return_value = [stale_row]
+    results = iter([discovery_result, claim_result])
+    call_order: list[str] = []
+
+    def execute(statement):
+        if "FOR UPDATE" in str(statement):
+            call_order.append("row_cohort")
+        return next(results)
+
+    mock_db_session.execute.side_effect = execute
+    savepoint = AsyncMock()
+    mock_db_session.begin_nested.return_value = savepoint
+    repository._lock_effective_dated_replay_identities = AsyncMock(
+        side_effect=lambda _keys: call_order.append("identity_set")
+    )
+
+    claimed = await repository._claim_stale_job_cohort(max_attempts=3)
+
+    assert claimed == [stale_row]
+    discovery_sql = str(mock_db_session.execute.await_args_list[0].args[0])
+    claim_sql = str(
+        mock_db_session.execute.await_args_list[1].args[0].compile(dialect=postgresql.dialect())
+    )
+    assert "FOR UPDATE" not in discovery_sql
+    assert "FOR UPDATE" in claim_sql
+    assert "SKIP LOCKED" in claim_sql
+    assert call_order == ["identity_set", "row_cohort"]
+    repository._lock_effective_dated_replay_identities.assert_awaited_once_with(
+        ["RESET_WATERMARKS|6:BOND-1"]
+    )
+    savepoint.start.assert_awaited_once_with()
+    savepoint.commit.assert_awaited_once_with()
+    savepoint.rollback.assert_not_awaited()
+
+
 async def test_stale_reprocessing_recovery_logs_counts_without_identifier_collections(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
@@ -429,14 +478,12 @@ async def test_find_and_reset_stale_jobs_is_noop_when_nothing_stale(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_select_result = MagicMock()
-    mock_select_result.all.return_value = []
-    mock_db_session.execute.return_value = mock_select_result
+    repository._claim_stale_job_cohort = AsyncMock(return_value=[])
 
     reset_count = await repository.find_and_reset_stale_jobs()
 
     assert reset_count == 0
-    assert mock_db_session.execute.await_count == 1
+    assert mock_db_session.execute.await_count == 0
 
 
 async def test_get_queue_stats_filters_by_job_type(
@@ -468,16 +515,15 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_select_result = MagicMock()
-    mock_select_result.all.return_value = [
+    stale_rows = [
         MagicMock(id=20, attempt_count=3),
         MagicMock(id=21, attempt_count=1),
     ]
+    repository._claim_stale_job_cohort = AsyncMock(return_value=stale_rows)
     mock_failed_result = MagicMock()
     mock_reset_result = MagicMock()
     mock_reset_result.rowcount = 1
     mock_db_session.execute.side_effect = [
-        mock_select_result,
         mock_failed_result,
         mock_reset_result,
     ]
@@ -491,16 +537,15 @@ async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_select_result = MagicMock()
-    mock_select_result.all.return_value = [MagicMock(id=10, attempt_count=1)]
+    repository._claim_stale_job_cohort = AsyncMock(return_value=[MagicMock(id=10, attempt_count=1)])
     mock_update_result = MagicMock()
     mock_update_result.rowcount = 0
-    mock_db_session.execute.side_effect = [mock_select_result, mock_update_result]
+    mock_db_session.execute.return_value = mock_update_result
 
     reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert reset_count == 0
-    update_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    update_stmt = mock_db_session.execute.await_args.args[0]
     stmt_text = str(update_stmt)
     assert "reprocessing_jobs.status = :status_1" in stmt_text
     assert "reprocessing_jobs.lease_expires_at <= clock_timestamp()" in stmt_text
@@ -529,14 +574,13 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             lease_token=LEASE_TOKEN,
         )
     ]
+    repository._claim_stale_job_cohort = AsyncMock(return_value=stale_result.all.return_value)
     locked_result = MagicMock()
     locked_result.one_or_none.return_value = stale_result.all.return_value[0]
     quarantine_result = MagicMock()
     coalesce_result = MagicMock()
     complete_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [
-        stale_result,
-        MagicMock(),
         locked_result,
         MagicMock(),
         quarantine_result,
@@ -547,22 +591,20 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert recovered_count == 1
-    assert mock_db_session.execute.await_count == 7
-    lock_statement = mock_db_session.execute.await_args_list[1].args[0]
-    assert "pg_advisory_xact_lock" in str(lock_statement)
-    locked_row_statement = mock_db_session.execute.await_args_list[2].args[0]
+    assert mock_db_session.execute.await_count == 5
+    locked_row_statement = mock_db_session.execute.await_args_list[0].args[0]
     compiled_locked_row = str(locked_row_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "FOR UPDATE" in compiled_locked_row
     assert "lease_token" in compiled_locked_row
     assert "lease_expires_at <= clock_timestamp()" in compiled_locked_row
-    repeated_lock_statement = mock_db_session.execute.await_args_list[3].args[0]
+    repeated_lock_statement = mock_db_session.execute.await_args_list[1].args[0]
     assert "pg_advisory_xact_lock" in str(repeated_lock_statement)
-    quarantine_statement = mock_db_session.execute.await_args_list[4].args[0]
+    quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[5].args
+    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[3].args
     assert "GREATEST" in str(coalesce_statement)
     assert coalesce_parameters["attempt_count"] == 2
-    complete_statement = mock_db_session.execute.await_args_list[6].args[0]
+    complete_statement = mock_db_session.execute.await_args_list[4].args[0]
     compiled_complete = str(complete_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "Coalesced into pending FX replay during stale recovery" in compiled_complete
 
@@ -584,14 +626,15 @@ async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
             },
         )
     ]
+    repository._claim_stale_job_cohort = AsyncMock(return_value=stale_result.all.return_value)
     failed_result = MagicMock(rowcount=1)
-    mock_db_session.execute.side_effect = [stale_result, failed_result]
+    mock_db_session.execute.return_value = failed_result
 
     recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
 
     assert recovered_count == 0
-    assert mock_db_session.execute.await_count == 2
-    failed_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert mock_db_session.execute.await_count == 1
+    failed_statement = mock_db_session.execute.await_args.args[0]
     compiled_failed = str(failed_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "status='FAILED'" in compiled_failed
     assert "Malformed effective-dated replay during stale recovery" in compiled_failed
