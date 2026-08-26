@@ -56,9 +56,7 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE" in cutover
     assert "active row(s) that cannot" in cutover
     assert "terminalize or repair" in cutover
-    assert cutover.index("pg_input_is_valid(payload::text") < cutover.index(
-        "requires a drained"
-    )
+    assert cutover.index("pg_input_is_valid(payload::text") < cutover.index("requires a drained")
     assert cutover.index("pg_input_is_valid(payload::text") < cutover.index(
         "payload->>'from_currency'"
     )
