@@ -31,9 +31,9 @@ _LEASE_OWNER_MAX_LENGTH = 128
 _DEFAULT_LEASE_DURATION_SECONDS = 15 * 60
 _OWNED_TRANSITION_STATUSES = frozenset({"COMPLETE", "FAILED"})
 _REPLAY_TEXT_TRIM_CHARS = (
-    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
-    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029"
-    r"\202F\205F\3000'"
+    "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029"
+    "\u202f\u205f\u3000"
 )
 
 
@@ -417,7 +417,7 @@ class ReprocessingJobRepository:
         """Validate predecessor pair work with the application grammar before coalescing."""
 
         candidate_statement = text(
-            f"""
+            """
             SELECT id, payload
             FROM reprocessing_jobs
             WHERE job_type = 'RESET_FX_WATERMARKS'
@@ -426,18 +426,23 @@ class ReprocessingJobRepository:
                   WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
                   WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
                   WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
-                  ELSE btrim(payload->>'from_currency', {_REPLAY_TEXT_TRIM_CHARS}) = :from_currency
-                   AND btrim(payload->>'to_currency', {_REPLAY_TEXT_TRIM_CHARS}) = :to_currency
+                  ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
+                   AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
               END
             FOR UPDATE
             """
         ).bindparams(
             bindparam("from_currency", type_=String()),
             bindparam("to_currency", type_=String()),
+            bindparam("trim_chars", type_=String()),
         )
         result = await self.db.execute(
             candidate_statement,
-            {"from_currency": from_currency, "to_currency": to_currency},
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
+            },
         )
         malformed_ids: list[int] = []
         known_earliest_dates: list[date] = []
@@ -1136,7 +1141,7 @@ class ReprocessingJobRepository:
             sibling_id = (
                 await self.db.execute(
                     text(
-                        f"""
+                        """
                         SELECT id
                         FROM reprocessing_jobs
                         WHERE id <> :job_id
@@ -1146,9 +1151,9 @@ class ReprocessingJobRepository:
                               IS NOT DISTINCT FROM 'string'
                           AND jsonb_typeof(payload::jsonb->'to_currency')
                               IS NOT DISTINCT FROM 'string'
-                          AND btrim(payload->>'from_currency', {_REPLAY_TEXT_TRIM_CHARS})
+                          AND btrim(payload->>'from_currency', :trim_chars)
                               = :from_currency
-                          AND btrim(payload->>'to_currency', {_REPLAY_TEXT_TRIM_CHARS})
+                          AND btrim(payload->>'to_currency', :trim_chars)
                               = :to_currency
                         ORDER BY id
                         LIMIT 1
@@ -1159,6 +1164,7 @@ class ReprocessingJobRepository:
                         "job_id": job_id,
                         "from_currency": identity.payload["from_currency"],
                         "to_currency": identity.payload["to_currency"],
+                        "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
                     },
                 )
             ).scalar_one_or_none()
