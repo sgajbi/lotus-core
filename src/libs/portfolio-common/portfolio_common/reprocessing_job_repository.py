@@ -30,6 +30,11 @@ _STALE_RESET_RESERVED_BINDS = 5
 _LEASE_OWNER_MAX_LENGTH = 128
 _DEFAULT_LEASE_DURATION_SECONDS = 15 * 60
 _OWNED_TRANSITION_STATUSES = frozenset({"COMPLETE", "FAILED"})
+_REPLAY_TEXT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029"
+    r"\202F\205F\3000'"
+)
 
 
 class ResetWatermarksStageOutcome(StrEnum):
@@ -412,7 +417,7 @@ class ReprocessingJobRepository:
         """Validate predecessor pair work with the application grammar before coalescing."""
 
         candidate_statement = text(
-            """
+            f"""
             SELECT id, payload
             FROM reprocessing_jobs
             WHERE job_type = 'RESET_FX_WATERMARKS'
@@ -421,8 +426,8 @@ class ReprocessingJobRepository:
                   WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
                   WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
                   WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
-                  ELSE btrim(payload->>'from_currency') = :from_currency
-                   AND btrim(payload->>'to_currency') = :to_currency
+                  ELSE btrim(payload->>'from_currency', {_REPLAY_TEXT_TRIM_CHARS}) = :from_currency
+                   AND btrim(payload->>'to_currency', {_REPLAY_TEXT_TRIM_CHARS}) = :to_currency
               END
             FOR UPDATE
             """
@@ -1121,18 +1126,42 @@ class ReprocessingJobRepository:
                 ReprocessingJob.payload["security_id"].as_string()
                 == identity.payload["security_id"]
             )
-        else:
-            predicates.extend(
-                (
-                    ReprocessingJob.payload["from_currency"].as_string()
-                    == identity.payload["from_currency"],
-                    ReprocessingJob.payload["to_currency"].as_string()
-                    == identity.payload["to_currency"],
+        if identity.job_type == "RESET_WATERMARKS":
+            sibling_id = (
+                await self.db.execute(
+                    select(ReprocessingJob.id).where(*predicates).with_for_update()
                 )
-            )
-        sibling_id = (
-            await self.db.execute(select(ReprocessingJob.id).where(*predicates).with_for_update())
-        ).scalar_one_or_none()
+            ).scalar_one_or_none()
+        else:
+            sibling_id = (
+                await self.db.execute(
+                    text(
+                        f"""
+                        SELECT id
+                        FROM reprocessing_jobs
+                        WHERE id <> :job_id
+                          AND job_type = 'RESET_FX_WATERMARKS'
+                          AND status = 'PENDING'
+                          AND jsonb_typeof(payload::jsonb->'from_currency')
+                              IS NOT DISTINCT FROM 'string'
+                          AND jsonb_typeof(payload::jsonb->'to_currency')
+                              IS NOT DISTINCT FROM 'string'
+                          AND btrim(payload->>'from_currency', {_REPLAY_TEXT_TRIM_CHARS})
+                              = :from_currency
+                          AND btrim(payload->>'to_currency', {_REPLAY_TEXT_TRIM_CHARS})
+                              = :to_currency
+                        ORDER BY id
+                        LIMIT 1
+                        FOR UPDATE
+                        """
+                    ),
+                    {
+                        "job_id": job_id,
+                        "from_currency": identity.payload["from_currency"],
+                        "to_currency": identity.payload["to_currency"],
+                    },
+                )
+            ).scalar_one_or_none()
         return sibling_id is not None
 
     async def _coalesce_pending_replay(self, identity: _EffectiveDatedReplayIdentity) -> None:

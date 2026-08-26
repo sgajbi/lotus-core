@@ -93,7 +93,8 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert constraint[3].count("IS TRUE") == 3
     assert constraint[3].count("jsonb_typeof") == 7
     assert "CASE" in constraint[3]
-    assert "^[0-9]" not in constraint[3]
+    assert "^[0-9]{4}-?[0-9]{2}-?[0-9]{2}" in constraint[3]
+    assert ".*(Z|[+-][0-9]{2}:?[0-9]{2}" in constraint[3]
     model_constraint = next(
         item
         for item in ReprocessingJob.__table__.constraints
@@ -107,6 +108,13 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
         payload={
             "earliest_impacted_date": "20250104",
             "generated_at": "2025-01-07T08:00:00+05:30:15",
+        },
+    )
+    assert temporal_validator(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "earliest_impacted_date": "20250104",
+            "generated_at": "20250107T080000+0530",
         },
     )
     assert not temporal_validator(

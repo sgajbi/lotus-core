@@ -287,6 +287,16 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 ),
                 correlation_id="payload-migration-offset-seconds",
             )
+            basic_timestamp_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"NZD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-07","content_hash":"basic-time",'
+                    '"generated_at":"20250107T080000+0530"}'
+                ),
+                correlation_id="payload-migration-basic-timestamp",
+            )
             date_only_timestamp_id = _insert_json_job(
                 connection,
                 job_type="RESET_FX_WATERMARKS",
@@ -318,7 +328,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                         :padded_security_identity_id,
                         :literal_escape_id, :valid_id, :basic_date_id,
                         :space_timestamp_id, :minute_timestamp_id, :offset_seconds_id,
-                        :date_only_timestamp_id
+                        :basic_timestamp_id, :date_only_timestamp_id
                     )
                     ORDER BY id
                     """
@@ -338,6 +348,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     "space_timestamp_id": space_timestamp_id,
                     "minute_timestamp_id": minute_timestamp_id,
                     "offset_seconds_id": offset_seconds_id,
+                    "basic_timestamp_id": basic_timestamp_id,
                     "date_only_timestamp_id": date_only_timestamp_id,
                 },
             ).all()
@@ -357,6 +368,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
             assert by_id[space_timestamp_id].status == "PENDING"
             assert by_id[minute_timestamp_id].status == "PENDING"
             assert by_id[offset_seconds_id].status == "PENDING"
+            assert by_id[basic_timestamp_id].status == "PENDING"
             assert all(
                 by_id[job_id].failure_reason
                 == "invalid_reprocessing_job_payload: quarantined during contract cutover"
