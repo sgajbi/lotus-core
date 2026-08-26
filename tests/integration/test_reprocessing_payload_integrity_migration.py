@@ -180,18 +180,14 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
             postgres_only_date_id = _insert_json_job(
                 connection,
                 job_type="RESET_WATERMARKS",
-                payload=(
-                    '{"security_id":"POSTGRES-DATE",'
-                    '"earliest_impacted_date":"infinity"}'
-                ),
+                payload=('{"security_id":"POSTGRES-DATE","earliest_impacted_date":"infinity"}'),
                 correlation_id="payload-migration-postgres-only-date",
             )
             literal_escape_id = _insert_json_job(
                 connection,
                 job_type="RESET_WATERMARKS",
                 payload=(
-                    '{"security_id":"SAFE\\\\u0000-TEXT",'
-                    '"earliest_impacted_date":"2026-08-25"}'
+                    '{"security_id":"SAFE\\\\u0000-TEXT","earliest_impacted_date":"2026-08-25"}'
                 ),
                 correlation_id="payload-migration-literal-escape",
             )

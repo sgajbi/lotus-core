@@ -575,9 +575,7 @@ async def test_predecessor_malformed_fx_replay_is_claimed_and_failed_supportably
         await async_db_session.commit()
         job_id = malformed_job.id
 
-        revaluation = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(
-            async_db_session
-        )
+        revaluation = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
         claimed = await revaluation.claim_pending_jobs(batch_size=1)
         await async_db_session.commit()
 
@@ -650,9 +648,7 @@ async def test_predecessor_malformed_pending_pair_is_quarantined_before_upsert(
         await async_db_session.commit()
         malformed_job_id = malformed_job.id
 
-        repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(
-            async_db_session
-        )
+        repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
         await repository.stage_durable_replay(
             correction=FxRateCorrection(
                 pair=DirectCurrencyPair("USD", "SGD"),
