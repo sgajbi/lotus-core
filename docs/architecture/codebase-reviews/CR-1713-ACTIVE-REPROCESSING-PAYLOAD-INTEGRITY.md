@@ -72,9 +72,9 @@ evidence is recorded on #1038.
 - Model proof prevents ORM/schema drift by requiring the named constraint.
 - Critical-lifecycle repository proof asserts that missing, database-unrepresentable, and
   non-string FX payload shapes fail at commit with the named CHECK constraint and leave no durable
-  queue row. Separate predecessor-schema tests
-  temporarily remove and reliably restore that constraint to prove both claim-time terminalization
-  and valid-replay staging quarantine remain operational recovery defenses.
+  queue row. One shared predecessor-schema fixture temporarily removes and reliably restores that
+  constraint around legacy-state tests, proving claim-time terminalization and valid-replay staging
+  quarantine remain operational recovery defenses without duplicating schema manipulation.
 - Real PostgreSQL migration proof seeds malformed FX and security rows plus valid pending work,
   seeds the literal-SQL legacy NUL path and harmless literal escape text, verifies only the unsafe
   row produces an actionable preflight failure, quarantines non-string scalar identity, preserves
@@ -88,7 +88,9 @@ evidence is recorded on #1038.
   migration-smoke, wiki/docs, architecture-catalog, and diff-hygiene gates passed. After rebuilding
   the checkout-specific integration images, the migration counterexample proof passed and all 20
   tests in the affected FX revaluation repository integration file passed, including five
-  current-schema rejection cases and four predecessor-schema runtime quarantine cases.
+  current-schema rejection cases and four predecessor-schema runtime quarantine cases. The final
+  critical-lifecycle database gate passed all 62 selected tests, including five additional
+  predecessor-schema recovery cases in the shared reprocessing-job repository suite.
 
 ## Compatibility And Scope
 
