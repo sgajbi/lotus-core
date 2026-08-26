@@ -4,11 +4,14 @@ from unittest.mock import patch
 
 import pytest
 from portfolio_common.database_models import ReprocessingJob
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    POSTGRES_STATEMENT_ROW_LIMIT,
+)
 from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobRepository,
     ReprocessingJobTransitionOutcome,
 )
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -863,6 +866,53 @@ async def test_stale_recovery_waits_for_owned_requeue_without_lock_inversion(
     assert row.status == "PENDING"
     assert row.failure_reason is None
     assert row.payload["earliest_impacted_date"] == "2025-01-07"
+
+
+async def test_concurrent_stale_recovery_claims_disjoint_bounded_cohorts(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    job_count = POSTGRES_STATEMENT_ROW_LIMIT + 1
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="LEASE_LIFECYCLE_PROOF",
+                payload={"sequence": sequence},
+                status="PROCESSING",
+                attempt_count=1,
+                lease_owner=f"stale-worker-{sequence}",
+                lease_token=f"{sequence:032x}",
+                lease_expires_at=stale_time,
+            )
+            for sequence in range(job_count)
+        ]
+    )
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def recover_cohort() -> int:
+        async with session_factory() as session, session.begin():
+            return await ReprocessingJobRepository(session).find_and_reset_stale_jobs(
+                max_attempts=3
+            )
+
+    recovered_counts = await asyncio.wait_for(
+        asyncio.gather(recover_cohort(), recover_cohort()),
+        timeout=30,
+    )
+
+    assert sorted(recovered_counts) == [1, POSTGRES_STATEMENT_ROW_LIMIT]
+    async_db_session.expire_all()
+    pending_count = int(
+        await async_db_session.scalar(
+            select(func.count())
+            .select_from(ReprocessingJob)
+            .where(ReprocessingJob.status == "PENDING")
+        )
+        or 0
+    )
+    assert pending_count == job_count
 
 
 async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any, Dict, Optional, cast
 
-from sqlalchemy import Date, String, bindparam, func, select, text, update
+from sqlalchemy import Date, String, bindparam, func, select, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
@@ -654,7 +654,7 @@ class ReprocessingJobRepository:
     async def find_and_reset_stale_jobs(self, max_attempts: int = 3) -> int:
         """Recover jobs whose database-clock lease has expired."""
 
-        stale_rows = await self._find_stale_job_rows()
+        stale_rows = await self._claim_stale_job_cohort(max_attempts=max_attempts)
         if not stale_rows:
             return 0
 
@@ -677,8 +677,53 @@ class ReprocessingJobRepository:
         reset_count = await self._reset_retryable_stale_jobs(reset_job_ids)
         return recovered_count + reset_count
 
-    async def _find_stale_job_rows(self) -> list[Any]:
-        return (await self.db.execute(_stale_reprocessing_jobs_stmt())).all()
+    async def _claim_stale_job_cohort(self, *, max_attempts: int) -> list[Any]:
+        """Claim one disjoint cohort after taking replay identity locks in global order."""
+
+        cursor: tuple[datetime, int] | None = None
+        while stale_rows := await self._find_stale_job_rows(after=cursor):
+            savepoint = self.db.begin_nested()
+            await savepoint.start()
+            try:
+                identity_keys = []
+                for row in stale_rows:
+                    try:
+                        identity = _retryable_stale_replay_identity(
+                            row,
+                            max_attempts=max_attempts,
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if identity is not None:
+                        identity_keys.append(identity.identity_key)
+                await self._lock_effective_dated_replay_identities(identity_keys)
+                claimed_rows = list(
+                    (
+                        await self.db.execute(
+                            _stale_reprocessing_jobs_stmt(
+                                job_ids=[int(row.id) for row in stale_rows],
+                                lock_rows=True,
+                            )
+                        )
+                    ).all()
+                )
+                if claimed_rows:
+                    await savepoint.commit()
+                    return claimed_rows
+                await savepoint.rollback()
+            except Exception:
+                await savepoint.rollback()
+                raise
+            last_row = stale_rows[-1]
+            cursor = (cast(datetime, last_row.lease_expires_at), int(last_row.id))
+        return []
+
+    async def _find_stale_job_rows(
+        self,
+        *,
+        after: tuple[datetime, int] | None = None,
+    ) -> list[Any]:
+        return list((await self.db.execute(_stale_reprocessing_jobs_stmt(after=after))).all())
 
     async def _recover_retryable_stale_coalesced_jobs(
         self,
@@ -690,31 +735,20 @@ class ReprocessingJobRepository:
         recovered_count = 0
         candidates: list[tuple[Any, _EffectiveDatedReplayIdentity]] = []
         for row in stale_rows:
-            if row.job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES:
-                continue
-            if row.attempt_count >= max_attempts:
-                continue
-            handled_job_ids.add(int(row.id))
             try:
-                candidates.append(
-                    (
-                        row,
-                        _validated_effective_dated_replay_identity(
-                            job_type=str(row.job_type),
-                            payload=row.payload,
-                            attempt_count=int(row.attempt_count),
-                            correlation_id=row.correlation_id,
-                            correlation_missing_reason=row.correlation_missing_reason,
-                            alternate_lookup_key=row.alternate_lookup_key,
-                        ),
-                    )
+                identity = _retryable_stale_replay_identity(
+                    row,
+                    max_attempts=max_attempts,
                 )
             except (KeyError, TypeError, ValueError):
+                handled_job_ids.add(int(row.id))
                 await self._fail_malformed_stale_replay(row)
+                continue
+            if identity is None:
+                continue
+            handled_job_ids.add(int(row.id))
+            candidates.append((row, identity))
 
-        await self._lock_effective_dated_replay_identities(
-            identity.identity_key for _, identity in candidates
-        )
         for row, candidate_identity in candidates:
             try:
                 locked_row = await self._lock_stale_effective_dated_job(
@@ -1185,6 +1219,25 @@ class ReprocessingJobRepository:
         return ReprocessingJobTransitionOutcome.RACED
 
 
+def _retryable_stale_replay_identity(
+    row: Any,
+    *,
+    max_attempts: int,
+) -> _EffectiveDatedReplayIdentity | None:
+    if row.job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES:
+        return None
+    if int(row.attempt_count) >= max_attempts:
+        return None
+    return _validated_effective_dated_replay_identity(
+        job_type=str(row.job_type),
+        payload=row.payload,
+        attempt_count=int(row.attempt_count),
+        correlation_id=row.correlation_id,
+        correlation_missing_reason=row.correlation_missing_reason,
+        alternate_lookup_key=row.alternate_lookup_key,
+    )
+
+
 def _validated_effective_dated_replay_identity(
     *,
     job_type: str,
@@ -1198,6 +1251,7 @@ def _validated_effective_dated_replay_identity(
         raise ValueError("owned requeue requires a supported effective-dated replay payload")
     earliest_impacted_date = _required_replay_payload_text(payload, "earliest_impacted_date")
     date.fromisoformat(earliest_impacted_date)
+    components: tuple[str, ...]
     if job_type == "RESET_WATERMARKS":
         components = (_required_replay_payload_text(payload, "security_id"),)
     else:
@@ -1270,8 +1324,13 @@ def _effective_date_job_priority(
     )
 
 
-def _stale_reprocessing_jobs_stmt():
-    return (
+def _stale_reprocessing_jobs_stmt(
+    *,
+    after: tuple[datetime, int] | None = None,
+    job_ids: Collection[int] | None = None,
+    lock_rows: bool = False,
+):
+    statement = (
         select(
             ReprocessingJob.id,
             ReprocessingJob.attempt_count,
@@ -1281,6 +1340,7 @@ def _stale_reprocessing_jobs_stmt():
             ReprocessingJob.correlation_missing_reason,
             ReprocessingJob.alternate_lookup_key,
             ReprocessingJob.lease_token,
+            ReprocessingJob.lease_expires_at,
         )
         .where(
             ReprocessingJob.status == "PROCESSING",
@@ -1289,6 +1349,15 @@ def _stale_reprocessing_jobs_stmt():
         .order_by(ReprocessingJob.lease_expires_at.asc(), ReprocessingJob.id.asc())
         .limit(POSTGRES_STATEMENT_ROW_LIMIT)
     )
+    if after is not None:
+        statement = statement.where(
+            tuple_(ReprocessingJob.lease_expires_at, ReprocessingJob.id) > after
+        )
+    if job_ids is not None:
+        statement = statement.where(ReprocessingJob.id.in_(sorted(set(job_ids))))
+    if lock_rows:
+        statement = statement.with_for_update(skip_locked=True)
+    return statement
 
 
 def _failed_stale_jobs_update_stmt(failed_job_ids: list[int]):
