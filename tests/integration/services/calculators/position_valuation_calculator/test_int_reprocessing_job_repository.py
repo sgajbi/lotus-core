@@ -107,6 +107,7 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
 async def test_stale_fx_timestamps_are_typed_before_cohort_recovery(
     clean_db,
     async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
 ) -> None:
     stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
     poisoned_fx = ReprocessingJob(
@@ -202,6 +203,7 @@ async def test_stale_fx_timestamps_are_typed_before_cohort_recovery(
 async def test_timezone_less_stale_fx_fails_without_blocking_valid_work(
     clean_db,
     async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
 ) -> None:
     stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
     timezone_less_fx = ReprocessingJob(
@@ -253,6 +255,7 @@ async def test_timezone_less_stale_fx_fails_without_blocking_valid_work(
 async def test_staging_quarantines_timezone_less_pending_fx_lineage(
     clean_db,
     async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
 ) -> None:
     legacy = ReprocessingJob(
         job_type="RESET_FX_WATERMARKS",
@@ -364,6 +367,7 @@ async def test_staging_preserves_valid_compact_offset_pending_fx_lineage(
 async def test_stale_control_character_payload_fails_before_identity_lock_binding(
     clean_db,
     async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
 ) -> None:
     inserted = await async_db_session.execute(
         text(
@@ -528,6 +532,7 @@ async def test_find_and_claim_jobs_batch_size_one_updates_exactly_one_row(
 async def test_find_and_claim_jobs_keeps_malformed_payload_from_blocking_valid_sibling(
     clean_db,
     async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
 ) -> None:
     await async_db_session.execute(
         text(

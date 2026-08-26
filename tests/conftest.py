@@ -6,11 +6,13 @@ from typing import Any, Callable
 
 import pytest
 import pytest_asyncio
+from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_async_database_engine, create_sync_database_engine
-from sqlalchemy import exc, text
+from sqlalchemy import delete, exc, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
+from sqlalchemy.schema import AddConstraint, DropConstraint
 
 from tests.e2e.api_client import E2EApiClient
 from tests.test_support.db_cleanup import (
@@ -554,6 +556,29 @@ async def async_db_session(db_engine):
         yield session
 
     await async_engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def predecessor_reprocessing_payload_schema(
+    clean_db,
+    async_db_session: AsyncSession,
+):
+    """Expose legacy replay state while reliably restoring current payload enforcement."""
+
+    constraint = next(
+        item
+        for item in ReprocessingJob.__table__.constraints
+        if item.name == "ck_reprocessing_jobs_active_payload_valid"
+    )
+    await async_db_session.execute(DropConstraint(constraint))
+    await async_db_session.commit()
+    try:
+        yield
+    finally:
+        await async_db_session.rollback()
+        await async_db_session.execute(delete(ReprocessingJob))
+        await async_db_session.execute(AddConstraint(constraint))
+        await async_db_session.commit()
 
 
 @pytest.fixture(scope="module")
