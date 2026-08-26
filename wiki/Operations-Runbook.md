@@ -262,9 +262,11 @@ through governed recovery before retrying; do not bypass the guard.
 After that preflight, the migration
 quarantines malformed pending Reset and FX replay payloads as `FAILED`, preserves their durable
 payload evidence, and emits separate bounded FX/security quarantine counts in the migration log.
-It then installs `ck_reprocessing_jobs_active_payload_valid`, which authoritatively rejects
-malformed or noncanonical `PENDING`/`PROCESSING` Reset/FX work at the post-cutover database
-boundary. Runtime quarantine remains defense in depth for predecessor-schema or restored rows.
+It then installs `ck_reprocessing_jobs_active_payload_valid`, which authoritatively rejects unsafe,
+non-string, incomplete, or database-unrepresentable `PENDING`/`PROCESSING` Reset/FX work at the
+post-cutover database boundary. Application `fromisoformat` validation remains authoritative for
+temporal grammar; runtime quarantine remains required for grammar-invalid predecessor-schema or
+restored rows.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
 restore it to active status by hand. Valid terminal historical evidence is not rewritten.

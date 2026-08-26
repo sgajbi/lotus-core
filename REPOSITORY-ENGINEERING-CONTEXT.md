@@ -4011,18 +4011,20 @@ Most relevant current governance:
      snapshot; never restore application-clock lease comparison or heartbeat-sensitive
      `updated_at` visibility fencing.
      Active `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` rows must satisfy the database-owned
-     payload contract introduced by migration `c162b2c3d529`: complete normalized identity,
-     canonical valid ISO effective date, and, for FX, complete content hash plus a canonical,
-     explicitly zoned source
-     timestamp. Schema cutover must drain `PROCESSING` work, quarantine malformed pending rows with
+     payload contract introduced by migration `c162b2c3d529`: safely extractable, string-typed,
+     complete normalized identity and temporal fields, and, for FX, complete string content hash
+     plus a database-representable, explicitly zoned source timestamp. Python `fromisoformat`
+     remains the temporal-grammar authority; do not copy that grammar into SQL predicates. Schema
+     cutover must drain `PROCESSING` work, quarantine database-invalid pending rows with
      bounded type-level counts, preserve terminal payload evidence, and reject future malformed
      active rows. Never weaken the CHECK constraint or silently rewrite historical payloads to make
      deployment pass.
      Preflight relevant active `payload::text` with PostgreSQL JSONB input validity before any `->>`
      extraction so a legacy literal-SQL row produces a bounded actionable migration error instead
      of an unexplained driver failure without falsely rejecting harmless literal escape text. The
-     CHECK is authoritative for post-cutover writes; retain tested runtime quarantine for
-     predecessor-schema and restored rows. Do not generalize bound-parameter behavior to direct
+     CHECK is authoritative for post-cutover representability and scalar types; retain tested
+     runtime quarantine for grammar-invalid predecessor-schema and restored rows. Do not generalize
+     bound-parameter behavior to direct
      SQL, restore, or migration paths.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
