@@ -22,11 +22,31 @@ _PAYLOAD_CUTOVER = sa.text(
     r"""
     DO $$
     DECLARE
+        invalid_unicode_count bigint;
         quarantined_fx_count bigint;
         quarantined_security_count bigint;
     BEGIN
         PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
+
+        SELECT count(*)
+        INTO invalid_unicode_count
+        FROM reprocessing_jobs
+        WHERE status IN ('PENDING', 'PROCESSING')
+          AND strpos(payload::text, E'\\u0000') > 0;
+
+        IF invalid_unicode_count > 0 THEN
+            RAISE EXCEPTION USING
+                MESSAGE = format(
+                    'reprocessing payload cutover found %s active row(s) containing '
+                    'an unsupported NUL escape',
+                    invalid_unicode_count
+                ),
+                HINT = (
+                    'preserve the raw payload evidence and terminalize or repair the affected '
+                    'rows through a governed recovery before retrying the migration'
+                );
+        END IF;
 
         IF EXISTS (
             SELECT 1 FROM reprocessing_jobs WHERE status = 'PROCESSING'
