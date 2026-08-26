@@ -70,10 +70,18 @@ the pair-scoped identity lock.
   limit proves two concurrent stale pollers claim disjoint cohorts whose union advances beyond one
   tranche.
 - Guard pass/fail tests cover positional and keyword bypasses plus missing owner wiring.
-- Local exact-tree evidence: 91 focused unit/fitness tests, 56 critical-lifecycle PostgreSQL tests,
-  and 9 explicitly selected real-PostgreSQL owned-requeue/coalescing tests; MyPy across 325 source
-  files; architecture guard; wiki/docs gates; and the required-status workflow-governance suite
-  with 529 tests and 94.27% branch-aware coverage.
+- Earlier implementation-slice evidence at `bec577528269760ccf3794899c31b919767be154`:
+  91 focused unit/fitness tests, 56 critical-lifecycle PostgreSQL tests, 9 explicitly selected
+  real-PostgreSQL owned-requeue/coalescing tests, MyPy across 325 source files, architecture and
+  wiki/docs guards, and the required-status workflow-governance suite with 529 tests and 94.27%
+  branch-aware coverage.
+- Final behavioral-head evidence at `8b9c754b06db472454c91eddcd8312eb281ee541`: 49 focused
+  repository unit tests and all 28 tests in the affected real-PostgreSQL repository integration
+  file passed. That database suite includes disjoint 1,001-row recovery, reversed multi-identity
+  lock ordering, malformed timestamp isolation, timezone-less stale replay failure, and
+  non-UTC-session quarantine of legacy timezone-less pending FX lineage. Ruff lint/format, MyPy on
+  the changed repository module, the reprocessing transition-boundary guard, and diff hygiene also
+  passed.
 
 ## Compatibility And Scope
 
