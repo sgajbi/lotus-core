@@ -1461,12 +1461,13 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Usage (modules/features)**: `src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py`, `src/services/valuation_orchestrator_service/app/core/reprocessing_worker.py`, `src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Active payload integrity**: `PENDING` and `PROCESSING` Reset/FX jobs must carry complete,
-  canonical ISO effective-date and source-time fields. Migration `c162b2c3d529` quarantines
+  safely extractable string identity and temporal fields. Migration `c162b2c3d529` quarantines
   malformed pending rows with recorded type-level counts before installing the database CHECK
   constraint. A JSONB-compatibility preflight identifies legacy active JSON values that cannot be
   safely extracted while accepting harmless literal escape text. Terminal historical evidence is
   retained without payload rewriting. The database constraint is authoritative for post-cutover
-  writes; runtime quarantine remains defense in depth for predecessor-schema and restored rows.
+  representability and scalar types; application `fromisoformat` validation is authoritative for
+  temporal grammar. Runtime quarantine remains required for predecessor-schema and restored rows.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `job_type` (String): Domain type discriminator used to branch processing behavior.

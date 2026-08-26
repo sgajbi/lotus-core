@@ -855,9 +855,11 @@ passes this check. Preserve unsafe raw evidence and terminalize or repair those 
 governed recovery before retrying.
 
 After quarantine, `ck_reprocessing_jobs_active_payload_valid` is authoritative for post-cutover
-active writes and rejects incomplete identities, noncanonical or invalid effective dates, and
-noncanonical, invalid, or timezone-less FX source timestamps. Runtime quarantine remains defense
-in depth for predecessor-schema or restored rows.
+database representability and scalar types. It rejects unsafe extraction, non-string or incomplete
+identity/temporal fields, database-invalid effective dates, and database-invalid or timezone-less
+FX source timestamps. Application `fromisoformat` validation remains the temporal-grammar authority;
+runtime quarantine therefore remains required for grammar-invalid predecessor-schema or restored
+rows. Do not tighten SQL with a second hand-written ISO parser.
 Investigate quarantined rows through the support API, correlation evidence, and source lineage;
 never repair payloads or reactivate rows directly. Recreate required work through its governed
 source command after correcting authoritative input. Downgrade removes the new-write constraint
