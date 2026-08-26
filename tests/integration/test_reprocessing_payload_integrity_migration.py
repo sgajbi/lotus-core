@@ -207,6 +207,26 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 ),
                 correlation_id="payload-migration-padded-fx-identity",
             )
+            control_padded_fx_identity_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"\\tUSD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2026-08-25","content_hash":"control",'
+                    '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                ),
+                correlation_id="payload-migration-control-padded-fx-identity",
+            )
+            unicode_padded_fx_identity_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"\\u00a0CHF","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2026-08-25","content_hash":"unicode",'
+                    '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                ),
+                correlation_id="payload-migration-unicode-padded-fx-identity",
+            )
             padded_security_identity_id = _insert_json_job(
                 connection,
                 job_type="RESET_WATERMARKS",
@@ -267,13 +287,23 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 ),
                 correlation_id="payload-migration-offset-seconds",
             )
+            date_only_timestamp_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"CAD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-07","content_hash":"date-only",'
+                    '"generated_at":"2025-01-07"}'
+                ),
+                correlation_id="payload-migration-date-only-timestamp",
+            )
 
             connection.execute(text("SET LOCAL client_min_messages = notice"))
             caplog.set_level(logging.INFO, logger="sqlalchemy.dialects.postgresql")
             migration["upgrade"]()
             assert _has_constraint(connection)
             assert any(
-                "quarantined 4 FX and 2 security replay row(s)" in record.getMessage()
+                "quarantined 7 FX and 2 security replay row(s)" in record.getMessage()
                 for record in caplog.records
             )
             rows = connection.execute(
@@ -284,9 +314,11 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     WHERE id IN (
                         :invalid_fx_id, :invalid_security_id, :non_string_identity_id,
                         :infinity_date_id, :padded_fx_identity_id,
+                        :control_padded_fx_identity_id, :unicode_padded_fx_identity_id,
                         :padded_security_identity_id,
                         :literal_escape_id, :valid_id, :basic_date_id,
-                        :space_timestamp_id, :minute_timestamp_id, :offset_seconds_id
+                        :space_timestamp_id, :minute_timestamp_id, :offset_seconds_id,
+                        :date_only_timestamp_id
                     )
                     ORDER BY id
                     """
@@ -297,6 +329,8 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     "non_string_identity_id": non_string_identity_id,
                     "infinity_date_id": infinity_date_id,
                     "padded_fx_identity_id": padded_fx_identity_id,
+                    "control_padded_fx_identity_id": control_padded_fx_identity_id,
+                    "unicode_padded_fx_identity_id": unicode_padded_fx_identity_id,
                     "padded_security_identity_id": padded_security_identity_id,
                     "literal_escape_id": literal_escape_id,
                     "valid_id": valid_id,
@@ -304,6 +338,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     "space_timestamp_id": space_timestamp_id,
                     "minute_timestamp_id": minute_timestamp_id,
                     "offset_seconds_id": offset_seconds_id,
+                    "date_only_timestamp_id": date_only_timestamp_id,
                 },
             ).all()
             by_id = {row.id: row for row in rows}
@@ -312,7 +347,10 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
             assert by_id[non_string_identity_id].status == "FAILED"
             assert by_id[infinity_date_id].status == "FAILED"
             assert by_id[padded_fx_identity_id].status == "FAILED"
+            assert by_id[control_padded_fx_identity_id].status == "FAILED"
+            assert by_id[unicode_padded_fx_identity_id].status == "FAILED"
             assert by_id[padded_security_identity_id].status == "FAILED"
+            assert by_id[date_only_timestamp_id].status == "FAILED"
             assert by_id[literal_escape_id].status == "PENDING"
             assert by_id[valid_id].status == "PENDING"
             assert by_id[basic_date_id].status == "PENDING"
@@ -328,7 +366,10 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     non_string_identity_id,
                     infinity_date_id,
                     padded_fx_identity_id,
+                    control_padded_fx_identity_id,
+                    unicode_padded_fx_identity_id,
                     padded_security_identity_id,
+                    date_only_timestamp_id,
                 )
             )
 
@@ -359,6 +400,34 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     correlation_id="payload-migration-non-string-rejected",
                 )
             non_string_active.rollback()
+
+            unicode_padding_active = connection.begin_nested()
+            with pytest.raises(IntegrityError):
+                _insert_json_job(
+                    connection,
+                    job_type="RESET_FX_WATERMARKS",
+                    payload=(
+                        '{"from_currency":"\\u00a0USD","to_currency":"SGD",'
+                        '"earliest_impacted_date":"2026-08-25","content_hash":"unicode-active",'
+                        '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                    ),
+                    correlation_id="payload-migration-unicode-padding-rejected",
+                )
+            unicode_padding_active.rollback()
+
+            date_only_active = connection.begin_nested()
+            with pytest.raises(IntegrityError):
+                _insert_json_job(
+                    connection,
+                    job_type="RESET_FX_WATERMARKS",
+                    payload=(
+                        '{"from_currency":"USD","to_currency":"SGD",'
+                        '"earliest_impacted_date":"2026-08-25","content_hash":"date-only-active",'
+                        '"generated_at":"2026-08-25"}'
+                    ),
+                    correlation_id="payload-migration-date-only-rejected",
+                )
+            date_only_active.rollback()
 
             missing_active = connection.begin_nested()
             with pytest.raises(IntegrityError):

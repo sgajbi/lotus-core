@@ -21,6 +21,34 @@ depends_on: str | Sequence[str] | None = None
 _TABLE_NAME = "reprocessing_jobs"
 _ACTIVE_PAYLOAD_CONSTRAINT = "ck_reprocessing_jobs_active_payload_valid"
 _TEMPORAL_QUARANTINE_TABLE = "c162_invalid_temporal_reprocessing_jobs"
+_REPLAY_TEXT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029"
+    r"\202F\205F\3000'"
+)
+_REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
+_FX_GENERATED_AT_TIMEZONE_PATTERN = (
+    r"'(T| )[0-9]{2}:[0-9]{2}(:[0-9]{2}([.][0-9]+)?)?"
+    r"(Z|[+-][0-9]{2}(:?[0-9]{2}(:?[0-9]{2}([.][0-9]+)?)?)?)$'"
+)
+
+
+def _normalized_replay_text_sql(expression: str) -> str:
+    """Match Python's replay identity normalization at the SQL boundary."""
+
+    return (
+        f"nullif({expression}, '') IS NOT NULL "
+        f"AND {expression} = btrim({expression}, {_REPLAY_TEXT_TRIM_CHARS}) "
+        f"AND {expression} !~ {_REPLAY_CONTROL_PATTERN}"
+    )
+
+
+_FX_FROM_CURRENCY_TEXT_VALID = _normalized_replay_text_sql("payload->>'from_currency'")
+_FX_TO_CURRENCY_TEXT_VALID = _normalized_replay_text_sql("payload->>'to_currency'")
+_FX_CONTENT_HASH_TEXT_VALID = _normalized_replay_text_sql("payload->>'content_hash'")
+_FX_EARLIEST_DATE_TEXT_VALID = _normalized_replay_text_sql("payload->>'earliest_impacted_date'")
+_FX_GENERATED_AT_TEXT_VALID = _normalized_replay_text_sql("payload->>'generated_at'")
+_RESET_SECURITY_ID_TEXT_VALID = _normalized_replay_text_sql("payload->>'security_id'")
 _PAYLOAD_PREFLIGHT = sa.text(
     r"""
     DO $$
@@ -62,7 +90,7 @@ _PAYLOAD_PREFLIGHT = sa.text(
     """
 )
 _PAYLOAD_CUTOVER = sa.text(
-    r"""
+    rf"""
     DO $$
     DECLARE
         quarantined_fx_count bigint;
@@ -86,22 +114,18 @@ _PAYLOAD_CUTOVER = sa.text(
                   payload::jsonb->'earliest_impacted_date'
               ) IS DISTINCT FROM 'string'
               OR jsonb_typeof(payload::jsonb->'generated_at') IS DISTINCT FROM 'string'
-              OR nullif(btrim(payload->>'from_currency'), '') IS NULL
-              OR nullif(btrim(payload->>'to_currency'), '') IS NULL
-              OR nullif(btrim(payload->>'content_hash'), '') IS NULL
-              OR payload->>'from_currency' <> btrim(payload->>'from_currency')
-              OR payload->>'to_currency' <> btrim(payload->>'to_currency')
-              OR payload->>'content_hash' <> btrim(payload->>'content_hash')
+              OR NOT ({_FX_FROM_CURRENCY_TEXT_VALID})
+              OR NOT ({_FX_TO_CURRENCY_TEXT_VALID})
+              OR NOT ({_FX_CONTENT_HASH_TEXT_VALID})
+              OR NOT ({_FX_EARLIEST_DATE_TEXT_VALID})
+              OR NOT ({_FX_GENERATED_AT_TEXT_VALID})
               OR pg_input_is_valid(
                   payload->>'earliest_impacted_date', 'date'
               ) IS NOT TRUE
               OR pg_input_is_valid(
                   payload->>'generated_at', 'timestamp with time zone'
               ) IS NOT TRUE
-              OR payload->>'generated_at' !~ (
-                  '(Z|[+-][0-9]{2}(:?[0-9]{2}'
-                  '(:?[0-9]{2}([.][0-9]+)?)?)?)$'
-              )
+              OR payload->>'generated_at' !~ ({_FX_GENERATED_AT_TIMEZONE_PATTERN})
           );
         GET DIAGNOSTICS quarantined_fx_count = ROW_COUNT;
 
@@ -119,8 +143,8 @@ _PAYLOAD_CUTOVER = sa.text(
               OR jsonb_typeof(
                   payload::jsonb->'earliest_impacted_date'
               ) IS DISTINCT FROM 'string'
-              OR nullif(btrim(payload->>'security_id'), '') IS NULL
-              OR payload->>'security_id' <> btrim(payload->>'security_id')
+              OR NOT ({_RESET_SECURITY_ID_TEXT_VALID})
+              OR NOT ({_FX_EARLIEST_DATE_TEXT_VALID})
               OR pg_input_is_valid(
                   payload->>'earliest_impacted_date', 'date'
               ) IS NOT TRUE
@@ -146,37 +170,35 @@ def upgrade() -> None:
     op.create_check_constraint(
         _ACTIVE_PAYLOAD_CONSTRAINT,
         _TABLE_NAME,
-        """
+        f"""
         CASE
             WHEN status NOT IN ('PENDING', 'PROCESSING') THEN TRUE
             WHEN job_type NOT IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS') THEN TRUE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
             WHEN job_type = 'RESET_FX_WATERMARKS' THEN (
-                jsonb_typeof(payload::jsonb->'from_currency') = 'string'
-                AND jsonb_typeof(payload::jsonb->'to_currency') = 'string'
-                AND jsonb_typeof(payload::jsonb->'content_hash') = 'string'
-                AND jsonb_typeof(payload::jsonb->'earliest_impacted_date') = 'string'
-                AND jsonb_typeof(payload::jsonb->'generated_at') = 'string'
-                AND nullif(btrim(payload->>'from_currency'), '') IS NOT NULL
-                AND nullif(btrim(payload->>'to_currency'), '') IS NOT NULL
-                AND nullif(btrim(payload->>'content_hash'), '') IS NOT NULL
-                AND payload->>'from_currency' = btrim(payload->>'from_currency')
-                AND payload->>'to_currency' = btrim(payload->>'to_currency')
-                AND payload->>'content_hash' = btrim(payload->>'content_hash')
+                jsonb_typeof(payload::jsonb->'from_currency') IS NOT DISTINCT FROM 'string'
+                AND jsonb_typeof(payload::jsonb->'to_currency') IS NOT DISTINCT FROM 'string'
+                AND jsonb_typeof(payload::jsonb->'content_hash') IS NOT DISTINCT FROM 'string'
+                AND jsonb_typeof(payload::jsonb->'earliest_impacted_date')
+                    IS NOT DISTINCT FROM 'string'
+                AND jsonb_typeof(payload::jsonb->'generated_at') IS NOT DISTINCT FROM 'string'
+                AND ({_FX_FROM_CURRENCY_TEXT_VALID})
+                AND ({_FX_TO_CURRENCY_TEXT_VALID})
+                AND ({_FX_CONTENT_HASH_TEXT_VALID})
+                AND ({_FX_EARLIEST_DATE_TEXT_VALID})
+                AND ({_FX_GENERATED_AT_TEXT_VALID})
                 AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
                 AND pg_input_is_valid(
                     payload->>'generated_at', 'timestamp with time zone'
                 ) IS TRUE
-                AND payload->>'generated_at' ~ (
-                    '(Z|[+-][0-9]{2}(:?[0-9]{2}'
-                    '(:?[0-9]{2}([.][0-9]+)?)?)?)$'
-                )
+                AND payload->>'generated_at' ~ {_FX_GENERATED_AT_TIMEZONE_PATTERN}
             )
             WHEN job_type = 'RESET_WATERMARKS' THEN (
-                jsonb_typeof(payload::jsonb->'security_id') = 'string'
-                AND jsonb_typeof(payload::jsonb->'earliest_impacted_date') = 'string'
-                AND nullif(btrim(payload->>'security_id'), '') IS NOT NULL
-                AND payload->>'security_id' = btrim(payload->>'security_id')
+                jsonb_typeof(payload::jsonb->'security_id') IS NOT DISTINCT FROM 'string'
+                AND jsonb_typeof(payload::jsonb->'earliest_impacted_date')
+                    IS NOT DISTINCT FROM 'string'
+                AND ({_RESET_SECURITY_ID_TEXT_VALID})
+                AND ({_FX_EARLIEST_DATE_TEXT_VALID})
                 AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
             )
             ELSE TRUE
