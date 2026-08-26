@@ -288,9 +288,9 @@ def test_lot_disposal_records_declare_versioned_immutable_integrity_contract() -
 
 
 def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
-    assert {
-        constraint.name for constraint in ReprocessingJob.__table__.constraints
-    } >= {"ck_reprocessing_jobs_active_payload_valid"}
+    assert {constraint.name for constraint in ReprocessingJob.__table__.constraints} >= {
+        "ck_reprocessing_jobs_active_payload_valid"
+    }
     indexes = {index.name: index for index in ReprocessingJob.__table__.indexes}
 
     uniqueness_index = indexes["uq_reprocessing_jobs_pending_reset_watermarks_security"]

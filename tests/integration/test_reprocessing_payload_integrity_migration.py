@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import runpy
 from contextlib import contextmanager
 from pathlib import Path
@@ -84,7 +85,7 @@ def _insert_json_job(
 
 
 @pytest.mark.usefixtures("clean_db")
-def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engine) -> None:
+def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engine, caplog) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.connect() as connection:
@@ -93,8 +94,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 connection,
                 job_type="RESET_WATERMARKS",
                 payload=(
-                    '{"security_id":"PROCESSING-GUARD",'
-                    '"earliest_impacted_date":"2026-08-25"}'
+                    '{"security_id":"PROCESSING-GUARD","earliest_impacted_date":"2026-08-25"}'
                 ),
                 correlation_id="payload-migration-processing-guard",
             )
@@ -141,10 +141,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
             invalid_security_id = _insert_json_job(
                 connection,
                 job_type="RESET_WATERMARKS",
-                payload=(
-                    '{"security_id":"INVALID-DATE",'
-                    '"earliest_impacted_date":"2026-99-99"}'
-                ),
+                payload=('{"security_id":"INVALID-DATE","earliest_impacted_date":"2026-99-99"}'),
                 correlation_id="payload-migration-invalid-security",
             )
             valid_id = _insert_json_job(
@@ -158,8 +155,14 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 correlation_id="payload-migration-valid",
             )
 
+            connection.execute(text("SET LOCAL client_min_messages = notice"))
+            caplog.set_level(logging.INFO, logger="sqlalchemy.dialects.postgresql")
             migration["upgrade"]()
             assert _has_constraint(connection)
+            assert any(
+                "quarantined 1 FX and 1 security replay row(s)" in record.getMessage()
+                for record in caplog.records
+            )
             rows = connection.execute(
                 text(
                     """
