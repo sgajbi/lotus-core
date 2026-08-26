@@ -1466,8 +1466,10 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   constraint. A JSONB-compatibility preflight identifies legacy active JSON values that cannot be
   safely extracted while accepting harmless literal escape text. Terminal historical evidence is
   retained without payload rewriting. The database constraint is authoritative for post-cutover
-  representability and scalar types; application `fromisoformat` validation is authoritative for
-  temporal grammar. Runtime quarantine remains required for predecessor-schema and restored rows.
+  representability, normalized identities, and scalar types; application `fromisoformat`
+  validation is authoritative for temporal grammar. The locked cutover applies that Python grammar
+  before its auditable quarantine update, and runtime staging applies the same validator before SQL
+  coalescing. Runtime quarantine remains required for predecessor-schema and restored rows.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `job_type` (String): Domain type discriminator used to branch processing behavior.
