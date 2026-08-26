@@ -265,6 +265,8 @@ class ReprocessingJobRepository:
                       payload->>'generated_at',
                       'timestamp with time zone'
                   ) IS NOT TRUE
+                  OR payload->>'generated_at'
+                      !~ '(Z|[+-][0-9]{2}:[0-9]{2})$'
               )
             """
         ).bindparams(

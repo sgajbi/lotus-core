@@ -250,6 +250,64 @@ async def test_timezone_less_stale_fx_fails_without_blocking_valid_work(
     assert recovered.status == "PENDING"
 
 
+async def test_staging_quarantines_timezone_less_pending_fx_lineage(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    legacy = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "JPY",
+            "earliest_impacted_date": "2025-01-04",
+            "content_hash": "sha256:" + ("f" * 64),
+            "generated_at": "2030-01-01T00:00:00",
+        },
+        status="PENDING",
+        correlation_id="corr-legacy-timezone-less",
+    )
+    async_db_session.add(legacy)
+    await async_db_session.flush()
+    legacy_id = legacy.id
+    await async_db_session.commit()
+
+    await async_db_session.execute(text("SET LOCAL TIME ZONE 'Asia/Singapore'"))
+    await ReprocessingJobRepository(async_db_session).stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="JPY",
+        earliest_impacted_date=date(2025, 1, 6),
+        content_hash="sha256:" + ("a" * 64),
+        generated_at=datetime(2026, 8, 26, 10, 0, tzinfo=timezone.utc),
+        correlation_id="corr-authoritative",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 2
+    assert rows[0].id == legacy_id
+    assert rows[0].status == "FAILED"
+    assert rows[0].failure_reason == (
+        "invalid_fx_revaluation_job_payload: superseded during valid replay staging"
+    )
+    assert rows[1].status == "PENDING"
+    assert rows[1].payload["generated_at"] == "2026-08-26T10:00:00+00:00"
+    assert rows[1].payload["content_hash"] == "sha256:" + ("a" * 64)
+    assert rows[1].correlation_id == "corr-authoritative"
+
+
 async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     clean_db, async_db_session: AsyncSession
 ):
