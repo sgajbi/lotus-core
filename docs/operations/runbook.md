@@ -840,6 +840,22 @@ lease fence rejects any later terminal write if authority expires meanwhile. Ale
 `renewal_error` and `ownership_lost`; use the correlated structured log to identify the job without
 adding business identifiers to metric labels. A lost renewal cancels the in-flight task so its
 database transaction rolls back before recovery can hand authority to another worker.
+
+### Reprocessing payload contract cutover
+
+Migration `c162b2c3d529` requires the same stopped-worker and zero-`PROCESSING` posture as the lease
+cutover. Its exclusive lock also fails after five seconds rather than waiting behind live table
+traffic. During upgrade it preserves valid work, changes malformed pending `RESET_WATERMARKS` and
+`RESET_FX_WATERMARKS` rows to `FAILED`, retains their original payload, and emits separate
+quarantine counts for the two job families. Capture the migration output as deployment evidence.
+
+After quarantine, `ck_reprocessing_jobs_active_payload_valid` rejects incomplete identities,
+invalid effective dates, and invalid or timezone-less FX source timestamps for active work.
+Investigate quarantined rows through the support API, correlation evidence, and source lineage;
+never repair payloads or reactivate rows directly. Recreate required work through its governed
+source command after correcting authoritative input. Downgrade removes the new-write constraint
+but deliberately does not reactivate poisoned historical work.
+
 The reprocessing-job support listing projects this same `lease_expires_at` authority: a
 `PROCESSING` row is `STALE_PROCESSING` only when its database-clock lease has expired. The caller's
 `stale_threshold_minutes` never marks a live leased claim stale and remains applicable only to
