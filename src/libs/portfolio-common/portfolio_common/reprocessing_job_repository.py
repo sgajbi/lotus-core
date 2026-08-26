@@ -267,7 +267,12 @@ class ReprocessingJobRepository:
               AND payload->>'from_currency' = :from_currency
               AND payload->>'to_currency' = :to_currency
               AND (
-                  pg_input_is_valid(
+                  json_typeof(payload->'content_hash') IS DISTINCT FROM 'string'
+                  OR json_typeof(
+                      payload->'earliest_impacted_date'
+                  ) IS DISTINCT FROM 'string'
+                  OR json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
+                  OR pg_input_is_valid(
                       payload->>'earliest_impacted_date',
                       'date'
                   ) IS NOT TRUE
