@@ -254,6 +254,14 @@ downgrade. The cutover's exclusive table lock times out after five seconds. If i
 drain the lingering reader or writer and retry; do not leave the migration queued behind live table
 traffic. Never bypass the guard by editing lease fields, statuses, or Alembic revision state.
 
+Migration `c162b2c3d529` uses the same upgrade drain and five-second exclusive-lock boundary. It
+quarantines malformed pending Reset and FX replay payloads as `FAILED`, preserves their durable
+payload evidence, and emits separate bounded FX/security quarantine counts in the migration log.
+It then installs `ck_reprocessing_jobs_active_payload_valid`, which rejects malformed `PENDING` or
+`PROCESSING` Reset/FX work at the database boundary. Review the recorded counts after upgrade and
+investigate each failed row through the support API and source lineage; do not edit the payload or
+restore it to active status by hand. Valid terminal historical evidence is not rewritten.
+
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply
 the same tenant in `X-Tenant-Id` and the query, plus `core.support.read`. This is privileged
