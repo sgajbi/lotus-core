@@ -603,7 +603,9 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
     assert "FOR UPDATE" in str(quarantine_statement)
-    assert "btrim(payload->>'from_currency')" in str(quarantine_statement)
+    quarantine_sql = str(quarantine_statement)
+    assert "btrim(payload->>'from_currency', U&'" in quarantine_sql
+    assert "\\00A0" in quarantine_sql
     coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[3].args
     assert "GREATEST" in str(coalesce_statement)
     assert coalesce_parameters["attempt_count"] == 2
