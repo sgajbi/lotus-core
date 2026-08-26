@@ -253,59 +253,10 @@ class ReprocessingJobRepository:
             )
         )
 
-        quarantine_statement = text(
-            """
-            UPDATE reprocessing_jobs
-            SET status = 'FAILED',
-                failure_reason = (
-                    'invalid_fx_revaluation_job_payload: '
-                    'superseded during valid replay staging'
-                ),
-                updated_at = now()
-            WHERE job_type = 'RESET_FX_WATERMARKS'
-              AND status = 'PENDING'
-              AND payload->>'from_currency' = :from_currency
-              AND payload->>'to_currency' = :to_currency
-              AND (
-                  json_typeof(payload->'content_hash') IS DISTINCT FROM 'string'
-                  OR json_typeof(
-                      payload->'earliest_impacted_date'
-                  ) IS DISTINCT FROM 'string'
-                  OR json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
-                  OR pg_input_is_valid(
-                      payload->>'earliest_impacted_date',
-                      'date'
-                  ) IS NOT TRUE
-                  OR pg_input_is_valid(
-                      payload->>'generated_at',
-                      'timestamp with time zone'
-                  ) IS NOT TRUE
-                  OR payload->>'generated_at' !~ (
-                      '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
-                      '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
-                )
-              )
-            RETURNING CASE
-                WHEN pg_input_is_valid(
-                    payload->>'earliest_impacted_date',
-                    'date'
-                )
-                THEN CAST(payload->>'earliest_impacted_date' AS date)
-                ELSE NULL
-            END AS earliest_impacted_date
-            """
-        ).bindparams(
-            bindparam("from_currency", type_=String()),
-            bindparam("to_currency", type_=String()),
+        quarantined_earliest_date = await self._quarantine_malformed_pending_fx_pair(
+            from_currency=from_currency,
+            to_currency=to_currency,
         )
-        quarantine_result = await self.db.execute(
-            quarantine_statement,
-            {
-                "from_currency": from_currency,
-                "to_currency": to_currency,
-            },
-        )
-        quarantined_earliest_date = quarantine_result.scalar_one_or_none()
         if quarantined_earliest_date is not None:
             earliest_impacted_date = min(
                 earliest_impacted_date,
@@ -451,6 +402,75 @@ class ReprocessingJobRepository:
                 "alternate_lookup_key": alternate_lookup_key,
             },
         )
+
+    async def _quarantine_malformed_pending_fx_pair(
+        self,
+        *,
+        from_currency: str,
+        to_currency: str,
+    ) -> date | None:
+        """Validate predecessor pair work with the application grammar before coalescing."""
+
+        candidate_statement = text(
+            """
+            SELECT id, payload
+            FROM reprocessing_jobs
+            WHERE job_type = 'RESET_FX_WATERMARKS'
+              AND status = 'PENDING'
+              AND CASE
+                  WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+                  WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
+                  WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
+                  ELSE btrim(payload->>'from_currency') = :from_currency
+                   AND btrim(payload->>'to_currency') = :to_currency
+              END
+            FOR UPDATE
+            """
+        ).bindparams(
+            bindparam("from_currency", type_=String()),
+            bindparam("to_currency", type_=String()),
+        )
+        result = await self.db.execute(
+            candidate_statement,
+            {"from_currency": from_currency, "to_currency": to_currency},
+        )
+        malformed_ids: list[int] = []
+        known_earliest_dates: list[date] = []
+        for row in result.mappings().all():
+            payload = row["payload"]
+            try:
+                _validated_effective_dated_replay_identity(
+                    job_type="RESET_FX_WATERMARKS",
+                    payload=payload,
+                    attempt_count=0,
+                    correlation_id=None,
+                    correlation_missing_reason=None,
+                    alternate_lookup_key=None,
+                )
+            except (TypeError, ValueError):
+                malformed_ids.append(int(row["id"]))
+                try:
+                    known_earliest_dates.append(
+                        date.fromisoformat(
+                            _required_replay_payload_text(payload, "earliest_impacted_date")
+                        )
+                    )
+                except (TypeError, ValueError):
+                    pass
+
+        if malformed_ids:
+            await self.db.execute(
+                update(ReprocessingJob)
+                .where(ReprocessingJob.id.in_(malformed_ids))
+                .values(
+                    status="FAILED",
+                    failure_reason=(
+                        "invalid_fx_revaluation_job_payload: superseded during valid replay staging"
+                    ),
+                    updated_at=func.now(),
+                )
+            )
+        return min(known_earliest_dates, default=None)
 
     @async_timed(repository="ReprocessingJobRepository", method="create_job")
     async def create_job(
@@ -1323,6 +1343,8 @@ def _required_replay_payload_text(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"effective-dated replay payload requires {key}")
+    if value != value.strip():
+        raise ValueError(f"effective-dated replay payload {key} must be normalized")
     if any(unicodedata.category(character) == "Cc" for character in value):
         raise ValueError(f"effective-dated replay payload {key} contains a control character")
     return value
