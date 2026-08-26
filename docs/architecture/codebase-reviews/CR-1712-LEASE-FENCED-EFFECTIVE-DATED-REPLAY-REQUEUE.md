@@ -75,13 +75,14 @@ the pair-scoped identity lock.
   real-PostgreSQL owned-requeue/coalescing tests, MyPy across 325 source files, architecture and
   wiki/docs guards, and the required-status workflow-governance suite with 529 tests and 94.27%
   branch-aware coverage.
-- Final behavioral-head evidence at `8b9c754b06db472454c91eddcd8312eb281ee541`: 49 focused
-  repository unit tests and all 28 tests in the affected real-PostgreSQL repository integration
+- Final behavioral-head evidence at `5a50cb947e71c86fd77d801b1d7617f6f12f6ca8`: 50 focused
+  repository unit tests and all 30 tests in the affected real-PostgreSQL repository integration
   file passed. That database suite includes disjoint 1,001-row recovery, reversed multi-identity
-  lock ordering, malformed timestamp isolation, timezone-less stale replay failure, and
-  non-UTC-session quarantine of legacy timezone-less pending FX lineage. Ruff lint/format, MyPy on
-  the changed repository module, the reprocessing transition-boundary guard, and diff hygiene also
-  passed.
+  lock ordering, malformed timestamp isolation, timezone-less stale replay failure, non-UTC-session
+  quarantine of legacy timezone-less pending FX lineage, preservation of valid compact ISO offsets,
+  and control-character failure before identity-lock binding while unrelated stale work progresses.
+  Ruff lint/format, MyPy on the changed repository module, the reprocessing transition-boundary
+  guard, and diff hygiene also passed.
 
 ## Compatibility And Scope
 
