@@ -5,6 +5,8 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
+from portfolio_common.database_models import ReprocessingJob
+
 from alembic import op
 
 MIGRATION = (
@@ -15,6 +17,10 @@ MIGRATION = (
 )
 
 
+def _normalized_sql(value: object) -> str:
+    return " ".join(str(value).split())
+
+
 def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversible(
     monkeypatch,
 ) -> None:
@@ -23,9 +29,7 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     monkeypatch.setattr(
         op,
         "alter_column",
-        lambda table, column, **kwargs: operations.append(
-            ("alter_column", table, column, kwargs)
-        ),
+        lambda table, column, **kwargs: operations.append(("alter_column", table, column, kwargs)),
     )
     monkeypatch.setattr(
         op,
@@ -37,9 +41,7 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     monkeypatch.setattr(
         op,
         "drop_constraint",
-        lambda name, table, **kwargs: operations.append(
-            ("drop_constraint", name, table, kwargs)
-        ),
+        lambda name, table, **kwargs: operations.append(("drop_constraint", name, table, kwargs)),
     )
 
     migration = runpy.run_path(str(MIGRATION))
@@ -67,6 +69,12 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert "RESET_WATERMARKS" in constraint[3]
     assert "pg_input_is_valid" in constraint[3]
     assert constraint[3].count("IS TRUE") == 3
+    model_constraint = next(
+        item
+        for item in ReprocessingJob.__table__.constraints
+        if item.name == "ck_reprocessing_jobs_active_payload_valid"
+    )
+    assert _normalized_sql(constraint[3]) == _normalized_sql(model_constraint.sqltext)
 
     operations.clear()
     migration["downgrade"]()
