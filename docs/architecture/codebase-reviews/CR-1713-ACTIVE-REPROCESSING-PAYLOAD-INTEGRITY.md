@@ -89,16 +89,16 @@ evidence is recorded on #1038.
   spellings including an offset with seconds, verifies exact terminal reasons and valid-row
   preservation, rejects future non-string active writes, and proves downgrade/reapply behavior
   inside a rollback-owned test transaction.
-- Local pre-PR evidence: 65 focused migration/model/repository units passed; the isolated
-  PostgreSQL migration proof passed with drain, exact audit-count, quarantine, valid-row,
-  malformed-write, downgrade, and reapply assertions; all 30 real-PostgreSQL reprocessing
-  repository tests passed; MyPy passed across 325 source files; repository lint/architecture,
-  migration-smoke, wiki/docs, architecture-catalog, and diff-hygiene gates passed. After rebuilding
-  the checkout-specific integration images, the migration counterexample proof passed and all 20
-  tests in the affected FX revaluation repository integration file passed, including five
-  current-schema rejection cases and four predecessor-schema runtime quarantine cases. The final
-  critical-lifecycle database gate passed all 62 selected tests, including five additional
-  predecessor-schema recovery cases in the shared reprocessing-job repository suite.
+- Final-head local evidence: focused migration/model/repository proofs passed, including the
+  isolated real-PostgreSQL migration counterexample (drain, exact audit counts, quarantine,
+  valid-row preservation, malformed-write rejection, downgrade, and reapply) and the affected
+  real-PostgreSQL reprocessing repository tests. `make lint` passed its financial-integrity,
+  architecture, security, contract, and governance gates; MyPy passed across 325 source files;
+  the changed wiki page passed the professional-quality audit and source/publication check. The
+  final `make test-critical-lifecycle-db` run at this head passed **64 selected tests** with 1,129
+  deselected in 393.89 seconds, including predecessor-schema recovery cases in the shared
+  reprocessing-job repository suite. The only warning is an unrelated deprecation assertion in
+  ingestion transaction-lifecycle coverage.
 
 ## Compatibility And Scope
 
