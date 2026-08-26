@@ -232,6 +232,8 @@ class ReprocessingJobRepository:
 
         if not isinstance(generated_at, datetime):
             raise TypeError("FX replay generated_at must be a datetime")
+        if generated_at.tzinfo is None or generated_at.utcoffset() is None:
+            raise ValueError("FX replay generated_at must be timezone-aware")
 
         await self._lock_effective_dated_replay_identity(
             _effective_dated_replay_identity_key(
@@ -1270,6 +1272,8 @@ def _validated_effective_dated_replay_identity(
         generated_at = datetime.fromisoformat(
             _required_replay_payload_text(payload, "generated_at")
         )
+        if generated_at.tzinfo is None or generated_at.utcoffset() is None:
+            raise ValueError("FX replay generated_at must be timezone-aware")
     return _EffectiveDatedReplayIdentity(
         job_type=job_type,
         identity_key=_effective_dated_replay_identity_key(job_type, *components),
