@@ -599,6 +599,20 @@ async def test_predecessor_malformed_fx_replay_is_claimed_and_failed_supportably
             "content_hash": True,
             "generated_at": "2026-04-10T08:00:00+00:00",
         },
+        {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "infinity",
+            "content_hash": "sha256:postgres-only-date",
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
+        {
+            "from_currency": " USD ",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": "sha256:padded-identity",
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
     ],
 )
 async def test_predecessor_malformed_pending_pair_is_quarantined_before_upsert(

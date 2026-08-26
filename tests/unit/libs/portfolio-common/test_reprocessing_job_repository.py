@@ -578,7 +578,7 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     locked_result = MagicMock()
     locked_result.one_or_none.return_value = stale_result.all.return_value[0]
     quarantine_result = MagicMock()
-    quarantine_result.scalar_one_or_none.return_value = None
+    quarantine_result.mappings.return_value.all.return_value = []
     coalesce_result = MagicMock()
     complete_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [
@@ -602,7 +602,8 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     assert "pg_advisory_xact_lock" in str(repeated_lock_statement)
     quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    assert "(:?[0-9]{2})?" in str(quarantine_statement)
+    assert "FOR UPDATE" in str(quarantine_statement)
+    assert "btrim(payload->>'from_currency')" in str(quarantine_statement)
     coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[3].args
     assert "GREATEST" in str(coalesce_statement)
     assert coalesce_parameters["attempt_count"] == 2
@@ -638,6 +639,13 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             "RESET_WATERMARKS",
             {
                 "security_id": "unsafe\x00identity",
+                "earliest_impacted_date": "2026-04-08",
+            },
+        ),
+        (
+            "RESET_WATERMARKS",
+            {
+                "security_id": " SEC-1 ",
                 "earliest_impacted_date": "2026-04-08",
             },
         ),
@@ -697,8 +705,24 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
     mock_db_session: AsyncMock,
 ) -> None:
     quarantine_result = MagicMock()
-    quarantine_result.scalar_one_or_none.return_value = date(2026, 4, 6)
-    mock_db_session.execute.side_effect = [MagicMock(), quarantine_result, MagicMock()]
+    quarantine_result.mappings.return_value.all.return_value = [
+        {
+            "id": 7,
+            "payload": {
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "earliest_impacted_date": "2026-04-06",
+                "content_hash": "sha256:" + ("b" * 64),
+                "generated_at": "not-a-timestamp",
+            },
+        }
+    ]
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        quarantine_result,
+        MagicMock(),
+        MagicMock(),
+    ]
 
     await repository.stage_pending_fx_revaluation_job(
         from_currency="USD",
@@ -712,8 +736,10 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
     )
 
     quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
-    assert "RETURNING CASE" in str(quarantine_statement)
-    _, upsert_parameters = mock_db_session.execute.await_args_list[2].args
+    assert "FOR UPDATE" in str(quarantine_statement)
+    quarantine_update = mock_db_session.execute.await_args_list[2].args[0]
+    assert "status=:status" in str(quarantine_update)
+    _, upsert_parameters = mock_db_session.execute.await_args_list[3].args
     assert upsert_parameters["effective_date"] == date(2026, 4, 6)
 
 

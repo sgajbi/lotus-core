@@ -104,6 +104,44 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
     assert jobs[1].correlation_id == "corr-stale-earliest"
 
 
+async def test_unnormalized_predecessor_security_replay_fails_without_rewriting_identity(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    malformed = ReprocessingJob(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": " SEC-1 ", "earliest_impacted_date": "2025-01-05"},
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="padded-security-worker",
+        lease_token="5" * 32,
+        lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    async_db_session.add(malformed)
+    await async_db_session.commit()
+    malformed_id = malformed.id
+
+    repository = ReprocessingJobRepository(async_db_session)
+    recovered_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
+    valid = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "SEC-1", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-normalized-security",
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    failed = await async_db_session.get(ReprocessingJob, malformed_id)
+    assert recovered_count == 0
+    assert failed is not None
+    assert failed.status == "FAILED"
+    assert failed.payload["security_id"] == " SEC-1 "
+    assert failed.failure_reason == "Malformed effective-dated replay during stale recovery"
+    assert valid.status == "PENDING"
+    assert valid.payload["security_id"] == "SEC-1"
+
+
 async def test_stale_fx_timestamps_are_typed_before_cohort_recovery(
     clean_db,
     async_db_session: AsyncSession,

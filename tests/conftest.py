@@ -563,7 +563,12 @@ async def predecessor_reprocessing_payload_schema(
     clean_db,
     async_db_session: AsyncSession,
 ):
-    """Expose legacy replay state while reliably restoring current payload enforcement."""
+    """Expose legacy replay state while reliably restoring current payload enforcement.
+
+    This fixture commits shared-schema DDL, so database lanes using it must remain serial. An
+    interrupted run can leave the test database without the constraint; the next drop then fails
+    loudly instead of allowing enforcement assertions to pass against an unknown schema.
+    """
 
     constraint = next(
         item

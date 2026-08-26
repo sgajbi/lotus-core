@@ -69,7 +69,7 @@ async def test_revaluation_query_requires_latest_derived_authority_older_than_so
 async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     session = AsyncMock(spec=AsyncSession)
     quarantine_result = MagicMock()
-    quarantine_result.scalar_one_or_none.return_value = None
+    quarantine_result.mappings.return_value.all.return_value = []
     session.execute.side_effect = [MagicMock(), quarantine_result, MagicMock()]
     repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
     correction = FxRateCorrection(
@@ -95,9 +95,9 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert "hashtextextended(:identity_key, 0)" in lock_sql
     assert lock_parameters == {"identity_key": "RESET_FX_WATERMARKS|3:USD|3:SGD"}
     assert "pg_input_is_valid" in quarantine_sql
-    assert quarantine_sql.count("json_typeof") == 3
-    assert "status = 'FAILED'" in quarantine_sql
-    assert "RETURNING CASE" in quarantine_sql
+    assert quarantine_sql.count("json_typeof") == 2
+    assert "FOR UPDATE" in quarantine_sql
+    assert "btrim(payload->>'from_currency')" in quarantine_sql
     assert quarantine_parameters == {
         "from_currency": "USD",
         "to_currency": "SGD",
