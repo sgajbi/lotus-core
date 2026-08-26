@@ -64,7 +64,10 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
         "requires a drained"
     )
     assert "payload->>'from_currency'" not in preflight
-    assert "CREATE TEMPORARY TABLE c162_invalid_temporal_reprocessing_jobs" in str(operations[1][1])
+    temporal_staging = str(operations[1][1])
+    assert "CREATE TEMPORARY TABLE IF NOT EXISTS c162_invalid_temporal_reprocessing_jobs" in temporal_staging
+    assert "ON COMMIT DROP" in temporal_staging
+    assert "TRUNCATE TABLE c162_invalid_temporal_reprocessing_jobs" in temporal_staging
     cutover = str(operations[2][1])
     assert cutover.count("GET DIAGNOSTICS") == 2
     assert "RESET_FX_WATERMARKS" in cutover
