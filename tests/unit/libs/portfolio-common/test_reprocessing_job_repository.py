@@ -609,23 +609,44 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     assert "Coalesced into pending FX replay during stale recovery" in compiled_complete
 
 
-async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
-    repository: ReprocessingJobRepository,
-    mock_db_session: AsyncMock,
-) -> None:
-    stale_result = MagicMock()
-    stale_result.all.return_value = [
-        MagicMock(
-            id=10,
-            attempt_count=1,
-            job_type="RESET_FX_WATERMARKS",
-            payload={
+@pytest.mark.parametrize(
+    ("job_type", "payload"),
+    [
+        (
+            "RESET_FX_WATERMARKS",
+            {
                 "from_currency": "USD",
                 "to_currency": "SGD",
                 "earliest_impacted_date": "2026-04-08",
                 "content_hash": "sha256:" + ("a" * 64),
                 "generated_at": "not-a-timestamp",
             },
+        ),
+        (
+            "RESET_FX_WATERMARKS",
+            {
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "earliest_impacted_date": "2026-04-08",
+                "content_hash": "sha256:" + ("a" * 64),
+                "generated_at": "2026-08-26T10:00:00",
+            },
+        ),
+    ],
+)
+async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+    job_type: str,
+    payload: dict[str, str],
+) -> None:
+    stale_result = MagicMock()
+    stale_result.all.return_value = [
+        MagicMock(
+            id=10,
+            attempt_count=1,
+            job_type=job_type,
+            payload=payload,
         )
     ]
     repository._claim_stale_job_cohort = AsyncMock(return_value=stale_result.all.return_value)
@@ -640,6 +661,26 @@ async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
     compiled_failed = str(failed_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "status='FAILED'" in compiled_failed
     assert "Malformed effective-dated replay during stale recovery" in compiled_failed
+
+
+async def test_stage_pending_fx_revaluation_requires_an_authoritative_instant(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    with pytest.raises(ValueError, match="generated_at must be timezone-aware"):
+        await repository.stage_pending_fx_revaluation_job(
+            from_currency="USD",
+            to_currency="SGD",
+            earliest_impacted_date=date(2026, 4, 8),
+            content_hash="sha256:" + ("a" * 64),
+            generated_at=datetime(2026, 8, 26, 10, 0),
+            correlation_id="corr-naive-time",
+            correlation_missing_reason=None,
+            alternate_lookup_key=None,
+            attempt_count=0,
+        )
+
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_create_job_coalesces_pending_reset_watermarks_job(

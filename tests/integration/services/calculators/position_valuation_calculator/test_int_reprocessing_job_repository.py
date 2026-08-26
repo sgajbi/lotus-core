@@ -199,6 +199,57 @@ async def test_stale_fx_timestamps_are_typed_before_cohort_recovery(
     assert recovered.status == "PENDING"
 
 
+async def test_timezone_less_stale_fx_fails_without_blocking_valid_work(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+    timezone_less_fx = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "CHF",
+            "earliest_impacted_date": "2025-01-06",
+            "content_hash": "sha256:" + ("d" * 64),
+            "generated_at": "2026-08-26T10:00:00",
+        },
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="timezone-less-fx-worker",
+        lease_token="e" * 32,
+        lease_expires_at=stale_time,
+    )
+    recoverable = ReprocessingJob(
+        job_type="LEASE_LIFECYCLE_PROOF",
+        payload={"scope": "after-timezone-less-fx-replay"},
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="recoverable-worker",
+        lease_token="f" * 32,
+        lease_expires_at=stale_time,
+    )
+    async_db_session.add_all([timezone_less_fx, recoverable])
+    await async_db_session.flush()
+    timezone_less_fx_id = timezone_less_fx.id
+    recoverable_id = recoverable.id
+    await async_db_session.commit()
+
+    recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        max_attempts=3
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    malformed = await async_db_session.get(ReprocessingJob, timezone_less_fx_id)
+    recovered = await async_db_session.get(ReprocessingJob, recoverable_id)
+    assert recovered_count == 1
+    assert malformed is not None
+    assert malformed.status == "FAILED"
+    assert malformed.failure_reason == "Malformed effective-dated replay during stale recovery"
+    assert recovered is not None
+    assert recovered.status == "PENDING"
+
+
 async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     clean_db, async_db_session: AsyncSession
 ):
