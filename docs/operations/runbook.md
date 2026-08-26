@@ -853,13 +853,20 @@ safely interpreted by PostgreSQL's JSON extraction boundary. If not, it reports 
 and recovery action instead of leaking a driver-level Unicode error. Harmless literal escape text
 passes this check. Preserve unsafe raw evidence and terminalize or repair those rows through
 governed recovery before retrying.
+While the exclusive lock remains held, the migration classifies pending replay dates and FX source
+timestamps with Python `fromisoformat`, stages invalid row ids transaction-locally, and includes
+them in the same attributable quarantine update. PostgreSQL-only spellings such as `infinity` are
+therefore terminalized without copying Python's grammar into SQL. Padded identities and hashes are
+also quarantined rather than normalized or rewritten.
 
 After quarantine, `ck_reprocessing_jobs_active_payload_valid` is authoritative for post-cutover
 database representability and scalar types. It rejects unsafe extraction, non-string or incomplete
-identity/temporal fields, database-invalid effective dates, and database-invalid or timezone-less
-FX source timestamps. Application `fromisoformat` validation remains the temporal-grammar authority;
-runtime quarantine therefore remains required for grammar-invalid predecessor-schema or restored
-rows. Do not tighten SQL with a second hand-written ISO parser.
+or unnormalized identity fields, database-invalid effective dates, and database-invalid or
+timezone-less FX source timestamps. Application `fromisoformat` validation remains the
+temporal-grammar authority; runtime staging validates matching predecessor rows before SQL
+coalescing so an invalid historical boundary cannot be silently replaced. Runtime quarantine
+therefore remains required for grammar-invalid predecessor-schema or restored rows. Do not tighten
+SQL with a second hand-written ISO parser.
 Investigate quarantined rows through the support API, correlation evidence, and source lineage;
 never repair payloads or reactivate rows directly. Recreate required work through its governed
 source command after correcting authoritative input. Downgrade removes the new-write constraint

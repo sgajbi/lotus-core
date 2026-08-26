@@ -4015,10 +4015,13 @@ Most relevant current governance:
      complete normalized identity and temporal fields, and, for FX, complete string content hash
      plus a database-representable, explicitly zoned source timestamp. Python `fromisoformat`
      remains the temporal-grammar authority; do not copy that grammar into SQL predicates. Schema
-     cutover must drain `PROCESSING` work, quarantine database-invalid pending rows with
-     bounded type-level counts, preserve terminal payload evidence, and reject future malformed
-     active rows. Never weaken the CHECK constraint or silently rewrite historical payloads to make
-     deployment pass.
+     cutover must drain `PROCESSING` work, classify temporal strings with Python while the exclusive
+     lock is held, quarantine invalid or unnormalized pending rows with bounded family counts,
+     preserve terminal payload evidence, and reject future malformed active writes through the
+     combined application/database boundary. Never weaken the CHECK constraint or silently rewrite
+     historical payloads to make deployment pass. FX staging must lock and validate matching
+     predecessor rows in Python before SQL coalescing; PostgreSQL casts must never launder an
+     application-invalid boundary such as `infinity` into a new payload.
      Preflight relevant active `payload::text` with PostgreSQL JSONB input validity before any `->>`
      extraction so a legacy literal-SQL row produces a bounded actionable migration error instead
      of an unexplained driver failure without falsely rejecting harmless literal escape text. The

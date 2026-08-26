@@ -31,12 +31,16 @@ cutover, and future malformed active work must fail at the persistence boundary.
    count and recovery hint rather than a driver-level Unicode error, while harmless literal escape
    text remains accepted.
 2. It quarantines malformed pending FX and security Reset rows as `FAILED`, retaining the original
-   payload and recording separate bounded row counts in PostgreSQL migration notices.
+   payload and recording separate bounded row counts in PostgreSQL migration notices. While the
+   exclusive lock is held, the immutable migration snapshots Python `fromisoformat` grammar into a
+   transaction-local id set so PostgreSQL-only dates such as `infinity` are quarantined without a
+   hand-written SQL grammar.
 3. The model and migration declare one database CHECK constraint for `PENDING` and `PROCESSING`
    Reset/FX work. It uses a guarded CASE to require JSONB-safe extraction, JSON string types,
-   nonblank identities, database-representable dates, and, for FX, a nonblank string content hash
-   plus a database-representable, explicitly zoned `generated_at`. Python `fromisoformat` remains
-   the single temporal-grammar authority, avoiding a divergent parser copied into SQL.
+   nonblank normalized identities, database-representable dates, and, for FX, a normalized string
+   content hash plus a database-representable, explicitly zoned `generated_at`. Python
+   `fromisoformat` remains the single temporal-grammar authority, avoiding a divergent parser copied
+   into SQL.
 4. Terminal rows are intentionally outside the constraint so historical evidence is not rewritten
    or made undeployable by a newly introduced active-work contract.
 5. Downgrade removes only the constraint. Quarantine is not reversed because restoring malformed
@@ -53,6 +57,9 @@ consumer. This CHECK is authoritative for post-cutover database representability
 Application validation is authoritative for temporal grammar. Existing runtime quarantine remains
 required for grammar-invalid predecessor, restore, migration-order, and out-of-band states, and its
 behavior is proved separately rather than treated as reachable through ordinary current writers.
+FX staging now locks matching predecessor rows, applies the same Python validator before any SQL
+cast or `ON CONFLICT`, and terminalizes invalid evidence without laundering its boundary. Replay
+text validation rejects padded values rather than silently changing durable identity.
 
 The proposed S5 JSON-to-JSONB rewrite was not implemented. The initial probe bound escaped JSON
 text through a parameter and observed rejection, but that evidence did not cover direct SQL literal
@@ -67,8 +74,8 @@ evidence is recorded on #1038.
 ## Meaningful Proof
 
 - Unit migration proof pins the linear revision, drain/lock contract, both quarantine families,
-  type-level count capture, reversible constraint operations, and three fail-closed temporal
-  predicates.
+  Python-owned temporal classification, type-level count capture, reversible constraint operations,
+  normalization, and timezone-presence predicates.
 - Model proof prevents ORM/schema drift by requiring the named constraint.
 - Critical-lifecycle repository proof asserts that missing, database-unrepresentable, and
   non-string FX payload shapes fail at commit with the named CHECK constraint and leave no durable
@@ -77,10 +84,11 @@ evidence is recorded on #1038.
   quarantine remain operational recovery defenses without duplicating schema manipulation.
 - Real PostgreSQL migration proof seeds malformed FX and security rows plus valid pending work,
   seeds the literal-SQL legacy NUL path and harmless literal escape text, verifies only the unsafe
-  row produces an actionable preflight failure, quarantines non-string scalar identity, preserves
-  all three application-accepted temporal spellings raised in review, verifies exact terminal
-  reasons and valid-row preservation, rejects future non-string active writes, and proves
-  downgrade/reapply behavior inside a rollback-owned test transaction.
+  row produces an actionable preflight failure, quarantines non-string, padded, and
+  Python-grammar-invalid identity/temporal evidence, preserves application-accepted temporal
+  spellings including an offset with seconds, verifies exact terminal reasons and valid-row
+  preservation, rejects future non-string active writes, and proves downgrade/reapply behavior
+  inside a rollback-owned test transaction.
 - Local pre-PR evidence: 65 focused migration/model/repository units passed; the isolated
   PostgreSQL migration proof passed with drain, exact audit-count, quarantine, valid-row,
   malformed-write, downgrade, and reapply assertions; all 30 real-PostgreSQL reprocessing
