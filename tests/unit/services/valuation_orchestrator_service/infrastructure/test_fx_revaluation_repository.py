@@ -68,6 +68,9 @@ async def test_revaluation_query_requires_latest_derived_authority_older_than_so
 
 async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     session = AsyncMock(spec=AsyncSession)
+    quarantine_result = MagicMock()
+    quarantine_result.scalar_one_or_none.return_value = None
+    session.execute.side_effect = [MagicMock(), quarantine_result, MagicMock()]
     repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
     correction = FxRateCorrection(
         pair=DirectCurrencyPair("USD", "SGD"),
@@ -93,6 +96,7 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert lock_parameters == {"identity_key": "RESET_FX_WATERMARKS|3:USD|3:SGD"}
     assert "pg_input_is_valid" in quarantine_sql
     assert "status = 'FAILED'" in quarantine_sql
+    assert "RETURNING CASE" in quarantine_sql
     assert quarantine_parameters == {
         "from_currency": "USD",
         "to_currency": "SGD",
