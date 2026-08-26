@@ -890,19 +890,33 @@ async def test_concurrent_stale_recovery_claims_disjoint_bounded_cohorts(
     )
     await async_db_session.commit()
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    before_commit = asyncio.Barrier(2)
 
-    async def recover_cohort() -> int:
+    async def recover_cohort() -> tuple[int, set[int]]:
         async with session_factory() as session, session.begin():
-            return await ReprocessingJobRepository(session).find_and_reset_stale_jobs(
+            recovered_count = await ReprocessingJobRepository(session).find_and_reset_stale_jobs(
                 max_attempts=3
             )
+            recovered_ids = set(
+                (
+                    await session.scalars(
+                        select(ReprocessingJob.id).where(ReprocessingJob.status == "PENDING")
+                    )
+                ).all()
+            )
+            await before_commit.wait()
+            return recovered_count, recovered_ids
 
-    recovered_counts = await asyncio.wait_for(
+    recovered_cohorts = await asyncio.wait_for(
         asyncio.gather(recover_cohort(), recover_cohort()),
         timeout=30,
     )
 
+    recovered_counts = [count for count, _ in recovered_cohorts]
+    first_ids, second_ids = (ids for _, ids in recovered_cohorts)
     assert sorted(recovered_counts) == [1, POSTGRES_STATEMENT_ROW_LIMIT]
+    assert first_ids.isdisjoint(second_ids)
+    assert len(first_ids | second_ids) == job_count
     async_db_session.expire_all()
     pending_count = int(
         await async_db_session.scalar(
