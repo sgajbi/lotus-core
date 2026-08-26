@@ -6,9 +6,9 @@ quiesced forward migration now quarantines malformed pending Reset and FX rows w
 recorded counts, preserves their payload evidence, and installs a database CHECK constraint for
 all active Reset/FX work. Real PostgreSQL proof covers both quarantine families, valid-row
 preservation, fail-closed future writes, drain enforcement, and reversible constraint rollout.
-The same proof contradicted the proposed JSON-to-JSONB rationale: PostgreSQL 16 rejects the
-literal `\\u0000` escape on the existing JSON input boundary, so no table rewrite or
-key-order/duplicate-key compatibility change is included without a reproducible persistence path.
+The active-row constraint makes an escaped NUL unrepresentable to the queue without a JSONB rewrite;
+a text-only preflight gives legacy literal-SQL rows an actionable fail-closed recovery message before
+JSON extraction. JSON key-order/duplicate-key compatibility therefore remains unchanged.
 No API/OpenAPI, event/Kafka, calculation, dependency, image, or runtime-topology contract changed.
 Evidence:
 [CR-1713-ACTIVE-REPROCESSING-PAYLOAD-INTEGRITY.md](./codebase-reviews/CR-1713-ACTIVE-REPROCESSING-PAYLOAD-INTEGRITY.md).

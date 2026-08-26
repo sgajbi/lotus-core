@@ -4017,6 +4017,9 @@ Most relevant current governance:
      bounded type-level counts, preserve terminal payload evidence, and reject future malformed
      active rows. Never weaken the CHECK constraint or silently rewrite historical payloads to make
      deployment pass.
+     Preflight unsupported NUL escapes from `payload::text` before any `->>` extraction so a legacy
+     literal-SQL row produces a bounded actionable migration error instead of an unexplained driver
+     failure. Do not generalize bound-parameter behavior to direct SQL, restore, or migration paths.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before
