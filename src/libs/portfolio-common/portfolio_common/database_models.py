@@ -5177,6 +5177,32 @@ class ReprocessingJob(Base):
             unique=True,
             postgresql_where=text("job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"),
         ),
+        CheckConstraint(
+            """
+            status NOT IN ('PENDING', 'PROCESSING')
+            OR job_type NOT IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')
+            OR (
+                job_type = 'RESET_FX_WATERMARKS'
+                AND nullif(btrim(payload->>'from_currency'), '') IS NOT NULL
+                AND nullif(btrim(payload->>'to_currency'), '') IS NOT NULL
+                AND nullif(btrim(payload->>'content_hash'), '') IS NOT NULL
+                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                AND pg_input_is_valid(
+                    payload->>'generated_at', 'timestamp with time zone'
+                ) IS TRUE
+                AND payload->>'generated_at' ~ (
+                    '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
+                    '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
+                )
+            )
+            OR (
+                job_type = 'RESET_WATERMARKS'
+                AND nullif(btrim(payload->>'security_id'), '') IS NOT NULL
+                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+            )
+            """,
+            name="ck_reprocessing_jobs_active_payload_valid",
+        ),
         Index(
             "ix_reproc_jobs_pending_fx_priority",
             text("(payload->>'earliest_impacted_date')"),
