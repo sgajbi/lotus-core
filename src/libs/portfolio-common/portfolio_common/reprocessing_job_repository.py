@@ -278,20 +278,34 @@ class ReprocessingJobRepository:
                   OR payload->>'generated_at' !~ (
                       '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
                       '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
-                  )
+                )
               )
+            RETURNING CASE
+                WHEN pg_input_is_valid(
+                    payload->>'earliest_impacted_date',
+                    'date'
+                )
+                THEN CAST(payload->>'earliest_impacted_date' AS date)
+                ELSE NULL
+            END AS earliest_impacted_date
             """
         ).bindparams(
             bindparam("from_currency", type_=String()),
             bindparam("to_currency", type_=String()),
         )
-        await self.db.execute(
+        quarantine_result = await self.db.execute(
             quarantine_statement,
             {
                 "from_currency": from_currency,
                 "to_currency": to_currency,
             },
         )
+        quarantined_earliest_date = quarantine_result.scalar_one_or_none()
+        if quarantined_earliest_date is not None:
+            earliest_impacted_date = min(
+                earliest_impacted_date,
+                quarantined_earliest_date,
+            )
 
         statement = text(
             """

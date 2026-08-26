@@ -303,6 +303,7 @@ async def test_staging_quarantines_timezone_less_pending_fx_lineage(
         "invalid_fx_revaluation_job_payload: superseded during valid replay staging"
     )
     assert rows[1].status == "PENDING"
+    assert rows[1].payload["earliest_impacted_date"] == "2025-01-04"
     assert rows[1].payload["generated_at"] == "2026-08-26T10:00:00+00:00"
     assert rows[1].payload["content_hash"] == "sha256:" + ("a" * 64)
     assert rows[1].correlation_id == "corr-authoritative"

@@ -578,6 +578,7 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     locked_result = MagicMock()
     locked_result.one_or_none.return_value = stale_result.all.return_value[0]
     quarantine_result = MagicMock()
+    quarantine_result.scalar_one_or_none.return_value = None
     coalesce_result = MagicMock()
     complete_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [
@@ -689,6 +690,31 @@ async def test_stage_pending_fx_revaluation_requires_an_authoritative_instant(
         )
 
     mock_db_session.execute.assert_not_awaited()
+
+
+async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    quarantine_result = MagicMock()
+    quarantine_result.scalar_one_or_none.return_value = date(2026, 4, 6)
+    mock_db_session.execute.side_effect = [MagicMock(), quarantine_result, MagicMock()]
+
+    await repository.stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="SGD",
+        earliest_impacted_date=date(2026, 4, 8),
+        content_hash="sha256:" + ("a" * 64),
+        generated_at=datetime(2026, 8, 26, 10, 0, tzinfo=timezone.utc),
+        correlation_id="corr-authoritative",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+
+    quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert "RETURNING CASE" in str(quarantine_statement)
+    _, upsert_parameters = mock_db_session.execute.await_args_list[2].args
+    assert upsert_parameters["effective_date"] == date(2026, 4, 6)
 
 
 async def test_create_job_coalesces_pending_reset_watermarks_job(
