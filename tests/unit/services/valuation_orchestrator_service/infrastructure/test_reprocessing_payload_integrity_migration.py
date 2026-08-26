@@ -65,7 +65,10 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     )
     assert "payload->>'from_currency'" not in preflight
     temporal_staging = str(operations[1][1])
-    assert "CREATE TEMPORARY TABLE IF NOT EXISTS c162_invalid_temporal_reprocessing_jobs" in temporal_staging
+    assert (
+        "CREATE TEMPORARY TABLE IF NOT EXISTS c162_invalid_temporal_reprocessing_jobs"
+        in temporal_staging
+    )
     assert "ON COMMIT DROP" in temporal_staging
     assert "TRUNCATE TABLE c162_invalid_temporal_reprocessing_jobs" in temporal_staging
     cutover = str(operations[2][1])
