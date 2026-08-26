@@ -65,6 +65,11 @@ not inference from a different input path.
 - The initial real PostgreSQL test also provided the negative S5 evidence before the implementation
   was narrowed; that failure is retained durably on issue #1038 rather than converted into a false
   passing assertion.
+- Local pre-PR evidence: 65 focused migration/model/repository units passed; the isolated
+  PostgreSQL migration proof passed with drain, exact audit-count, quarantine, valid-row,
+  malformed-write, downgrade, and reapply assertions; all 30 real-PostgreSQL reprocessing
+  repository tests passed; MyPy passed across 325 source files; repository lint/architecture,
+  migration-smoke, wiki/docs, architecture-catalog, and diff-hygiene gates passed.
 
 ## Compatibility And Scope
 
