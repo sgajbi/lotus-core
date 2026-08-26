@@ -11,7 +11,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -89,6 +89,45 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
 
     with db_engine.connect() as connection:
         with _previous_revision(migration, connection):
+            processing_id = _insert_json_job(
+                connection,
+                job_type="RESET_WATERMARKS",
+                payload=(
+                    '{"security_id":"PROCESSING-GUARD",'
+                    '"earliest_impacted_date":"2026-08-25"}'
+                ),
+                correlation_id="payload-migration-processing-guard",
+            )
+            connection.execute(
+                text(
+                    """
+                    UPDATE reprocessing_jobs
+                    SET status = 'PROCESSING',
+                        lease_owner = 'payload-migration-proof',
+                        lease_token = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                        lease_expires_at = clock_timestamp() + INTERVAL '15 minutes'
+                    WHERE id = :job_id
+                    """
+                ),
+                {"job_id": processing_id},
+            )
+            guarded_upgrade = connection.begin_nested()
+            with pytest.raises(DBAPIError, match="requires a drained PROCESSING queue"):
+                migration["upgrade"]()
+            guarded_upgrade.rollback()
+            assert not _has_constraint(connection)
+            connection.execute(
+                text(
+                    """
+                    UPDATE reprocessing_jobs
+                    SET status = 'COMPLETE', lease_owner = NULL,
+                        lease_token = NULL, lease_expires_at = NULL
+                    WHERE id = :job_id
+                    """
+                ),
+                {"job_id": processing_id},
+            )
+
             invalid_fx_id = _insert_json_job(
                 connection,
                 job_type="RESET_FX_WATERMARKS",
@@ -159,6 +198,16 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     correlation_id="payload-migration-rejected",
                 )
             malformed_active.rollback()
+
+            missing_active = connection.begin_nested()
+            with pytest.raises(IntegrityError):
+                _insert_json_job(
+                    connection,
+                    job_type="RESET_WATERMARKS",
+                    payload="{}",
+                    correlation_id="payload-migration-missing",
+                )
+            missing_active.rollback()
 
             migration["downgrade"]()
             assert not _has_constraint(connection)
