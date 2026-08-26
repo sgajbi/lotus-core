@@ -625,12 +625,19 @@ async def test_predecessor_malformed_fx_replay_is_claimed_and_failed_supportably
             "content_hash": "sha256:malformed-timestamp",
             "generated_at": "not-a-timestamp",
         },
+        {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": True,
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
     ],
 )
 async def test_predecessor_malformed_pending_pair_is_quarantined_before_upsert(
     clean_db,
     async_db_session: AsyncSession,
-    malformed_payload: dict[str, str],
+    malformed_payload: dict[str, object],
 ) -> None:
     malformed_correlation_id = "corr-malformed-pending-pair"
     replacement_correlation_id = "corr-valid-replacement"
@@ -713,12 +720,26 @@ async def test_predecessor_malformed_pending_pair_is_quarantined_before_upsert(
             "content_hash": "sha256:malformed-timestamp",
             "generated_at": "not-a-timestamp",
         },
+        {
+            "from_currency": 123,
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": "sha256:numeric-identity",
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
+        {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": True,
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
     ],
 )
 async def test_malformed_fx_replay_is_rejected_before_active_queue_entry(
     clean_db,
     async_db_session: AsyncSession,
-    malformed_payload: dict[str, str],
+    malformed_payload: dict[str, object],
 ) -> None:
     malformed_job = ReprocessingJob(
         job_type="RESET_FX_WATERMARKS",

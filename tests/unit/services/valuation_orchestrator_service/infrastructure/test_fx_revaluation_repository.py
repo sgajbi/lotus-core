@@ -95,6 +95,7 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert "hashtextextended(:identity_key, 0)" in lock_sql
     assert lock_parameters == {"identity_key": "RESET_FX_WATERMARKS|3:USD|3:SGD"}
     assert "pg_input_is_valid" in quarantine_sql
+    assert quarantine_sql.count("json_typeof") == 3
     assert "status = 'FAILED'" in quarantine_sql
     assert "RETURNING CASE" in quarantine_sql
     assert quarantine_parameters == {
