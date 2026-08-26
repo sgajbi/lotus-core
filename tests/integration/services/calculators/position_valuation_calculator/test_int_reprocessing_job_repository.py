@@ -104,7 +104,7 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
     assert jobs[1].correlation_id == "corr-stale-earliest"
 
 
-async def test_malformed_stale_fx_timestamp_fails_without_blocking_cohort(
+async def test_stale_fx_timestamps_are_typed_before_cohort_recovery(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
@@ -124,6 +124,21 @@ async def test_malformed_stale_fx_timestamp_fails_without_blocking_cohort(
         lease_token="a" * 32,
         lease_expires_at=stale_time,
     )
+    separator_poisoned_fx = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2025-01-06",
+            "content_hash": "sha256:" + ("c" * 64),
+            "generated_at": "2026-08-26Q10:00:00+00:00",
+        },
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="separator-poisoned-fx-worker",
+        lease_token="c" * 32,
+        lease_expires_at=stale_time,
+    )
     pending_sibling = ReprocessingJob(
         job_type="RESET_FX_WATERMARKS",
         payload={
@@ -131,7 +146,7 @@ async def test_malformed_stale_fx_timestamp_fails_without_blocking_cohort(
             "to_currency": "SGD",
             "earliest_impacted_date": "2025-01-07",
             "content_hash": "sha256:" + ("b" * 64),
-            "generated_at": "2025-01-07T08:00:00+00:00",
+            "generated_at": "2027-01-07T08:00:00+00:00",
         },
         status="PENDING",
         correlation_id="corr-valid-pending-fx",
@@ -145,9 +160,10 @@ async def test_malformed_stale_fx_timestamp_fails_without_blocking_cohort(
         lease_token="b" * 32,
         lease_expires_at=stale_time,
     )
-    async_db_session.add_all([poisoned_fx, pending_sibling, recoverable])
+    async_db_session.add_all([poisoned_fx, separator_poisoned_fx, pending_sibling, recoverable])
     await async_db_session.flush()
     poisoned_id = poisoned_fx.id
+    separator_poisoned_id = separator_poisoned_fx.id
     sibling_id = pending_sibling.id
     recoverable_id = recoverable.id
     sibling_payload = dict(pending_sibling.payload)
@@ -160,15 +176,24 @@ async def test_malformed_stale_fx_timestamp_fails_without_blocking_cohort(
     async_db_session.expire_all()
 
     poisoned = await async_db_session.get(ReprocessingJob, poisoned_id)
+    separator_poisoned = await async_db_session.get(ReprocessingJob, separator_poisoned_id)
     sibling = await async_db_session.get(ReprocessingJob, sibling_id)
     recovered = await async_db_session.get(ReprocessingJob, recoverable_id)
-    assert recovered_count == 1
+    assert recovered_count == 2
     assert poisoned is not None
     assert poisoned.status == "FAILED"
     assert poisoned.failure_reason == "Malformed effective-dated replay during stale recovery"
+    assert separator_poisoned is not None
+    assert separator_poisoned.status == "COMPLETE"
+    assert separator_poisoned.failure_reason == (
+        "Coalesced into pending FX replay during stale recovery"
+    )
     assert sibling is not None
     assert sibling.status == "PENDING"
-    assert sibling.payload == sibling_payload
+    assert sibling.payload == {
+        **sibling_payload,
+        "earliest_impacted_date": "2025-01-06",
+    }
     assert sibling.correlation_id == "corr-valid-pending-fx"
     assert recovered is not None
     assert recovered.status == "PENDING"
@@ -683,7 +708,7 @@ async def test_owned_fx_requeue_preserves_earliest_date_and_latest_source_lineag
         to_currency="SGD",
         earliest_impacted_date=date(2025, 1, 7),
         content_hash="sha256:" + ("a" * 64),
-        generated_at="2025-01-07T00:00:00+00:00",
+        generated_at=datetime(2025, 1, 7, tzinfo=timezone.utc),
         correlation_id="corr-claimed",
         correlation_missing_reason=None,
         alternate_lookup_key=None,
@@ -696,7 +721,7 @@ async def test_owned_fx_requeue_preserves_earliest_date_and_latest_source_lineag
         to_currency="SGD",
         earliest_impacted_date=date(2025, 1, 5),
         content_hash="sha256:" + ("b" * 64),
-        generated_at="2025-01-08T00:00:00+00:00",
+        generated_at=datetime(2025, 1, 8, tzinfo=timezone.utc),
         correlation_id="corr-sibling",
         correlation_missing_reason=None,
         alternate_lookup_key=None,
