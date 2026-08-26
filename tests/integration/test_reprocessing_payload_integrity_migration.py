@@ -128,6 +128,39 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 {"job_id": processing_id},
             )
 
+            nul_id = connection.execute(
+                text(
+                    r"""
+                    INSERT INTO reprocessing_jobs (
+                        job_type, payload, status, correlation_id, attempt_count,
+                        lease_owner, lease_token, lease_expires_at
+                    ) VALUES (
+                        'RESET_FX_WATERMARKS',
+                        CAST(
+                            '{"from_currency":"NU\u0000L","to_currency":"SGD",'
+                            '"earliest_impacted_date":"2026-08-25","content_hash":"nul",'
+                            '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                            AS JSON
+                        ),
+                        'PROCESSING', 'payload-migration-nul', 1,
+                        'payload-migration-worker',
+                        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                        clock_timestamp() - INTERVAL '30 minutes'
+                    )
+                    RETURNING id
+                    """
+                )
+            ).scalar_one()
+            unsupported_payload = connection.begin_nested()
+            with pytest.raises(DBAPIError, match="active row.*unsupported NUL escape"):
+                migration["upgrade"]()
+            unsupported_payload.rollback()
+            assert not _has_constraint(connection)
+            connection.execute(
+                text("DELETE FROM reprocessing_jobs WHERE id = :job_id"),
+                {"job_id": nul_id},
+            )
+
             invalid_fx_id = _insert_json_job(
                 connection,
                 job_type="RESET_FX_WATERMARKS",
