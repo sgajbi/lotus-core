@@ -848,13 +848,16 @@ cutover. Its exclusive lock also fails after five seconds rather than waiting be
 traffic. During upgrade it preserves valid work, changes malformed pending `RESET_WATERMARKS` and
 `RESET_FX_WATERMARKS` rows to `FAILED`, retains their original payload, and emits separate
 quarantine counts for the two job families. Capture the migration output as deployment evidence.
-Before any JSON field extraction, the migration scans active payload text for the unsupported NUL
-escape. If found, it reports the affected count and recovery action instead of leaking a driver-level
-Unicode error. Preserve the raw evidence and terminalize or repair those rows through governed
-recovery before retrying.
+Before any JSON field extraction, the migration checks whether relevant active payload text can be
+safely interpreted by PostgreSQL's JSON extraction boundary. If not, it reports the affected count
+and recovery action instead of leaking a driver-level Unicode error. Harmless literal escape text
+passes this check. Preserve unsafe raw evidence and terminalize or repair those rows through
+governed recovery before retrying.
 
-After quarantine, `ck_reprocessing_jobs_active_payload_valid` rejects incomplete identities,
-invalid effective dates, and invalid or timezone-less FX source timestamps for active work.
+After quarantine, `ck_reprocessing_jobs_active_payload_valid` is authoritative for post-cutover
+active writes and rejects incomplete identities, noncanonical or invalid effective dates, and
+noncanonical, invalid, or timezone-less FX source timestamps. Runtime quarantine remains defense
+in depth for predecessor-schema or restored rows.
 Investigate quarantined rows through the support API, correlation evidence, and source lineage;
 never repair payloads or reactivate rows directly. Recreate required work through its governed
 source command after correcting authoritative input. Downgrade removes the new-write constraint

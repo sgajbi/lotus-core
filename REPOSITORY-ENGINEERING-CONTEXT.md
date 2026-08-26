@@ -4012,14 +4012,18 @@ Most relevant current governance:
      `updated_at` visibility fencing.
      Active `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` rows must satisfy the database-owned
      payload contract introduced by migration `c162b2c3d529`: complete normalized identity,
-     parseable effective date, and, for FX, complete content hash plus an explicitly zoned source
+     canonical valid ISO effective date, and, for FX, complete content hash plus a canonical,
+     explicitly zoned source
      timestamp. Schema cutover must drain `PROCESSING` work, quarantine malformed pending rows with
      bounded type-level counts, preserve terminal payload evidence, and reject future malformed
      active rows. Never weaken the CHECK constraint or silently rewrite historical payloads to make
      deployment pass.
-     Preflight unsupported NUL escapes from `payload::text` before any `->>` extraction so a legacy
-     literal-SQL row produces a bounded actionable migration error instead of an unexplained driver
-     failure. Do not generalize bound-parameter behavior to direct SQL, restore, or migration paths.
+     Preflight relevant active `payload::text` with PostgreSQL JSONB input validity before any `->>`
+     extraction so a legacy literal-SQL row produces a bounded actionable migration error instead
+     of an unexplained driver failure without falsely rejecting harmless literal escape text. The
+     CHECK is authoritative for post-cutover writes; retain tested runtime quarantine for
+     predecessor-schema and restored rows. Do not generalize bound-parameter behavior to direct
+     SQL, restore, or migration paths.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before

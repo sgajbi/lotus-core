@@ -16,7 +16,7 @@ worker could terminalize the poisoned row, risking repeated queue-wide loss of p
 
 ## Financial And Temporal Invariant
 
-Every active Reset or FX replay row must have a complete replay identity and parseable temporal
+Every active Reset or FX replay row must have a complete replay identity and canonical ISO temporal
 authority before SQL ordering or coalescing uses it. Deployment must not invent missing dates,
 timestamps, hashes, or identities. Malformed pending work becomes attributable terminal evidence;
 valid work and terminal history remain unchanged. A worker must not remain active during the
@@ -25,14 +25,15 @@ cutover, and future malformed active work must fail at the persistence boundary.
 ## Design
 
 1. Forward migration `c162b2c3d529` takes a five-second-bounded exclusive table lock, refuses to
-   run while any row is `PROCESSING`, and preflights active payload text for unsupported NUL escapes
-   before any JSON field extraction. Legacy literal-SQL rows receive an actionable count and
-   recovery hint rather than a driver-level Unicode error.
+   run while any row is `PROCESSING`, and preflights relevant active payload text for JSONB-safe
+   extraction before any JSON field extraction. Legacy literal-SQL NUL rows receive an actionable
+   count and recovery hint rather than a driver-level Unicode error, while harmless literal escape
+   text remains accepted.
 2. It quarantines malformed pending FX and security Reset rows as `FAILED`, retaining the original
    payload and recording separate bounded row counts in PostgreSQL migration notices.
 3. The model and migration declare one database CHECK constraint for `PENDING` and `PROCESSING`
-   Reset/FX work. It requires nonblank identities, parseable effective dates, and, for FX, a
-   nonblank content hash plus parseable explicitly zoned `generated_at`.
+   Reset/FX work. It requires nonblank identities, canonical valid calendar dates, and, for FX, a
+   nonblank content hash plus canonical, parseable, explicitly zoned `generated_at`.
 4. Terminal rows are intentionally outside the constraint so historical evidence is not rewritten
    or made undeployable by a newly introduced active-work contract.
 5. Downgrade removes only the constraint. Quarantine is not reversed because restoring malformed
@@ -45,15 +46,19 @@ The review covered both temporal replay job families and every repository SQL wr
 creation routes Reset work through the governed staging method, and stale FX recovery uses the
 typed replay validator introduced under #1032. The durable database constraint closes legacy,
 restore, migration, and out-of-band active-write paths without duplicating validation across every
-consumer.
+consumer. This CHECK is authoritative for post-cutover writes. Existing runtime quarantine remains
+defense in depth for predecessor-schema, restore, and migration-order states, and its behavior is
+proved separately rather than treated as reachable through the current schema.
 
 The proposed S5 JSON-to-JSONB rewrite was not implemented. The initial probe bound escaped JSON
 text through a parameter and observed rejection, but that evidence did not cover direct SQL literal
 input; PostgreSQL 16.14 can persist the latter in a `json` column and fail only when `->>` extracts
-the affected value. Review correctly exposed that population error. The migration now detects the
-stored escape through `payload::text` before extraction, while the active-row CHECK constraint
-makes future NUL-bearing active work unrepresentable. This closes the queue-safety objective without
-changing JSON key ordering or duplicate-key behavior. The corrected evidence is recorded on #1038.
+the affected value. Review correctly exposed that population error. The migration now asks
+PostgreSQL whether each relevant active `payload::text` is valid JSONB before extraction. That
+tracks the actual extraction boundary without falsely rejecting harmless literal escape text,
+while the active-row CHECK makes future unsafe active work unrepresentable. This closes the
+queue-safety objective without changing JSON key ordering or duplicate-key behavior. The corrected
+evidence is recorded on #1038.
 
 ## Meaningful Proof
 
@@ -61,21 +66,23 @@ changing JSON key ordering or duplicate-key behavior. The corrected evidence is 
   type-level count capture, reversible constraint operations, and three fail-closed temporal
   predicates.
 - Model proof prevents ORM/schema drift by requiring the named constraint.
-- Critical-lifecycle repository proof now asserts that all three previously worker-rejected FX
-  payload shapes fail at commit with the named CHECK constraint and leave no durable queue row.
-  The earlier tests were intentionally changed because the stronger product boundary makes their
-  malformed post-cutover `PENDING` fixtures impossible.
+- Critical-lifecycle repository proof asserts that malformed FX payload shapes fail at commit with
+  the named CHECK constraint and leave no durable queue row. Separate predecessor-schema tests
+  temporarily remove and reliably restore that constraint to prove both claim-time terminalization
+  and valid-replay staging quarantine remain operational recovery defenses.
 - Real PostgreSQL migration proof seeds malformed FX and security rows plus valid pending work,
-  seeds the literal-SQL legacy NUL path, verifies its actionable preflight failure, verifies exact
-  terminal reasons and valid-row preservation, rejects future malformed active writes, and proves
-  downgrade/reapply behavior inside a rollback-owned test transaction.
+  seeds the literal-SQL legacy NUL path and harmless literal escape text, verifies only the unsafe
+  row produces an actionable preflight failure, quarantines PostgreSQL-only date spellings, verifies
+  exact terminal reasons and valid-row preservation, rejects future malformed active writes, and
+  proves downgrade/reapply behavior inside a rollback-owned test transaction.
 - Local pre-PR evidence: 65 focused migration/model/repository units passed; the isolated
   PostgreSQL migration proof passed with drain, exact audit-count, quarantine, valid-row,
   malformed-write, downgrade, and reapply assertions; all 30 real-PostgreSQL reprocessing
   repository tests passed; MyPy passed across 325 source files; repository lint/architecture,
   migration-smoke, wiki/docs, architecture-catalog, and diff-hygiene gates passed. After rebuilding
-  the checkout-specific integration images, all three active-row rejection cases and all 14 tests
-  in the affected FX revaluation repository integration file passed.
+  the checkout-specific integration images, the migration counterexample proof passed and all 17
+  tests in the affected FX revaluation repository integration file passed, including three
+  current-schema rejection cases and three predecessor-schema runtime quarantine cases.
 
 ## Compatibility And Scope
 
