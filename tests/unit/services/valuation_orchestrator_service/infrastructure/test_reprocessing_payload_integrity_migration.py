@@ -64,6 +64,7 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert "RESET_FX_WATERMARKS" in cutover
     assert "RESET_WATERMARKS" in cutover
     assert "pg_input_is_valid" in cutover
+    assert cutover.count("jsonb_typeof") == 7
     assert "quarantined during contract cutover" in cutover
 
     constraint = operations[1]
@@ -77,8 +78,9 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert "RESET_WATERMARKS" in constraint[3]
     assert "pg_input_is_valid" in constraint[3]
     assert constraint[3].count("IS TRUE") == 3
-    assert constraint[3].count("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") == 2
-    assert "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" in constraint[3]
+    assert constraint[3].count("jsonb_typeof") == 7
+    assert "CASE" in constraint[3]
+    assert "^[0-9]" not in constraint[3]
     model_constraint = next(
         item
         for item in ReprocessingJob.__table__.constraints

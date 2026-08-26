@@ -177,11 +177,15 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 payload=('{"security_id":"INVALID-DATE","earliest_impacted_date":"2026-99-99"}'),
                 correlation_id="payload-migration-invalid-security",
             )
-            postgres_only_date_id = _insert_json_job(
+            non_string_identity_id = _insert_json_job(
                 connection,
-                job_type="RESET_WATERMARKS",
-                payload=('{"security_id":"POSTGRES-DATE","earliest_impacted_date":"infinity"}'),
-                correlation_id="payload-migration-postgres-only-date",
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":123,"to_currency":"SGD",'
+                    '"earliest_impacted_date":"2026-08-25","content_hash":"scalar",'
+                    '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                ),
+                correlation_id="payload-migration-non-string-identity",
             )
             literal_escape_id = _insert_json_job(
                 connection,
@@ -201,13 +205,39 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 ),
                 correlation_id="payload-migration-valid",
             )
+            basic_date_id = _insert_json_job(
+                connection,
+                job_type="RESET_WATERMARKS",
+                payload=('{"security_id":"BASIC-DATE","earliest_impacted_date":"20250825"}'),
+                correlation_id="payload-migration-basic-date",
+            )
+            space_timestamp_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"GBP","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-07","content_hash":"flexible",'
+                    '"generated_at":"2025-01-07 08:00:00+05:30"}'
+                ),
+                correlation_id="payload-migration-space-timestamp",
+            )
+            minute_timestamp_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"JPY","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-07","content_hash":"minute",'
+                    '"generated_at":"2025-01-07T08:00Z"}'
+                ),
+                correlation_id="payload-migration-minute-timestamp",
+            )
 
             connection.execute(text("SET LOCAL client_min_messages = notice"))
             caplog.set_level(logging.INFO, logger="sqlalchemy.dialects.postgresql")
             migration["upgrade"]()
             assert _has_constraint(connection)
             assert any(
-                "quarantined 1 FX and 2 security replay row(s)" in record.getMessage()
+                "quarantined 2 FX and 1 security replay row(s)" in record.getMessage()
                 for record in caplog.records
             )
             rows = connection.execute(
@@ -216,8 +246,9 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     SELECT id, status, failure_reason
                     FROM reprocessing_jobs
                     WHERE id IN (
-                        :invalid_fx_id, :invalid_security_id, :postgres_only_date_id,
-                        :literal_escape_id, :valid_id
+                        :invalid_fx_id, :invalid_security_id, :non_string_identity_id,
+                        :literal_escape_id, :valid_id, :basic_date_id,
+                        :space_timestamp_id, :minute_timestamp_id
                     )
                     ORDER BY id
                     """
@@ -225,21 +256,27 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 {
                     "invalid_fx_id": invalid_fx_id,
                     "invalid_security_id": invalid_security_id,
-                    "postgres_only_date_id": postgres_only_date_id,
+                    "non_string_identity_id": non_string_identity_id,
                     "literal_escape_id": literal_escape_id,
                     "valid_id": valid_id,
+                    "basic_date_id": basic_date_id,
+                    "space_timestamp_id": space_timestamp_id,
+                    "minute_timestamp_id": minute_timestamp_id,
                 },
             ).all()
             by_id = {row.id: row for row in rows}
             assert by_id[invalid_fx_id].status == "FAILED"
             assert by_id[invalid_security_id].status == "FAILED"
-            assert by_id[postgres_only_date_id].status == "FAILED"
+            assert by_id[non_string_identity_id].status == "FAILED"
             assert by_id[literal_escape_id].status == "PENDING"
             assert by_id[valid_id].status == "PENDING"
+            assert by_id[basic_date_id].status == "PENDING"
+            assert by_id[space_timestamp_id].status == "PENDING"
+            assert by_id[minute_timestamp_id].status == "PENDING"
             assert all(
                 by_id[job_id].failure_reason
                 == "invalid_reprocessing_job_payload: quarantined during contract cutover"
-                for job_id in (invalid_fx_id, invalid_security_id, postgres_only_date_id)
+                for job_id in (invalid_fx_id, invalid_security_id, non_string_identity_id)
             )
 
             malformed_active = connection.begin_nested()
@@ -255,6 +292,20 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     correlation_id="payload-migration-rejected",
                 )
             malformed_active.rollback()
+
+            non_string_active = connection.begin_nested()
+            with pytest.raises(IntegrityError):
+                _insert_json_job(
+                    connection,
+                    job_type="RESET_FX_WATERMARKS",
+                    payload=(
+                        '{"from_currency":true,"to_currency":"SGD",'
+                        '"earliest_impacted_date":"2026-08-25","content_hash":"bad-type",'
+                        '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                    ),
+                    correlation_id="payload-migration-non-string-rejected",
+                )
+            non_string_active.rollback()
 
             missing_active = connection.begin_nested()
             with pytest.raises(IntegrityError):
