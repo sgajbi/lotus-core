@@ -255,6 +255,10 @@ drain the lingering reader or writer and retry; do not leave the migration queue
 traffic. Never bypass the guard by editing lease fields, statuses, or Alembic revision state.
 
 Migration `c162b2c3d529` uses the same upgrade drain and five-second exclusive-lock boundary. It
+preflights active payload text before JSON field extraction and fails with an actionable message
+when a legacy row contains an unsupported NUL escape. Preserve that raw evidence and terminalize
+or repair the affected row through governed recovery before retrying; do not bypass the guard.
+After that preflight, the migration
 quarantines malformed pending Reset and FX replay payloads as `FAILED`, preserves their durable
 payload evidence, and emits separate bounded FX/security quarantine counts in the migration log.
 It then installs `ck_reprocessing_jobs_active_payload_valid`, which rejects malformed `PENDING` or

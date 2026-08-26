@@ -24,8 +24,10 @@ cutover, and future malformed active work must fail at the persistence boundary.
 
 ## Design
 
-1. Forward migration `c162b2c3d529` takes a five-second-bounded exclusive table lock and refuses to
-   run while any row is `PROCESSING`.
+1. Forward migration `c162b2c3d529` takes a five-second-bounded exclusive table lock, refuses to
+   run while any row is `PROCESSING`, and preflights active payload text for unsupported NUL escapes
+   before any JSON field extraction. Legacy literal-SQL rows receive an actionable count and
+   recovery hint rather than a driver-level Unicode error.
 2. It quarantines malformed pending FX and security Reset rows as `FAILED`, retaining the original
    payload and recording separate bounded row counts in PostgreSQL migration notices.
 3. The model and migration declare one database CHECK constraint for `PENDING` and `PROCESSING`
@@ -45,13 +47,13 @@ typed replay validator introduced under #1032. The durable database constraint c
 restore, migration, and out-of-band active-write paths without duplicating validation across every
 consumer.
 
-The proposed S5 JSON-to-JSONB rewrite was not implemented. In the repository's isolated
-PostgreSQL 16 integration runtime, binding JSON text containing the literal `\\u0000` escape and
-casting it to the existing `json` type failed immediately with
-`unsupported Unicode escape sequence`; no row was persisted. This measured behavior conflicts
-with the issue comment's premise. The result is recorded on #1038 for review. A table rewrite that
-changes key ordering and duplicate-key behavior requires a reproducible current storage defect,
-not inference from a different input path.
+The proposed S5 JSON-to-JSONB rewrite was not implemented. The initial probe bound escaped JSON
+text through a parameter and observed rejection, but that evidence did not cover direct SQL literal
+input; PostgreSQL 16.14 can persist the latter in a `json` column and fail only when `->>` extracts
+the affected value. Review correctly exposed that population error. The migration now detects the
+stored escape through `payload::text` before extraction, while the active-row CHECK constraint
+makes future NUL-bearing active work unrepresentable. This closes the queue-safety objective without
+changing JSON key ordering or duplicate-key behavior. The corrected evidence is recorded on #1038.
 
 ## Meaningful Proof
 
@@ -60,11 +62,9 @@ not inference from a different input path.
   predicates.
 - Model proof prevents ORM/schema drift by requiring the named constraint.
 - Real PostgreSQL migration proof seeds malformed FX and security rows plus valid pending work,
-  verifies exact terminal reasons and valid-row preservation, rejects a future malformed active
-  write, and proves downgrade/reapply behavior inside a rollback-owned test transaction.
-- The initial real PostgreSQL test also provided the negative S5 evidence before the implementation
-  was narrowed; that failure is retained durably on issue #1038 rather than converted into a false
-  passing assertion.
+  seeds the literal-SQL legacy NUL path, verifies its actionable preflight failure, verifies exact
+  terminal reasons and valid-row preservation, rejects future malformed active writes, and proves
+  downgrade/reapply behavior inside a rollback-owned test transaction.
 - Local pre-PR evidence: 65 focused migration/model/repository units passed; the isolated
   PostgreSQL migration proof passed with drain, exact audit-count, quarantine, valid-row,
   malformed-write, downgrade, and reapply assertions; all 30 real-PostgreSQL reprocessing

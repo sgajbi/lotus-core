@@ -17,8 +17,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Active payload integrity**: `PENDING` and `PROCESSING` Reset/FX jobs must carry complete,
   parseable effective-date and source-time fields. Migration `c162b2c3d529` quarantines malformed
-  pending rows with recorded type-level counts before installing the database CHECK constraint;
-  terminal historical evidence is retained without payload rewriting.
+  pending rows with recorded type-level counts before installing the database CHECK constraint. A
+  text-only preflight reports legacy active NUL escapes before JSON extraction; terminal historical
+  evidence is retained without payload rewriting.
 - **Column definitions**:
   - `calendar_code` (String): Controlled code value from a domain taxonomy/configuration.
   - `date` (Date): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
