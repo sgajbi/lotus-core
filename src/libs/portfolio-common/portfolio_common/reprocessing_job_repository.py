@@ -7,7 +7,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any, Dict, Optional, cast
 
-from sqlalchemy import Date, String, bindparam, func, select, text, tuple_, update
+from sqlalchemy import Date, DateTime, String, bindparam, func, select, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
@@ -83,6 +83,7 @@ class _EffectiveDatedReplayIdentity:
     job_type: str
     identity_key: str
     payload: dict[str, Any]
+    generated_at: datetime | None
     attempt_count: int
     correlation_id: str | None
     correlation_missing_reason: str | None
@@ -221,13 +222,16 @@ class ReprocessingJobRepository:
         to_currency: str,
         earliest_impacted_date: date,
         content_hash: str,
-        generated_at: str,
+        generated_at: datetime,
         correlation_id: str | None,
         correlation_missing_reason: str | None,
         alternate_lookup_key: str | None,
         attempt_count: int = 0,
     ) -> None:
         """Quarantine malformed pair work, then coalesce one valid pending FX replay."""
+
+        if not isinstance(generated_at, datetime):
+            raise TypeError("FX replay generated_at must be a datetime")
 
         await self._lock_effective_dated_replay_identity(
             _effective_dated_replay_identity_key(
@@ -291,7 +295,7 @@ class ReprocessingJobRepository:
                     'to_currency', :to_currency,
                     'earliest_impacted_date', CAST(:effective_date AS date)::text,
                     'content_hash', :content_hash,
-                    'generated_at', :generated_at
+                    'generated_at', :generated_at_text
                 )::json,
                 'PENDING',
                 :attempt_count,
@@ -334,7 +338,7 @@ class ReprocessingJobRepository:
                             ),
                             COALESCE(reprocessing_jobs.payload->>'content_hash', '')
                         )
-                        THEN :generated_at
+                        THEN :generated_at_text
                         ELSE reprocessing_jobs.payload->>'generated_at'
                     END
                 )::json,
@@ -391,7 +395,8 @@ class ReprocessingJobRepository:
             bindparam("to_currency", type_=String()),
             bindparam("effective_date", type_=Date()),
             bindparam("content_hash", type_=String()),
-            bindparam("generated_at", type_=String()),
+            bindparam("generated_at", type_=DateTime(timezone=True)),
+            bindparam("generated_at_text", type_=String()),
             bindparam("correlation_id", type_=String()),
             bindparam("correlation_missing_reason", type_=String()),
             bindparam("alternate_lookup_key", type_=String()),
@@ -404,6 +409,7 @@ class ReprocessingJobRepository:
                 "effective_date": earliest_impacted_date,
                 "content_hash": content_hash,
                 "generated_at": generated_at,
+                "generated_at_text": generated_at.isoformat(),
                 "attempt_count": attempt_count,
                 "correlation_id": correlation_id,
                 "correlation_missing_reason": correlation_missing_reason,
@@ -776,7 +782,7 @@ class ReprocessingJobRepository:
                             payload["earliest_impacted_date"]
                         ),
                         content_hash=payload["content_hash"],
-                        generated_at=payload["generated_at"],
+                        generated_at=cast(datetime, identity.generated_at),
                         correlation_id=identity.correlation_id,
                         correlation_missing_reason=identity.correlation_missing_reason,
                         alternate_lookup_key=identity.alternate_lookup_key,
@@ -1090,7 +1096,7 @@ class ReprocessingJobRepository:
             to_currency=payload["to_currency"],
             earliest_impacted_date=earliest_impacted_date,
             content_hash=payload["content_hash"],
-            generated_at=payload["generated_at"],
+            generated_at=cast(datetime, identity.generated_at),
             correlation_id=identity.correlation_id,
             correlation_missing_reason=identity.correlation_missing_reason,
             alternate_lookup_key=identity.alternate_lookup_key,
@@ -1252,6 +1258,7 @@ def _validated_effective_dated_replay_identity(
     earliest_impacted_date = _required_replay_payload_text(payload, "earliest_impacted_date")
     date.fromisoformat(earliest_impacted_date)
     components: tuple[str, ...]
+    generated_at: datetime | None = None
     if job_type == "RESET_WATERMARKS":
         components = (_required_replay_payload_text(payload, "security_id"),)
     else:
@@ -1260,11 +1267,14 @@ def _validated_effective_dated_replay_identity(
             _required_replay_payload_text(payload, "to_currency"),
         )
         _required_replay_payload_text(payload, "content_hash")
-        datetime.fromisoformat(_required_replay_payload_text(payload, "generated_at"))
+        generated_at = datetime.fromisoformat(
+            _required_replay_payload_text(payload, "generated_at")
+        )
     return _EffectiveDatedReplayIdentity(
         job_type=job_type,
         identity_key=_effective_dated_replay_identity_key(job_type, *components),
         payload=cast(dict[str, Any], payload),
+        generated_at=generated_at,
         attempt_count=attempt_count,
         correlation_id=correlation_id,
         correlation_missing_reason=correlation_missing_reason,

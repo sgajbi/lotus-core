@@ -162,7 +162,7 @@ class SqlAlchemyFxRevaluationRepository:
             to_currency=correction.pair.to_currency,
             earliest_impacted_date=correction.effective_date,
             content_hash=correction.content_hash,
-            generated_at=correction.generated_at.isoformat(),
+            generated_at=correction.generated_at,
             correlation_id=diagnostics.correlation_id,
             correlation_missing_reason=diagnostics.correlation_missing_reason,
             alternate_lookup_key=diagnostics.alternate_lookup_key,
