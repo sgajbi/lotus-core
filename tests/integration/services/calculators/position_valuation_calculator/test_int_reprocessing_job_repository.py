@@ -104,6 +104,76 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
     assert jobs[1].correlation_id == "corr-stale-earliest"
 
 
+async def test_malformed_stale_fx_timestamp_fails_without_blocking_cohort(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+    poisoned_fx = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2025-01-05",
+            "content_hash": "sha256:" + ("a" * 64),
+            "generated_at": "not-a-timestamp",
+        },
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="poisoned-fx-worker",
+        lease_token="a" * 32,
+        lease_expires_at=stale_time,
+    )
+    pending_sibling = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2025-01-07",
+            "content_hash": "sha256:" + ("b" * 64),
+            "generated_at": "2025-01-07T08:00:00+00:00",
+        },
+        status="PENDING",
+        correlation_id="corr-valid-pending-fx",
+    )
+    recoverable = ReprocessingJob(
+        job_type="LEASE_LIFECYCLE_PROOF",
+        payload={"scope": "same-stale-cohort"},
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="recoverable-worker",
+        lease_token="b" * 32,
+        lease_expires_at=stale_time,
+    )
+    async_db_session.add_all([poisoned_fx, pending_sibling, recoverable])
+    await async_db_session.flush()
+    poisoned_id = poisoned_fx.id
+    sibling_id = pending_sibling.id
+    recoverable_id = recoverable.id
+    sibling_payload = dict(pending_sibling.payload)
+    await async_db_session.commit()
+
+    recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        max_attempts=3
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    poisoned = await async_db_session.get(ReprocessingJob, poisoned_id)
+    sibling = await async_db_session.get(ReprocessingJob, sibling_id)
+    recovered = await async_db_session.get(ReprocessingJob, recoverable_id)
+    assert recovered_count == 1
+    assert poisoned is not None
+    assert poisoned.status == "FAILED"
+    assert poisoned.failure_reason == "Malformed effective-dated replay during stale recovery"
+    assert sibling is not None
+    assert sibling.status == "PENDING"
+    assert sibling.payload == sibling_payload
+    assert sibling.correlation_id == "corr-valid-pending-fx"
+    assert recovered is not None
+    assert recovered.status == "PENDING"
+
+
 async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     clean_db, async_db_session: AsyncSession
 ):

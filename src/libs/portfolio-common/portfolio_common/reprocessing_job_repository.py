@@ -1260,7 +1260,7 @@ def _validated_effective_dated_replay_identity(
             _required_replay_payload_text(payload, "to_currency"),
         )
         _required_replay_payload_text(payload, "content_hash")
-        _required_replay_payload_text(payload, "generated_at")
+        datetime.fromisoformat(_required_replay_payload_text(payload, "generated_at"))
     return _EffectiveDatedReplayIdentity(
         job_type=job_type,
         identity_key=_effective_dated_replay_identity_key(job_type, *components),
