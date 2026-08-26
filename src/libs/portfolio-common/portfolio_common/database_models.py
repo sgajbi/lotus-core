@@ -5187,11 +5187,13 @@ class ReprocessingJob(Base):
                 AND nullif(btrim(payload->>'to_currency'), '') IS NOT NULL
                 AND nullif(btrim(payload->>'content_hash'), '') IS NOT NULL
                 AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                AND payload->>'earliest_impacted_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
                 AND pg_input_is_valid(
                     payload->>'generated_at', 'timestamp with time zone'
                 ) IS TRUE
                 AND payload->>'generated_at' ~ (
-                    '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
+                    '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+                    '[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?'
                     '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
                 )
             )
@@ -5199,6 +5201,7 @@ class ReprocessingJob(Base):
                 job_type = 'RESET_WATERMARKS'
                 AND nullif(btrim(payload->>'security_id'), '') IS NOT NULL
                 AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                AND payload->>'earliest_impacted_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
             )
             """,
             name="ck_reprocessing_jobs_active_payload_valid",

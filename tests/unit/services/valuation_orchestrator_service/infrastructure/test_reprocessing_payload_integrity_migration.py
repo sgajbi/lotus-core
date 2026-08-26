@@ -53,11 +53,15 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert "LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE" in cutover
     assert "requires a drained PROCESSING queue" in cutover
     assert "status IN ('PENDING', 'PROCESSING')" in cutover
-    assert "strpos(payload::text, E'\\\\u0000')" in cutover
-    assert "active row(s) containing" in cutover
+    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE" in cutover
+    assert "active row(s) that cannot" in cutover
     assert "terminalize or repair" in cutover
-    assert cutover.index("strpos(payload::text") < cutover.index("requires a drained")
-    assert cutover.index("strpos(payload::text") < cutover.index("payload->>'from_currency'")
+    assert cutover.index("pg_input_is_valid(payload::text") < cutover.index(
+        "requires a drained"
+    )
+    assert cutover.index("pg_input_is_valid(payload::text") < cutover.index(
+        "payload->>'from_currency'"
+    )
     assert cutover.count("GET DIAGNOSTICS") == 2
     assert "RESET_FX_WATERMARKS" in cutover
     assert "RESET_WATERMARKS" in cutover
@@ -75,6 +79,8 @@ def test_reprocessing_payload_integrity_migration_is_linear_guarded_and_reversib
     assert "RESET_WATERMARKS" in constraint[3]
     assert "pg_input_is_valid" in constraint[3]
     assert constraint[3].count("IS TRUE") == 3
+    assert constraint[3].count("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") == 2
+    assert "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" in constraint[3]
     model_constraint = next(
         item
         for item in ReprocessingJob.__table__.constraints
