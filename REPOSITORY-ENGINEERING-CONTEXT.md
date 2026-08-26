@@ -4010,6 +4010,13 @@ Most relevant current governance:
      must return PostgreSQL statement time, count, ordered page, and classification from one SQL
      snapshot; never restore application-clock lease comparison or heartbeat-sensitive
      `updated_at` visibility fencing.
+     Active `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` rows must satisfy the database-owned
+     payload contract introduced by migration `c162b2c3d529`: complete normalized identity,
+     parseable effective date, and, for FX, complete content hash plus an explicitly zoned source
+     timestamp. Schema cutover must drain `PROCESSING` work, quarantine malformed pending rows with
+     bounded type-level counts, preserve terminal payload evidence, and reject future malformed
+     active rows. Never weaken the CHECK constraint or silently rewrite historical payloads to make
+     deployment pass.
      Aggregation-owned expired
      lease recovery remains separately tracked by #962.
      Financial reconciliation must collect normalized point-in-time FX pair/date keys before
