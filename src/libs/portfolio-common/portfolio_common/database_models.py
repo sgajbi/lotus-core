@@ -5192,19 +5192,23 @@ class ReprocessingJob(Base):
                     AND nullif(btrim(payload->>'from_currency'), '') IS NOT NULL
                     AND nullif(btrim(payload->>'to_currency'), '') IS NOT NULL
                     AND nullif(btrim(payload->>'content_hash'), '') IS NOT NULL
+                    AND payload->>'from_currency' = btrim(payload->>'from_currency')
+                    AND payload->>'to_currency' = btrim(payload->>'to_currency')
+                    AND payload->>'content_hash' = btrim(payload->>'content_hash')
                     AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
                     AND pg_input_is_valid(
                         payload->>'generated_at', 'timestamp with time zone'
                     ) IS TRUE
                     AND payload->>'generated_at' ~ (
-                        '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
-                        '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
+                        '(Z|[+-][0-9]{2}(:?[0-9]{2}'
+                        '(:?[0-9]{2}([.][0-9]+)?)?)?)$'
                     )
                 )
                 WHEN job_type = 'RESET_WATERMARKS' THEN (
                     jsonb_typeof(payload::jsonb->'security_id') = 'string'
                     AND jsonb_typeof(payload::jsonb->'earliest_impacted_date') = 'string'
                     AND nullif(btrim(payload->>'security_id'), '') IS NOT NULL
+                    AND payload->>'security_id' = btrim(payload->>'security_id')
                     AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
                 )
                 ELSE TRUE
