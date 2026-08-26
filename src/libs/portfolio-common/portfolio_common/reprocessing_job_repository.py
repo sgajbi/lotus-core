@@ -1,5 +1,6 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
+import unicodedata
 import uuid
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
@@ -235,6 +236,15 @@ class ReprocessingJobRepository:
         if generated_at.tzinfo is None or generated_at.utcoffset() is None:
             raise ValueError("FX replay generated_at must be timezone-aware")
 
+        staging_payload = {
+            "from_currency": from_currency,
+            "to_currency": to_currency,
+            "content_hash": content_hash,
+        }
+        from_currency = _required_replay_payload_text(staging_payload, "from_currency")
+        to_currency = _required_replay_payload_text(staging_payload, "to_currency")
+        content_hash = _required_replay_payload_text(staging_payload, "content_hash")
+
         await self._lock_effective_dated_replay_identity(
             _effective_dated_replay_identity_key(
                 "RESET_FX_WATERMARKS",
@@ -265,8 +275,10 @@ class ReprocessingJobRepository:
                       payload->>'generated_at',
                       'timestamp with time zone'
                   ) IS NOT TRUE
-                  OR payload->>'generated_at'
-                      !~ '(Z|[+-][0-9]{2}:[0-9]{2})$'
+                  OR payload->>'generated_at' !~ (
+                      '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
+                      '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
+                  )
               )
             """
         ).bindparams(
@@ -1292,6 +1304,8 @@ def _required_replay_payload_text(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"effective-dated replay payload requires {key}")
+    if any(unicodedata.category(character) == "Cc" for character in value):
+        raise ValueError(f"effective-dated replay payload {key} contains a control character")
     return value
 
 
