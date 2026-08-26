@@ -22,7 +22,7 @@ _PAYLOAD_CUTOVER = sa.text(
     r"""
     DO $$
     DECLARE
-        invalid_unicode_count bigint;
+        unsafe_json_count bigint;
         quarantined_fx_count bigint;
         quarantined_security_count bigint;
     BEGIN
@@ -30,17 +30,18 @@ _PAYLOAD_CUTOVER = sa.text(
         LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
 
         SELECT count(*)
-        INTO invalid_unicode_count
+        INTO unsafe_json_count
         FROM reprocessing_jobs
         WHERE status IN ('PENDING', 'PROCESSING')
-          AND strpos(payload::text, E'\\u0000') > 0;
+          AND job_type IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')
+          AND pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE;
 
-        IF invalid_unicode_count > 0 THEN
+        IF unsafe_json_count > 0 THEN
             RAISE EXCEPTION USING
                 MESSAGE = format(
-                    'reprocessing payload cutover found %s active row(s) containing '
-                    'an unsupported NUL escape',
-                    invalid_unicode_count
+                    'reprocessing payload cutover found %s active row(s) that cannot '
+                    'be safely extracted',
+                    unsafe_json_count
                 ),
                 HINT = (
                     'preserve the raw payload evidence and terminalize or repair the affected '
@@ -71,11 +72,13 @@ _PAYLOAD_CUTOVER = sa.text(
               OR pg_input_is_valid(
                   payload->>'earliest_impacted_date', 'date'
               ) IS NOT TRUE
+              OR payload->>'earliest_impacted_date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
               OR pg_input_is_valid(
                   payload->>'generated_at', 'timestamp with time zone'
               ) IS NOT TRUE
               OR payload->>'generated_at' !~ (
-                  '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
+                  '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+                  '[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?'
                   '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
               )
           );
@@ -94,6 +97,7 @@ _PAYLOAD_CUTOVER = sa.text(
               OR pg_input_is_valid(
                   payload->>'earliest_impacted_date', 'date'
               ) IS NOT TRUE
+              OR payload->>'earliest_impacted_date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
           );
         GET DIAGNOSTICS quarantined_security_count = ROW_COUNT;
 
@@ -123,11 +127,13 @@ def upgrade() -> None:
             AND nullif(btrim(payload->>'to_currency'), '') IS NOT NULL
             AND nullif(btrim(payload->>'content_hash'), '') IS NOT NULL
             AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+            AND payload->>'earliest_impacted_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
             AND pg_input_is_valid(
                 payload->>'generated_at', 'timestamp with time zone'
             ) IS TRUE
             AND payload->>'generated_at' ~ (
-                '[0-9]{2}:[0-9]{2}(:[0-9]{2})?([.][0-9]+)?'
+                '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+                '[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?'
                 '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
             )
         )
@@ -135,6 +141,7 @@ def upgrade() -> None:
             job_type = 'RESET_WATERMARKS'
             AND nullif(btrim(payload->>'security_id'), '') IS NOT NULL
             AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+            AND payload->>'earliest_impacted_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
         )
         """,
     )

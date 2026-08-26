@@ -152,7 +152,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 )
             ).scalar_one()
             unsupported_payload = connection.begin_nested()
-            with pytest.raises(DBAPIError, match="active row.*unsupported NUL escape"):
+            with pytest.raises(DBAPIError, match="active row.*cannot be safely extracted"):
                 migration["upgrade"]()
             unsupported_payload.rollback()
             assert not _has_constraint(connection)
@@ -177,6 +177,24 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 payload=('{"security_id":"INVALID-DATE","earliest_impacted_date":"2026-99-99"}'),
                 correlation_id="payload-migration-invalid-security",
             )
+            postgres_only_date_id = _insert_json_job(
+                connection,
+                job_type="RESET_WATERMARKS",
+                payload=(
+                    '{"security_id":"POSTGRES-DATE",'
+                    '"earliest_impacted_date":"infinity"}'
+                ),
+                correlation_id="payload-migration-postgres-only-date",
+            )
+            literal_escape_id = _insert_json_job(
+                connection,
+                job_type="RESET_WATERMARKS",
+                payload=(
+                    '{"security_id":"SAFE\\\\u0000-TEXT",'
+                    '"earliest_impacted_date":"2026-08-25"}'
+                ),
+                correlation_id="payload-migration-literal-escape",
+            )
             valid_id = _insert_json_job(
                 connection,
                 job_type="RESET_FX_WATERMARKS",
@@ -193,7 +211,7 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
             migration["upgrade"]()
             assert _has_constraint(connection)
             assert any(
-                "quarantined 1 FX and 1 security replay row(s)" in record.getMessage()
+                "quarantined 1 FX and 2 security replay row(s)" in record.getMessage()
                 for record in caplog.records
             )
             rows = connection.execute(
@@ -201,24 +219,31 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     """
                     SELECT id, status, failure_reason
                     FROM reprocessing_jobs
-                    WHERE id IN (:invalid_fx_id, :invalid_security_id, :valid_id)
+                    WHERE id IN (
+                        :invalid_fx_id, :invalid_security_id, :postgres_only_date_id,
+                        :literal_escape_id, :valid_id
+                    )
                     ORDER BY id
                     """
                 ),
                 {
                     "invalid_fx_id": invalid_fx_id,
                     "invalid_security_id": invalid_security_id,
+                    "postgres_only_date_id": postgres_only_date_id,
+                    "literal_escape_id": literal_escape_id,
                     "valid_id": valid_id,
                 },
             ).all()
             by_id = {row.id: row for row in rows}
             assert by_id[invalid_fx_id].status == "FAILED"
             assert by_id[invalid_security_id].status == "FAILED"
+            assert by_id[postgres_only_date_id].status == "FAILED"
+            assert by_id[literal_escape_id].status == "PENDING"
             assert by_id[valid_id].status == "PENDING"
             assert all(
                 by_id[job_id].failure_reason
                 == "invalid_reprocessing_job_payload: quarantined during contract cutover"
-                for job_id in (invalid_fx_id, invalid_security_id)
+                for job_id in (invalid_fx_id, invalid_security_id, postgres_only_date_id)
             )
 
             malformed_active = connection.begin_nested()
