@@ -15,6 +15,10 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Relationships**: No explicit foreign-key relationships declared.
 - **Usage (modules/features)**: `src/services/ingestion_service/app/routers/business_dates.py`, `src/services/ingestion_service/app/services/ingestion_service.py`, `src/services/persistence_service/app/repositories/business_date_repository.py`, `src/services/persistence_service/app/consumers/business_date_consumer.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Active payload integrity**: `PENDING` and `PROCESSING` Reset/FX jobs must carry complete,
+  parseable effective-date and source-time fields. Migration `c162b2c3d529` quarantines malformed
+  pending rows with recorded type-level counts before installing the database CHECK constraint;
+  terminal historical evidence is retained without payload rewriting.
 - **Column definitions**:
   - `calendar_code` (String): Controlled code value from a domain taxonomy/configuration.
   - `date` (Date): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.

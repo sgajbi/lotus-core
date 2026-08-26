@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1713 active reprocessing payload integrity (2026-08-26): issue #1038 showed that legacy or
+out-of-band malformed temporal payloads could reach SQL casts and wedge replay coalescing. A
+quiesced forward migration now quarantines malformed pending Reset and FX rows with separate
+recorded counts, preserves their payload evidence, and installs a database CHECK constraint for
+all active Reset/FX work. Real PostgreSQL proof covers both quarantine families, valid-row
+preservation, fail-closed future writes, drain enforcement, and reversible constraint rollout.
+The same proof contradicted the proposed JSON-to-JSONB rationale: PostgreSQL 16 rejects the
+literal `\\u0000` escape on the existing JSON input boundary, so no table rewrite or
+key-order/duplicate-key compatibility change is included without a reproducible persistence path.
+No API/OpenAPI, event/Kafka, calculation, dependency, image, or runtime-topology contract changed.
+Evidence:
+[CR-1713-ACTIVE-REPROCESSING-PAYLOAD-INTEGRITY.md](./codebase-reviews/CR-1713-ACTIVE-REPROCESSING-PAYLOAD-INTEGRITY.md).
+
 CR-1712 lease-fenced effective-dated replay requeue (2026-08-26): issue #1032 showed that a
 claimed Reset or FX replay could attempt a generic `PROCESSING -> PENDING` transition after a new
 pending sibling was staged. The partial unique index then rejected the transition and the older
