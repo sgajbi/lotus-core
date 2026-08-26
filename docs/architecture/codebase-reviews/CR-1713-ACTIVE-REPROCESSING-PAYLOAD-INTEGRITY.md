@@ -61,6 +61,10 @@ changing JSON key ordering or duplicate-key behavior. The corrected evidence is 
   type-level count capture, reversible constraint operations, and three fail-closed temporal
   predicates.
 - Model proof prevents ORM/schema drift by requiring the named constraint.
+- Critical-lifecycle repository proof now asserts that all three previously worker-rejected FX
+  payload shapes fail at commit with the named CHECK constraint and leave no durable queue row.
+  The earlier tests were intentionally changed because the stronger product boundary makes their
+  malformed post-cutover `PENDING` fixtures impossible.
 - Real PostgreSQL migration proof seeds malformed FX and security rows plus valid pending work,
   seeds the literal-SQL legacy NUL path, verifies its actionable preflight failure, verifies exact
   terminal reasons and valid-row preservation, rejects future malformed active writes, and proves
@@ -69,7 +73,9 @@ changing JSON key ordering or duplicate-key behavior. The corrected evidence is 
   PostgreSQL migration proof passed with drain, exact audit-count, quarantine, valid-row,
   malformed-write, downgrade, and reapply assertions; all 30 real-PostgreSQL reprocessing
   repository tests passed; MyPy passed across 325 source files; repository lint/architecture,
-  migration-smoke, wiki/docs, architecture-catalog, and diff-hygiene gates passed.
+  migration-smoke, wiki/docs, architecture-catalog, and diff-hygiene gates passed. After rebuilding
+  the checkout-specific integration images, all three active-row rejection cases and all 14 tests
+  in the affected FX revaluation repository integration file passed.
 
 ## Compatibility And Scope
 
@@ -82,6 +88,6 @@ population-wide proof before generalizing from one writer, so no skill change is
 
 ## Remaining Closure
 
-Keep #1038 open until the S5 evidence conflict is adjudicated, the protected PR receives current
-merge authority, exact-head and exact-main gates pass, wiki source is published with parity, and
-branch/worktree hygiene is verified.
+Keep #1038 open until the corrected S5 implementation receives a current-head review verdict, the
+protected PR receives merge authority, exact-head and exact-main gates pass, wiki source is
+published with parity, and branch/worktree hygiene is verified.
