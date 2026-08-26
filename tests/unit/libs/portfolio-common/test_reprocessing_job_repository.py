@@ -623,6 +623,8 @@ async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
                 "from_currency": "USD",
                 "to_currency": "SGD",
                 "earliest_impacted_date": "2026-04-08",
+                "content_hash": "sha256:" + ("a" * 64),
+                "generated_at": "not-a-timestamp",
             },
         )
     ]
