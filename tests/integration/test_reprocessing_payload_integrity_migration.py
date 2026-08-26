@@ -187,6 +187,32 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 ),
                 correlation_id="payload-migration-non-string-identity",
             )
+            infinity_date_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"CHF","to_currency":"SGD",'
+                    '"earliest_impacted_date":"infinity","content_hash":"infinite",'
+                    '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                ),
+                correlation_id="payload-migration-infinity-date",
+            )
+            padded_fx_identity_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":" USD ","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2026-08-25","content_hash":"padded",'
+                    '"generated_at":"2026-08-25T00:00:00+00:00"}'
+                ),
+                correlation_id="payload-migration-padded-fx-identity",
+            )
+            padded_security_identity_id = _insert_json_job(
+                connection,
+                job_type="RESET_WATERMARKS",
+                payload=('{"security_id":" SEC-1 ","earliest_impacted_date":"2026-08-25"}'),
+                correlation_id="payload-migration-padded-security-identity",
+            )
             literal_escape_id = _insert_json_job(
                 connection,
                 job_type="RESET_WATERMARKS",
@@ -231,13 +257,23 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                 ),
                 correlation_id="payload-migration-minute-timestamp",
             )
+            offset_seconds_id = _insert_json_job(
+                connection,
+                job_type="RESET_FX_WATERMARKS",
+                payload=(
+                    '{"from_currency":"AUD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-07","content_hash":"offset-seconds",'
+                    '"generated_at":"2025-01-07T08:00:00+05:30:15"}'
+                ),
+                correlation_id="payload-migration-offset-seconds",
+            )
 
             connection.execute(text("SET LOCAL client_min_messages = notice"))
             caplog.set_level(logging.INFO, logger="sqlalchemy.dialects.postgresql")
             migration["upgrade"]()
             assert _has_constraint(connection)
             assert any(
-                "quarantined 2 FX and 1 security replay row(s)" in record.getMessage()
+                "quarantined 4 FX and 2 security replay row(s)" in record.getMessage()
                 for record in caplog.records
             )
             rows = connection.execute(
@@ -247,8 +283,10 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     FROM reprocessing_jobs
                     WHERE id IN (
                         :invalid_fx_id, :invalid_security_id, :non_string_identity_id,
+                        :infinity_date_id, :padded_fx_identity_id,
+                        :padded_security_identity_id,
                         :literal_escape_id, :valid_id, :basic_date_id,
-                        :space_timestamp_id, :minute_timestamp_id
+                        :space_timestamp_id, :minute_timestamp_id, :offset_seconds_id
                     )
                     ORDER BY id
                     """
@@ -257,26 +295,41 @@ def test_upgrade_quarantines_poisoned_work_and_enforces_active_payloads(db_engin
                     "invalid_fx_id": invalid_fx_id,
                     "invalid_security_id": invalid_security_id,
                     "non_string_identity_id": non_string_identity_id,
+                    "infinity_date_id": infinity_date_id,
+                    "padded_fx_identity_id": padded_fx_identity_id,
+                    "padded_security_identity_id": padded_security_identity_id,
                     "literal_escape_id": literal_escape_id,
                     "valid_id": valid_id,
                     "basic_date_id": basic_date_id,
                     "space_timestamp_id": space_timestamp_id,
                     "minute_timestamp_id": minute_timestamp_id,
+                    "offset_seconds_id": offset_seconds_id,
                 },
             ).all()
             by_id = {row.id: row for row in rows}
             assert by_id[invalid_fx_id].status == "FAILED"
             assert by_id[invalid_security_id].status == "FAILED"
             assert by_id[non_string_identity_id].status == "FAILED"
+            assert by_id[infinity_date_id].status == "FAILED"
+            assert by_id[padded_fx_identity_id].status == "FAILED"
+            assert by_id[padded_security_identity_id].status == "FAILED"
             assert by_id[literal_escape_id].status == "PENDING"
             assert by_id[valid_id].status == "PENDING"
             assert by_id[basic_date_id].status == "PENDING"
             assert by_id[space_timestamp_id].status == "PENDING"
             assert by_id[minute_timestamp_id].status == "PENDING"
+            assert by_id[offset_seconds_id].status == "PENDING"
             assert all(
                 by_id[job_id].failure_reason
                 == "invalid_reprocessing_job_payload: quarantined during contract cutover"
-                for job_id in (invalid_fx_id, invalid_security_id, non_string_identity_id)
+                for job_id in (
+                    invalid_fx_id,
+                    invalid_security_id,
+                    non_string_identity_id,
+                    infinity_date_id,
+                    padded_fx_identity_id,
+                    padded_security_identity_id,
+                )
             )
 
             malformed_active = connection.begin_nested()
