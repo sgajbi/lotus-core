@@ -43,12 +43,17 @@ weakening the pending unique indexes or deleting durable lineage.
 ## Same-Pattern Review
 
 The production-source scan found the two issue-owned caller paths and no additional literal
-`update_job_status(..., "PENDING")` bypass in the effective-dated replay family. Existing stale-job
-recovery is a separate repository-owned database-clock policy and remains unchanged. The guard is
-registered under `architecture-guard` and its exact repository command is admitted by the governed
-Make recipe contract, preventing the same bypass and CI-command drift from recurring. The existing
-FX staging unit now identifies lock, quarantine, and upsert statements by SQL contract instead of
-fragile execution position, while explicitly proving the new pair-scoped identity lock.
+`update_job_status(..., "PENDING")` bypass in the effective-dated replay family. Stale recovery now
+uses a two-phase cohort claim: bounded non-locking discovery determines the complete identity set;
+globally sorted advisory locks are acquired; then exact stale rows are reselected with
+`FOR UPDATE SKIP LOCKED`. Keyset continuation lets concurrent pollers advance beyond a busy first
+tranche, while a rolled-back savepoint releases an empty tranche's advisory locks before the next
+identity set is considered. This preserves both deadlock-safe advisory-to-row ordering and disjoint
+bounded recovery throughput. The guard is registered under `architecture-guard` and its exact
+repository command is admitted by the governed Make recipe contract, preventing the same bypass
+and CI-command drift from recurring. The existing FX staging unit identifies lock, quarantine, and
+upsert statements by SQL contract instead of fragile execution position, while explicitly proving
+the pair-scoped identity lock.
 
 ## Meaningful Proof
 
@@ -60,7 +65,10 @@ fragile execution position, while explicitly proving the new pair-scoped identit
   the generic writer.
 - Real PostgreSQL integration tests cover earlier/equal/later siblings, correlation ownership, FX
   source lineage, stale token, repeated replay, outer rollback, no-sibling reuse, and concurrent
-  staging under the identity lock.
+  staging under the identity lock. Cross-path concurrency deliberately reverses identity order and
+  observes advisory-lock waiting without deadlock. A backlog larger than the 1,000-row statement
+  limit proves two concurrent stale pollers claim disjoint cohorts whose union advances beyond one
+  tranche.
 - Guard pass/fail tests cover positional and keyword bypasses plus missing owner wiring.
 - Local exact-tree evidence: 91 focused unit/fitness tests, 56 critical-lifecycle PostgreSQL tests,
   and 9 explicitly selected real-PostgreSQL owned-requeue/coalescing tests; MyPy across 325 source
