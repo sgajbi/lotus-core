@@ -308,6 +308,124 @@ async def test_staging_quarantines_timezone_less_pending_fx_lineage(
     assert rows[1].correlation_id == "corr-authoritative"
 
 
+async def test_staging_preserves_valid_compact_offset_pending_fx_lineage(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    compact_offset = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "HKD",
+            "earliest_impacted_date": "2025-01-04",
+            "content_hash": "sha256:" + ("b" * 64),
+            "generated_at": "2025-01-07T08:00:00+0800",
+        },
+        status="PENDING",
+        correlation_id="corr-compact-offset",
+    )
+    async_db_session.add(compact_offset)
+    await async_db_session.flush()
+    compact_offset_id = compact_offset.id
+    await async_db_session.commit()
+
+    await ReprocessingJobRepository(async_db_session).stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="HKD",
+        earliest_impacted_date=date(2025, 1, 6),
+        content_hash="sha256:" + ("c" * 64),
+        generated_at=datetime(2025, 1, 8, tzinfo=timezone.utc),
+        correlation_id="corr-latest-authoritative",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob).where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].id == compact_offset_id
+    assert rows[0].status == "PENDING"
+    assert rows[0].payload["earliest_impacted_date"] == "2025-01-04"
+    assert rows[0].payload["generated_at"] == "2025-01-08T00:00:00+00:00"
+    assert rows[0].payload["content_hash"] == "sha256:" + ("c" * 64)
+    assert rows[0].correlation_id == "corr-latest-authoritative"
+
+
+async def test_stale_control_character_payload_fails_before_identity_lock_binding(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    inserted = await async_db_session.execute(
+        text(
+            r"""
+            INSERT INTO reprocessing_jobs (
+                job_type,
+                payload,
+                status,
+                attempt_count,
+                lease_owner,
+                lease_token,
+                lease_expires_at
+            )
+            VALUES (
+                'RESET_FX_WATERMARKS',
+                CAST(
+                    '{"from_currency":"US\u0000D","to_currency":"CAD",'
+                    '"earliest_impacted_date":"2025-01-04",'
+                    '"content_hash":"poisoned-content-hash",'
+                    '"generated_at":"2025-01-07T08:00:00+00:00"}'
+                    AS JSON
+                ),
+                'PROCESSING',
+                1,
+                'control-character-worker',
+                '33333333333333333333333333333333',
+                clock_timestamp() - interval '30 minutes'
+            )
+            RETURNING id
+            """
+        )
+    )
+    poisoned_id = int(inserted.scalar_one())
+    recoverable = ReprocessingJob(
+        job_type="LEASE_LIFECYCLE_PROOF",
+        payload={"scope": "after-control-character-replay"},
+        status="PROCESSING",
+        attempt_count=1,
+        lease_owner="recoverable-worker",
+        lease_token="4" * 32,
+        lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    async_db_session.add(recoverable)
+    await async_db_session.flush()
+    recoverable_id = recoverable.id
+    await async_db_session.commit()
+
+    recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        max_attempts=3
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    poisoned = await async_db_session.get(ReprocessingJob, poisoned_id)
+    recovered = await async_db_session.get(ReprocessingJob, recoverable_id)
+    assert recovered_count == 1
+    assert poisoned is not None
+    assert poisoned.status == "FAILED"
+    assert poisoned.failure_reason == "Malformed effective-dated replay during stale recovery"
+    assert recovered is not None
+    assert recovered.status == "PENDING"
+
+
 async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     clean_db, async_db_session: AsyncSession
 ):
