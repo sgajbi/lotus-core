@@ -3,8 +3,8 @@
 - Status: Draft
 - Date: 2026-04-15
 - Scope: `lotus-core`
-- Source RFC: `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
-- Boundary RFC: `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+- Source RFC: `lotus-platform: rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
+- Boundary RFC: `lotus-platform: rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
 - Related local inventory: `docs/architecture/RFC-0082-contract-family-inventory.md`
 
 ## Purpose

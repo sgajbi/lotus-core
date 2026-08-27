@@ -3,7 +3,7 @@
 - Status: Draft
 - Date: 2026-04-15
 - Scope: `lotus-core`
-- Governing RFC: `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
+- Governing RFC: `lotus-platform: rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
 - Related:
   - `docs/architecture/RFC-0083-target-state-gap-analysis.md`
   - `docs/architecture/RFC-0082-contract-family-inventory.md`

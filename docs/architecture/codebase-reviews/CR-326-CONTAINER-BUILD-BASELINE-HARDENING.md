@@ -28,6 +28,6 @@ These were not correctness bugs, but they are real performance and reproducibili
 ## Evidence
 - `.dockerignore`
 - `.github/workflows/ci.yml`
-- `C:/Users/Sandeep/projects/lotus-platform/platform-standards/Container-Build-and-Image-Engineering-Standard.md`
-- `C:/Users/Sandeep/projects/lotus-platform/platform-standards/templates/.dockerignore.backend.template`
-- `C:/Users/Sandeep/projects/lotus-platform/platform-standards/templates/Dockerfile.python-service.template`
+- `lotus-platform: platform-standards/Container-Build-and-Image-Engineering-Standard.md`
+- `lotus-platform: platform-standards/templates/.dockerignore.backend.template`
+- `lotus-platform: platform-standards/templates/Dockerfile.python-service.template`
