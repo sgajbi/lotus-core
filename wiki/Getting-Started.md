@@ -28,13 +28,23 @@ image; use [Validation and CI](Validation-and-CI) and the linked runbooks for th
 | Setting | Value | Where |
 | --- | --- | --- |
 | Declared floor | `>=3.11` | `pyproject.toml` |
-| CI and lint target | `3.12` | `PYTHON_VERSION` in every workflow; ruff `target-version = "py312"` |
+| Behavioural and lint gates | `3.12` | `PYTHON_VERSION` in all five workflows; ruff `target-version = "py312"` |
+| Windows lock-closure replay | `3.11` | the `windows-lock-closures` job in `feature-lane`, `pr-merge-gate`, `main-releasability` |
 | Runtime images | `3.11` | all ten service `Dockerfile`s, digest-pinned |
 
-Use **3.12 locally**: it is what every CI lane runs, so it is what reproduces a gate result. Be aware
-that the released containers run **3.11**, so local and CI behaviour is not automatically proof of
-runtime behaviour. That divergence is tracked as
-[#1046](https://github.com/sgajbi/lotus-core/issues/1046) and is not a setting to change here.
+Use **3.12 locally** for ordinary work: it is what every Linux behavioural and quality lane runs, so
+it is what reproduces a gate result.
+
+Two exceptions matter:
+
+- **Reproducing the Windows dependency gates requires 3.11.** The `windows-lock-closures` job pins
+  it deliberately so the closure it replays matches the runtime. Running those lock-replay commands
+  under 3.12 can resolve a *different* closure and produce a result the gate will not agree with.
+- **Released containers run 3.11**, so local and CI behaviour is not automatically proof of runtime
+  behaviour.
+
+The divergence between the behavioural gates and the runtime is tracked as
+[#1046](https://github.com/sgajbi/lotus-core/issues/1046); it is not a setting to change here.
 
 ## First Local Setup
 

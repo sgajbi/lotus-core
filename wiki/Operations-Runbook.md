@@ -43,17 +43,29 @@ variable shown.
 | `portfolio_transaction_processing_service` | worker | 8085 | 8090 | `LOTUS_TRANSACTION_PROCESSING_HOST_PORT` | operational only |
 | `valuation_orchestrator_service` | worker | 8087 | 8087 | `LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT` | operational only |
 
-Every worker's operational surface is exactly four routes — `GET /health/live`, `GET /health/ready`,
-`GET /metrics`, `GET /version` — and nothing else. A worker has no business routes by design: it
-consumes Kafka and writes durable state. Use `/health/ready` to decide whether it is safe to send
-traffic through the pipeline it feeds, `/metrics` for scrape, and `/version` to confirm which build
-is running before trusting any other diagnostic.
+A worker has **no business routes by design**: it consumes Kafka and writes durable state. Its
+operational surface is four OpenAPI routes — `GET /health/live`, `GET /health/ready`, `GET /metrics`,
+`GET /version`. Use `/health/ready` to decide whether it is safe to send traffic through the pipeline
+it feeds, `/metrics` for scrape, and `/version` to confirm which build is running before trusting any
+other diagnostic.
 
-The five API services expose the same four routes in addition to their contract surface, so the
-probe pattern is identical everywhere. The generated route inventory for the contract surfaces is
-[`docs/standards/api-route-catalog.v1.json`](../docs/standards/api-route-catalog.v1.json), verified
-against the running applications by `make api-route-catalog-guard`; the worker operational routes
-are outside that catalog's scope.
+**Three further routes are reachable on every service, worker included** — `/docs`, `/openapi.json`
+and `/redoc`. FastAPI's documentation URLs stay enabled on the shared health app, and
+`contracts/security/security-control-coverage.v1.json` allowlists all three for each of the ten
+apps. They are outside the OpenAPI schema, so they never appear in route counts. Treat the reachable
+HTTP exposure of a worker as **seven** routes when reviewing network policy or an exposure
+inventory, not four.
+
+The five API services expose the same four operational routes in addition to their contract surface,
+so the probe pattern is identical everywhere.
+
+The generated route inventory is
+[`docs/standards/api-route-catalog.v1.json`](../docs/standards/api-route-catalog.v1.json), checked by
+`make api-route-catalog-guard`. Its scope is **all ten apps, workers included** — each worker
+contributes its four operational entries, keyed by `service_app`. The guard imports every app and
+compares the committed catalog to each `app.openapi()` **in process**; it is a static parity check
+against the code, not a query against running services, so a green guard proves the catalog matches
+the code rather than proving any service is up.
 
 The host ports above are what "service health routes are responding" in
 [Startup checks](#startup-checks) means in practice — for example
