@@ -581,14 +581,21 @@ target CI image-release manifest. It covers two services, selected by `--service
 ```bash
 python scripts/release/render_release_deployment.py \
   --service portfolio_transaction_processing_service \
-  --release-manifest <ci-image-release-manifest.json> \
-  --output deployment/kubernetes/base/portfolio-transaction-processing.yaml
+  --release-manifest output/build-evidence/portfolio_transaction_processing_service-image-release-manifest.json \
+  --output output/deployment/portfolio-transaction-processing.yaml
 
 python scripts/release/render_release_deployment.py \
   --service portfolio_derived_state_service \
-  --release-manifest <ci-image-release-manifest.json> \
-  --output deployment/kubernetes/base/portfolio-derived-state.yaml
+  --release-manifest output/build-evidence/portfolio_derived_state_service-image-release-manifest.json \
+  --output output/deployment/portfolio-derived-state.yaml
 ```
+
+Render to `output/deployment/`, never back over the base template. The tracked files under
+`deployment/kubernetes/base/` carry an all-zero digest placeholder that the renderer needs in order
+to substitute a real digest; writing a rendered deployment over one replaces that placeholder and
+makes the next render fail with `deployment template must contain one target image placeholder`.
+`deployment/kubernetes/base/README.md` holds the canonical commands, including the matching
+`kubectl apply -f output/deployment/...` step.
 
 `--template` is optional; each service already declares its own base template. The renderer refuses
 to emit a deployment the release evidence does not authorize, so a `DeploymentRenderError` means the
