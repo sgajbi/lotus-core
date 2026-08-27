@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.repositories.reporting_repository import ReportingRepository
+from src.services.query_service.app.repositories.reporting_repository import (
+    ReportingRepository,
+    SnapshotPresence,
+)
 
 
 class _FakeExecuteResult:
@@ -129,6 +132,42 @@ async def test_reporting_repository_latest_snapshot_query_can_scope_cash_asset_c
     assert "trim(position_history.security_id) = anon_" in normalized
     assert "position_history.position_date <= '2026-03-27'" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_snapshot_presence_does_not_apply_open_position_filter() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [("P1", date(2026, 3, 26), 2), ("P2", date(2026, 3, 27), 1)]
+    )
+    repo = ReportingRepository(db)
+
+    presence = await repo.list_snapshot_presence(
+        portfolio_ids=["P1", "P2"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert presence == {
+        "P1": SnapshotPresence(snapshot_date=date(2026, 3, 26), row_count=2),
+        "P2": SnapshotPresence(snapshot_date=date(2026, 3, 27), row_count=1),
+    }
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "daily_position_snapshots.portfolio_id IN ('P1', 'P2')" in compiled
+    assert "daily_position_snapshots.date <= '2026-03-27'" in compiled
+    assert "max(daily_position_snapshots.date)" in compiled.lower()
+    assert "count(daily_position_snapshots.id)" in compiled.lower()
+    assert "GROUP BY daily_position_snapshots.portfolio_id" in compiled
+    assert "daily_position_snapshots.quantity != 0" not in compiled
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_snapshot_presence_empty_scope_is_read_free() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReportingRepository(db)
+
+    assert await repo.list_snapshot_presence(portfolio_ids=[], as_of_date=date(2026, 3, 27)) == {}
+    db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio

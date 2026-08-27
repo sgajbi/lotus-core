@@ -35,6 +35,14 @@ class ReportingSnapshotRow:
 
 
 @dataclass(frozen=True)
+class SnapshotPresence:
+    """Source-owned snapshot presence for one portfolio and an as-of date."""
+
+    snapshot_date: date
+    row_count: int
+
+
+@dataclass(frozen=True)
 class InstrumentLookthroughComponentRow:
     parent_security_id: str
     component_security_id: str
@@ -267,6 +275,43 @@ class ReportingRepository:
             ReportingSnapshotRow(portfolio=portfolio, snapshot=snapshot, instrument=instrument)
             for portfolio, snapshot, instrument in rows
         ]
+
+    async def list_snapshot_presence(
+        self,
+        *,
+        portfolio_ids: list[str],
+        as_of_date: date,
+    ) -> dict[str, SnapshotPresence]:
+        """Return source snapshot presence without applying the open-position filter.
+
+        The AUM row query intentionally excludes flat positions.  This separate bounded aggregate
+        keeps a missing/empty source snapshot distinguishable from a genuine zero-valued result.
+        """
+        if not portfolio_ids:
+            return {}
+
+        stmt = (
+            select(
+                DailyPositionSnapshot.portfolio_id,
+                func.max(DailyPositionSnapshot.date).label("snapshot_date"),
+                func.count(DailyPositionSnapshot.id).label("row_count"),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
+                DailyPositionSnapshot.date <= as_of_date,
+            )
+            .group_by(DailyPositionSnapshot.portfolio_id)
+            .order_by(DailyPositionSnapshot.portfolio_id.asc())
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return {
+            str(portfolio_id): SnapshotPresence(
+                snapshot_date=snapshot_date,
+                row_count=int(row_count or 0),
+            )
+            for portfolio_id, snapshot_date, row_count in rows
+            if snapshot_date is not None
+        }
 
     async def count_latest_open_position_keys(
         self,
