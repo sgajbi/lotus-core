@@ -18,10 +18,23 @@ image; use [Validation and CI](Validation-and-CI) and the linked runbooks for th
 
 ## Prerequisites
 
-- Python 3.11 or newer,
+- Python 3.12 for local work — see the version note below,
 - Docker and Docker Compose,
 - GNU Make or an equivalent shell that can run the repo `Makefile`,
 - a sibling `lotus-platform` checkout when running platform-backed validators or wiki sync checks.
+
+**Python version, precisely.** Three different values are in play and the difference matters:
+
+| Setting | Value | Where |
+| --- | --- | --- |
+| Declared floor | `>=3.11` | `pyproject.toml` |
+| CI and lint target | `3.12` | `PYTHON_VERSION` in every workflow; ruff `target-version = "py312"` |
+| Runtime images | `3.11` | all ten service `Dockerfile`s, digest-pinned |
+
+Use **3.12 locally**: it is what every CI lane runs, so it is what reproduces a gate result. Be aware
+that the released containers run **3.11**, so local and CI behaviour is not automatically proof of
+runtime behaviour. That divergence is tracked as
+[#1046](https://github.com/sgajbi/lotus-core/issues/1046) and is not a setting to change here.
 
 ## First Local Setup
 
