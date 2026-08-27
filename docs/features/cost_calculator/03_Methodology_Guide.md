@@ -1,6 +1,6 @@
 # Methodology Guide: Cost Calculator
 
-This guide explains the methodologies used by the `cost_calculator_service` to ensure accurate and auditable financial calculations.
+This guide explains the methodologies used by the cost module inside the unified `portfolio_transaction_processing_service` runtime to ensure accurate and auditable financial calculations.
 
 ## 1. Core Principle: Full History Recalculation
 

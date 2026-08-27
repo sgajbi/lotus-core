@@ -1,6 +1,6 @@
 # Operations & Troubleshooting Guide: Cashflow Calculator
 
-This guide provides information for operating and troubleshooting the `cashflow_calculator_service`.
+This guide provides information for operating and troubleshooting cashflow processing, which runs inside the unified `portfolio_transaction_processing_service` deployment.
 
 ## 1. Key Metrics
 
@@ -29,7 +29,7 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
 ### Symptom: Messages are ending up in the DLQ
 
 - **Potential Cause 1: Invalid Message Payload**
-  - **Check**: The logs for the `cashflow_calculator_service`. Look for `ValidationError` or `JSONDecodeError` messages.
+  - **Check**: The logs for `portfolio_transaction_processing_service`. Look for `ValidationError` or `JSONDecodeError` messages.
   - **Action**: The upstream service is likely publishing a malformed `TransactionEvent`. The message in the DLQ will need to be inspected to identify the schema violation.
 
 - **Potential Cause 2: Missing Cashflow Rule**

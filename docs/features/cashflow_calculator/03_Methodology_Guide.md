@@ -1,6 +1,6 @@
 # Methodology Guide: Cashflow Calculator
 
-This guide details the rule-based methodology used by the `cashflow_calculator_service` to generate cash flow records from transactions.
+This guide details the rule-based methodology used by the cashflow module inside the unified `portfolio_transaction_processing_service` runtime to generate cash flow records from transactions.
 
 ## 1. Rule-Based Mapping
 

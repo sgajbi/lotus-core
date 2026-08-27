@@ -1,6 +1,6 @@
 # Operations & Troubleshooting Guide: Cost Calculator
 
-This guide provides operational instructions for monitoring and troubleshooting the `cost_calculator_service`.
+This guide provides operational instructions for monitoring and troubleshooting cost processing, which runs inside the unified `portfolio_transaction_processing_service` deployment.
 
 ## 1. Observability & Monitoring
 

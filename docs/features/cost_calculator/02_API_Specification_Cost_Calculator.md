@@ -1,18 +1,20 @@
 # Kafka Contract: Transaction Processing
 
-The `portfolio_transaction_processing_service` is the unified transaction-economics runtime for
-cost, cashflow, and position processing. Its primary interface is Apache Kafka. It also exposes
-standard HTTP endpoints for health and metrics monitoring.
+The cost, cashflow, and position modules all run inside the unified `portfolio_transaction_processing_service`
+deployment. It is a Kafka worker: it exposes no business REST API, only operational HTTP endpoints
+for health, metrics, and build identity.
 
 ## 1. Health & Metrics API
 
-* **Base URL:** `http://localhost:8083`
+* **Container port:** `8085`
+* **Host default:** `http://localhost:8090` (override with `LOTUS_TRANSACTION_PROCESSING_HOST_PORT`)
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health/live` | A liveness probe to confirm the service process is running. Returns `{"status": "alive"}`. |
 | `GET` | `/health/ready` | A readiness probe that checks the service's ability to connect to the database. Returns `{"status": "ready"}` on success or a `503 Service Unavailable` on failure. |
 | `GET` | `/metrics` | Exposes performance and application metrics in Prometheus format. |
+| `GET` | `/version` | Returns the build identity of the running image. |
 
 ## 2. Kafka Interface
 
