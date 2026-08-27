@@ -15,8 +15,12 @@ from src.services.query_service.app.dtos.reporting_dto import (
 from src.services.query_service.app.repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingSnapshotRow,
+    SnapshotPresence,
 )
-from src.services.query_service.app.services.reporting_service import ReportingService
+from src.services.query_service.app.services.reporting_service import (
+    ReportingService,
+    _aum_coverage_state,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -128,6 +132,92 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     assert response.totals.position_count == 2
     assert response.portfolios[0].portfolio_currency == "USD"
     assert response.portfolios[0].aum_portfolio_currency == Decimal("150")
+    assert response.portfolios[0].snapshot_found is True
+    assert response.portfolios[0].snapshot_date == date(2026, 3, 27)
+    assert response.portfolios[0].coverage_state == "MEASURED"
+
+
+@pytest.mark.parametrize(
+    ("rows", "presence", "expected"),
+    [
+        ([], None, "NO_SNAPSHOT"),
+        ([], SnapshotPresence(snapshot_date=date(2026, 3, 26), row_count=1), "LOADED_EMPTY"),
+        (
+            [ReportingSnapshotRow(_portfolio("P1"), _snapshot("SEC1", market_value="0"), None)],
+            SnapshotPresence(date(2026, 3, 27), 1),
+            "MEASURED_ZERO",
+        ),
+        (
+            [ReportingSnapshotRow(_portfolio("P1"), _snapshot("SEC1", market_value="10"), None)],
+            SnapshotPresence(date(2026, 3, 27), 1),
+            "MEASURED",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    _portfolio("P1"),
+                    SimpleNamespace(market_value=None, date=date(2026, 3, 27)),
+                    None,
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 27), 1),
+            "UNAVAILABLE",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    _portfolio("P1"),
+                    _snapshot("SEC1", market_value="10", snapshot_date=date(2026, 3, 26)),
+                    None,
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 26), 1),
+            "CARRY_FORWARD",
+        ),
+    ],
+)
+async def test_aum_coverage_state_preserves_source_presence_and_zero_semantics(
+    rows: list[ReportingSnapshotRow],
+    presence: SnapshotPresence | None,
+    expected: str,
+) -> None:
+    assert (
+        _aum_coverage_state(
+            rows=rows,
+            presence=presence,
+            resolved_as_of_date=date(2026, 3, 27),
+        )
+        == expected
+    )
+
+
+async def test_get_assets_under_management_publishes_presence_for_empty_portfolio() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = []
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(snapshot_date=date(2026, 3, 26), row_count=2)
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_assets_under_management(
+            AssetsUnderManagementQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+            )
+        )
+
+    summary = response.portfolios[0]
+    assert summary.aum_reporting_currency == Decimal("0")
+    assert summary.position_count == 0
+    assert summary.snapshot_found is True
+    assert summary.snapshot_date == date(2026, 3, 26)
+    assert summary.coverage_state == "LOADED_EMPTY"
 
 
 async def test_get_assets_under_management_converts_snapshot_rows_sequentially() -> None:

@@ -34,11 +34,13 @@ from ..dtos.reporting_dto import (
     PortfolioSummaryTotals,
     ReportingPortfolioSummary,
     ReportingScope,
+    SnapshotCoverageState,
 )
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingRepository,
+    SnapshotPresence,
 )
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
@@ -235,6 +237,23 @@ def _is_unvalued_snapshot(row: Any) -> bool:
     return bool(normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS)
 
 
+def _aum_coverage_state(
+    *,
+    rows: list[Any],
+    presence: SnapshotPresence | None,
+    resolved_as_of_date: date,
+) -> SnapshotCoverageState:
+    """Classify AUM source coverage without treating a numeric zero as missing data."""
+    if not rows:
+        return "NO_SNAPSHOT" if presence is None else "LOADED_EMPTY"
+    if any(row.snapshot.market_value is None for row in rows):
+        return "UNAVAILABLE"
+    if all(decimal_or_zero(row.snapshot.market_value) == ZERO for row in rows):
+        return "MEASURED_ZERO"
+    latest_row_date = max(row.snapshot.date for row in rows)
+    return "CARRY_FORWARD" if latest_row_date < resolved_as_of_date else "MEASURED"
+
+
 def _portfolio_summary_rollup(
     *,
     row_reporting_values: list[tuple[Any, Decimal, Decimal]],
@@ -341,10 +360,16 @@ class ReportingService:
             portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
             as_of_date=resolved_as_of_date,
         )
+        raw_snapshot_presence = await self.repo.list_snapshot_presence(
+            portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
+            as_of_date=resolved_as_of_date,
+        )
+        snapshot_presence = raw_snapshot_presence if isinstance(raw_snapshot_presence, dict) else {}
 
         per_portfolio_reporting: dict[str, Decimal] = defaultdict(lambda: ZERO)
         per_portfolio_native: dict[str, Decimal] = defaultdict(lambda: ZERO)
         per_portfolio_positions: dict[str, int] = defaultdict(int)
+        rows_by_portfolio: dict[str, list[Any]] = defaultdict(list)
 
         row_reporting_values = await self._snapshot_reporting_values(
             rows=rows,
@@ -353,29 +378,49 @@ class ReportingService:
         )
 
         for row, native_value, reporting_value in row_reporting_values:
-            per_portfolio_native[row.portfolio.portfolio_id] += native_value
-            per_portfolio_reporting[row.portfolio.portfolio_id] += reporting_value
-            per_portfolio_positions[row.portfolio.portfolio_id] += 1
+            portfolio_id = row.portfolio.portfolio_id
+            per_portfolio_native[portfolio_id] += native_value
+            per_portfolio_reporting[portfolio_id] += reporting_value
+            per_portfolio_positions[portfolio_id] += 1
+            rows_by_portfolio[portfolio_id].append(row)
 
         portfolio_summaries: list[ReportingPortfolioSummary] = []
         total_positions = 0
         total_aum_reporting = ZERO
         for portfolio in portfolios:
-            total_positions += per_portfolio_positions[portfolio.portfolio_id]
-            total_aum_reporting += per_portfolio_reporting[portfolio.portfolio_id]
+            portfolio_id = portfolio.portfolio_id
+            presence = snapshot_presence.get(portfolio_id)
+            portfolio_rows = rows_by_portfolio[portfolio_id]
+            total_positions += per_portfolio_positions[portfolio_id]
+            total_aum_reporting += per_portfolio_reporting[portfolio_id]
             portfolio_summaries.append(
                 ReportingPortfolioSummary(
-                    portfolio_id=portfolio.portfolio_id,
+                    portfolio_id=portfolio_id,
                     booking_center_code=portfolio.booking_center_code,
                     client_id=portfolio.client_id,
                     portfolio_currency=normalize_currency_code(str(portfolio.base_currency)),
                     aum_portfolio_currency=(
-                        per_portfolio_native[portfolio.portfolio_id]
+                        per_portfolio_native[portfolio_id]
                         if request.scope.scope_type == "portfolio"
                         else None
                     ),
-                    aum_reporting_currency=per_portfolio_reporting[portfolio.portfolio_id],
-                    position_count=per_portfolio_positions[portfolio.portfolio_id],
+                    aum_reporting_currency=per_portfolio_reporting[portfolio_id],
+                    position_count=per_portfolio_positions[portfolio_id],
+                    snapshot_found=presence is not None or bool(portfolio_rows),
+                    snapshot_date=(
+                        presence.snapshot_date
+                        if presence is not None
+                        else (
+                            max(row.snapshot.date for row in portfolio_rows)
+                            if portfolio_rows
+                            else None
+                        )
+                    ),
+                    coverage_state=_aum_coverage_state(
+                        rows=portfolio_rows,
+                        presence=presence,
+                        resolved_as_of_date=resolved_as_of_date,
+                    ),
                 )
             )
 
