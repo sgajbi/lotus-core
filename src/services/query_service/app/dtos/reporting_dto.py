@@ -18,6 +18,14 @@ from pydantic import BaseModel, Field, model_validator
 from .calculation_lineage_dto import CalculationLineageResponse
 
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
+SnapshotCoverageState = Literal[
+    "NO_SNAPSHOT",
+    "LOADED_EMPTY",
+    "MEASURED_ZERO",
+    "MEASURED",
+    "CARRY_FORWARD",
+    "UNAVAILABLE",
+]
 LookThroughMode = Literal["direct_only", "prefer_look_through"]
 
 
@@ -205,6 +213,31 @@ class ReportingPortfolioSummary(BaseModel):
         ...,
         description="Number of non-zero positions contributing to AUM.",
         examples=[12],
+    )
+    snapshot_found: bool = Field(
+        ...,
+        description=(
+            "Whether a source-owned daily position snapshot exists for this portfolio at or "
+            "before the resolved as-of date. Numeric zero values are not evidence of absence; "
+            "use coverage_state for the source coverage decision."
+        ),
+        examples=[True],
+    )
+    snapshot_date: date | None = Field(
+        None,
+        description=(
+            "Latest source-owned daily position snapshot date at or before the resolved as-of "
+            "date, or null when no snapshot exists."
+        ),
+        examples=["2026-03-27"],
+    )
+    coverage_state: SnapshotCoverageState = Field(
+        ...,
+        description=(
+            "Source-owned AUM coverage state: NO_SNAPSHOT, LOADED_EMPTY, MEASURED_ZERO, "
+            "MEASURED, CARRY_FORWARD, or UNAVAILABLE."
+        ),
+        examples=["MEASURED"],
     )
 
 
