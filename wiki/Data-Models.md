@@ -39,7 +39,7 @@ Primary master and reference tables include:
 - `portfolio_benchmark_assignments`
 - `benchmark_definitions`
 - `index_definitions`
-- `classification_taxonomies`
+- `classification_taxonomy`
 - `cash_account_masters`
 - `instrument_lookthrough_components`
 
@@ -138,8 +138,8 @@ not make the complete fixed-income lifecycle or redemption a supported capabilit
 runtime, query, recovery/load, and downstream certification finish.
 
 Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
-in `docs/standards/financial-numeric-persistence.v1.json` classifies all 131 ORM numeric columns
-across 35 tables by nullability and signed, positive, or nonnegative semantics; every entry is
+in `docs/standards/financial-numeric-persistence.v1.json` classifies all 146 ORM numeric columns
+across 37 tables by nullability and signed, positive, or nonnegative semantics; every entry is
 enforced. Source facts, client policy, position state, transaction economics, cashflows, derived
 timeseries, and reconciliation reject PostgreSQL `NaN`, `Infinity`, and `-Infinity`. Sign checks
 remain independent so legitimate signed cashflow, return, cost, market-value, and P&L fields are
@@ -209,12 +209,12 @@ Primary operational tables include:
 - `portfolio_valuation_jobs`
 - `ingestion_jobs`
 - `ingestion_job_failures`
-- `ingestion_ops_controls`
+- `ingestion_ops_control`
 - `consumer_dlq_events`
-- `consumer_dlq_replay_audits`
+- `consumer_dlq_replay_audit`
 - `reprocessing_jobs`
 - `analytics_export_jobs`
-- `pipeline_stage_states`
+- `pipeline_stage_state`
 - `financial_reconciliation_runs`
 - `financial_reconciliation_findings`
 
