@@ -2497,6 +2497,20 @@
       ]
     },
     {
+      "semanticId": "lotus.coverage_state",
+      "canonicalTerm": "coverage_state",
+      "preferredName": "coverage_state",
+      "description": "Source-owned AUM coverage state: NO_SNAPSHOT, LOADED_EMPTY, MEASURED_ZERO, MEASURED, CARRY_FORWARD, or UNAVAILABLE.",
+      "example": "MEASURED",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.created_at",
       "canonicalTerm": "created_at",
       "preferredName": "created_at",
@@ -8501,14 +8515,29 @@
       "semanticId": "lotus.snapshot_date",
       "canonicalTerm": "snapshot_date",
       "preferredName": "snapshot_date",
-      "description": "Resolved snapshot date backing the summary.",
+      "description": "Latest source-owned daily position snapshot date at or before the resolved as-of date, or null when no snapshot exists.",
       "example": "2026-03-27",
       "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.snapshot_found",
+      "canonicalTerm": "snapshot_found",
+      "preferredName": "snapshot_found",
+      "description": "Whether a source-owned daily position snapshot exists for this portfolio at or before the resolved as-of date. Numeric zero values are not evidence of absence; use coverage_state for the source coverage decision.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "boolean"
       ]
     },
     {
@@ -22119,7 +22148,7 @@
         "Wealth Reporting"
       ],
       "summary": "Query Assets Under Management",
-      "description": "What: Return source-owned assets-under-management views for a resolved reporting scope.\nHow: Resolves latest-snapshot or explicit as-of-date holdings totals for a single portfolio, portfolio list, or business unit, with optional reporting-currency restatement.\nWhen: Use this contract when a downstream consumer needs AUM totals and per-portfolio AUM breakdowns rather than broad holdings state or summary composition. Prefer this route over reconstructing AUM from holdings rows when the downstream need is a governed AUM figure.",
+      "description": "What: Return source-owned assets-under-management views for a resolved reporting scope.\nHow: Resolves latest-snapshot or explicit as-of-date holdings totals for a single portfolio, portfolio list, or business unit, with optional reporting-currency restatement.\nWhen: Use this contract when a downstream consumer needs AUM totals and per-portfolio AUM breakdowns with source snapshot coverage evidence rather than broad holdings state or summary composition. Prefer this route over reconstructing AUM from holdings rows when the downstream need is a governed AUM figure; use each portfolio row's `coverage_state` instead of inferring missing data from zero totals.",
       "naming": {
         "boundedContext": "wealth_reporting",
         "canonicalTerms": [
@@ -22128,6 +22157,7 @@
           "aum_reporting_currency",
           "booking_center_code",
           "client_id",
+          "coverage_state",
           "portfolio_count",
           "portfolio_currency",
           "portfolio_id",
@@ -22138,6 +22168,8 @@
           "resolved_as_of_date",
           "scope",
           "scope_type",
+          "snapshot_date",
+          "snapshot_found",
           "totals"
         ]
       },
@@ -22348,6 +22380,30 @@
             "type": "integer",
             "semanticId": "lotus.position_count",
             "attributeRef": "lotus.position_count"
+          },
+          {
+            "name": "portfolios[].snapshot_found",
+            "location": "body",
+            "required": true,
+            "type": "boolean",
+            "semanticId": "lotus.snapshot_found",
+            "attributeRef": "lotus.snapshot_found"
+          },
+          {
+            "name": "portfolios[].snapshot_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.snapshot_date",
+            "attributeRef": "lotus.snapshot_date"
+          },
+          {
+            "name": "portfolios[].coverage_state",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_state",
+            "attributeRef": "lotus.coverage_state"
           }
         ]
       }

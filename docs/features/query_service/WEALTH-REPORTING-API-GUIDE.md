@@ -166,7 +166,13 @@ Response highlights:
 - resolved as-of date
 - effective reporting currency
 - scope totals
-- per-portfolio AUM breakdown
+- per-portfolio AUM breakdown with source snapshot coverage evidence
+
+Each portfolio row includes `snapshot_found`, `snapshot_date`, and `coverage_state`. The
+coverage state is source-owned and can be `NO_SNAPSHOT`, `LOADED_EMPTY`, `MEASURED_ZERO`,
+`MEASURED`, `CARRY_FORWARD`, or `UNAVAILABLE`. A numeric zero remains a valid reported value;
+consumers must use the coverage state rather than infer missing data from `aum_reporting_currency`
+or `position_count`.
 
 ### Asset Allocation
 

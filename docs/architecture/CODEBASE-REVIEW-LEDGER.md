@@ -1,5 +1,14 @@
 # Codebase Review Ledger
 
+CR-1714 AUM snapshot-presence evidence (2026-08-28, implementation in progress): issue #1034
+identified that AUM's zero-filled response could not distinguish a missing source snapshot from a
+loaded empty snapshot or a measured zero. The bounded reporting repository read now preserves
+source snapshot presence and effective date, while the additive AUM row contract classifies
+`NO_SNAPSHOT`, `LOADED_EMPTY`, `MEASURED_ZERO`, `MEASURED`, `CARRY_FORWARD`, and `UNAVAILABLE`
+without changing existing numeric totals. Focused service, repository, and OpenAPI tests cover the
+classification and query boundary. Final status remains open until protected PR, exact-main, and
+QA evidence are recorded.
+
 CR-1713 active reprocessing payload integrity (2026-08-26): issue #1038 showed that legacy or
 out-of-band malformed temporal payloads could reach SQL casts and wedge replay coalescing. A
 quiesced forward migration now quarantines malformed pending Reset and FX rows with separate
