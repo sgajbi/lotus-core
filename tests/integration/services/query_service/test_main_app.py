@@ -490,6 +490,19 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert components["AssetsUnderManagementResponse"]["properties"]["reporting_currency"][
         "examples"
     ] == ["USD"]
+    aum_portfolio_summary = components["ReportingPortfolioSummary"]
+    assert aum_portfolio_summary["properties"]["snapshot_found"]["type"] == "boolean"
+    assert {
+        item.get("format") for item in aum_portfolio_summary["properties"]["snapshot_date"]["anyOf"]
+    } == {"date", None}
+    assert aum_portfolio_summary["properties"]["coverage_state"]["enum"] == [
+        "NO_SNAPSHOT",
+        "LOADED_EMPTY",
+        "MEASURED_ZERO",
+        "MEASURED",
+        "CARRY_FORWARD",
+        "UNAVAILABLE",
+    ]
     assert allocation_response["properties"]["look_through"]["description"].startswith(
         "Applied look-through mode"
     )

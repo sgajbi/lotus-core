@@ -30,9 +30,10 @@ PORTFOLIO_SUMMARY_INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
         "portfolio, portfolio list, or business unit, with optional reporting-currency "
         "restatement.\n"
         "When: Use this contract when a downstream consumer needs AUM totals and per-portfolio "
-        "AUM breakdowns rather than broad holdings state or summary composition. Prefer this "
-        "route over reconstructing AUM from holdings rows when the downstream need is a governed "
-        "AUM figure."
+        "AUM breakdowns with source snapshot coverage evidence rather than broad holdings state "
+        "or summary composition. Prefer this route over reconstructing AUM from holdings rows "
+        "when the downstream need is a governed AUM figure; use each portfolio row's "
+        "`coverage_state` instead of inferring missing data from zero totals."
     ),
 )
 async def query_assets_under_management(
