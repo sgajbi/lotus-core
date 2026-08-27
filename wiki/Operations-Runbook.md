@@ -574,9 +574,26 @@ manifests, SBOM artifact/provenance/signing/scan workflow controls, digest-based
 references, same-image promotion evidence across `dev`, `uat`, and `prod`, no secret-like build
 ARG/ENV additions, and the shared `/version` route.
 
-For the unified transaction runtime, render
-`deployment/kubernetes/base/portfolio-transaction-processing.yaml` with
-`scripts/release/render_transaction_processing_deployment.py` and the target CI image-release manifest.
+Deployments are rendered from governed image evidence by
+`scripts/release/render_release_deployment.py`, which pins each image to a digest taken from the
+target CI image-release manifest. It covers two services, selected by `--service`:
+
+```bash
+python scripts/release/render_release_deployment.py \
+  --service portfolio_transaction_processing_service \
+  --release-manifest <ci-image-release-manifest.json> \
+  --output deployment/kubernetes/base/portfolio-transaction-processing.yaml
+
+python scripts/release/render_release_deployment.py \
+  --service portfolio_derived_state_service \
+  --release-manifest <ci-image-release-manifest.json> \
+  --output deployment/kubernetes/base/portfolio-derived-state.yaml
+```
+
+`--template` is optional; each service already declares its own base template. The renderer refuses
+to emit a deployment the release evidence does not authorize, so a `DeploymentRenderError` means the
+manifest and the requested service disagree — correct the evidence rather than the template.
+
 Never apply the checked-in all-zero digest placeholder or deploy the legacy cost, cashflow, and
 position worker images/scalers. Apply `deployment/kubernetes/keda/processing-scaledobjects.yaml`
 only after the governed Kafka offset handoff.

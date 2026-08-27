@@ -29,8 +29,11 @@
 
 - Core state transitions execute within explicit DB transaction boundaries.
 - Partial updates are rolled back to prevent ledger/position divergence.
-- Evidence:
-  - `src/libs/portfolio-common/portfolio_common/unit_of_work.py`
+- Evidence — unit-of-work adapters are owned per service, not shared through `portfolio-common`:
+  - `src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_processing/unit_of_work.py`
+  - `src/services/portfolio_transaction_processing_service/app/infrastructure/corporate_action_event_graph/unit_of_work.py`
+  - `src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/unit_of_work.py`
+  - `src/services/query_control_plane_service/app/infrastructure/simulation_unit_of_work.py`
   - service consumer transaction handlers listed above
 
 ## As-Of and Reproducibility Semantics
@@ -39,7 +42,9 @@
 - Epoch-aware query logic preserves atomic snapshot consistency.
 - Evidence:
   - `src/services/query_control_plane_service/app/routers/integration.py`
-  - `src/services/query_service/app/services/integration_service.py`
+  - `src/services/query_service/app/repositories/position_repository.py`
+  - `src/services/query_service/app/repositories/reporting_repository.py`
+  - `src/services/query_service/app/application/holdings_reconciliation.py`
   - `docs/features/foundational_data_queries/03_Methodology_Guide.md`
 
 ## Concurrency and Conflict Policy
