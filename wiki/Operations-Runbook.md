@@ -23,6 +23,43 @@ themselves certify a particular environment, production capacity, or downstream 
 - reconciliation runs
 - demo data pack loading
 
+### Service HTTP surfaces and ports
+
+Ten services listen over HTTP. Five publish a business contract surface; five are Kafka workers
+that still expose an operational surface, which is how they are probed and scraped. Container ports
+are fixed; host ports are the app-local Compose defaults and are overridable by the environment
+variable shown.
+
+| Service | Kind | Container | Host default | Override | HTTP surface |
+| --- | --- | ---: | ---: | --- | ---: |
+| `ingestion_service` | API | 8000 | 8200 | `LOTUS_INGESTION_HOST_PORT` | 42 routes |
+| `query_service` | API | 8001 | 8201 | `LOTUS_QUERY_HOST_PORT` | 33 routes |
+| `query_control_plane_service` | API | 8002 | 8202 | `LOTUS_QUERY_CONTROL_PLANE_HOST_PORT` | 78 routes |
+| `event_replay_service` | API | 8009 | 8209 | `LOTUS_EVENT_REPLAY_HOST_PORT` | 28 routes |
+| `financial_reconciliation_service` | API | 8010 | 8210 | `LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT` | 10 routes |
+| `persistence_service` | worker | 8080 | 8080 | `LOTUS_PERSISTENCE_HOST_PORT` | operational only |
+| `position_valuation_calculator` | worker | 8084 | 8084 | `LOTUS_POSITION_VALUATION_HOST_PORT` | operational only |
+| `portfolio_derived_state_service` | worker | 8085 | 8085 | `LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT` | operational only |
+| `portfolio_transaction_processing_service` | worker | 8085 | 8090 | `LOTUS_TRANSACTION_PROCESSING_HOST_PORT` | operational only |
+| `valuation_orchestrator_service` | worker | 8087 | 8087 | `LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT` | operational only |
+
+Every worker's operational surface is exactly four routes — `GET /health/live`, `GET /health/ready`,
+`GET /metrics`, `GET /version` — and nothing else. A worker has no business routes by design: it
+consumes Kafka and writes durable state. Use `/health/ready` to decide whether it is safe to send
+traffic through the pipeline it feeds, `/metrics` for scrape, and `/version` to confirm which build
+is running before trusting any other diagnostic.
+
+The five API services expose the same four routes in addition to their contract surface, so the
+probe pattern is identical everywhere. The generated route inventory for the contract surfaces is
+[`docs/standards/api-route-catalog.v1.json`](../docs/standards/api-route-catalog.v1.json), verified
+against the running applications by `make api-route-catalog-guard`; the worker operational routes
+are outside that catalog's scope.
+
+The host ports above are what "service health routes are responding" in
+[Startup checks](#startup-checks) means in practice — for example
+`curl http://localhost:8090/health/ready` reaches
+`portfolio_transaction_processing_service`, whose container port is 8085.
+
 Executable incident playbooks are maintained in
 `contracts/operations/incident-playbooks.v1.json`, summarized in
 [Incident Playbooks](../docs/operations/Incident-Playbooks.md), and validated by
