@@ -10,4 +10,4 @@ The foundational `GET` endpoints are a read-through layer for data that has alre
 * **Diagnosis:** The issue is **not** in the `query_service`. The `query_service` is correctly showing that the data does not exist in the final database tables.
 * **Resolution:** The problem lies in the data pipeline that populates those tables.
     1.  Trace the data point back to the `ingestion_service` using the `correlation_id` to confirm it was received.
-    2.  Check the logs of the relevant consumer service (`persistence_service`, `cost_calculator_service`, etc.) for errors related to that `correlation_id`. The data was likely either dropped in a Dead-Letter Queue (DLQ) or is stuck in a retry loop.
+    2.  Check the logs of the relevant consumer service (`persistence_service`, `portfolio_transaction_processing_service`, etc.) for errors related to that `correlation_id`. The data was likely either dropped in a Dead-Letter Queue (DLQ) or is stuck in a retry loop.

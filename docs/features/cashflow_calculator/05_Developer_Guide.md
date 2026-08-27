@@ -1,50 +1,63 @@
-# Developer's Guide: Cashflow Calculator
+# Developer's Guide: Cashflow Processing
 
-This guide provides developers with instructions for understanding and extending the `cashflow_calculator_service`.
+This guide explains how cashflow processing works and how to extend it.
+
+Cashflow is not a separate deployment. It is a module inside the unified
+`portfolio_transaction_processing_service` runtime, where cost, cashflow, and position effects
+complete within one atomic use case.
 
 ## 1. Architecture Overview
 
-The `cashflow_calculator_service` is designed to be extremely simple and maintainable. It has two main parts:
+Three pieces matter:
 
-* **`TransactionConsumer`:** The Kafka consumer that subscribes to `transactions.persisted` events. Its primary job is to look up the correct rule for the incoming transaction type and pass it to the logic layer.
-* **`cashflow_rules` (Database Table):** This table contains the core of the service's business logic. It declaratively maps transaction types to their corresponding cash flow attributes. The consumer loads these rules into an in-memory cache at startup for high performance.
+* **Transaction consumer** —
+  `src/services/portfolio_transaction_processing_service/app/delivery/kafka/transaction_processing_consumer.py`
+  subscribes to persisted transaction events and drives the processing use case.
+* **`cashflow_rules` table** — the declarative rule set mapping a transaction type to its
+  classification, timing, and aggregation level. It is loaded through
+  `app/infrastructure/cashflow/rule_cache.py` rather than read per message.
+* **Domain calculation** — `app/domain/cashflow/calculation.py` applies a resolved rule to one
+  booked transaction. `app/application/cashflow_processing/use_case.py` orchestrates it.
 
-The philosophy of this service is to keep all business rules declarative and centralized in the database, making the system easy for business users to modify without code changes.
+The design intent is unchanged from when cashflow ran as its own service: business rules stay
+declarative and centralized in the database, so adding a rule does not require a code change or a
+redeployment. What changed is where the code runs.
 
 ## 2. Adding a Rule for a New Transaction Type
 
-To add support for a new transaction type (e.g., a "MANAGEMENT_FEE"), a new record must be inserted into the `cashflow_rules` table. This is an operational task, not a developer task, and does not require a code change or redeployment.
+Adding the rule itself is an operational task — insert a record into `cashflow_rules`.
 
-A developer's responsibility is to ensure the new transaction type exists in the system's enums and is handled correctly by upstream services.
+A developer's responsibility is to make sure the transaction type is known to the platform and
+behaves correctly end to end.
 
-1.  **Verify Transaction Type Enum:** Ensure the new transaction type exists in the shared enum.
-    * **File:** `src/services/calculators/cost_calculator_service/app/cost_engine/domain/enums/transaction_type.py`
+1.  **Register the transaction type.** Types are declarative definitions, not enum members. Add a
+    `_definition(...)` entry to `_REGISTRY` in
+    `src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`, declaring at
+    minimum `lifecycle_family`, `economic_role`, `position_effect`, `cash_effect`, `lot_behavior`,
+    and `settlement_behavior`. These fields drive downstream treatment; they are not labels.
 
-2.  **Add a Unit Test:** To ensure your new rule behaves as expected once added to the database, add a new test case to the logic test suite.
-    * **File:** `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
+2.  **Add a unit test** for the rule's behaviour in
+    `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`.
 
-    ```python
-    def test_calculate_management_fee_transaction(base_transaction_event: TransactionEvent):
-        """A MANAGEMENT_FEE is a negative cashflow (outflow)."""
-        event = base_transaction_event
-        event.transaction_type = "MANAGEMENT_FEE"
+    The calculation entry point is `calculate_transaction_cashflow(transaction, rule, *, epoch=...,
+    calculation_context=...)`, which takes a `BookedTransaction` and a `CashflowRule`
+    (`classification`, `timing`, `is_position_flow`, `is_portfolio_flow`) and returns a
+    `CalculatedCashflow`. `CashflowClassification` and `CashflowTiming` live in
+    `app/domain/cashflow/types.py`. Follow the cases already in that test module rather than
+    copying a snippet from this page — they carry the current fixtures and numeric policy.
 
-        # Simulate the rule that will be in the database
-        rule = CashflowRule(
-            classification=CashflowClassification.EXPENSE,
-            timing=CashflowTiming.EOD,
-            is_position_flow=False, # Mgmt fees are not tied to a single position
-            is_portfolio_flow=True   # It is an external outflow of capital
-        )
-        
-        cashflow = CashflowLogic.calculate(event, rule)
-        assert cashflow.amount < 0
-        assert cashflow.is_position_flow is False
-        assert cashflow.is_portfolio_flow is True
-    ```
+3.  **Check settlement and transfer behaviour** if the type moves cash or lots between portfolios;
+    `test_settlement_and_transfer_policy.py` in the same directory covers that boundary.
 
 ## 3. Testing
 
-To run the unit tests specifically for the cashflow logic, use the following command from the project root:
 ```bash
-pytest tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py
+pytest tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/
+pytest tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py
+```
+
+The integration test asserts the rule contract for the core business flows and the corporate-action
+and rights transfer family, checking that each enumerated type has a rule with the expected
+classification and flow level. It covers those families explicitly rather than every registered
+type, so a new type outside them will not be caught there — add it to that test when its family
+belongs under the contract.

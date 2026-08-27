@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-The **`position_calculator_service`** is a core backend service that transforms the stream of individual, cost-calculated transactions into an auditable, chronological history of each security holding. Its primary output is the `position_history` table, which provides a running statement of quantity and cost basis after every transaction.
+**Position processing** is the core backend capability, owned by the unified `portfolio_transaction_processing_service` runtime, that transforms the stream of individual, cost-calculated transactions into an auditable, chronological history of each security holding. Its primary output is the `position_history` table, which provides a running statement of quantity and cost basis after every transaction.
 
 This service is also the system's primary defense against out-of-order data. It contains the logic to detect back-dated **transactions** and is responsible for initiating the entire **Epoch/Watermark Reprocessing** flow to ensure the portfolio's history is always accurate and deterministic.
 

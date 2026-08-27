@@ -1,6 +1,6 @@
 # Operations & Troubleshooting Guide: Position Calculator
 
-This guide provides operational instructions for monitoring and troubleshooting the `position_calculator_service`.
+This guide provides operational instructions for monitoring and troubleshooting position processing, which runs inside the unified `portfolio_transaction_processing_service` deployment.
 
 ## 1. Observability & Monitoring
 
@@ -25,6 +25,6 @@ All logs are structured JSON and are tagged with the `correlation_id`. The most 
 
 | Scenario | Symptom(s) in API / Logs | Key Log Message(s) / Support API | Resolution / Action |
 | :--- | :--- | :--- | :--- |
-| **Position History is Incorrect** | Downstream data (e.g., in the `/positions` API) shows wrong quantity or cost basis. | Compare `/positions`, `/position-history`, and `/lineage/.../securities/{security_id}` for the same key/date window. | **Cause:** Upstream `cost_calculator_service` may have published incorrect `net_cost` on the transaction event. <br> **Resolution:** Verify upstream cost basis logic and correlated transaction lineage. |
+| **Position History is Incorrect** | Downstream data (e.g., in the `/positions` API) shows wrong quantity or cost basis. | Compare `/positions`, `/position-history`, and `/lineage/.../securities/{security_id}` for the same key/date window. | **Cause:** Cost processing may have staged an incorrect `net_cost` before the position effect was applied. Cost, cashflow, and position effects complete in one atomic use case, so check the transaction's cost-basis evidence rather than a separate upstream deployment. <br> **Resolution:** Verify cost basis logic and correlated transaction lineage. |
 | **Reprocessing Not Triggered** | A known back-dated transaction was ingested, but epoch state did not advance. | No "Back-dated transaction detected" log message and no change in lineage endpoint epoch/watermark. | **Cause:** Back-dated detection logic did not evaluate to true for the key state. <br> **Resolution:** Validate key lineage via API-first endpoints and escalate with correlation ID plus lineage payloads if logic appears inconsistent. |
 | **Messages Sent to DLQ** | The `events_dlqd_total` metric is increasing. | `Unexpected error in position calculator...` | **Cause:** A "poison pill" message caused by a bug in the position calculation logic that isn't handled gracefully. <br> **Resolution:** **Escalate to the development team.** Provide the full DLQ message, which contains the original transaction and a detailed error traceback. |
