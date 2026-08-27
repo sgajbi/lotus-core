@@ -1,4 +1,4 @@
-# Operations & Troubleshooting Guide: Position Calculator
+# Operations & Troubleshooting Guide: Position Processing
 
 This guide provides operational instructions for monitoring and troubleshooting position processing, which runs inside the unified `portfolio_transaction_processing_service` deployment.
 

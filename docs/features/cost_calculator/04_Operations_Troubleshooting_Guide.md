@@ -1,4 +1,4 @@
-# Operations & Troubleshooting Guide: Cost Calculator
+# Operations & Troubleshooting Guide: Cost Processing
 
 This guide provides operational instructions for monitoring and troubleshooting cost processing, which runs inside the unified `portfolio_transaction_processing_service` deployment.
 

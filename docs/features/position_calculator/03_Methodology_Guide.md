@@ -1,4 +1,4 @@
-# Methodology Guide: Position Calculator
+# Methodology Guide: Position Processing
 
 This guide details the methodologies used by the position module inside the unified `portfolio_transaction_processing_service` runtime to build the `position_history` and to trigger reprocessing.
 

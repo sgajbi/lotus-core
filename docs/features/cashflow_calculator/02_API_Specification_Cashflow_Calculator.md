@@ -1,4 +1,4 @@
-# API Specification: Cashflow Calculator
+# Kafka Contract: Cashflow Processing
 
 The cost, cashflow, and position modules all run inside the unified `portfolio_transaction_processing_service`
 deployment. It is a Kafka worker: it exposes no business REST API, only operational HTTP endpoints

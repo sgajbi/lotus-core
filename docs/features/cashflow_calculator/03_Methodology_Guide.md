@@ -1,4 +1,4 @@
-# Methodology Guide: Cashflow Calculator
+# Methodology Guide: Cashflow Processing
 
 This guide details the rule-based methodology used by the cashflow module inside the unified `portfolio_transaction_processing_service` runtime to generate cash flow records from transactions.
 
