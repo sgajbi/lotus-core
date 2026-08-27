@@ -32,19 +32,29 @@ image; use [Validation and CI](Validation-and-CI) and the linked runbooks for th
 | Windows lock-closure replay | `3.11` | the `windows-lock-closures` job in `feature-lane`, `pr-merge-gate`, `main-releasability` |
 | Runtime images | `3.11` | all ten service `Dockerfile`s, digest-pinned |
 
-Use **3.12 locally** for ordinary work: it is what every Linux behavioural and quality lane runs, so
-it is what reproduces a gate result.
+Use **3.12 locally** for ordinary work: it is the interpreter for the **in-process** gates — unit and
+integration suites, coverage, lint, typecheck — so it is what reproduces those results.
 
-Two exceptions matter:
+Which interpreter actually runs your code depends on the gate:
 
-- **Reproducing the Windows dependency gates requires 3.11.** The `windows-lock-closures` job pins
-  it deliberately so the closure it replays matches the runtime. Running those lock-replay commands
-  under 3.12 can resolve a *different* closure and produce a result the gate will not agree with.
-- **Released containers run 3.11**, so local and CI behaviour is not automatically proof of runtime
-  behaviour.
+| Gate style | Host interpreter | Code under test runs on |
+| --- | --- | --- |
+| In-process (`test-suites`, `coverage-gate`, quality gates) | 3.12 | **3.12** |
+| Container (`docker-smoke-contract`, `e2e-smoke`, latency and performance gates) | 3.12 | **3.11**, inside the built runtime images |
+| `windows-lock-closures` | 3.11 | dependency resolution only |
 
-The divergence between the behavioural gates and the runtime is tracked as
-[#1046](https://github.com/sgajbi/lotus-core/issues/1046); it is not a setting to change here.
+Two consequences worth knowing before you debug a failure:
+
+- **A container-only failure will not reproduce under host 3.12.** Those lanes boot the real Compose
+  stack from the 3.11 Dockerfiles, so 3.12 is only the orchestrator there. Reproduce them with the
+  containers, not the host interpreter.
+- **Reproducing the Windows dependency gate requires 3.11.** `windows-lock-closures` pins it
+  deliberately so the closure it replays matches the runtime; replaying under 3.12 can resolve a
+  *different* closure and disagree with the gate.
+
+The in-process suites therefore run on an interpreter the runtime images do not use. That gap is
+tracked as [#1046](https://github.com/sgajbi/lotus-core/issues/1046); it is not a setting to change
+here.
 
 ## First Local Setup
 

@@ -30,18 +30,24 @@ that still expose an operational surface, which is how they are probed and scrap
 are fixed; host ports are the app-local Compose defaults and are overridable by the environment
 variable shown.
 
-| Service | Kind | Container | Host default | Override | HTTP surface |
+| Service | Kind | Container | Host default | Override | OpenAPI paths |
 | --- | --- | ---: | ---: | --- | ---: |
-| `ingestion_service` | API | 8000 | 8200 | `LOTUS_INGESTION_HOST_PORT` | 42 routes |
-| `query_service` | API | 8001 | 8201 | `LOTUS_QUERY_HOST_PORT` | 33 routes |
-| `query_control_plane_service` | API | 8002 | 8202 | `LOTUS_QUERY_CONTROL_PLANE_HOST_PORT` | 78 routes |
-| `event_replay_service` | API | 8009 | 8209 | `LOTUS_EVENT_REPLAY_HOST_PORT` | 28 routes |
-| `financial_reconciliation_service` | API | 8010 | 8210 | `LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT` | 10 routes |
-| `persistence_service` | worker | 8080 | 8080 | `LOTUS_PERSISTENCE_HOST_PORT` | operational only |
-| `position_valuation_calculator` | worker | 8084 | 8084 | `LOTUS_POSITION_VALUATION_HOST_PORT` | operational only |
-| `portfolio_derived_state_service` | worker | 8085 | 8085 | `LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT` | operational only |
-| `portfolio_transaction_processing_service` | worker | 8085 | 8090 | `LOTUS_TRANSACTION_PROCESSING_HOST_PORT` | operational only |
-| `valuation_orchestrator_service` | worker | 8087 | 8087 | `LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT` | operational only |
+| `ingestion_service` | API | 8000 | 8200 | `LOTUS_INGESTION_HOST_PORT` | 42 |
+| `query_service` | API | 8001 | 8201 | `LOTUS_QUERY_HOST_PORT` | 33 |
+| `query_control_plane_service` | API | 8002 | 8202 | `LOTUS_QUERY_CONTROL_PLANE_HOST_PORT` | 78 |
+| `event_replay_service` | API | 8009 | 8209 | `LOTUS_EVENT_REPLAY_HOST_PORT` | 28 |
+| `financial_reconciliation_service` | API | 8010 | 8210 | `LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT` | 10 |
+| `persistence_service` | worker | 8080 | 8080 | `LOTUS_PERSISTENCE_HOST_PORT` | 4 (operational) |
+| `position_valuation_calculator` | worker | 8084 | 8084 | `LOTUS_POSITION_VALUATION_HOST_PORT` | 4 (operational) |
+| `portfolio_derived_state_service` | worker | 8085 | 8085 | `LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT` | 4 (operational) |
+| `portfolio_transaction_processing_service` | worker | 8085 | 8090 | `LOTUS_TRANSACTION_PROCESSING_HOST_PORT` | 4 (operational) |
+| `valuation_orchestrator_service` | worker | 8087 | 8087 | `LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT` | 4 (operational) |
+
+The path counts above are **unique OpenAPI paths**, which is how the route catalog keys them for
+navigation. A few paths carry more than one method, so the operation count is slightly higher —
+`query_control_plane_service` has 79 operations over 78 paths, and `event_replay_service` 29 over 28,
+because one path in each supports two verbs. Use the operation count when sizing an exposure
+review; use the path count when navigating the catalog.
 
 A worker has **no business routes by design**: it consumes Kafka and writes durable state. Its
 operational surface is four OpenAPI routes — `GET /health/live`, `GET /health/ready`, `GET /metrics`,
