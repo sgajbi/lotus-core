@@ -248,10 +248,12 @@ def _aum_coverage_state(
         return "NO_SNAPSHOT" if presence is None else "LOADED_EMPTY"
     if any(row.snapshot.market_value is None for row in rows):
         return "UNAVAILABLE"
+    latest_row_date = max(row.snapshot.date for row in rows)
+    if latest_row_date < resolved_as_of_date:
+        return "CARRY_FORWARD"
     if all(decimal_or_zero(row.snapshot.market_value) == ZERO for row in rows):
         return "MEASURED_ZERO"
-    latest_row_date = max(row.snapshot.date for row in rows)
-    return "CARRY_FORWARD" if latest_row_date < resolved_as_of_date else "MEASURED"
+    return "MEASURED"
 
 
 def _portfolio_summary_rollup(
