@@ -74,6 +74,15 @@ These endpoints are hosted by `event_replay_service` after the RFC 081 control-p
   endpoint only after audit writes are healthy.
 
 ## Scaling Controls
+
+Before applying the scalers, confirm the prerequisites in
+[`deployment/kubernetes/keda/README.md`](../../deployment/kubernetes/keda/README.md). One is a
+cutover hazard rather than a checklist item: **the transaction-processing Kafka offset handoff must
+have completed before the first pod starts.** The `portfolio-transaction-processing` scaler sets
+`minReplicaCount: 2`, so applying this manifest during an initial rollout, or against a zero-replica
+target, starts that consumer group immediately. If its offsets have not been migrated, retained transaction history is
+replayed at cutover.
+
 - Deploy KEDA scaled objects from `deployment/kubernetes/keda/processing-scaledobjects.yaml`,
   or apply the directory through its kustomization:
   - `kubectl apply -k deployment/kubernetes/keda -n lotus-core`
