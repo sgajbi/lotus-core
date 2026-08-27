@@ -241,8 +241,8 @@ governed Workbench startup script accepts `-CleanCoreState` for this purpose.
 ## Related Documents
 
 - seed contract:
-  - [Front-Office-Portfolio-Seed-Contract.md](/C:/Users/Sandeep/projects/lotus-core/docs/operations/Front-Office-Portfolio-Seed-Contract.md)
+  - [Front-Office-Portfolio-Seed-Contract.md](./Front-Office-Portfolio-Seed-Contract.md)
 - benchmark repair seed:
-  - [Manual-Portfolio-Performance-Benchmark-Seed-Runbook.md](/C:/Users/Sandeep/projects/lotus-core/docs/operations/Manual-Portfolio-Performance-Benchmark-Seed-Runbook.md)
+  - [Manual-Portfolio-Performance-Benchmark-Seed-Runbook.md](./Manual-Portfolio-Performance-Benchmark-Seed-Runbook.md)
 - tool:
-  - [front_office_portfolio_seed.py](/C:/Users/Sandeep/projects/lotus-core/tools/front_office_portfolio_seed.py)
+  - [front_office_portfolio_seed.py](../../tools/front_office_portfolio_seed.py)

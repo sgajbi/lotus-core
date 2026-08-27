@@ -15,7 +15,7 @@ This document is normative for **new endpoint placement**.
 Platform RFC-0082 is the broader authority for downstream-facing `lotus-core`
 domain authority and analytics-serving boundaries:
 
-- `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+- `lotus-platform: rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
 
 The current route-family inventory and watchlist is maintained in:
 

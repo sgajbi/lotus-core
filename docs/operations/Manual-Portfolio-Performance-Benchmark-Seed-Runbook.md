@@ -15,7 +15,7 @@ is not the full front-office seed target. For the broader realistic seed
 contract that should support gateway and UI development across the portfolio and
 performance workspaces, see:
 
-- [Front-Office-Portfolio-Seed-Contract.md](/C:/Users/Sandeep/projects/lotus-core/docs/operations/Front-Office-Portfolio-Seed-Contract.md)
+- [Front-Office-Portfolio-Seed-Contract.md](./Front-Office-Portfolio-Seed-Contract.md)
 
 ## Safety Scope
 
@@ -285,5 +285,5 @@ this order:
 
 ## Source Files
 
-- tool: [tools/manual_performance_seed.py](/C:/Users/Sandeep/projects/lotus-core/tools/manual_performance_seed.py)
-- tests: [test_manual_performance_seed.py](/C:/Users/Sandeep/projects/lotus-core/tests/unit/tools/test_manual_performance_seed.py)
+- tool: [tools/manual_performance_seed.py](../../tools/manual_performance_seed.py)
+- tests: [test_manual_performance_seed.py](../../tests/unit/tools/test_manual_performance_seed.py)

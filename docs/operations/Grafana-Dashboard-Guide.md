@@ -168,12 +168,12 @@ This dashboard expects:
 ## Related Files
 
 - Platform-owned Grafana provisioning:
-  - [dashboard.yml](C:/Users/Sandeep/projects/lotus-platform/platform-stack/grafana/provisioning/dashboards/dashboard.yml)
+  - `lotus-platform`: `platform-stack/grafana/provisioning/dashboards/dashboard.yml`
 - Dashboard JSON:
-  - [portfolio_analytics.json](C:/Users/Sandeep/projects/lotus-core/grafana/dashboards/portfolio_analytics.json)
+  - [portfolio_analytics.json](../../grafana/dashboards/portfolio_analytics.json)
 - Dashboard provisioning:
-  - [dashboard.yml](C:/Users/Sandeep/projects/lotus-core/grafana/provisioning/dashboards/dashboard.yml)
+  - [dashboard.yml](../../grafana/provisioning/dashboards/dashboard.yml)
 - App-local Docker topology:
-  - [docker-compose.yml](C:/Users/Sandeep/projects/lotus-core/docker-compose.yml)
+  - [docker-compose.yml](../../docker-compose.yml)
 - App-local stack guide:
-  - [App-Local-Stack-Guide.md](C:/Users/Sandeep/projects/lotus-core/docs/operations/App-Local-Stack-Guide.md)
+  - [App-Local-Stack-Guide.md](./App-Local-Stack-Guide.md)

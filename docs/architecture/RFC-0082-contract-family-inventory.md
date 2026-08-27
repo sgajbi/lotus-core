@@ -4,7 +4,7 @@
 
 This document is the Slice 1 inventory for platform RFC-0082:
 
-- `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+- `lotus-platform: rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
 
 It classifies active downstream-facing `lotus-core` API surfaces into the RFC-0082 contract families:
 

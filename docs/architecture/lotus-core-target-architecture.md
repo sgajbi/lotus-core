@@ -4,11 +4,11 @@ This document codifies the target module boundaries for `lotus-core` as approved
 
 Platform RFC-0082 now governs the downstream-facing domain-authority and analytics-serving boundary:
 
-- `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
+- `lotus-platform: rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
 
 Platform RFC-0083 now governs the system-of-record target architecture:
 
-- `C:/Users/Sandeep/projects/lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
+- `lotus-platform: rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
 
 The current local contract-family inventory is:
 

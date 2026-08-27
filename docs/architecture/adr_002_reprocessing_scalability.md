@@ -2,7 +2,7 @@
 
 * **Status**: Implemented
 * **Date**: 2025-09-01
-* **RFC**: [RFC 018 - Enhance Reprocessing Scalability and Resilience](../../RFC%20018%20-%20Enhance%20Reprocessing%20Scalability%20and%20Resilience.md)
+* **RFC**: [RFC 018 - Enhance Reprocessing Scalability and Resilience](../RFCs/RFC%20018%20-%20Enhance%20Reprocessing%20Scalability%20and%20Resilience.md)
 
 ## Context and Problem Statement
 
