@@ -55,12 +55,23 @@ operational surface is four OpenAPI routes — `GET /health/live`, `GET /health/
 it feeds, `/metrics` for scrape, and `/version` to confirm which build is running before trusting any
 other diagnostic.
 
-**Three further routes are reachable on every service, worker included** — `/docs`, `/openapi.json`
-and `/redoc`. FastAPI's documentation URLs stay enabled on the shared health app, and
-`contracts/security/security-control-coverage.v1.json` allowlists all three for each of the ten
-apps. They are outside the OpenAPI schema, so they never appear in route counts. Treat the reachable
-HTTP exposure of a worker as **seven** routes when reviewing network policy or an exposure
-inventory, not four.
+**Four further paths are reachable on every service, worker included** — `/docs`,
+`/docs/oauth2-redirect`, `/openapi.json` and `/redoc`. FastAPI's documentation URLs stay enabled on
+the shared health app, including the Swagger OAuth2 redirect, and none of the four is in the OpenAPI
+schema, so they never appear in route counts.
+
+**A worker therefore exposes eight reachable paths, not four.** Use eight when reviewing network
+policy or building an exposure inventory:
+
+| | Paths |
+| --- | --- |
+| In the OpenAPI schema | `/health/live`, `/health/ready`, `/metrics`, `/version` |
+| Reachable, outside the schema | `/docs`, `/docs/oauth2-redirect`, `/openapi.json`, `/redoc` |
+
+`contracts/security/security-control-coverage.v1.json` allowlists `/docs`, `/openapi.json` and
+`/redoc` for each of the ten apps, but **not** `/docs/oauth2-redirect` — tracked as
+[#1048](https://github.com/sgajbi/lotus-core/issues/1048). Until that closes, treat the security
+contract as covering three of the four documentation paths.
 
 The five API services expose the same four operational routes in addition to their contract surface,
 so the probe pattern is identical everywhere.
