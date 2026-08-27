@@ -1,4 +1,4 @@
-# Feature Documentation: Cost Calculator
+# Feature Documentation: Cost Processing
 
 ## 1. Summary
 

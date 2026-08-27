@@ -1,4 +1,4 @@
-# Feature: Cashflow Calculator
+# Feature: Cashflow Processing
 
 The **Cashflow Calculator** service is a core component of the system responsible for translating raw financial transactions into standardized cashflow records. These records are essential for all higher-level performance and time-series calculations.
 

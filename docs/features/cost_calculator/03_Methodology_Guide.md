@@ -1,4 +1,4 @@
-# Methodology Guide: Cost Calculator
+# Methodology Guide: Cost Processing
 
 This guide explains the methodologies used by the cost module inside the unified `portfolio_transaction_processing_service` runtime to ensure accurate and auditable financial calculations.
 

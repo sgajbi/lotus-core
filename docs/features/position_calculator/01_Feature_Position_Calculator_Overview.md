@@ -1,4 +1,4 @@
-# Feature Documentation: Position Calculator
+# Feature Documentation: Position Processing
 
 ## 1. Summary
 
