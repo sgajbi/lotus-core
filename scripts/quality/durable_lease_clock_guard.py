@@ -14,6 +14,14 @@ _APPLICATION_CLOCK_CALLS = {
     ("datetime", "today"),
     ("timezone", "now"),
 }
+_APPLICATION_CLOCK_HELPER_NAMES = {
+    "utc_now",
+    "utcnow",
+    "today",
+    "current_time",
+    "current_timestamp",
+    "application_deadline",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +72,12 @@ def _contains_application_clock(
         if isinstance(child, ast.Call):
             chain = _attribute_chain(child.func)
             if len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls:
+                return True
+            if chain and (
+                chain[-1] in _APPLICATION_CLOCK_HELPER_NAMES
+                or chain[-1].endswith("_now")
+                or "deadline" in chain[-1].lower()
+            ):
                 return True
             if chain and chain[-1] in {"timedelta", "make_interval"}:
                 # timedelta is an application-side duration when paired with a clock call;
