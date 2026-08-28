@@ -27,10 +27,13 @@ portfolio workspaces trustworthy for PB/WM consumers:
 `GET /reporting-currencies/support` is the source-owned preflight contract for performance
 restatement. It evaluates one portfolio at a required `as_of_date` and returns a typed
 `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` result. Core includes the portfolio base currency and
-currencies observed in the latest non-zero positions, then requires an authoritative FX rate for
-each source currency on or before the requested date. Presence in `GET /lookups/currencies` is
-reported separately as `observed_selector_currency` and must never be treated as proof of
-restatement support.
+currencies observed in the latest non-zero positions. It then validates the same two-leg FX path
+used by performance: each non-base position currency to the portfolio base currency, followed by
+the portfolio base currency to the requested reporting currency. Same-currency legs use the
+identity rate. Every required source-owned rate must exist on or before the requested date.
+Requests before the portfolio `open_date` are `UNAVAILABLE` because the requested scope is outside
+the portfolio's effective window. Presence in `GET /lookups/currencies` is reported separately as
+`observed_selector_currency` and must never be treated as proof of restatement support.
 
 The contract is evidence of Core source-data support only. It does not certify downstream
 `lotus-performance` execution, client publication, or performance methodology.
