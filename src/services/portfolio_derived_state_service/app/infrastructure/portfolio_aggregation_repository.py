@@ -33,6 +33,7 @@ from ..domain.aggregation_jobs.models import (
     AggregationJobCompletionDisposition,
     AggregationJobFailureDisposition,
     AggregationJobLease,
+    AggregationJobLeaseClaim,
     ClaimedAggregationJob,
     ExpiredAggregationJobRecovery,
 )
@@ -285,7 +286,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         self,
         eligible_targets: list[_EligibleAggregationJobTarget],
         *,
-        lease: AggregationJobLease,
+        lease: AggregationJobLeaseClaim,
     ) -> list[PortfolioAggregationJob]:
         if not eligible_targets:
             return []
@@ -322,7 +323,8 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 ),
                 lease_owner=lease.owner,
                 lease_token=lease.token,
-                lease_expires_at=lease.expires_at,
+                lease_expires_at=func.clock_timestamp()
+                + func.make_interval(0, 0, 0, 0, 0, 0, lease.duration_seconds),
             )
             .returning(job)
             .execution_options(populate_existing=True)
@@ -341,7 +343,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         self,
         *,
         batch_size: int,
-        lease: AggregationJobLease,
+        lease: AggregationJobLeaseClaim,
     ) -> list[ClaimedAggregationJob]:
         """Claim one ready batch with durable, fenced lease ownership."""
 
@@ -355,14 +357,13 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
     async def recover_expired_job_leases(
         self,
         *,
-        now: datetime,
         max_attempts: int,
     ) -> ExpiredAggregationJobRecovery:
         """Requeue or fail expired claims while rechecking expiry on every write."""
 
         expired_rows = cast(
             list[Any],
-            (await self.db.execute(_expired_job_leases_statement(now))).all(),
+            (await self.db.execute(_expired_job_leases_statement())).all(),
         )
         failed_job_ids = [
             row.id
@@ -372,14 +373,14 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         ]
         failed_job_id_set = set(failed_job_ids)
         requeue_job_ids = sorted(row.id for row in expired_rows if row.id not in failed_job_id_set)
-        failed_count = await self._fail_expired_job_leases(failed_job_ids, now)
-        requeued_count = await self._requeue_expired_job_leases(requeue_job_ids, now)
+        failed_count = await self._fail_expired_job_leases(failed_job_ids)
+        requeued_count = await self._requeue_expired_job_leases(requeue_job_ids)
         return ExpiredAggregationJobRecovery(
             requeued_count=requeued_count,
             failed_count=failed_count,
         )
 
-    async def _fail_expired_job_leases(self, job_ids: list[int], now: datetime) -> int:
+    async def _fail_expired_job_leases(self, job_ids: list[int]) -> int:
         normalized_ids = sorted(set(job_ids))
         if not normalized_ids:
             return 0
@@ -396,7 +397,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             reserved_binds=9,
         ):
             result = await self.db.execute(
-                _expired_job_leases_update(list(chunk), now)
+                _expired_job_leases_update(list(chunk))
                 .where(
                     func.coalesce(PortfolioAggregationJob.failure_reason, "")
                     != AGGREGATION_REPROCESS_REQUESTED
@@ -412,7 +413,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             failed_count += int(result.rowcount or 0)
         return failed_count
 
-    async def _requeue_expired_job_leases(self, job_ids: list[int], now: datetime) -> int:
+    async def _requeue_expired_job_leases(self, job_ids: list[int]) -> int:
         normalized_ids = sorted(set(job_ids))
         if not normalized_ids:
             return 0
@@ -429,7 +430,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             reserved_binds=7,
         ):
             result = await self.db.execute(
-                _expired_job_leases_update(list(chunk), now)
+                _expired_job_leases_update(list(chunk))
                 .values(
                     status="PENDING",
                     failure_reason=None,
@@ -577,7 +578,7 @@ def _missing_position_timeseries_exists(
     )
 
 
-def _expired_job_leases_statement(now: datetime):
+def _expired_job_leases_statement():
     return (
         select(
             PortfolioAggregationJob.id,
@@ -586,7 +587,7 @@ def _expired_job_leases_statement(now: datetime):
         )
         .where(
             PortfolioAggregationJob.status == "PROCESSING",
-            PortfolioAggregationJob.lease_expires_at <= now,
+            PortfolioAggregationJob.lease_expires_at <= func.clock_timestamp(),
         )
         .order_by(
             PortfolioAggregationJob.lease_expires_at.asc(),
@@ -643,11 +644,11 @@ def _unmaterialized_authoritative_snapshot_exists(target_epoch: int):
     )
 
 
-def _expired_job_leases_update(job_ids: list[int], now: datetime):
+def _expired_job_leases_update(job_ids: list[int]):
     return update(PortfolioAggregationJob).where(
         PortfolioAggregationJob.id.in_(job_ids),
         PortfolioAggregationJob.status == "PROCESSING",
-        PortfolioAggregationJob.lease_expires_at <= now,
+        PortfolioAggregationJob.lease_expires_at <= func.clock_timestamp(),
     )
 
 

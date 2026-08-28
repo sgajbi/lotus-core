@@ -11,6 +11,7 @@ from src.services.portfolio_derived_state_service.app.application.aggregation_jo
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobBatchResult,
     AggregationJobLease,
+    AggregationJobLeaseClaim,
     ClaimedAggregationJob,
     ExpiredAggregationJobRecovery,
 )
@@ -32,9 +33,9 @@ class FakeRepository:
             "oldest_pending_created_at": datetime(2026, 7, 15, 7, 58, tzinfo=timezone.utc),
         }
 
-    async def recover_expired_job_leases(self, *, now, max_attempts):
+    async def recover_expired_job_leases(self, *, max_attempts):
         self.poll_entered.set()
-        self.recovery_calls.append((now, max_attempts))
+        self.recovery_calls.append(max_attempts)
         return ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
 
     async def claim_eligible_jobs(self, *, batch_size, lease):
@@ -138,10 +139,14 @@ async def test_scheduler_recovers_expiry_then_leases_and_processes_ready_batch()
 
     await scheduler._run_poll_once()
 
-    assert repository.recovery_calls == [(FixedClock().now_utc(), 6)]
+    assert repository.recovery_calls == [6]
     batch_size, lease = repository.claim_calls[0]
     assert batch_size == 17
-    assert lease == job.lease
+    assert lease == AggregationJobLeaseClaim(
+        owner="aggregation-runtime-1",
+        token="lease-token-1",
+        duration_seconds=300,
+    )
     assert processor.batches == [[job]]
     assert metrics.pending == [2, 2]
     assert metrics.failed == [1, 1]

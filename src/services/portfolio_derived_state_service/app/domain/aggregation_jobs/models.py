@@ -46,6 +46,31 @@ class AggregationJobLease:
         object.__setattr__(self, "token", token)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AggregationJobLeaseClaim:
+    """Claim identity and bounded duration used to mint a lease in PostgreSQL time."""
+
+    owner: str
+    token: str
+    duration_seconds: int
+
+    def __post_init__(self) -> None:
+        owner = self.owner.strip()
+        token = self.token.strip()
+        if not owner:
+            raise ValueError("Aggregation job lease requires an owner.")
+        if len(owner) > 128:
+            raise ValueError("Aggregation job lease owner cannot exceed 128 characters.")
+        if not token:
+            raise ValueError("Aggregation job lease requires a token.")
+        if len(token) > 64:
+            raise ValueError("Aggregation job lease token cannot exceed 64 characters.")
+        if self.duration_seconds <= 0:
+            raise ValueError("Aggregation job lease duration must be positive.")
+        object.__setattr__(self, "owner", owner)
+        object.__setattr__(self, "token", token)
+
+
 @dataclass(frozen=True, slots=True)
 class ClaimedAggregationJob:
     """Aggregation work paired with the lease required for terminal writes."""

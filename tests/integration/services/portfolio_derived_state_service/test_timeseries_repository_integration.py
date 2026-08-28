@@ -27,7 +27,7 @@ from src.services.portfolio_derived_state_service.app.application.position_times
     MaterializePositionTimeseriesCommand,
 )
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
-    AggregationJobLease,
+    AggregationJobLeaseClaim,
 )
 from src.services.portfolio_derived_state_service.app.domain.position_timeseries.calculator import (
     calculate_position_timeseries,
@@ -68,13 +68,13 @@ class _SessionPositionTimeseriesRepositoryProvider:
             return await operation(TimeseriesGenerationRepository(self._session))
 
 
-def _lease(identity: str) -> AggregationJobLease:
+def _lease(identity: str) -> AggregationJobLeaseClaim:
     """Build one durable claim identity for a repository integration scenario."""
 
-    return AggregationJobLease(
+    return AggregationJobLeaseClaim(
         owner=f"integration-runtime-{identity}",
         token=f"integration-lease-{identity}",
-        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        duration_seconds=300,
     )
 
 
