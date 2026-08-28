@@ -72,9 +72,9 @@ class ReportingCurrencySupportRepository:
             )
             .subquery()
         )
-        instrument_currency = func.upper(func.trim(Instrument.currency))
+        instrument_currency = currency_code_sql_expr(Instrument.currency)
         currency_stmt = (
-            select(Instrument.currency)
+            select(instrument_currency.label("source_currency"))
             .select_from(latest_positions)
             .outerjoin(
                 Instrument,
