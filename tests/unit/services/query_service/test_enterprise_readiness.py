@@ -24,6 +24,7 @@ from src.services.query_service.app.enterprise_readiness import (
     redact_sensitive,
     validate_enterprise_runtime_config,
 )
+from src.services.query_service.app.main import app
 
 
 def _configure_auth_context_env(monkeypatch):
@@ -211,6 +212,23 @@ def test_bulk_portfolio_summary_requires_registered_read_capability(monkeypatch)
 
     assert allowed is True
     assert reason is None
+
+
+def test_query_default_rules_cover_reporting_currency_support_route(monkeypatch) -> None:
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+    route_keys = {
+        f"{method} {route.path}"
+        for route in app.routes
+        for method in getattr(route, "methods", set())
+        if getattr(route, "path", "").startswith("/reporting-currencies/")
+    }
+
+    assert route_keys == {"GET /reporting-currencies/support"}
+    assert route_keys <= load_capability_rules().keys()
+    assert (
+        _required_capability("GET", "/reporting-currencies/support")
+        == "query.reporting_currency_support.read"
+    )
 
 
 def test_authorize_write_request_requires_service_identity_when_headers_present(monkeypatch):

@@ -21,6 +21,7 @@ logger = logging.getLogger("enterprise_readiness")
 _SERVICE_NAME = "lotus-core"
 QUERY_READ_CAPABILITY_RULES: dict[str, str] = {
     "POST /reporting/portfolio-summary/bulk-query": "query.portfolio_summary.read",
+    "GET /reporting-currencies/support": "query.reporting_currency_support.read",
     "GET /portfolios/{portfolio_id}/positions/{security_id}/lots/{lot_id}/book-cost": (
         "query.fixed_income_book_cost.read"
     ),
