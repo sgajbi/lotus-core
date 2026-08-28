@@ -18,8 +18,13 @@ The service's main function is to consume, process, and produce Kafka events.
 
 ### 2.1. Consumers
 
-`app/consumer_manager.py` builds a single consumer, on `valuation.job.requested`, with
-`dlq.valuation_service` as its DLQ.
+`app/consumer_manager.py` subscribes to **one** topic, `valuation.job.requested`, under the single
+consumer group `position_valuation_worker_group`, with `dlq.valuation_service` as its DLQ.
+
+It builds `POSITION_VALUATION_WORKER_COUNT` identical `ValuationConsumer` instances in-process,
+all in that one group. The setting defaults to `1` in code and is set to `8` for the app-local
+Compose stack. Capacity and partition planning should treat this as one consumer group with a
+configurable number of in-process workers sharing the topic's partitions, not as a single reader.
 
 #### Topic: `valuation.job.requested`
 
@@ -43,8 +48,10 @@ The service's main function is to consume, process, and produce Kafka events.
 
 * **Purpose:** Signals that a new market price has been saved. A back-dated price triggers a
   reprocessing flow, but this service does not subscribe to the topic.
-  `valuation_orchestrator_service` consumes it and reacts by scheduling valuation jobs, which reach
-  this service as `valuation.job.requested`. `persistence_service` also consumes it.
+  `valuation_orchestrator_service` is its only consumer; it reacts by scheduling valuation jobs,
+  which reach this service as `valuation.job.requested`. `persistence_service` is the **producer**
+  — its `MarketPriceConsumer` reads the raw market-price topic and stages `MarketPricePersisted`
+  here.
 * **Producer:** `persistence_service`
 * **Key:** `security_id`
 * **Payload (`MarketPricePersistedEvent`):**
