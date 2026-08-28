@@ -264,4 +264,4 @@ affected portfolio. Replay through the governed remediation path after correctin
 - [Support and Lineage](Support-and-Lineage)
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Operations Runbook](Operations-Runbook)
-- [Lotus Core Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
+- [Lotus Core Microservice Boundaries and Trigger Matrix](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/microservice-boundaries-and-trigger-matrix.md)

@@ -4,7 +4,7 @@
 
 This page is the navigation view for API families and common route examples. The generated
 implementation-backed catalog lives in
-[`docs/standards/api-route-catalog.v1.json`](../docs/standards/api-route-catalog.v1.json) and is
+[`docs/standards/api-route-catalog.v1.json`](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-route-catalog.v1.json) and is
 checked by `make api-route-catalog-guard`.
 
 | Need | Primary Evidence | Notes |
@@ -85,7 +85,7 @@ Reconciliation and control execution contracts.
 ## Copy-paste route examples
 
 Verified synthetic success and failure examples live in
-[verified-api-examples.v1.json](../docs/standards/verified-api-examples.v1.json). The catalog maps
+[verified-api-examples.v1.json](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/verified-api-examples.v1.json). The catalog maps
 each route family to example IDs and is guarded by `make api-example-catalog-guard`; use it for
 error, idempotency, pagination, security, dependency-timeout, and degraded-source-data examples
 instead of copying unverified prose snippets.
@@ -200,8 +200,8 @@ POST /integration/advisory/proposals/simulate-execution
 
 For detailed classification, use:
 
-- [Generated API Route Catalog](../docs/standards/api-route-catalog.v1.json)
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [Route Contract-Family Registry](../docs/standards/route-contract-family-registry.json)
-- [Endpoint Consolidation Watchlist](../docs/standards/endpoint-consolidation-watchlist.json)
-- [Architecture Index](../docs/architecture/README.md)
+- [Generated API Route Catalog](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-route-catalog.v1.json)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [Route Contract-Family Registry](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/route-contract-family-registry.json)
+- [Endpoint Consolidation Watchlist](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/endpoint-consolidation-watchlist.json)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)

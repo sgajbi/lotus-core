@@ -83,7 +83,7 @@ Because the repo is expensive to validate fully, the normal workflow is:
 
 Suite composition is governed by:
 
-- [scripts/quality/test_manifest.py](../scripts/quality/test_manifest.py)
+- [scripts/quality/test_manifest.py](https://github.com/sgajbi/lotus-core/blob/main/scripts/quality/test_manifest.py)
 
 Useful manifest checks:
 

@@ -188,4 +188,4 @@ portfolio readiness or normal front-office support posture.
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
-- [Architecture Index](../docs/architecture/README.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)

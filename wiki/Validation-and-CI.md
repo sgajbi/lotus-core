@@ -407,13 +407,13 @@ used by release enforcement and does not replace protected PR or exact-main proo
 ## Reading path when a gate fails
 
 - route-family or consumer guard failure:
-  start with [RFC Index](RFC-Index), then [Architecture Index](../docs/architecture/README.md)
+  start with [RFC Index](RFC-Index), then [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
 - event-runtime or supportability guard failure:
   start with [Operations Runbook](Operations-Runbook), then the RFC-0083 eventing/supportability
   docs from the architecture index
 - architecture or OpenAPI guard failure:
   start with [Architecture](Architecture), [API Surface](API-Surface), the
-  [generated API route catalog](../docs/standards/api-route-catalog.v1.json), and the deep
+  [generated API route catalog](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-route-catalog.v1.json), and the deep
   architecture index before changing code or docs
 - wiki docs gate failure:
   update repo-local `wiki/` source first, keep `_Sidebar.md` aligned with every publishable page,
@@ -432,7 +432,7 @@ used by release enforcement and does not replace protected PR or exact-main proo
 ## Related references
 
 - [RFC Index](RFC-Index)
-- [Architecture Index](../docs/architecture/README.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
 - [Operations Runbook](Operations-Runbook)
 
 ## App-Level Validation Evidence

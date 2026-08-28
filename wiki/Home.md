@@ -85,9 +85,9 @@ make analytics-input-consumer-contract-guard
 
 ## Canonical References
 
-- [Repository Engineering Context](../REPOSITORY-ENGINEERING-CONTEXT.md)
-- [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
-- [Architecture Index](../docs/architecture/README.md)
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
-- [Route Contract-Family Registry](../docs/standards/route-contract-family-registry.json)
+- [Repository Engineering Context](https://github.com/sgajbi/lotus-core/blob/main/REPOSITORY-ENGINEERING-CONTEXT.md)
+- [Target Architecture](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/lotus-core-target-architecture.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [RFC-0083 Target-State Gap Analysis](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-target-state-gap-analysis.md)
+- [Route Contract-Family Registry](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/route-contract-family-registry.json)

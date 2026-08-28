@@ -53,10 +53,10 @@ consumer audit instead of treating this page as a route-by-route source of truth
 
 ## Reference
 
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [RFC-0082 Downstream Endpoint Consumer And Test Coverage Audit](../docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md)
-- [Architecture Index](../docs/architecture/README.md)
-- [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [RFC-0082 Downstream Endpoint Consumer And Test Coverage Audit](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+- [Query Service And Control Plane Boundary](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [API Surface](API-Surface)
 
 ## Read Next

@@ -3,7 +3,7 @@
 ## Current Scope
 
 This page is the wiki navigation view. The full governed inventory lives in
-[`docs/standards/rfc-status-ledger.v1.json`](../docs/standards/rfc-status-ledger.v1.json) and is
+[`docs/standards/rfc-status-ledger.v1.json`](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/rfc-status-ledger.v1.json) and is
 checked by `make rfc-status-ledger-guard`.
 
 The ledger covers:
@@ -35,10 +35,10 @@ docs/wiki links, supported-feature posture, and supersession/deprecation metadat
 
 ## Key local references
 
-- [Architecture Index](../docs/architecture/README.md)
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
-- [RFC-0083 Production Readiness Closure](../docs/architecture/RFC-0083-production-readiness-closure.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [RFC-0083 Target-State Gap Analysis](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-target-state-gap-analysis.md)
+- [RFC-0083 Production Readiness Closure](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-production-readiness-closure.md)
 
 ## Use this page when
 
@@ -50,18 +50,18 @@ docs/wiki links, supported-feature posture, and supersession/deprecation metadat
 
 Route-family or downstream contract work:
 
-1. [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
+1. [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
 2. [Query Control Plane](Query-Control-Plane)
 3. [API Surface](API-Surface)
 
 RFC-0083 slice work:
 
-1. [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
-2. [Architecture Index](../docs/architecture/README.md)
+1. [RFC-0083 Target-State Gap Analysis](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-target-state-gap-analysis.md)
+2. [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
 3. the specific RFC-0083 target-model document for the slice
 
 Validation or readiness review:
 
 1. [Validation and CI](Validation-and-CI)
-2. [RFC-0083 Production Readiness Closure](../docs/architecture/RFC-0083-production-readiness-closure.md)
+2. [RFC-0083 Production Readiness Closure](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-production-readiness-closure.md)
 3. [Operations Runbook](Operations-Runbook)

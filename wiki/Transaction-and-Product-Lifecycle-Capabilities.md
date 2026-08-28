@@ -14,7 +14,7 @@ make transaction-capability-catalog-guard
 ```
 
 The detailed engineering catalog is
-[Transaction And Product Lifecycle Capabilities](../docs/features/transaction-and-product-lifecycle-capabilities.md).
+[Transaction And Product Lifecycle Capabilities](https://github.com/sgajbi/lotus-core/blob/main/docs/features/transaction-and-product-lifecycle-capabilities.md).
 
 ## Current Position
 
