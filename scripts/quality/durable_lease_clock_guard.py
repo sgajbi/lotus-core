@@ -38,23 +38,32 @@ def _attribute_chain(node: ast.AST) -> tuple[str, ...]:
 def _contains_application_clock(
     node: ast.AST,
     application_clock_names: set[str] | None = None,
+    application_clock_calls: set[tuple[str, str]] | None = None,
 ) -> bool:
     application_clock_names = application_clock_names or set()
+    application_clock_calls = application_clock_calls or _APPLICATION_CLOCK_CALLS
     if isinstance(node, ast.Name):
         return node.id in application_clock_names
     if isinstance(node, ast.BinOp):
         return _contains_application_clock(
-            node.left, application_clock_names
+            node.left,
+            application_clock_names,
+            application_clock_calls,
         ) or _contains_application_clock(
             node.right,
             application_clock_names,
+            application_clock_calls,
         )
     if isinstance(node, ast.UnaryOp):
-        return _contains_application_clock(node.operand, application_clock_names)
+        return _contains_application_clock(
+            node.operand,
+            application_clock_names,
+            application_clock_calls,
+        )
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
             chain = _attribute_chain(child.func)
-            if len(chain) >= 2 and tuple(chain[-2:]) in _APPLICATION_CLOCK_CALLS:
+            if len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls:
                 return True
             if chain and chain[-1] in {"timedelta", "make_interval"}:
                 # timedelta is an application-side duration when paired with a clock call;
@@ -62,6 +71,21 @@ def _contains_application_clock(
                 if chain[-1] == "timedelta":
                     return True
     return False
+
+
+def _application_clock_calls(tree: ast.AST) -> set[tuple[str, str]]:
+    calls = set(_APPLICATION_CLOCK_CALLS)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.module != "datetime":
+            continue
+        for imported in node.names:
+            if imported.name == "datetime":
+                alias = imported.asname or imported.name
+                calls.update((alias, method) for method in ("now", "utcnow", "today"))
+            elif imported.name == "timezone":
+                alias = imported.asname or imported.name
+                calls.add((alias, "now"))
+    return calls
 
 
 def _assignment_pairs(tree: ast.AST) -> list[tuple[list[str], ast.AST]]:
@@ -74,7 +98,10 @@ def _assignment_pairs(tree: ast.AST) -> list[tuple[list[str], ast.AST]]:
     return pairs
 
 
-def _application_clock_names(tree: ast.AST) -> set[str]:
+def _application_clock_names(
+    tree: ast.AST,
+    application_clock_calls: set[tuple[str, str]],
+) -> set[str]:
     """Conservatively taint locals derived from application-clock expressions."""
 
     names: set[str] = set()
@@ -83,7 +110,7 @@ def _application_clock_names(tree: ast.AST) -> set[str]:
     while changed:
         changed = False
         for targets, value in pairs:
-            if _contains_application_clock(value, names):
+            if _contains_application_clock(value, names, application_clock_calls):
                 before = len(names)
                 names.update(targets)
                 changed = changed or len(names) != before
@@ -112,7 +139,8 @@ def find_durable_lease_clock_findings(
     findings: list[DurableLeaseClockFinding] = []
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        application_clock_names = _application_clock_names(tree)
+        application_clock_calls = _application_clock_calls(tree)
+        application_clock_names = _application_clock_names(tree, application_clock_calls)
         for node in ast.walk(tree):
             assignments: list[tuple[list[str], ast.AST]] = []
             if isinstance(node, ast.Assign):
@@ -130,6 +158,7 @@ def find_durable_lease_clock_findings(
                     if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(
                         value,
                         application_clock_names,
+                        application_clock_calls,
                     ):
                         findings.append(
                             DurableLeaseClockFinding(
