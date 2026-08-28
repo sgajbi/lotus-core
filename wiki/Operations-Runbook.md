@@ -597,9 +597,20 @@ makes the next render fail with `deployment template must contain one target ima
 `deployment/kubernetes/base/README.md` holds the canonical commands, including the matching
 `kubectl apply -f output/deployment/...` step.
 
-`--template` is optional; each service already declares its own base template. The renderer refuses
-to emit a deployment the release evidence does not authorize, so a `DeploymentRenderError` means the
-manifest and the requested service disagree — correct the evidence rather than the template.
+`--template` is optional; each service already declares its own base template.
+
+The renderer refuses to emit a deployment the release evidence does not authorize, and reports every
+refusal as a `DeploymentRenderError`. The exception alone does not identify the fault; read its
+message, which names one of three families:
+
+| Message names | Fault is in | Remediation |
+| --- | --- | --- |
+| `deployment template must contain one target image placeholder` | the template | Restore the base template. This is the failure seen after rendering over `deployment/kubernetes/base/`. |
+| `release manifest does not belong to the target service`, `release manifest has an unexpected image name`, `release manifest does not prove <field>=...` | the manifest/service pairing or its attestation | Render the service its own manifest, or fix the attested fields. |
+| `release manifest has an invalid digest image reference`, `release digest belongs to an unexpected image`, `release digest and digest image reference differ`, `release manifest promotions are missing`, `release manifest does not cover dev, uat, and prod`, `release environments do not promote the same digest` | the release evidence | Correct the evidence; do not edit the template to make the render pass. |
+
+The template family is checked before the manifest is validated, so a damaged template masks any
+evidence problem until it is repaired.
 
 Never apply the checked-in all-zero digest placeholder or deploy the legacy cost, cashflow, and
 position worker images/scalers. Apply `deployment/kubernetes/keda/processing-scaledobjects.yaml`
