@@ -39,8 +39,8 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes **three** edits, in different places. Doing only the first is the common failure: the
-type registers cleanly and then fails at runtime.
+This takes up to **four** edits, in different places. Doing only the first is the common failure:
+the type registers cleanly and then fails at runtime — or worse, books silently with no effect.
 
 **1. Declare the type.** Add a `_definition(...)` entry to `_REGISTRY` in
 `src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`, declaring
@@ -80,6 +80,28 @@ in the same use case does not stand. Insert the `cashflow_rules` row as describe
 Step 3 is skippable only where `requires_cashflow_processing(transaction)` is false — the
 non-cash FX contract lifecycle path, which returns before rule resolution. Everything else needs the
 rule.
+
+**4. Map the position effect — required whenever the type moves a holding.** If the registry
+definition gives the type a `position_effect` other than `none`, it also needs a branch in
+`_position_update_handler` in `app/domain/position/reducer.py`, which dispatches through hard-coded
+type sets (`CASH_POSITION_DELTA_TRANSACTION_TYPES`, `POSITION_TRANSFER_TRANSACTION_TYPES`,
+`SAME_INSTRUMENT_CORPORATE_ACTION_TYPES`, and the explicit `BUY` / `SELL` / redemption cases). Add
+the code to the set that matches its economics, or add a handler if none fits, and cover it in the
+reducer's domain tests.
+
+**This step fails silently if skipped.** `_position_update_handler` returns `None` for an unknown
+code, and `calculate_next_position_state` then returns `current_state` unchanged:
+
+```python
+next_state = (
+    handler(current_state, transaction, txn_type) if handler is not None else current_state
+)
+```
+
+There is no exception, log, or metric — unlike the cost and cashflow steps, which fail loudly. A
+type that clears steps 1 to 3 but is missing here will book, pass processing, and write a
+`position_history` row carrying no quantity or cost-basis effect. Verify the reducer branch with a
+domain test rather than assuming a green pipeline means the type is wired up.
 
 Use `calculation_support_status` and `production_booking_allowed` to introduce a type before its
 calculation support is complete, rather than registering it as fully supported early.
