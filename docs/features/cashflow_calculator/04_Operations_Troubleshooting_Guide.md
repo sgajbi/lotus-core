@@ -33,7 +33,8 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
 >
 > `fixed_income_book_cost_authority_group` and `fixed_income_book_cost_correction_replay_group` have
 > **no cashflow effect** — neither creation nor value. The amortized-cost overlay writes cost and
-> realized-P&L fields only, and cashflow amounts derive from settlement, gross, and fee fields. A
+> realized-P&L fields only, and cashflow amounts derive from settlement, gross, fee, and
+> accrued-interest fields. A
 > stall on either shows up in cost basis, not here. See
 > [the Kafka contract](./02_API_Specification_Cashflow_Calculator.md#21-consumer) for what each
 > group carries.

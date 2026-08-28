@@ -49,7 +49,9 @@ the canonical transaction through the same atomic use case.
 two are separated at field level. `_apply_transaction_overlay()` writes only cost and realized-P&L
 fields (`realized_gain_loss`, `realized_gain_loss_local`, `net_cost`, `net_cost_local`), while
 `calculate_transaction_cashflow()` derives its amount from `gross_transaction_amount`,
-`settlement_date`, and the resolved trade fee, and never consumes book-cost authority. A repair
+`settlement_date`, the resolved trade fee, and — for INTEREST — the accrued-interest economics in
+`calculate_interest_settlement_economics()`, which itself reads only gross amount, withholding tax,
+and interest deductions. None of these consume book-cost authority. A repair
 replay may replace and re-emit the same cashflow row, but its financial value cannot go stale
 because of a stalled fixed-income group.
 
