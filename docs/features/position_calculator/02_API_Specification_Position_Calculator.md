@@ -26,12 +26,22 @@ position work queue to subscribe to or to measure lag on.
 
 The unified deployment builds five consumers, listed in full in
 [the transaction-processing Kafka contract](../cost_calculator/02_API_Specification_Cost_Calculator.md#21-consumers).
-Two of them drive position effects:
+Three of them drive position effects:
 
 | Topic | Consumer group | Drives |
 | --- | --- | --- |
 | `transactions.persisted` | `portfolio_transaction_processing_group` | Position effects for newly persisted transactions. |
 | `transactions.reprocessing.requested` | `portfolio_transaction_replay_request_group` | Position replay for an affected key after a back-dated correction. |
+| `corporate_action.manifest.received` | `corporate_action_manifest_group` | **Conditional.** Governed corporate actions only — see below. |
+
+For a governed corporate-action child, `TransactionProcessingConsumer` routes the arrival and
+returns *without financial mutation*, logging `Corporate-action child intake completed without
+financial mutation.` The position effect happens later: the manifest makes the durable release
+eligible, and `CorporateActionReleaseWorker` invokes `ProcessTransactionUseCase` for each member.
+
+This matters for monitoring. If `corporate_action.manifest.received` is stalled, those position
+effects never occur even while both other groups are current and show no lag, so watching only the
+first two hides the failure.
 
 The service does **not** consume `transactions.cost.processed`. That topic is an outbound
 compatibility event, described below; tracing position lag through it leads to a self-loop that does
