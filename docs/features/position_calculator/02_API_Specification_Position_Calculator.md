@@ -34,7 +34,7 @@ atomic use case later:
 | `transactions.persisted` | `portfolio_transaction_processing_group` | Directly, for newly persisted transactions. |
 | `transactions.reprocessing.requested` | `portfolio_transaction_replay_request_group` | Directly, replaying an affected key after a back-dated correction. |
 | `corporate_action.manifest.received` | `corporate_action_manifest_group` | Indirectly — governed corporate actions. |
-| `fixed_income.book_cost.authority.received` | `fixed_income_book_cost_authority_group` | Indirectly — fixed-income book-cost corrections. |
+| `fixed_income.book_cost.authority.received` | `fixed_income_book_cost_authority_group` | Indirectly — **corrections only**, to already-booked transactions. |
 | `fixed_income.book_cost.disposal_replay.requested` | `fixed_income_book_cost_correction_replay_group` | Indirectly — the second hop of that correction. |
 
 The three indirect paths are the ones that surprise operators, because the two direct groups can be
@@ -53,8 +53,11 @@ then consumes that and invokes `ReplayBookedTransactionUseCase`, which republish
 transaction so cost and position are reprocessed atomically. A stall on *either* group leaves the
 corrected cost basis unapplied.
 
-So a stall on any of the three indirect groups produces the same symptom: position state that is
-silently wrong while the two direct groups show no lag at all.
+The two failure shapes differ, and it is worth keeping them apart when diagnosing. A stalled
+manifest group means corporate-action position effects **never happen**. A stalled fixed-income
+group means an existing position keeps **uncorrected** cost basis — the original effect was applied
+atomically at booking. Either way the two direct groups show no lag, so the symptom is position
+state that is silently wrong.
 
 The service does **not** consume `transactions.cost.processed`. That topic is an outbound
 compatibility event, described below; tracing position lag through it leads to a self-loop that does

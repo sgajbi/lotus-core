@@ -26,11 +26,17 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
 
 ### Symptom: Consumer Lag is Increasing
 
-> Check lag on **all five** consumer groups, not only `portfolio_transaction_processing_group`.
-> `portfolio_transaction_replay_request_group`, `corporate_action_manifest_group`,
-> `fixed_income_book_cost_authority_group`, and `fixed_income_book_cost_correction_replay_group`
-> each drive cashflow generation directly or on a later hop, and any one can stall while the primary
-> group stays current so expected cashflows are never created. See
+> Check lag on **all five** consumer groups, not only `portfolio_transaction_processing_group` —
+> but read the symptom correctly, because the groups fail differently.
+>
+> A **missing** cashflow comes from `portfolio_transaction_processing_group`,
+> `portfolio_transaction_replay_request_group`, or `corporate_action_manifest_group`. Any of those
+> can stall while the others stay current, so the cashflow is never created.
+>
+> `fixed_income_book_cost_authority_group` and `fixed_income_book_cost_correction_replay_group`
+> cannot cause a missing cashflow. They replay already-booked transactions to apply revised
+> book-cost authority, and the original cashflow was committed atomically at booking. A stall there
+> leaves **stale** values, not absent rows. See
 > [the Kafka contract](./02_API_Specification_Cashflow_Calculator.md#21-consumer) for what each
 > group carries.
 
