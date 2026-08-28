@@ -28,8 +28,9 @@ portfolio workspaces trustworthy for PB/WM consumers:
 restatement. It evaluates one portfolio at a required `as_of_date` and returns a typed
 `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` result. Core includes the portfolio base currency and
 currencies observed in the latest position snapshots. A position whose latest quantity is zero is
-also included when same-day valuation or cash-flow evidence exists (the liquidation-day exception),
-because performance still resolves its position-to-base FX leg for that as-of date. Core then
+also included when same-day valuation evidence matches the latest position quantity in the active
+epoch (the liquidation-day exception), because performance still resolves its position-to-base FX
+leg for that as-of date. Core then
 validates the same two-leg FX path
 used by performance: each non-base position currency to the portfolio base currency, followed by
 the portfolio base currency to the requested reporting currency. Same-currency legs use the
