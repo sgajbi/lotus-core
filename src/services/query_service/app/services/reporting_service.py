@@ -29,6 +29,7 @@ from ..dtos.reporting_dto import (
     AssetsUnderManagementResponse,
     AssetsUnderManagementTotals,
     BulkPortfolioSummaryAggregate,
+    BulkPortfolioSummaryAggregateTotals,
     BulkPortfolioSummaryItem,
     BulkPortfolioSummaryQueryRequest,
     BulkPortfolioSummaryResponse,
@@ -288,38 +289,6 @@ def _portfolio_summary_totals(
         cash_balance_reporting_currency=cash_reporting,
         invested_market_value_portfolio_currency=total_portfolio - cash_portfolio,
         invested_market_value_reporting_currency=total_reporting - cash_reporting,
-    )
-
-
-def _sum_portfolio_summary_totals(
-    current: PortfolioSummaryTotals | None,
-    additional: PortfolioSummaryTotals,
-) -> PortfolioSummaryTotals:
-    if current is None:
-        return additional
-    return PortfolioSummaryTotals(
-        total_market_value_portfolio_currency=(
-            current.total_market_value_portfolio_currency
-            + additional.total_market_value_portfolio_currency
-        ),
-        total_market_value_reporting_currency=(
-            current.total_market_value_reporting_currency
-            + additional.total_market_value_reporting_currency
-        ),
-        cash_balance_portfolio_currency=(
-            current.cash_balance_portfolio_currency + additional.cash_balance_portfolio_currency
-        ),
-        cash_balance_reporting_currency=(
-            current.cash_balance_reporting_currency + additional.cash_balance_reporting_currency
-        ),
-        invested_market_value_portfolio_currency=(
-            current.invested_market_value_portfolio_currency
-            + additional.invested_market_value_portfolio_currency
-        ),
-        invested_market_value_reporting_currency=(
-            current.invested_market_value_reporting_currency
-            + additional.invested_market_value_reporting_currency
-        ),
     )
 
 
@@ -673,7 +642,15 @@ class ReportingService:
                 rows_by_portfolio[str(row.portfolio.portfolio_id)].append(row)
 
         items: list[BulkPortfolioSummaryItem] = []
-        aggregate_totals: PortfolioSummaryTotals | None = None
+        aggregate_total_portfolio = ZERO
+        aggregate_total_reporting = ZERO
+        aggregate_cash_portfolio = ZERO
+        aggregate_cash_reporting = ZERO
+        aggregate_invested_portfolio = ZERO
+        aggregate_invested_reporting = ZERO
+        aggregate_portfolio_currency: str | None = None
+        aggregate_native_currency_compatible = True
+        fx_failures: set[tuple[str, str, date]] = set()
         aggregate_covered = True
         covered_count = 0
         for portfolio_id in request.portfolio_ids:
@@ -700,20 +677,46 @@ class ReportingService:
                 presence=presence,
                 resolved_as_of_date=resolved_as_of_date,
                 reporting_currency=reporting_currency,
+                fx_failures=fx_failures,
             )
             items.append(member)
             if totals is None:
                 aggregate_covered = False
             else:
                 covered_count += 1
-                aggregate_totals = _sum_portfolio_summary_totals(aggregate_totals, totals)
+                aggregate_total_portfolio += totals.total_market_value_portfolio_currency
+                aggregate_total_reporting += totals.total_market_value_reporting_currency
+                aggregate_cash_portfolio += totals.cash_balance_portfolio_currency
+                aggregate_cash_reporting += totals.cash_balance_reporting_currency
+                aggregate_invested_portfolio += totals.invested_market_value_portfolio_currency
+                aggregate_invested_reporting += totals.invested_market_value_reporting_currency
+                member_currency = member.portfolio_currency
+                if aggregate_portfolio_currency is None:
+                    aggregate_portfolio_currency = member_currency
+                elif aggregate_portfolio_currency != member_currency:
+                    aggregate_native_currency_compatible = False
 
         if aggregate_covered and covered_count == len(request.portfolio_ids):
             aggregate = BulkPortfolioSummaryAggregate(
                 portfolio_count=len(request.portfolio_ids),
                 coverage_state="COMPLETE",
                 coverage_reason="all_members_covered",
-                totals=aggregate_totals,
+                totals=BulkPortfolioSummaryAggregateTotals(
+                    total_market_value_portfolio_currency=(
+                        aggregate_total_portfolio if aggregate_native_currency_compatible else None
+                    ),
+                    total_market_value_reporting_currency=aggregate_total_reporting,
+                    cash_balance_portfolio_currency=(
+                        aggregate_cash_portfolio if aggregate_native_currency_compatible else None
+                    ),
+                    cash_balance_reporting_currency=aggregate_cash_reporting,
+                    invested_market_value_portfolio_currency=(
+                        aggregate_invested_portfolio
+                        if aggregate_native_currency_compatible
+                        else None
+                    ),
+                    invested_market_value_reporting_currency=aggregate_invested_reporting,
+                ),
             )
         else:
             aggregate = BulkPortfolioSummaryAggregate(
@@ -743,6 +746,7 @@ class ReportingService:
         presence: SnapshotPresence | None,
         resolved_as_of_date: date,
         reporting_currency: str | None,
+        fx_failures: set[tuple[str, str, date]],
     ) -> tuple[BulkPortfolioSummaryItem, PortfolioSummaryTotals | None]:
         portfolio_id = str(portfolio.portfolio_id)
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
@@ -765,6 +769,7 @@ class ReportingService:
                     rows=portfolio_rows,
                     as_of_date=resolved_as_of_date,
                     reporting_currency=effective_reporting_currency,
+                    fx_failures=fx_failures,
                 )
             except ValueError:
                 coverage_state = "FX_UNAVAILABLE"
@@ -824,18 +829,28 @@ class ReportingService:
         rows: list[Any],
         as_of_date: date,
         reporting_currency: str,
+        fx_failures: set[tuple[str, str, date]] | None = None,
     ) -> list[tuple[Any, Decimal, Decimal]]:
         row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
         row_reporting_values = []
         for row, native_value in row_native_values:
-            row_reporting_values.append(
-                await self._convert_amount(
+            from_currency = str(normalize_currency_code(str(row.portfolio.base_currency)))
+            to_currency = str(normalize_currency_code(reporting_currency))
+            fx_key = (from_currency, to_currency, as_of_date)
+            if fx_failures is not None and fx_key in fx_failures:
+                raise ValueError(f"FX rate not found for {from_currency}/{to_currency}.")
+            try:
+                converted = await self._convert_amount(
                     amount=native_value,
-                    from_currency=row.portfolio.base_currency,
-                    to_currency=reporting_currency,
+                    from_currency=from_currency,
+                    to_currency=to_currency,
                     as_of_date=as_of_date,
                 )
-            )
+            except ValueError:
+                if fx_failures is not None:
+                    fx_failures.add(fx_key)
+                raise
+            row_reporting_values.append(converted)
         return [
             (row, native_value, reporting_value)
             for (row, native_value), reporting_value in zip(

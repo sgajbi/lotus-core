@@ -673,6 +673,85 @@ async def test_bulk_summary_batches_snapshot_read_and_aggregates_members() -> No
     repo.list_cash_account_masters.assert_not_awaited()
 
 
+async def test_bulk_summary_keeps_native_aggregate_fields_null_for_mixed_currencies() -> None:
+    repo = AsyncMock()
+    portfolios = [_portfolio("P1", base_currency="USD"), _portfolio("P2", base_currency="SGD")]
+    repo.list_portfolios.return_value = portfolios
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolios[0],
+            snapshot=_snapshot("SEC1", market_value="100"),
+            instrument=_instrument("SEC1"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolios[1],
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", currency="SGD"),
+        ),
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1),
+        "P2": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1),
+    }
+    repo.get_latest_fx_rate.return_value = Decimal("0.5")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1", "P2"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert response.aggregate.coverage_state == "COMPLETE"
+    assert response.aggregate.totals is not None
+    assert response.aggregate.totals.total_market_value_portfolio_currency is None
+    assert response.aggregate.totals.cash_balance_portfolio_currency is None
+    assert response.aggregate.totals.invested_market_value_portfolio_currency is None
+    assert response.aggregate.totals.total_market_value_reporting_currency == Decimal("125")
+    assert response.aggregate.totals.cash_balance_reporting_currency == Decimal("0")
+    assert response.aggregate.totals.invested_market_value_reporting_currency == Decimal("125")
+
+
+async def test_bulk_summary_caches_negative_fx_lookup_for_repeated_currency_pair() -> None:
+    repo = AsyncMock()
+    portfolios = [_portfolio("P1", base_currency="SGD"), _portfolio("P2", base_currency="SGD")]
+    repo.list_portfolios.return_value = portfolios
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(f"SEC-{portfolio.portfolio_id}", market_value="10"),
+            instrument=_instrument(f"SEC-{portfolio.portfolio_id}", currency="SGD"),
+        )
+        for portfolio in portfolios
+    ]
+    repo.list_snapshot_presence.return_value = {
+        portfolio.portfolio_id: SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1)
+        for portfolio in portfolios
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=ValueError("FX rate not found"))  # type: ignore[method-assign]
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1", "P2"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert [item.coverage_state for item in response.portfolios] == [
+        "FX_UNAVAILABLE",
+        "FX_UNAVAILABLE",
+    ]
+    assert service._convert_amount.await_count == 1
+
+
 async def test_get_bulk_portfolio_summary_is_fail_closed_for_missing_partial_and_fx_members() -> (
     None
 ):
