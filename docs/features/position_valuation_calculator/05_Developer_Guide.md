@@ -24,7 +24,7 @@ The primary data flow for a standard valuation job is as follows:
 6.  It executes `ValuationLogic.calculate_valuation`.
 7.  It saves the result by upserting a record into the `daily_position_snapshots` table.
 8.  It writes a `DailyPositionSnapshotPersistedEvent` to the `outbox_events` table within the same database transaction.
-9.  The external **`OutboxDispatcher`** process publishes this final event to the `valuation.snapshot.persisted` Kafka topic for downstream consumers (like the `timeseries-generator-service`).
+9.  The external **`OutboxDispatcher`** process publishes this final event to the `valuation.snapshot.persisted` Kafka topic for its downstream consumer, `portfolio_derived_state_service`.
 
 ## 3. Extending the Logic
 

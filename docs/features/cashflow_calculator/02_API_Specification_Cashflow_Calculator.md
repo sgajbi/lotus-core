@@ -22,7 +22,12 @@ The service's main function is to consume, process, and produce Kafka events.
 
 ### 2.1. Consumer
 
-The service listens to a single topic:
+Cashflow has no Kafka topic of its own. It is one of three effects — cost, cashflow, and position —
+applied inside a single atomic use case, so there is no separate cashflow work queue.
+
+The unified deployment builds five consumers, listed in full in
+[the transaction-processing Kafka contract](../cost_calculator/02_API_Specification_Cost_Calculator.md#21-consumers).
+The one that drives cashflow generation is:
 
 #### Topic: `transactions.persisted`
 
