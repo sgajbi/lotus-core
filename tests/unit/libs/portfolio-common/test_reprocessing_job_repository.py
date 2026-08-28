@@ -1102,6 +1102,30 @@ async def test_renew_lease_uses_database_clock_and_exact_claim(
     assert "clock_timestamp() + make_interval" in statement
 
 
+async def test_get_lease_remaining_seconds_uses_database_clock(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.side_effect = [
+        MagicMock(
+            one_or_none=MagicMock(
+                return_value=MagicMock(lease_remaining_seconds=87.5)
+            )
+        )
+    ]
+
+    remaining = await repository.get_lease_remaining_seconds(
+        99,
+        lease_token=LEASE_TOKEN,
+    )
+
+    assert remaining == 87.5
+    statement = str(mock_db_session.execute.await_args.args[0])
+    assert "EXTRACT(epoch" in statement
+    assert "reprocessing_jobs.lease_expires_at - clock_timestamp()" in statement
+    assert "reprocessing_jobs.lease_expires_at > clock_timestamp()" in statement
+
+
 @pytest.mark.parametrize(
     ("lease_token", "lease_duration_seconds", "message"),
     [

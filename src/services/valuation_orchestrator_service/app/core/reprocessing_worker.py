@@ -354,7 +354,8 @@ class ReprocessingWorker:
         terminal_transition_started: asyncio.Event,
     ) -> None:
         loop = asyncio.get_running_loop()
-        lease_deadline = loop.time() + self._lease_duration_seconds
+        remaining_lease_seconds = await self._read_lease_remaining_seconds(job)
+        lease_deadline = loop.time() + remaining_lease_seconds
         next_renewal_at = loop.time() + self._lease_renewal_interval_seconds
         while True:
             wait_seconds = max(0.0, next_renewal_at - loop.time())
@@ -428,8 +429,9 @@ class ReprocessingWorker:
                 return
             if outcome is ReprocessingJobTransitionOutcome.APPLIED:
                 observe_reprocessing_worker_lease_renewal(job_type, "renewed")
+                remaining_lease_seconds = await self._read_lease_remaining_seconds(job)
                 renewed_at = loop.time()
-                lease_deadline = renewed_at + self._lease_duration_seconds
+                lease_deadline = renewed_at + remaining_lease_seconds
                 next_renewal_at = renewed_at + self._lease_renewal_interval_seconds
                 continue
 
@@ -450,6 +452,23 @@ class ReprocessingWorker:
                 f"reprocessing job {self._job_id(job)} lease renewal lost ownership: "
                 f"{outcome.value}"
             )
+
+    async def _read_lease_remaining_seconds(self, job) -> float:
+        """Read the durable lease budget before making a monotonic local decision."""
+
+        async for db in self._open_session():
+            async with db.begin():
+                remaining = await self._repository_factory.reprocessing_jobs(
+                    db
+                ).get_lease_remaining_seconds(
+                    self._job_id(job),
+                    lease_token=job.lease_token,
+                )
+        if remaining is None or remaining <= 0:
+            raise ReprocessingJobOwnershipLostError(
+                f"reprocessing job {self._job_id(job)} lease authority was lost"
+            )
+        return remaining
 
     @staticmethod
     def _job_id(job) -> int:
