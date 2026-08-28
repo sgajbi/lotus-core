@@ -293,6 +293,59 @@ def test_dispatcher_reclaims_expired_claim(db_engine, clean_db, smart_mock_kafka
 
 
 @pytest.mark.lifecycle
+def test_dispatcher_fences_result_write_after_claim_expiry(db_engine, clean_db):
+    """A delivery result cannot finalize a row after its durable lease expires."""
+
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    with test_session_factory() as session:
+        with session.begin():
+            event = OutboxEvent(
+                aggregate_type="ExpiredResultFenceTest",
+                aggregate_id=f"expired-result-{uuid.uuid4()}",
+                status="PENDING",
+                event_type="TestEvent",
+                payload="{}",
+                topic="expired-result-fence.topic",
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        db_session_factory=test_session_factory,
+        claim_lease_seconds=30,
+    )
+    claimed = dispatcher._claim_pending_events()
+    assert [event.id for event in claimed] == [event_id]
+
+    with test_session_factory() as session:
+        with session.begin():
+            session.execute(
+                text(
+                    "UPDATE outbox_events "
+                    "SET claim_expires_at = clock_timestamp() - interval '1 second' "
+                    "WHERE id = :id"
+                ),
+                {"id": event_id},
+            )
+
+    with test_session_factory() as session:
+        with session.begin():
+            dispatcher._mark_successes(session, claimed, [event_id])
+
+    with test_session_factory() as session:
+        status, claim_token, claim_expires_at = session.execute(
+            text("SELECT status, claim_token, claim_expires_at FROM outbox_events WHERE id = :id"),
+            {"id": event_id},
+        ).one()
+
+    assert status == "PENDING"
+    assert claim_token == claimed[0].claim_token
+    assert claim_expires_at is not None
+
+
+@pytest.mark.lifecycle
 def test_concurrent_dispatcher_cannot_claim_later_event_for_active_ordering_stream(
     db_engine,
     clean_db,
