@@ -19,7 +19,7 @@ The health of this service is critical for the availability of all performance a
 * **Queue outcomes:** `control_queue_operations_total{queue="aggregation"}` counts bounded claim,
   lease-recovery, complete, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
   Alert on sustained `lost_ownership`, `failed`, or `execution_error` rates rather than parsing logs.
-* **`events_dlqd_total` (Counter):** An increase means the delivery was malformed or the application could not durably record its failure. Missing governed source data normally leaves the aggregation job in `FAILED` for support-led remediation rather than duplicating failure evidence in the DLQ.
+* **Dead-letter volume:** This service emits no DLQ counter of its own — `events_dlqd_total` is owned by `persistence_service` per `SERVICE_LOCAL_METRIC_OWNERS`. Its consumer routes failures to the shared `dlq.persistence_service` topic, so observe depth there. A rise means the delivery was malformed or the application could not durably record its failure. Missing governed source data normally leaves the aggregation job in `FAILED` for support-led remediation rather than duplicating failure evidence in the DLQ.
 * **Materialization latency:** Attribute position-event handling and portfolio-job execution
   separately. Rising portfolio latency can indicate large fan-in, missing completeness, FX lookup
   pressure, or database contention.

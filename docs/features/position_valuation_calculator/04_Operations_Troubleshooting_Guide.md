@@ -21,14 +21,14 @@ The health of this service is critical for overall data freshness. Monitor the f
 
 All logs are structured JSON and tagged with a `correlation_id`. Key log messages can help diagnose issues:
 
-**Two services are involved.** Lines below marked *(orchestrator)* are emitted by `valuation_orchestrator_service`; the rest come from this service. Collect both when tracing a valuation problem end to end.
+**Two services are involved.** Lines below marked *(orchestrator)* are emitted by `valuation_orchestrator_service`. Treat the marking as a guide, not a guarantee: several of these messages originate in shared `portfolio-common` code and are attributed by whichever service calls it. Collect both services' logs when tracing a valuation problem end to end.
 
 * **`"Back-dated price event detected..."`**: Emitted by `PriceEventConsumer` in `valuation_orchestrator_service`, confirming a back-dated price was identified and a reprocessing flow will be triggered. Look for it in that service's logs, not this one's.
 * **`"No open position keys were ready for in-horizon market price..."`**: Confirms that the service detected the price-before-position-history race and persisted a durable replay trigger instead of losing the valuation opportunity.
 * **`"ValuationScheduler: advanced N watermarks..."`** *(orchestrator)*: High-visibility log proving the scheduler is advancing watermarks for completed keys.
 * **`"Created ... backfill valuation jobs for ..."`** *(orchestrator)*: Confirms `ValuationScheduler` is identifying data gaps and creating work.
 * **`"Skipping job due to missing position data..."`**: A common warning from this service's `ValuationConsumer`. Expected when the orchestrator creates a job for a date before the first transaction.
-* **`"Reset ... stale valuation jobs from 'PROCESSING' to 'PENDING'"`**: This message indicates that the scheduler's self-healing mechanism has activated to recover jobs from a potentially crashed consumer.
+* **`"Reset ... stale valuation jobs from 'PROCESSING' to 'PENDING'"`** *(orchestrator)*: The scheduler's self-healing mechanism recovered jobs from a potentially crashed consumer. `ValuationScheduler._reset_stale_valuation_jobs` drives `ValuationStaleJobResetter`, and the warning text itself comes from shared `portfolio_common/valuation_repository_base.py`, so search the orchestrator's logs for it, not the compute worker's.
 
 ## 3. Common Failure Scenarios & Resolutions
 
