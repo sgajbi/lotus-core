@@ -1,10 +1,10 @@
 # Feature: Cashflow Processing
 
-The **Cashflow Calculator** service is a core component of the system responsible for translating raw financial transactions into standardized cashflow records. These records are essential for all higher-level performance and time-series calculations.
+**Cashflow processing** translates raw financial transactions into standardized cashflow records. It is not a separate deployment: it is one of three effects — cost, cashflow, and position — applied inside a single atomic use case in the unified `portfolio_transaction_processing_service` runtime. These records are essential for all higher-level performance and time-series calculations.
 
 ## 1. Core Responsibilities
 
-- **Consumption**: Listens to the `transactions.cost.processed` Kafka topic for new, validated transaction events.
+- **Consumption**: Driven by `TransactionProcessingConsumer` on `transactions.persisted`, with `transactions.reprocessing.requested` for replay. Cashflow has no subscription of its own, and nothing consumes `transactions.cost.processed` — that topic is an outbound compatibility fact.
 - **Enrichment**: For each transaction, it applies a set of business rules to determine the cashflow's financial characteristics.
 - **Calculation**: It calculates the net cashflow amount, adjusting for fees and applying the correct sign (inflow/outflow).
 - **Persistence**: Saves the resulting `Cashflow` record to the main database.

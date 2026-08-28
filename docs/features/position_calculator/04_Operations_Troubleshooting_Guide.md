@@ -13,7 +13,7 @@ The health of this service is crucial for both data accuracy and the proper func
 | **`reprocessing_epoch_bumped_total`** | **Counter** | `portfolio_id`, `security_id` | **(New)** Increments every time a back-dated transaction triggers a new epoch and a full reprocessing flow. This is the primary indicator of reprocessing activity. |
 | `epoch_mismatch_dropped_total` | Counter | `service_name`, `topic`, `portfolio_id`, `security_id` | Increments every time this consumer discards a Kafka message because its epoch is stale. A high rate indicates that epoch fencing is working correctly to prevent data corruption during an active replay. |
 | `event_processing_latency_seconds` | Histogram | `topic`, `consumer_group` | Measures the time taken to process a single transaction. A sudden increase can indicate that the service is recalculating very long position histories, which may be a performance bottleneck. |
-| Consumer Lag | Gauge | `topic`, `group_id`, `partition` | High or growing consumer lag on the `transactions.cost.processed` topic is a primary indicator that the service is struggling to keep up with the transaction volume or is stuck in a retry loop. |
+| Consumer Lag | Gauge | `topic`, `group_id`, `partition` | Alert on the subscriptions that actually drive position effects: `transactions.persisted` (group `portfolio_transaction_processing_group`) and `transactions.reprocessing.requested` (group `portfolio_transaction_replay_request_group`). Growing lag on either indicates the runtime is behind or stuck in a retry loop. Do **not** monitor `transactions.cost.processed` — nothing subscribes to it, so it cannot reveal a stuck worker. |
 
 ## 2. Structured Logging & Tracing
 

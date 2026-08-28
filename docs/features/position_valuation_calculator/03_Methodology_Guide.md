@@ -206,7 +206,7 @@ which describes negative rebate interest after the ex-dividend date, and its
 
 ## 2. Valuation Scheduler Logic
 
-The `ValuationScheduler` is a powerful background process that orchestrates all valuation and backfill activities. It runs in a continuous loop, performing a series of state management and job creation tasks.
+The `ValuationScheduler`, which runs in `valuation_orchestrator_service` rather than in this service, orchestrates all valuation and backfill activities. It runs in a continuous loop, performing a series of state management and job creation tasks.
 
 ### Scheduler's Main Loop
 
