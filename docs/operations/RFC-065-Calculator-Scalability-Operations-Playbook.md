@@ -74,8 +74,30 @@ These endpoints are hosted by `event_replay_service` after the RFC 081 control-p
   endpoint only after audit writes are healthy.
 
 ## Scaling Controls
-- Deploy KEDA scaled objects from:
-  - `deployment/kubernetes/keda/calculator-scaledobjects.yaml`
+
+Before applying the scalers, confirm the prerequisites in
+[`deployment/kubernetes/keda/README.md`](../../deployment/kubernetes/keda/README.md). One is a
+cutover hazard rather than a checklist item: **the transaction-processing Kafka offset handoff must
+have completed before the first pod starts.** The `portfolio-transaction-processing` scaler sets
+`minReplicaCount: 2`, so applying this manifest during an initial rollout, or against a zero-replica
+target, starts that consumer group immediately. If its offsets have not been migrated, retained transaction history is
+replayed at cutover.
+
+- Deploy KEDA scaled objects from `deployment/kubernetes/keda/processing-scaledobjects.yaml`,
+  or apply the directory through its kustomization:
+  - `kubectl apply -k deployment/kubernetes/keda -n lotus-core`
+- That manifest is the whole scaling surface. It defines one `TriggerAuthentication`
+  (`lotus-core-kafka-auth`) and three `ScaledObject` resources:
+
+  | ScaledObject | Scale target |
+  | --- | --- |
+  | `portfolio-transaction-processing` | `portfolio-transaction-processing` |
+  | `valuation-calculator-scaledobject` | `position-valuation-calculator` |
+  | `portfolio-derived-state` | `portfolio-derived-state` |
+
+  There are no separate cost, cashflow, or position-worker scalers to deploy. Those workers were
+  consolidated into the deployments above, and the Operations Runbook records that their legacy
+  images and scalers must not be deployed.
 - Validate scaling objects:
   - `kubectl get scaledobject -n lotus-core`
   - `kubectl describe scaledobject <name> -n lotus-core`

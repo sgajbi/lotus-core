@@ -16,9 +16,14 @@ own transaction completion through an explicit unit-of-work boundary.
 
 ## Current Representative Unit Of Work
 
-`SimulationService` uses the query-service `UnitOfWork` port from
-`src/services/query_service/app/ports/unit_of_work.py`. The default implementation is
-`SqlAlchemyUnitOfWork` in `src/services/query_service/app/infrastructure/unit_of_work.py`.
+`SimulationService` (`src/services/query_control_plane_service/app/application/simulation.py`) uses
+the `SimulationUnitOfWork` port from
+`src/services/query_control_plane_service/app/ports/simulation.py`. The implementation is
+`src/services/query_control_plane_service/app/infrastructure/simulation_unit_of_work.py`.
+
+The same service carries a second unit-of-work family for analytics —
+`…/app/ports/analytics.py` with `…/app/infrastructure/analytics_unit_of_work.py` — which is why
+these adapters are named per family rather than as a single `unit_of_work.py`.
 
 `SimulationRepository` stages session rows, change rows, status changes, and deletes only. It does
 not commit, rollback, generate identifiers, or read clocks.

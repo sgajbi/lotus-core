@@ -574,9 +574,44 @@ manifests, SBOM artifact/provenance/signing/scan workflow controls, digest-based
 references, same-image promotion evidence across `dev`, `uat`, and `prod`, no secret-like build
 ARG/ENV additions, and the shared `/version` route.
 
-For the unified transaction runtime, render
-`deployment/kubernetes/base/portfolio-transaction-processing.yaml` with
-`scripts/release/render_transaction_processing_deployment.py` and the target CI image-release manifest.
+Deployments are rendered from governed image evidence by
+`scripts/release/render_release_deployment.py`, which pins each image to a digest taken from the
+target CI image-release manifest. It covers two services, selected by `--service`:
+
+```bash
+python scripts/release/render_release_deployment.py \
+  --service portfolio_transaction_processing_service \
+  --release-manifest output/build-evidence/portfolio_transaction_processing_service-image-release-manifest.json \
+  --output output/deployment/portfolio-transaction-processing.yaml
+
+python scripts/release/render_release_deployment.py \
+  --service portfolio_derived_state_service \
+  --release-manifest output/build-evidence/portfolio_derived_state_service-image-release-manifest.json \
+  --output output/deployment/portfolio-derived-state.yaml
+```
+
+Render to `output/deployment/`, never back over the base template. The tracked files under
+`deployment/kubernetes/base/` carry an all-zero digest placeholder that the renderer needs in order
+to substitute a real digest; writing a rendered deployment over one replaces that placeholder and
+makes the next render fail with `deployment template must contain one target image placeholder`.
+`deployment/kubernetes/base/README.md` holds the canonical commands, including the matching
+`kubectl apply -f output/deployment/...` step.
+
+`--template` is optional; each service already declares its own base template.
+
+The renderer refuses to emit a deployment the release evidence does not authorize, and reports every
+refusal as a `DeploymentRenderError`. The exception alone does not identify the fault; read its
+message, which names one of three families:
+
+| Message names | Fault is in | Remediation |
+| --- | --- | --- |
+| `deployment template must contain one target image placeholder` | the template | Restore the base template. This is the failure seen after rendering over `deployment/kubernetes/base/`. |
+| `release manifest does not belong to the target service`, `release manifest has an unexpected image name`, `release manifest does not prove <field>=...` | the manifest/service pairing or its attestation | Render the service its own manifest, or fix the attested fields. |
+| `release manifest has an invalid digest image reference`, `release digest belongs to an unexpected image`, `release digest and digest image reference differ`, `release manifest promotions are missing`, `release manifest does not cover dev, uat, and prod`, `release environments do not promote the same digest` | the release evidence | Correct the evidence; do not edit the template to make the render pass. |
+
+The template family is checked before the manifest is validated, so a damaged template masks any
+evidence problem until it is repaired.
+
 Never apply the checked-in all-zero digest placeholder or deploy the legacy cost, cashflow, and
 position worker images/scalers. Apply `deployment/kubernetes/keda/processing-scaledobjects.yaml`
 only after the governed Kafka offset handoff.
