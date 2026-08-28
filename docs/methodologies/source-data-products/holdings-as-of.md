@@ -4,10 +4,8 @@
 
 `HoldingsAsOf:v1` is the core-owned operational holdings and cash-balance product exposed by:
 
-1. `GET /portfolios/{portfolio_id}/positions`,
-2. `GET /portfolios/{portfolio_id}/cash-balances`, and
-3. the additive `POST /reporting/portfolio-summary/bulk-query` summary seam for bounded,
-   already-authorized cohorts.
+1. `GET /portfolios/{portfolio_id}/positions`, and
+2. `GET /portfolios/{portfolio_id}/cash-balances`.
 
 It returns governed position rows and cash-account balances for one portfolio with source-data
 product identity, runtime metadata, as-of semantics, instrument descriptors, source-owned
@@ -22,6 +20,12 @@ The product is source evidence for recorded holdings and cash state. It is not a
 methodology, income-needs plan, performance return, risk exposure methodology, tax advice,
 execution-quality assessment, or OMS acknowledgement.
 
+The additive `POST /reporting/portfolio-summary/bulk-query` endpoint is a bounded reporting summary
+seam, not a `HoldingsAsOf:v1` data-product route. Its per-member coverage states and cohort
+aggregation are documented in the [wealth reporting API guide](../../features/query_service/WEALTH-REPORTING-API-GUIDE.md)
+and route-family registry; it does not carry the product identity, runtime metadata, or lineage
+contract described by this methodology.
+
 ## Endpoint and Mode Coverage
 
 | Mode | Request shape | Implemented behavior |
@@ -33,7 +37,6 @@ execution-quality assessment, or OMS acknowledgement.
 | Explicit as-of cash balances | `/cash-balances?as_of_date=<date>` | Returns cash-account balances for the requested date. |
 | Reporting-currency cash balances | `/cash-balances?reporting_currency=<ccy>` | Converts portfolio-currency cash balances to the requested reporting currency using the latest FX rate on or before the resolved `as_of_date`. |
 | Source-reported cash weight | `/cash-balances` and `/cash-balances?as_of_date=<date>` | Computes `source_reported_cash_weight` from Core-owned cash and same-date portfolio market-value snapshot evidence. Returns null with blocked supportability when denominator evidence is incomplete, missing, zero, or stale. |
-| Bounded bulk portfolio summary | `/reporting/portfolio-summary/bulk-query` | Returns source-owned total, invested, and cash facts for up to 100 explicit portfolio IDs. Per-member coverage and FX failures are explicit; the cohort aggregate fails closed when any member is not trustworthy. |
 
 ## Inputs
 
