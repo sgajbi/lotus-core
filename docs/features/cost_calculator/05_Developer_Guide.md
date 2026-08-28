@@ -172,6 +172,17 @@ MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES = RECONCILABLE_CORPORATE_ACTION_TYPES.u
 A **quantity-transfer** pair goes in `QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS` as a
 source-to-target mapping, and that single edit populates the source and target frozensets together.
 
+A quantity-transfer **source** leg needs one more edit, in a different module:
+`_INTERNAL_LOT_DISPOSAL_TYPES` in `app/application/cost_basis_processing/disposal_persistence.py`.
+It currently holds exactly the keys of the pairs map — `EXCHANGE_OUT`, `MERGER_OUT`,
+`REPLACEMENT_OUT` — but is authored separately, so a new source type is absent from it.
+
+**This fails silently.** `_disposal_destination()` returns `None` for a code outside that set, so the
+transaction persists an active disposal receipt **without** the target transaction, lot, or
+instrument identity that every other internal transfer records. Nothing errors; the receipt is
+simply missing its linkage. Add the code and cover it with a disposal-persistence test asserting the
+destination is populated.
+
 A **basis-transfer** leg takes **two** edits, because the broad set and the directional sets are
 authored independently — the broad one is not derived from them, and it also carries
 `CASH_CONSIDERATION`, which belongs to neither direction:
