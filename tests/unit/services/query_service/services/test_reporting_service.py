@@ -185,6 +185,27 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
             SnapshotPresence(date(2026, 3, 26), 1),
             "CARRY_FORWARD",
         ),
+        (
+            [ReportingSnapshotRow(_portfolio("P1"), _snapshot("SEC1", market_value="10"), None)],
+            SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=2),
+            "UNAVAILABLE",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    _portfolio("P1"),
+                    _snapshot("SEC1", market_value="10", snapshot_date=date(2026, 3, 27)),
+                    None,
+                ),
+                ReportingSnapshotRow(
+                    _portfolio("P1"),
+                    _snapshot("SEC2", market_value="5", snapshot_date=date(2026, 3, 26)),
+                    None,
+                ),
+            ],
+            SnapshotPresence(date(2026, 3, 27), 2, expected_open_count=2),
+            "CARRY_FORWARD",
+        ),
     ],
 )
 async def test_aum_coverage_state_preserves_source_presence_and_zero_semantics(
