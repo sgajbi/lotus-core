@@ -92,7 +92,9 @@ another batch after productive work, preserving cross-stream capacity without al
 overtaking.
 
 The dispatcher flush fence follows the producer's configured Kafka `delivery.timeout.ms`, and the
-claim lease must exceed that fence by the governed safety margin. The default lease is 130 seconds
+claim lease must exceed that fence by the governed safety margin. PostgreSQL mints and reclaims
+`claim_expires_at` with `clock_timestamp()`; application time is retained only for retry scheduling
+and telemetry. The default lease is 130 seconds
 for the default 120-second producer delivery timeout. The lease begins after stream-head selection,
 so query latency cannot consume the margin reserved for commit and producer publication. Startup
 fails when an override is too short, so a publisher cannot outlive its database lease and deliver

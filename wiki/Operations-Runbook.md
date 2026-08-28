@@ -294,7 +294,9 @@ Each reprocessing claim commits before execution. Every reset-watermarks or FX j
 independent transaction, so one failed job cannot roll back a sibling. Terminal writes require the
 exact opaque claim token and an unexpired lease; a late worker rolls its domain mutations back.
 `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` (default `15`) is the lease lifetime, measured by the
-PostgreSQL clock rather than `updated_at` or an application clock. The worker renews the lease every
+PostgreSQL clock rather than `updated_at` or an application clock. Before scheduling work and after
+each renewal, the worker reads the remaining lease budget from PostgreSQL; it never re-bases the
+configured duration on a local clock. The worker renews the lease every
 one-third of that lifetime in a separate transaction. Renewal I/O is bounded to half that interval;
 transport failures retry after a positive I/O-timeout floor against a monotonic lease budget rather
 than waiting another full interval. The floor bounds connection attempts and traceback logs during
@@ -312,6 +314,13 @@ as stale; that threshold remains fallback policy only for queues without lease a
 timestamp, total, ordered page, and lease classification come from one PostgreSQL statement
 snapshot, so heartbeat updates cannot hide a live claim or split count from page and host-clock
 skew cannot contradict the worker fence.
+
+Aggregation and outbox durable claim deadlines follow the same rule. PostgreSQL mints, reclaims,
+and fences `lease_expires_at`/`claim_expires_at` with `clock_timestamp()`. The scheduler and
+dispatcher retain application time only for telemetry, poll cadence, and ordinary retry scheduling
+(`next_attempt_at`). Neither path renews a claim: work is deliberately processed in bounded chunks,
+and the configured lease must exceed the measured batch/delivery budget. A host-clock skew therefore
+cannot steal a live claim or authorize a late terminal write.
 
 Migration `c161b2c3d528` requires a quiesced reprocessing queue. Stop old workers and ensure no
 `PROCESSING` rows remain before upgrade; the migration fails closed otherwise. For rollback, stop

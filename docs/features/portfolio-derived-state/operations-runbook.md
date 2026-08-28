@@ -72,8 +72,9 @@ All logs are structured JSON and are tagged with the `correlation_id`. Key log m
 The exact-source fan-in profile is certified locally: 1,000 transactions produced exactly 1,000
 snapshots, 1,000 position rows, and one portfolio row with clean reconciliation, closed queues,
 zero lock waiters, and zero blocked sessions. Its portfolio-stage maximum was `1.723829s` against a
-`900s` aggregation lease. This does not certify daily, price/FX burst, backdated, release, or
-rollback behavior, and it does not yet close the fixed-lease versus heartbeat decision.
+`900s` aggregation lease. Aggregation uses bounded chunks rather than a heartbeat: the lease is
+minted and recovered with PostgreSQL time and must remain longer than the measured fan-in bound.
+This does not certify daily, price/FX burst, backdated, release, or rollback behavior.
 
 Daily, market-price burst/restatement, release, and rollback certification remains required before
 #714 closure. Runtime consolidation does not permit position and portfolio workload metrics to lose
