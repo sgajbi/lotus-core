@@ -117,6 +117,44 @@ def _application_clock_names(
     return names
 
 
+def _expanded_deadline_targets(
+    tree: ast.AST,
+    application_clock_names: set[str],
+    application_clock_calls: set[tuple[str, str]],
+) -> dict[str, set[str]]:
+    """Find deadline keys hidden behind ``**mapping`` call expansions."""
+
+    mappings: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            assignments = [(_target_names(target), node.value) for target in node.targets]
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            assignments = [(_target_names(node.target), node.value)]
+        else:
+            continue
+        for targets, value in assignments:
+            deadline_targets: set[str] = set()
+            if isinstance(value, ast.Dict):
+                for key, item_value in zip(value.keys, value.values, strict=False):
+                    if (
+                        isinstance(key, ast.Constant)
+                        and isinstance(key.value, str)
+                        and key.value.endswith(_DEADLINE_SUFFIX)
+                        and _contains_application_clock(
+                            item_value,
+                            application_clock_names,
+                            application_clock_calls,
+                        )
+                    ):
+                        deadline_targets.add(key.value)
+            elif isinstance(value, ast.Name):
+                deadline_targets.update(mappings.get(value.id, set()))
+            for target in targets:
+                if deadline_targets:
+                    mappings.setdefault(target, set()).update(deadline_targets)
+    return mappings
+
+
 def _target_names(node: ast.AST) -> list[str]:
     if isinstance(node, ast.Name):
         return [node.id]
@@ -141,6 +179,11 @@ def find_durable_lease_clock_findings(
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         application_clock_calls = _application_clock_calls(tree)
         application_clock_names = _application_clock_names(tree, application_clock_calls)
+        expanded_deadline_targets = _expanded_deadline_targets(
+            tree,
+            application_clock_names,
+            application_clock_calls,
+        )
         for node in ast.walk(tree):
             assignments: list[tuple[list[str], ast.AST]] = []
             if isinstance(node, ast.Assign):
@@ -153,6 +196,26 @@ def find_durable_lease_clock_findings(
                     for keyword in node.keywords
                     if keyword.arg and keyword.arg.endswith(_DEADLINE_SUFFIX)
                 ]
+                for keyword in node.keywords:
+                    if keyword.arg is None and isinstance(keyword.value, ast.Name):
+                        assignments.append(
+                            (
+                                list(expanded_deadline_targets.get(keyword.value.id, set())),
+                                keyword.value,
+                            )
+                        )
+                    elif keyword.arg is None and isinstance(keyword.value, ast.Dict):
+                        assignments.extend(
+                            ([key.value], item_value)
+                            for key, item_value in zip(
+                                keyword.value.keys,
+                                keyword.value.values,
+                                strict=False,
+                            )
+                            if isinstance(key, ast.Constant)
+                            and isinstance(key.value, str)
+                            and key.value.endswith(_DEADLINE_SUFFIX)
+                        )
             for targets, value in assignments:
                 for target in targets:
                     if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(

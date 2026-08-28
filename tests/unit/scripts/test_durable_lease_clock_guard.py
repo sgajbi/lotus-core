@@ -76,3 +76,23 @@ def test_durable_lease_clock_guard_rejects_aliased_application_clock_deadline(
 
     assert len(findings) == 1
     assert findings[0].target == "lease_expires_at"
+
+
+def test_durable_lease_clock_guard_rejects_expanded_deadline_mapping(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timedelta, timezone\n"
+        "values_to_update = {\n"
+        "    'lease_expires_at': datetime.now(timezone.utc) + timedelta(seconds=30),\n"
+        "}\n"
+        "stmt.values(**values_to_update)\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].target == "lease_expires_at"
