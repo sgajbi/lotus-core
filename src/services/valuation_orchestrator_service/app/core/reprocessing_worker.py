@@ -317,12 +317,11 @@ class ReprocessingWorker:
             job,
             timeout_seconds=self._lease_renewal_io_timeout_seconds,
         )
-        # The database reports the remaining budget at statement time. Discount
-        # the local time spent returning from that read before starting work.
-        initial_remaining_lease_seconds = measured_remaining_lease_seconds - (
-            loop.time() - authority_read_started_at
-        )
-        if initial_remaining_lease_seconds <= 0:
+        # Keep the measured deadline absolute across task scheduling. The
+        # database reports the remaining budget at statement time; anchoring it
+        # to the read start prevents a delayed renewal task from extending it.
+        initial_lease_deadline = authority_read_started_at + measured_remaining_lease_seconds
+        if initial_lease_deadline <= loop.time():
             raise ReprocessingJobOwnershipLostError(
                 f"reprocessing job {self._job_id(job)} lease authority was lost"
             )
@@ -344,7 +343,7 @@ class ReprocessingWorker:
                 job_type=job_type,
                 stop_event=stop_renewal,
                 terminal_transition_started=terminal_transition_started,
-                initial_remaining_lease_seconds=initial_remaining_lease_seconds,
+                initial_lease_deadline=initial_lease_deadline,
             )
         )
         try:
@@ -368,18 +367,24 @@ class ReprocessingWorker:
         job_type: str,
         stop_event: asyncio.Event,
         terminal_transition_started: asyncio.Event,
-        initial_remaining_lease_seconds: float | None = None,
+        initial_lease_deadline: float | None = None,
     ) -> None:
         loop = asyncio.get_running_loop()
-        if initial_remaining_lease_seconds is None:
+        scheduled_at = loop.time()
+        if initial_lease_deadline is None:
             remaining_lease_seconds = await self._read_lease_remaining_seconds(
                 job,
                 timeout_seconds=self._lease_renewal_io_timeout_seconds,
             )
+            scheduled_at = loop.time()
+            lease_deadline = scheduled_at + remaining_lease_seconds
         else:
-            remaining_lease_seconds = initial_remaining_lease_seconds
-        scheduled_at = loop.time()
-        lease_deadline = scheduled_at + remaining_lease_seconds
+            lease_deadline = initial_lease_deadline
+            remaining_lease_seconds = lease_deadline - loop.time()
+            if remaining_lease_seconds <= 0:
+                raise ReprocessingJobOwnershipLostError(
+                    f"reprocessing job {self._job_id(job)} lease authority was lost"
+                )
         # A delayed worker may receive less authority than the normal heartbeat interval.
         # Wake at the measured durable deadline rather than sleeping past it.
         next_renewal_at = min(
@@ -524,6 +529,10 @@ class ReprocessingWorker:
         except TimeoutError as exc:
             raise ReprocessingJobOwnershipLostError(
                 f"reprocessing job {self._job_id(job)} lease authority read timed out"
+            ) from exc
+        except Exception as exc:
+            raise ReprocessingJobOwnershipLostError(
+                f"reprocessing job {self._job_id(job)} lease authority read failed"
             ) from exc
         if remaining is None or remaining <= 0:
             raise ReprocessingJobOwnershipLostError(
