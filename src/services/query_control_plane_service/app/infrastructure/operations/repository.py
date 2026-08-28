@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
@@ -756,6 +756,7 @@ class OperationsRepository:
         portfolio_id: str,
         skip: int,
         limit: int,
+        stale_threshold_minutes: int = 15,
         reprocessing_status: Optional[str] = None,
         security_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
@@ -870,6 +871,7 @@ class OperationsRepository:
         portfolio_id: str,
         skip: int,
         limit: int,
+        stale_threshold_minutes: int = 15,
         status: Optional[str] = None,
         business_date: Optional[date] = None,
         security_id: Optional[str] = None,
@@ -972,6 +974,140 @@ class OperationsRepository:
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_valuation_jobs_snapshot(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stale_threshold_minutes: int = 15,
+        status: Optional[str] = None,
+        business_date: Optional[date] = None,
+        security_id: Optional[str] = None,
+        job_id: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> tuple[datetime, int, list[Any]]:
+        """Read valuation ordering, classification time, total, and page in one snapshot."""
+
+        snapshot_now = func.statement_timestamp()
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        job_scope = apply_valuation_job_scope(
+            select(PortfolioValuationJob.__table__),
+            portfolio_id=portfolio_id,
+            actionable_valuation_job=is_actionable_valuation_job(as_of=snapshot_now),
+            status=status,
+            business_date=business_date,
+            normalized_security_id=normalized_security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=snapshot_now,
+        ).cte("scoped_valuation_jobs")
+        if security_id is not None and not normalized_security_id:
+            job_scope = select(*job_scope.c).where(false()).cte("empty_valuation_jobs")
+        support_priority = support_job_priority(
+            job_scope.c.status,
+            job_scope.c.valuation_lease_expires_at,
+            snapshot_now,
+            inclusive=True,
+        ).label("support_priority")
+        paged = (
+            select(*job_scope.c, support_priority)
+            .order_by(
+                support_priority.asc(),
+                job_scope.c.valuation_date.asc(),
+                job_scope.c.updated_at.asc(),
+                job_scope.c.id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+            .cte("paged_valuation_jobs")
+        )
+        total = select(func.count()).select_from(job_scope).scalar_subquery()
+        anchor = select(literal(1).label("anchor")).subquery()
+        stmt = (
+            select(snapshot_now.label("generated_at_utc"), total.label("total"), *paged.c)
+            .select_from(anchor)
+            .outerjoin(paged, true())
+            .order_by(
+                paged.c.support_priority.asc(),
+                paged.c.valuation_date.asc(),
+                paged.c.updated_at.asc(),
+                paged.c.id.asc(),
+            )
+        )
+        rows = list((await self.db.execute(stmt)).all())
+        snapshot_row = rows[0]
+        return (
+            snapshot_row.generated_at_utc,
+            int(snapshot_row.total or 0),
+            [row for row in rows if row.id is not None],
+        )
+
+    async def get_aggregation_jobs_snapshot(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stale_threshold_minutes: int = 15,
+        status: Optional[str] = None,
+        business_date: Optional[date] = None,
+        job_id: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> tuple[datetime, int, list[Any]]:
+        """Read aggregation ordering, classification time, total, and page in one snapshot."""
+
+        snapshot_now = func.statement_timestamp()
+        job_scope = apply_aggregation_job_scope(
+            select(PortfolioAggregationJob.__table__),
+            portfolio_id=portfolio_id,
+            status=status,
+            business_date=business_date,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=snapshot_now,
+        ).cte("scoped_aggregation_jobs")
+        support_priority = support_job_priority(
+            job_scope.c.status,
+            job_scope.c.lease_expires_at,
+            snapshot_now,
+            inclusive=True,
+        ).label("support_priority")
+        paged = (
+            select(*job_scope.c, support_priority)
+            .order_by(
+                support_priority.asc(),
+                job_scope.c.aggregation_date.asc(),
+                job_scope.c.updated_at.asc(),
+                job_scope.c.id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+            .cte("paged_aggregation_jobs")
+        )
+        total = select(func.count()).select_from(job_scope).scalar_subquery()
+        anchor = select(literal(1).label("anchor")).subquery()
+        stmt = (
+            select(snapshot_now.label("generated_at_utc"), total.label("total"), *paged.c)
+            .select_from(anchor)
+            .outerjoin(paged, true())
+            .order_by(
+                paged.c.support_priority.asc(),
+                paged.c.aggregation_date.asc(),
+                paged.c.updated_at.asc(),
+                paged.c.id.asc(),
+            )
+        )
+        rows = list((await self.db.execute(stmt)).all())
+        snapshot_row = rows[0]
+        return (
+            snapshot_row.generated_at_utc,
+            int(snapshot_row.total or 0),
+            [row for row in rows if row.id is not None],
+        )
 
     async def get_analytics_export_jobs_count(
         self,

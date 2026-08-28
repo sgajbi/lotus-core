@@ -81,6 +81,59 @@ def mock_ops_repo() -> AsyncMock:
     repo = AsyncMock()
     repo.portfolio_exists.return_value = True
     repo.get_reconciliation_finding_summaries.return_value = {}
+
+    async def valuation_snapshot(**kwargs):
+        return (
+            FIXED_GENERATED_AT,
+            await repo.get_valuation_jobs_count(
+                **{
+                    key: value
+                    for key, value in kwargs.items()
+                    if key not in {"skip", "limit", "stale_threshold_minutes"}
+                },
+                as_of=FIXED_GENERATED_AT,
+            ),
+            await repo.get_valuation_jobs(
+                skip=kwargs["skip"],
+                limit=kwargs["limit"],
+                stale_minutes=kwargs.get("stale_threshold_minutes", 15),
+                reference_now=FIXED_GENERATED_AT,
+                as_of=FIXED_GENERATED_AT,
+                **{
+                    key: value
+                    for key, value in kwargs.items()
+                    if key not in {"skip", "limit", "stale_threshold_minutes"}
+                },
+            ),
+        )
+
+    async def aggregation_snapshot(**kwargs):
+        return (
+            FIXED_GENERATED_AT,
+            await repo.get_aggregation_jobs_count(
+                **{
+                    key: value
+                    for key, value in kwargs.items()
+                    if key not in {"skip", "limit", "stale_threshold_minutes"}
+                },
+                as_of=FIXED_GENERATED_AT,
+            ),
+            await repo.get_aggregation_jobs(
+                skip=kwargs["skip"],
+                limit=kwargs["limit"],
+                stale_minutes=kwargs.get("stale_threshold_minutes", 15),
+                reference_now=FIXED_GENERATED_AT,
+                as_of=FIXED_GENERATED_AT,
+                **{
+                    key: value
+                    for key, value in kwargs.items()
+                    if key not in {"skip", "limit", "stale_threshold_minutes"}
+                },
+            ),
+        )
+
+    repo.get_valuation_jobs_snapshot.side_effect = valuation_snapshot
+    repo.get_aggregation_jobs_snapshot.side_effect = aggregation_snapshot
     return repo
 
 
@@ -1103,7 +1156,7 @@ async def test_get_aggregation_jobs_uses_lease_expiry_over_custom_stale_threshol
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
     created_at = datetime(2025, 8, 31, 9, 45, tzinfo=timezone.utc)
-    updated_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    updated_at = FIXED_GENERATED_AT - timedelta(minutes=20)
     mock_ops_repo.get_aggregation_jobs_count.return_value = 1
     mock_ops_repo.get_aggregation_jobs.return_value = [
         type(

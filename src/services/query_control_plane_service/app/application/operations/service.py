@@ -924,32 +924,17 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        generated_at_utc = datetime.now(timezone.utc)
-        stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await self._read_count_and_page(
-            self.repo.get_valuation_jobs_count(
-                portfolio_id=portfolio_id,
-                status=normalized_status,
-                business_date=business_date,
-                security_id=security_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_valuation_jobs(
-                portfolio_id=portfolio_id,
-                skip=skip,
-                limit=limit,
-                status=normalized_status,
-                business_date=business_date,
-                security_id=security_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                stale_minutes=stale_minutes,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
+        generated_at_utc, total, jobs = await self.repo.get_valuation_jobs_snapshot(
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            stale_threshold_minutes=stale_threshold_minutes,
+            status=normalized_status,
+            business_date=business_date,
+            security_id=security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
         )
         return SupportJobListResponse(
             portfolio_id=portfolio_id,
@@ -991,30 +976,16 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
-        generated_at_utc = datetime.now(timezone.utc)
-        stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await self._read_count_and_page(
-            self.repo.get_aggregation_jobs_count(
-                portfolio_id=portfolio_id,
-                status=normalized_status,
-                business_date=business_date,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_aggregation_jobs(
-                portfolio_id=portfolio_id,
-                skip=skip,
-                limit=limit,
-                status=normalized_status,
-                business_date=business_date,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                stale_minutes=stale_minutes,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
+        generated_at_utc, total, jobs = await self.repo.get_aggregation_jobs_snapshot(
+            portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
+            stale_threshold_minutes=stale_threshold_minutes,
+            status=normalized_status,
+            business_date=business_date,
+            job_id=job_id,
+            correlation_id=correlation_id,
         )
         return SupportJobListResponse(
             portfolio_id=portfolio_id,
