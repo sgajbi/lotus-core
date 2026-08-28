@@ -52,6 +52,7 @@ from .control_code_normalization import normalize_control_code
 from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")
+VALUED_STATUS = "VALUED"
 UNVALUED_STATUS = "UNVALUED"
 ResolvedAllocationRow = tuple[Any, str | None, Decimal]
 
@@ -308,6 +309,8 @@ def _bulk_summary_coverage(
         return "PARTIAL", "open_position_coverage_gap"
     if any(row.snapshot.market_value is None for row in rows):
         return "PARTIAL", "market_value_missing"
+    if any(normalize_control_code(row.snapshot.valuation_status) != VALUED_STATUS for row in rows):
+        return "PARTIAL", "valuation_status_not_valued"
     if any(row.instrument is None for row in rows):
         return "PARTIAL", "instrument_classification_missing"
     if any(not _has_usable_cash_classification(row) for row in rows):
