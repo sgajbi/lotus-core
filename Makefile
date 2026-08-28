@@ -390,6 +390,9 @@ rfc0083-closure-guard:
 typecheck:
 	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run mypy --config-file mypy.ini
 
+durable-lease-clock-guard:
+	$(REPOSITORY_PYTHON) scripts/quality/durable_lease_clock_guard.py
+
 architecture-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/architecture_boundary_guard.py --strict
 	$(MAKE) test-import-root-guard
@@ -418,6 +421,7 @@ architecture-guard:
 	$(MAKE) transaction-replay-boundary-guard
 	$(MAKE) reprocessing-transition-boundary-guard
 	$(MAKE) aggregation-scheduler-boundary-guard
+	$(MAKE) durable-lease-clock-guard
 	$(MAKE) position-reducer-boundary-guard
 	$(MAKE) cash-instrument-authority-guard
 	$(MAKE) infrastructure-adapter-layer-guard
