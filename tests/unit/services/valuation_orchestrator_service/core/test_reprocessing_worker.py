@@ -322,6 +322,43 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
     )
 
 
+async def test_worker_wakes_by_measured_deadline_when_interval_is_longer(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 0.5
+    worker._lease_renewal_io_timeout_seconds = 0.1
+    jobs = mock_dependencies["repro_job_repo"]
+    jobs.get_lease_remaining_seconds.return_value = 0.05
+    operation_cancelled = asyncio.Event()
+
+    async def operation(_terminal_transition_started):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            operation_cancelled.set()
+
+    job = ReprocessingJob(
+        id=108,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    started_at = asyncio.get_running_loop().time()
+    with pytest.raises(ReprocessingJobOwnershipLostError, match="deadline was exhausted"):
+        await worker._process_with_lease_renewal(
+            job=job,
+            job_type="RESET_WATERMARKS",
+            operation=operation,
+        )
+
+    assert asyncio.get_running_loop().time() - started_at < 0.25
+    assert operation_cancelled.is_set()
+    jobs.renew_lease.assert_not_awaited()
+
+
 async def test_worker_retries_lease_renewal_error_without_failing_job(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.001
