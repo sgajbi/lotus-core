@@ -41,7 +41,7 @@ The implementation-backed value proposition is:
 | Capability area | Implementation-backed support | Primary audience | Main evidence |
 | --- | --- | --- | --- |
 | Portfolio and account source of record | Portfolio master, account/cash-account context, holdings, position state, cash balances, instruments, lookups, and reporting-oriented reads. | Business, operations, engineering | [API Surface](API-Surface), [Data Models](Data-Models), [Query Service](API-Surface) |
-| Transaction and booking evidence | Transaction ledger windows, buy/sell state support, cash movements, cashflow linkage, realized-tax evidence, fees, FX/event linkage, and deterministic pagination. | Business, reporting, operations | [Mesh Data Products](Mesh-Data-Products), [TransactionLedgerWindow methodology](../docs/methodologies/source-data-products/transaction-ledger-window.md) |
+| Transaction and booking evidence | Transaction ledger windows, buy/sell state support, cash movements, cashflow linkage, realized-tax evidence, fees, FX/event linkage, and deterministic pagination. | Business, reporting, operations | [Mesh Data Products](Mesh-Data-Products), [TransactionLedgerWindow methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/transaction-ledger-window.md) |
 | Position, valuation, and cashflow processing | Position materialization, valuation jobs, cashflow rules, cost basis, portfolio aggregation, and time-series foundations. | Engineering, operations, demo support | [Position Processing](Position-Calculator), [Valuation Calculator](Valuation-Calculator), [Cashflow Calculator](Cashflow-Calculator), [Timeseries and Aggregation](Timeseries-and-Aggregation) |
 | Operational read plane | Stable read APIs for portfolios, positions, transactions, prices, FX rates, cash, reporting evidence, and lookup/reference data. | Gateway, Workbench, reporting, support teams | [API Surface](API-Surface), `src/services/query_service/app/routers/` |
 | Query control plane | Governed analytics-input, snapshot, simulation, policy, capability, support, lineage, and source-data product APIs. | Performance, risk, advise, manage, gateway, operations | [Query Control Plane](Query-Control-Plane), [Integrations](Integrations) |
@@ -235,6 +235,6 @@ business APIs unless the route family explicitly supports that use.
 - [Operations Runbook](Operations-Runbook)
 - [Security and Governance](Security-and-Governance)
 - [Database Migrations](Database-Migrations)
-- [Architecture Index](../docs/architecture/README.md)
-- [Route Contract-Family Registry](../docs/standards/route-contract-family-registry.json)
-- [Domain Product Declaration](../contracts/domain-data-products/lotus-core-products.v1.json)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+- [Route Contract-Family Registry](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/route-contract-family-registry.json)
+- [Domain Product Declaration](https://github.com/sgajbi/lotus-core/blob/main/contracts/domain-data-products/lotus-core-products.v1.json)

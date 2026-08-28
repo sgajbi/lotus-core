@@ -22,12 +22,12 @@ the repository contracts, guards, middleware, and tests that prove them.
 
 ## Important references
 
-- [Architecture Index](../docs/architecture/README.md)
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [RFC-0083 Security Tenancy Lifecycle Target Model](../docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md)
-- [RFC-0083 Eventing Supportability Target Model](../docs/architecture/RFC-0083-eventing-supportability-target-model.md)
-- [Temporal Vocabulary](../docs/standards/temporal-vocabulary.md)
-- [Route Contract-Family Registry](../docs/standards/route-contract-family-registry.json)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [RFC-0083 Security Tenancy Lifecycle Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md)
+- [RFC-0083 Eventing Supportability Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-eventing-supportability-target-model.md)
+- [Temporal Vocabulary](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/temporal-vocabulary.md)
+- [Route Contract-Family Registry](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/route-contract-family-registry.json)
 
 ## What is actually enforced
 

@@ -239,5 +239,5 @@ cutover.
 - [API Surface](API-Surface)
 - [System Data Flow](System-Data-Flow)
 - [Operations Runbook](Operations-Runbook)
-- [Domain State Transition Policy](../docs/standards/domain-state-transition-policy.md)
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
+- [Domain State Transition Policy](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/domain-state-transition-policy.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
