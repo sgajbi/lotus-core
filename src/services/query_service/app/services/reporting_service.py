@@ -245,11 +245,14 @@ def _aum_coverage_state(
 ) -> SnapshotCoverageState:
     """Classify AUM source coverage without treating a numeric zero as missing data."""
     if not rows:
-        return "NO_SNAPSHOT" if presence is None else "LOADED_EMPTY"
+        if presence is None:
+            return "NO_SNAPSHOT"
+        return "UNAVAILABLE" if presence.expected_open_count > 0 else "LOADED_EMPTY"
+    if presence is not None and presence.expected_open_count > len(rows):
+        return "UNAVAILABLE"
     if any(row.snapshot.market_value is None for row in rows):
         return "UNAVAILABLE"
-    latest_row_date = max(row.snapshot.date for row in rows)
-    if latest_row_date < resolved_as_of_date:
+    if any(row.snapshot.date < resolved_as_of_date for row in rows):
         return "CARRY_FORWARD"
     if all(decimal_or_zero(row.snapshot.market_value) == ZERO for row in rows):
         return "MEASURED_ZERO"

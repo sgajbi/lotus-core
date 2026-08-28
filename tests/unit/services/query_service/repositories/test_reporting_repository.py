@@ -186,6 +186,7 @@ async def test_latest_snapshot_rows_reuses_presence_from_same_statement_snapshot
                 SimpleNamespace(security_id="SEC1"),
                 date(2026, 3, 27),
                 1,
+                1,
             )
         ]
     )
@@ -200,7 +201,9 @@ async def test_latest_snapshot_rows_reuses_presence_from_same_statement_snapshot
         as_of_date=date(2026, 3, 27),
     )
 
-    assert presence == {"P1": SnapshotPresence(snapshot_date=date(2026, 3, 27), row_count=1)}
+    assert presence == {
+        "P1": SnapshotPresence(snapshot_date=date(2026, 3, 27), row_count=1, expected_open_count=1)
+    }
     db.execute.assert_awaited_once()
 
 

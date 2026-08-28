@@ -40,6 +40,7 @@ class SnapshotPresence:
 
     snapshot_date: date
     row_count: int
+    expected_open_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -259,6 +260,15 @@ class ReportingRepository:
 
         presence_subq = (
             select(
+                latest_open_history_subq.c.portfolio_id,
+                func.count().label("expected_open_count"),
+            )
+            .where(latest_open_history_subq.c.rn == 1)
+            .group_by(latest_open_history_subq.c.portfolio_id)
+            .subquery()
+        )
+        source_presence_subq = (
+            select(
                 DailyPositionSnapshot.portfolio_id.label("portfolio_id"),
                 func.max(DailyPositionSnapshot.date).label("snapshot_date"),
                 func.count(DailyPositionSnapshot.id).label("row_count"),
@@ -275,7 +285,15 @@ class ReportingRepository:
                 DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
                 DailyPositionSnapshot.date <= as_of_date,
             )
-            .group_by(DailyPositionSnapshot.portfolio_id)
+            .outerjoin(
+                presence_subq,
+                presence_subq.c.portfolio_id == DailyPositionSnapshot.portfolio_id,
+            )
+            .add_columns(presence_subq.c.expected_open_count)
+            .group_by(
+                DailyPositionSnapshot.portfolio_id,
+                presence_subq.c.expected_open_count,
+            )
             .subquery()
         )
         stmt = (
@@ -283,8 +301,9 @@ class ReportingRepository:
                 Portfolio,
                 DailyPositionSnapshot,
                 Instrument,
-                presence_subq.c.snapshot_date,
-                presence_subq.c.row_count,
+                source_presence_subq.c.snapshot_date,
+                source_presence_subq.c.row_count,
+                source_presence_subq.c.expected_open_count,
             )
             .select_from(Portfolio)
             .outerjoin(
@@ -303,8 +322,8 @@ class ReportingRepository:
             )
             .outerjoin(Instrument, instrument_security_id == snapshot_security_id)
             .outerjoin(
-                presence_subq,
-                presence_subq.c.portfolio_id == Portfolio.portfolio_id,
+                source_presence_subq,
+                source_presence_subq.c.portfolio_id == Portfolio.portfolio_id,
             )
             .where(Portfolio.portfolio_id.in_(portfolio_ids))
             .order_by(
@@ -322,6 +341,7 @@ class ReportingRepository:
                 presence[str(portfolio.portfolio_id)] = SnapshotPresence(
                     snapshot_date=presence_values[0],
                     row_count=int(presence_values[1] or 0),
+                    expected_open_count=int(presence_values[2] or 0),
                 )
             if snapshot is not None:
                 result.append(
