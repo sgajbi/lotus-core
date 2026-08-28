@@ -100,14 +100,14 @@ async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_
     assert "daily_position_snapshots.quantity != 0" in compiled
     assert "trim(position_history.security_id) AS security_id" in compiled
     assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled
-    assert "trim(daily_position_snapshots.security_id) = anon_2.security_id" in compiled
-    assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled
-    assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled
+    assert "trim(daily_position_snapshots.security_id) = anon_" in normalized
+    assert "daily_position_snapshots.epoch = anon_" in normalized
+    assert "daily_position_snapshots.quantity = anon_" in normalized
     assert "position_history.position_date <= '2026-03-27'" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
     assert "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)" in compiled
     assert (
-        "ORDER BY daily_position_snapshots.portfolio_id ASC, "
+        "ORDER BY portfolios.portfolio_id ASC, "
         "trim(daily_position_snapshots.security_id) ASC" in compiled
     )
 
@@ -159,6 +159,10 @@ async def test_reporting_repository_snapshot_presence_does_not_apply_open_positi
     assert "count(daily_position_snapshots.id)" in compiled.lower()
     assert "GROUP BY daily_position_snapshots.portfolio_id" in compiled
     assert "daily_position_snapshots.quantity != 0" not in compiled
+    assert "daily_position_snapshots.epoch = position_state.epoch" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)" in compiled
+    )
 
 
 @pytest.mark.asyncio
@@ -168,6 +172,35 @@ async def test_reporting_repository_snapshot_presence_empty_scope_is_read_free()
 
     assert await repo.list_snapshot_presence(portfolio_ids=[], as_of_date=date(2026, 3, 27)) == {}
     db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_latest_snapshot_rows_reuses_presence_from_same_statement_snapshot() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            (
+                SimpleNamespace(portfolio_id="P1"),
+                SimpleNamespace(security_id="SEC1", date=date(2026, 3, 27)),
+                SimpleNamespace(security_id="SEC1"),
+                date(2026, 3, 27),
+                1,
+            )
+        ]
+    )
+    repo = ReportingRepository(db)
+
+    await repo.list_latest_snapshot_rows(
+        portfolio_ids=["P1"],
+        as_of_date=date(2026, 3, 27),
+    )
+    presence = await repo.list_snapshot_presence(
+        portfolio_ids=["P1"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert presence == {"P1": SnapshotPresence(snapshot_date=date(2026, 3, 27), row_count=1)}
+    db.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
