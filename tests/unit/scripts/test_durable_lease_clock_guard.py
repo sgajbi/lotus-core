@@ -42,3 +42,21 @@ def test_durable_lease_clock_guard_rejects_application_clock_keyword(tmp_path: P
 
     assert len(findings) == 1
     assert findings[0].target == "valuation_lease_expires_at"
+
+
+def test_durable_lease_clock_guard_rejects_indirect_application_clock_deadline(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n"
+        "lease_expiry = datetime.now(timezone.utc)\n"
+        "build(lease_expires_at=lease_expiry)\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].target == "lease_expires_at"

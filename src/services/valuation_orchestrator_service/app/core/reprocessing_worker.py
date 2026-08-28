@@ -311,6 +311,21 @@ class ReprocessingWorker:
         job_type: str,
         operation: Callable[[asyncio.Event], Awaitable[None]],
     ) -> None:
+        loop = asyncio.get_running_loop()
+        authority_read_started_at = loop.time()
+        measured_remaining_lease_seconds = await self._read_lease_remaining_seconds(
+            job,
+            timeout_seconds=self._lease_renewal_io_timeout_seconds,
+        )
+        # The database reports the remaining budget at statement time. Discount
+        # the local time spent returning from that read before starting work.
+        initial_remaining_lease_seconds = measured_remaining_lease_seconds - (
+            loop.time() - authority_read_started_at
+        )
+        if initial_remaining_lease_seconds <= 0:
+            raise ReprocessingJobOwnershipLostError(
+                f"reprocessing job {self._job_id(job)} lease authority was lost"
+            )
         stop_renewal = asyncio.Event()
         terminal_transition_started = asyncio.Event()
 
@@ -329,6 +344,7 @@ class ReprocessingWorker:
                 job_type=job_type,
                 stop_event=stop_renewal,
                 terminal_transition_started=terminal_transition_started,
+                initial_remaining_lease_seconds=initial_remaining_lease_seconds,
             )
         )
         try:
@@ -352,9 +368,16 @@ class ReprocessingWorker:
         job_type: str,
         stop_event: asyncio.Event,
         terminal_transition_started: asyncio.Event,
+        initial_remaining_lease_seconds: float | None = None,
     ) -> None:
         loop = asyncio.get_running_loop()
-        remaining_lease_seconds = await self._read_lease_remaining_seconds(job)
+        if initial_remaining_lease_seconds is None:
+            remaining_lease_seconds = await self._read_lease_remaining_seconds(
+                job,
+                timeout_seconds=self._lease_renewal_io_timeout_seconds,
+            )
+        else:
+            remaining_lease_seconds = initial_remaining_lease_seconds
         scheduled_at = loop.time()
         lease_deadline = scheduled_at + remaining_lease_seconds
         # A delayed worker may receive less authority than the normal heartbeat interval.
@@ -435,9 +458,20 @@ class ReprocessingWorker:
                 return
             if outcome is ReprocessingJobTransitionOutcome.APPLIED:
                 observe_reprocessing_worker_lease_renewal(job_type, "renewed")
-                remaining_lease_seconds = await self._read_lease_remaining_seconds(job)
+                renewed_read_started_at = loop.time()
+                remaining_lease_seconds = await self._read_lease_remaining_seconds(
+                    job,
+                    timeout_seconds=self._lease_renewal_io_timeout_seconds,
+                )
                 renewed_at = loop.time()
-                lease_deadline = renewed_at + remaining_lease_seconds
+                lease_deadline = (
+                    renewed_at + remaining_lease_seconds - (renewed_at - renewed_read_started_at)
+                )
+                remaining_lease_seconds = lease_deadline - renewed_at
+                if remaining_lease_seconds <= 0:
+                    raise ReprocessingJobOwnershipLostError(
+                        f"reprocessing job {self._job_id(job)} lease authority was lost"
+                    )
                 next_renewal_at = min(
                     renewed_at + self._lease_renewal_interval_seconds,
                     lease_deadline,
@@ -462,17 +496,35 @@ class ReprocessingWorker:
                 f"{outcome.value}"
             )
 
-    async def _read_lease_remaining_seconds(self, job) -> float:
+    async def _read_lease_remaining_seconds(
+        self,
+        job,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> float:
         """Read the durable lease budget before making a monotonic local decision."""
 
-        async for db in self._open_session():
-            async with db.begin():
-                remaining = await self._repository_factory.reprocessing_jobs(
-                    db
-                ).get_lease_remaining_seconds(
-                    self._job_id(job),
-                    lease_token=job.lease_token,
-                )
+        async def read() -> float | None:
+            async for db in self._open_session():
+                async with db.begin():
+                    return await self._repository_factory.reprocessing_jobs(
+                        db
+                    ).get_lease_remaining_seconds(
+                        self._job_id(job),
+                        lease_token=job.lease_token,
+                    )
+            return None
+
+        try:
+            if timeout_seconds is None:
+                remaining = await read()
+            else:
+                async with asyncio.timeout(timeout_seconds):
+                    remaining = await read()
+        except TimeoutError as exc:
+            raise ReprocessingJobOwnershipLostError(
+                f"reprocessing job {self._job_id(job)} lease authority read timed out"
+            ) from exc
         if remaining is None or remaining <= 0:
             raise ReprocessingJobOwnershipLostError(
                 f"reprocessing job {self._job_id(job)} lease authority was lost"
