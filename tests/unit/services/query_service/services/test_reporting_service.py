@@ -636,7 +636,7 @@ async def test_bulk_summary_batches_snapshot_read_and_aggregates_members() -> No
         ReportingSnapshotRow(
             portfolio=portfolios[0],
             snapshot=_snapshot("CASH1", market_value="20"),
-            instrument=_instrument("CASH1", asset_class="CASH"),
+            instrument=_instrument("CASH1", asset_class="CASH", product_type="CASH"),
         ),
         ReportingSnapshotRow(
             portfolio=portfolios[1],
@@ -811,6 +811,80 @@ async def test_bulk_summary_fails_closed_for_non_valued_snapshots(valuation_stat
 
     assert response.portfolios[0].coverage_state == "PARTIAL"
     assert response.portfolios[0].coverage_reason == "valuation_status_not_valued"
+    assert response.portfolios[0].totals is None
+    assert response.aggregate.coverage_state == "UNAVAILABLE"
+    assert response.aggregate.totals is None
+
+
+@pytest.mark.parametrize("valuation_status", ["VALUED_CURRENT", "VALUED_STALE"])
+async def test_bulk_summary_accepts_canonical_valued_snapshot_statuses(
+    valuation_status: str,
+) -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="20", valuation_status=valuation_status),
+            instrument=_instrument("SEC1"),
+        )
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1),
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert response.portfolios[0].coverage_state == "COMPLETE"
+    assert response.portfolios[0].totals is not None
+    assert response.aggregate.coverage_state == "COMPLETE"
+
+
+@pytest.mark.parametrize(
+    ("product_type", "asset_class"),
+    [("CASH", "EQUITY"), ("EQUITY", "CASH")],
+)
+async def test_bulk_summary_fails_closed_for_contradictory_cash_classifiers(
+    product_type: str,
+    asset_class: str,
+) -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="20"),
+            instrument=_instrument("SEC1", product_type=product_type, asset_class=asset_class),
+        )
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1),
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert response.portfolios[0].coverage_state == "PARTIAL"
+    assert response.portfolios[0].coverage_reason == "cash_classification_missing"
     assert response.portfolios[0].totals is None
     assert response.aggregate.coverage_state == "UNAVAILABLE"
     assert response.aggregate.totals is None
