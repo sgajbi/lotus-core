@@ -1,12 +1,18 @@
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.query_service.app.application.reporting_currency_support import (
+    FxSupportEvidence,
+    ReportingCurrencySupportResult,
+)
 from src.services.query_service.app.dependencies import (
     get_instrument_service,
     get_portfolio_service,
+    get_reporting_currency_support_service,
 )
 from src.services.query_service.app.main import app
 
@@ -140,3 +146,41 @@ async def test_lookup_contract_unexpected_errors_use_global_500_envelope(async_t
     assert response.status_code == 500
     assert response.json()["error"] == "Internal Server Error"
     assert "correlation_id" in response.json()
+
+
+async def test_reporting_currency_support_contract_distinguishes_selector_observation():
+    service = MagicMock()
+    service.evaluate = AsyncMock(
+        return_value=ReportingCurrencySupportResult(
+            portfolio_id="PF-1",
+            tenant_id="tenant-1",
+            reporting_currency="EUR",
+            as_of_date=date(2026, 8, 28),
+            status="UNSUPPORTED",
+            reason_code="required_fx_source_unavailable",
+            source_currencies=("EUR", "USD"),
+            missing_source_currencies=("USD",),
+            fx_evidence=(
+                FxSupportEvidence("EUR", date(2026, 8, 28), True),
+                FxSupportEvidence("USD", None, False),
+            ),
+            observed_selector_currency=True,
+        )
+    )
+    app.dependency_overrides[get_reporting_currency_support_service] = lambda: service
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/reporting-currencies/support?portfolio_id=PF-1&tenant_id=tenant-1"
+            "&reporting_currency=EUR&as_of_date=2026-08-28"
+        )
+
+    app.dependency_overrides.pop(get_reporting_currency_support_service, None)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["contract"] == "ReportingCurrencySupport:v1"
+    assert payload["status"] == "UNSUPPORTED"
+    assert payload["supported"] is False
+    assert payload["observed_selector_currency"] is True
+    assert payload["missing_source_currencies"] == ["USD"]
+    service.evaluate.assert_awaited_once()

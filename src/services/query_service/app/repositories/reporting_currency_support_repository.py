@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from typing import cast
+
+from portfolio_common.database_models import (
+    FxRate,
+    Instrument,
+    Portfolio,
+    PositionHistory,
+    PositionState,
+)
+from portfolio_common.domain.currency import normalize_currency_code
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .currency_query_expressions import currency_code_sql_expr
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioCurrencySource:
+    tenant_id: str | None
+    base_currency: str
+    source_currencies: tuple[str, ...]
+
+
+class ReportingCurrencySupportRepository:
+    """Read source-owned portfolio and FX evidence for supportability decisions."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_portfolio_currency_source(
+        self,
+        *,
+        portfolio_id: str,
+        tenant_id: str | None,
+        as_of_date: date,
+    ) -> PortfolioCurrencySource | None:
+        portfolio_stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
+        if tenant_id is not None:
+            portfolio_stmt = portfolio_stmt.where(Portfolio.tenant_id == tenant_id)
+        portfolio = (await self.db.execute(portfolio_stmt)).scalar_one_or_none()
+        if portfolio is None:
+            return None
+
+        history_security_id = func.trim(PositionHistory.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        latest_positions = (
+            select(
+                history_security_id.label("security_id"),
+                PositionHistory.quantity.label("quantity"),
+                func.row_number()
+                .over(
+                    partition_by=history_security_id,
+                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
+                )
+                .label("rn"),
+            )
+            .join(
+                PositionState,
+                and_(
+                    PositionHistory.portfolio_id == PositionState.portfolio_id,
+                    history_security_id == state_security_id,
+                    PositionHistory.epoch == PositionState.epoch,
+                ),
+            )
+            .where(
+                PositionHistory.portfolio_id == portfolio_id,
+                PositionHistory.position_date <= as_of_date,
+            )
+            .subquery()
+        )
+        instrument_currency = func.upper(func.trim(Instrument.currency))
+        currency_stmt = (
+            select(instrument_currency)
+            .join(
+                latest_positions,
+                func.trim(Instrument.security_id) == latest_positions.c.security_id,
+            )
+            .where(latest_positions.c.rn == 1, latest_positions.c.quantity != 0)
+            .where(Instrument.currency.is_not(None), func.trim(Instrument.currency) != "")
+            .distinct()
+            .order_by(instrument_currency.asc())
+        )
+        currencies = list((await self.db.execute(currency_stmt)).scalars().all())
+        normalized_base = normalize_currency_code(portfolio.base_currency)
+        source_currencies = tuple(
+            sorted({normalized_base, *(normalize_currency_code(c) for c in currencies)})
+        )
+        return PortfolioCurrencySource(
+            tenant_id=portfolio.tenant_id,
+            base_currency=normalized_base,
+            source_currencies=source_currencies,
+        )
+
+    async def get_latest_fx_rate_date(
+        self,
+        *,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> date | None:
+        from_code = normalize_currency_code(from_currency)
+        to_code = normalize_currency_code(to_currency)
+        if from_code == to_code:
+            return as_of_date
+        stmt = (
+            select(FxRate.rate_date)
+            .where(
+                currency_code_sql_expr(FxRate.from_currency) == from_code,
+                currency_code_sql_expr(FxRate.to_currency) == to_code,
+                FxRate.rate_date <= as_of_date,
+            )
+            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
+            .limit(1)
+        )
+        return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
+
+    async def is_selector_currency_observed(self, *, currency: str) -> bool:
+        code = normalize_currency_code(currency)
+        portfolio_match = (
+            select(Portfolio.portfolio_id)
+            .where(currency_code_sql_expr(Portfolio.base_currency) == code)
+            .limit(1)
+        )
+        if (await self.db.execute(portfolio_match)).scalar_one_or_none() is not None:
+            return True
+        instrument_match = (
+            select(Instrument.security_id)
+            .where(currency_code_sql_expr(Instrument.currency) == code)
+            .limit(1)
+        )
+        return (await self.db.execute(instrument_match)).scalar_one_or_none() is not None

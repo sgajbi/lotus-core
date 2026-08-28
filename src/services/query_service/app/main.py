@@ -28,6 +28,7 @@ from .routers import (
     positions,
     prices,
     reporting,
+    reporting_currency_support,
     sell_state,
     transactions,
 )
@@ -89,4 +90,5 @@ include_routers(
     fx_rates.router,
     lookups.router,
     reporting.router,
+    reporting_currency_support.router,
 )
