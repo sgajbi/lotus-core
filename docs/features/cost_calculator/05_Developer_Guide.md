@@ -169,10 +169,32 @@ RECONCILABLE_CORPORATE_ACTION_TYPES = frozenset(BASIS_TRANSFER_CORPORATE_ACTION_
 MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES = RECONCILABLE_CORPORATE_ACTION_TYPES.union({"FEE", "TAX"})
 ```
 
-So add a basis-transfer leg to `BASIS_TRANSFER_CORPORATE_ACTION_TYPES`, and a quantity-transfer pair
-to `QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS` as a source-to-target mapping — which populates the
-source and target frozensets together. Both routes flow into `RECONCILABLE` and therefore into
-`MANIFEST_GOVERNED`, so the type is governed **and** reconciled.
+A **quantity-transfer** pair goes in `QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS` as a
+source-to-target mapping, and that single edit populates the source and target frozensets together.
+
+A **basis-transfer** leg takes **two** edits, because the broad set and the directional sets are
+authored independently — the broad one is not derived from them, and it also carries
+`CASH_CONSIDERATION`, which belongs to neither direction:
+
+```python
+BASIS_TRANSFER_CORPORATE_ACTION_TYPES = {"SPIN_OFF", "SPIN_IN", "DEMERGER_OUT", "DEMERGER_IN", "CASH_CONSIDERATION"}
+SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES = {"SPIN_OFF", "DEMERGER_OUT"}
+TARGET_BASIS_TRANSFER_TRANSACTION_TYPES = {"SPIN_IN", "DEMERGER_IN"}
+```
+
+Add the code to the broad set **and** to the matching directional set. Reconciliation accumulation
+(`domain/cost_basis/corporate_action_reconciliation.py`), corporate-action validation
+(`corporate_action/validation.py`), and dependency ordering (`corporate_action/ordering.py`) all read
+the directional sets, not the broad one.
+
+Adding only to the broad set admits the leg as reconcilable while it is never counted as a source or
+a target, which surfaces as a `CA_BUNDLE_A_INSUFFICIENT_LEGS` finding and loses the
+direction-specific validation and ordering. Note also the interaction with step 9: membership of
+`SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES` feeds `_SOURCE_OUT_RANK_TYPES`, so the directional edit
+supplies the rank-0 ordering for a source leg automatically.
+
+Both routes flow into `RECONCILABLE` and therefore into `MANIFEST_GOVERNED`, so the type ends up
+governed **and** reconciled.
 
 Extending the `{"FEE", "TAX"}` literal instead governs the type without reconciling it, and that
 **fails silently**. `_reconciliation_key()` in `application/corporate_action_reconciliation.py`
