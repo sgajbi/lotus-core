@@ -38,3 +38,12 @@ def test_reporting_currency_support_response_rejects_unknown_fields() -> None:
             reason_code="supported",
             unexpected="value",
         )
+
+
+def test_reporting_currency_fx_evidence_documents_exact_as_of_date() -> None:
+    schema = ReportingCurrencySupportResponse.model_json_schema()
+
+    description = schema["$defs"]["ReportingCurrencyFxEvidence"]["properties"]["rate_date"][
+        "description"
+    ]
+    assert "must equal the requested as-of date" in description

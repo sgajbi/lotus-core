@@ -18,7 +18,7 @@ class ReportingCurrencyFxEvidence(BaseModel):
     source_currency: str = Field(..., min_length=3, max_length=3, examples=["EUR"])
     rate_date: date | None = Field(
         default=None,
-        description="Latest source-owned FX rate date at or before the requested as-of date.",
+        description="Source-owned FX observation date, which must equal the requested as-of date.",
     )
     rate_available: bool = Field(
         ..., description="Whether an authoritative FX rate is available for this source currency."
