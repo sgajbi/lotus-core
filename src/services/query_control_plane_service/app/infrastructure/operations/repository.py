@@ -886,11 +886,16 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        reference_now = reference_now or datetime.now(timezone.utc)
+        # Keep this compatibility reader database-authoritative.  The public service uses
+        # ``get_valuation_jobs_snapshot``; callers of this older port must not be able to
+        # reintroduce host-clock lease classification by supplying ``reference_now``.
+        snapshot_now = func.statement_timestamp()
         stmt = apply_valuation_job_scope(
             select(PortfolioValuationJob),
             portfolio_id=portfolio_id,
-            actionable_valuation_job=is_actionable_valuation_job(as_of=as_of),
+            actionable_valuation_job=is_actionable_valuation_job(
+                as_of=as_of if as_of is not None else snapshot_now
+            ),
             status=status,
             business_date=business_date,
             normalized_security_id=normalized_security_id,
@@ -903,7 +908,7 @@ class OperationsRepository:
                 support_job_priority(
                     PortfolioValuationJob.status,
                     PortfolioValuationJob.valuation_lease_expires_at,
-                    reference_now,
+                    snapshot_now,
                     inclusive=True,
                 ).asc(),
                 PortfolioValuationJob.valuation_date.asc(),
@@ -948,7 +953,9 @@ class OperationsRepository:
         reference_now: Optional[datetime] = None,
         as_of: Optional[datetime] = None,
     ) -> list[PortfolioAggregationJob]:
-        reference_now = reference_now or datetime.now(timezone.utc)
+        # ``reference_now`` is retained for source compatibility only.  Lease state is
+        # always ordered against PostgreSQL statement time.
+        snapshot_now = func.statement_timestamp()
         stmt = apply_aggregation_job_scope(
             select(PortfolioAggregationJob),
             portfolio_id=portfolio_id,
@@ -963,7 +970,7 @@ class OperationsRepository:
                 support_job_priority(
                     PortfolioAggregationJob.status,
                     PortfolioAggregationJob.lease_expires_at,
-                    reference_now,
+                    snapshot_now,
                     inclusive=True,
                 ).asc(),
                 PortfolioAggregationJob.aggregation_date.asc(),
@@ -997,13 +1004,18 @@ class OperationsRepository:
         job_scope = apply_valuation_job_scope(
             select(PortfolioValuationJob.__table__),
             portfolio_id=portfolio_id,
-            actionable_valuation_job=is_actionable_valuation_job(as_of=snapshot_now),
+            actionable_valuation_job=is_actionable_valuation_job(
+                as_of=as_of if as_of is not None else snapshot_now
+            ),
             status=status,
             business_date=business_date,
             normalized_security_id=normalized_security_id,
             job_id=job_id,
             correlation_id=correlation_id,
-            as_of=None,
+            # A caller-supplied as-of is a historical contract and must be preserved.
+            # When absent, rely on PostgreSQL's statement snapshot rather than adding an
+            # updated_at visibility fence that would hide live heartbeats.
+            as_of=as_of,
         ).cte("scoped_valuation_jobs")
         if security_id is not None and not normalized_security_id:
             job_scope = select(*job_scope.c).where(false()).cte("empty_valuation_jobs")
@@ -1068,7 +1080,9 @@ class OperationsRepository:
             business_date=business_date,
             job_id=job_id,
             correlation_id=correlation_id,
-            as_of=None,
+            # Preserve explicit historical reads while avoiding an application heartbeat
+            # fence for the live support listing.
+            as_of=as_of,
         ).cte("scoped_aggregation_jobs")
         support_priority = support_job_priority(
             job_scope.c.status,
