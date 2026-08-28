@@ -38,11 +38,16 @@ class ReportingCurrencySupportService:
                 tenant_id=query.tenant_id,
                 as_of_date=query.as_of_date,
             )
-        except ValueError:
+        except ValueError as exc:
+            reason_code = (
+                "portfolio_as_of_before_inception"
+                if str(exc) == "as_of_date precedes portfolio inception"
+                else "portfolio_currency_source_invalid"
+            )
             return ReportingCurrencySupportResult(
                 **base,
                 status="UNAVAILABLE",
-                reason_code="portfolio_currency_source_invalid",
+                reason_code=reason_code,
             )
         if source is None:
             return ReportingCurrencySupportResult(
@@ -52,20 +57,48 @@ class ReportingCurrencySupportService:
             )
 
         base["tenant_id"] = source.tenant_id
-        rate_dates = await self._repository.get_latest_fx_rate_dates(
-            from_currencies=source.source_currencies,
-            to_currency=reporting_currency,
+        position_source_currencies = tuple(
+            currency for currency in source.source_currencies if currency != source.base_currency
+        )
+        position_rate_dates = await self._repository.get_latest_fx_rate_dates(
+            from_currencies=position_source_currencies,
+            to_currency=source.base_currency,
             as_of_date=query.as_of_date,
+        )
+        reporting_rate_dates = (
+            {}
+            if source.base_currency == reporting_currency
+            else await self._repository.get_latest_fx_rate_dates(
+                from_currencies=(source.base_currency,),
+                to_currency=reporting_currency,
+                as_of_date=query.as_of_date,
+            )
+        )
+        portfolio_to_reporting_rate_date = (
+            query.as_of_date
+            if source.base_currency == reporting_currency
+            else reporting_rate_dates.get(source.base_currency)
         )
         evidence: list[FxSupportEvidence] = []
         missing: list[str] = []
         for source_currency in source.source_currencies:
-            rate_date = (
+            position_to_portfolio_rate_date = (
                 query.as_of_date
-                if source_currency == reporting_currency
-                else rate_dates.get(source_currency)
+                if source_currency == source.base_currency
+                else position_rate_dates.get(source_currency)
             )
-            available = rate_date is not None
+            if (
+                position_to_portfolio_rate_date is not None
+                and portfolio_to_reporting_rate_date is not None
+            ):
+                available = True
+                rate_date = min(
+                    position_to_portfolio_rate_date,
+                    portfolio_to_reporting_rate_date,
+                )
+            else:
+                available = False
+                rate_date = None
             evidence.append(
                 FxSupportEvidence(
                     source_currency=source_currency,
