@@ -192,6 +192,65 @@ class PortfolioSummaryQueryRequest(BaseModel):
     )
 
 
+MAX_BULK_PORTFOLIO_SUMMARY_SIZE = 100
+BulkPortfolioSummaryCoverageState = Literal[
+    "COMPLETE",
+    "MEASURED_ZERO",
+    "CARRY_FORWARD",
+    "LOADED_EMPTY",
+    "NO_SNAPSHOT",
+    "PARTIAL",
+    "FX_UNAVAILABLE",
+    "INVALID_PORTFOLIO",
+]
+BulkPortfolioSummaryAggregateState = Literal["COMPLETE", "PARTIAL", "UNAVAILABLE"]
+
+
+class BulkPortfolioSummaryQueryRequest(BaseModel):
+    portfolio_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_BULK_PORTFOLIO_SUMMARY_SIZE,
+        description=(
+            "Explicit portfolio identifiers already authorized by the caller. The request is "
+            f"bounded to {MAX_BULK_PORTFOLIO_SUMMARY_SIZE} members."
+        ),
+        examples=[["PORT-001", "PORT-002"]],
+    )
+    as_of_date: date | None = Field(
+        None,
+        description=(
+            "As-of date for the historical portfolio snapshots. Defaults to the latest "
+            "business date."
+        ),
+        examples=["2026-03-27"],
+    )
+    reporting_currency: str | None = Field(
+        None,
+        description=(
+            "Reporting currency for the cohort. Required when more than one portfolio is "
+            "requested; a single-member request defaults to that portfolio's base currency."
+        ),
+        examples=["USD"],
+    )
+
+    @model_validator(mode="after")
+    def validate_bulk_request(self) -> "BulkPortfolioSummaryQueryRequest":
+        normalized_ids = [value.strip() for value in self.portfolio_ids]
+        if any(not value for value in normalized_ids):
+            raise ValueError("portfolio_ids cannot contain blank identifiers.")
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("portfolio_ids must not contain duplicates.")
+        self.portfolio_ids = normalized_ids
+        if len(normalized_ids) > 1 and not self.reporting_currency:
+            raise ValueError(
+                "reporting_currency is required when more than one portfolio is requested."
+            )
+        if self.reporting_currency is not None and not self.reporting_currency.strip():
+            raise ValueError("reporting_currency cannot be blank.")
+        return self
+
+
 class ReportingPortfolioSummary(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-001"])
     booking_center_code: str = Field(
@@ -711,6 +770,83 @@ class PortfolioSummaryResponse(BaseModel):
     snapshot_metadata: PortfolioSummarySnapshotMetadata = Field(
         ...,
         description="Resolved snapshot metadata for the summary query.",
+    )
+
+
+class BulkPortfolioSummaryItem(BaseModel):
+    portfolio_id: str = Field(
+        ..., description="Requested portfolio identifier.", examples=["PORT-001"]
+    )
+    booking_center_code: str | None = Field(
+        None, description="Booking center code when the portfolio exists."
+    )
+    client_id: str | None = Field(None, description="Client identifier when the portfolio exists.")
+    portfolio_currency: str | None = Field(
+        None, description="Portfolio base currency when the portfolio exists."
+    )
+    reporting_currency: str | None = Field(
+        None, description="Effective reporting currency for this member."
+    )
+    resolved_as_of_date: date = Field(..., description="Effective as-of date used for this member.")
+    coverage_state: BulkPortfolioSummaryCoverageState = Field(
+        ...,
+        description=(
+            "Source coverage state. Totals are populated only for COMPLETE, MEASURED_ZERO, "
+            "or CARRY_FORWARD members."
+        ),
+    )
+    coverage_reason: str = Field(
+        ..., description="Machine-readable explanation for the coverage state."
+    )
+    snapshot_date: date | None = Field(
+        None, description="Latest source snapshot date used or observed."
+    )
+    snapshot_row_count: int = Field(
+        ..., ge=0, description="Source snapshot row count observed for the member."
+    )
+    expected_open_position_count: int = Field(
+        ..., ge=0, description="Expected open source positions used to detect partial coverage."
+    )
+    totals: PortfolioSummaryTotals | None = Field(
+        None,
+        description=(
+            "Source-owned total, invested, and cash facts; null when coverage is not trustworthy."
+        ),
+    )
+
+
+class BulkPortfolioSummaryAggregate(BaseModel):
+    portfolio_count: int = Field(..., ge=0, description="Number of requested members.")
+    coverage_state: BulkPortfolioSummaryAggregateState = Field(
+        ..., description="Aggregate coverage posture across every requested member."
+    )
+    coverage_reason: str = Field(
+        ..., description="Why the aggregate is complete, partial, or unavailable."
+    )
+    totals: PortfolioSummaryTotals | None = Field(
+        None,
+        description="Cohort totals only when every requested member is covered and trustworthy.",
+    )
+
+
+class BulkPortfolioSummaryResponse(BaseModel):
+    contract_version: Literal["portfolio-summary-bulk-v1"] = Field(
+        "portfolio-summary-bulk-v1",
+        description="Versioned additive bulk summary contract.",
+    )
+    requested_portfolio_ids: list[str] = Field(
+        ..., description="Requested identifiers in caller-provided deterministic order."
+    )
+    resolved_as_of_date: date = Field(..., description="Effective as-of date used by the query.")
+    reporting_currency: str | None = Field(
+        None,
+        description="Effective reporting currency; null only when no requested portfolio exists.",
+    )
+    portfolios: list[BulkPortfolioSummaryItem] = Field(
+        ..., description="One explicit coverage/result item for every requested identifier."
+    )
+    aggregate: BulkPortfolioSummaryAggregate = Field(
+        ..., description="Cohort aggregate with fail-closed coverage semantics."
     )
 
 

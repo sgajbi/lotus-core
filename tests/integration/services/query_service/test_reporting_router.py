@@ -171,6 +171,32 @@ async def test_query_portfolio_summary(async_test_client):
     assert response.json()["totals"]["cash_balance_portfolio_currency"] == "200"
 
 
+async def test_query_bulk_portfolio_summary(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_bulk_portfolio_summary.return_value = {
+        "contract_version": "portfolio-summary-bulk-v1",
+        "requested_portfolio_ids": ["P1", "P2"],
+        "resolved_as_of_date": date(2026, 3, 27),
+        "reporting_currency": "USD",
+        "portfolios": [],
+        "aggregate": {
+            "portfolio_count": 2,
+            "coverage_state": "UNAVAILABLE",
+            "coverage_reason": "no_member_has_trustworthy_totals",
+            "totals": None,
+        },
+    }
+
+    response = await client.post(
+        "/reporting/portfolio-summary/bulk-query",
+        json={"portfolio_ids": ["P1", "P2"], "reporting_currency": "USD"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["contract_version"] == "portfolio-summary-bulk-v1"
+    mock_service.get_bulk_portfolio_summary.assert_awaited_once()
+
+
 async def test_reporting_router_maps_value_errors_to_400(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_assets_under_management.side_effect = ValueError("bad scope")

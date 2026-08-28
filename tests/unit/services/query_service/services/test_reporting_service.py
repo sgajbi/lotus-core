@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.reporting_dto import (
     AssetAllocationQueryRequest,
     AssetsUnderManagementQueryRequest,
+    BulkPortfolioSummaryQueryRequest,
     PortfolioSummaryQueryRequest,
     ReportingScope,
 )
@@ -609,6 +610,231 @@ async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio()
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P404"))
+
+
+def test_bulk_portfolio_summary_request_is_bounded_and_deduplicated() -> None:
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        BulkPortfolioSummaryQueryRequest(portfolio_ids=["P1", " P1 "])
+    with pytest.raises(ValueError, match="required when more than one"):
+        BulkPortfolioSummaryQueryRequest(portfolio_ids=["P1", "P2"])
+
+    request = BulkPortfolioSummaryQueryRequest(portfolio_ids=[" P1 "], reporting_currency=" usd ")
+    assert request.portfolio_ids == ["P1"]
+    assert request.reporting_currency == " usd "
+
+
+async def test_bulk_summary_batches_snapshot_read_and_aggregates_members() -> None:
+    repo = AsyncMock()
+    portfolios = [_portfolio("P1"), _portfolio("P2")]
+    repo.list_portfolios.return_value = portfolios
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolios[0],
+            snapshot=_snapshot("SEC1", market_value="100"),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolios[0],
+            snapshot=_snapshot("CASH1", market_value="20"),
+            instrument=_instrument("CASH1", asset_class="CASH"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolios[1],
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", asset_class="BOND"),
+        ),
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(date(2026, 3, 27), 2, expected_open_count=2),
+        "P2": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1),
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1", "P2"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert [item.portfolio_id for item in response.portfolios] == ["P1", "P2"]
+    assert response.portfolios[0].totals is not None
+    assert response.portfolios[0].totals.cash_balance_reporting_currency == Decimal("20")
+    assert response.portfolios[1].totals is not None
+    assert response.aggregate.coverage_state == "COMPLETE"
+    assert response.aggregate.totals is not None
+    assert response.aggregate.totals.total_market_value_reporting_currency == Decimal("170")
+    repo.list_latest_snapshot_rows.assert_awaited_once_with(
+        portfolio_ids=["P1", "P2"], as_of_date=date(2026, 3, 27), include_presence=True
+    )
+    repo.list_cash_account_masters.assert_not_awaited()
+
+
+async def test_get_bulk_portfolio_summary_is_fail_closed_for_missing_partial_and_fx_members() -> (
+    None
+):
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.list_portfolios.return_value = [portfolio]
+    missing_value = _snapshot("SEC1", market_value="10")
+    missing_value.market_value = None
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=missing_value,
+            instrument=_instrument("SEC1"),
+        )
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=2)
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        partial = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1", "P404"], reporting_currency="SGD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert [item.coverage_state for item in partial.portfolios] == ["PARTIAL", "INVALID_PORTFOLIO"]
+    assert all(item.totals is None for item in partial.portfolios)
+    assert partial.aggregate.coverage_state == "UNAVAILABLE"
+    assert partial.aggregate.totals is None
+
+
+async def test_get_bulk_portfolio_summary_keeps_fx_failure_on_member_and_blocks_aggregate() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="10"),
+            instrument=_instrument("SEC1"),
+        )
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1)
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+
+        async def fail_fx(**_kwargs):
+            raise ValueError("FX rate not found")
+
+        service._convert_amount = AsyncMock(side_effect=fail_fx)  # type: ignore[method-assign]
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P1"], reporting_currency="SGD", as_of_date=date(2026, 3, 27)
+            )
+        )
+
+    assert response.portfolios[0].coverage_state == "FX_UNAVAILABLE"
+    assert response.portfolios[0].coverage_reason == "reporting_fx_unavailable"
+    assert response.portfolios[0].totals is None
+    assert response.aggregate.coverage_state == "UNAVAILABLE"
+    assert response.aggregate.totals is None
+
+
+async def test_get_bulk_portfolio_summary_distinguishes_zero_empty_and_no_snapshot() -> None:
+    repo = AsyncMock()
+    portfolios = [_portfolio("P0"), _portfolio("PE"), _portfolio("PN")]
+    repo.list_portfolios.return_value = portfolios
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolios[0],
+            snapshot=_snapshot("SEC0", market_value="0"),
+            instrument=_instrument("SEC0"),
+        )
+    ]
+    repo.list_snapshot_presence.return_value = {
+        "P0": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1),
+        "PE": SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=0),
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=["P0", "PE", "PN"],
+                reporting_currency="USD",
+                as_of_date=date(2026, 3, 27),
+            )
+        )
+
+    assert [item.coverage_state for item in response.portfolios] == [
+        "MEASURED_ZERO",
+        "LOADED_EMPTY",
+        "NO_SNAPSHOT",
+    ]
+    assert response.portfolios[0].totals is not None
+    assert response.portfolios[1].totals is None
+    assert response.aggregate.coverage_state == "PARTIAL"
+    assert response.aggregate.totals is None
+
+
+@pytest.mark.parametrize("member_count", [1, 25, 100])
+async def test_bulk_summary_keeps_repository_reads_bounded_at_supported_sizes(
+    member_count: int,
+) -> None:
+    repo = AsyncMock()
+    portfolios = [_portfolio(f"P{index}") for index in range(member_count)]
+    repo.list_portfolios.return_value = portfolios
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(f"SEC-{portfolio.portfolio_id}", market_value="1"),
+            instrument=_instrument(f"SEC-{portfolio.portfolio_id}"),
+        )
+        for portfolio in portfolios
+    ]
+    repo.list_snapshot_presence.return_value = {
+        portfolio.portfolio_id: SnapshotPresence(date(2026, 3, 27), 1, expected_open_count=1)
+        for portfolio in portfolios
+    }
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_bulk_portfolio_summary(
+            BulkPortfolioSummaryQueryRequest(
+                portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
+                reporting_currency="USD",
+                as_of_date=date(2026, 3, 27),
+            )
+        )
+
+    assert len(response.portfolios) == member_count
+    assert response.aggregate.coverage_state == "COMPLETE"
+    repo.list_portfolios.assert_awaited_once_with(
+        portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios]
+    )
+    repo.list_latest_snapshot_rows.assert_awaited_once_with(
+        portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
+        as_of_date=date(2026, 3, 27),
+        include_presence=True,
+    )
+    repo.list_snapshot_presence.assert_awaited_once_with(
+        portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
+        as_of_date=date(2026, 3, 27),
+    )
+    repo.list_cash_account_masters.assert_not_awaited()
 
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:

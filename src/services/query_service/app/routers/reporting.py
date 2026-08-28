@@ -6,6 +6,8 @@ from ..dtos.reporting_dto import (
     AssetAllocationResponse,
     AssetsUnderManagementQueryRequest,
     AssetsUnderManagementResponse,
+    BulkPortfolioSummaryQueryRequest,
+    BulkPortfolioSummaryResponse,
     PortfolioSummaryQueryRequest,
     PortfolioSummaryResponse,
 )
@@ -116,5 +118,31 @@ async def query_portfolio_summary(
         return await service.get_portfolio_summary(request)
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
+    except ValueError as exc:
+        raise value_error_to_http(exc) from exc
+
+
+@router.post(
+    "/portfolio-summary/bulk-query",
+    response_model=BulkPortfolioSummaryResponse,
+    summary="Query Bulk Portfolio Summary",
+    description=(
+        "What: Return a bounded, source-owned reporting summary for an explicit portfolio cohort.\n"
+        "How: Resolves all requested portfolios and their snapshot rows in bounded batch reads, "
+        "then computes deterministic per-portfolio total, invested, and cash facts in the "
+        "requested reporting currency.\n"
+        "When: Use this additive `portfolio-summary-bulk-v1` seam when Gateway has already "
+        "resolved caller entitlement for a cohort. Core does not perform entitlement checks, "
+        "and consumers must use each member's coverage state rather than inferring completeness "
+        "from numeric zeros. The cohort aggregate is fail-closed and is null when any member "
+        "has missing source, partial coverage, invalid identity, or unavailable FX evidence."
+    ),
+)
+async def query_bulk_portfolio_summary(
+    request: BulkPortfolioSummaryQueryRequest,
+    service: ReportingService = Depends(get_reporting_service),
+):
+    try:
+        return await service.get_bulk_portfolio_summary(request)
     except ValueError as exc:
         raise value_error_to_http(exc) from exc
