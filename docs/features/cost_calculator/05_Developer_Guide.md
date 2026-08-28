@@ -156,16 +156,42 @@ release under a parent manifest are gated by their own vocabulary, not by the re
 policies in `corporate_action/cohort_policy.py` and the role and type maps in
 `corporate_action/manifest.py`.
 
-The two failure directions are worth separating:
+**Do not add the type to `MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES` directly.** It is a derived
+union, and which set you add to decides whether the type is also reconciled:
+
+```python
+RECONCILABLE_CORPORATE_ACTION_TYPES = frozenset(BASIS_TRANSFER_CORPORATE_ACTION_TYPES).union(
+    SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES,
+    TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES,
+    FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES,
+    {"ADJUSTMENT"},
+)
+MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES = RECONCILABLE_CORPORATE_ACTION_TYPES.union({"FEE", "TAX"})
+```
+
+So add a basis-transfer leg to `BASIS_TRANSFER_CORPORATE_ACTION_TYPES`, and a quantity-transfer pair
+to `QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS` as a source-to-target mapping — which populates the
+source and target frozensets together. Both routes flow into `RECONCILABLE` and therefore into
+`MANIFEST_GOVERNED`, so the type is governed **and** reconciled.
+
+Extending the `{"FEE", "TAX"}` literal instead governs the type without reconciling it, and that
+**fails silently**. `_reconciliation_key()` in `application/corporate_action_reconciliation.py`
+returns `None` when `is_reconcilable_corporate_action()` is false, so the child parks, releases, and
+books normally while conservation and linkage reconciliation are skipped entirely. The transaction
+looks correct and simply carries no reconciliation evidence.
+
+Three failure directions, then:
 
 * **Registered but not in the manifest vocabulary** — a transaction carrying parent-manifest
   identity is not recognised as a child, so it bypasses parking and is processed as an ordinary
   transaction. It books; it just skips the governance that was supposed to hold it.
 * **Added to the vocabulary incompletely** — the type is recognised but has no matching cohort
-  policy or role mapping, and manifest validation rejects it.
+  policy or role mapping, and manifest validation rejects it. This one fails loudly.
+* **Governed but not reconcilable** — parked and released correctly, with reconciliation silently
+  absent, as above.
 
-Add the type to the governed set, give it a cohort policy and role mapping, and cover both the
-parking path and the release path in tests.
+Add the type to the correct classification set, give it a cohort policy and role mapping, and cover
+the parking path, the release path, and the reconciliation evidence in tests.
 
 
 **8. Add redemption vocabulary and eligibility — required for a redemption-family type.** Reusing
