@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobCompletionDisposition,
     AggregationJobFailureDisposition,
-    AggregationJobLease,
+    AggregationJobLeaseClaim,
     ExpiredAggregationJobRecovery,
 )
 from src.services.portfolio_derived_state_service.app.infrastructure import (
@@ -388,17 +388,15 @@ async def test_concurrent_aggregation_recovery_claims_disjoint_stale_cohorts(
         prefix="P-AGG-STALE-CONCURRENT",
     )
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
-    now = datetime.now(UTC)
-
     async with session_factory() as first_session, session_factory() as second_session:
         async with first_session.begin():
             first = await PortfolioAggregationRepository(first_session).recover_expired_job_leases(
-                now=now, max_attempts=3
+                max_attempts=3
             )
             async with second_session.begin():
                 second = await PortfolioAggregationRepository(
                     second_session
-                ).recover_expired_job_leases(now=now, max_attempts=3)
+                ).recover_expired_job_leases(max_attempts=3)
 
     assert first == ExpiredAggregationJobRecovery(requeued_count=1_000, failed_count=0)
     assert second == ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
@@ -438,7 +436,7 @@ async def test_later_aggregation_recovery_chunk_failure_rolls_back_all_updates(
         with pytest.raises(RuntimeError, match="second aggregation recovery chunk failure"):
             async with async_db_session.begin():
                 await PortfolioAggregationRepository(async_db_session)._requeue_expired_job_leases(
-                    job_ids, datetime.now(UTC)
+                    job_ids
                 )
     finally:
         sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", fail_second_update)
@@ -571,10 +569,10 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
             repo = PortfolioAggregationRepository(session)
             claimed = await repo.claim_eligible_jobs(
                 batch_size=1,
-                lease=AggregationJobLease(
+                lease=AggregationJobLeaseClaim(
                     owner=f"aggregation-runtime-{claimant}",
                     token=f"lease-token-{claimant}",
-                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                    duration_seconds=300,
                 ),
             )
             await session.commit()
@@ -627,10 +625,10 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     first_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-first",
                 token="lease-token-first",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -699,10 +697,10 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     second_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-second",
                 token="lease-token-second",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -730,10 +728,10 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     third_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-third",
                 token="lease-token-third",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -773,10 +771,10 @@ async def test_claim_promotes_carry_forward_day_to_authoritative_portfolio_epoch
     claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-carry-forward",
                 token="lease-token-carry-forward",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -825,10 +823,10 @@ async def test_claimed_target_is_fenced_when_source_advances_between_claim_state
             )
             await source_session.commit()
 
-        first_lease = AggregationJobLease(
+        first_lease = AggregationJobLeaseClaim(
             owner="aggregation-runtime-snapshot-fence-first",
             token="lease-token-snapshot-fence-first",
-            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            duration_seconds=300,
         )
         first_claim = (
             await repository._claim_eligible_job_rows(
@@ -852,10 +850,10 @@ async def test_claimed_target_is_fenced_when_source_advances_between_claim_state
         second_claim = (
             await repository.claim_eligible_jobs(
                 batch_size=1,
-                lease=AggregationJobLease(
+                lease=AggregationJobLeaseClaim(
                     owner="aggregation-runtime-snapshot-fence-second",
                     token="lease-token-snapshot-fence-second",
-                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                    duration_seconds=300,
                 ),
             )
         )[0]
@@ -883,10 +881,10 @@ async def test_aggregation_terminal_fence_uses_statement_time_after_transaction_
     claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-aged-transaction",
                 token="lease-token-aged-transaction",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -937,10 +935,10 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
     first_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-same-epoch-success",
                 token="lease-token-same-epoch-success",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -987,10 +985,10 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
     second_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-same-epoch-failure",
                 token="lease-token-same-epoch-failure",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]
@@ -1039,10 +1037,10 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
     final_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner="aggregation-runtime-same-epoch-final",
                 token="lease-token-same-epoch-final",
-                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                duration_seconds=300,
             ),
         )
     )[0]

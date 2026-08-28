@@ -8,7 +8,7 @@ from typing import Any, Protocol, TypeVar
 
 from ..domain.aggregation_jobs.models import (
     AggregationJobBatchResult,
-    AggregationJobLease,
+    AggregationJobLeaseClaim,
     ClaimedAggregationJob,
     ExpiredAggregationJobRecovery,
 )
@@ -22,7 +22,6 @@ class AggregationSchedulerRepository(Protocol):
     async def recover_expired_job_leases(
         self,
         *,
-        now: datetime,
         max_attempts: int,
     ) -> ExpiredAggregationJobRecovery: ...
 
@@ -30,7 +29,7 @@ class AggregationSchedulerRepository(Protocol):
         self,
         *,
         batch_size: int,
-        lease: AggregationJobLease,
+        lease: AggregationJobLeaseClaim,
     ) -> list[ClaimedAggregationJob]: ...
 
 

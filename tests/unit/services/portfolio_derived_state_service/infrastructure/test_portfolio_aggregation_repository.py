@@ -14,6 +14,7 @@ from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.mo
     AggregationJobCompletionDisposition,
     AggregationJobFailureDisposition,
     AggregationJobLease,
+    AggregationJobLeaseClaim,
     ExpiredAggregationJobRecovery,
 )
 from src.services.portfolio_derived_state_service.app.infrastructure import (
@@ -41,11 +42,14 @@ def repository(mock_db_session: AsyncMock) -> PortfolioAggregationRepository:
     return PortfolioAggregationRepository(mock_db_session)
 
 
-def _lease() -> AggregationJobLease:
-    return AggregationJobLease(
+LEASE_EXPIRES_AT = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
+
+
+def _lease() -> AggregationJobLeaseClaim:
+    return AggregationJobLeaseClaim(
         owner="portfolio-aggregation-runtime-1",
         token="lease-token-1",
-        expires_at=datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
+        duration_seconds=300,
     )
 
 
@@ -180,7 +184,7 @@ async def test_claim_eligible_jobs_increments_attempt_count(
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
-            lease_expires_at=_lease().expires_at,
+            lease_expires_at=LEASE_EXPIRES_AT,
         )
     ]
     mock_db_session.execute.side_effect = [eligible_result, claimed_result]
@@ -219,7 +223,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
-            lease_expires_at=_lease().expires_at,
+            lease_expires_at=LEASE_EXPIRES_AT,
         ),
         MagicMock(
             portfolio_id="P1",
@@ -231,7 +235,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
-            lease_expires_at=_lease().expires_at,
+            lease_expires_at=LEASE_EXPIRES_AT,
         ),
         MagicMock(
             portfolio_id="P1",
@@ -243,7 +247,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
-            lease_expires_at=_lease().expires_at,
+            lease_expires_at=LEASE_EXPIRES_AT,
         ),
     ]
     mock_db_session.execute.side_effect = [eligible_result, claimed_result]
@@ -502,10 +506,10 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    lease = AggregationJobLease(
+    lease = AggregationJobLeaseClaim(
         owner="portfolio-aggregation-runtime-1",
         token="lease-token-1",
-        expires_at=datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
+        duration_seconds=300,
     )
     eligible_result = MagicMock()
     eligible_result.fetchall.return_value = [(7, 4, False)]
@@ -521,14 +525,18 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
             correlation_id="corr-1",
             lease_owner=lease.owner,
             lease_token=lease.token,
-            lease_expires_at=lease.expires_at,
+            lease_expires_at=LEASE_EXPIRES_AT,
         )
     ]
     mock_db_session.execute.side_effect = [eligible_result, claimed_result]
 
     claimed_jobs = await repository.claim_eligible_jobs(batch_size=5, lease=lease)
 
-    assert claimed_jobs[0].lease == lease
+    assert claimed_jobs[0].lease == AggregationJobLease(
+        owner=lease.owner,
+        token=lease.token,
+        expires_at=LEASE_EXPIRES_AT,
+    )
     assert claimed_jobs[0].aggregation_revision == 9
     assert claimed_jobs[0].target_epoch == 4
     assert claimed_jobs[0].source_revision == 5
@@ -541,7 +549,7 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
     )
     assert "lease_owner='portfolio-aggregation-runtime-1'" in compiled
     assert "lease_token='lease-token-1'" in compiled
-    assert "lease_expires_at='2026-07-15 08:30:00+00:00'" in compiled
+    assert "lease_expires_at=(clock_timestamp() + make_interval" in compiled
 
 
 async def test_complete_or_requeue_claim_fences_terminal_write_and_clears_lease(
@@ -635,13 +643,12 @@ async def test_recover_expired_job_leases_requeues_retryable_claim_and_clears_le
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
     expired_result = MagicMock()
     expired_result.all.return_value = [MagicMock(id=7, attempt_count=1, failure_reason=None)]
     reset_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [expired_result, reset_result]
 
-    result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
+    result = await repository.recover_expired_job_leases(max_attempts=3)
 
     assert result == ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
     select_sql = str(
@@ -660,9 +667,9 @@ async def test_recover_expired_job_leases_requeues_retryable_claim_and_clears_le
             compile_kwargs={"literal_binds": True},
         )
     )
-    assert "lease_expires_at <= '2026-07-15 08:30:00+00:00'" in select_sql
+    assert "lease_expires_at <= clock_timestamp()" in select_sql
     assert "updated_at <" not in select_sql
-    assert "lease_expires_at <= '2026-07-15 08:30:00+00:00'" in reset_sql
+    assert "lease_expires_at <= clock_timestamp()" in reset_sql
     assert "lease_owner=NULL" in reset_sql
     assert "lease_token=NULL" in reset_sql
     assert "lease_expires_at=NULL" in reset_sql
@@ -677,14 +684,13 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
     expired_result = MagicMock()
     expired_result.all.return_value = [MagicMock(id=7, attempt_count=3, failure_reason=None)]
     failed_result = MagicMock(rowcount=1)
     reset_result = MagicMock(rowcount=0)
     mock_db_session.execute.side_effect = [expired_result, failed_result, reset_result]
 
-    result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
+    result = await repository.recover_expired_job_leases(max_attempts=3)
 
     assert result == ExpiredAggregationJobRecovery(requeued_count=0, failed_count=1)
     failed_sql = str(
@@ -698,7 +704,7 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     assert "status='FAILED'" in failed_sql
     assert "lease expired after max attempts" in failed_sql
     assert "coalesce(portfolio_aggregation_jobs.failure_reason, '') !=" in failed_sql
-    assert "lease_expires_at <= '2026-07-15 08:30:00+00:00'" in failed_sql
+    assert "lease_expires_at <= clock_timestamp()" in failed_sql
     assert "lease_owner=NULL" in failed_sql
     assert mock_db_session.execute.await_count == 2
 
@@ -707,7 +713,6 @@ async def test_recover_expired_job_leases_requeues_unattempted_superseded_revisi
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
     expired_result = MagicMock()
     expired_result.all.return_value = [
         MagicMock(
@@ -719,7 +724,7 @@ async def test_recover_expired_job_leases_requeues_unattempted_superseded_revisi
     reset_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [expired_result, reset_result]
 
-    result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
+    result = await repository.recover_expired_job_leases(max_attempts=3)
 
     assert result == ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
     reset_sql = str(
@@ -738,7 +743,6 @@ async def test_recover_expired_job_leases_uses_disjoint_failed_and_requeue_updat
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
     expired_result = MagicMock()
     expired_result.all.return_value = [
         MagicMock(id=9, attempt_count=3, failure_reason=None),
@@ -749,7 +753,7 @@ async def test_recover_expired_job_leases_uses_disjoint_failed_and_requeue_updat
     reset_result = MagicMock(rowcount=2)
     mock_db_session.execute.side_effect = [expired_result, failed_result, reset_result]
 
-    result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
+    result = await repository.recover_expired_job_leases(max_attempts=3)
 
     assert result == ExpiredAggregationJobRecovery(requeued_count=2, failed_count=1)
     failed_statement = mock_db_session.execute.await_args_list[1].args[0]
@@ -777,7 +781,6 @@ async def test_requeue_expired_job_leases_chunks_and_aggregates_counts(
     with caplog.at_level(logging.INFO):
         count = await repository._requeue_expired_job_leases(
             [*range(1_001), sentinel_job_id, 0],
-            datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
         )
 
     assert count == 1_001

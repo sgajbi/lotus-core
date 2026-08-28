@@ -6,6 +6,7 @@ import pytest
 
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobLease,
+    AggregationJobLeaseClaim,
     ClaimedAggregationJob,
 )
 
@@ -22,6 +23,23 @@ def test_aggregation_job_lease_preserves_fenced_ownership() -> None:
     assert lease.owner == "portfolio-aggregation-worker-1"
     assert lease.token == "lease-token-1"
     assert lease.expires_at == expires_at
+
+
+def test_aggregation_job_lease_claim_carries_only_db_minted_duration() -> None:
+    claim = AggregationJobLeaseClaim(
+        owner="portfolio-aggregation-worker-1",
+        token="lease-token-1",
+        duration_seconds=300,
+    )
+
+    assert claim.owner == "portfolio-aggregation-worker-1"
+    assert claim.token == "lease-token-1"
+    assert claim.duration_seconds == 300
+
+
+def test_aggregation_job_lease_claim_rejects_non_positive_duration() -> None:
+    with pytest.raises(ValueError, match="duration"):
+        AggregationJobLeaseClaim(owner="worker", token="token", duration_seconds=0)
 
 
 @pytest.mark.parametrize(

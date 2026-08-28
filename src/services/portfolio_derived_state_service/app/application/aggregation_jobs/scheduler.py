@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta, timezone
+from datetime import timezone
 
-from ...domain.aggregation_jobs.models import AggregationJobLease, ClaimedAggregationJob
+from ...domain.aggregation_jobs.models import AggregationJobLeaseClaim, ClaimedAggregationJob
 from ...ports.aggregation_scheduler_ports import (
     AggregationJobBatchProcessor,
     AggregationLeaseTokenGenerator,
@@ -73,18 +73,16 @@ class AggregationScheduler:
         repository: AggregationSchedulerRepository,
     ) -> list[ClaimedAggregationJob]:
         await self._update_queue_metrics(repository)
-        now = self._clock.now_utc()
         recovery = await repository.recover_expired_job_leases(
-            now=now,
             max_attempts=self._max_attempts,
         )
         self._metrics_sink.observe_recovery(recovery)
         jobs = await repository.claim_eligible_jobs(
             batch_size=self._batch_size,
-            lease=AggregationJobLease(
+            lease=AggregationJobLeaseClaim(
                 owner=self._lease_owner,
                 token=self._token_generator.new_hex(),
-                expires_at=now + timedelta(seconds=self._lease_duration_seconds),
+                duration_seconds=self._lease_duration_seconds,
             ),
         )
         self._metrics_sink.observe_claimed(len(jobs))
