@@ -71,3 +71,61 @@ async def test_reporting_currency_support_rejects_cross_tenant_scope() -> None:
 
     assert exc_info.value.status_code == 403
     service.evaluate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_currency_support_rejects_missing_authenticated_scope() -> None:
+    service = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_reporting_currency_support(
+            request=_request(" "),
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id=None,
+            service=service,
+        )
+
+    assert exc_info.value.status_code == 403
+    service.evaluate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_currency_support_rejects_blank_explicit_tenant_without_auth_scope() -> (
+    None
+):
+    service = AsyncMock()
+    request = SimpleNamespace(state=SimpleNamespace())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_reporting_currency_support(
+            request=request,
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id=" ",
+            service=service,
+        )
+
+    assert exc_info.value.status_code == 422
+    service.evaluate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_currency_support_maps_service_validation_errors() -> None:
+    service = AsyncMock()
+    service.evaluate.side_effect = ValueError("portfolio source invalid")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_reporting_currency_support(
+            request=SimpleNamespace(state=SimpleNamespace()),
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id=None,
+            service=service,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "portfolio source invalid"
