@@ -39,8 +39,8 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes up to **five** edits, in different places. Doing only the first is the common failure:
-the type registers cleanly and then fails at runtime — or worse, books silently with no effect.
+This takes up to **six** edits, in different places. Doing only the first is the common failure:
+the type registers cleanly and then fails at runtime — or worse, books silently with the wrong result.
 
 The recurring shape is that the registry declares *intent*, while several hard-coded maps must be
 updated to match. The registry does not drive them, so nothing stops the two from disagreeing.
@@ -126,6 +126,26 @@ Note that `production_transaction_types_for_generated_cash_legs()` documents its
 types "backed by a settlement-cash resolver", but it derives that set purely from registry fields —
 nothing checks the resolver map. Registering the type is what opts it in; adding the resolver is a
 separate edit you must make yourself. Cover it with the settlement domain tests.
+
+**6. Set the cashflow value date — required when the cashflow should not use the transaction date.**
+`_resolve_cashflow_date()` in `app/domain/cashflow/calculation.py` decides the persisted cashflow
+date from two hard-coded sets, `_SETTLEMENT_DATED_TRANSACTION_TYPES` and
+`_PAYMENT_DATED_TRANSACTION_TYPES`. Neither is derived from the registry or from
+`_SETTLEMENT_CASH_RESOLVERS`, so a type wired through steps 1 to 5 is still absent from both.
+
+**This step fails silently, like step 4.** The resolution order is: a
+`synthetic_flow_effective_date` if present, then settlement date for a type in either set, then
+settlement date for an `FX_BUY`/`FX_SELL` classification, and otherwise:
+
+```python
+return transaction.transaction_date.date()
+```
+
+A settlement-dated or payment-dated type that is missing from both sets is dated on its transaction
+date instead. Nothing errors. Because cashflow timing feeds time-weighted return, the result is a
+plausible but wrong performance figure rather than a failure — add a cashflow-date test alongside
+the set update.
+
 ## 3. Testing
 
 ```bash
