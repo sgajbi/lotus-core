@@ -26,22 +26,35 @@ position work queue to subscribe to or to measure lag on.
 
 The unified deployment builds five consumers, listed in full in
 [the transaction-processing Kafka contract](../cost_calculator/02_API_Specification_Cost_Calculator.md#21-consumers).
-Three of them drive position effects:
+**All five can drive position effects** — two directly, three by staging work that reaches the
+atomic use case later:
 
-| Topic | Consumer group | Drives |
+| Topic | Consumer group | Drives position effects |
 | --- | --- | --- |
-| `transactions.persisted` | `portfolio_transaction_processing_group` | Position effects for newly persisted transactions. |
-| `transactions.reprocessing.requested` | `portfolio_transaction_replay_request_group` | Position replay for an affected key after a back-dated correction. |
-| `corporate_action.manifest.received` | `corporate_action_manifest_group` | **Conditional.** Governed corporate actions only — see below. |
+| `transactions.persisted` | `portfolio_transaction_processing_group` | Directly, for newly persisted transactions. |
+| `transactions.reprocessing.requested` | `portfolio_transaction_replay_request_group` | Directly, replaying an affected key after a back-dated correction. |
+| `corporate_action.manifest.received` | `corporate_action_manifest_group` | Indirectly — governed corporate actions. |
+| `fixed_income.book_cost.authority.received` | `fixed_income_book_cost_authority_group` | Indirectly — fixed-income book-cost corrections. |
+| `fixed_income.book_cost.disposal_replay.requested` | `fixed_income_book_cost_correction_replay_group` | Indirectly — the second hop of that correction. |
 
-For a governed corporate-action child, `TransactionProcessingConsumer` routes the arrival and
-returns *without financial mutation*, logging `Corporate-action child intake completed without
-financial mutation.` The position effect happens later: the manifest makes the durable release
-eligible, and `CorporateActionReleaseWorker` invokes `ProcessTransactionUseCase` for each member.
+The three indirect paths are the ones that surprise operators, because the two direct groups can be
+completely current while position state is wrong.
 
-This matters for monitoring. If `corporate_action.manifest.received` is stalled, those position
-effects never occur even while both other groups are current and show no lag, so watching only the
-first two hides the failure.
+**Corporate actions.** For a governed corporate-action child, `TransactionProcessingConsumer` routes
+the arrival and returns *without financial mutation*, logging `Corporate-action child intake
+completed without financial mutation.` The position effect happens later: the manifest makes the
+durable release eligible, and `CorporateActionReleaseWorker` invokes `ProcessTransactionUseCase` for
+each member.
+
+**Fixed-income corrections.** This is a two-hop path.
+`FixedIncomeBookCostAuthorityConsumer` handles an authority event and its unit of work stages
+`fixed_income.book_cost.disposal_replay.requested`. `FixedIncomeBookCostCorrectionReplayConsumer`
+then consumes that and invokes `ReplayBookedTransactionUseCase`, which republishes the canonical
+transaction so cost and position are reprocessed atomically. A stall on *either* group leaves the
+corrected cost basis unapplied.
+
+So a stall on any of the three indirect groups produces the same symptom: position state that is
+silently wrong while the two direct groups show no lag at all.
 
 The service does **not** consume `transactions.cost.processed`. That topic is an outbound
 compatibility event, described below; tracing position lag through it leads to a self-loop that does
