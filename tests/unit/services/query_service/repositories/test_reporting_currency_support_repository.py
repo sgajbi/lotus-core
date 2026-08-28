@@ -62,6 +62,7 @@ async def test_portfolio_currency_source_is_as_of_and_tenant_fenced() -> None:
     assert "position_timeseries.quantity = anon_1.quantity" in currency_sql
     assert "cashflows.cashflow_date = '2026-08-28'" in currency_sql
     assert "cashflows.epoch = anon_1.epoch" in currency_sql
+    assert currency_sql.count("position_timeseries.quantity = anon_1.quantity") == 2
     assert "SELECT DISTINCT upper(trim(instruments.currency)) AS source_currency" in currency_sql
     assert "ORDER BY upper(trim(instruments.currency)) ASC" in currency_sql
 
@@ -90,6 +91,7 @@ async def test_liquidation_evidence_is_fenced_to_active_position_epoch() -> None
     assert "position_timeseries.epoch = anon_1.epoch" in currency_sql
     assert "position_timeseries.quantity = anon_1.quantity" in currency_sql
     assert "cashflows.epoch = anon_1.epoch" in currency_sql
+    assert currency_sql.count("position_timeseries.quantity = anon_1.quantity") == 2
 
 
 async def test_portfolio_currency_source_returns_none_when_portfolio_missing() -> None:
