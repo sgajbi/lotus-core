@@ -15,7 +15,9 @@ Three pieces matter:
   subscribes to persisted transaction events and drives the processing use case.
 * **`cashflow_rules` table** — the declarative rule set mapping a transaction type to its
   classification, timing, and aggregation level. It is loaded through
-  `app/infrastructure/cashflow/rule_cache.py` rather than read per message.
+  `app/infrastructure/cashflow/rule_cache.py` rather than read per message. That cache is
+  version-checked, not load-once: it refreshes on TTL expiry, on a source rule-set version change,
+  or when a requested rule is missing, so a rule change takes effect without a restart.
 * **Domain calculation** — `app/domain/cashflow/calculation.py` applies a resolved rule to one
   booked transaction. `app/application/cashflow_processing/use_case.py` orchestrates it.
 
