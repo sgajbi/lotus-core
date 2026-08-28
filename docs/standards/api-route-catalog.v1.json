@@ -10865,6 +10865,52 @@
     {
       "service_app": "query_service",
       "method": "POST",
+      "path": "/reporting/portfolio-summary/bulk-query",
+      "route_key": "POST /reporting/portfolio-summary/bulk-query",
+      "operation_id": "query_bulk_portfolio_summary_reporting_portfolio_summary_bulk_query_post",
+      "summary": "Query Bulk Portfolio Summary",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "route_family": "Operational Read",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "mutation-audit-required",
+      "request_schema": "BulkPortfolioSummaryQueryRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "BulkPortfolioSummaryResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "not-declared",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-workbench",
+        "lotus-report"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_service",
+      "method": "POST",
       "path": "/reporting/portfolio-summary/query",
       "route_key": "POST /reporting/portfolio-summary/query",
       "operation_id": "query_portfolio_summary_reporting_portfolio_summary_query_post",

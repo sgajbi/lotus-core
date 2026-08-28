@@ -256,6 +256,23 @@ Behavior:
   - cash-account count
   - valued / unvalued counts
 
+### Bulk Portfolio Summary
+
+- `POST /reporting/portfolio-summary/bulk-query`
+
+This additive `portfolio-summary-bulk-v1` contract is the Core source seam for an already
+authorized Advisor Book cohort. The request accepts an explicit, deterministic list of 1–100
+portfolio IDs, an optional as-of date, and a required reporting currency when more than one
+portfolio is requested. Core performs one bounded portfolio/snapshot read and owns each member's
+total, invested, and cash facts after reporting-currency restatement.
+
+Every requested ID receives a result item, including `INVALID_PORTFOLIO`, `NO_SNAPSHOT`,
+`LOADED_EMPTY`, `PARTIAL`, and `FX_UNAVAILABLE` states. Numeric zero is never used as a missing
+data signal. The cohort `aggregate` is populated only when every member is `COMPLETE`,
+`MEASURED_ZERO`, or `CARRY_FORWARD`; otherwise its totals are null and its explicit coverage
+state is `PARTIAL` or `UNAVAILABLE`. Gateway remains the entitlement owner and must not rebuild
+Core totals or FX semantics.
+
 ### Cash Balances
 
 

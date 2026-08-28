@@ -5,7 +5,9 @@
 `HoldingsAsOf:v1` is the core-owned operational holdings and cash-balance product exposed by:
 
 1. `GET /portfolios/{portfolio_id}/positions`,
-2. `GET /portfolios/{portfolio_id}/cash-balances`.
+2. `GET /portfolios/{portfolio_id}/cash-balances`, and
+3. the additive `POST /reporting/portfolio-summary/bulk-query` summary seam for bounded,
+   already-authorized cohorts.
 
 It returns governed position rows and cash-account balances for one portfolio with source-data
 product identity, runtime metadata, as-of semantics, instrument descriptors, source-owned
@@ -31,6 +33,7 @@ execution-quality assessment, or OMS acknowledgement.
 | Explicit as-of cash balances | `/cash-balances?as_of_date=<date>` | Returns cash-account balances for the requested date. |
 | Reporting-currency cash balances | `/cash-balances?reporting_currency=<ccy>` | Converts portfolio-currency cash balances to the requested reporting currency using the latest FX rate on or before the resolved `as_of_date`. |
 | Source-reported cash weight | `/cash-balances` and `/cash-balances?as_of_date=<date>` | Computes `source_reported_cash_weight` from Core-owned cash and same-date portfolio market-value snapshot evidence. Returns null with blocked supportability when denominator evidence is incomplete, missing, zero, or stale. |
+| Bounded bulk portfolio summary | `/reporting/portfolio-summary/bulk-query` | Returns source-owned total, invested, and cash facts for up to 100 explicit portfolio IDs. Per-member coverage and FX failures are explicit; the cohort aggregate fails closed when any member is not trustworthy. |
 
 ## Inputs
 
