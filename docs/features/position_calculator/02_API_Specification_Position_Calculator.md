@@ -48,16 +48,28 @@ The service listens to a single topic:
     }
     ```
 
-### 2.2. Producer (Reprocessing Flow)
-
-The service only produces messages when it triggers a reprocessing flow.
+### 2.2. Producer
 
 #### Topic: `transactions.cost.processed`
 
-* **Purpose:** When a back-dated transaction is detected, this service re-publishes all historical transactions for that security to this same topic. This ensures the entire history is re-calculated deterministically.
-* **Consumer:** `portfolio_transaction_processing_service` itself, plus downstream consumers such as `portfolio_derived_state_service`.
+* **Purpose:** Records each processed transaction as a `ProcessedTransactionPersisted` event.
+  `TransactionalCostProcessingEffectStager.stage_processed_transactions`
+  (`app/infrastructure/cost_basis/effect_staging.py`) stages one outbox row per transaction inside
+  the same unit of work that persists the cost, cashflow, and position effects, so the event cannot
+  be emitted for work that did not commit. It is staged for every processed transaction, not only
+  during reprocessing.
+* **Consumer:** none at runtime. The event-supportability contract records this family with
+  `consumer_services=()` and `runtime_active=False`; it is staged as a compatibility event, not a
+  work queue. The unified runtime subscribes to `transactions.persisted` and
+  `transactions.reprocessing.requested` only, so do not trace replay or lag through a self-loop on
+  this topic — position effects are applied inside the atomic transaction-processing use case before
+  this event is staged.
 * **Key:** `portfolio_id`
-* **Payload (`TransactionEvent`):** The payload is the same as the consumed event, with one critical difference: the `epoch` field is incremented to the new, higher version number. This is the signal for all consumers to perform epoch fencing.
+* **Payload (`TransactionEvent`):** The event business payload of the processed transaction,
+  carrying its `epoch`. Reprocessing raises the epoch for the affected key, so events staged after a
+  back-dated correction carry the higher value. Epoch fencing is enforced by the epoch-aware query
+  and derived-state reads against durable state, not by consuming this topic — it has no runtime
+  consumer.
     ```json
     {
         "transaction_id": "HISTORICAL_TXN_001",
