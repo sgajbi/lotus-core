@@ -602,6 +602,20 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     assert jobs[0].status == "PROCESSING"
     assert jobs[0].attempt_count == 1
     assert jobs[0].lease_token in {"lease-token-one", "lease-token-two"}
+    async with session_factory() as authority_session:
+        database_now = await authority_session.scalar(select(func.clock_timestamp()))
+        lease_expiry = await authority_session.scalar(
+            select(PortfolioAggregationJob.lease_expires_at).where(
+                PortfolioAggregationJob.portfolio_id == "P-AGG-CLAIM"
+            )
+        )
+        recovery = await PortfolioAggregationRepository(
+            authority_session
+        ).recover_expired_job_leases(max_attempts=3)
+    assert database_now is not None
+    assert lease_expiry is not None
+    assert 295 <= (lease_expiry - database_now).total_seconds() <= 305
+    assert recovery == ExpiredAggregationJobRecovery(requeued_count=0, failed_count=0)
 
 
 @pytest.mark.lifecycle
