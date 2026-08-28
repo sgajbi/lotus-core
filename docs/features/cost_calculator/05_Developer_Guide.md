@@ -39,7 +39,7 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes up to **six** edits, in different places. Doing only the first is the common failure:
+This takes up to **seven** edits, in different places. Doing only the first is the common failure:
 the type registers cleanly and then fails at runtime — or worse, books silently with the wrong result.
 
 The recurring shape is that the registry declares *intent*, while several hard-coded maps must be
@@ -145,6 +145,27 @@ A settlement-dated or payment-dated type that is missing from both sets is dated
 date instead. Nothing errors. Because cashflow timing feeds time-weighted return, the result is a
 plausible but wrong performance figure rather than a failure — add a cashflow-date test alongside
 the set update.
+
+
+**7. Add manifest governance — required for a manifest-governed corporate-action type.** Parking and
+release under a parent manifest are gated by their own vocabulary, not by the registry.
+`corporate_action_manifest_child()` in
+`app/domain/transaction/corporate_action/arrival.py` recognises a child only if its type is in
+`MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES`
+(`corporate_action/classification.py`), and manifest validation dispatches through the closed cohort
+policies in `corporate_action/cohort_policy.py` and the role and type maps in
+`corporate_action/manifest.py`.
+
+The two failure directions are worth separating:
+
+* **Registered but not in the manifest vocabulary** — a transaction carrying parent-manifest
+  identity is not recognised as a child, so it bypasses parking and is processed as an ordinary
+  transaction. It books; it just skips the governance that was supposed to hold it.
+* **Added to the vocabulary incompletely** — the type is recognised but has no matching cohort
+  policy or role mapping, and manifest validation rejects it.
+
+Add the type to the governed set, give it a cohort policy and role mapping, and cover both the
+parking path and the release path in tests.
 
 ## 3. Testing
 
