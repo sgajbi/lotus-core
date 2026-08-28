@@ -90,6 +90,9 @@
     "domain-layer-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/domain_layer_guard.py"
     ],
+    "durable-lease-clock-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/durable_lease_clock_guard.py"
+    ],
     "e2e-test-value-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/e2e_test_value_guard.py"
     ],
