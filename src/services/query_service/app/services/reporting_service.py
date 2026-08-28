@@ -52,7 +52,7 @@ from .control_code_normalization import normalize_control_code
 from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")
-VALUED_STATUS = "VALUED"
+USABLE_VALUATION_STATUSES = frozenset({"VALUED", "VALUED_CURRENT", "VALUED_STALE"})
 UNVALUED_STATUS = "UNVALUED"
 ResolvedAllocationRow = tuple[Any, str | None, Decimal]
 
@@ -309,7 +309,10 @@ def _bulk_summary_coverage(
         return "PARTIAL", "open_position_coverage_gap"
     if any(row.snapshot.market_value is None for row in rows):
         return "PARTIAL", "market_value_missing"
-    if any(normalize_control_code(row.snapshot.valuation_status) != VALUED_STATUS for row in rows):
+    if any(
+        normalize_control_code(row.snapshot.valuation_status) not in USABLE_VALUATION_STATUSES
+        for row in rows
+    ):
         return "PARTIAL", "valuation_status_not_valued"
     if any(row.instrument is None for row in rows):
         return "PARTIAL", "instrument_classification_missing"
@@ -329,9 +332,7 @@ def _has_usable_cash_classification(row: Any) -> bool:
     asset_class = normalize_control_code(getattr(instrument, "asset_class", None))
     if not product_type and not asset_class:
         return False
-    if product_type != "CASH":
-        return True
-    return asset_class == "CASH"
+    return (product_type == "CASH") == (asset_class == "CASH")
 
 
 def _portfolio_summary_metadata(
