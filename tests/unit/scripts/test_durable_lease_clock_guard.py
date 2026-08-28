@@ -96,3 +96,24 @@ def test_durable_lease_clock_guard_rejects_expanded_deadline_mapping(
 
     assert len(findings) == 1
     assert findings[0].target == "lease_expires_at"
+
+
+def test_durable_lease_clock_guard_rejects_positional_deadline_mapping(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n"
+        "values_to_update = {'lease_expires_at': datetime.now(timezone.utc)}\n"
+        "stmt.values(values_to_update)\n"
+        "stmt.values({'lease_expires_at': datetime.now(timezone.utc)})\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert [finding.target for finding in findings] == [
+        "lease_expires_at",
+        "lease_expires_at",
+    ]
