@@ -36,6 +36,13 @@ behaves correctly end to end.
     minimum `lifecycle_family`, `economic_role`, `position_effect`, `cash_effect`, `lot_behavior`,
     and `settlement_behavior`. These fields drive downstream treatment; they are not labels.
 
+    **Registry registration alone is not enough for a production-bookable type.** Cost, cashflow,
+    and position effects run in one atomic use case, and cost resolves a per-type strategy: a type
+    absent from `CostBasisCalculator._strategies` fails with
+    `No cost calculation strategy is registered for '<type>'`, so cashflow is never reached. Follow
+    [the cost extension checklist](../cost_calculator/05_Developer_Guide.md#adding-a-transaction-type)
+    for the full set of edits.
+
 2.  **Add a unit test** for the rule's behaviour in
     `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`.
 
