@@ -95,29 +95,6 @@ class ReportingCurrencySupportRepository:
             source_currencies=source_currencies,
         )
 
-    async def get_latest_fx_rate_date(
-        self,
-        *,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> date | None:
-        from_code = normalize_currency_code(from_currency)
-        to_code = normalize_currency_code(to_currency)
-        if from_code == to_code:
-            return as_of_date
-        stmt = (
-            select(FxRate.rate_date)
-            .where(
-                currency_code_sql_expr(FxRate.from_currency) == from_code,
-                currency_code_sql_expr(FxRate.to_currency) == to_code,
-                FxRate.rate_date <= as_of_date,
-            )
-            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
-            .limit(1)
-        )
-        return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
-
     async def get_latest_fx_rate_dates(
         self,
         *,
