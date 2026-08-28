@@ -12,8 +12,8 @@ The service is a standard Kafka consumer and exposes metrics via its `/metrics` 
 These are the instruments the unified runtime actually emits, from
 `app/infrastructure/cost_basis/metrics.py` and the transaction-processing runtime:
 
-* **`lotus_core_transaction_processing_operations_total` (Counter)**: Transaction-processing operations. A flat line under known traffic means the runtime is stuck or failing.
-* **`lotus_core_transaction_processing_operation_duration_seconds` (Histogram)**: End-to-end time for a processing operation, including I/O. Use it for overall latency.
+* **`lotus_core_transaction_processing_operations_total` (Counter, labels `stage`, `outcome`)**: Completed processing operations per stage. A flat line under known traffic means the runtime is stuck or failing. Select `stage="transaction"` for whole transactions, or `stage="cost"` for the cost stage specifically.
+* **`lotus_core_transaction_processing_operation_duration_seconds` (Histogram, labels `stage`, `outcome`)**: Duration per stage. `ProcessTransactionUseCase` records `transaction`, `idempotency`, `cost`, `cashflow`, `position`, `pipeline`, `commit`, and `replay` separately, so an unfiltered aggregate mixes nested stages. Use `stage="transaction"` for end-to-end latency and `stage="cost"` to isolate cost processing.
 * **`recalculation_duration_seconds` (Histogram)**: Wall-clock time inside the cost recalculation itself, isolating financial logic from Kafka and database I/O. A spike here points at the calculation path rather than infrastructure.
 * **`recalculation_depth` (Histogram)**: Historical transactions replayed per incoming event. High upper buckets (>500) mean transactions frequently hit positions with long histories, a latency source.
 * **`cost_processing_execution_total` (Counter)**: Cost-processing executions.
