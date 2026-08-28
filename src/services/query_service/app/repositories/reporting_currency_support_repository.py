@@ -105,6 +105,16 @@ class ReportingCurrencySupportRepository:
                             func.trim(Cashflow.security_id) == latest_positions.c.security_id,
                             Cashflow.cashflow_date == as_of_date,
                             Cashflow.epoch == latest_positions.c.epoch,
+                            exists(
+                                select(1).where(
+                                    PositionTimeseries.portfolio_id == portfolio_id,
+                                    func.trim(PositionTimeseries.security_id)
+                                    == latest_positions.c.security_id,
+                                    PositionTimeseries.date == as_of_date,
+                                    PositionTimeseries.epoch == latest_positions.c.epoch,
+                                    PositionTimeseries.quantity == latest_positions.c.quantity,
+                                )
+                            ),
                         )
                     ),
                 ),
