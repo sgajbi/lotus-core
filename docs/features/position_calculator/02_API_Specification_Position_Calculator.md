@@ -12,7 +12,7 @@ for health, metrics, and build identity.
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health/live` | A liveness probe to confirm the service process is running. Returns `{"status": "alive"}`. |
-| `GET` | `/health/ready` | A readiness probe that checks the service's ability to connect to the database. Returns `{"status": "ready"}` on success or a `503 Service Unavailable` on failure. |
+| `GET` | `/health/ready` | A readiness probe over **three** dependencies — `db`, `kafka`, and `worker_runtime` (declared in `app/web.py`). Returns `{"status": "ready"}` on success or `503 Service Unavailable` on failure, with per-dependency detail in the body. A 503 is not necessarily a database problem: read the body to see which dependency failed. |
 | `GET` | `/metrics` | Exposes performance and application metrics in Prometheus format. |
 | `GET` | `/version` | Returns the build identity of the running image. |
 
