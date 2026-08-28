@@ -27,7 +27,10 @@ portfolio workspaces trustworthy for PB/WM consumers:
 `GET /reporting-currencies/support` is the source-owned preflight contract for performance
 restatement. It evaluates one portfolio at a required `as_of_date` and returns a typed
 `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` result. Core includes the portfolio base currency and
-currencies observed in the latest non-zero positions. It then validates the same two-leg FX path
+currencies observed in the latest position snapshots. A position whose latest quantity is zero is
+also included when same-day valuation or cash-flow evidence exists (the liquidation-day exception),
+because performance still resolves its position-to-base FX leg for that as-of date. Core then
+validates the same two-leg FX path
 used by performance: each non-base position currency to the portfolio base currency, followed by
 the portfolio base currency to the requested reporting currency. Same-currency legs use the
 identity rate. Every required source-owned rate must exist on the requested valuation date; stale
@@ -365,8 +368,10 @@ very large reporting jobs without weakening the main ledger contract.
 
 ### Reporting APIs
 
-The reporting APIs use the latest non-zero snapshot per `(portfolio_id, security_id)` as of the
-requested date. This keeps the query bounded while preserving true historical as-of semantics.
+The reporting APIs use the latest snapshot per `(portfolio_id, security_id)` as of the requested
+date. Zero-quantity snapshots are retained when same-day valuation or cash-flow evidence exists,
+so liquidation-day restatements cannot omit a currency required by performance FX resolution.
+This keeps the query bounded while preserving true historical as-of semantics.
 
 Important characteristics:
 
