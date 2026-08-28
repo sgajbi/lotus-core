@@ -133,6 +133,9 @@ def _cash_account_id_mapping(rows: list[Any]) -> dict[str, str]:
 class ReportingRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._snapshot_presence_cache: (
+            tuple[tuple[str, ...], date, dict[str, SnapshotPresence]] | None
+        ) = None
 
     async def get_latest_business_date(self) -> date | None:
         stmt = select(func.max(BusinessDate.date)).where(
@@ -225,6 +228,7 @@ class ReportingRepository:
         )
         ranked_snapshot_subq = (
             select(
+                DailyPositionSnapshot.portfolio_id.label("portfolio_id"),
                 DailyPositionSnapshot.id.label("snapshot_id"),
                 func.row_number()
                 .over(
@@ -253,28 +257,79 @@ class ReportingRepository:
             .subquery()
         )
 
-        stmt = (
-            select(Portfolio, DailyPositionSnapshot, Instrument)
+        presence_subq = (
+            select(
+                DailyPositionSnapshot.portfolio_id.label("portfolio_id"),
+                func.max(DailyPositionSnapshot.date).label("snapshot_date"),
+                func.count(DailyPositionSnapshot.id).label("row_count"),
+            )
             .join(
+                PositionState,
+                and_(
+                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                    snapshot_security_id == state_security_id,
+                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                ),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
+                DailyPositionSnapshot.date <= as_of_date,
+            )
+            .group_by(DailyPositionSnapshot.portfolio_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                Portfolio,
+                DailyPositionSnapshot,
+                Instrument,
+                presence_subq.c.snapshot_date,
+                presence_subq.c.row_count,
+            )
+            .select_from(Portfolio)
+            .outerjoin(
                 ranked_snapshot_subq,
+                ranked_snapshot_subq.c.portfolio_id == Portfolio.portfolio_id,
+            )
+            .outerjoin(
+                DailyPositionSnapshot,
                 and_(
                     DailyPositionSnapshot.id == ranked_snapshot_subq.c.snapshot_id,
                     ranked_snapshot_subq.c.rn == 1,
                 ),
             )
-            .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
             .outerjoin(Instrument, instrument_security_id == snapshot_security_id)
+            .outerjoin(
+                presence_subq,
+                presence_subq.c.portfolio_id == Portfolio.portfolio_id,
+            )
+            .where(Portfolio.portfolio_id.in_(portfolio_ids))
             .order_by(
-                DailyPositionSnapshot.portfolio_id.asc(),
+                Portfolio.portfolio_id.asc(),
                 snapshot_security_id.asc(),
             )
         )
 
-        rows = (await self.db.execute(stmt)).all()
-        return [
-            ReportingSnapshotRow(portfolio=portfolio, snapshot=snapshot, instrument=instrument)
-            for portfolio, snapshot, instrument in rows
-        ]
+        result_rows = (await self.db.execute(stmt)).all()
+        presence: dict[str, SnapshotPresence] = {}
+        result: list[ReportingSnapshotRow] = []
+        for result_row in result_rows:
+            portfolio, snapshot, instrument, *presence_values = result_row
+            if presence_values and presence_values[0] is not None:
+                presence[str(portfolio.portfolio_id)] = SnapshotPresence(
+                    snapshot_date=presence_values[0],
+                    row_count=int(presence_values[1] or 0),
+                )
+            if snapshot is not None:
+                result.append(
+                    ReportingSnapshotRow(
+                        portfolio=portfolio,
+                        snapshot=snapshot,
+                        instrument=instrument,
+                    )
+                )
+        self._snapshot_presence_cache = (tuple(sorted(portfolio_ids)), as_of_date, presence)
+        return result
 
     async def list_snapshot_presence(
         self,
@@ -290,11 +345,26 @@ class ReportingRepository:
         if not portfolio_ids:
             return {}
 
+        cache_key = (tuple(sorted(portfolio_ids)), as_of_date)
+        if self._snapshot_presence_cache is not None:
+            cached_ids, cached_date, cached_presence = self._snapshot_presence_cache
+            if (cached_ids, cached_date) == cache_key:
+                return cached_presence
+
         stmt = (
             select(
                 DailyPositionSnapshot.portfolio_id,
                 func.max(DailyPositionSnapshot.date).label("snapshot_date"),
                 func.count(DailyPositionSnapshot.id).label("row_count"),
+            )
+            .join(
+                PositionState,
+                and_(
+                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                    func.trim(DailyPositionSnapshot.security_id)
+                    == func.trim(PositionState.security_id),
+                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                ),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
