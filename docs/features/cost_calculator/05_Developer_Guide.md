@@ -39,7 +39,7 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes up to **seven** edits, in different places. Doing only the first is the common failure:
+This takes up to **eight** edits, in different places. Doing only the first is the common failure:
 the type registers cleanly and then fails at runtime — or worse, books silently with the wrong result.
 
 The recurring shape is that the registry declares *intent*, while several hard-coded maps must be
@@ -177,6 +177,28 @@ The two failure directions are worth separating:
 
 Add the type to the governed set, give it a cohort policy and role mapping, and cover both the
 parking path and the release path in tests.
+
+
+**8. Add redemption vocabulary and eligibility — required for a redemption-family type.** Reusing
+`RedemptionStrategy` in step 2 is not enough. Two further maps gate the redemption path, and both
+are hard-coded:
+
+* `REDEMPTION_TRANSACTION_TYPES` in `app/domain/transaction/redemption/economics.py` —
+  `_validated_inputs()` fails a code that is absent from it with
+  `RedemptionCalculationReasonCode.INVALID_TRANSACTION_TYPE`.
+* `REDEMPTION_ELIGIBLE_PRODUCT_TYPES_BY_TRANSACTION` in
+  `app/domain/transaction/redemption/eligibility.py` —
+  `assert_redemption_command_eligible()` **indexes** this dict directly, so a code present in the
+  first map but missing here raises `KeyError` rather than a domain error.
+
+Add the code to both, and cover the economics path and the eligibility path in tests.
+
+> Worth knowing when you edit this: `REDEMPTION_TRANSACTION_TYPES` exists **twice** under different
+> definitions. The ingestion copy in
+> `src/services/ingestion_service/app/DTOs/transaction_model_dto.py` derives from the registry via
+> `production_transaction_types_for_lifecycle_families("redemption")` and needs no edit. The
+> processing copy above is a hard-coded frozenset and does. A redemption type added to the registry
+> alone will pass ingestion validation and then fail in processing.
 
 ## 3. Testing
 
