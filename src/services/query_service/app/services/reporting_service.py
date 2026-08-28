@@ -310,11 +310,21 @@ def _bulk_summary_coverage(
         return "PARTIAL", "market_value_missing"
     if any(row.instrument is None for row in rows):
         return "PARTIAL", "instrument_classification_missing"
+    if any(not _has_usable_cash_classification(row) for row in rows):
+        return "PARTIAL", "cash_classification_missing"
     if any(row.snapshot.date < resolved_as_of_date for row in rows):
         return "CARRY_FORWARD", "latest_source_snapshot_precedes_as_of_date"
     if all(decimal_or_zero(row.snapshot.market_value) == ZERO for row in rows):
         return "MEASURED_ZERO", "source_measured_zero"
     return "COMPLETE", "all_source_positions_covered"
+
+
+def _has_usable_cash_classification(row: Any) -> bool:
+    """Require product and asset classification to agree before cash is reported."""
+    instrument = row.instrument
+    if normalize_control_code(getattr(instrument, "product_type", None)) != "CASH":
+        return True
+    return normalize_control_code(getattr(instrument, "asset_class", None)) == "CASH"
 
 
 def _portfolio_summary_metadata(
