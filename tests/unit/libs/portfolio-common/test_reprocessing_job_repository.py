@@ -1107,11 +1107,7 @@ async def test_get_lease_remaining_seconds_uses_database_clock(
     mock_db_session: AsyncMock,
 ) -> None:
     mock_db_session.execute.side_effect = [
-        MagicMock(
-            one_or_none=MagicMock(
-                return_value=MagicMock(lease_remaining_seconds=87.5)
-            )
-        )
+        MagicMock(one_or_none=MagicMock(return_value=MagicMock(lease_remaining_seconds=87.5)))
     ]
 
     remaining = await repository.get_lease_remaining_seconds(
