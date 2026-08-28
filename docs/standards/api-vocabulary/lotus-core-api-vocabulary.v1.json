@@ -2286,6 +2286,20 @@
       ]
     },
     {
+      "semanticId": "lotus.contract",
+      "canonicalTerm": "contract",
+      "preferredName": "contract",
+      "description": "Stable source-owned contract identifier.",
+      "example": "example_contract",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.contract_rate",
       "canonicalTerm": "contract_rate",
       "preferredName": "contract_rate",
@@ -3559,6 +3573,26 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.fx_evidence",
+      "canonicalTerm": "fx_evidence",
+      "preferredName": "fx_evidence",
+      "description": "reporting currency support response field: fx evidence.",
+      "example": [
+        {
+          "source_currency": "EUR",
+          "rate_date": "2026-02-27",
+          "rate_available": true
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
       ]
     },
     {
@@ -5285,6 +5319,22 @@
       ]
     },
     {
+      "semanticId": "lotus.missing_source_currencies",
+      "canonicalTerm": "missing_source_currencies",
+      "preferredName": "missing_source_currencies",
+      "description": "Observed source currencies without an authoritative FX rate.",
+      "example": [
+        "example_value"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.mode",
       "canonicalTerm": "mode",
       "preferredName": "mode",
@@ -5725,6 +5775,20 @@
       ]
     },
     {
+      "semanticId": "lotus.observed_selector_currency",
+      "canonicalTerm": "observed_selector_currency",
+      "preferredName": "observed_selector_currency",
+      "description": "Whether the requested code appears in Core's selector catalog. This is an observed selector fact only and never implies restatement support.",
+      "example": true,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.oci_labels",
       "canonicalTerm": "oci_labels",
       "preferredName": "oci_labels",
@@ -5857,6 +5921,20 @@
       "preferredName": "opening_cash_balance_portfolio_currency",
       "description": "Total source cash balance at the as-of date in portfolio currency.",
       "example": 250000,
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.operation",
+      "canonicalTerm": "operation",
+      "preferredName": "operation",
+      "description": "Operation for which supportability was evaluated.",
+      "example": "example_operation",
       "type": "string",
       "locations": [
         "body"
@@ -6940,6 +7018,20 @@
       ]
     },
     {
+      "semanticId": "lotus.rate_available",
+      "canonicalTerm": "rate_available",
+      "preferredName": "rate_available",
+      "description": "Whether an authoritative FX rate is available for this source currency.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "boolean"
+      ]
+    },
+    {
       "semanticId": "lotus.rate_date",
       "canonicalTerm": "rate_date",
       "preferredName": "rate_date",
@@ -6950,6 +7042,7 @@
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -8228,12 +8321,13 @@
         ],
         "booking_center_code": "SGPB"
       },
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "ReportingScope"
+        "ReportingScope",
+        "string"
       ]
     },
     {
@@ -8833,6 +8927,36 @@
       ]
     },
     {
+      "semanticId": "lotus.source_currencies",
+      "canonicalTerm": "source_currencies",
+      "preferredName": "source_currencies",
+      "description": "Currencies observed in the portfolio source state at or before as-of date.",
+      "example": [
+        "example_value"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_currency",
+      "canonicalTerm": "source_currency",
+      "preferredName": "source_currency",
+      "description": "ISO currency code for source currency.",
+      "example": "EUR",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_digest",
       "canonicalTerm": "source_digest",
       "preferredName": "source_digest",
@@ -9257,6 +9381,7 @@
         "body"
       ],
       "observedTypes": [
+        "ReportingCurrencySupportStatus",
         "string"
       ]
     },
@@ -12408,6 +12533,66 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "limit",
       "semanticId": "lotus.limit"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio whose source state is evaluated.",
+      "example": "DEMO_DPM_EUR_001",
+      "behaviorImpact": "Affects get_reporting_currency_support request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "reporting_currency",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Requested three-letter ISO-style reporting currency.",
+      "example": "USD",
+      "behaviorImpact": "Affects get_reporting_currency_support request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "reporting_currency",
+      "semanticId": "lotus.reporting_currency"
+    },
+    {
+      "name": "as_of_date",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Effective date used for portfolio and FX evidence.",
+      "example": "2026-02-27",
+      "behaviorImpact": "Affects get_reporting_currency_support request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "as_of_date",
+      "semanticId": "lotus.as_of_date"
+    },
+    {
+      "name": "tenant_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Optional tenant fence for portfolio resolution.",
+      "example": "TENANT_SG",
+      "behaviorImpact": "Affects get_reporting_currency_support request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "tenant_id",
+      "semanticId": "lotus.tenant_id"
     },
     {
       "name": "LOTUS_CORE_CAP_SUPPORT_APIS_ENABLED",
@@ -23532,6 +23717,218 @@
             "type": "object",
             "semanticId": "lotus.totals",
             "attributeRef": "lotus.totals"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "get_reporting_currency_support",
+      "method": "GET",
+      "path": "/reporting-currencies/support",
+      "domain": "reporting_currency_support",
+      "serviceGroup": "query",
+      "tags": [
+        "Reporting Currency Support"
+      ],
+      "summary": "Evaluate reporting-currency support",
+      "description": "Returns Core's source-owned, portfolio/as-of supportability decision for performance restatement. Selector presence is reported separately and never implies support. UNSUPPORTED means required FX evidence is missing; UNAVAILABLE means the portfolio source could not be resolved. This contract does not certify downstream lotus-performance execution or client publication.",
+      "naming": {
+        "boundedContext": "reporting_currency_support",
+        "canonicalTerms": [
+          "as_of_date",
+          "contract",
+          "fx_evidence",
+          "missing_source_currencies",
+          "observed_selector_currency",
+          "operation",
+          "portfolio_id",
+          "rate_available",
+          "rate_date",
+          "reason_code",
+          "reporting_currency",
+          "scope",
+          "source_currencies",
+          "source_currency",
+          "status",
+          "supported",
+          "tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "query",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "query",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "as_of_date",
+            "location": "query",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "tenant_id",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "ReportingCurrencySupportResponse",
+        "fields": [
+          {
+            "name": "contract",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.contract",
+            "attributeRef": "lotus.contract"
+          },
+          {
+            "name": "operation",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.operation",
+            "attributeRef": "lotus.operation"
+          },
+          {
+            "name": "scope",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "ReportingCurrencySupportStatus",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "supported",
+            "location": "body",
+            "required": true,
+            "type": "boolean",
+            "semanticId": "lotus.supported",
+            "attributeRef": "lotus.supported"
+          },
+          {
+            "name": "reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_currencies",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_currencies",
+            "attributeRef": "lotus.source_currencies"
+          },
+          {
+            "name": "missing_source_currencies",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.missing_source_currencies",
+            "attributeRef": "lotus.missing_source_currencies"
+          },
+          {
+            "name": "fx_evidence",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.fx_evidence",
+            "attributeRef": "lotus.fx_evidence"
+          },
+          {
+            "name": "fx_evidence[].source_currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_currency",
+            "attributeRef": "lotus.source_currency"
+          },
+          {
+            "name": "fx_evidence[].rate_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.rate_date",
+            "attributeRef": "lotus.rate_date"
+          },
+          {
+            "name": "fx_evidence[].rate_available",
+            "location": "body",
+            "required": true,
+            "type": "boolean",
+            "semanticId": "lotus.rate_available",
+            "attributeRef": "lotus.rate_available"
+          },
+          {
+            "name": "observed_selector_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_selector_currency",
+            "attributeRef": "lotus.observed_selector_currency"
           }
         ]
       }

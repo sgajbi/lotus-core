@@ -10772,6 +10772,55 @@
     },
     {
       "service_app": "query_service",
+      "method": "GET",
+      "path": "/reporting-currencies/support",
+      "route_key": "GET /reporting-currencies/support",
+      "operation_id": "get_reporting_currency_support",
+      "summary": "Evaluate reporting-currency support",
+      "tags": [
+        "Reporting Currency Support"
+      ],
+      "route_family": "Operational Read",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "read-audit-where-policy-requires",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "ReportingCurrencySupportResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id",
+        "as_of_date"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-workbench",
+        "lotus-report"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_service",
       "method": "POST",
       "path": "/reporting/asset-allocation/query",
       "route_key": "POST /reporting/asset-allocation/query",

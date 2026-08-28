@@ -28,6 +28,12 @@ Operational read contracts for:
 - lookups
 - reporting-oriented source-data reads
 
+`GET /reporting-currencies/support` is the source-owned, portfolio/as-of preflight for performance
+restatement. It returns explicit `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` status based on
+source currencies and as-of FX evidence. `observed_selector_currency` is informational only;
+`GET /lookups/currencies` remains selector-only. The contract does not certify downstream
+`lotus-performance` execution or client publication.
+
 The reporting family includes the additive `POST /reporting/portfolio-summary/bulk-query`
 (`portfolio-summary-bulk-v1`) source seam. Gateway supplies an already-authorized cohort of up to
 100 portfolio IDs; Core returns per-member total/invested/cash facts and fail-closed coverage,

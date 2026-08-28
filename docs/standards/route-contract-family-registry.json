@@ -178,6 +178,7 @@
         "GET /lookups/currencies",
         "GET /lookups/instruments",
         "GET /lookups/portfolios",
+        "GET /reporting-currencies/support",
         "GET /portfolios",
         "GET /portfolios/{portfolio_id}",
         "GET /portfolios/{portfolio_id}/cash-balances",
