@@ -192,6 +192,29 @@ def test_book_cost_read_capability_is_registered_by_default(monkeypatch):
     )
 
 
+def test_bulk_portfolio_summary_read_capability_is_registered_by_default(monkeypatch):
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+
+    assert (
+        _required_capability("POST", "/reporting/portfolio-summary/bulk-query")
+        == "query.portfolio_summary.read"
+    )
+
+
+def test_bulk_portfolio_summary_requires_registered_read_capability(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    _configure_auth_context_env(monkeypatch)
+
+    headers = _signed_enterprise_headers("query.portfolio_summary.read")
+    allowed, reason = authorize_request(
+        "POST", "/reporting/portfolio-summary/bulk-query", headers
+    )
+
+    assert allowed is True
+    assert reason is None
+
+
 def test_authorize_write_request_requires_service_identity_when_headers_present(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     headers = {
