@@ -26,6 +26,14 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
 
 ### Symptom: Consumer Lag is Increasing
 
+> Check lag on **all five** consumer groups, not only `portfolio_transaction_processing_group`.
+> `portfolio_transaction_replay_request_group`, `corporate_action_manifest_group`,
+> `fixed_income_book_cost_authority_group`, and `fixed_income_book_cost_correction_replay_group`
+> each drive cashflow generation directly or on a later hop, and any one can stall while the primary
+> group stays current so expected cashflows are never created. See
+> [the Kafka contract](./02_API_Specification_Cashflow_Calculator.md#21-consumer) for what each
+> group carries.
+
 - **Potential Cause 1: Database Performance**
   - **Check**: The `db_operation_latency_seconds` histogram in Grafana. The cashflow *write*
     itself is not instrumented — `SqlAlchemyCashflowRepository.create()` carries no
