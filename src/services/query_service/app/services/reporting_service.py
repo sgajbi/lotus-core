@@ -364,6 +364,7 @@ class ReportingService:
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
             as_of_date=resolved_as_of_date,
+            include_presence=True,
         )
         raw_snapshot_presence = await self.repo.list_snapshot_presence(
             portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],

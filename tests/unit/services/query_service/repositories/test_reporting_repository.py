@@ -108,9 +108,10 @@ async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_
     assert "LEFT OUTER JOIN instruments" in compiled
     assert "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)" in compiled
     assert (
-        "ORDER BY portfolios.portfolio_id ASC, "
+        "ORDER BY daily_position_snapshots.portfolio_id ASC, "
         "trim(daily_position_snapshots.security_id) ASC" in compiled
     )
+    assert "max(daily_position_snapshots.date)" not in compiled.lower()
 
 
 @pytest.mark.asyncio
@@ -195,6 +196,7 @@ async def test_latest_snapshot_rows_reuses_presence_from_same_statement_snapshot
     await repo.list_latest_snapshot_rows(
         portfolio_ids=["P1"],
         as_of_date=date(2026, 3, 27),
+        include_presence=True,
     )
     presence = await repo.list_snapshot_presence(
         portfolio_ids=["P1"],

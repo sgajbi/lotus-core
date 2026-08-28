@@ -174,6 +174,7 @@ class ReportingRepository:
         portfolio_ids: list[str],
         as_of_date: date,
         instrument_asset_class: str | None = None,
+        include_presence: bool = False,
     ) -> list[ReportingSnapshotRow]:
         history_security_id = func.trim(PositionHistory.security_id)
         state_security_id = func.trim(PositionState.security_id)
@@ -257,6 +258,29 @@ class ReportingRepository:
             )
             .subquery()
         )
+
+        if not include_presence:
+            stmt = (
+                select(Portfolio, DailyPositionSnapshot, Instrument)
+                .join(
+                    ranked_snapshot_subq,
+                    and_(
+                        DailyPositionSnapshot.id == ranked_snapshot_subq.c.snapshot_id,
+                        ranked_snapshot_subq.c.rn == 1,
+                    ),
+                )
+                .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
+                .outerjoin(Instrument, instrument_security_id == snapshot_security_id)
+                .order_by(
+                    DailyPositionSnapshot.portfolio_id.asc(),
+                    snapshot_security_id.asc(),
+                )
+            )
+            rows = (await self.db.execute(stmt)).all()
+            return [
+                ReportingSnapshotRow(portfolio=portfolio, snapshot=snapshot, instrument=instrument)
+                for portfolio, snapshot, instrument in rows
+            ]
 
         presence_subq = (
             select(
