@@ -27,6 +27,7 @@ from .services.lot_disposal_service import LotDisposalService
 from .services.portfolio_service import PortfolioService
 from .services.position_service import PositionService
 from .services.price_service import MarketPriceService
+from .services.reporting_currency_support_service import ReportingCurrencySupportService
 from .services.reporting_service import ReportingService
 from .services.sell_state_service import SellStateService
 from .services.transaction_service import TransactionService
@@ -181,6 +182,12 @@ def get_reporting_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ReportingService:
     return ReportingService(db)
+
+
+def get_reporting_currency_support_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ReportingCurrencySupportService:
+    return ReportingCurrencySupportService(db)
 
 
 def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> SellStateService:
