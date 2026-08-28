@@ -890,6 +890,7 @@ class OperationsRepository:
         # ``get_valuation_jobs_snapshot``; callers of this older port must not be able to
         # reintroduce host-clock lease classification by supplying ``reference_now``.
         snapshot_now = func.statement_timestamp()
+        priority_now = as_of if as_of is not None else snapshot_now
         stmt = apply_valuation_job_scope(
             select(PortfolioValuationJob),
             portfolio_id=portfolio_id,
@@ -908,7 +909,7 @@ class OperationsRepository:
                 support_job_priority(
                     PortfolioValuationJob.status,
                     PortfolioValuationJob.valuation_lease_expires_at,
-                    snapshot_now,
+                    priority_now,
                     inclusive=True,
                 ).asc(),
                 PortfolioValuationJob.valuation_date.asc(),
@@ -956,6 +957,7 @@ class OperationsRepository:
         # ``reference_now`` is retained for source compatibility only.  Lease state is
         # always ordered against PostgreSQL statement time.
         snapshot_now = func.statement_timestamp()
+        priority_now = as_of if as_of is not None else snapshot_now
         stmt = apply_aggregation_job_scope(
             select(PortfolioAggregationJob),
             portfolio_id=portfolio_id,
@@ -970,7 +972,7 @@ class OperationsRepository:
                 support_job_priority(
                     PortfolioAggregationJob.status,
                     PortfolioAggregationJob.lease_expires_at,
-                    snapshot_now,
+                    priority_now,
                     inclusive=True,
                 ).asc(),
                 PortfolioAggregationJob.aggregation_date.asc(),
@@ -998,6 +1000,7 @@ class OperationsRepository:
         """Read valuation ordering, classification time, total, and page in one snapshot."""
 
         snapshot_now = func.statement_timestamp()
+        priority_now = as_of if as_of is not None else snapshot_now
         normalized_security_id = (
             normalize_security_id(security_id) if security_id is not None else None
         )
@@ -1022,7 +1025,7 @@ class OperationsRepository:
         support_priority = support_job_priority(
             job_scope.c.status,
             job_scope.c.valuation_lease_expires_at,
-            snapshot_now,
+            priority_now,
             inclusive=True,
         ).label("support_priority")
         paged = (
@@ -1073,6 +1076,7 @@ class OperationsRepository:
         """Read aggregation ordering, classification time, total, and page in one snapshot."""
 
         snapshot_now = func.statement_timestamp()
+        priority_now = as_of if as_of is not None else snapshot_now
         job_scope = apply_aggregation_job_scope(
             select(PortfolioAggregationJob.__table__),
             portfolio_id=portfolio_id,
@@ -1087,7 +1091,7 @@ class OperationsRepository:
         support_priority = support_job_priority(
             job_scope.c.status,
             job_scope.c.lease_expires_at,
-            snapshot_now,
+            priority_now,
             inclusive=True,
         ).label("support_priority")
         paged = (
