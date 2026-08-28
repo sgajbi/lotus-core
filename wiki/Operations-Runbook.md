@@ -77,7 +77,7 @@ The five API services expose the same four operational routes in addition to the
 so the probe pattern is identical everywhere.
 
 The generated route inventory is
-[`docs/standards/api-route-catalog.v1.json`](../docs/standards/api-route-catalog.v1.json), checked by
+[`docs/standards/api-route-catalog.v1.json`](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-route-catalog.v1.json), checked by
 `make api-route-catalog-guard`. Its scope is **all ten apps, workers included** — each worker
 contributes its four operational entries, keyed by `service_app`. The guard imports every app and
 compares the committed catalog to each `app.openapi()` **in process**; it is a static parity check
@@ -91,7 +91,7 @@ the local `curl` readiness check reaches
 
 Executable incident playbooks are maintained in
 `contracts/operations/incident-playbooks.v1.json`, summarized in
-[Incident Playbooks](../docs/operations/Incident-Playbooks.md), and validated by
+[Incident Playbooks](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/Incident-Playbooks.md), and validated by
 `make incident-playbook-guard`.
 
 Guarded incident IDs: `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`, `outbox-backlog`,
@@ -166,7 +166,7 @@ not a synthetic row for every later business date.
 
 Kafka topic counts and ordering scopes are source-owned. The topic creator and service startup fail
 when existing metadata conflicts with the governed contract. Use the
-[Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md) for
+[Kafka Partition Migration Runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/kafka-partition-migration-runbook.md) for
 pause, drain, expansion, replacement-topic, and rollback procedures; do not bypass the mismatch
 check or use a global partition-count override.
 
@@ -183,7 +183,7 @@ separate internal modules. Do not start the legacy cost, cashflow, or position w
 it. Valuation remains separately deployed.
 
 Before switching an environment, follow the
-[Transaction Processing Cutover Runbook](../docs/operations/Transaction-Processing-Cutover-Runbook.md).
+[Transaction Processing Cutover Runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/Transaction-Processing-Cutover-Runbook.md).
 The Kafka offset command is dry-run by default and requires `--apply` to mutate target offsets.
 
 Image canary and rollback use a different, stable-group proof. Generate the immutable plan with
@@ -721,4 +721,4 @@ domain truth, replay, persistence, or supportability behavior, stay in `lotus-co
 
 - [Support and Lineage](Support-and-Lineage)
 - [Query Control Plane](Query-Control-Plane)
-- [Architecture Index](../docs/architecture/README.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)

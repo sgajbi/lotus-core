@@ -178,4 +178,4 @@ Check beyond this service when:
 - [System Data Flow](System-Data-Flow)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
-- [Lotus Core Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
+- [Lotus Core Microservice Boundaries and Trigger Matrix](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/microservice-boundaries-and-trigger-matrix.md)

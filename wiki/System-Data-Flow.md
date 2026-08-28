@@ -138,4 +138,4 @@ reconciliation surfaces are part of the supported system behavior.
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
-- [RFC-0083 Eventing Supportability Target Model](../docs/architecture/RFC-0083-eventing-supportability-target-model.md)
+- [RFC-0083 Eventing Supportability Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-eventing-supportability-target-model.md)
