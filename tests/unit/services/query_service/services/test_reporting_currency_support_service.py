@@ -100,6 +100,21 @@ async def test_invalid_persisted_currency_is_typed_unavailable() -> None:
     assert result.reason_code == "portfolio_currency_source_invalid"
 
 
+async def test_unresolved_position_currency_is_typed_unavailable() -> None:
+    repository = AsyncMock(spec=ReportingCurrencySupportRepository)
+    repository.get_portfolio_currency_source.side_effect = ValueError(
+        "position source currency is unavailable"
+    )
+    repository.is_selector_currency_observed.return_value = True
+    service = _service(repository)
+
+    result = await service.evaluate(ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28)))
+
+    assert result.status == "UNAVAILABLE"
+    assert result.reason_code == "portfolio_currency_source_invalid"
+    assert result.observed_selector_currency is True
+
+
 async def test_malformed_currency_is_rejected_before_source_queries() -> None:
     repository = AsyncMock(spec=ReportingCurrencySupportRepository)
     service = _service(repository)

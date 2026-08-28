@@ -52,6 +52,7 @@ async def test_portfolio_currency_source_is_as_of_and_tenant_fenced() -> None:
     currency_sql = str(
         db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
     )
+    assert "LEFT OUTER JOIN instruments" in currency_sql
     assert "position_history.position_date <= '2026-08-28'" in currency_sql
     assert "quantity != 0" in currency_sql
 
@@ -83,6 +84,23 @@ async def test_portfolio_currency_source_fails_closed_for_invalid_persisted_curr
         )
 
     assert db.execute.await_count == 2
+
+
+@pytest.mark.parametrize("unresolved_currency", [None, "   "])
+async def test_portfolio_currency_source_fails_closed_for_unresolved_position_currency(
+    unresolved_currency: str | None,
+) -> None:
+    repository, db = _repository(
+        _result(scalar=SimpleNamespace(tenant_id="tenant-1", base_currency="USD")),
+        _result(scalars=[unresolved_currency]),
+    )
+
+    with pytest.raises(ValueError, match="position source currency is unavailable"):
+        await repository.get_portfolio_currency_source(
+            portfolio_id="PF-1",
+            tenant_id="tenant-1",
+            as_of_date=date(2026, 8, 28),
+        )
 
 
 async def test_latest_fx_dates_batches_sources_and_ignores_null_rates() -> None:

@@ -74,17 +74,20 @@ class ReportingCurrencySupportRepository:
         )
         instrument_currency = func.upper(func.trim(Instrument.currency))
         currency_stmt = (
-            select(instrument_currency)
-            .join(
-                latest_positions,
+            select(Instrument.currency)
+            .select_from(latest_positions)
+            .outerjoin(
+                Instrument,
                 func.trim(Instrument.security_id) == latest_positions.c.security_id,
             )
             .where(latest_positions.c.rn == 1, latest_positions.c.quantity != 0)
-            .where(Instrument.currency.is_not(None), func.trim(Instrument.currency) != "")
             .distinct()
             .order_by(instrument_currency.asc())
         )
         currencies = list((await self.db.execute(currency_stmt)).scalars().all())
+        for currency in currencies:
+            if currency is None or not str(currency).strip():
+                raise ValueError("position source currency is unavailable")
         normalized_base = normalize_currency_code(portfolio.base_currency)
         source_currencies = tuple(
             sorted({normalized_base, *(normalize_currency_code(c) for c in currencies)})
