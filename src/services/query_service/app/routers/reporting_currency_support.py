@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from ..application.reporting_currency_support import ReportingCurrencySupportQuery
 from ..dependencies import get_reporting_currency_support_service
@@ -27,6 +27,7 @@ router = APIRouter(prefix="/reporting-currencies", tags=["Reporting Currency Sup
     ),
 )
 async def get_reporting_currency_support(
+    request: Request,
     portfolio_id: str = Query(
         ..., min_length=1, description="Portfolio whose source state is evaluated."
     ),
@@ -45,13 +46,33 @@ async def get_reporting_currency_support(
     ),
     service: ReportingCurrencySupportService = Depends(get_reporting_currency_support_service),
 ) -> ReportingCurrencySupportResponse:
+    authenticated_tenant_id = getattr(request.state, "enterprise_verified_tenant_id", None)
+    normalized_tenant_id = tenant_id.strip() if tenant_id is not None else ""
+    if authenticated_tenant_id is not None:
+        normalized_authenticated_tenant_id = str(authenticated_tenant_id).strip()
+        if not normalized_authenticated_tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="authenticated tenant scope is unavailable",
+            )
+        if normalized_tenant_id and normalized_tenant_id != normalized_authenticated_tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="requested tenant does not match authenticated tenant scope",
+            )
+        normalized_tenant_id = normalized_authenticated_tenant_id
+    elif tenant_id is not None and not normalized_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="tenant_id must not be blank",
+        )
     try:
         result = await service.evaluate(
             ReportingCurrencySupportQuery(
                 portfolio_id=portfolio_id,
                 reporting_currency=reporting_currency,
                 as_of_date=as_of_date,
-                tenant_id=tenant_id,
+                tenant_id=normalized_tenant_id or None,
             )
         )
     except ValueError as exc:
