@@ -21,6 +21,21 @@ The current runtime centers on:
 
 This makes the service an operational control plane, not a write-ingress surface.
 
+## Current scope and evidence
+
+The routes, replay application services, durable audit records, and supportability contracts in
+`src/services/event_replay_service/` define the behavior documented here. Replay remains bounded and
+fail-closed when evidence is incomplete; this page does not imply unrestricted Kafka or database
+administration.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Inspect evidence | Governed Ingestion Evidence |
+| Replay safely | Replay and remediation sections |
+| Operate queues | Runtime role and Operations Runbook |
+
 ## Governed Ingestion Evidence
 
 `GET /ingestion/jobs/{job_id}/evidence` publishes `IngestionEvidenceBundle:v1`. The response includes

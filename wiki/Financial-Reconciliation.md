@@ -21,6 +21,21 @@ The current runtime centers on:
 
 This makes the service an independent verifier, not another calculator stage.
 
+## Current scope and evidence
+
+This page covers the reconciliation controls implemented by
+`financial_reconciliation_service`. Control definitions, persistence models, and the reconciliation
+contract tests are the evidence; a successful run is control evidence for the requested scope, not
+an independent certification or downstream analytics conclusion.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Understand controls | What it handles |
+| Run a check | Runtime role and scope parameters |
+| Investigate findings | Durable evidence and Operations Runbook |
+
 ## Runtime role
 
 For a requested reconciliation scope, the service:

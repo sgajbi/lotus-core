@@ -1,5 +1,19 @@
 # Troubleshooting
 
+## Current scope and evidence
+
+Use this page for first-response diagnosis of the supported Core runtime. Incident playbook IDs,
+health checks, metrics, and linked runbooks are the evidence for each action; if the documented path
+cannot restore a bounded service state, escalate with the captured command output and evidence IDs.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Classify an incident | Common issues and guarded playbook IDs |
+| Restore app-local runtime | Startup and health checks |
+| Escalate safely | Linked runbook and evidence requirements |
+
 ## Common issues
 
 Executable incident playbooks are maintained in

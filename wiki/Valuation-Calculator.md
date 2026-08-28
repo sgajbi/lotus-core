@@ -19,6 +19,20 @@ The current runtime centers on:
 
 This makes the service a job-driven valuation worker, not a simple direct topic joiner.
 
+## Current scope and evidence
+
+The valuation worker, job repository, valuation domain logic, and valuation contract tests under
+`src/services/calculators/` define the supported behavior. Market and FX completeness failures remain
+visible as bounded or unavailable states; this page does not claim independent price authority.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Follow a valuation job | Runtime role |
+| Diagnose missing inputs | Market, FX, and readiness sections |
+| Verify supportability | Valuation contract tests and Operations Runbook |
+
 ## Runtime role
 
 For an eligible portfolio-security-day valuation job, the service:

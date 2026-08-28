@@ -7,6 +7,20 @@
 This matters because `lotus-core` is an event-driven system of record. A state change is not fully
 usable until the required downstream signal can be published with traceable metadata.
 
+## Current scope and evidence
+
+The outbox repository, dispatcher, database models, and event-contract tests under `src/` are the
+implementation evidence for this page. Publication is at-least-once and auditable; consumers must
+remain idempotent, and an outbox row alone does not prove downstream processing completed.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Understand publication | How it works |
+| Diagnose backlog | Dispatcher and recovery sections |
+| Verify contracts | Event-supportability and outbox tests |
+
 ## Core components
 
 Primary implementation surfaces include:

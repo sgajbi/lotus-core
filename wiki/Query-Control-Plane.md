@@ -22,6 +22,21 @@ The current runtime centers on:
 
 This makes it a contract and operations plane, not a generic duplicate of the read API.
 
+## Current scope and evidence
+
+The route modules, DTO contracts, source-data product declarations, and query-control-plane tests
+under `src/services/query_control_plane_service/` define the supported surface. Analytics inputs and
+support evidence are governed Core outputs; downstream services remain authoritative for their own
+analytics conclusions.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Select a surface | Current feature state |
+| Verify a contract | Route modules and DTO contracts |
+| Operate evidence | Support, lineage, and Operations Runbook |
+
 ## Current feature state
 
 | Surface | What it provides today | What it does not own |
