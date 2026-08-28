@@ -8,11 +8,19 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
 
 | Metric Name | Type | Labels | Description |
 | :--- | :--- | :--- | :--- |
-| `kafka_messages_consumed_total`| Counter | `topic`, `group_id` | Tracks the total number of messages consumed from Kafka. A healthy service shows this steadily increasing. |
-| `kafka_consume_errors_total` | Counter | `topic`, `error` | Monitors for Kafka consumption errors. Any value other than zero requires investigation. |
+| `kafka_consumer_events_total` | Counter | `topic`, `group_id`, `event` | The activity signal. `BaseConsumer` records every consume, commit, and failure event here. A flat line under known traffic means the consumer is not progressing. |
+| `kafka_consumer_processing_duration_seconds` | Histogram | `topic`, `group_id` | Per-message processing time. Rising values point at the handler rather than at Kafka. |
+| `kafka_consumer_partition_lag_messages` | Gauge | `topic`, `group_id`, `partition` | Partition lag — the primary backlog signal. |
+| `kafka_consumer_in_flight_messages` | Gauge | `topic`, `group_id` | In-flight depth. With poll-idle, separates a stalled handler from an empty topic. |
+| `kafka_consumer_poll_idle_seconds` | Histogram | `topic`, `group_id` | Time spent polling with nothing to do. |
 | `db_operation_latency_seconds` | Histogram | `repository`, `method` | Measures the latency of database operations. Spikes can indicate DB performance issues. |
 | `outbox_events_published_total`| Counter | `aggregate_type`, `topic` | Tracks the number of `CashflowCalculated` events successfully published. |
 | **`cashflows_created_total`** | **Counter** | **`classification`, `timing`**| **(New in RFC 022)** Provides a business-level count of generated cashflows. This is crucial for understanding the financial activity being processed (e.g., number of `INCOME` vs. `EXPENSE` flows). |
+
+> **Do not use `kafka_messages_consumed_total` or `kafka_consume_errors_total`.** Both are declared
+> in `portfolio_common/monitoring.py`, but the only code that increments them is
+> `observe_kafka_consumed` / `observe_kafka_consume_error`, and nothing calls those helpers. A panel
+> built on either counter stays at zero whether or not cashflow processing is healthy or failing.
 
 ## 2. Common Failure Modes & Recovery
 
