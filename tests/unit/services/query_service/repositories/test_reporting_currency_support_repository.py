@@ -58,9 +58,36 @@ async def test_portfolio_currency_source_is_as_of_and_tenant_fenced() -> None:
     assert "position_history.position_date <= '2026-08-28'" in currency_sql
     assert "quantity != 0" in currency_sql
     assert "position_timeseries.date = '2026-08-28'" in currency_sql
+    assert "position_timeseries.epoch = anon_1.epoch" in currency_sql
     assert "cashflows.cashflow_date = '2026-08-28'" in currency_sql
+    assert "cashflows.epoch = anon_1.epoch" in currency_sql
     assert "SELECT DISTINCT upper(trim(instruments.currency)) AS source_currency" in currency_sql
     assert "ORDER BY upper(trim(instruments.currency)) ASC" in currency_sql
+
+
+async def test_liquidation_evidence_is_fenced_to_active_position_epoch() -> None:
+    repository, db = _repository(
+        _result(
+            scalar=SimpleNamespace(
+                tenant_id="tenant-1", base_currency="USD", open_date=date(2026, 1, 1)
+            )
+        ),
+        _result(scalars=["EUR"]),
+    )
+
+    await repository.get_portfolio_currency_source(
+        portfolio_id="PF-1",
+        tenant_id="tenant-1",
+        as_of_date=date(2026, 8, 28),
+    )
+
+    currency_sql = str(
+        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    # Evidence from a superseded materialization must not make a zero-ending
+    # position appear in the preflight source set.
+    assert "position_timeseries.epoch = anon_1.epoch" in currency_sql
+    assert "cashflows.epoch = anon_1.epoch" in currency_sql
 
 
 async def test_portfolio_currency_source_returns_none_when_portfolio_missing() -> None:

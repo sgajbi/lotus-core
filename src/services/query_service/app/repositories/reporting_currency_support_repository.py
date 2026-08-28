@@ -54,6 +54,7 @@ class ReportingCurrencySupportRepository:
         latest_positions = (
             select(
                 history_security_id.label("security_id"),
+                PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
                 func.row_number()
                 .over(
@@ -94,6 +95,7 @@ class ReportingCurrencySupportRepository:
                             func.trim(PositionTimeseries.security_id)
                             == latest_positions.c.security_id,
                             PositionTimeseries.date == as_of_date,
+                            PositionTimeseries.epoch == latest_positions.c.epoch,
                         )
                     ),
                     exists(
@@ -101,6 +103,7 @@ class ReportingCurrencySupportRepository:
                             Cashflow.portfolio_id == portfolio_id,
                             func.trim(Cashflow.security_id) == latest_positions.c.security_id,
                             Cashflow.cashflow_date == as_of_date,
+                            Cashflow.epoch == latest_positions.c.epoch,
                         )
                     ),
                 ),
