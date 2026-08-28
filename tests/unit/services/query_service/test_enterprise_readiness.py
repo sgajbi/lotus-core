@@ -207,9 +207,7 @@ def test_bulk_portfolio_summary_requires_registered_read_capability(monkeypatch)
     _configure_auth_context_env(monkeypatch)
 
     headers = _signed_enterprise_headers("query.portfolio_summary.read")
-    allowed, reason = authorize_request(
-        "POST", "/reporting/portfolio-summary/bulk-query", headers
-    )
+    allowed, reason = authorize_request("POST", "/reporting/portfolio-summary/bulk-query", headers)
 
     assert allowed is True
     assert reason is None
