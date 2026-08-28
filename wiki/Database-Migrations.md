@@ -27,7 +27,7 @@ migration still requires human review for financial and temporal correctness.
 
 Most schema work starts in:
 
-- [database_models.py](../src/libs/portfolio-common/portfolio_common/database_models.py)
+- [database_models.py](https://github.com/sgajbi/lotus-core/blob/main/src/libs/portfolio-common/portfolio_common/database_models.py)
 
 ### 2. Generate a migration
 
@@ -166,4 +166,4 @@ parents requires a separate governed Alembic migration and production rollout pl
 
 - [Operations Runbook](Operations-Runbook)
 - [Testing Guide](Testing-Guide)
-- [RFC-0083 Reconciliation Data Quality Target Model](../docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md)
+- [RFC-0083 Reconciliation Data Quality Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md)

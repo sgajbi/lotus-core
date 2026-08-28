@@ -7,12 +7,12 @@ state.
 
 This page is an orientation map, not a schema dump. For exact fields and indexes, use:
 
-- [database_models.py](../src/libs/portfolio-common/portfolio_common/database_models.py)
-- [RFC-0083 Portfolio Reconstruction Target Model](../docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md)
-- [RFC-0083 Ingestion Source Lineage Target Model](../docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md)
-- [RFC-0083 Reconciliation Data Quality Target Model](../docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md)
-- [RFC-0083 Source Data Product Catalog](../docs/architecture/RFC-0083-source-data-product-catalog.md)
-- [RFC-0083 Market Reference Data Target Model](../docs/architecture/RFC-0083-market-reference-data-target-model.md)
+- [database_models.py](https://github.com/sgajbi/lotus-core/blob/main/src/libs/portfolio-common/portfolio_common/database_models.py)
+- [RFC-0083 Portfolio Reconstruction Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md)
+- [RFC-0083 Ingestion Source Lineage Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md)
+- [RFC-0083 Reconciliation Data Quality Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md)
+- [RFC-0083 Source Data Product Catalog](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-source-data-product-catalog.md)
+- [RFC-0083 Market Reference Data Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-market-reference-data-target-model.md)
 
 ## Current scope and reader map
 
@@ -224,13 +224,13 @@ reconciliation behavior is not incidental implementation detail in `lotus-core`.
 ## Model rules that matter
 
 1. New temporal semantics must follow
-   [Temporal Vocabulary](../docs/standards/temporal-vocabulary.md).
+   [Temporal Vocabulary](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/temporal-vocabulary.md).
 2. New source-data or analytics-input products must align with
-   [RFC-0083 Source Data Product Catalog](../docs/architecture/RFC-0083-source-data-product-catalog.md).
+   [RFC-0083 Source Data Product Catalog](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-source-data-product-catalog.md).
 3. New security, retention, or operator-surface changes must align with
-   [RFC-0083 Security Tenancy Lifecycle Target Model](../docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md).
+   [RFC-0083 Security Tenancy Lifecycle Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md).
 4. New event or replay supportability changes must align with
-   [RFC-0083 Eventing Supportability Target Model](../docs/architecture/RFC-0083-eventing-supportability-target-model.md).
+   [RFC-0083 Eventing Supportability Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-eventing-supportability-target-model.md).
 
 ## When to update this page
 

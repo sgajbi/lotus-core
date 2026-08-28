@@ -18,7 +18,7 @@ cannot restore a bounded service state, escalate with the captured command outpu
 
 Executable incident playbooks are maintained in
 `contracts/operations/incident-playbooks.v1.json`, summarized in
-[Incident Playbooks](../docs/operations/Incident-Playbooks.md), and validated by
+[Incident Playbooks](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/Incident-Playbooks.md), and validated by
 `make incident-playbook-guard`.
 
 Use the guarded playbook IDs for incident classification: `ingestion-stuck-failed`, `dlq-growth`,
@@ -30,8 +30,8 @@ Use the guarded playbook IDs for incident classification: `ingestion-stuck-faile
 
 Use:
 
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [Query Service And Control Plane Boundary](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [API Surface](API-Surface)
 
 ### Shared runtime or ingress is broken
@@ -82,7 +82,7 @@ Use:
 
 - [Query Control Plane](Query-Control-Plane)
 - [Support and Lineage](Support-and-Lineage)
-- [Architecture Index](../docs/architecture/README.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
 
 ### Validation scope feels too expensive
 

@@ -105,16 +105,16 @@ Control execution and reconciliation run contracts.
 
 ## Architecture references
 
-- [Architecture Index](../docs/architecture/README.md)
-- [Current-State Architecture Map](../docs/architecture/current-state-architecture-map.md)
-- [End-State Runtime Vision](../docs/architecture/lotus-core-end-state-runtime-vision.md)
-- [Architecture Documentation Catalog](../docs/architecture/architecture-documentation-catalog.v1.json)
-- [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
-- [Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
-- [Calculator Runtime Consolidation Decision](../docs/architecture/calculator-runtime-consolidation-decision.md)
-- [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
-- [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
-- [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
+- [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+- [Current-State Architecture Map](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/current-state-architecture-map.md)
+- [End-State Runtime Vision](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/lotus-core-end-state-runtime-vision.md)
+- [Architecture Documentation Catalog](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/architecture-documentation-catalog.v1.json)
+- [Target Architecture](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/lotus-core-target-architecture.md)
+- [Microservice Boundaries and Trigger Matrix](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/microservice-boundaries-and-trigger-matrix.md)
+- [Calculator Runtime Consolidation Decision](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/calculator-runtime-consolidation-decision.md)
+- [RFC-0082 Contract Family Inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0082-contract-family-inventory.md)
+- [Query Service And Control Plane Boundary](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+- [RFC-0083 Target-State Gap Analysis](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-target-state-gap-analysis.md)
 - [System Data Flow](System-Data-Flow)
 - [Outbox Events](Outbox-Events)
 

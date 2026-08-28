@@ -25,12 +25,12 @@ remain idempotent, and an outbox row alone does not prove downstream processing 
 
 Primary implementation surfaces include:
 
-- [outbox_repository.py](../src/libs/portfolio-common/portfolio_common/outbox_repository.py)
+- [outbox_repository.py](https://github.com/sgajbi/lotus-core/blob/main/src/libs/portfolio-common/portfolio_common/outbox_repository.py)
 - `portfolio_common.outbox_dispatcher`
 - `outbox_events` in
-  [database_models.py](../src/libs/portfolio-common/portfolio_common/database_models.py)
+  [database_models.py](https://github.com/sgajbi/lotus-core/blob/main/src/libs/portfolio-common/portfolio_common/database_models.py)
 - `processed_events` in
-  [database_models.py](../src/libs/portfolio-common/portfolio_common/database_models.py)
+  [database_models.py](https://github.com/sgajbi/lotus-core/blob/main/src/libs/portfolio-common/portfolio_common/database_models.py)
 
 ## How it works
 
@@ -234,8 +234,8 @@ Use this page together with:
 - do not bypass durable publish intent with ad hoc direct publish from state-mutating paths unless
   the contract is explicitly governed as direct Kafka publication
 - keep producer keys and partition counts aligned with
-  [the machine-readable Kafka runtime contract](../contracts/eventing/kafka-topic-runtime-contract.v1.json)
-- use the [Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md)
+  [the machine-readable Kafka runtime contract](https://github.com/sgajbi/lotus-core/blob/main/contracts/eventing/kafka-topic-runtime-contract.v1.json)
+- use the [Kafka Partition Migration Runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/kafka-partition-migration-runbook.md)
   before changing existing topic metadata
 - when deploying a dispatcher stream-order change, quiesce all services that own a dispatcher,
   apply the database migration, and restart only the new version; mixed dispatcher versions are
@@ -252,4 +252,4 @@ Use this page together with:
 - [System Data Flow](System-Data-Flow)
 - [Operations Runbook](Operations-Runbook)
 - [Testing Guide](Testing-Guide)
-- [RFC-0083 Eventing Supportability Target Model](../docs/architecture/RFC-0083-eventing-supportability-target-model.md)
+- [RFC-0083 Eventing Supportability Target Model](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/RFC-0083-eventing-supportability-target-model.md)
