@@ -355,8 +355,14 @@ class ReprocessingWorker:
     ) -> None:
         loop = asyncio.get_running_loop()
         remaining_lease_seconds = await self._read_lease_remaining_seconds(job)
-        lease_deadline = loop.time() + remaining_lease_seconds
-        next_renewal_at = loop.time() + self._lease_renewal_interval_seconds
+        scheduled_at = loop.time()
+        lease_deadline = scheduled_at + remaining_lease_seconds
+        # A delayed worker may receive less authority than the normal heartbeat interval.
+        # Wake at the measured durable deadline rather than sleeping past it.
+        next_renewal_at = min(
+            scheduled_at + self._lease_renewal_interval_seconds,
+            lease_deadline,
+        )
         while True:
             wait_seconds = max(0.0, next_renewal_at - loop.time())
             try:
@@ -432,7 +438,10 @@ class ReprocessingWorker:
                 remaining_lease_seconds = await self._read_lease_remaining_seconds(job)
                 renewed_at = loop.time()
                 lease_deadline = renewed_at + remaining_lease_seconds
-                next_renewal_at = renewed_at + self._lease_renewal_interval_seconds
+                next_renewal_at = min(
+                    renewed_at + self._lease_renewal_interval_seconds,
+                    lease_deadline,
+                )
                 continue
 
             observe_reprocessing_worker_lease_renewal(job_type, "ownership_lost")
