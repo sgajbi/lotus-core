@@ -27,7 +27,28 @@ applied inside a single atomic use case, so there is no separate cashflow work q
 
 The unified deployment builds five consumers, listed in full in
 [the transaction-processing Kafka contract](../cost_calculator/02_API_Specification_Cost_Calculator.md#21-consumers).
-The one that drives cashflow generation is:
+**All five can drive cashflow generation** — two directly, three by staging work that reaches the
+same atomic use case on a later hop:
+
+| Consumer group | Drives cashflow |
+| --- | --- |
+| `portfolio_transaction_processing_group` | Directly, for newly persisted transactions. |
+| `portfolio_transaction_replay_request_group` | Directly, on replay of an affected key. |
+| `corporate_action_manifest_group` | Indirectly — governed corporate actions. |
+| `fixed_income_book_cost_authority_group` | Indirectly — fixed-income book-cost corrections. |
+| `fixed_income_book_cost_correction_replay_group` | Indirectly — the second hop of that correction. |
+
+For a governed corporate-action child, `TransactionProcessingConsumer` records the child *without
+financial mutation*; the manifest makes its release eligible and
+`ProcessNextCorporateActionReleaseUseCase` then invokes `ProcessTransactionUseCase`, which carries
+the cashflow effect. The fixed-income path is two hops: the authority consumer stages
+`fixed_income.book_cost.disposal_replay.requested`, and the correction-replay consumer republishes
+the canonical transaction through the same atomic use case.
+
+So `corporate_action_manifest_group` — or either fixed-income group — can stall while
+`portfolio_transaction_processing_group` stays current and the expected cashflows are never created.
+
+The subscription detailed below is the direct one:
 
 #### Topic: `transactions.persisted`
 

@@ -29,7 +29,13 @@ detection, or back-dated price handling, change `valuation_orchestrator_service`
 
 * **Daily Valuation:** Calculates the mark-to-market value and unrealized P&L for every position.
 * **Full Dual-Currency Support:** Correctly handles valuation for securities denominated in a different currency than the portfolio's base currency, fetching and applying the appropriate FX rates.
-* **Stateful Scheduling:** `ValuationScheduler`, in `valuation_orchestrator_service`, is the sole authority for creating valuation jobs, preventing duplicate or unnecessary work.
+* **Stateful Scheduling:** `ValuationScheduler`, in `valuation_orchestrator_service`, creates the
+  scheduled and backfill jobs. It is **not** the only creator: within the same service,
+  `PriceEventConsumer._queue_immediate_valuation_jobs()`, `ProcessFxRateCorrection.execute()`,
+  and `ValuationReadinessConsumer` each upsert valuation jobs directly for price, FX-correction, and
+  readiness-driven flows. The shared job repository is what prevents duplicate or unnecessary work,
+  not the scheduler. Diagnosing missing jobs means checking the flow that should have created them,
+  not only the scheduler.
 * **Automatic Backfilling:** That same scheduler detects gaps in the `daily_position_snapshots` history and creates the jobs needed to fill them.
 * **Scalable Price Reprocessing:** `valuation_orchestrator_service` detects back-dated market prices and orchestrates a durable, rate-limited reprocessing flow via a dedicated job queue and worker, ensuring stability even for widely-held securities. This service performs the resulting valuations.
 * **Resilient Job Handling:** Includes logic to reset stale jobs that may have been stuck due to a worker crash, ensuring the pipeline is self-healing.
