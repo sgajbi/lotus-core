@@ -59,6 +59,7 @@ async def test_portfolio_currency_source_is_as_of_and_tenant_fenced() -> None:
     assert "quantity != 0" in currency_sql
     assert "position_timeseries.date = '2026-08-28'" in currency_sql
     assert "position_timeseries.epoch = anon_1.epoch" in currency_sql
+    assert "position_timeseries.quantity = anon_1.quantity" in currency_sql
     assert "cashflows.cashflow_date = '2026-08-28'" in currency_sql
     assert "cashflows.epoch = anon_1.epoch" in currency_sql
     assert "SELECT DISTINCT upper(trim(instruments.currency)) AS source_currency" in currency_sql
@@ -87,6 +88,7 @@ async def test_liquidation_evidence_is_fenced_to_active_position_epoch() -> None
     # Evidence from a superseded materialization must not make a zero-ending
     # position appear in the preflight source set.
     assert "position_timeseries.epoch = anon_1.epoch" in currency_sql
+    assert "position_timeseries.quantity = anon_1.quantity" in currency_sql
     assert "cashflows.epoch = anon_1.epoch" in currency_sql
 
 

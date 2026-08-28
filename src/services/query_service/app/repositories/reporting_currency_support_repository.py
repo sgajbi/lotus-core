@@ -96,6 +96,7 @@ class ReportingCurrencySupportRepository:
                             == latest_positions.c.security_id,
                             PositionTimeseries.date == as_of_date,
                             PositionTimeseries.epoch == latest_positions.c.epoch,
+                            PositionTimeseries.quantity == latest_positions.c.quantity,
                         )
                     ),
                     exists(
