@@ -2,7 +2,7 @@
 
 This guide explains the methodologies used by the cost module inside the unified `portfolio_transaction_processing_service` runtime to ensure accurate and auditable financial calculations.
 
-## 1. Core Principle: Full History Recalculation
+## 1. Core Principle: Checkpointed Append, With Full Recalculation As Fallback
 
 Cost processing has **two modes**, chosen per transaction by `CostBasisCalculationCoordinator.calculate()` in `app/application/cost_basis_processing/calculation.py`.
 
