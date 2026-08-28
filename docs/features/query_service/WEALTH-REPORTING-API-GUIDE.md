@@ -369,9 +369,11 @@ very large reporting jobs without weakening the main ledger contract.
 ### Reporting APIs
 
 The reporting APIs use the latest snapshot per `(portfolio_id, security_id)` as of the requested
-date. Zero-quantity snapshots are retained when same-day valuation or cash-flow evidence exists,
-so liquidation-day restatements cannot omit a currency required by performance FX resolution.
-This keeps the query bounded while preserving true historical as-of semantics.
+date. The reporting-currency support preflight has a route-specific liquidation-day exception:
+its source-currency evidence retains a zero-ending position only when same-day valuation or
+cash-flow evidence exists in the active position epoch. Other reporting endpoints continue to
+apply their own snapshot predicates. This keeps each query bounded while preserving true
+historical as-of semantics.
 
 Important characteristics:
 
