@@ -189,6 +189,18 @@ causes the calculator to apply partial-redemption semantics and reject the close
 quantity redemption regression test for this conditional path. Non-full-redemption types do not
 belong in this set.
 
+If the type can dispose of a **fixed-income lot carrying an active amortized-cost profile**, it
+needs a third entry: `_AMORTIZED_COST_DISPOSAL_TRANSACTION_TYPES` in
+`app/application/cost_basis_processing/amortized_disposal.py`. `_apply_transaction_overlay()`
+raises `ValueError("amortized-cost transaction overlay requires a governed fixed-income disposal")`
+for a code absent from it.
+
+This one hides easily, because it only fires on a combination: FIFO cost basis (the overlay raises
+`"lot-level amortized cost requires FIFO source-lot identity"` otherwise), a source lot with an
+active amortized-cost profile, and book-cost authority applying. A new redemption type can pass
+every other step and every ordinary test, then fail the first time it meets an amortized lot. Add an
+amortized-disposal test rather than relying on the general redemption cases.
+
 > Worth knowing when you edit this: `REDEMPTION_TRANSACTION_TYPES` exists **twice** under different
 > definitions. The ingestion copy in
 > `src/services/ingestion_service/app/DTOs/transaction_model_dto.py` derives from the registry via
