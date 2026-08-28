@@ -22,7 +22,9 @@ results:
 
 ## 2. Two Different Extension Axes
 
-The most common mistake is to conflate these. They are separate.
+The most common mistake is to conflate these. They are separate — and note that the two protocols
+have deliberately similar names: `CostBasisStrategy` consumes lots for a cost-basis method, while
+`TransactionCostStrategy` applies the economics of one transaction type.
 
 ### Adding a cost-basis method
 
@@ -37,13 +39,35 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-Transaction types do **not** get their own strategy class. They are declarative definitions in
-`_REGISTRY` in `src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`.
+This takes **two** edits, in different places. Doing only the first is the common failure: the type
+registers cleanly and then fails cost processing at runtime.
 
-Add a `_definition(...)` entry declaring `lifecycle_family`, `economic_role`, `position_effect`,
-`cash_effect`, `lot_behavior`, and `settlement_behavior`. Cost treatment follows from
-`lot_behavior` — for example `consume_lot` for a disposal, or `none` where no lot is affected. The
-application layer reads that field; it does not branch on the type code.
+**1. Declare the type.** Add a `_definition(...)` entry to `_REGISTRY` in
+`src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`, declaring
+`lifecycle_family`, `economic_role`, `position_effect`, `cash_effect`, `lot_behavior`, and
+`settlement_behavior`. There is no `TransactionType` enum; types are string codes with declarative
+definitions. `lot_behavior` governs how the application layer replays lots — see
+`cost_basis_processing/calculation.py`, which reads it to choose incremental versus rebuild — but it
+does **not** select the cost strategy.
+
+**2. Map the type to a cost strategy.** `CostBasisCalculator.__init__`
+(`app/domain/cost_basis/calculation/cost_basis_calculator.py`) holds
+`_strategies: dict[str, TransactionCostStrategy]`, mapping each transaction-type code to a strategy
+instance — `BuyStrategy`, `SellStrategy`, `SecurityInflowStrategy`, `RedemptionStrategy`,
+`QuantityRestatementStrategy`, and so on. Add an entry for the new code, reusing an existing
+strategy where the economics match rather than writing a new one by default.
+
+`_resolve_strategy` applies these in order:
+
+1. Rejects the transaction if `is_production_booking_transaction_type` is false, reporting the
+   registry's `calculation_support_status`.
+2. For cash instruments, returns `CashInflowStrategy` / `CashOutflowStrategy` for a fixed set of
+   codes before consulting the map.
+3. Otherwise looks up `_strategies`, and reports
+   `No cost calculation strategy is registered for '<type>'` when the code is absent.
+
+So a type that is production-bookable but unmapped fails at step 3. If the new type is a cash
+instrument, check whether it also belongs in the step-2 branch.
 
 Use `calculation_support_status` and `production_booking_allowed` to introduce a type before its
 calculation support is complete, rather than registering it as fully supported early.
