@@ -289,7 +289,10 @@ class ReportingRepository:
             .select_from(Portfolio)
             .outerjoin(
                 ranked_snapshot_subq,
-                ranked_snapshot_subq.c.portfolio_id == Portfolio.portfolio_id,
+                and_(
+                    ranked_snapshot_subq.c.portfolio_id == Portfolio.portfolio_id,
+                    ranked_snapshot_subq.c.rn == 1,
+                ),
             )
             .outerjoin(
                 DailyPositionSnapshot,

@@ -103,6 +103,7 @@ async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_
     assert "trim(daily_position_snapshots.security_id) = anon_" in normalized
     assert "daily_position_snapshots.epoch = anon_" in normalized
     assert "daily_position_snapshots.quantity = anon_" in normalized
+    assert ".rn = 1" in normalized
     assert "position_history.position_date <= '2026-03-27'" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
     assert "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)" in compiled
