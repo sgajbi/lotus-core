@@ -1286,6 +1286,35 @@ class ReprocessingJobRepository:
 
         return await self._classify_owned_transition_failure(job_id, lease_token)
 
+    async def get_lease_remaining_seconds(
+        self,
+        job_id: int,
+        *,
+        lease_token: str,
+    ) -> float | None:
+        """Read the live lease budget from PostgreSQL's clock for local scheduling."""
+
+        row = (
+            await self.db.execute(
+                select(
+                    (
+                        func.extract(
+                            "epoch",
+                            ReprocessingJob.lease_expires_at - func.clock_timestamp(),
+                        )
+                    ).label("lease_remaining_seconds")
+                ).where(
+                    ReprocessingJob.id == job_id,
+                    ReprocessingJob.status == "PROCESSING",
+                    ReprocessingJob.lease_token == lease_token,
+                    ReprocessingJob.lease_expires_at > func.clock_timestamp(),
+                )
+            )
+        ).one_or_none()
+        if row is None or row.lease_remaining_seconds is None:
+            return None
+        return float(row.lease_remaining_seconds)
+
     async def _classify_owned_transition_failure(
         self,
         job_id: int,

@@ -60,6 +60,7 @@ def mock_dependencies():
         "failed_count": 0,
         "oldest_pending_created_at": None,
     }
+    mock_repro_job_repo.get_lease_remaining_seconds.return_value = 900.0
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_db_session.begin.return_value = AsyncMock()
@@ -314,6 +315,7 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
         lease_token=LEASE_TOKEN,
         lease_duration_seconds=900,
     )
+    assert jobs.get_lease_remaining_seconds.await_count == 2
     mock_dependencies["observe_lease_renewal"].assert_called_once_with(
         "RESET_WATERMARKS",
         "renewed",
@@ -417,6 +419,7 @@ async def test_worker_bounds_fast_renewal_failures_within_lease_budget(mock_depe
     worker._lease_renewal_interval_seconds = 0.2
     worker._lease_renewal_io_timeout_seconds = 0.1
     jobs = mock_dependencies["repro_job_repo"]
+    jobs.get_lease_remaining_seconds.return_value = worker._lease_duration_seconds
     jobs.renew_lease.side_effect = ConnectionRefusedError("database unavailable")
 
     async def operation(_terminal_transition_started):
@@ -659,7 +662,7 @@ async def test_failed_job_rolls_back_without_preventing_sibling_commit(mock_depe
     assert jobs.update_job_status.await_args_list[0].kwargs["lease_token"] == LEASE_TOKEN
     assert jobs.update_job_status.await_args_list[1].args == (32, "COMPLETE")
     assert jobs.update_job_status.await_args_list[1].kwargs == {"lease_token": LEASE_TOKEN}
-    assert mock_dependencies["db_session"].begin.call_count == 9
+    assert mock_dependencies["db_session"].begin.call_count == 11
     transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
     assert transaction_exits.await_args_list[2].args[0] is RuntimeError
 
