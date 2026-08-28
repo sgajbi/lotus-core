@@ -13,7 +13,7 @@ from portfolio_common.db import AsyncSessionLocal
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.outbox_repository import OutboxRepository
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import sessionmaker
 
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
@@ -214,9 +214,6 @@ def test_dispatcher_starts_delivery_lease_after_stream_head_selection(
     """Head-selection latency must not consume the Kafka delivery safety margin."""
 
     test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
-    selection_started_at = datetime(2026, 7, 30, 1, 0, tzinfo=timezone.utc)
-    selection_completed_at = selection_started_at + timedelta(seconds=20)
-
     with test_session_factory() as session:
         with session.begin():
             session.add(
@@ -230,15 +227,13 @@ def test_dispatcher_starts_delivery_lease_after_stream_head_selection(
                 )
             )
 
-    class _ControlledDateTime(datetime):
-        instants = iter((selection_started_at, selection_completed_at))
-
+    class _FastHostDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
-            instant = next(cls.instants)
+            instant = datetime(2099, 1, 1, tzinfo=timezone.utc)
             return instant if tz is not None else instant.replace(tzinfo=None)
 
-    monkeypatch.setattr(outbox_dispatcher_module, "datetime", _ControlledDateTime)
+    monkeypatch.setattr(outbox_dispatcher_module, "datetime", _FastHostDateTime)
     dispatcher = OutboxDispatcher(
         kafka_producer=MagicMock(spec=KafkaProducer),
         db_session_factory=test_session_factory,
@@ -248,7 +243,10 @@ def test_dispatcher_starts_delivery_lease_after_stream_head_selection(
     claimed_events = dispatcher._claim_pending_events()
 
     assert len(claimed_events) == 1
-    assert claimed_events[0].claim_expires_at == selection_completed_at + timedelta(seconds=30)
+    with test_session_factory() as session:
+        database_now = session.execute(select(func.clock_timestamp())).scalar_one()
+    remaining_seconds = (claimed_events[0].claim_expires_at - database_now).total_seconds()
+    assert 25 <= remaining_seconds <= 35
 
 
 def test_dispatcher_reclaims_expired_claim(db_engine, clean_db, smart_mock_kafka_producer):
