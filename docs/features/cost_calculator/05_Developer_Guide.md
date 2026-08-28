@@ -39,8 +39,8 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes **two** edits, in different places. Doing only the first is the common failure: the type
-registers cleanly and then fails cost processing at runtime.
+This takes **three** edits, in different places. Doing only the first is the common failure: the
+type registers cleanly and then fails at runtime.
 
 **1. Declare the type.** Add a `_definition(...)` entry to `_REGISTRY` in
 `src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`, declaring
@@ -68,6 +68,18 @@ strategy where the economics match rather than writing a new one by default.
 
 So a type that is production-bookable but unmapped fails at step 3. If the new type is a cash
 instrument, check whether it also belongs in the step-2 branch.
+
+**3. Add a cashflow rule.** Cost, cashflow, and position effects run in one atomic use case, so a
+type that clears cost still fails if cashflow cannot resolve it.
+`ProcessTransactionCashflowUseCase.process` resolves the type against `cashflow_rules` and raises
+`TransactionProcessingError(reason_code="cashflow_rule_missing", retryable=False)` when no rule
+exists. It is terminal, not retried, and it fails the whole transaction — the cost and position work
+in the same use case does not stand. Insert the `cashflow_rules` row as described in
+[the cashflow developer guide](../cashflow_calculator/05_Developer_Guide.md#2-adding-a-rule-for-a-new-transaction-type).
+
+Step 3 is skippable only where `requires_cashflow_processing(transaction)` is false — the
+non-cash FX contract lifecycle path, which returns before rule resolution. Everything else needs the
+rule.
 
 Use `calculation_support_status` and `production_booking_allowed` to introduce a type before its
 calculation support is complete, rather than registering it as fully supported early.

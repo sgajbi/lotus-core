@@ -49,10 +49,10 @@ not exist.
   during reprocessing.
 * **Consumer:** none at runtime. The event-supportability contract records this family with
   `consumer_services=()` and `runtime_active=False`; it is staged as a compatibility event, not a
-  work queue. The unified runtime subscribes to `transactions.persisted` and
-  `transactions.reprocessing.requested` only, so do not trace replay or lag through a self-loop on
-  this topic — position effects are applied inside the atomic transaction-processing use case before
-  this event is staged.
+  work queue. Position effects reach the runtime through `transactions.persisted` and
+  `transactions.reprocessing.requested` — two of its five subscriptions, not the whole contract — so
+  do not trace replay or lag through a self-loop on this topic. Position effects are applied inside
+  the atomic transaction-processing use case before this event is staged.
 * **Key:** `portfolio_id`
 * **Payload (`TransactionEvent`):** The event business payload of the processed transaction,
   carrying its `epoch`. Reprocessing raises the epoch for the affected key, so events staged after a
