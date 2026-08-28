@@ -51,11 +51,12 @@ The health of this service is critical for the availability of all performance a
 All logs are structured JSON and are tagged with the `correlation_id`. Key log messages can help diagnose issues:
 
 * **`"Position-timeseries materialization completed."`**: Confirms the position-timeseries application use case finished and reports whether current or dependent days changed.
-* **`"Scheduler claimed ... jobs for processing"`**: Confirms the in-process scheduler is leasing
-  durable portfolio-date work.
+* **Scheduler claim activity**: no stable log literal to grep for. Confirm the in-process
+  scheduler is leasing durable portfolio-date work through
+  `control_queue_operations_total{queue="aggregation"}` claim outcomes rather than a message.
 * **`"Found and claimed ... eligible aggregation jobs"`**: Confirms deterministic queue claims.
 * **`"Missing FX rate from..."`**: A critical source-data error that causes the owned aggregation job to fail without publishing partial output.
-* **`"Portfolio aggregation requires instrument reference data."`**: A position could not be tied to authoritative instrument metadata, so Core rejected the incomplete portfolio aggregate and failed the owned job.
+* **Missing instrument reference**: no stable log literal to grep for. When a position cannot be tied to authoritative instrument metadata, Core rejects the incomplete portfolio aggregate and leaves the owned job in `FAILED` with its reason recorded; read the job row rather than searching logs.
 
 ## 3. Common Failure Scenarios & Resolutions
 
