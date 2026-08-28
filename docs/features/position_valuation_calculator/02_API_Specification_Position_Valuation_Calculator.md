@@ -9,7 +9,7 @@ The `position-valuation-calculator` is a headless service that does not have a t
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health/live` | A liveness probe to confirm the service process is running. Returns `{"status": "alive"}`. |
-| `GET` | `/health/ready` | A readiness probe that checks the service's ability to connect to the database. Returns `{"status": "ready"}` on success or a `503 Service Unavailable` on failure. |
+| `GET` | `/health/ready` | A readiness probe over **three** dependencies — `db`, `kafka`, and `worker_runtime` (declared in the service's `web.py`). Returns `{"status": "ready"}` on success or `503 Service Unavailable` on failure, with per-dependency detail in the body. A 503 is not necessarily a database problem: read the body to see which dependency failed. |
 | `GET` | `/metrics` | Exposes a wide range of performance and application metrics in Prometheus format. |
 
 ## 2. Kafka Interface

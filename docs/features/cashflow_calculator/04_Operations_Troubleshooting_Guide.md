@@ -27,7 +27,12 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
 ### Symptom: Consumer Lag is Increasing
 
 - **Potential Cause 1: Database Performance**
-  - **Check**: The `db_operation_latency_seconds` histogram in Grafana. Are `create_cashflow` operations becoming slow?
+  - **Check**: The `db_operation_latency_seconds` histogram in Grafana. The cashflow *write*
+    itself is not instrumented — `SqlAlchemyCashflowRepository.create()` carries no
+    `async_timed`, so there is no `method="create_cashflow"` series. Use the timed operations
+    that do exist on this path, such as
+    `db_operation_latency_seconds{repository="CashflowRulesRepository"}` for rule loads and the
+    `CostBasis*` repository operations that share the same unit of work.
   - **Action**: Investigate the database for slow queries, high CPU usage, or connection pool exhaustion.
 
 - **Potential Cause 2: Downstream Outage**
