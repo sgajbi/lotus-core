@@ -1230,6 +1230,7 @@ async def test_get_valuation_jobs_snapshot_uses_one_database_time_statement(
     assert "statement_timestamp()" in compiled
     assert "count(*)" in compiled.lower()
     assert "valuation_lease_expires_at <= statement_timestamp()" in compiled
+    assert "portfolio_valuation_jobs.updated_at <= statement_timestamp()" not in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
 
 
@@ -1252,6 +1253,7 @@ async def test_get_aggregation_jobs_snapshot_preserves_empty_page_total(
     assert "statement_timestamp()" in compiled
     assert "count(*)" in compiled.lower()
     assert "lease_expires_at <= statement_timestamp()" in compiled
+    assert "portfolio_aggregation_jobs.updated_at <= statement_timestamp()" not in compiled
     assert "LIMIT 5 OFFSET 20" in compiled
 
 
