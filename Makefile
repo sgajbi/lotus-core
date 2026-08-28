@@ -2,6 +2,7 @@
 .PHONY: profile-derived-state-price-restatement profile-derived-state-fx-restatement
 .PHONY: ingestion-gateway-rate-limit-policy-guard generated-artifact-tracking-guard technology-governance-pilot-guard technology-governance-pilot-receipt-guard dependency-lock-replay-check dependency-technology-inventory dependency-technology-certify refresh-dependency-technology-inventory base-image-lifecycle-guard base-image-registry-evidence-check refresh-base-image-manifest-evidence outbox-capacity-profile-guard test-outbox-capacity-acceptance
 .PHONY: test-critical-lifecycle-db test-kafka-restart-recovery-gate
+.PHONY: durable-lease-clock-guard
 .PHONY: calculated-output-policy-guard bond-quote-authority-guard cash-instrument-authority-guard
 .PHONY: test-fixed-income-book-cost-recovery-gate
 .PHONY: test-import-root-guard
