@@ -72,6 +72,17 @@ strategy where the economics match rather than writing a new one by default.
 So a type that is production-bookable but unmapped fails at step 3. If the new type is a cash
 instrument, check whether it also belongs in the step-2 branch.
 
+**2a. Extend redemption vocabulary and policy maps — required for a redemption-family type.**
+Reusing `RedemptionStrategy` does not complete redemption support. The redemption economics
+calculator accepts only codes in `REDEMPTION_TRANSACTION_TYPES` in
+`app/domain/transaction/redemption/economics.py`, and command validation then indexes the
+separate `REDEMPTION_ELIGIBLE_PRODUCT_TYPES_BY_TRANSACTION` map in
+`app/domain/transaction/redemption/eligibility.py`. Add the new code to both maps when the type is
+a redemption, with the eligible product types required by its policy. Otherwise cost processing
+will reject the transaction as an unsupported redemption or fail with a missing eligibility
+policy. Add economics and command-eligibility tests for the new code, including an ineligible
+product case. This is conditional: non-redemption transaction families do not change these maps.
+
 **3. Add a cashflow rule.** Cost, cashflow, and position effects run in one atomic use case, so a
 type that clears cost still fails if cashflow cannot resolve it.
 `ProcessTransactionCashflowUseCase.process` resolves the type against `cashflow_rules` and raises
