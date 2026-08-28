@@ -12,7 +12,13 @@ The key attributes determined by the rules are:
 * **Timing:** Whether the flow should be considered at the Beginning-of-Day (`BOD`) or End-of-Day (`EOD`) for performance calculations.
 * **Flow Type:** Booleans (`is_position_flow`, `is_portfolio_flow`) that determine how the flow impacts TWR calculations.
 
-The following table details the complete rule set as seeded in the database:
+The table below shows representative rules.
+
+> **This table is an illustrative subset, not the seeded rule set.** Ten migrations under
+> `alembic/versions/` write to `cashflow_rules`, adding redemption, adjustment, FX-settlement,
+> corporate-action, and rights families that are not listed here. These flags determine TWR flow
+> treatment, so treat the migrations as authority when seeding or testing, not this page.
+> Regenerating the full table from migration truth is tracked as a repository issue.
 
 | Transaction Type | Classification | Timing | Is Position Flow? | Is Portfolio Flow? |
 | :--- | :--- | :--- | :--- | :--- |
@@ -21,7 +27,7 @@ The following table details the complete rule set as seeded in the database:
 | `DIVIDEND` | `INCOME` | `EOD` | Yes | No |
 | `INTEREST` | `INCOME` | `EOD` | Yes | No |
 | `FEE` | `EXPENSE` | `EOD` | Yes | **Yes** |
-| `TAX` | `EXPENSE` | `EOD` | Yes | No |
+| `TAX` | `EXPENSE` | `EOD` | Yes | **Yes** |
 | `TRANSFER_IN` | `TRANSFER` | `BOD` | Yes | **Yes** |
 | `DEPOSIT` | `CASHFLOW_IN` | `BOD` | Yes | **Yes** |
 | `TRANSFER_OUT` | `TRANSFER` | `EOD` | Yes | **Yes** |
