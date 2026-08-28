@@ -1201,6 +1201,60 @@ async def test_get_aggregation_jobs_query(
     assert "LIMIT 5 OFFSET 2" in compiled
 
 
+async def test_get_valuation_jobs_snapshot_uses_one_database_time_statement(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    generated_at = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.all.return_value = [
+        SimpleNamespace(
+            generated_at_utc=generated_at,
+            total=1,
+            id=8801,
+            status="PROCESSING",
+            valuation_date=date(2025, 8, 31),
+            updated_at=generated_at,
+            valuation_lease_expires_at=generated_at,
+        )
+    ]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    snapshot = await repository.get_valuation_jobs_snapshot(portfolio_id="P1", skip=0, limit=20)
+
+    assert snapshot[0] == generated_at
+    assert snapshot[1] == 1
+    assert snapshot[2][0].id == 8801
+    compiled = str(
+        mock_db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "statement_timestamp()" in compiled
+    assert "count(*)" in compiled.lower()
+    assert "valuation_lease_expires_at <= statement_timestamp()" in compiled
+    assert "LIMIT 20 OFFSET 0" in compiled
+
+
+async def test_get_aggregation_jobs_snapshot_preserves_empty_page_total(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    generated_at = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.all.return_value = [
+        SimpleNamespace(generated_at_utc=generated_at, total=4, id=None)
+    ]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    snapshot = await repository.get_aggregation_jobs_snapshot(portfolio_id="P1", skip=20, limit=5)
+
+    assert snapshot == (generated_at, 4, [])
+    compiled = str(
+        mock_db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "statement_timestamp()" in compiled
+    assert "count(*)" in compiled.lower()
+    assert "lease_expires_at <= statement_timestamp()" in compiled
+    assert "LIMIT 5 OFFSET 20" in compiled
+
+
 async def test_portfolio_exists_true(repository: OperationsRepository, mock_db_session: AsyncMock):
     mock_execute_scalar_one_or_none(mock_db_session, "P1")
 

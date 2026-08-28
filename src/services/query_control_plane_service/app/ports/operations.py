@@ -196,8 +196,18 @@ class OperationsSupportRepository(Protocol):
         portfolio_id: str,
         skip: int,
         limit: int,
+        stale_threshold_minutes: int = 15,
         **filters: Any,
     ) -> list[Any]: ...
+
+    async def get_valuation_jobs_snapshot(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stale_threshold_minutes: int = 15,
+        **filters: Any,
+    ) -> tuple[datetime, int, list[Any]]: ...
 
     async def get_aggregation_jobs_count(self, portfolio_id: str, **filters: Any) -> int: ...
 
@@ -208,6 +218,15 @@ class OperationsSupportRepository(Protocol):
         limit: int,
         **filters: Any,
     ) -> list[Any]: ...
+
+    async def get_aggregation_jobs_snapshot(
+        self,
+        portfolio_id: str,
+        skip: int,
+        limit: int,
+        stale_threshold_minutes: int = 15,
+        **filters: Any,
+    ) -> tuple[datetime, int, list[Any]]: ...
 
     async def get_analytics_export_jobs_count(
         self,
