@@ -612,7 +612,7 @@ async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio()
             await service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P404"))
 
 
-def test_bulk_portfolio_summary_request_is_bounded_and_deduplicated() -> None:
+async def test_bulk_portfolio_summary_request_is_bounded_and_deduplicated() -> None:
     with pytest.raises(ValueError, match="must not contain duplicates"):
         BulkPortfolioSummaryQueryRequest(portfolio_ids=["P1", " P1 "])
     with pytest.raises(ValueError, match="required when more than one"):
