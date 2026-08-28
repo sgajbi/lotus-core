@@ -1,6 +1,12 @@
 # Methodology Guide: Position Valuation & Scheduling
 
-This guide details the methodologies used by the `position-valuation-calculator` for both its calculation and orchestration responsibilities.
+This guide covers valuation methodology across **two deployments**.
+`position_valuation_calculator` owns the calculation — `ValuationLogic` and the job consumer.
+`valuation_orchestrator_service` owns the orchestration described in later sections: the scheduler,
+the price event consumer, and the reprocessing worker.
+
+The calculator has no scheduler, price consumer, or reprocessing worker. When a section below
+describes orchestration behaviour, the code lives in `valuation_orchestrator_service`.
 
 ## 1. Valuation Logic
 

@@ -19,7 +19,16 @@
 
 The rules that map a transaction type (e.g., "BUY", "DIVIDEND") to a cashflow's financial properties are not hardcoded. Instead, they are stored in the `cashflow_rules` database table.
 
-This provides significant business agility, as a financial analyst can modify how transactions are treated without requiring a developer to change code or redeploy the service. The service loads these rules into an in-memory cache at startup for high performance.
+This provides significant business agility: a financial analyst can modify how transactions are
+treated without a developer changing code, **and without a redeploy or restart**.
+
+`CashflowRuleCache.resolve()` (`app/infrastructure/cashflow/rule_cache.py`) holds a version-checked
+snapshot rather than a load-once-at-startup cache. It populates lazily on first use and refreshes
+the snapshot when any of three conditions hold: the TTL has expired
+(`CASHFLOW_RULE_CACHE_TTL_SECONDS`, default 300 seconds), the source rule-set version no longer
+matches the cached one, or the requested rule is absent — which forces an immediate reload.
+
+So a rule change is picked up on its own. Restarting the deployment to apply one is unnecessary.
 
 ### Idempotency and Reliability
 
