@@ -39,8 +39,11 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes up to **four** edits, in different places. Doing only the first is the common failure:
+This takes up to **five** edits, in different places. Doing only the first is the common failure:
 the type registers cleanly and then fails at runtime — or worse, books silently with no effect.
+
+The recurring shape is that the registry declares *intent*, while several hard-coded maps must be
+updated to match. The registry does not drive them, so nothing stops the two from disagreeing.
 
 **1. Declare the type.** Add a `_definition(...)` entry to `_REGISTRY` in
 `src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`, declaring
@@ -106,6 +109,23 @@ domain test rather than assuming a green pipeline means the type is wired up.
 Use `calculation_support_status` and `production_booking_allowed` to introduce a type before its
 calculation support is complete, rather than registering it as fully supported early.
 
+
+**5. Add a settlement-cash resolver — required when the type generates its own cash leg.** If the
+registry definition sets `settlement_behavior="requires_cash_leg"` (with a `trade`, `income`, or
+`redemption` `lifecycle_family` and an `inflow`/`outflow` `cash_effect`), then
+`production_transaction_types_for_generated_cash_legs()` includes the type automatically, and the
+atomic use case will try to build its settlement leg.
+
+That path calls `calculate_settlement_cash_movement()` in
+`app/domain/transaction/settlement/cash_movement.py`, which looks the code up in the hard-coded
+`_SETTLEMENT_CASH_RESOLVERS` map and raises
+`ValueError("<type> has no ordinary settlement cash policy")` when it is absent. The transaction
+fails while generating a leg the registry said it should have.
+
+Note that `production_transaction_types_for_generated_cash_legs()` documents itself as returning
+types "backed by a settlement-cash resolver", but it derives that set purely from registry fields —
+nothing checks the resolver map. Registering the type is what opts it in; adding the resolver is a
+separate edit you must make yourself. Cover it with the settlement domain tests.
 ## 3. Testing
 
 ```bash
