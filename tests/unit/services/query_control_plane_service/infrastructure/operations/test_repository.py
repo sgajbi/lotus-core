@@ -1251,10 +1251,7 @@ async def test_get_valuation_jobs_snapshot_preserves_explicit_as_of(
         mock_db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
-    assert (
-        "valuation_lease_expires_at <= '2025-08-30 11:00:00+00:00'"
-        in compiled
-    )
+    assert "valuation_lease_expires_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_aggregation_jobs_snapshot_preserves_explicit_as_of(
