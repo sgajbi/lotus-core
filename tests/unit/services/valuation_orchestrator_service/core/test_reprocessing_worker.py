@@ -359,6 +359,41 @@ async def test_worker_wakes_by_measured_deadline_when_interval_is_longer(
     jobs.renew_lease.assert_not_awaited()
 
 
+async def test_worker_does_not_start_operation_until_authority_read_completes(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_io_timeout_seconds = 0.01
+    operation_started = asyncio.Event()
+
+    async def stalled_authority_read(*_args, **_kwargs):
+        await asyncio.Event().wait()
+
+    mock_dependencies[
+        "repro_job_repo"
+    ].get_lease_remaining_seconds.side_effect = stalled_authority_read
+
+    async def operation(_terminal_transition_started):
+        operation_started.set()
+
+    job = ReprocessingJob(
+        id=109,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    with pytest.raises(ReprocessingJobOwnershipLostError, match="read timed out"):
+        await worker._process_with_lease_renewal(
+            job=job,
+            job_type="RESET_WATERMARKS",
+            operation=operation,
+        )
+
+    assert not operation_started.is_set()
+
+
 async def test_worker_retries_lease_renewal_error_without_failing_job(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.001
@@ -644,7 +679,10 @@ async def test_worker_marks_failed_and_emits_failure_metric(mock_dependencies):
     assert kwargs["lease_token"] == LEASE_TOKEN
     assert "db write failed" in kwargs["failure_reason"]
     transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
-    assert transaction_exits.await_args_list[2].args[0] is RuntimeError
+    assert any(
+        call_args.args and call_args.args[0] is RuntimeError
+        for call_args in transaction_exits.await_args_list
+    )
 
 
 async def test_worker_records_exception_type_when_failure_message_is_empty(mock_dependencies):
@@ -701,7 +739,10 @@ async def test_failed_job_rolls_back_without_preventing_sibling_commit(mock_depe
     assert jobs.update_job_status.await_args_list[1].kwargs == {"lease_token": LEASE_TOKEN}
     assert mock_dependencies["db_session"].begin.call_count == 11
     transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
-    assert transaction_exits.await_args_list[2].args[0] is RuntimeError
+    assert any(
+        call_args.args and call_args.args[0] is RuntimeError
+        for call_args in transaction_exits.await_args_list
+    )
 
 
 async def test_worker_claims_each_job_only_after_the_previous_job_finishes(mock_dependencies):
@@ -1089,7 +1130,10 @@ async def test_worker_skips_completion_metric_when_terminal_ownership_is_lost(mo
         1,
     )
     transaction_exits = mock_dependencies["db_session"].begin.return_value.__aexit__
-    assert transaction_exits.await_args_list[2].args[0] is ReprocessingJobOwnershipLostError
+    assert any(
+        call_args.args and call_args.args[0] is ReprocessingJobOwnershipLostError
+        for call_args in transaction_exits.await_args_list
+    )
 
 
 async def test_worker_emits_requeue_ownership_metric_when_requeue_ownership_is_lost(

@@ -35,7 +35,22 @@ def _attribute_chain(node: ast.AST) -> tuple[str, ...]:
     return tuple(reversed(parts))
 
 
-def _contains_application_clock(node: ast.AST) -> bool:
+def _contains_application_clock(
+    node: ast.AST,
+    application_clock_names: set[str] | None = None,
+) -> bool:
+    application_clock_names = application_clock_names or set()
+    if isinstance(node, ast.Name):
+        return node.id in application_clock_names
+    if isinstance(node, ast.BinOp):
+        return _contains_application_clock(
+            node.left, application_clock_names
+        ) or _contains_application_clock(
+            node.right,
+            application_clock_names,
+        )
+    if isinstance(node, ast.UnaryOp):
+        return _contains_application_clock(node.operand, application_clock_names)
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
             chain = _attribute_chain(child.func)
@@ -47,6 +62,32 @@ def _contains_application_clock(node: ast.AST) -> bool:
                 if chain[-1] == "timedelta":
                     return True
     return False
+
+
+def _assignment_pairs(tree: ast.AST) -> list[tuple[list[str], ast.AST]]:
+    pairs: list[tuple[list[str], ast.AST]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            pairs.extend((_target_names(target), node.value) for target in node.targets)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            pairs.append((_target_names(node.target), node.value))
+    return pairs
+
+
+def _application_clock_names(tree: ast.AST) -> set[str]:
+    """Conservatively taint locals derived from application-clock expressions."""
+
+    names: set[str] = set()
+    pairs = _assignment_pairs(tree)
+    changed = True
+    while changed:
+        changed = False
+        for targets, value in pairs:
+            if _contains_application_clock(value, names):
+                before = len(names)
+                names.update(targets)
+                changed = changed or len(names) != before
+    return names
 
 
 def _target_names(node: ast.AST) -> list[str]:
@@ -71,6 +112,7 @@ def find_durable_lease_clock_findings(
     findings: list[DurableLeaseClockFinding] = []
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        application_clock_names = _application_clock_names(tree)
         for node in ast.walk(tree):
             assignments: list[tuple[list[str], ast.AST]] = []
             if isinstance(node, ast.Assign):
@@ -85,7 +127,10 @@ def find_durable_lease_clock_findings(
                 ]
             for targets, value in assignments:
                 for target in targets:
-                    if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(value):
+                    if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(
+                        value,
+                        application_clock_names,
+                    ):
                         findings.append(
                             DurableLeaseClockFinding(
                                 file=path.relative_to(repo_root).as_posix(),
