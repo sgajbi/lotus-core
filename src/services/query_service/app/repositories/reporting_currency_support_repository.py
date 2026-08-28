@@ -120,7 +120,7 @@ class ReportingCurrencySupportRepository:
             .where(
                 currency_code_sql_expr(FxRate.from_currency).in_(normalized_sources),
                 currency_code_sql_expr(FxRate.to_currency) == normalized_target,
-                FxRate.rate_date <= as_of_date,
+                FxRate.rate_date == as_of_date,
             )
             .group_by(currency_code_sql_expr(FxRate.from_currency))
         )

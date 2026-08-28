@@ -30,7 +30,8 @@ restatement. It evaluates one portfolio at a required `as_of_date` and returns a
 currencies observed in the latest non-zero positions. It then validates the same two-leg FX path
 used by performance: each non-base position currency to the portfolio base currency, followed by
 the portfolio base currency to the requested reporting currency. Same-currency legs use the
-identity rate. Every required source-owned rate must exist on or before the requested date.
+identity rate. Every required source-owned rate must exist on the requested valuation date; stale
+rates are not carried forward by this preflight.
 Requests before the portfolio `open_date` are `UNAVAILABLE` because the requested scope is outside
 the portfolio's effective window. Presence in `GET /lookups/currencies` is reported separately as
 `observed_selector_currency` and must never be treated as proof of restatement support.
