@@ -182,6 +182,13 @@ are hard-coded:
 
 Add the code to both, and cover the economics path and the eligibility path in tests.
 
+If the new code is a **full-redemption** transaction, also add it to the hard-coded
+`_FULL_REDEMPTION_TRANSACTION_TYPES` set in `app/domain/transaction/redemption/economics.py`.
+That set controls whether a full-quantity redemption closes the position; omitting the code
+causes the calculator to apply partial-redemption semantics and reject the close. Add a full-
+quantity redemption regression test for this conditional path. Non-full-redemption types do not
+belong in this set.
+
 > Worth knowing when you edit this: `REDEMPTION_TRANSACTION_TYPES` exists **twice** under different
 > definitions. The ingestion copy in
 > `src/services/ingestion_service/app/DTOs/transaction_model_dto.py` derives from the registry via
