@@ -39,7 +39,7 @@ affects realized P&L, so it needs an RFC and migration story, not just code.
 
 ### Adding a transaction type
 
-This takes up to **eight** edits, in different places. Doing only the first is the common failure:
+This takes up to **nine** edits, in different places. Doing only the first is the common failure:
 the type registers cleanly and then fails at runtime — or worse, books silently with the wrong result.
 
 The recurring shape is that the registry declares *intent*, while several hard-coded maps must be
@@ -207,6 +207,34 @@ amortized-disposal test rather than relying on the general redemption cases.
 > `production_transaction_types_for_lifecycle_families("redemption")` and needs no edit. The
 > processing copy above is a hard-coded frozenset and does. A redemption type added to the registry
 > alone will pass ingestion validation and then fail in processing.
+
+
+**9. Add a dependency rank — required for a multi-leg corporate-action or rights type.** Replay
+ordering for linked legs comes from the hard-coded `_DEPENDENCY_RANK_BY_TYPE` in
+`app/domain/transaction/corporate_action/ordering.py`, read through
+`corporate_action_dependency_rank()`. Both sorters consume it: cost ordering in
+`domain/cost_basis/calculation/transaction_ordering.py` and position history in
+`domain/position/history.py`, plus the corporate-action event graph.
+
+| Rank | Legs |
+| --- | --- |
+| 0 | source-out legs, `RIGHTS_ANNOUNCE`, `RIGHTS_ALLOCATE` |
+| 1 | target-in legs, rights election (`RIGHTS_SUBSCRIBE`, `RIGHTS_OVERSUBSCRIBE`, `RIGHTS_SELL`, `RIGHTS_EXPIRE`, `RIGHTS_ADJUSTMENT`) |
+| 2 | cash consideration markers, `RIGHTS_SHARE_DELIVERY` |
+| 3 | `RIGHTS_REFUND` |
+| **4** | **fallback — non-Bundle-A / unknown** |
+| 5 | same-instrument quantity restatements |
+
+**This step fails silently, like steps 4 and 6.** An unmapped code takes the rank-4 fallback:
+
+```python
+return _DEPENDENCY_RANK_BY_TYPE.get(transaction_type, 4)
+```
+
+A new rights-election type belongs at rank 1, before delivery and refund. Left unmapped it sorts to
+4, so same-time delivery (2) and refund (3) legs run **before** the election rather than after it.
+Nothing errors; the legs simply process in the wrong order, and cost and position results follow
+that order. Add the rank and cover it with both cost-ordering and position-ordering tests.
 
 ## 3. Testing
 
