@@ -27,16 +27,16 @@ applied inside a single atomic use case, so there is no separate cashflow work q
 
 The unified deployment builds five consumers, listed in full in
 [the transaction-processing Kafka contract](../cost_calculator/02_API_Specification_Cost_Calculator.md#21-consumers).
-**All five can drive cashflow generation** — two directly, three by staging work that reaches the
-same atomic use case on a later hop:
+**Three of the five drive cashflow** — two directly, one by staging work that reaches the same
+atomic use case on a later hop:
 
 | Consumer group | Drives cashflow |
 | --- | --- |
 | `portfolio_transaction_processing_group` | Directly, for newly persisted transactions. |
 | `portfolio_transaction_replay_request_group` | Directly, on replay of an affected key. |
 | `corporate_action_manifest_group` | Indirectly — governed corporate actions. |
-| `fixed_income_book_cost_authority_group` | **Not** for original creation; revises cashflows on already-booked transactions. |
-| `fixed_income_book_cost_correction_replay_group` | **Not** for original creation; the second hop of that revision. |
+| `fixed_income_book_cost_authority_group` | **No cashflow effect.** |
+| `fixed_income_book_cost_correction_replay_group` | **No cashflow effect.** |
 
 For a governed corporate-action child, `TransactionProcessingConsumer` records the child *without
 financial mutation*; the manifest makes its release eligible and
@@ -45,16 +45,18 @@ the cashflow effect. The fixed-income path is two hops: the authority consumer s
 `fixed_income.book_cost.disposal_replay.requested`, and the correction-replay consumer republishes
 the canonical transaction through the same atomic use case.
 
-**A missing cashflow is never explained by the fixed-income groups.**
-`_stage_correction_replay()` stages work only for a newly committed profile decision, and only when
-`find_earliest_affected_disposal()` finds an already-persisted disposal — whose cashflow was
-committed atomically during the original transaction processing. The correction consumer replays
-that booked transaction to apply revised book-cost authority. A stall there leaves cost basis and
-revised cashflow values stale; it cannot explain a cashflow that was never created.
+**Neither fixed-income group affects cashflow at all** — not its creation and not its value. The
+two are separated at field level. `_apply_transaction_overlay()` writes only cost and realized-P&L
+fields (`realized_gain_loss`, `realized_gain_loss_local`, `net_cost`, `net_cost_local`), while
+`calculate_transaction_cashflow()` derives its amount from `gross_transaction_amount`,
+`settlement_date`, and the resolved trade fee, and never consumes book-cost authority. A repair
+replay may replace and re-emit the same cashflow row, but its financial value cannot go stale
+because of a stalled fixed-income group.
 
-For a **missing** cashflow, the relevant groups are `portfolio_transaction_processing_group`,
+The groups that matter for cashflow are `portfolio_transaction_processing_group`,
 `portfolio_transaction_replay_request_group`, and — for governed corporate actions —
-`corporate_action_manifest_group`, which can stall while the primary group stays current.
+`corporate_action_manifest_group`. Any of those can stall while the others stay current, leaving the
+cashflow uncreated.
 
 The subscription detailed below is the direct one:
 
