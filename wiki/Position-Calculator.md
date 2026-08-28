@@ -5,9 +5,9 @@
 The position module maintains canonical position-history state inside the unified
 `portfolio_transaction_processing_service` runtime.
 
-It takes processed transaction events, recalculates the affected position path, and handles
-reprocessing flows when late or back-dated activity would otherwise leave downstream state
-inconsistent.
+It receives booked transactions through the unified processing use case, recalculates the affected
+position path, and handles reprocessing flows when late or back-dated activity would otherwise leave
+downstream state inconsistent.
 
 ## What it handles
 
@@ -21,9 +21,23 @@ The current app-local/CI runtime centers on:
 
 This makes the service more than a simple running-balance updater.
 
+## Current scope and evidence
+
+The unified transaction-processing application, position-history domain module, epoch controls, and
+replay contract tests are the evidence for this page. Position effects are Core-owned state; this
+page does not claim ownership of downstream performance or risk conclusions.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Follow a booking | Runtime role and Consolidated runtime |
+| Understand replay | Recalculation concurrency |
+| Verify outputs | Data it owns and contract tests |
+
 ## Runtime role
 
-For a processed transaction event, the service:
+For a booked transaction entering the unified use case, the position module:
 
 1. loads current position and reprocessing state
 2. determines whether the transaction can be applied incrementally or requires reprocessing

@@ -21,6 +21,20 @@ Use it when you need to reason about:
 5. `query_service` and `query_control_plane_service` expose operational and downstream-governed read
    contracts over persisted state
 
+## Current scope and evidence
+
+This is the current write-to-read flow implemented by Core services and event contracts. Topic names,
+ownership, and failure semantics are grounded in the service composition and supportability artifacts;
+historical or target-state topology is labeled in the linked architecture and RFC material.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Trace source data | End-to-end flow |
+| Locate state ownership | Core runtime stages |
+| Diagnose drift | Supportability and Operations Runbook |
+
 ## Core runtime stages
 
 ### 1. Write ingress

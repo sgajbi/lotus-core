@@ -7,6 +7,21 @@
 It consumes raw source-data topics, writes canonical records to PostgreSQL, and emits the first
 governed completion signals needed by downstream calculators and generators.
 
+## Current scope and evidence
+
+The consumer composition, persistence adapters, database models, and event-supportability contracts
+under `src/services/persistence_service/` define the current behavior. This page describes app-local
+and CI runtime ownership; shared infrastructure availability and deployment promotion remain
+platform-operated concerns.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Trace a dataset | What it handles and Runtime role |
+| Verify persistence | Database models and event contracts |
+| Diagnose lag | Operations Runbook and consumer metrics |
+
 ## What it handles
 
 The service currently runs dedicated consumers for:

@@ -5,6 +5,21 @@ API routes bind HTTP, application services orchestrate use cases, domain and sha
 business rules, infrastructure modules adapt persistence and external systems, and repo-native
 guards enforce the boundaries.
 
+## Current scope and evidence
+
+This page describes the implemented service and module boundaries on `main`. The ownership map is
+grounded in the runtime packages under `src/services/`, the repository layout, and the architecture
+catalog; it is not a target-state deployment or a bank-acceptance claim. Use the linked contracts and
+repo-native guards for executable evidence before changing a boundary.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Runtime ownership | System Shape and Main Runtime Areas |
+| Boundary change | Architecture index and linked RFCs |
+| Verification | Repository architecture and contract guards |
+
 ## System Shape
 
 ```mermaid

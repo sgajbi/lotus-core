@@ -70,7 +70,7 @@ policy or building an exposure inventory:
 
 `contracts/security/security-control-coverage.v1.json` allowlists `/docs`, `/openapi.json` and
 `/redoc` for each of the ten apps, but **not** `/docs/oauth2-redirect` — tracked as
-[#1048](https://github.com/sgajbi/lotus-core/issues/1048). Until that closes, treat the security
+[issue #1048](https://github.com/sgajbi/lotus-core/issues/1048). Until that closes, treat the security
 contract as covering three of the four documentation paths.
 
 The five API services expose the same four operational routes in addition to their contract surface,
@@ -86,7 +86,7 @@ the code rather than proving any service is up.
 
 The host ports above are what "service health routes are responding" in
 [Startup checks](#startup-checks) means in practice — for example
-`curl http://localhost:8090/health/ready` reaches
+the local `curl` readiness check reaches
 `portfolio_transaction_processing_service`, whose container port is 8085.
 
 Executable incident playbooks are maintained in

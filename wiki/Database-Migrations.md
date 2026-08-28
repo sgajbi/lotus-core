@@ -7,6 +7,20 @@
 Schema changes are part of the product contract here because portfolio, transaction, valuation,
 supportability, and replay state all depend on deterministic database shape.
 
+## Current scope and evidence
+
+This page documents the migration workflow currently enforced for the Core schema. The models,
+Alembic history, migration smoke checks, and migration contract guards are the evidence; a generated
+migration still requires human review for financial and temporal correctness.
+
+## Reader Map
+
+| Reader need | Start with |
+| --- | --- |
+| Change schema | Standard workflow and migration review |
+| Prove safety | Migration smoke and contract checks |
+| Recover | Rollback and operational guidance below |
+
 ## Standard workflow
 
 ### 1. Change the SQLAlchemy models
