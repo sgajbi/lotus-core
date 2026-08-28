@@ -30,7 +30,10 @@ Operational read contracts for:
 
 `GET /reporting-currencies/support` is the source-owned, portfolio/as-of preflight for performance
 restatement. It returns explicit `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` status based on
-source currencies and as-of FX evidence. `observed_selector_currency` is informational only;
+source currencies and the same two-leg as-of FX path used by performance: position currency to
+portfolio base, then portfolio base to requested reporting currency. Same-currency legs use the
+identity rate; every required source-owned rate must exist on or before the requested date. A date
+before portfolio `open_date` is `UNAVAILABLE`. `observed_selector_currency` is informational only;
 `GET /lookups/currencies` remains selector-only. The contract does not certify downstream
 `lotus-performance` execution or client publication.
 
