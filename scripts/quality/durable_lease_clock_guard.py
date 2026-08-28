@@ -216,6 +216,27 @@ def find_durable_lease_clock_findings(
                             and isinstance(key.value, str)
                             and key.value.endswith(_DEADLINE_SUFFIX)
                         )
+                for argument in node.args:
+                    if isinstance(argument, ast.Name):
+                        assignments.extend(
+                            (
+                                [target],
+                                argument,
+                            )
+                            for target in expanded_deadline_targets.get(argument.id, set())
+                        )
+                    elif isinstance(argument, ast.Dict):
+                        assignments.extend(
+                            ([key.value], item_value)
+                            for key, item_value in zip(
+                                argument.keys,
+                                argument.values,
+                                strict=False,
+                            )
+                            if isinstance(key, ast.Constant)
+                            and isinstance(key.value, str)
+                            and key.value.endswith(_DEADLINE_SUFFIX)
+                        )
             for targets, value in assignments:
                 for target in targets:
                     if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(
