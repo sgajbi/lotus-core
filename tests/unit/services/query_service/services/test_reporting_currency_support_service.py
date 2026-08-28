@@ -32,7 +32,7 @@ async def test_support_is_true_only_when_every_source_currency_has_as_of_fx() ->
         tenant_id="tenant-1", base_currency="USD", source_currencies=("EUR", "USD")
     )
     repository.is_selector_currency_observed.return_value = True
-    repository.get_latest_fx_rate_date.side_effect = [date(2026, 8, 20), date(2026, 8, 28)]
+    repository.get_latest_fx_rate_dates.return_value = {"EUR": date(2026, 8, 20)}
     service = _service(repository)
 
     result = await service.evaluate(
@@ -48,6 +48,11 @@ async def test_support_is_true_only_when_every_source_currency_has_as_of_fx() ->
         FxSupportEvidence("EUR", date(2026, 8, 20), True),
         FxSupportEvidence("USD", date(2026, 8, 28), True),
     )
+    repository.get_latest_fx_rate_dates.assert_awaited_once_with(
+        from_currencies=("EUR", "USD"),
+        to_currency="USD",
+        as_of_date=date(2026, 8, 28),
+    )
 
 
 async def test_observed_selector_currency_does_not_imply_restatement_support() -> None:
@@ -56,14 +61,14 @@ async def test_observed_selector_currency_does_not_imply_restatement_support() -
         tenant_id=None, base_currency="USD", source_currencies=("EUR", "USD")
     )
     repository.is_selector_currency_observed.return_value = True
-    repository.get_latest_fx_rate_date.side_effect = [None, date(2026, 8, 28)]
+    repository.get_latest_fx_rate_dates.return_value = {}
     service = _service(repository)
 
     result = await service.evaluate(ReportingCurrencySupportQuery("PF-1", "EUR", date(2026, 8, 28)))
 
     assert result.status == "UNSUPPORTED"
     assert result.reason_code == "required_fx_source_unavailable"
-    assert result.missing_source_currencies == ("EUR",)
+    assert result.missing_source_currencies == ("USD",)
     assert result.observed_selector_currency is True
 
 
@@ -80,7 +85,7 @@ async def test_missing_portfolio_is_typed_unavailable_not_plausible_support() ->
     assert result.status == "UNAVAILABLE"
     assert result.reason_code == "portfolio_source_unavailable"
     assert result.source_currencies == ()
-    repository.get_latest_fx_rate_date.assert_not_awaited()
+    repository.get_latest_fx_rate_dates.assert_not_awaited()
 
 
 async def test_invalid_persisted_currency_is_typed_unavailable() -> None:

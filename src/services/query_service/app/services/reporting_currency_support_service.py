@@ -52,13 +52,18 @@ class ReportingCurrencySupportService:
             )
 
         base["tenant_id"] = source.tenant_id
+        rate_dates = await self._repository.get_latest_fx_rate_dates(
+            from_currencies=source.source_currencies,
+            to_currency=reporting_currency,
+            as_of_date=query.as_of_date,
+        )
         evidence: list[FxSupportEvidence] = []
         missing: list[str] = []
         for source_currency in source.source_currencies:
-            rate_date = await self._repository.get_latest_fx_rate_date(
-                from_currency=source_currency,
-                to_currency=reporting_currency,
-                as_of_date=query.as_of_date,
+            rate_date = (
+                query.as_of_date
+                if source_currency == reporting_currency
+                else rate_dates.get(source_currency)
             )
             available = rate_date is not None
             evidence.append(
