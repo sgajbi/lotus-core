@@ -370,8 +370,9 @@ very large reporting jobs without weakening the main ledger contract.
 
 The reporting APIs use the latest snapshot per `(portfolio_id, security_id)` as of the requested
 date. The reporting-currency support preflight has a route-specific liquidation-day exception:
-its source-currency evidence retains a zero-ending position only when same-day valuation or
-cash-flow evidence exists in the active position epoch. Other reporting endpoints continue to
+its source-currency evidence retains a zero-ending position only when same-day valuation evidence
+matches the latest position quantity in the active epoch, or same-day cash-flow evidence exists
+in that epoch. Other reporting endpoints continue to
 apply their own snapshot predicates. This keeps each query bounded while preserving true
 historical as-of semantics.
 
