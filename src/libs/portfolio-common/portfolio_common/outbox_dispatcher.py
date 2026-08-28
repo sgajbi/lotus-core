@@ -64,6 +64,16 @@ class _ClaimedOutboxEvent:
     ingestion_job_id: str | None = None
 
 
+def _owned_delivery_claim(event: _ClaimedOutboxEvent):
+    """Fence delivery-result writes on both token identity and live DB lease authority."""
+
+    return and_(
+        OutboxEvent.id == event.id,
+        OutboxEvent.claim_token == event.claim_token,
+        OutboxEvent.claim_expires_at > func.clock_timestamp(),
+    )
+
+
 class OutboxDispatcher:
     """
     Polls the outbox_events table and publishes PENDING events to Kafka.
@@ -519,8 +529,7 @@ class OutboxDispatcher:
                 continue
             result = db.execute(
                 update(OutboxEvent)
-                .where(OutboxEvent.id == event.id)
-                .where(OutboxEvent.claim_token == event.claim_token)
+                .where(_owned_delivery_claim(event))
                 .values(
                     status="PROCESSED",
                     processed_at=processed_at,
@@ -586,8 +595,7 @@ class OutboxDispatcher:
             )
             result = db.execute(
                 update(OutboxEvent)
-                .where(OutboxEvent.id == event.id)
-                .where(OutboxEvent.claim_token == event.claim_token)
+                .where(_owned_delivery_claim(event))
                 .values(
                     # Use COALESCE to treat NULL as 0 before incrementing.
                     retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
@@ -651,8 +659,7 @@ class OutboxDispatcher:
             )
             result = db.execute(
                 update(OutboxEvent)
-                .where(OutboxEvent.id == event.id)
-                .where(OutboxEvent.claim_token == event.claim_token)
+                .where(_owned_delivery_claim(event))
                 .values(
                     status=TERMINAL_FAILURE_STATUS,
                     retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
