@@ -19,7 +19,7 @@ The health of this service is crucial for both data accuracy and the proper func
 
 All logs are structured JSON and are tagged with the `correlation_id`. The most important log message from this service is:
 
-* **`"Back-dated transaction detected. Advancing position recovery epoch."`**: This confirms that the service identified an out-of-order transaction and initiated an epoch transition. Inspect structured field `backdated_handling`: deployed compatibility consumers use `queue_replay`; the combined atomic path uses `rebuild_inline` and must not depend on the legacy replay topic.
+* **`"Back-dated transaction detected. Advancing position recovery epoch."`**: This confirms that the service identified an out-of-order transaction and initiated an epoch transition. Inspect structured field `backdated_handling`. The unified runtime emits exactly one value, **`inline_rebuild`** (`PrometheusPositionHistoryObserver.backdated_recalculation_detected()`). Neither `queue_replay` nor `rebuild_inline` is emitted anywhere — filtering on either matches nothing and hides every rebuild. The same log line also carries `effective_completed_date`, `watermark_date`, `latest_position_history_date`, and `current_epoch`, which together show why the rebuild was triggered.
 
 ## 3. Common Failure Scenarios & Resolutions
 

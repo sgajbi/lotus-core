@@ -25,6 +25,11 @@ The service uses a robust method to determine if an incoming transaction is back
 
 1.  **Fetch State**: For an incoming transaction, the service fetches two key dates for the `(portfolio_id, security_id)` key:
     * The `watermark_date` from the `position_state` table.
+    * The date of the latest `position_history` row.
     * The date of the most recent `daily_position_snapshot` for the current epoch.
-2.  **Determine Effective Date**: It calculates the `effective_completed_date` by taking the **later** of these two dates. This ensures that even if the watermark hasn't been advanced yet, the system is aware of the most recent work that has been completed.
+2.  **Determine Effective Date**: `plan_backdated_recalculation()` calculates the
+    `effective_completed_date` as the **maximum of all three**, treating a missing history or
+    snapshot date as the epoch start. Position history is easy to overlook: when it is ahead of both
+    the watermark and the snapshots, the runtime still advances the epoch and rebuilds. Omitting it
+    predicts no rebuild where one happens, which matters for tests as much as for operations.
 3.  **Compare**: The transaction is considered back-dated if its `transaction_date` is **earlier than** the `effective_completed_date`. Transactions occurring on the same day are not considered back-dated.
