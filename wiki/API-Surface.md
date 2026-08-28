@@ -34,7 +34,8 @@ source currencies and the same two-leg as-of FX path used by performance: positi
 portfolio base, then portfolio base to requested reporting currency. Same-currency legs use the
 identity rate; every required source-owned rate must exist on the requested valuation date, and
 stale rates are not carried forward. Currencies from zero-ending positions are included when
-same-day valuation or cash-flow evidence exists, covering liquidation-day restatements. A date
+same-day valuation evidence matches the latest position quantity in the active epoch, covering
+liquidation-day restatements. A date
 before portfolio `open_date` is `UNAVAILABLE`.
 `observed_selector_currency` is informational only;
 `GET /lookups/currencies` remains selector-only. The contract does not certify downstream
