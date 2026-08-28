@@ -394,6 +394,57 @@ async def test_worker_does_not_start_operation_until_authority_read_completes(
     assert not operation_started.is_set()
 
 
+async def test_worker_keeps_absolute_lease_deadline_when_renewal_starts_late(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 0.5
+    worker._lease_renewal_io_timeout_seconds = 0.1
+    jobs = mock_dependencies["repro_job_repo"]
+    deadline = asyncio.get_running_loop().time() + 0.02
+    await asyncio.sleep(0.03)
+    stop_event = asyncio.Event()
+
+    job = ReprocessingJob(
+        id=110,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    with pytest.raises(ReprocessingJobOwnershipLostError, match="authority was lost"):
+        await worker._renew_lease_while_processing(
+            job=job,
+            job_type="RESET_WATERMARKS",
+            stop_event=stop_event,
+            terminal_transition_started=asyncio.Event(),
+            initial_lease_deadline=deadline,
+        )
+
+    jobs.get_lease_remaining_seconds.assert_not_awaited()
+    jobs.renew_lease.assert_not_awaited()
+
+
+async def test_worker_does_not_terminally_fail_job_when_authority_read_fails(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    jobs = mock_dependencies["repro_job_repo"]
+    jobs.get_lease_remaining_seconds.side_effect = ConnectionError("database unavailable")
+    job = ReprocessingJob(
+        id=111,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._process_reset_watermark_job(job=job)
+
+    jobs.update_job_status.assert_not_awaited()
+
+
 async def test_worker_retries_lease_renewal_error_without_failing_job(mock_dependencies):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.001
