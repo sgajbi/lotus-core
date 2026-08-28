@@ -266,7 +266,7 @@ class OutboxDispatcher:
 
     def _claim_pending_events(self) -> list[_ClaimedOutboxEvent]:
         claim_token = uuid4().hex
-        now = datetime.now(timezone.utc)
+        retry_now = datetime.now(timezone.utc)
 
         with self._session_factory() as db:
             with db.begin():
@@ -294,14 +294,14 @@ class OutboxDispatcher:
                     .filter(
                         or_(
                             candidate.next_attempt_at.is_(None),
-                            candidate.next_attempt_at <= now,
+                            candidate.next_attempt_at <= retry_now,
                         )
                     )
                     .filter(
                         or_(
                             candidate.claim_token.is_(None),
                             candidate.claim_expires_at.is_(None),
-                            candidate.claim_expires_at <= now,
+                            candidate.claim_expires_at <= func.clock_timestamp(),
                         )
                     )
                     .filter(~earlier_stream_event_exists)
@@ -318,15 +318,34 @@ class OutboxDispatcher:
                 if not events_to_claim:
                     return []
 
-                # Start the delivery lease only after head selection. Query latency must not
-                # consume the safety margin reserved for commit and producer publication.
-                claim_expires_at = datetime.now(timezone.utc) + timedelta(
-                    seconds=self._claim_lease_seconds
+                # Mint the delivery lease in PostgreSQL time only after head selection. Query
+                # latency must not consume the safety margin reserved for commit and producer
+                # publication, and a dispatcher with a skewed host clock must not steal a live
+                # claim. RETURNING gives the caller the exact durable deadline it must fence.
+                claimed_rows = (
+                    db.execute(
+                        update(OutboxEvent)
+                        .where(OutboxEvent.id.in_([event.id for event in events_to_claim]))
+                        .values(
+                            claim_token=claim_token,
+                            claim_expires_at=func.clock_timestamp()
+                            + func.make_interval(0, 0, 0, 0, 0, 0, self._claim_lease_seconds),
+                        )
+                        .returning(OutboxEvent)
+                        .execution_options(
+                            synchronize_session=False,
+                            populate_existing=True,
+                        )
+                    )
+                    .scalars()
+                    .all()
                 )
+                claimed_by_id = {int(event.id): event for event in claimed_rows}
                 claimed_events: list[_ClaimedOutboxEvent] = []
-                for event in events_to_claim:
-                    event.claim_token = claim_token
-                    event.claim_expires_at = claim_expires_at
+                for selected_event in events_to_claim:
+                    event = claimed_by_id.get(int(selected_event.id))
+                    if event is None or event.claim_expires_at is None:
+                        raise RuntimeError("Outbox claim did not return durable lease identity")
                     claimed_events.append(
                         _ClaimedOutboxEvent(
                             id=event.id,
@@ -342,7 +361,7 @@ class OutboxDispatcher:
                             retry_count=event.retry_count,
                             created_at=_as_utc(event.created_at),
                             claim_token=claim_token,
-                            claim_expires_at=claim_expires_at,
+                            claim_expires_at=_as_utc(event.claim_expires_at),
                         )
                     )
                 return claimed_events
