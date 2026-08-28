@@ -322,9 +322,13 @@ def _bulk_summary_coverage(
 def _has_usable_cash_classification(row: Any) -> bool:
     """Require product and asset classification to agree before cash is reported."""
     instrument = row.instrument
-    if normalize_control_code(getattr(instrument, "product_type", None)) != "CASH":
+    product_type = normalize_control_code(getattr(instrument, "product_type", None))
+    asset_class = normalize_control_code(getattr(instrument, "asset_class", None))
+    if not product_type and not asset_class:
+        return False
+    if product_type != "CASH":
         return True
-    return normalize_control_code(getattr(instrument, "asset_class", None)) == "CASH"
+    return asset_class == "CASH"
 
 
 def _portfolio_summary_metadata(
