@@ -22,7 +22,20 @@ The service's function is to consume, process, and produce Kafka events.
 
 ### 2.1. Consumers
 
-The service listens to two topics:
+`app/runtime/consumer_composition.py` builds **five** consumers. All five route failures to the
+shared DLQ topic `dlq.persistence_service`.
+
+| Topic | Consumer group | Role |
+| --- | --- | --- |
+| `transactions.persisted` | `portfolio_transaction_processing_group` | Primary work queue — cost, cashflow, and position effects for newly persisted transactions. |
+| `transactions.reprocessing.requested` | `portfolio_transaction_replay_request_group` | Replay of an affected key after a back-dated correction. |
+| `fixed_income.book_cost.authority.received` | `fixed_income_book_cost_authority_group` | Governed fixed-income book-cost authority. |
+| `fixed_income.book_cost.disposal_replay.requested` | `fixed_income_book_cost_correction_replay_group` | Fixed-income disposal correction replay. |
+| `corporate_action.manifest.received` | `corporate_action_manifest_group` | Corporate-action manifest intake. |
+
+Deployment and integration work must account for all five subscriptions. The two sections below
+detail the transaction-cost flow; the fixed-income and corporate-action families are documented with
+their own features.
 
 #### Topic: `transactions.persisted`
 

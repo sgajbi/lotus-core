@@ -18,12 +18,15 @@ The service's main function is to consume, process, and produce Kafka events.
 
 ### 2.1. Consumers
 
-The service listens to two topics:
+`app/consumer_manager.py` builds a single consumer, on `valuation.job.requested`, with
+`dlq.valuation_service` as its DLQ.
 
 #### Topic: `valuation.job.requested`
 
 * **Purpose:** This is the primary work queue for the service. Each message represents a job to value a single position on a single day for a specific epoch.
-* **Producer:** `ValuationScheduler` (within this same service).
+* **Producer:** `valuation_orchestrator_service` — `app/core/valuation_scheduler.py` schedules the
+  work and `app/core/valuation_job_publisher.py` publishes the jobs. Scheduling is **not** owned by
+  this service.
 * **Key:** `portfolio_id`
 * **Payload (`PortfolioValuationRequiredEvent`):**
     ```json
@@ -36,9 +39,12 @@ The service listens to two topics:
     }
     ```
 
-#### Topic: `market_prices.persisted`
+#### Topic: `market_prices.persisted` — not consumed by this service
 
-* **Purpose:** This topic signals that a new market price has been saved to the database. The service consumes these events to detect if the price is for a past date, which would trigger a reprocessing flow.
+* **Purpose:** Signals that a new market price has been saved. A back-dated price triggers a
+  reprocessing flow, but this service does not subscribe to the topic.
+  `valuation_orchestrator_service` consumes it and reacts by scheduling valuation jobs, which reach
+  this service as `valuation.job.requested`. `persistence_service` also consumes it.
 * **Producer:** `persistence_service`
 * **Key:** `security_id`
 * **Payload (`MarketPricePersistedEvent`):**
@@ -57,8 +63,8 @@ The service produces events to one topic after successfully completing a valuati
 
 #### Topic: `valuation.snapshot.persisted`
 
-* **Purpose:** This event signals that a `daily_position_snapshot` has been successfully created or updated with valuation data. This event is a critical trigger for the downstream `timeseries-generator-service`.
-* **Consumer:** `timeseries-generator-service`
+* **Purpose:** Signals that a `daily_position_snapshot` has been created or updated with valuation data. It is the trigger for downstream derived-state generation.
+* **Consumer:** `portfolio_derived_state_service` (recorded in the event-supportability contract and subscribed in its `app/runtime.py`).
 * **Key:** `portfolio_id`
 * **Payload (`DailyPositionSnapshotPersistedEvent`):**
     ```json

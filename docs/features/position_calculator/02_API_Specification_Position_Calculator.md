@@ -18,35 +18,24 @@ for health, metrics, and build identity.
 
 ## 2. Kafka Interface
 
-The service consumes from and produces to the same topic, forming a loop during reprocessing events.
+Position processing has no Kafka topic of its own. It is one of three effects — cost, cashflow, and
+position — applied inside a single atomic use case in the unified runtime, so there is no separate
+position work queue to subscribe to or to measure lag on.
 
 ### 2.1. Consumer
 
-The service listens to a single topic:
+The unified deployment builds five consumers, listed in full in
+[the transaction-processing Kafka contract](../cost_calculator/02_API_Specification_Cost_Calculator.md#21-consumers).
+Two of them drive position effects:
 
-#### Topic: `transactions.cost.processed`
+| Topic | Consumer group | Drives |
+| --- | --- | --- |
+| `transactions.persisted` | `portfolio_transaction_processing_group` | Position effects for newly persisted transactions. |
+| `transactions.reprocessing.requested` | `portfolio_transaction_replay_request_group` | Position replay for an affected key after a back-dated correction. |
 
-* **Purpose:** This is the work queue. Each message represents a transaction whose cost effects have been applied and which is ready to be incorporated into the `position_history`.
-* **Producer:** `portfolio_transaction_processing_service` — the cost module for new events, and the same runtime for replayed events.
-* **Key:** `portfolio_id`
-* **Payload (`TransactionEvent`):**
-    ```json
-    {
-      "transaction_id": "TXN_001",
-      "portfolio_id": "PORT_001",
-      "security_id": "SEC_AAPL",
-      "transaction_date": "2025-08-15T10:00:00Z",
-      "transaction_type": "BUY",
-      "quantity": 10.0,
-      "price": 150.0,
-      "gross_transaction_amount": 1500.0,
-      "net_cost": 1505.0,
-      "trade_currency": "USD",
-      "currency": "USD",
-      "trade_fee": 5.0,
-      "epoch": 0
-    }
-    ```
+The service does **not** consume `transactions.cost.processed`. That topic is an outbound
+compatibility event, described below; tracing position lag through it leads to a self-loop that does
+not exist.
 
 ### 2.2. Producer
 
