@@ -146,6 +146,8 @@ async def test_latest_fx_dates_batches_sources_and_ignores_null_rates() -> None:
     sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) IN ('EUR', 'GBP')" in sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in sql
+    assert "fx_rates.rate_date = '2026-08-28'" in sql
+    assert "fx_rates.rate_date <=" not in sql
     assert "GROUP BY upper(trim(fx_rates.from_currency))" in sql
 
 

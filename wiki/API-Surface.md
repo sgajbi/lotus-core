@@ -32,8 +32,9 @@ Operational read contracts for:
 restatement. It returns explicit `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` status based on
 source currencies and the same two-leg as-of FX path used by performance: position currency to
 portfolio base, then portfolio base to requested reporting currency. Same-currency legs use the
-identity rate; every required source-owned rate must exist on or before the requested date. A date
-before portfolio `open_date` is `UNAVAILABLE`. `observed_selector_currency` is informational only;
+identity rate; every required source-owned rate must exist on the requested valuation date, and
+stale rates are not carried forward. A date before portfolio `open_date` is `UNAVAILABLE`.
+`observed_selector_currency` is informational only;
 `GET /lookups/currencies` remains selector-only. The contract does not certify downstream
 `lotus-performance` execution or client publication.
 
