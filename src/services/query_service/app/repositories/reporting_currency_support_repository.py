@@ -118,6 +118,37 @@ class ReportingCurrencySupportRepository:
         )
         return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
+    async def get_latest_fx_rate_dates(
+        self,
+        *,
+        from_currencies: tuple[str, ...],
+        to_currency: str,
+        as_of_date: date,
+    ) -> dict[str, date]:
+        """Return all latest as-of FX dates in one bounded query."""
+        normalized_sources = tuple(normalize_currency_code(value) for value in from_currencies)
+        normalized_target = normalize_currency_code(to_currency)
+        if not normalized_sources:
+            return {}
+        stmt = (
+            select(
+                currency_code_sql_expr(FxRate.from_currency).label("from_currency"),
+                func.max(FxRate.rate_date).label("rate_date"),
+            )
+            .where(
+                currency_code_sql_expr(FxRate.from_currency).in_(normalized_sources),
+                currency_code_sql_expr(FxRate.to_currency) == normalized_target,
+                FxRate.rate_date <= as_of_date,
+            )
+            .group_by(currency_code_sql_expr(FxRate.from_currency))
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return {
+            str(from_currency): cast(date, rate_date)
+            for from_currency, rate_date in rows
+            if rate_date is not None
+        }
+
     async def is_selector_currency_observed(self, *, currency: str) -> bool:
         code = normalize_currency_code(currency)
         portfolio_match = (
