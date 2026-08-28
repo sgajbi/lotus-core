@@ -1003,7 +1003,7 @@ class OperationsRepository:
             normalized_security_id=normalized_security_id,
             job_id=job_id,
             correlation_id=correlation_id,
-            as_of=snapshot_now,
+            as_of=None,
         ).cte("scoped_valuation_jobs")
         if security_id is not None and not normalized_security_id:
             job_scope = select(*job_scope.c).where(false()).cte("empty_valuation_jobs")
@@ -1068,7 +1068,7 @@ class OperationsRepository:
             business_date=business_date,
             job_id=job_id,
             correlation_id=correlation_id,
-            as_of=snapshot_now,
+            as_of=None,
         ).cte("scoped_aggregation_jobs")
         support_priority = support_job_priority(
             job_scope.c.status,
