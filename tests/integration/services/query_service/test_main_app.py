@@ -392,6 +392,7 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/portfolios/{portfolio_id}/cash-balances" in paths
     assert "/portfolios/{portfolio_id}/liquidity-ladder" in paths
     assert "/reporting/portfolio-summary/query" in paths
+    assert "/reporting/portfolio-summary/bulk-query" in paths
     assert "/portfolios/{portfolio_id}/cash-accounts" in paths
 
 
@@ -405,6 +406,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     aum_query = paths["/reporting/assets-under-management/query"]["post"]
     allocation_query = paths["/reporting/asset-allocation/query"]["post"]
     portfolio_summary_query = paths["/reporting/portfolio-summary/query"]["post"]
+    bulk_portfolio_summary_query = paths["/reporting/portfolio-summary/bulk-query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
     strategic_cash_balances_query = paths["/portfolios/{portfolio_id}/cash-balances"]["get"]
     liquidity_ladder_query = paths["/portfolios/{portfolio_id}/liquidity-ladder"]["get"]
@@ -441,6 +443,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         "correct lotus-core summary seam for report-ready wealth totals"
         in portfolio_summary_query["description"]
     )
+    assert "bounded, source-owned reporting summary" in bulk_portfolio_summary_query["description"]
+    assert "portfolio-summary-bulk-v1" in bulk_portfolio_summary_query["description"]
     assert "canonical cash-account master records" in cash_accounts_query["description"]
     assert "Do not use this route for per-account balances" in cash_accounts_query["description"]
 

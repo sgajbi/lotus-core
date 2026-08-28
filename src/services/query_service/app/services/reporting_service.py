@@ -28,6 +28,10 @@ from ..dtos.reporting_dto import (
     AssetsUnderManagementQueryRequest,
     AssetsUnderManagementResponse,
     AssetsUnderManagementTotals,
+    BulkPortfolioSummaryAggregate,
+    BulkPortfolioSummaryItem,
+    BulkPortfolioSummaryQueryRequest,
+    BulkPortfolioSummaryResponse,
     PortfolioSummaryQueryRequest,
     PortfolioSummaryResponse,
     PortfolioSummarySnapshotMetadata,
@@ -285,6 +289,63 @@ def _portfolio_summary_totals(
         invested_market_value_portfolio_currency=total_portfolio - cash_portfolio,
         invested_market_value_reporting_currency=total_reporting - cash_reporting,
     )
+
+
+def _sum_portfolio_summary_totals(
+    current: PortfolioSummaryTotals | None,
+    additional: PortfolioSummaryTotals,
+) -> PortfolioSummaryTotals:
+    if current is None:
+        return additional
+    return PortfolioSummaryTotals(
+        total_market_value_portfolio_currency=(
+            current.total_market_value_portfolio_currency
+            + additional.total_market_value_portfolio_currency
+        ),
+        total_market_value_reporting_currency=(
+            current.total_market_value_reporting_currency
+            + additional.total_market_value_reporting_currency
+        ),
+        cash_balance_portfolio_currency=(
+            current.cash_balance_portfolio_currency + additional.cash_balance_portfolio_currency
+        ),
+        cash_balance_reporting_currency=(
+            current.cash_balance_reporting_currency + additional.cash_balance_reporting_currency
+        ),
+        invested_market_value_portfolio_currency=(
+            current.invested_market_value_portfolio_currency
+            + additional.invested_market_value_portfolio_currency
+        ),
+        invested_market_value_reporting_currency=(
+            current.invested_market_value_reporting_currency
+            + additional.invested_market_value_reporting_currency
+        ),
+    )
+
+
+def _bulk_summary_coverage(
+    *,
+    rows: list[Any],
+    presence: SnapshotPresence | None,
+    resolved_as_of_date: date,
+) -> tuple[str, str]:
+    if presence is None:
+        return "NO_SNAPSHOT", "no_source_snapshot"
+    if not rows:
+        if presence.expected_open_count > 0:
+            return "PARTIAL", "open_position_coverage_gap"
+        return "LOADED_EMPTY", "source_snapshot_has_no_open_positions"
+    if presence.expected_open_count > len(rows):
+        return "PARTIAL", "open_position_coverage_gap"
+    if any(row.snapshot.market_value is None for row in rows):
+        return "PARTIAL", "market_value_missing"
+    if any(row.instrument is None for row in rows):
+        return "PARTIAL", "instrument_classification_missing"
+    if any(row.snapshot.date < resolved_as_of_date for row in rows):
+        return "CARRY_FORWARD", "latest_source_snapshot_precedes_as_of_date"
+    if all(decimal_or_zero(row.snapshot.market_value) == ZERO for row in rows):
+        return "MEASURED_ZERO", "source_measured_zero"
+    return "COMPLETE", "all_source_positions_covered"
 
 
 def _portfolio_summary_metadata(
@@ -569,6 +630,176 @@ class ReportingService:
                 row_count=len(rows),
                 cash_account_count=len(cash_account_records),
             ),
+        )
+
+    async def get_bulk_portfolio_summary(
+        self, request: BulkPortfolioSummaryQueryRequest
+    ) -> BulkPortfolioSummaryResponse:
+        """Resolve a bounded cohort from one source snapshot read.
+
+        The caller supplies already-authorized identifiers. Missing members and source/FX
+        failures remain explicit result items so a partial cohort can never be mistaken for a
+        complete aggregate.
+        """
+        resolved_as_of_date = await self._resolve_portfolio_summary_date(request.as_of_date)
+        portfolios = await self.repo.list_portfolios(portfolio_ids=request.portfolio_ids)
+        portfolios_by_id = {str(portfolio.portfolio_id): portfolio for portfolio in portfolios}
+        found_ids = [
+            portfolio_id
+            for portfolio_id in request.portfolio_ids
+            if portfolio_id in portfolios_by_id
+        ]
+
+        reporting_currency: str | None = None
+        if request.reporting_currency:
+            reporting_currency = normalize_currency_code(request.reporting_currency)
+        elif len(portfolios) == 1:
+            reporting_currency = normalize_currency_code(str(portfolios[0].base_currency))
+
+        rows_by_portfolio: dict[str, list[Any]] = defaultdict(list)
+        snapshot_presence: dict[str, SnapshotPresence] = {}
+        if found_ids:
+            rows = await self.repo.list_latest_snapshot_rows(
+                portfolio_ids=found_ids,
+                as_of_date=resolved_as_of_date,
+                include_presence=True,
+            )
+            raw_presence = await self.repo.list_snapshot_presence(
+                portfolio_ids=found_ids,
+                as_of_date=resolved_as_of_date,
+            )
+            snapshot_presence = raw_presence if isinstance(raw_presence, dict) else {}
+            for row in rows:
+                rows_by_portfolio[str(row.portfolio.portfolio_id)].append(row)
+
+        items: list[BulkPortfolioSummaryItem] = []
+        aggregate_totals: PortfolioSummaryTotals | None = None
+        aggregate_covered = True
+        covered_count = 0
+        for portfolio_id in request.portfolio_ids:
+            portfolio = portfolios_by_id.get(portfolio_id)
+            if portfolio is None:
+                aggregate_covered = False
+                items.append(
+                    BulkPortfolioSummaryItem(
+                        portfolio_id=portfolio_id,
+                        resolved_as_of_date=resolved_as_of_date,
+                        coverage_state="INVALID_PORTFOLIO",
+                        coverage_reason="portfolio_not_found",
+                        snapshot_row_count=0,
+                        expected_open_position_count=0,
+                    )
+                )
+                continue
+
+            portfolio_rows = rows_by_portfolio.get(portfolio_id, [])
+            presence = snapshot_presence.get(portfolio_id)
+            member, totals = await self._build_bulk_summary_member(
+                portfolio=portfolio,
+                portfolio_rows=portfolio_rows,
+                presence=presence,
+                resolved_as_of_date=resolved_as_of_date,
+                reporting_currency=reporting_currency,
+            )
+            items.append(member)
+            if totals is None:
+                aggregate_covered = False
+            else:
+                covered_count += 1
+                aggregate_totals = _sum_portfolio_summary_totals(aggregate_totals, totals)
+
+        if aggregate_covered and covered_count == len(request.portfolio_ids):
+            aggregate = BulkPortfolioSummaryAggregate(
+                portfolio_count=len(request.portfolio_ids),
+                coverage_state="COMPLETE",
+                coverage_reason="all_members_covered",
+                totals=aggregate_totals,
+            )
+        else:
+            aggregate = BulkPortfolioSummaryAggregate(
+                portfolio_count=len(request.portfolio_ids),
+                coverage_state="PARTIAL" if covered_count else "UNAVAILABLE",
+                coverage_reason=(
+                    "member_coverage_incomplete"
+                    if covered_count
+                    else "no_member_has_trustworthy_totals"
+                ),
+                totals=None,
+            )
+
+        return BulkPortfolioSummaryResponse(
+            requested_portfolio_ids=request.portfolio_ids,
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+            portfolios=items,
+            aggregate=aggregate,
+        )
+
+    async def _build_bulk_summary_member(
+        self,
+        *,
+        portfolio: Any,
+        portfolio_rows: list[Any],
+        presence: SnapshotPresence | None,
+        resolved_as_of_date: date,
+        reporting_currency: str | None,
+    ) -> tuple[BulkPortfolioSummaryItem, PortfolioSummaryTotals | None]:
+        portfolio_id = str(portfolio.portfolio_id)
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        effective_reporting_currency = reporting_currency or portfolio_currency
+        snapshot_date = (
+            presence.snapshot_date
+            if presence
+            else max((row.snapshot.date for row in portfolio_rows), default=None)
+        )
+        expected_open_count = presence.expected_open_count if presence else 0
+        coverage_state, coverage_reason = _bulk_summary_coverage(
+            rows=portfolio_rows,
+            presence=presence,
+            resolved_as_of_date=resolved_as_of_date,
+        )
+        totals: PortfolioSummaryTotals | None = None
+        if coverage_state in {"COMPLETE", "MEASURED_ZERO", "CARRY_FORWARD"}:
+            try:
+                row_reporting_values = await self._snapshot_reporting_values(
+                    rows=portfolio_rows,
+                    as_of_date=resolved_as_of_date,
+                    reporting_currency=effective_reporting_currency,
+                )
+            except ValueError:
+                coverage_state = "FX_UNAVAILABLE"
+                coverage_reason = "reporting_fx_unavailable"
+            else:
+                total_portfolio = sum((native for _, native, _ in row_reporting_values), ZERO)
+                total_reporting = sum((converted for _, _, converted in row_reporting_values), ZERO)
+                cash_values = [
+                    (native, converted)
+                    for row, native, converted in row_reporting_values
+                    if self._cash_balance_resolver.is_cash_row(row)
+                ]
+                totals = _portfolio_summary_totals(
+                    total_portfolio=total_portfolio,
+                    total_reporting=total_reporting,
+                    cash_portfolio=sum((native for native, _ in cash_values), ZERO),
+                    cash_reporting=sum((converted for _, converted in cash_values), ZERO),
+                )
+
+        return (
+            BulkPortfolioSummaryItem(
+                portfolio_id=portfolio_id,
+                booking_center_code=portfolio.booking_center_code,
+                client_id=portfolio.client_id,
+                portfolio_currency=portfolio_currency,
+                reporting_currency=effective_reporting_currency,
+                resolved_as_of_date=resolved_as_of_date,
+                coverage_state=coverage_state,
+                coverage_reason=coverage_reason,
+                snapshot_date=snapshot_date,
+                snapshot_row_count=len(portfolio_rows),
+                expected_open_position_count=expected_open_count,
+                totals=totals,
+            ),
+            totals,
         )
 
     async def _get_required_portfolio(self, portfolio_id: str):
