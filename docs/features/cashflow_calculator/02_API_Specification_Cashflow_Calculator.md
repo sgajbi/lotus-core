@@ -35,8 +35,8 @@ same atomic use case on a later hop:
 | `portfolio_transaction_processing_group` | Directly, for newly persisted transactions. |
 | `portfolio_transaction_replay_request_group` | Directly, on replay of an affected key. |
 | `corporate_action_manifest_group` | Indirectly — governed corporate actions. |
-| `fixed_income_book_cost_authority_group` | Indirectly — fixed-income book-cost corrections. |
-| `fixed_income_book_cost_correction_replay_group` | Indirectly — the second hop of that correction. |
+| `fixed_income_book_cost_authority_group` | **Not** for original creation; revises cashflows on already-booked transactions. |
+| `fixed_income_book_cost_correction_replay_group` | **Not** for original creation; the second hop of that revision. |
 
 For a governed corporate-action child, `TransactionProcessingConsumer` records the child *without
 financial mutation*; the manifest makes its release eligible and
@@ -45,8 +45,16 @@ the cashflow effect. The fixed-income path is two hops: the authority consumer s
 `fixed_income.book_cost.disposal_replay.requested`, and the correction-replay consumer republishes
 the canonical transaction through the same atomic use case.
 
-So `corporate_action_manifest_group` — or either fixed-income group — can stall while
-`portfolio_transaction_processing_group` stays current and the expected cashflows are never created.
+**A missing cashflow is never explained by the fixed-income groups.**
+`_stage_correction_replay()` stages work only for a newly committed profile decision, and only when
+`find_earliest_affected_disposal()` finds an already-persisted disposal — whose cashflow was
+committed atomically during the original transaction processing. The correction consumer replays
+that booked transaction to apply revised book-cost authority. A stall there leaves cost basis and
+revised cashflow values stale; it cannot explain a cashflow that was never created.
+
+For a **missing** cashflow, the relevant groups are `portfolio_transaction_processing_group`,
+`portfolio_transaction_replay_request_group`, and — for governed corporate actions —
+`corporate_action_manifest_group`, which can stall while the primary group stays current.
 
 The subscription detailed below is the direct one:
 
