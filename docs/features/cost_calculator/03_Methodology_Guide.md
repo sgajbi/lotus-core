@@ -4,7 +4,13 @@ This guide explains the methodologies used by the cost module inside the unified
 
 ## 1. Core Principle: Full History Recalculation
 
-To guarantee correctness in the face of back-dated or corrected transactions, the service employs a **full history recalculation** strategy. For every new transaction it processes for a given security, it performs the following steps:
+Cost processing has **two modes**, chosen per transaction by `CostBasisCalculationCoordinator.calculate()` in `app/application/cost_basis_processing/calculation.py`.
+
+**Ordered append** is the normal path for in-order activity. It restores only the required open-lot or average-cost checkpoint state and processes the incoming transaction against it, rather than replaying the security's history. It is selected when a processing checkpoint exists, the type's `lot_behavior` is in `INCREMENTAL_SAFE_LOT_BEHAVIORS`, the combination is not AVCO with a `consume_lot` or `quantity_restatement` behaviour (which needs full source history), and `checkpoint.permits_append(...)` accepts the incoming transaction for the configured cost-basis method.
+
+**Full rebuild** is the fallback, used for back-dated or corrected transactions and whenever any condition above fails. Ordered append can also fall back to it mid-flight. Capacity planning should treat rebuild as the exceptional path, not the per-transaction cost.
+
+The rest of this section describes full rebuild. For every transaction processed that way, the service performs the following steps:
 
 1.  **Fetch History**: It queries the database for **all** existing transactions for that specific `(portfolio_id, security_id)` key.
 2.  **Create Timeline**: It combines the new transaction with the fetched historical ones.
@@ -13,7 +19,7 @@ To guarantee correctness in the face of back-dated or corrected transactions, th
 5.  **Persist Affected Suffix**: It updates the incoming transaction and every later transaction whose calculated cost or realized P&L can be affected, in deterministic timeline order and one database transaction.
 6.  **Publish Once**: It publishes only the incoming processed transaction event. The combined position path rebuilds from the corrected canonical rows, so publishing the corrected suffix would apply later positions twice.
 
-Any engine error in the recalculated timeline fails the operation before suffix persistence. This method, while computationally intensive, is deterministic and robust, ensuring that later canonical cost rows do not remain stale when data arrives out of order.
+Any engine error in the recalculated timeline fails the operation before suffix persistence. Full rebuild is computationally intensive but deterministic and robust, ensuring later canonical cost rows do not remain stale when data arrives out of order. Ordered append reaches the same result for in-order activity without that cost, which is why the checkpoint conditions above are conservative.
 
 ## 2. Cost Basis Strategy: First-In, First-Out (FIFO)
 
