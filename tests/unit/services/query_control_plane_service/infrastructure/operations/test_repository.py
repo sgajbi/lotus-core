@@ -1130,7 +1130,8 @@ async def test_get_valuation_jobs_query(
     assert "upper(trim(portfolio_valuation_jobs.status))" not in compiled
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert (
-        "portfolio_valuation_jobs.valuation_lease_expires_at <= statement_timestamp()" in compiled
+        "portfolio_valuation_jobs.valuation_lease_expires_at <= '2025-08-31 12:00:00+00:00'"
+        in compiled
     )
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
@@ -1195,7 +1196,7 @@ async def test_get_aggregation_jobs_query(
     assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
     assert "upper(trim(portfolio_aggregation_jobs.status))" not in compiled
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_aggregation_jobs.lease_expires_at <= statement_timestamp()" in compiled
+    assert "portfolio_aggregation_jobs.lease_expires_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 
@@ -1250,6 +1251,10 @@ async def test_get_valuation_jobs_snapshot_preserves_explicit_as_of(
         mock_db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert (
+        "valuation_lease_expires_at <= '2025-08-30 11:00:00+00:00'"
+        in compiled
+    )
 
 
 async def test_get_aggregation_jobs_snapshot_preserves_explicit_as_of(
@@ -1269,6 +1274,7 @@ async def test_get_aggregation_jobs_snapshot_preserves_explicit_as_of(
         mock_db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert "lease_expires_at <= '2025-08-30 11:00:00+00:00'" in compiled
 
 
 async def test_get_aggregation_jobs_snapshot_preserves_empty_page_total(
