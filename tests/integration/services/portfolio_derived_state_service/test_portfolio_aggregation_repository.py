@@ -290,7 +290,6 @@ async def test_recover_expired_job_leases_requeues_retryable_claim(
     await async_db_session.commit()
 
     recovery = await repo.recover_expired_job_leases(
-        now=datetime.now(UTC),
         max_attempts=3,
     )
     await async_db_session.commit()
@@ -323,7 +322,6 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     repo = PortfolioAggregationRepository(async_db_session)
 
     recovery = await repo.recover_expired_job_leases(
-        now=datetime.now(UTC),
         max_attempts=1,
     )
     await async_db_session.commit()
@@ -353,14 +351,10 @@ async def test_expired_aggregation_backlog_drains_in_bounded_cohorts(
     repository = PortfolioAggregationRepository(async_db_session)
 
     first = await repository.recover_expired_job_leases(
-        now=datetime.now(UTC),
         max_attempts=3,
     )
     await async_db_session.commit()
-    second = await repository.recover_expired_job_leases(
-        now=datetime.now(UTC),
-        max_attempts=3,
-    )
+    second = await repository.recover_expired_job_leases(max_attempts=3)
     await async_db_session.commit()
 
     assert first == ExpiredAggregationJobRecovery(requeued_count=1_000, failed_count=0)
@@ -478,7 +472,6 @@ async def test_recovery_skips_row_locked_by_terminal_writer_transaction(
         )
         recovery = await asyncio.wait_for(
             PortfolioAggregationRepository(async_db_session).recover_expired_job_leases(
-                now=datetime.now(UTC),
                 max_attempts=3,
             ),
             timeout=15,
@@ -1093,7 +1086,7 @@ async def test_expired_superseded_revision_requeues_after_prior_attempt_exhausti
     await async_db_session.commit()
 
     recovery = await PortfolioAggregationRepository(async_db_session).recover_expired_job_leases(
-        now=now, max_attempts=3
+        max_attempts=3
     )
     await async_db_session.commit()
     await async_db_session.refresh(job)
