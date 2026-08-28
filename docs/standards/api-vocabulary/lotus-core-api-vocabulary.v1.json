@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-14T05:50:20.006111+00:00",
+  "generatedAt": "2026-08-28T05:25:02.441631+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -142,6 +142,32 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.aggregate",
+      "canonicalTerm": "aggregate",
+      "preferredName": "aggregate",
+      "description": "Cohort aggregate with fail-closed coverage semantics.",
+      "example": {
+        "portfolio_count": 10,
+        "coverage_state": "COMPLETE",
+        "coverage_reason": "example_coverage_reason",
+        "totals": {
+          "total_market_value_portfolio_currency": 1000000.0,
+          "total_market_value_reporting_currency": 1000000.0,
+          "cash_balance_portfolio_currency": 120000.0,
+          "cash_balance_reporting_currency": 120000.0,
+          "invested_market_value_portfolio_currency": 880000.0,
+          "invested_market_value_reporting_currency": 880000.0
+        }
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "BulkPortfolioSummaryAggregate"
       ]
     },
     {
@@ -2275,6 +2301,20 @@
       ]
     },
     {
+      "semanticId": "lotus.contract_version",
+      "canonicalTerm": "contract_version",
+      "preferredName": "contract_version",
+      "description": "Versioned additive bulk summary contract.",
+      "example": "portfolio-summary-bulk-v1",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.contributor_count",
       "canonicalTerm": "contributor_count",
       "preferredName": "contributor_count",
@@ -2494,6 +2534,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.coverage_reason",
+      "canonicalTerm": "coverage_reason",
+      "preferredName": "coverage_reason",
+      "description": "Machine-readable explanation for the coverage state.",
+      "example": "example_coverage_reason",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -3244,6 +3298,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.expected_open_position_count",
+      "canonicalTerm": "expected_open_position_count",
+      "preferredName": "expected_open_position_count",
+      "description": "Expected open source positions used to detect partial coverage.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -6175,6 +6243,7 @@
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -7474,6 +7543,22 @@
       ]
     },
     {
+      "semanticId": "lotus.requested_portfolio_ids",
+      "canonicalTerm": "requested_portfolio_ids",
+      "preferredName": "requested_portfolio_ids",
+      "description": "Requested identifiers in caller-provided deterministic order.",
+      "example": [
+        "example_value"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.required_amount",
       "canonicalTerm": "required_amount",
       "preferredName": "required_amount",
@@ -8572,6 +8657,20 @@
       ],
       "observedTypes": [
         "PortfolioSummarySnapshotMetadata"
+      ]
+    },
+    {
+      "semanticId": "lotus.snapshot_row_count",
+      "canonicalTerm": "snapshot_row_count",
+      "preferredName": "snapshot_row_count",
+      "description": "Source snapshot row count observed for the member.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -9939,7 +10038,8 @@
         "AssetsUnderManagementTotals",
         "CashBalancesTotals",
         "PortfolioLiquidityLadderTotals",
-        "PortfolioSummaryTotals"
+        "PortfolioSummaryTotals",
+        "object"
       ]
     },
     {
@@ -23186,6 +23286,252 @@
             "type": "integer",
             "semanticId": "lotus.unvalued_position_count",
             "attributeRef": "lotus.unvalued_position_count"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "query_bulk_portfolio_summary_reporting_portfolio_summary_bulk_query_post",
+      "method": "POST",
+      "path": "/reporting/portfolio-summary/bulk-query",
+      "domain": "wealth_reporting",
+      "serviceGroup": "query",
+      "tags": [
+        "Wealth Reporting"
+      ],
+      "summary": "Query Bulk Portfolio Summary",
+      "description": "What: Return a bounded, source-owned reporting summary for an explicit portfolio cohort.\nHow: Resolves all requested portfolios and their snapshot rows in bounded batch reads, then computes deterministic per-portfolio total, invested, and cash facts in the requested reporting currency.\nWhen: Use this additive `portfolio-summary-bulk-v1` seam when Gateway has already resolved caller entitlement for a cohort. Core does not perform entitlement checks, and consumers must use each member's coverage state rather than inferring completeness from numeric zeros. The cohort aggregate is fail-closed and is null when any member has missing source, partial coverage, invalid identity, or unavailable FX evidence.",
+      "naming": {
+        "boundedContext": "wealth_reporting",
+        "canonicalTerms": [
+          "aggregate",
+          "as_of_date",
+          "booking_center_code",
+          "client_id",
+          "contract_version",
+          "coverage_reason",
+          "coverage_state",
+          "expected_open_position_count",
+          "portfolio_count",
+          "portfolio_currency",
+          "portfolio_id",
+          "portfolio_ids",
+          "portfolios",
+          "reporting_currency",
+          "requested_portfolio_ids",
+          "resolved_as_of_date",
+          "snapshot_date",
+          "snapshot_row_count",
+          "totals"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_ids",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.portfolio_ids",
+            "attributeRef": "lotus.portfolio_ids"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "BulkPortfolioSummaryResponse",
+        "fields": [
+          {
+            "name": "contract_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.contract_version",
+            "attributeRef": "lotus.contract_version"
+          },
+          {
+            "name": "requested_portfolio_ids",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.requested_portfolio_ids",
+            "attributeRef": "lotus.requested_portfolio_ids"
+          },
+          {
+            "name": "resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "portfolios",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.portfolios",
+            "attributeRef": "lotus.portfolios"
+          },
+          {
+            "name": "portfolios[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolios[].booking_center_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.booking_center_code",
+            "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "portfolios[].client_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.client_id",
+            "attributeRef": "lotus.client_id"
+          },
+          {
+            "name": "portfolios[].portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.portfolio_currency",
+            "attributeRef": "lotus.portfolio_currency"
+          },
+          {
+            "name": "portfolios[].reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "portfolios[].resolved_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.resolved_as_of_date",
+            "attributeRef": "lotus.resolved_as_of_date"
+          },
+          {
+            "name": "portfolios[].coverage_state",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_state",
+            "attributeRef": "lotus.coverage_state"
+          },
+          {
+            "name": "portfolios[].coverage_reason",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_reason",
+            "attributeRef": "lotus.coverage_reason"
+          },
+          {
+            "name": "portfolios[].snapshot_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.snapshot_date",
+            "attributeRef": "lotus.snapshot_date"
+          },
+          {
+            "name": "portfolios[].snapshot_row_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.snapshot_row_count",
+            "attributeRef": "lotus.snapshot_row_count"
+          },
+          {
+            "name": "portfolios[].expected_open_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.expected_open_position_count",
+            "attributeRef": "lotus.expected_open_position_count"
+          },
+          {
+            "name": "portfolios[].totals",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
+          },
+          {
+            "name": "aggregate",
+            "location": "body",
+            "required": true,
+            "type": "BulkPortfolioSummaryAggregate",
+            "semanticId": "lotus.aggregate",
+            "attributeRef": "lotus.aggregate"
+          },
+          {
+            "name": "aggregate.portfolio_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.portfolio_count",
+            "attributeRef": "lotus.portfolio_count"
+          },
+          {
+            "name": "aggregate.coverage_state",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_state",
+            "attributeRef": "lotus.coverage_state"
+          },
+          {
+            "name": "aggregate.coverage_reason",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_reason",
+            "attributeRef": "lotus.coverage_reason"
+          },
+          {
+            "name": "aggregate.totals",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.totals",
+            "attributeRef": "lotus.totals"
           }
         ]
       }

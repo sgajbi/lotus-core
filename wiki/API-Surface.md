@@ -28,6 +28,11 @@ Operational read contracts for:
 - lookups
 - reporting-oriented source-data reads
 
+The reporting family includes the additive `POST /reporting/portfolio-summary/bulk-query`
+(`portfolio-summary-bulk-v1`) source seam. Gateway supplies an already-authorized cohort of up to
+100 portfolio IDs; Core returns per-member total/invested/cash facts and fail-closed coverage,
+with a cohort aggregate only when every requested member is trustworthy.
+
 ### `query_control_plane_service`
 
 Governed downstream contracts for:

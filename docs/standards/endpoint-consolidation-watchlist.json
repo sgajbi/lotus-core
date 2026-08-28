@@ -106,6 +106,21 @@
     },
     {
       "service": "query_service",
+      "method": "POST",
+      "path": "/reporting/portfolio-summary/bulk-query",
+      "routeFamily": "Operational Read",
+      "disposition": "keep_bounded_source_summary",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "PortfolioStateSnapshot"
+      ],
+      "approvedRationale": "Gateway requires one bounded source-owned summary read for an already-authorized portfolio cohort without fan-out.",
+      "boundaryGuardrail": "Keep this as Core-owned valuation, FX, as-of, cash/invested, and coverage truth; do not add entitlement, analytics narrative, report composition, or recommendation behavior.",
+      "consumerGuidance": "Use this additive portfolio-summary-bulk-v1 seam for explicit cohorts; prefer PortfolioStateSnapshot:v1 when durable product metadata is required."
+    },
+    {
+      "service": "query_service",
       "method": "GET",
       "path": "/portfolios/{portfolio_id}/cashflow-projection",
       "routeFamily": "Operational Read",

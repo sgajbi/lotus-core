@@ -201,6 +201,7 @@
         "GET /prices",
         "POST /reporting/asset-allocation/query",
         "POST /reporting/assets-under-management/query",
+        "POST /reporting/portfolio-summary/bulk-query",
         "POST /reporting/portfolio-summary/query"
       ]
     }
