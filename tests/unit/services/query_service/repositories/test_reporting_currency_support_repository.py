@@ -27,7 +27,9 @@ def _repository(*results: MagicMock) -> tuple[ReportingCurrencySupportRepository
 
 
 async def test_portfolio_currency_source_is_as_of_and_tenant_fenced() -> None:
-    portfolio = SimpleNamespace(tenant_id="tenant-1", base_currency=" usd ")
+    portfolio = SimpleNamespace(
+        tenant_id="tenant-1", base_currency=" usd ", open_date=date(2026, 1, 1)
+    )
     repository, db = _repository(
         _result(scalar=portfolio),
         _result(scalars=["EUR", " eur ", "GBP"]),
@@ -72,9 +74,30 @@ async def test_portfolio_currency_source_returns_none_when_portfolio_missing() -
     db.execute.assert_awaited_once()
 
 
+async def test_portfolio_currency_source_fails_closed_before_portfolio_inception() -> None:
+    repository, db = _repository(
+        _result(
+            scalar=SimpleNamespace(
+                tenant_id="tenant-1", base_currency="USD", open_date=date(2026, 9, 1)
+            )
+        )
+    )
+
+    with pytest.raises(ValueError, match="precedes portfolio inception"):
+        await repository.get_portfolio_currency_source(
+            portfolio_id="PF-1",
+            tenant_id="tenant-1",
+            as_of_date=date(2026, 8, 28),
+        )
+
+    db.execute.assert_awaited_once()
+
+
 async def test_portfolio_currency_source_fails_closed_for_invalid_persisted_currency() -> None:
     repository, db = _repository(
-        _result(scalar=SimpleNamespace(tenant_id=None, base_currency="USD")),
+        _result(
+            scalar=SimpleNamespace(tenant_id=None, base_currency="USD", open_date=date(2026, 1, 1))
+        ),
         _result(scalars=["US1"]),
     )
 
@@ -93,7 +116,11 @@ async def test_portfolio_currency_source_fails_closed_for_unresolved_position_cu
     unresolved_currency: str | None,
 ) -> None:
     repository, db = _repository(
-        _result(scalar=SimpleNamespace(tenant_id="tenant-1", base_currency="USD")),
+        _result(
+            scalar=SimpleNamespace(
+                tenant_id="tenant-1", base_currency="USD", open_date=date(2026, 1, 1)
+            )
+        ),
         _result(scalars=[unresolved_currency]),
     )
 

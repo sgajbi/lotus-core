@@ -44,6 +44,8 @@ class ReportingCurrencySupportRepository:
         portfolio = (await self.db.execute(portfolio_stmt)).scalar_one_or_none()
         if portfolio is None:
             return None
+        if as_of_date < portfolio.open_date:
+            raise ValueError("as_of_date precedes portfolio inception")
 
         history_security_id = func.trim(PositionHistory.security_id)
         state_security_id = func.trim(PositionState.security_id)
