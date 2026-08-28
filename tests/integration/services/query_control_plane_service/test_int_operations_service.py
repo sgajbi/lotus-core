@@ -73,6 +73,14 @@ class _FixedDateTime(datetime):
         return FIXED_GENERATED_AT.astimezone(tz)
 
 
+async def _assert_database_generated_timestamp(
+    async_db_session: AsyncSession, generated_at: datetime
+) -> None:
+    database_now = (await async_db_session.execute(select(func.statement_timestamp()))).scalar_one()
+    assert generated_at <= database_now
+    assert (database_now - generated_at) < timedelta(seconds=5)
+
+
 async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     clean_db, async_db_session: AsyncSession
 ):
@@ -1593,15 +1601,20 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_valuation_jobs("P9", skip=0, limit=20)
 
-    assert response.generated_at_utc == FIXED_GENERATED_AT
-    assert response.total == 1
-    assert len(response.items) == 1
-    assert response.items[0].job_type == "VALUATION"
-    assert response.items[0].security_id == "SEC-VAL-OLD"
-    assert response.items[0].business_date == date(2025, 8, 20)
-    assert response.items[0].correlation_id == "corr-valuation-old"
-    assert response.items[0].is_stale_processing is True
-    assert response.items[0].operational_state == "STALE_PROCESSING"
+    await _assert_database_generated_timestamp(async_db_session, response.generated_at_utc)
+    assert response.total == 2
+    assert len(response.items) == 2
+    records = {item.correlation_id: item for item in response.items}
+    old = records["corr-valuation-old"]
+    assert old.job_type == "VALUATION"
+    assert old.security_id == "SEC-VAL-OLD"
+    assert old.business_date == date(2025, 8, 20)
+    assert old.is_stale_processing is True
+    assert old.operational_state == "STALE_PROCESSING"
+    late = records["corr-valuation-late"]
+    assert late.status == "FAILED"
+    assert late.is_terminal_failure is True
+    assert late.operational_state == "FAILED"
 
 
 @pytest.mark.lifecycle
@@ -1645,7 +1658,7 @@ async def test_valuation_jobs_expose_skipped_operational_state(
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_valuation_jobs("P9S", skip=0, limit=20)
 
-    assert response.generated_at_utc == FIXED_GENERATED_AT
+    await _assert_database_generated_timestamp(async_db_session, response.generated_at_utc)
     assert response.total == 1
     assert len(response.items) == 1
     assert response.items[0].status == "SKIPPED_NO_POSITION"
@@ -1809,14 +1822,19 @@ async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_aggregation_jobs("P10", skip=0, limit=20)
 
-    assert response.generated_at_utc == FIXED_GENERATED_AT
-    assert response.total == 1
-    assert len(response.items) == 1
-    assert response.items[0].job_type == "AGGREGATION"
-    assert response.items[0].business_date == date(2025, 8, 20)
-    assert response.items[0].correlation_id == "corr-aggregation-old"
-    assert response.items[0].is_stale_processing is True
-    assert response.items[0].operational_state == "STALE_PROCESSING"
+    await _assert_database_generated_timestamp(async_db_session, response.generated_at_utc)
+    assert response.total == 2
+    assert len(response.items) == 2
+    records = {item.correlation_id: item for item in response.items}
+    old = records["corr-aggregation-old"]
+    assert old.job_type == "AGGREGATION"
+    assert old.business_date == date(2025, 8, 20)
+    assert old.is_stale_processing is True
+    assert old.operational_state == "STALE_PROCESSING"
+    late = records["corr-aggregation-late"]
+    assert late.status == "FAILED"
+    assert late.is_terminal_failure is True
+    assert late.operational_state == "FAILED"
 
 
 async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
