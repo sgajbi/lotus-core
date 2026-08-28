@@ -5,14 +5,16 @@ from datetime import date
 from typing import cast
 
 from portfolio_common.database_models import (
+    Cashflow,
     FxRate,
     Instrument,
     Portfolio,
     PositionHistory,
     PositionState,
+    PositionTimeseries,
 )
 from portfolio_common.domain.currency import normalize_currency_code
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .currency_query_expressions import currency_code_sql_expr
@@ -82,7 +84,27 @@ class ReportingCurrencySupportRepository:
                 Instrument,
                 func.trim(Instrument.security_id) == latest_positions.c.security_id,
             )
-            .where(latest_positions.c.rn == 1, latest_positions.c.quantity != 0)
+            .where(
+                latest_positions.c.rn == 1,
+                or_(
+                    latest_positions.c.quantity != 0,
+                    exists(
+                        select(1).where(
+                            PositionTimeseries.portfolio_id == portfolio_id,
+                            func.trim(PositionTimeseries.security_id)
+                            == latest_positions.c.security_id,
+                            PositionTimeseries.date == as_of_date,
+                        )
+                    ),
+                    exists(
+                        select(1).where(
+                            Cashflow.portfolio_id == portfolio_id,
+                            func.trim(Cashflow.security_id) == latest_positions.c.security_id,
+                            Cashflow.cashflow_date == as_of_date,
+                        )
+                    ),
+                ),
+            )
             .distinct()
             .order_by(instrument_currency.asc())
         )
