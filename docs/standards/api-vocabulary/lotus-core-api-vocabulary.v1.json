@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-28T05:25:02.441631+00:00",
+  "generatedAt": "2026-08-28T06:23:10.605897+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -154,12 +154,12 @@
         "coverage_state": "COMPLETE",
         "coverage_reason": "example_coverage_reason",
         "totals": {
-          "total_market_value_portfolio_currency": 1000000.0,
-          "total_market_value_reporting_currency": 1000000.0,
-          "cash_balance_portfolio_currency": 120000.0,
-          "cash_balance_reporting_currency": 120000.0,
-          "invested_market_value_portfolio_currency": 880000.0,
-          "invested_market_value_reporting_currency": 880000.0
+          "total_market_value_portfolio_currency": "example_value",
+          "total_market_value_reporting_currency": "USD",
+          "cash_balance_portfolio_currency": "example_value",
+          "cash_balance_reporting_currency": "USD",
+          "invested_market_value_portfolio_currency": "example_value",
+          "invested_market_value_reporting_currency": "USD"
         }
       },
       "type": "object",

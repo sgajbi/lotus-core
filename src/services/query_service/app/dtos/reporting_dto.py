@@ -815,6 +815,38 @@ class BulkPortfolioSummaryItem(BaseModel):
     )
 
 
+class BulkPortfolioSummaryAggregateTotals(BaseModel):
+    total_market_value_portfolio_currency: Decimal | None = Field(
+        None,
+        description=(
+            "Cohort total in native portfolio currency; null when members use mixed currencies."
+        ),
+    )
+    total_market_value_reporting_currency: Decimal = Field(
+        ..., description="Cohort total restated to the effective reporting currency."
+    )
+    cash_balance_portfolio_currency: Decimal | None = Field(
+        None,
+        description=(
+            "Cohort cash total in native portfolio currency; null when members use mixed "
+            "currencies."
+        ),
+    )
+    cash_balance_reporting_currency: Decimal = Field(
+        ..., description="Cohort cash total restated to the effective reporting currency."
+    )
+    invested_market_value_portfolio_currency: Decimal | None = Field(
+        None,
+        description=(
+            "Cohort invested total in native portfolio currency; null when members use mixed "
+            "currencies."
+        ),
+    )
+    invested_market_value_reporting_currency: Decimal = Field(
+        ..., description="Cohort invested total restated to the effective reporting currency."
+    )
+
+
 class BulkPortfolioSummaryAggregate(BaseModel):
     portfolio_count: int = Field(..., ge=0, description="Number of requested members.")
     coverage_state: BulkPortfolioSummaryAggregateState = Field(
@@ -823,9 +855,12 @@ class BulkPortfolioSummaryAggregate(BaseModel):
     coverage_reason: str = Field(
         ..., description="Why the aggregate is complete, partial, or unavailable."
     )
-    totals: PortfolioSummaryTotals | None = Field(
+    totals: BulkPortfolioSummaryAggregateTotals | None = Field(
         None,
-        description="Cohort totals only when every requested member is covered and trustworthy.",
+        description=(
+            "Cohort totals only when every requested member is covered and trustworthy. Native "
+            "currency fields are null for mixed-currency cohorts; reporting fields remain valid."
+        ),
     )
 
 
