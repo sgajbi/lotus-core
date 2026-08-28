@@ -212,7 +212,18 @@ which describes negative rebate interest after the ex-dividend date, and its
 
 ## 2. Valuation Scheduler Logic
 
-The `ValuationScheduler`, which runs in `valuation_orchestrator_service` rather than in this service, orchestrates all valuation and backfill activities. It runs in a continuous loop, performing a series of state management and job creation tasks.
+The `ValuationScheduler` runs in `valuation_orchestrator_service`, not in this service. It is the
+**backfill planner and pending-job dispatcher**: it runs a continuous loop performing state
+management, plans backfill jobs for lagging position states, and dispatches pending jobs.
+
+It does **not** own all job creation. Three other paths in the same service upsert valuation jobs
+directly, and job creation in those flows must be diagnosed there rather than in the scheduler:
+
+| Path | Creates jobs for |
+| --- | --- |
+| `PriceEventConsumer._queue_immediate_valuation_jobs()` | In-horizon market price arrivals. |
+| `ProcessFxRateCorrection.execute()` | FX rate corrections. |
+| `ValuationReadinessConsumer.process_message()` | Readiness-driven valuation and position-readiness jobs. |
 
 ### Scheduler's Main Loop
 
