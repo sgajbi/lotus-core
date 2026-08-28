@@ -11,11 +11,16 @@ Scheduling and reprocessing orchestration belong to `valuation_orchestrator_serv
 | --- | --- | --- |
 | `ValuationConsumer` | **this service** | Consumes `valuation.job.requested` and calculates market value and unrealized P&L for one position on one day. |
 | `ValuationLogic` | **this service** | Stateless valuation formulas, including dual-currency handling. |
-| `ValuationRepository` | **this service** | Database access for valuation inputs and snapshot writes. |
+| `ValuationRepository` (`app/repositories/valuation_repository.py`) | **this service** | Database access for valuation inputs and snapshot writes. |
 | `ValuationScheduler` | `valuation_orchestrator_service` | Detects gaps, creates backfill jobs, and initiates reprocessing for back-dated prices. |
 | `PriceEventConsumer` | `valuation_orchestrator_service` | Consumes `market_prices.persisted` and detects back-dated prices. |
 | `ReprocessingWorker` | `valuation_orchestrator_service` | Drains durable reset-watermark jobs, rate-limiting the fan-out. |
 | `InstrumentReprocessingStateRepository` | `valuation_orchestrator_service` | Owns `instrument_reprocessing_state`. |
+| `ValuationRepository` (`valuation_orchestrator_service/app/repositories/valuation_repository.py`) | `valuation_orchestrator_service` | **A second, distinct class of the same name.** Serves the scheduler, price consumer, watermark advancer, stale-job resetter, and reprocessing worker. |
+
+Both `ValuationRepository` classes subclass `ValuationRepositoryBase` from `portfolio-common` and are
+service-local. The name alone does not tell you which one you are looking at: check the import path
+before editing, or a change intended for scheduling behaviour will land in the compute worker.
 
 Work reaches this service only as `valuation.job.requested`. To change scheduling, backfill
 detection, or back-dated price handling, change `valuation_orchestrator_service`, not this one.
