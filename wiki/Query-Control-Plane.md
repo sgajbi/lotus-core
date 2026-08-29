@@ -231,8 +231,8 @@ router inside the operational read plane.
   mixed dates, historical cost-basis fallback, and carried-forward price or FX evidence remain
   explicit `UNAVAILABLE` reasons. Cross-currency baseline positions use the FX effective date
   persisted with the valuation; a current price status cannot substitute for missing FX lineage.
-  Same-currency positions need no FX date. Consumers must not replace unavailable evidence with
-  request or wall-clock dates
+  Same-currency positions need no FX date; consumers must not replace them with request or
+  wall-clock dates
 - effective integration policy contracts and resolution must remain QCP package-owned; environment
   configuration and clock construction stay at dependency composition, while precedence,
   section filtering, provenance, and warnings remain deterministic application policy
