@@ -77,7 +77,23 @@ def _contains_application_clock(
             application_clock_calls,
         )
     for child in ast.walk(node):
-        if isinstance(child, ast.Call):
+        if isinstance(child, ast.Attribute):
+            chain = _attribute_chain(child)
+            if len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls:
+                return True
+            if (
+                len(chain) >= 2
+                and chain[-2] == "func"
+                and chain[-1] in _TRANSACTION_START_SQL_CLOCKS
+            ):
+                return True
+            if chain and (
+                chain[-1] in _APPLICATION_CLOCK_HELPER_NAMES
+                or chain[-1].endswith("_now")
+                or "deadline" in chain[-1].lower()
+            ):
+                return True
+        elif isinstance(child, ast.Call):
             chain = _attribute_chain(child.func)
             if len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls:
                 return True
