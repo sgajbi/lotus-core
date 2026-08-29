@@ -334,6 +334,36 @@ async def test_core_snapshot_uses_injected_clock_for_generated_metadata(mock_dep
     assert response.generated_at == generated_at
 
 
+async def test_core_snapshot_product_timestamp_includes_newer_market_evidence(
+    mock_dependencies,
+) -> None:
+    position_repo, _, _, _, _, _ = mock_dependencies
+    portfolio_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
+    market_timestamp = datetime(2026, 2, 27, 11, tzinfo=UTC)
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        replace(
+            position_repo.get_latest_positions_by_portfolio_as_of_date.return_value[0],
+            source_updated_at=market_timestamp,
+            portfolio_fact_created_at=portfolio_timestamp,
+            portfolio_fact_updated_at=portfolio_timestamp,
+            state_created_at=portfolio_timestamp,
+            state_updated_at=portfolio_timestamp,
+        )
+    ]
+
+    response = await _service(mock_dependencies).get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.reconciliation_status == COMPLETE
+    assert response.source_provenance.market_data.valuation_timestamp == market_timestamp
+    assert response.latest_evidence_timestamp == market_timestamp
+
+
 @pytest.mark.parametrize(
     (
         "control_status",
@@ -415,7 +445,7 @@ async def test_core_snapshot_empty_source_window_is_deterministic_and_unreconcil
 
     assert first.reconciliation_status == UNRECONCILED
     assert first.data_quality_status == UNKNOWN
-    assert first.latest_evidence_timestamp is None
+    assert first.latest_evidence_timestamp == datetime(2026, 2, 27, 9, tzinfo=UTC)
     assert first.source_evidence_current is False
     assert first.snapshot_id == second.snapshot_id
     assert first.calculation_lineage == second.calculation_lineage
