@@ -232,8 +232,9 @@ router inside the operational read plane.
   explicit `UNAVAILABLE` reasons. Cross-currency baseline positions use the exact FX effective date
   and value persisted with the valuation. The value is part of market-data identity, so a same-date
   correction cannot retain stale lineage; a current price status cannot substitute for missing FX
-  evidence. Same-currency positions need no FX fact; consumers must not replace it with current
-  reference data, request dates, or wall-clock dates
+  evidence. Same-currency positions need no FX fact. Source-owned dates remain authoritative:
+  consumers must not replace them with request or wall-clock dates, and missing cross-currency FX
+  facts must not be reconstructed from current reference data
 - effective integration policy contracts and resolution must remain QCP package-owned; environment
   configuration and clock construction stay at dependency composition, while precedence,
   section filtering, provenance, and warnings remain deterministic application policy
