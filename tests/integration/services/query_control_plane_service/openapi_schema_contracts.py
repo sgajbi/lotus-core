@@ -148,6 +148,8 @@ SIMULATION_SCHEMA_ROOTS = {
 }
 
 CORE_SNAPSHOT_SCHEMA_ROOTS = {
+    "CoreSnapshotSourceProvenanceRecord",
+    "CoreSnapshotSourceProvenance",
     "CoreSnapshotSimulationOptions",
     "CoreSnapshotRequestOptions",
     "CoreSnapshotRequest",

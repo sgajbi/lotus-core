@@ -38,7 +38,9 @@ from src.services.query_control_plane_service.app.contracts.core_snapshot import
     CoreSnapshotSection,
 )
 from src.services.query_control_plane_service.app.domain.core_snapshot import (
+    CoreSnapshotFxRate,
     CoreSnapshotInstrument,
+    CoreSnapshotMarketPrice,
     CoreSnapshotPositionSource,
 )
 
@@ -181,8 +183,12 @@ def mock_dependencies():
         version=3,
     )
     simulation_repo.get_changes.return_value = []
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.1"))]
-    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency="USD")]
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1.1"))
+    ]
+    price_repo.get_prices.return_value = [
+        CoreSnapshotMarketPrice(price_date=date(2026, 2, 27), price=Decimal("10"), currency="USD")
+    ]
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_US")]
 
     yield (
@@ -258,6 +264,14 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.tenant_id == "default"
     assert response.restatement_version == "current"
     assert response.reconciliation_status == COMPLETE
+    assert response.valuation_context.effective_as_of_date == date(2026, 2, 27)
+    assert response.valuation_context.supportability == "READY"
+    assert response.valuation_context.reason_code == "SOURCE_EVIDENCE_READY"
+    assert response.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert response.source_provenance.market_data.as_of == date(2026, 2, 27)
+    assert response.source_provenance.portfolio.source_id != (
+        response.source_provenance.market_data.source_id
+    )
     assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 10, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
@@ -739,7 +753,9 @@ async def test_core_snapshot_raises_when_new_security_has_blank_market_price(moc
             amount=None,
         )
     ]
-    price_repo.get_prices.return_value = [SimpleNamespace(price=" ", currency="USD")]
+    price_repo.get_prices.return_value = [
+        SimpleNamespace(price=" ", currency="USD", price_date=date(2026, 2, 27))
+    ]
     service = _service(mock_dependencies)
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
@@ -787,7 +803,9 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
     assert baseline.freshness.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
 
 
-async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mock_dependencies):
+async def test_core_snapshot_history_fallback_does_not_claim_current_market_evidence(
+    mock_dependencies,
+):
     (position_repo, _, _, _, _, _) = mock_dependencies
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = []
     position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = [
@@ -818,7 +836,12 @@ async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mo
     assert response.data_quality_status == PARTIAL
     assert response.reconciliation_status == COMPLETE
     assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 10, tzinfo=UTC)
-    assert response.source_evidence_current is True
+    assert response.source_evidence_current is False
+    assert response.valuation_context.effective_as_of_date is None
+    assert response.valuation_context.supportability == "UNAVAILABLE"
+    assert response.valuation_context.reason_code == "MARKET_DATA_AS_OF_UNAVAILABLE"
+    assert response.source_provenance.market_data.as_of is None
+    assert response.source_provenance.market_data.freshness_status == "UNAVAILABLE"
 
 
 async def test_latest_snapshot_timestamp_uses_latest_row_or_state_timestamp():

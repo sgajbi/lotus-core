@@ -27,13 +27,15 @@ async def test_get_fx_rate_or_raise_returns_identity_rate_without_repository_loo
         as_of_date=date(2026, 2, 27),
     )
 
-    assert rate == Decimal("1")
+    assert rate.value == Decimal("1")
+    assert rate.effective_as_of_date is None
+    assert rate.observation() is None
     fx_repo.get_fx_rates.assert_not_awaited()
 
 
 async def test_get_fx_rate_or_raise_rejects_blank_rate() -> None:
     fx_repo = AsyncMock()
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=" ")]
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=" ", rate_date=date(2026, 2, 27))]
 
     with pytest.raises(CoreSnapshotUnavailableSectionError, match="missing FX rate EUR/USD"):
         await get_fx_rate_or_raise(

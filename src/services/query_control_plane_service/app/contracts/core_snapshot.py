@@ -33,6 +33,87 @@ class CoreSnapshotWeightBasis(str, Enum):
     TOTAL_MARKET_VALUE_BASE = "total_market_value_base"
 
 
+class CoreSnapshotValuationSupportability(str, Enum):
+    READY = "READY"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class CoreSnapshotValuationReason(str, Enum):
+    SOURCE_EVIDENCE_READY = "SOURCE_EVIDENCE_READY"
+    PORTFOLIO_AS_OF_UNAVAILABLE = "PORTFOLIO_AS_OF_UNAVAILABLE"
+    PORTFOLIO_AS_OF_CONFLICT = "PORTFOLIO_AS_OF_CONFLICT"
+    MARKET_DATA_AS_OF_UNAVAILABLE = "MARKET_DATA_AS_OF_UNAVAILABLE"
+    MARKET_DATA_AS_OF_CONFLICT = "MARKET_DATA_AS_OF_CONFLICT"
+    SOURCE_AS_OF_MISMATCH = "SOURCE_AS_OF_MISMATCH"
+    SOURCE_AS_OF_STALE = "SOURCE_AS_OF_STALE"
+
+
+class CoreSnapshotSourceProvenanceRecord(BaseModel):
+    source_system: Literal["LOTUS_CORE"] = Field(
+        "LOTUS_CORE",
+        description="Authoritative upstream system that owns this source record.",
+    )
+    source_kind: Literal["PORTFOLIO", "MARKET_DATA"] = Field(
+        ...,
+        description="Financial source family represented by this record.",
+    )
+    source_id: str = Field(
+        ...,
+        description="Deterministic source snapshot identity derived from authoritative facts.",
+        examples=["lotus-core:portfolio-state-snapshot:portfolio:PB_SG_GLOBAL_BAL_001:9f8a6325"],
+    )
+    as_of: date | None = Field(
+        ...,
+        description=(
+            "Source-owned effective business date, or null when Core cannot prove one coherent "
+            "date for the source family."
+        ),
+    )
+    contract_version: Literal["PortfolioStateSnapshot:v1"] = Field(
+        "PortfolioStateSnapshot:v1",
+        description="Versioned Core source contract that published this evidence.",
+    )
+    source_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description="SHA-256 of the normalized authoritative facts for this source family.",
+        examples=["9f8a6325b52fcb11b0a5e7c44a4e8d869f8a6325b52fcb11b0a5e7c44a4e8d86"],
+    )
+    valuation_timestamp: datetime | None = Field(
+        None,
+        description="Latest durable evidence timestamp included in the source record.",
+    )
+    freshness_status: Literal["CURRENT", "STALE", "PARTIAL", "UNAVAILABLE"] = Field(
+        ...,
+        description="Core-owned freshness posture for this source record.",
+    )
+
+
+class CoreSnapshotSourceProvenance(BaseModel):
+    schema_version: Literal["lotus.source-provenance.v1"] = Field(
+        "lotus.source-provenance.v1",
+        description="Versioned source-provenance envelope schema.",
+    )
+    source_system: Literal["LOTUS_CORE"] = Field(
+        "LOTUS_CORE",
+        description="Authoritative system for both enclosed records.",
+    )
+    portfolio: CoreSnapshotSourceProvenanceRecord = Field(
+        ...,
+        description="Portfolio-state evidence used by the snapshot.",
+    )
+    market_data: CoreSnapshotSourceProvenanceRecord = Field(
+        ...,
+        description="Market-price and FX evidence used by the snapshot.",
+    )
+    raw_payload_stored: Literal[False] = Field(
+        False,
+        description=(
+            "Always false; provenance stores identities and hashes, not raw source payloads."
+        ),
+    )
+
+
 class CoreSnapshotSimulationOptions(BaseModel):
     session_id: str = Field(
         ...,
@@ -157,6 +238,24 @@ class CoreSnapshotValuationContext(BaseModel):
         ...,
         description="Weight calculation basis applied to baseline and projected sections.",
         examples=["total_market_value_base"],
+    )
+    effective_as_of_date: date | None = Field(
+        ...,
+        description=(
+            "Single source-owned effective date when portfolio and market-data evidence agree; "
+            "null when Core cannot prove coherent valuation timing."
+        ),
+        examples=["2026-02-27"],
+    )
+    supportability: CoreSnapshotValuationSupportability = Field(
+        ...,
+        description="Whether the valuation context has coherent source-owned date evidence.",
+        examples=["READY"],
+    )
+    reason_code: CoreSnapshotValuationReason = Field(
+        ...,
+        description="Stable reason describing valuation-date readiness or failure.",
+        examples=["SOURCE_EVIDENCE_READY"],
     )
 
 
@@ -613,6 +712,13 @@ class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
                 "weight_basis": "total_market_value_base",
             }
         ],
+    )
+    source_provenance: CoreSnapshotSourceProvenance = Field(
+        ...,
+        description=(
+            "Typed portfolio and market-data evidence with independent deterministic identities "
+            "and source-owned effective dates."
+        ),
     )
     simulation: Optional[CoreSnapshotSimulationMetadata] = Field(
         None,

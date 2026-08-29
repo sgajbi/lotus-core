@@ -35,6 +35,7 @@ from ...contracts.core_snapshot import (
     CoreSnapshotSections,
     CoreSnapshotSimulationMetadata,
     CoreSnapshotValuationContext,
+    CoreSnapshotValuationSupportability,
 )
 from ...contracts.instrument_enrichment import InstrumentEnrichmentRecord
 from ...domain.core_snapshot import CoreSnapshotPositionSource
@@ -67,7 +68,7 @@ from .governance import (
 )
 from .identity import core_snapshot_request_fingerprint
 from .instrument_enrichment_reader import CoreSnapshotInstrumentEnrichmentReader
-from .market_data import get_fx_rate_or_raise
+from .market_data import MarketDataObservation, ResolvedFxRate, get_fx_rate_or_raise
 from .projected_valuation import CoreSnapshotProjectedPositionResolver
 from .quality import snapshot_data_quality_status
 from .reconciliation import (
@@ -78,13 +79,14 @@ from .reconciliation import (
 )
 from .sections import build_core_snapshot_sections
 from .simulation_validation import CoreSnapshotSimulationSessionValidator
+from .source_provenance import resolve_core_snapshot_source_provenance
 
 
 @dataclass(frozen=True)
 class _CoreSnapshotCurrencyContext:
     portfolio_currency: str
     reporting_currency: str
-    reporting_fx: Decimal
+    reporting_fx: ResolvedFxRate
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ class _CoreSnapshotProjection:
     positions: dict[str, dict[str, Any]] | None
     total_market_value: Decimal
     simulation_metadata: CoreSnapshotSimulationMetadata | None
+    market_data_observations: tuple[MarketDataObservation, ...]
 
 
 @dataclass(frozen=True)
@@ -106,6 +109,8 @@ class _CoreSnapshotBaseline:
     freshness: CoreSnapshotFreshnessMetadata
     reconciliation: CoreSnapshotReconciliationEvidence
     source_content_hash: str
+    source_rows: tuple[CoreSnapshotPositionSource, ...]
+    use_snapshot: bool
 
 
 @dataclass(frozen=True)
@@ -157,7 +162,7 @@ class CoreSnapshotService:
         baseline = await self._resolve_baseline_positions(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
-            reporting_fx=currency_context.reporting_fx,
+            reporting_fx=currency_context.reporting_fx.value,
             include_cash=request.options.include_cash_positions,
             include_zero=request.options.include_zero_quantity_positions,
         )
@@ -167,7 +172,7 @@ class CoreSnapshotService:
             portfolio_id=portfolio_id,
             request=request,
             portfolio_currency=currency_context.portfolio_currency,
-            reporting_fx=currency_context.reporting_fx,
+            reporting_fx=currency_context.reporting_fx.value,
             baseline_positions=baseline.positions,
         )
         projected_positions = projection.positions
@@ -189,6 +194,7 @@ class CoreSnapshotService:
             baseline=baseline,
             governance=governance_resolution,
             simulation_metadata=projection.simulation_metadata,
+            projected_market_data=projection.market_data_observations,
             sections=sections_payload,
         )
 
@@ -225,13 +231,13 @@ class CoreSnapshotService:
     ) -> _CoreSnapshotProjection:
         if request.snapshot_mode != CoreSnapshotMode.SIMULATION:
             self.simulation_session_validator.validate_baseline_snapshot_sections(request.sections)
-            return _CoreSnapshotProjection(None, Decimal(0), None)
+            return _CoreSnapshotProjection(None, Decimal(0), None, ())
 
         session = await self.simulation_session_validator.validated_session(
             portfolio_id=portfolio_id,
             request=request,
         )
-        projected_positions = await self.projected_position_resolver.resolve_projected_positions(
+        resolution = await self.projected_position_resolver.resolve_projected_positions(
             session_id=session.session_id,
             as_of_date=request.as_of_date,
             portfolio_base_currency=portfolio_currency,
@@ -241,13 +247,14 @@ class CoreSnapshotService:
             include_cash=request.options.include_cash_positions,
         )
         return _CoreSnapshotProjection(
-            positions=projected_positions,
-            total_market_value=total_market_value_projected(projected_positions),
+            positions=resolution.positions,
+            total_market_value=total_market_value_projected(resolution.positions),
             simulation_metadata=CoreSnapshotSimulationMetadata(
                 session_id=session.session_id,
                 version=session.version,
                 baseline_as_of_date=request.as_of_date,
             ),
+            market_data_observations=resolution.market_data_observations,
         )
 
     @staticmethod
@@ -270,6 +277,7 @@ class CoreSnapshotService:
         baseline: _CoreSnapshotBaseline,
         governance: CoreSnapshotGovernanceResolution,
         simulation_metadata: CoreSnapshotSimulationMetadata | None,
+        projected_market_data: tuple[MarketDataObservation, ...],
         sections: CoreSnapshotSections,
     ) -> CoreSnapshotResponse:
         generated_at = self._clock.utc_now()
@@ -286,10 +294,20 @@ class CoreSnapshotService:
             source_data_quality_status=source_data_quality_status,
             reconciliation_status=baseline.reconciliation.status,
         )
+        provenance = resolve_core_snapshot_source_provenance(
+            portfolio_id=portfolio_id,
+            requested_as_of_date=request.as_of_date,
+            position_rows=baseline.source_rows,
+            use_snapshot=baseline.use_snapshot,
+            portfolio_source_hash=baseline.source_content_hash,
+            reporting_fx=currency_context.reporting_fx,
+            projected_market_data=projected_market_data,
+        )
         source_evidence_current = (
             baseline.reconciliation.status == COMPLETE
             and data_quality_status in {COMPLETE, PARTIAL}
             and baseline.reconciliation.latest_evidence_timestamp is not None
+            and provenance.supportability is CoreSnapshotValuationSupportability.READY
         )
         calculation_lineage = build_calculation_lineage(
             algorithm_id=CORE_SNAPSHOT_ALGORITHM_ID,
@@ -303,6 +321,7 @@ class CoreSnapshotService:
                 "restatement_version": CURRENT_RESTATEMENT_VERSION,
                 "request_fingerprint": request_fingerprint_value,
                 "source_content_hash": baseline.source_content_hash,
+                "source_provenance": provenance.source_provenance.model_dump(mode="python"),
                 "reconciliation_scope_content_hash": (baseline.reconciliation.scope_content_hash),
                 "reconciliation_control_content_hash": (
                     baseline.reconciliation.control_content_hash
@@ -314,6 +333,9 @@ class CoreSnapshotService:
                     "reporting_currency": currency_context.reporting_currency,
                     "position_basis": request.options.position_basis,
                     "weight_basis": request.options.weight_basis,
+                    "effective_as_of_date": provenance.effective_as_of_date,
+                    "supportability": provenance.supportability,
+                    "reason_code": provenance.reason_code,
                 },
                 "simulation": (
                     simulation_metadata.model_dump(mode="python")
@@ -338,6 +360,7 @@ class CoreSnapshotService:
                 "restatement_version": CURRENT_RESTATEMENT_VERSION,
                 "request_fingerprint": request_fingerprint_value,
                 "source_content_hash": baseline.source_content_hash,
+                "source_provenance": provenance.source_provenance.model_dump(mode="json"),
                 "freshness": baseline.freshness.model_dump(mode="json"),
                 "governance": {
                     "consumer_system": governance.consumer_system,
@@ -355,6 +378,13 @@ class CoreSnapshotService:
                     "reporting_currency": currency_context.reporting_currency,
                     "position_basis": request.options.position_basis.value,
                     "weight_basis": request.options.weight_basis.value,
+                    "effective_as_of_date": (
+                        provenance.effective_as_of_date.isoformat()
+                        if provenance.effective_as_of_date is not None
+                        else None
+                    ),
+                    "supportability": provenance.supportability.value,
+                    "reason_code": provenance.reason_code.value,
                 },
                 "simulation": (
                     simulation_metadata.model_dump(mode="json")
@@ -429,7 +459,11 @@ class CoreSnapshotService:
                 reporting_currency=currency_context.reporting_currency,
                 position_basis=request.options.position_basis,
                 weight_basis=request.options.weight_basis,
+                effective_as_of_date=provenance.effective_as_of_date,
+                supportability=provenance.supportability,
+                reason_code=provenance.reason_code,
             ),
+            source_provenance=provenance.source_provenance,
             simulation=simulation_metadata,
             calculation_lineage=calculation_lineage.lineage_payload(),
             sections=sections,
@@ -451,6 +485,22 @@ class CoreSnapshotService:
                     "source_product": "PortfolioStateSnapshot",
                     "request_fingerprint": request_fingerprint_value,
                     "source_content_hash": baseline.source_content_hash,
+                    "portfolio_source_id": provenance.source_provenance.portfolio.source_id,
+                    "portfolio_source_hash": provenance.source_provenance.portfolio.source_hash,
+                    "portfolio_effective_as_of_date": (
+                        provenance.source_provenance.portfolio.as_of.isoformat()
+                        if provenance.source_provenance.portfolio.as_of is not None
+                        else "UNAVAILABLE"
+                    ),
+                    "market_data_source_id": provenance.source_provenance.market_data.source_id,
+                    "market_data_source_hash": provenance.source_provenance.market_data.source_hash,
+                    "market_data_effective_as_of_date": (
+                        provenance.source_provenance.market_data.as_of.isoformat()
+                        if provenance.source_provenance.market_data.as_of is not None
+                        else "UNAVAILABLE"
+                    ),
+                    "valuation_supportability": provenance.supportability.value,
+                    "valuation_reason_code": provenance.reason_code.value,
                     "reconciliation_scope_content_hash": (
                         baseline.reconciliation.scope_content_hash
                     ),
@@ -469,7 +519,11 @@ class CoreSnapshotService:
                     "CURRENT"
                     if source_evidence_current
                     else "STALE"
-                    if baseline.reconciliation.status == STALE
+                    if (
+                        baseline.reconciliation.status == STALE
+                        or provenance.source_provenance.portfolio.freshness_status == "STALE"
+                        or provenance.source_provenance.market_data.freshness_status == "STALE"
+                    )
                     else "UNAVAILABLE"
                 ),
             ),
@@ -513,6 +567,8 @@ class CoreSnapshotService:
                 controls=controls,
             ),
             source_content_hash=core_snapshot_source_content_hash(baseline_rows.rows),
+            source_rows=tuple(baseline_rows.rows),
+            use_snapshot=baseline_rows.use_snapshot,
         )
 
     async def _baseline_position_rows(
