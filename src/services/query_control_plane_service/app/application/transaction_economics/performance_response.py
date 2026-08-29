@@ -41,6 +41,7 @@ def build_performance_component_economics_response(
     next_page_token: str | None = None,
 ) -> PerformanceComponentEconomicsResponse:
     observed_component_families = observed_performance_component_families(rows)
+    authoritative_empty = not rows and not has_more
     state = performance_component_economics_supportability_state(rows=rows, has_more=has_more)
     reason = performance_component_economics_supportability_reason(
         rows=rows,
@@ -97,6 +98,8 @@ def build_performance_component_economics_response(
                 "has_more": has_more,
             },
             lineage=performance_component_economics_source_lineage(),
+            source_evidence_current=True if authoritative_empty else None,
+            freshness_status="CURRENT" if authoritative_empty else None,
         ),
     )
 

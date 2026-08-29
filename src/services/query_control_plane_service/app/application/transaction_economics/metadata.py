@@ -20,6 +20,8 @@ def transaction_economics_runtime_metadata(
     latest_evidence_timestamp: datetime | None,
     content_payload: dict[str, Any],
     lineage: dict[str, str],
+    source_evidence_current: bool | None = None,
+    freshness_status: str | None = None,
 ) -> dict[str, object]:
     """Build stable proof metadata without duplicating volatile response fields."""
 
@@ -33,6 +35,8 @@ def transaction_economics_runtime_metadata(
         content_hash=content_hash,
         source_refs=[f"lotus-core://source/{product_name}/{portfolio_id}/{as_of_date.isoformat()}"],
         lineage={"source_product": product_name, "source_owner": "lotus-core", **lineage},
+        source_evidence_current=source_evidence_current,
+        freshness_status=freshness_status,
     )
     metadata.pop("as_of_date")
     return cast(dict[str, object], metadata)
