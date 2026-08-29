@@ -569,6 +569,22 @@ class ReprocessingWorker:
                 return
             if outcome is ReprocessingJobTransitionOutcome.APPLIED:
                 observe_reprocessing_worker_lease_renewal(job_type, "renewed")
+                if lease_deadline_state is not None:
+                    # The renewal write has durably extended the claim, but its
+                    # exact PostgreSQL expiry still needs confirmation. Re-arm
+                    # the watchdog conservatively for that bounded read so the
+                    # prior deadline cannot cancel valid work mid-confirmation.
+                    provisional_deadline = (
+                        loop.time()
+                        + self._lease_duration_seconds
+                        - self._lease_renewal_io_timeout_seconds
+                    )
+                    lease_deadline_state["deadline"] = max(
+                        lease_deadline_state["deadline"],
+                        provisional_deadline,
+                    )
+                    if lease_deadline_changed is not None:
+                        lease_deadline_changed.set()
                 renewed_read_started_at = loop.time()
                 remaining_lease_seconds = await self._read_lease_remaining_seconds(
                     job,
