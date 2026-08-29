@@ -216,7 +216,7 @@ def find_durable_lease_clock_findings(
         scopes = [
             node
             for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         ]
         scopes.insert(0, tree)
         for scope in scopes:

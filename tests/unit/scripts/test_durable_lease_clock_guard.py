@@ -159,3 +159,23 @@ def test_durable_lease_clock_guard_scopes_taint_to_each_function(tmp_path: Path)
     assert [(finding.target, finding.line) for finding in findings] == [
         ("lease_expires_at", 6),
     ]
+
+
+def test_durable_lease_clock_guard_scans_class_level_defaults(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "models.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n"
+        "\n"
+        "class Job:\n"
+        "    lease_expires_at = mapped_column(\n"
+        "        default=lambda: datetime.now(timezone.utc),\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert [(finding.target, finding.line) for finding in findings] == [
+        ("lease_expires_at", 4),
+    ]
