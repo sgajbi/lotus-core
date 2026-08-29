@@ -453,12 +453,16 @@ class ReprocessingWorker:
         )
 
     def _next_lease_renewal_retry_at(self, *, now: float, lease_deadline: float) -> float:
-        """Back off failed renewals without scheduling beyond the safety margin."""
+        """Retry within the remaining budget while retaining one I/O window."""
 
-        safety_margin_deadline = lease_deadline - (2 * self._lease_renewal_io_timeout_seconds)
-        if now >= safety_margin_deadline:
-            return now + self._lease_renewal_io_timeout_seconds
-        return min(now + self._lease_renewal_io_timeout_seconds, safety_margin_deadline)
+        remaining_seconds = lease_deadline - now
+        if remaining_seconds <= self._lease_renewal_io_timeout_seconds:
+            return lease_deadline
+        retry_delay = min(
+            self._lease_renewal_io_timeout_seconds,
+            remaining_seconds - self._lease_renewal_io_timeout_seconds,
+        )
+        return now + retry_delay
 
     async def _renew_lease_while_processing(
         self,
