@@ -77,7 +77,7 @@ def apply_baseline_projected_values(
         if apply_baseline_projected_value(entry):
             continue
         quantity = entry["quantity"]
-        if quantity <= 0:
+        if quantity == 0:
             entry["market_value_base"] = Decimal(0)
             entry["market_value_local"] = Decimal(0)
             continue

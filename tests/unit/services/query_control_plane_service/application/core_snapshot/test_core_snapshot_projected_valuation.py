@@ -70,10 +70,10 @@ def _resolver(dependencies) -> CoreSnapshotProjectedPositionResolver:
     )
 
 
-async def test_projected_position_resolver_handles_non_positive_quantity_branch(
+async def test_projected_position_resolver_prices_new_short_position(
     resolver_dependencies,
 ):
-    simulation_repo, instrument_repo, _price_repo, _fx_repo = resolver_dependencies
+    simulation_repo, instrument_repo, price_repo, _fx_repo = resolver_dependencies
     simulation_repo.get_changes.return_value = [
         SimpleNamespace(
             security_id="SEC_NEG",
@@ -94,7 +94,15 @@ async def test_projected_position_resolver_handles_non_positive_quantity_branch(
         include_cash=True,
     )
 
-    assert projected.positions["SEC_NEG"]["market_value_base"] == Decimal("0")
+    assert projected.positions["SEC_NEG"]["market_value_local"] == Decimal("-10")
+    assert projected.positions["SEC_NEG"]["market_value_base"] == Decimal("-10")
+    assert len(projected.market_data_observations) == 1
+    assert projected.market_data_observations[0].source_key == "SEC_NEG"
+    assert projected.market_data_observations[0].effective_as_of_date == date(2026, 2, 27)
+    price_repo.get_prices.assert_awaited_once_with(
+        security_id="SEC_NEG",
+        end_date=date(2026, 2, 27),
+    )
 
 
 async def test_projected_position_resolver_normalizes_change_security_ids(

@@ -162,7 +162,7 @@ class CoreSnapshotProjectedPositionResolver:
         portfolio_to_reporting_fx: Decimal,
         include_cash: bool,
         include_zero: bool,
-    ) -> None:
+    ) -> tuple[MarketDataObservation, ...]:
         price_required = apply_baseline_projected_values(
             projected,
             include_cash=include_cash,
