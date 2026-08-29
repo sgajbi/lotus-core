@@ -23,6 +23,12 @@ _APPLICATION_CLOCK_HELPER_NAMES = {
     "current_timestamp",
     "application_deadline",
 }
+_TRANSACTION_START_SQL_CLOCKS = {
+    "current_date",
+    "current_timestamp",
+    "localtimestamp",
+    "now",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +79,12 @@ def _contains_application_clock(
         if isinstance(child, ast.Call):
             chain = _attribute_chain(child.func)
             if len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls:
+                return True
+            if (
+                len(chain) >= 2
+                and chain[-2] == "func"
+                and chain[-1] in _TRANSACTION_START_SQL_CLOCKS
+            ):
                 return True
             if chain and (
                 chain[-1] in _APPLICATION_CLOCK_HELPER_NAMES
