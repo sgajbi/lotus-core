@@ -37,7 +37,10 @@ stale rates are not carried forward. Currencies from zero-ending positions are i
 same-day valuation evidence matches the latest position quantity in the active epoch, covering
 liquidation-day restatements. A date
 before portfolio `open_date` is `UNAVAILABLE`.
-`observed_selector_currency` is informational only;
+Authenticated requests are always bound to the verified tenant. Trusted internal callers without
+an authenticated principal must provide an explicit, non-blank `tenant_id`; Core rejects omitted
+scope before querying portfolio data. `observed_selector_currency` is tenant-scoped to portfolio
+base currencies and historically held instruments and remains informational only;
 `GET /lookups/currencies` remains selector-only. The contract does not certify downstream
 `lotus-performance` execution or client publication.
 

@@ -248,6 +248,11 @@ Current repository posture:
     Query-service lookup catalog assembly now lives in `LookupCatalogService`; lookup routers
     should keep selector routes limited to HTTP query parameter parsing and response wrapping while
     the service owns source scoping, de-duplication, ordering, and limit behavior.
+    Reporting-currency support is always tenant-fenced: authenticated requests use the verified
+    tenant, trusted internal requests must supply a non-blank tenant, and application queries reject
+    missing scope before repository access. `observed_selector_currency` is tenant-scoped through
+    tenant portfolios and their historical instrument usage. FX support evidence is exact-date
+    only; this preflight must never carry forward a latest-as-of rate.
     Event-replay operations now follows the same bounded-module pattern: FastAPI routes in
     `src/services/event_replay_service/app/routers/` bind HTTP requests, build API DTOs, and map
     `HTTPException` only; command and query orchestration belongs in

@@ -37,8 +37,11 @@ the portfolio base currency to the requested reporting currency. Same-currency l
 identity rate. Every required source-owned rate must exist on the requested valuation date; stale
 rates are not carried forward by this preflight.
 Requests before the portfolio `open_date` are `UNAVAILABLE` because the requested scope is outside
-the portfolio's effective window. Presence in `GET /lookups/currencies` is reported separately as
-`observed_selector_currency` and must never be treated as proof of restatement support.
+the portfolio's effective window. Authenticated requests are bound to their verified tenant;
+trusted internal callers without an authenticated principal must provide a non-blank `tenant_id`.
+Core rejects missing scope before repository access. Currency observation is tenant-scoped to
+portfolio base currencies and historically held instruments, is reported separately as
+`observed_selector_currency`, and must never be treated as proof of restatement support.
 
 The contract is evidence of Core source-data support only. It does not certify downstream
 `lotus-performance` execution, client publication, or performance methodology.
