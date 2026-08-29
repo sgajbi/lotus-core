@@ -225,6 +225,11 @@ router inside the operational read plane.
   valid row epoch, read those exact financial-reconciliation controls in one set-based adapter
   query, and expose deterministic input/calculation/output lineage plus a source-bound snapshot id;
   per-security epochs are last-mutation versions, not separate portfolio-day control requirements
+- `PortfolioStateSnapshot:v1` owns the typed portfolio and market-data `source_provenance` envelope.
+  A valuation context is `READY` only when all selected portfolio rows and every material price or
+  FX observation prove one effective date equal to the requested business date. Missing values,
+  mixed dates, historical cost-basis fallback, and carried-forward price or FX evidence remain
+  explicit `UNAVAILABLE` reasons; consumers must not replace them with request or wall-clock dates
 - effective integration policy contracts and resolution must remain QCP package-owned; environment
   configuration and clock construction stay at dependency composition, while precedence,
   section filtering, provenance, and warnings remain deterministic application policy

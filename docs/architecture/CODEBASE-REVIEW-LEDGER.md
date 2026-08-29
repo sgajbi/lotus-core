@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1715 Portfolio snapshot effective-date authority (2026-08-29, hardened locally; protected PR
+and exact-main evidence pending): issue #1035 showed that downstream advisory context could receive
+stable Core values but not the source-owned portfolio and market-data dates needed to defend the
+valuation horizon. Core now preserves position, price, and FX dates through snapshot assembly,
+publishes independent deterministic source records, and requires coherent exact-date evidence
+before claiming `READY` or current source evidence. Historical cost-basis fallback, missing valued
+rows, mixed dates, and carried-forward market observations fail closed with stable reason codes.
+The request date and generation clock cannot become financial evidence. Focused application,
+service, OpenAPI, and canonical `PB_SG_GLOBAL_BAL_001` route-contract tests protect the boundary.
+Downstream adoption and live memo/report-package proof remain owned by `lotus-advise#557` after the
+Core contract merges. Evidence:
+[CR-1715-PORTFOLIO-SNAPSHOT-EFFECTIVE-DATE-AUTHORITY.md](./codebase-reviews/CR-1715-PORTFOLIO-SNAPSHOT-EFFECTIVE-DATE-AUTHORITY.md).
+
 CR-1714 AUM snapshot-presence evidence (2026-08-28, implementation in progress): issue #1034
 identified that AUM's zero-filled response could not distinguish a missing source snapshot from a
 loaded empty snapshot or a measured zero. The bounded reporting repository read now preserves

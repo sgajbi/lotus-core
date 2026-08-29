@@ -453,6 +453,15 @@ for unchanged securities remain included in the collective source scope. Missing
 unknown, or source-older controls fail closed as `UNRECONCILED`, `PARTIAL`, `BLOCKED`, `UNKNOWN`, or
 `STALE`; only complete controls at least as recent as their source scope are `COMPLETE`.
 
+The top-level `source_provenance` envelope publishes independent deterministic portfolio and
+market-data source identities, hashes, freshness, timestamps, and source-owned effective dates.
+`valuation_context.supportability=READY` requires one coherent portfolio date and one coherent
+market-data date, both equal to the requested date. Missing or mixed dates, historical cost-basis
+fallback, incomplete valued rows, and carried-forward projected price or FX observations produce a
+stable unavailable reason. The request date and generation time are never substituted for source
+evidence. Downstream advisory consumers must consume this aggregated contract rather than compose
+plausible valuation truth from weaker routes.
+
 The response publishes a deterministic `portfolio_state_snapshot:<hash>` identity and explicit
 input, calculation, and output SHA-256 lineage. The input hash binds portfolio, tenant, as-of date,
 mode, restatement version, normalized request, selected position/instrument facts, exact
@@ -469,7 +478,8 @@ source rows and reconciliation controls when available. Current snapshot-backed 
 durable timestamp and one unambiguous position epoch are `COMPLETE`; historical fallback baselines
 are `PARTIAL`; snapshot-backed baselines missing complete epoch or timestamp evidence are `PARTIAL`;
 and empty baselines remain `UNKNOWN`. `source_evidence_current` is true only when reconciliation is
-`COMPLETE`, data quality is `COMPLETE` or `PARTIAL`, and timestamp evidence exists. The nested
+`COMPLETE`, data quality is `COMPLETE` or `PARTIAL`, timestamp evidence exists, and the typed
+valuation context is `READY`. The nested
 freshness block continues to expose a snapshot epoch only for one unambiguous current-state epoch;
 mixed per-security epochs remain null rather than claiming a portfolio-wide epoch.
 
