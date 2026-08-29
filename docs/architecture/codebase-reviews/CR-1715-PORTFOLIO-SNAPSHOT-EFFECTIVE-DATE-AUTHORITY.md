@@ -24,6 +24,8 @@ for source-effective dates.
 
 - `ResolvedFxRate` and projected-position resolution retain exact source dates without attaching a
   fabricated date to same-currency identity conversion.
+- `DailyPositionSnapshot` persists the actual FX effective date used by cross-currency valuation;
+  legacy rows without that lineage and carried-forward rates fail closed until revaluation.
 - One QCP application policy resolves source-family dates, deterministic hashes and snapshot ids,
   freshness, readiness, and stable failure reasons.
 - `CoreSnapshotResponse` publishes a typed `lotus.source-provenance.v1` envelope and an explicit
@@ -31,9 +33,9 @@ for source-effective dates.
 - Source provenance is bound into input lineage, response content identity, and runtime lineage.
 - `source_evidence_current` additionally requires valuation supportability `READY`.
 
-Historical cost-basis fallback, missing valued rows, mixed dates, and carried-forward price or FX
-evidence remain unavailable. No test timeout, assertion, quality gate, or failure mapping was
-weakened.
+Historical cost-basis fallback, missing valued rows, mixed dates, current-price rows with missing
+FX lineage, and carried-forward price or FX evidence remain unavailable. No test timeout,
+assertion, quality gate, or failure mapping was weakened.
 
 ## Proof
 
