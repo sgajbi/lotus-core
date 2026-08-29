@@ -757,6 +757,36 @@ async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_d
     assert record.weight == Decimal("0")
 
 
+async def test_resolve_baseline_positions_withholds_legacy_money_without_currency_receipt(
+    mock_dependencies,
+):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    row = _snapshot_row("SEC_LEGACY", Decimal("3"), Decimal("33"), Decimal("30"))
+    row.valuation_source_currency = None
+    row.valuation_reporting_currency = None
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        _position_source(
+            row,
+            _instrument("SEC_LEGACY", currency="GBP"),
+            SimpleNamespace(status="CURRENT", epoch=7),
+        )
+    ]
+    service = _service(mock_dependencies)
+
+    baseline = await service._resolve_baseline_positions(
+        portfolio_id="PORT_001",
+        as_of_date=date(2026, 2, 27),
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    record = baseline.positions["SEC_LEGACY"]["position_record"]
+    assert record.currency is None
+    assert record.market_value_local is None
+    assert record.market_value_base is None
+
+
 async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_dependencies):
     service = _service(mock_dependencies)
     request = CoreSnapshotRequest(

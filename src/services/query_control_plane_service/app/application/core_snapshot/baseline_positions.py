@@ -61,13 +61,14 @@ def baseline_position_entry(
         use_snapshot=use_snapshot,
         reporting_fx=reporting_fx,
     )
+    position_currency = row.valuation_source_currency if use_snapshot else instrument.currency
     return baseline_position_payload(
         security_id=security_id,
         quantity=quantity,
         market_value_base=market_value_base,
         market_value_local=market_value_local,
         instrument=instrument,
-        valuation_currency=(row.valuation_source_currency if use_snapshot else None),
+        position_currency=position_currency,
     )
 
 
@@ -92,6 +93,8 @@ def baseline_market_values(
     reporting_fx: Decimal,
 ) -> tuple[Decimal | None, Decimal | None]:
     if use_snapshot:
+        if not row.valuation_source_currency or not row.valuation_reporting_currency:
+            return None, None
         market_value_base_raw = decimal_or_none(row.market_value)
         market_value_local = decimal_or_none(row.market_value_local)
     else:
@@ -110,7 +113,7 @@ def baseline_position_payload(
     market_value_base: Decimal | None,
     market_value_local: Decimal | None,
     instrument: CoreSnapshotInstrument,
-    valuation_currency: str | None = None,
+    position_currency: str | None,
 ) -> dict[str, Any]:
     payload = {
         "security_id": security_id,
@@ -121,7 +124,7 @@ def baseline_position_payload(
     payload.update(
         baseline_instrument_payload(
             instrument,
-            valuation_currency=valuation_currency,
+            position_currency=position_currency,
         )
     )
     return payload
@@ -130,10 +133,10 @@ def baseline_position_payload(
 def baseline_instrument_payload(
     instrument: CoreSnapshotInstrument,
     *,
-    valuation_currency: str | None = None,
+    position_currency: str | None,
 ) -> dict[str, Any]:
     return {
-        "currency": valuation_currency or instrument.currency,
+        "currency": position_currency,
         "instrument_name": instrument.name,
         "asset_class": instrument.asset_class,
         "sector": instrument.sector,

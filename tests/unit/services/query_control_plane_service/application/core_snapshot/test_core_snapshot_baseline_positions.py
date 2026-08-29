@@ -17,12 +17,16 @@ def _snapshot_row(
     quantity: object = Decimal("3"),
     market_value: object = Decimal("30"),
     market_value_local: object = Decimal("30"),
+    valuation_source_currency: str | None = "USD",
+    valuation_reporting_currency: str | None = "USD",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         security_id=security_id,
         quantity=quantity,
         market_value=market_value,
         market_value_local=market_value_local,
+        valuation_source_currency=valuation_source_currency,
+        valuation_reporting_currency=valuation_reporting_currency,
     )
 
 
@@ -140,6 +144,33 @@ def test_baseline_position_entries_preserves_valuation_time_currency() -> None:
     )
 
     assert entries["SEC_RELABELED"]["currency"] == "EUR"
+
+
+def test_baseline_position_entries_withholds_legacy_snapshot_money_without_currency_receipt() -> (
+    None
+):
+    entries = baseline_position_entries(
+        rows=[
+            _source(
+                _snapshot_row(
+                    "SEC_LEGACY",
+                    market_value=Decimal("33"),
+                    market_value_local=Decimal("30"),
+                    valuation_source_currency=None,
+                    valuation_reporting_currency=None,
+                ),
+                _instrument("SEC_LEGACY", currency="GBP"),
+            )
+        ],
+        use_snapshot=True,
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    assert entries["SEC_LEGACY"]["currency"] is None
+    assert entries["SEC_LEGACY"]["market_value_local"] is None
+    assert entries["SEC_LEGACY"]["market_value_base"] is None
 
 
 def test_baseline_position_entries_filters_cash_and_zero_positions() -> None:
