@@ -45,6 +45,9 @@ when reconciliation is complete, data quality is complete or partial, timestamp 
 and typed portfolio and market-data provenance proves one source-owned effective date equal to the
 requested date. Historical cost-basis fallback, missing valuations, mixed position dates, and
 carried-forward price or FX observations cannot claim current valuation evidence.
+Cross-currency baseline valuations must preserve the effective date of the FX row that produced
+the stored value. Missing legacy lineage or a carried-forward FX date fails closed until
+revaluation; same-currency valuation does not fabricate FX evidence.
 The typed `source_provenance` envelope carries the two independent source identities and dates.
 Its deterministic identity is tenant-, request-, source-, policy-, valuation-, restatement-, and
 simulation-version-bound; response generation time and correlation ids do not revise the snapshot.

@@ -171,6 +171,7 @@ section shape and derive the usage line from a fresh scan rather than copying a 
   - `unrealized_gain_loss` (Numeric): Domain attribute used by the owning module.
   - `unrealized_gain_loss_local` (Numeric): Domain attribute used by the owning module.
   - `valuation_status` (String): Domain attribute used by the owning module.
+  - `valuation_fx_rate_date` (Date, nullable): Exact effective date of the FX row used for a cross-currency valuation; null for same-currency, unvalued, failed, or legacy snapshots without authoritative lineage.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
