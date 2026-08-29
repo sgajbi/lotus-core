@@ -25,7 +25,10 @@ def _row(
     valuation_status: str = "VALUED_CURRENT",
     valuation_fx_rate_date: date | None = None,
     valuation_fx_rate: Decimal | None = None,
+    portfolio_fact_updated_at: datetime | None = None,
+    state_updated_at: datetime | None = None,
 ) -> CoreSnapshotPositionSource:
+    portfolio_timestamp = portfolio_fact_updated_at or updated_at
     return CoreSnapshotPositionSource(
         security_id=security_id,
         quantity=Decimal("1"),
@@ -38,7 +41,7 @@ def _row(
         source_created_at=updated_at - timedelta(hours=1),
         source_updated_at=updated_at,
         state_created_at=None,
-        state_updated_at=updated_at - timedelta(minutes=1),
+        state_updated_at=state_updated_at or updated_at - timedelta(minutes=1),
         instrument=CoreSnapshotInstrument(
             security_id=security_id,
             name=f"Instrument {security_id}",
@@ -57,6 +60,8 @@ def _row(
         valuation_status=valuation_status,
         valuation_fx_rate_date=valuation_fx_rate_date,
         valuation_fx_rate=valuation_fx_rate,
+        portfolio_fact_created_at=portfolio_timestamp - timedelta(hours=1),
+        portfolio_fact_updated_at=portfolio_timestamp,
         portfolio_business_date=portfolio_business_date,
     )
 
@@ -110,6 +115,48 @@ def test_core_snapshot_scopes_use_position_history_date_not_market_snapshot_date
 
     assert len(scopes.items) == 1
     assert scopes.items[0].business_date == date(2026, 4, 10)
+
+
+def test_core_snapshot_scopes_pair_portfolio_date_with_portfolio_fact_timestamp() -> None:
+    portfolio_timestamp = datetime(2026, 4, 10, 2, tzinfo=UTC)
+    market_timestamp = datetime(2026, 4, 10, 5, tzinfo=UTC)
+    scopes = core_snapshot_reconciliation_scopes(
+        [
+            _row(
+                updated_at=market_timestamp,
+                portfolio_fact_updated_at=portfolio_timestamp,
+                state_updated_at=portfolio_timestamp - timedelta(minutes=1),
+            )
+        ]
+    )
+
+    assert scopes.items[0].latest_evidence_timestamp == portfolio_timestamp
+
+
+def test_core_snapshot_scopes_make_control_stale_after_portfolio_fact_correction() -> None:
+    control_timestamp = datetime(2026, 4, 10, 3, tzinfo=UTC)
+    scopes = core_snapshot_reconciliation_scopes(
+        [
+            _row(
+                updated_at=datetime(2026, 4, 10, 2, tzinfo=UTC),
+                portfolio_fact_updated_at=datetime(2026, 4, 10, 4, tzinfo=UTC),
+            )
+        ]
+    )
+
+    evidence = core_snapshot_reconciliation_evidence(
+        scopes=scopes,
+        controls=[
+            FinancialReconciliationControl(
+                business_date=date(2026, 4, 10),
+                epoch=4,
+                status="COMPLETED",
+                updated_at=control_timestamp,
+            )
+        ],
+    )
+
+    assert evidence.status == STALE
 
 
 def test_core_snapshot_source_hash_is_order_independent_and_value_sensitive() -> None:

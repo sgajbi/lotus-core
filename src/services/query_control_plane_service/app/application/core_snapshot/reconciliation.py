@@ -40,8 +40,8 @@ def core_snapshot_reconciliation_scopes(
                 row_epoch=row.epoch,
                 state_epoch=row.epoch,
                 latest_evidence_timestamp=_latest_timestamp(
-                    row.source_created_at,
-                    row.source_updated_at,
+                    row.portfolio_fact_created_at,
+                    row.portfolio_fact_updated_at,
                     row.state_created_at,
                     row.state_updated_at,
                 ),
