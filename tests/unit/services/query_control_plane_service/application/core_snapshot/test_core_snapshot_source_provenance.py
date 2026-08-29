@@ -78,7 +78,6 @@ def _resolve(
         requested_as_of_date=requested_as_of_date,
         position_rows=tuple(rows),
         use_snapshot=use_snapshot,
-        portfolio_source_hash="a" * 64,
         reporting_fx=reporting_fx or _identity_fx(),
         projected_market_data=projected_market_data,
     )
@@ -167,6 +166,24 @@ def test_market_source_identity_changes_with_authoritative_fx_fact() -> None:
     )
     assert first.source_provenance.market_data.source_id != (
         revised.source_provenance.market_data.source_id
+    )
+
+
+def test_market_value_correction_does_not_restate_portfolio_source_identity() -> None:
+    original = _resolve(_row("SEC_A", market_value=Decimal("100")))
+    corrected = _resolve(_row("SEC_A", market_value=Decimal("105")))
+
+    assert original.source_provenance.portfolio.source_hash == (
+        corrected.source_provenance.portfolio.source_hash
+    )
+    assert original.source_provenance.portfolio.source_id == (
+        corrected.source_provenance.portfolio.source_id
+    )
+    assert original.source_provenance.market_data.source_hash != (
+        corrected.source_provenance.market_data.source_hash
+    )
+    assert original.source_provenance.market_data.source_id != (
+        corrected.source_provenance.market_data.source_id
     )
 
 

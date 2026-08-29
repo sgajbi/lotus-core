@@ -40,7 +40,6 @@ def resolve_core_snapshot_source_provenance(
     requested_as_of_date: date,
     position_rows: tuple[CoreSnapshotPositionSource, ...],
     use_snapshot: bool,
-    portfolio_source_hash: str,
     reporting_fx: ResolvedFxRate,
     projected_market_data: tuple[MarketDataObservation, ...],
 ) -> CoreSnapshotSourceProvenanceResolution:
@@ -72,6 +71,7 @@ def resolve_core_snapshot_source_provenance(
         evidence_expected=market_evidence_expected,
     )
 
+    portfolio_source_hash = _portfolio_source_hash(position_rows)
     market_source_hash = cast(
         str,
         canonical_content_hash(
@@ -128,6 +128,45 @@ def resolve_core_snapshot_source_provenance(
         effective_as_of_date=effective_date,
         supportability=supportability,
         reason_code=reason,
+    )
+
+
+def _portfolio_source_hash(
+    position_rows: tuple[CoreSnapshotPositionSource, ...],
+) -> str:
+    return cast(
+        str,
+        canonical_content_hash(
+            {
+                "positions": [
+                    {
+                        "security_id": row.security_id,
+                        "quantity": row.quantity,
+                        "cost_basis": row.cost_basis,
+                        "cost_basis_local": row.cost_basis_local,
+                        "business_date": row.business_date,
+                        "epoch": row.epoch,
+                        "instrument": {
+                            "security_id": row.instrument.security_id,
+                            "name": row.instrument.name,
+                            "currency": row.instrument.currency,
+                            "asset_class": row.instrument.asset_class,
+                            "sector": row.instrument.sector,
+                            "country_of_risk": row.instrument.country_of_risk,
+                            "isin": row.instrument.isin,
+                            "issuer_id": row.instrument.issuer_id,
+                            "issuer_name": row.instrument.issuer_name,
+                            "ultimate_parent_issuer_id": (row.instrument.ultimate_parent_issuer_id),
+                            "ultimate_parent_issuer_name": (
+                                row.instrument.ultimate_parent_issuer_name
+                            ),
+                            "liquidity_tier": row.instrument.liquidity_tier,
+                        },
+                    }
+                    for row in sorted(position_rows, key=lambda item: item.security_id)
+                ]
+            }
+        ),
     )
 
 
