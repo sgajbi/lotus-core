@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Literal, cast
 
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
+from portfolio_common.domain.valuation import is_quote_independent_flat_position
 
 from ...contracts.core_snapshot import (
     CoreSnapshotSourceProvenance,
@@ -40,6 +41,7 @@ def resolve_core_snapshot_source_provenance(
     requested_as_of_date: date,
     position_rows: tuple[CoreSnapshotPositionSource, ...],
     use_snapshot: bool,
+    portfolio_currency: str,
     reporting_fx: ResolvedFxRate,
     projected_market_data: tuple[MarketDataObservation, ...],
 ) -> CoreSnapshotSourceProvenanceResolution:
@@ -64,10 +66,25 @@ def resolve_core_snapshot_source_provenance(
         reporting_fx=reporting_fx,
         projected_market_data=projected_market_data,
     )
-    market_dates = tuple(row.business_date for row in valued_rows) + tuple(
+    baseline_market_dates = tuple(
+        source_date
+        for row in valued_rows
+        for source_date in _baseline_market_dates(
+            row=row,
+            portfolio_currency=portfolio_currency,
+        )
+    )
+    market_dates = baseline_market_dates + tuple(
         observation.effective_as_of_date for observation in market_observations
     )
-    market_evidence_expected = len(position_rows) + len(market_observations)
+    market_evidence_expected = (
+        len(position_rows)
+        + sum(
+            int(_requires_baseline_fx_evidence(row, portfolio_currency=portfolio_currency))
+            for row in position_rows
+        )
+        + len(market_observations)
+    )
     market_date = _resolve_family_date(
         dates=market_dates,
         requested_as_of_date=requested_as_of_date,
@@ -87,6 +104,7 @@ def resolve_core_snapshot_source_provenance(
                         "market_value": row.market_value,
                         "market_value_local": row.market_value_local,
                         "valuation_status": row.valuation_status,
+                        "valuation_fx_rate_date": row.valuation_fx_rate_date,
                     }
                     for row in sorted(position_rows, key=lambda item: item.security_id)
                 ],
@@ -133,6 +151,33 @@ def resolve_core_snapshot_source_provenance(
         supportability=supportability,
         reason_code=reason,
     )
+
+
+def _baseline_market_dates(
+    *,
+    row: CoreSnapshotPositionSource,
+    portfolio_currency: str,
+) -> tuple[date | None, ...]:
+    dates: tuple[date | None, ...] = (row.business_date,)
+    if _requires_baseline_fx_evidence(row, portfolio_currency=portfolio_currency):
+        return dates + (row.valuation_fx_rate_date,)
+    return dates
+
+
+def _requires_baseline_fx_evidence(
+    row: CoreSnapshotPositionSource,
+    *,
+    portfolio_currency: str,
+) -> bool:
+    is_cross_currency = (
+        row.instrument.currency.strip().upper() != portfolio_currency.strip().upper()
+    )
+    is_flat = is_quote_independent_flat_position(
+        quantity=row.quantity,
+        cost_basis_reporting=row.cost_basis,
+        cost_basis_local=row.cost_basis_local,
+    )
+    return is_cross_currency and not is_flat
 
 
 def _portfolio_source_hash(

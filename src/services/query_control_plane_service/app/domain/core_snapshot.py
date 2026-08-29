@@ -51,6 +51,7 @@ class CoreSnapshotPositionSource:
     instrument: CoreSnapshotInstrument
     business_date: date | None = None
     valuation_status: str | None = None
+    valuation_fx_rate_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)

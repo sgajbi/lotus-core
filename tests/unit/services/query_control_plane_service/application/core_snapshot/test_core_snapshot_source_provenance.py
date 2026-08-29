@@ -24,17 +24,22 @@ def _row(
     security_id: str,
     *,
     business_date: date | None = date(2026, 2, 27),
+    quantity: Decimal = Decimal("10"),
     market_value: Decimal | None = Decimal("100"),
+    cost_basis: Decimal = Decimal("80"),
+    cost_basis_local: Decimal = Decimal("80"),
     valuation_status: str | None = "VALUED_CURRENT",
+    instrument_currency: str = "USD",
+    valuation_fx_rate_date: date | None = None,
 ) -> CoreSnapshotPositionSource:
     evidence_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
     return CoreSnapshotPositionSource(
         security_id=security_id,
-        quantity=Decimal("10"),
+        quantity=quantity,
         market_value=market_value,
         market_value_local=market_value,
-        cost_basis=Decimal("80"),
-        cost_basis_local=Decimal("80"),
+        cost_basis=cost_basis,
+        cost_basis_local=cost_basis_local,
         epoch=7,
         source_created_at=evidence_timestamp,
         source_updated_at=evidence_timestamp,
@@ -43,7 +48,7 @@ def _row(
         instrument=CoreSnapshotInstrument(
             security_id=security_id,
             name=security_id,
-            currency="USD",
+            currency=instrument_currency,
             asset_class="EQUITY",
             sector=None,
             country_of_risk=None,
@@ -56,6 +61,7 @@ def _row(
         ),
         business_date=business_date,
         valuation_status=valuation_status,
+        valuation_fx_rate_date=valuation_fx_rate_date,
     )
 
 
@@ -72,6 +78,7 @@ def _resolve(
     *rows: CoreSnapshotPositionSource,
     requested_as_of_date: date = date(2026, 2, 27),
     use_snapshot: bool = True,
+    portfolio_currency: str = "USD",
     reporting_fx: ResolvedFxRate | None = None,
     projected_market_data: tuple[MarketDataObservation, ...] = (),
 ):
@@ -80,6 +87,7 @@ def _resolve(
         requested_as_of_date=requested_as_of_date,
         position_rows=tuple(rows),
         use_snapshot=use_snapshot,
+        portfolio_currency=portfolio_currency,
         reporting_fx=reporting_fx or _identity_fx(),
         projected_market_data=projected_market_data,
     )
@@ -229,3 +237,66 @@ def test_source_provenance_rejects_carried_forward_baseline_price() -> None:
     assert resolution.source_provenance.market_data.source_hash != (
         current.source_provenance.market_data.source_hash
     )
+
+
+def test_source_provenance_rejects_carried_forward_baseline_fx() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_EUR",
+            instrument_currency="EUR",
+            valuation_fx_rate_date=date(2026, 2, 26),
+        ),
+        portfolio_currency="USD",
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_CONFLICT
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.market_data.as_of is None
+    assert resolution.source_provenance.market_data.freshness_status == "PARTIAL"
+
+
+def test_source_provenance_rejects_missing_baseline_fx_lineage() -> None:
+    resolution = _resolve(
+        _row("SEC_EUR", instrument_currency="EUR"),
+        portfolio_currency="USD",
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.market_data.as_of is None
+    assert resolution.source_provenance.market_data.freshness_status == "UNAVAILABLE"
+
+
+def test_source_provenance_accepts_exact_date_baseline_fx() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_EUR",
+            instrument_currency="EUR",
+            valuation_fx_rate_date=date(2026, 2, 27),
+        ),
+        portfolio_currency="USD",
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.READY
+    assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_EVIDENCE_READY
+    assert resolution.effective_as_of_date == date(2026, 2, 27)
+
+
+def test_source_provenance_does_not_fabricate_fx_for_flat_position() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_EUR",
+            instrument_currency="EUR",
+            quantity=Decimal("0"),
+            cost_basis=Decimal("0"),
+            cost_basis_local=Decimal("0"),
+            market_value=Decimal("0"),
+        ),
+        portfolio_currency="USD",
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.READY
+    assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_EVIDENCE_READY
+    assert resolution.effective_as_of_date == date(2026, 2, 27)
