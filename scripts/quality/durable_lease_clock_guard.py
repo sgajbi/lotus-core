@@ -16,6 +16,7 @@ _APPLICATION_CLOCK_CALLS = {
 }
 _APPLICATION_CLOCK_HELPER_NAMES = {
     "utc_now",
+    "now_utc",
     "utcnow",
     "today",
     "current_time",
