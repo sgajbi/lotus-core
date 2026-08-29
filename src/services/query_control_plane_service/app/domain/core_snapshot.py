@@ -50,6 +50,7 @@ class CoreSnapshotPositionSource:
     state_updated_at: datetime | None
     instrument: CoreSnapshotInstrument
     business_date: date | None = None
+    valuation_status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

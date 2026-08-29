@@ -55,7 +55,10 @@ def resolve_core_snapshot_source_provenance(
     valued_rows = tuple(
         row
         for row in position_rows
-        if use_snapshot and row.market_value is not None and row.business_date is not None
+        if use_snapshot
+        and row.market_value is not None
+        and row.business_date is not None
+        and row.valuation_status == "VALUED_CURRENT"
     )
     market_observations = _market_observations(
         reporting_fx=reporting_fx,
@@ -83,6 +86,7 @@ def resolve_core_snapshot_source_provenance(
                         "epoch": row.epoch,
                         "market_value": row.market_value,
                         "market_value_local": row.market_value_local,
+                        "valuation_status": row.valuation_status,
                     }
                     for row in sorted(position_rows, key=lambda item: item.security_id)
                 ],

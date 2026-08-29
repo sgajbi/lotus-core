@@ -325,4 +325,5 @@ def _position_source(
         state_updated_at=state.updated_at,
         instrument=_instrument_record(instrument),
         business_date=(row.date if use_snapshot else row.position_date),
+        valuation_status=getattr(row, "valuation_status", None) if use_snapshot else None,
     )
