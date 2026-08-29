@@ -16,6 +16,8 @@ Status: Initial scorecard baseline on 2026-06-02.
   defaults, so production-like Core environments default read authorization, read audit,
   capability-rule enforcement, and runtime-config enforcement to fail closed unless explicitly
   overridden.
+- CR-1714 zero-floor maintainability entries retain exact unclamped MI so further degradation
+  cannot hide behind Radon's clamped `0.00`.
 
 | Category | Current Baseline | Target Direction |
 | --- | --- | --- |

@@ -4291,10 +4291,11 @@ Most relevant current governance:
 256. Production maintainability and module size are blocking, zero-headroom ratchets. The default
      Radon maintainability ceiling is rank B; current tracked C-ranked modules exist only in
      `quality/maintainability-baseline.v1.json`, and any new, worsened, improved, missing, or stale
-     entry must fail until the reviewed baseline is updated. Tracked Python modules under `src/`
-     have a 1,500-line hard budget; current exceptions exist only in
-     `quality/module-size-baseline.v1.json` with owner, rationale, issue, expiry, and exact line
-     count. `make quality-maintainability-gate` and `make quality-source-size-gate` run in the
+     entry must fail until the reviewed baseline is updated. Entries at Radon's clamped `0.00`
+     floor also retain the exact unclamped MI, preventing invisible degradation below the floor.
+     Tracked Python modules under `src/` have a 1,500-line hard budget; current exceptions exist
+     only in `quality/module-size-baseline.v1.json` with owner, rationale, issue, expiry, and exact
+     line count. `make quality-maintainability-gate` and `make quality-source-size-gate` run in the
      required Quality Baseline maintainability job. Both gates use Git's tracked-file inventory,
      fail on empty scans, and intentionally ignore untracked generated build output. Do not add
      headroom, silent exclusions, or baseline entries without owning backlog evidence.

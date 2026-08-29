@@ -23,7 +23,9 @@ inventories so local generated files cannot alter clean-CI truth.
 
 1. Make rank B the default maintainability ceiling.
 2. Bank each current tracked C module at its exact Radon MI value with an owner, rationale, and
-   issue. New debt, worse debt, unbanked improvement, missing files, and stale entries fail.
+   issue. For modules clamped at Radon's zero floor, also bank the exact unclamped MI so further
+   degradation cannot hide behind `0.00`. New debt, worse debt, unbanked improvement, missing
+   files, and stale entries fail.
 3. Set a 1,500-line tracked-module budget. Bank each current exception at its exact line count with
    owner, rationale, issue, and expiry. New, grown, shrunken, resolved, missing, or expired entries
    fail until the baseline is ratcheted.
@@ -41,8 +43,10 @@ for adding code to hotspots.
 - `make quality-source-size-gate` passes 1,144 tracked modules with 9 reviewed entries.
 - Running the maintainability gate without its baseline returns exit 1 and names all 10 C-ranked
   files and ranks.
-- 67 focused pass/fail, changed-baseline, stale-baseline, expiry, path-traversal, tracked-inventory,
-  real-scanner, and empty-scan tests pass with 98% branch coverage across both gate modules.
+- 76 focused pass/fail, changed-baseline, zero-floor unclamped-MI, stale-baseline, expiry,
+  path-traversal, tracked-inventory, real-scanner, and empty-scan tests pass with 98% branch
+  coverage across both gate modules.
+- The full workflow-governance suite passes 530 tests at 94.27% branch-aware coverage.
 - Static required-check governance passes with 37 manifest-owned checks.
 
 ## Remaining Work

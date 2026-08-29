@@ -8,6 +8,7 @@
       "path": "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
       "rank": "C",
       "mi": 0.0,
+      "raw_mi": -3.4824447332949626,
       "owner": "lotus-core maintainers",
       "rationale": "Existing enterprise-readiness hotspot; new or changed debt is forbidden.",
       "issue": "#462"
@@ -16,6 +17,7 @@
       "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
       "rank": "C",
       "mi": 0.0,
+      "raw_mi": -17.31240066726044,
       "owner": "lotus-core maintainers",
       "rationale": "Existing shared-consumer hotspot scheduled for bounded decomposition.",
       "issue": "#462"
@@ -48,6 +50,7 @@
       "path": "src/services/portfolio_transaction_processing_service/app/infrastructure/corporate_action_event_graph/repository.py",
       "rank": "C",
       "mi": 0.0,
+      "raw_mi": -2.6523245086829195,
       "owner": "lotus-core maintainers",
       "rationale": "Existing corporate-action repository hotspot; baseline has zero growth headroom.",
       "issue": "#462"
@@ -64,6 +67,7 @@
       "path": "src/services/query_control_plane_service/app/application/operations/service.py",
       "rank": "C",
       "mi": 0.0,
+      "raw_mi": -7.444043144193977,
       "owner": "lotus-core maintainers",
       "rationale": "Existing operations application hotspot scheduled for route-family decomposition.",
       "issue": "#462"

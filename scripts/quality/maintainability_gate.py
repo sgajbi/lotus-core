@@ -11,6 +11,8 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from pathlib import Path, PurePosixPath
 
+from radon.metrics import mi_parameters
+
 RANK_ORDER = {"A": 0, "B": 1, "C": 2}
 DEFAULT_ALLOWED_RANK = "B"
 
@@ -37,7 +39,9 @@ def _validated_roots(roots: Sequence[str]) -> tuple[str, ...]:
     return tuple(validated)
 
 
-def load_baseline(path: Path, *, max_allowed_rank: str) -> dict[str, tuple[str, float]]:
+def load_baseline(
+    path: Path, *, max_allowed_rank: str
+) -> dict[str, tuple[str, float, float | None]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != "lotus.core.maintainability-baseline.v1":
         raise ValueError("Maintainability baseline has an unsupported schema_version.")
@@ -56,7 +60,7 @@ def load_baseline(path: Path, *, max_allowed_rank: str) -> dict[str, tuple[str, 
     if not isinstance(entries, list):
         raise ValueError("Maintainability baseline entries must be a list.")
 
-    baseline: dict[str, tuple[str, float]] = {}
+    baseline: dict[str, tuple[str, float, float | None]] = {}
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(f"Maintainability baseline entry {index} must be an object.")
@@ -78,12 +82,24 @@ def load_baseline(path: Path, *, max_allowed_rank: str) -> dict[str, tuple[str, 
         mi = entry.get("mi")
         if not isinstance(mi, int | float) or isinstance(mi, bool):
             raise ValueError(f"Maintainability baseline entry {normalized} must define numeric mi.")
+        raw_mi = entry.get("raw_mi")
+        if float(mi) == 0.0 and (not isinstance(raw_mi, int | float) or isinstance(raw_mi, bool)):
+            raise ValueError(
+                f"Maintainability baseline entry {normalized} at the MI floor must define "
+                "numeric raw_mi."
+            )
+        if raw_mi is not None and (not isinstance(raw_mi, int | float) or isinstance(raw_mi, bool)):
+            raise ValueError(f"Maintainability baseline entry {normalized} raw_mi must be numeric.")
         for field in ("owner", "rationale", "issue"):
             if not isinstance(entry.get(field), str) or not entry[field].strip():
                 raise ValueError(
                     f"Maintainability baseline entry {normalized} must define {field}."
                 )
-        baseline[normalized] = (rank, float(mi))
+        baseline[normalized] = (
+            rank,
+            float(mi),
+            float(raw_mi) if raw_mi is not None else None,
+        )
     return baseline
 
 
@@ -91,7 +107,7 @@ def maintainability_violations(
     report: Mapping[str, Mapping[str, object]],
     *,
     max_allowed_rank: str = DEFAULT_ALLOWED_RANK,
-    baseline: Mapping[str, tuple[str, float]] | None = None,
+    baseline: Mapping[str, tuple[str, float, float | None]] | None = None,
 ) -> list[str]:
     allowed_rank = max_allowed_rank.upper()
     allowed_score = RANK_ORDER[allowed_rank]
@@ -115,7 +131,7 @@ def maintainability_violations(
             continue
         if RANK_ORDER[rank] <= allowed_score:
             if path in accepted_debt:
-                baseline_rank, baseline_mi = accepted_debt[path]
+                baseline_rank, baseline_mi, _ = accepted_debt[path]
                 violations.append(
                     f"{path}: improved to rank {rank} ({mi:.2f}); remove stale baseline "
                     f"{baseline_rank} ({baseline_mi:.2f})"
@@ -130,21 +146,55 @@ def maintainability_violations(
                 "without a reviewed baseline"
             )
             continue
-        baseline_rank, baseline_mi = accepted
+        baseline_rank, baseline_mi, baseline_raw_mi = accepted
         if not math.isclose(mi, baseline_mi, abs_tol=1e-6):
             direction = "improved" if mi > baseline_mi else "worsened"
             violations.append(
                 f"{path}: maintainability {direction} from baseline {baseline_rank} "
                 f"({baseline_mi:.2f}) to {rank} ({mi:.2f}); ratchet the baseline"
             )
+        elif baseline_mi == 0.0:
+            raw_mi = metrics.get("raw_mi")
+            if (
+                baseline_raw_mi is None
+                or not isinstance(raw_mi, int | float)
+                or isinstance(raw_mi, bool)
+            ):
+                violations.append(
+                    f"{path}: clamped maintainability requires numeric raw_mi evidence"
+                )
+            elif not math.isclose(float(raw_mi), baseline_raw_mi, abs_tol=1e-6):
+                direction = "improved" if float(raw_mi) > baseline_raw_mi else "worsened"
+                violations.append(
+                    f"{path}: unclamped maintainability {direction} from baseline "
+                    f"{baseline_raw_mi:.2f} to {float(raw_mi):.2f}; ratchet the baseline"
+                )
 
     for path in sorted(set(accepted_debt) - observed_debt):
         if path not in normalized_report:
-            rank, mi = accepted_debt[path]
+            rank, mi, _ = accepted_debt[path]
             violations.append(
                 f"{path}: baseline {rank} ({mi:.2f}) was not observed; remove stale baseline"
             )
     return violations
+
+
+def unclamped_maintainability_index(source: str) -> float:
+    raw_volume, raw_complexity, raw_logical_lines, raw_comments = mi_parameters(source)
+    volume = float(raw_volume)
+    complexity = float(raw_complexity)
+    logical_lines = float(raw_logical_lines)
+    comments = float(raw_comments)
+    if volume <= 0 or logical_lines <= 0:
+        return 100.0
+    non_normalized = (
+        171
+        - 5.2 * math.log(volume)
+        - 0.23 * complexity
+        - 16.2 * math.log(logical_lines)
+        + 50 * math.sin(math.sqrt(2.46 * math.radians(comments)))
+    )
+    return float(non_normalized * 100 / 171.0)
 
 
 def tracked_python_paths(roots: Sequence[str]) -> set[str]:
@@ -177,11 +227,17 @@ def run_radon_maintainability(roots: Sequence[str]) -> dict[str, dict[str, objec
         raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
     report = json.loads(completed.stdout or "{}")
     tracked = tracked_python_paths(validated_roots)
-    return {
-        _normalized_path(path): metrics
-        for path, metrics in report.items()
-        if _normalized_path(path) in tracked
-    }
+    tracked_report: dict[str, dict[str, object]] = {}
+    for path, metrics in report.items():
+        normalized = _normalized_path(path)
+        if normalized not in tracked:
+            continue
+        tracked_metrics = dict(metrics)
+        if tracked_metrics.get("mi") == 0.0:
+            source = Path(normalized).read_text(encoding="utf-8")
+            tracked_metrics["raw_mi"] = unclamped_maintainability_index(source)
+        tracked_report[normalized] = tracked_metrics
+    return tracked_report
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
