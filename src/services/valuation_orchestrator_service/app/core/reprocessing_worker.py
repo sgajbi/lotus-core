@@ -327,6 +327,8 @@ class ReprocessingWorker:
             )
         stop_renewal = asyncio.Event()
         terminal_transition_started = asyncio.Event()
+        lease_deadline_state = {"deadline": initial_lease_deadline}
+        lease_deadline_changed = asyncio.Event()
 
         async def run_operation() -> None:
             try:
@@ -344,9 +346,16 @@ class ReprocessingWorker:
                 stop_event=stop_renewal,
                 terminal_transition_started=terminal_transition_started,
                 initial_lease_deadline=initial_lease_deadline,
+                lease_deadline_state=lease_deadline_state,
+                lease_deadline_changed=lease_deadline_changed,
             )
         )
-        deadline_task = asyncio.create_task(self._wait_until_lease_deadline(initial_lease_deadline))
+        deadline_task = asyncio.create_task(
+            self._wait_until_lease_deadline(
+                lease_deadline_state=lease_deadline_state,
+                lease_deadline_changed=lease_deadline_changed,
+            )
+        )
         deadline_expired = False
         try:
             done, _pending = await asyncio.wait(
@@ -389,10 +398,21 @@ class ReprocessingWorker:
                 await asyncio.gather(operation_task, renewal_task, return_exceptions=True)
 
     @staticmethod
-    async def _wait_until_lease_deadline(deadline: float) -> None:
-        remaining_seconds = deadline - asyncio.get_running_loop().time()
-        if remaining_seconds > 0:
-            await asyncio.sleep(remaining_seconds)
+    async def _wait_until_lease_deadline(
+        *,
+        lease_deadline_state: dict[str, float],
+        lease_deadline_changed: asyncio.Event,
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        while True:
+            lease_deadline_changed.clear()
+            remaining_seconds = lease_deadline_state["deadline"] - loop.time()
+            if remaining_seconds <= 0:
+                return
+            try:
+                await asyncio.wait_for(lease_deadline_changed.wait(), timeout=remaining_seconds)
+            except asyncio.TimeoutError:
+                return
 
     async def _await_task_cleanup(self, task: asyncio.Task[object]) -> None:
         if task.done():
@@ -447,6 +467,8 @@ class ReprocessingWorker:
         stop_event: asyncio.Event,
         terminal_transition_started: asyncio.Event,
         initial_lease_deadline: float | None = None,
+        lease_deadline_state: dict[str, float] | None = None,
+        lease_deadline_changed: asyncio.Event | None = None,
     ) -> None:
         loop = asyncio.get_running_loop()
         scheduled_at = loop.time()
@@ -556,6 +578,10 @@ class ReprocessingWorker:
                     raise ReprocessingJobOwnershipLostError(
                         f"reprocessing job {self._job_id(job)} lease authority was lost"
                     )
+                if lease_deadline_state is not None:
+                    lease_deadline_state["deadline"] = lease_deadline
+                    if lease_deadline_changed is not None:
+                        lease_deadline_changed.set()
                 next_renewal_at = self._next_lease_renewal_at(
                     now=renewed_at,
                     lease_deadline=lease_deadline,
