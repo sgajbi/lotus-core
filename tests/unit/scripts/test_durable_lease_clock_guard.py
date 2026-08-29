@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from scripts.quality.durable_lease_clock_guard import find_durable_lease_clock_findings
 
 
@@ -209,13 +211,17 @@ def test_durable_lease_clock_guard_allows_database_clock_with_duration(tmp_path:
     assert find_durable_lease_clock_findings(repo_root=tmp_path) == []
 
 
-def test_durable_lease_clock_guard_rejects_transaction_start_sql_clock(tmp_path: Path) -> None:
+@pytest.mark.parametrize("clock_name", ["now", "transaction_timestamp"])
+def test_durable_lease_clock_guard_rejects_transaction_start_sql_clock(
+    tmp_path: Path,
+    clock_name: str,
+) -> None:
     source = tmp_path / "src" / "leases.py"
     source.parent.mkdir(parents=True)
     source.write_text(
         "from datetime import timedelta\n"
         "from sqlalchemy import func\n"
-        "lease_expires_at = func.now() + timedelta(seconds=30)\n",
+        f"lease_expires_at = func.{clock_name}() + timedelta(seconds=30)\n",
         encoding="utf-8",
     )
 
