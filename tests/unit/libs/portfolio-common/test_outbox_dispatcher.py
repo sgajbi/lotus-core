@@ -439,6 +439,40 @@ def test_dispatcher_aborts_queued_publish_when_post_publish_refresh_is_incomplet
     flush_results.assert_not_called()
 
 
+def test_dispatcher_refreshes_claim_between_published_events(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    dispatcher = module.OutboxDispatcher(kafka_producer=producer)
+    now = module.datetime.now(module.timezone.utc)
+    events = [
+        module._ClaimedOutboxEvent(
+            id=event_id,
+            aggregate_type="PublishLoop",
+            aggregate_id=f"agg-{event_id}",
+            partition_key=f"PORT_001|SEC_{event_id}",
+            event_type="TestEvent",
+            payload={},
+            topic="publish-loop.topic",
+            correlation_id=None,
+            traceparent=None,
+            retry_count=0,
+            created_at=now,
+            claim_token=f"claim-{event_id}",
+            claim_expires_at=now + timedelta(seconds=30),
+        )
+        for event_id in (201, 202)
+    ]
+    renew_claims = MagicMock(return_value=False)
+    monkeypatch.setattr(dispatcher, "_renew_claims_for_delivery", renew_claims)
+
+    assert dispatcher._publish_events(events, {}, {}) is False
+
+    assert producer.publish_message.call_count == 1
+    producer.reset_after_flush_failure.assert_called_once_with()
+    assert renew_claims.call_args_list == [((events,), {})]
+
+
 def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:
     import portfolio_common.outbox_dispatcher as module
 
