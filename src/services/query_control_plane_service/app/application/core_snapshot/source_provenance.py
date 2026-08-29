@@ -84,7 +84,7 @@ def resolve_core_snapshot_source_provenance(
                         "market_value": row.market_value,
                         "market_value_local": row.market_value_local,
                     }
-                    for row in sorted(valued_rows, key=lambda item: item.security_id)
+                    for row in sorted(position_rows, key=lambda item: item.security_id)
                 ],
                 "market_observations": [
                     observation.lineage_payload()

@@ -185,6 +185,7 @@ def test_source_provenance_exposes_matching_stale_date_without_claiming_readines
 
 
 def test_source_provenance_rejects_partially_valued_snapshot() -> None:
+    complete = _resolve(_row("SEC_A"))
     resolution = _resolve(
         _row("SEC_A"),
         _row("SEC_B", market_value=None),
@@ -192,3 +193,6 @@ def test_source_provenance_rejects_partially_valued_snapshot() -> None:
 
     assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
     assert resolution.source_provenance.market_data.as_of is None
+    assert resolution.source_provenance.market_data.source_hash != (
+        complete.source_provenance.market_data.source_hash
+    )
