@@ -183,6 +183,24 @@ def test_durable_lease_clock_guard_scans_class_level_defaults(tmp_path: Path) ->
     ]
 
 
+def test_durable_lease_clock_guard_rejects_callable_clock_default(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "models.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime\n"
+        "\n"
+        "class Job:\n"
+        "    lease_expires_at = mapped_column(default=datetime.now)\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert [(finding.target, finding.line) for finding in findings] == [
+        ("lease_expires_at", 4),
+    ]
+
+
 def test_durable_lease_clock_guard_rejects_now_utc_clock_port(tmp_path: Path) -> None:
     source = tmp_path / "src" / "leases.py"
     source.parent.mkdir(parents=True)
