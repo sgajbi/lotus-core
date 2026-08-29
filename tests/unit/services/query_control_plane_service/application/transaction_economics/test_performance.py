@@ -280,6 +280,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         transactions=[transaction],
         portfolio_base_currency="USD",
         generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+        is_initial_page=True,
     )
     regenerated_response = build_performance_component_economics_response(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -288,6 +289,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         transactions=[transaction],
         portfolio_base_currency="USD",
         generated_at=datetime(2026, 5, 10, 16, tzinfo=UTC),
+        is_initial_page=True,
     )
 
     assert response.product_name == "PerformanceComponentEconomics"
@@ -569,6 +571,7 @@ def test_performance_component_economics_empty_response_is_authoritative_no_acti
         transactions=[],
         portfolio_base_currency="USD",
         generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+        is_initial_page=True,
     )
 
     assert response.supportability.state == "READY"
@@ -752,6 +755,21 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
     assert response.source_evidence_current is False
     assert response.freshness_status == "UNAVAILABLE"
     assert response.rows == []
+
+    initial_empty = build_performance_component_economics_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PerformanceComponentEconomicsRequest(
+            as_of_date=date(2026, 4, 10),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+        ),
+        rows=[],
+        transactions=[],
+        portfolio_base_currency="USD",
+        generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+        is_initial_page=True,
+    )
+    assert response.request_fingerprint == initial_empty.request_fingerprint
+    assert response.content_hash != initial_empty.content_hash
 
 
 @pytest.mark.asyncio

@@ -1301,6 +1301,7 @@ async def test_performance_component_economics_authoritative_empty_is_ready(
             transactions=[],
             portfolio_base_currency="USD",
             generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+            is_initial_page=True,
         )
     )
 
