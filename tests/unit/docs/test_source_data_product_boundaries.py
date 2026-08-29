@@ -150,6 +150,19 @@ def test_mesh_wiki_distinguishes_active_products_from_mesh_certification() -> No
     assert "Active source-product declaration, local implementation proof" in normalized_context
 
 
+def test_portfolio_state_snapshot_docs_preserve_source_owned_date_authority() -> None:
+    wiki = _single_line(_read("wiki/Query-Control-Plane.md"))
+    mesh = _single_line(_read("wiki/Mesh-Data-Products.md"))
+    context = _single_line(_read("REPOSITORY-ENGINEERING-CONTEXT.md"))
+
+    for text in (wiki, mesh, context):
+        assert "source_provenance" in text
+        assert "carried-forward" in text
+    assert "consumers must not replace them with request or wall-clock dates" in wiki
+    assert "cannot claim current valuation evidence" in mesh
+    assert "Do not let consumers synthesize these dates" in context
+
+
 def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> None:
     catalog = _read("docs/architecture/RFC-0083-source-data-product-catalog.md")
     wiki = _read("wiki/Mesh-Data-Products.md")

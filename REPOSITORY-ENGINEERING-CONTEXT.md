@@ -3503,6 +3503,13 @@ Most relevant current governance:
      output hash. Generation time and correlation ids remain operational evidence and must not alter
      identity. Keep the DTO/workflow/source extraction in QCP; share only framework-independent
      reconciliation and calculation-lineage primitives.
+     The same contract owns portfolio and market-data effective-date truth through its typed
+     `source_provenance` envelope. Preserve actual position business dates, projected price dates,
+     and non-identity FX dates through calculation and serialization. `READY` requires one coherent
+     date per source family, equality between families, and equality to the requested business
+     date. Historical cost-basis fallback, missing valuations, mixed dates, and carried-forward
+     observations fail closed with stable reason codes. Do not let consumers synthesize these
+     dates from request fields, wall-clock time, or several weaker routes.
 213. App-local Compose must start every worker-capable service through the same owned runtime entry
      point as its Dockerfile. Do not override `financial_reconciliation_service` with the pure HTTP
      `app.main` application: `app.runtime` owns the reconciliation-request consumer, outbox

@@ -41,7 +41,11 @@ collapsed into structural `PARTIAL`. Stale coverage carries both `freshness_stat
 
 `PortfolioStateSnapshot:v1` fails closed when an exact financial-reconciliation control is missing,
 running, failed, unknown, or older than its selected position evidence. A response is current only
-when reconciliation is complete, data quality is complete or partial, and timestamp evidence exists.
+when reconciliation is complete, data quality is complete or partial, timestamp evidence exists,
+and typed portfolio and market-data provenance proves one source-owned effective date equal to the
+requested date. Historical cost-basis fallback, missing valuations, mixed position dates, and
+carried-forward price or FX observations cannot claim current valuation evidence.
+The typed `source_provenance` envelope carries the two independent source identities and dates.
 Its deterministic identity is tenant-, request-, source-, policy-, valuation-, restatement-, and
 simulation-version-bound; response generation time and correlation ids do not revise the snapshot.
 
