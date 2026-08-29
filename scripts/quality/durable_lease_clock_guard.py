@@ -102,9 +102,28 @@ def _application_clock_calls(tree: ast.AST) -> set[tuple[str, str]]:
     return calls
 
 
+def _walk_lexical_scope(scope: ast.AST):
+    """Yield nodes in one lexical scope without traversing nested scopes."""
+
+    stack = [scope]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in reversed(list(ast.iter_child_nodes(node))):
+            if node is not scope and isinstance(
+                node,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+            ):
+                continue
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                yield child
+                continue
+            stack.append(child)
+
+
 def _assignment_pairs(tree: ast.AST) -> list[tuple[list[str], ast.AST]]:
     pairs: list[tuple[list[str], ast.AST]] = []
-    for node in ast.walk(tree):
+    for node in _walk_lexical_scope(tree):
         if isinstance(node, ast.Assign):
             pairs.extend((_target_names(target), node.value) for target in node.targets)
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
@@ -115,10 +134,11 @@ def _assignment_pairs(tree: ast.AST) -> list[tuple[list[str], ast.AST]]:
 def _application_clock_names(
     tree: ast.AST,
     application_clock_calls: set[tuple[str, str]],
+    initial_names: set[str] | None = None,
 ) -> set[str]:
     """Conservatively taint locals derived from application-clock expressions."""
 
-    names: set[str] = set()
+    names: set[str] = set(initial_names or ())
     pairs = _assignment_pairs(tree)
     changed = True
     while changed:
@@ -139,7 +159,7 @@ def _expanded_deadline_targets(
     """Find deadline keys hidden behind ``**mapping`` call expansions."""
 
     mappings: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
+    for node in _walk_lexical_scope(tree):
         if isinstance(node, ast.Assign):
             assignments = [(_target_names(target), node.value) for target in node.targets]
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
@@ -192,80 +212,92 @@ def find_durable_lease_clock_findings(
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         application_clock_calls = _application_clock_calls(tree)
-        application_clock_names = _application_clock_names(tree, application_clock_calls)
-        expanded_deadline_targets = _expanded_deadline_targets(
-            tree,
-            application_clock_names,
-            application_clock_calls,
-        )
-        for node in ast.walk(tree):
-            assignments: list[tuple[list[str], ast.AST]] = []
-            if isinstance(node, ast.Assign):
-                assignments = [(_target_names(target), node.value) for target in node.targets]
-            elif isinstance(node, ast.AnnAssign):
-                assignments = [(_target_names(node.target), node.value)] if node.value else []
-            elif isinstance(node, ast.Call):
-                assignments = [
-                    ([keyword.arg], keyword.value)
-                    for keyword in node.keywords
-                    if keyword.arg and keyword.arg.endswith(_DEADLINE_SUFFIX)
-                ]
-                for keyword in node.keywords:
-                    if keyword.arg is None and isinstance(keyword.value, ast.Name):
-                        assignments.append(
-                            (
-                                list(expanded_deadline_targets.get(keyword.value.id, set())),
-                                keyword.value,
+        module_names = _application_clock_names(tree, application_clock_calls)
+        scopes = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        scopes.insert(0, tree)
+        for scope in scopes:
+            application_clock_names = _application_clock_names(
+                scope,
+                application_clock_calls,
+                initial_names=module_names if scope is not tree else None,
+            )
+            expanded_deadline_targets = _expanded_deadline_targets(
+                scope,
+                application_clock_names,
+                application_clock_calls,
+            )
+            for node in _walk_lexical_scope(scope):
+                assignments: list[tuple[list[str], ast.AST]] = []
+                if isinstance(node, ast.Assign):
+                    assignments = [(_target_names(target), node.value) for target in node.targets]
+                elif isinstance(node, ast.AnnAssign):
+                    assignments = [(_target_names(node.target), node.value)] if node.value else []
+                elif isinstance(node, ast.Call):
+                    assignments = [
+                        ([keyword.arg], keyword.value)
+                        for keyword in node.keywords
+                        if keyword.arg and keyword.arg.endswith(_DEADLINE_SUFFIX)
+                    ]
+                    for keyword in node.keywords:
+                        if keyword.arg is None and isinstance(keyword.value, ast.Name):
+                            assignments.append(
+                                (
+                                    list(expanded_deadline_targets.get(keyword.value.id, set())),
+                                    keyword.value,
+                                )
                             )
-                        )
-                    elif keyword.arg is None and isinstance(keyword.value, ast.Dict):
-                        assignments.extend(
-                            ([key.value], item_value)
-                            for key, item_value in zip(
-                                keyword.value.keys,
-                                keyword.value.values,
-                                strict=False,
+                        elif keyword.arg is None and isinstance(keyword.value, ast.Dict):
+                            assignments.extend(
+                                ([key.value], item_value)
+                                for key, item_value in zip(
+                                    keyword.value.keys,
+                                    keyword.value.values,
+                                    strict=False,
+                                )
+                                if isinstance(key, ast.Constant)
+                                and isinstance(key.value, str)
+                                and key.value.endswith(_DEADLINE_SUFFIX)
                             )
-                            if isinstance(key, ast.Constant)
-                            and isinstance(key.value, str)
-                            and key.value.endswith(_DEADLINE_SUFFIX)
-                        )
-                for argument in node.args:
-                    if isinstance(argument, ast.Name):
-                        assignments.extend(
-                            (
-                                [target],
-                                argument,
+                    for argument in node.args:
+                        if isinstance(argument, ast.Name):
+                            assignments.extend(
+                                (
+                                    [target],
+                                    argument,
+                                )
+                                for target in expanded_deadline_targets.get(argument.id, set())
                             )
-                            for target in expanded_deadline_targets.get(argument.id, set())
-                        )
-                    elif isinstance(argument, ast.Dict):
-                        assignments.extend(
-                            ([key.value], item_value)
-                            for key, item_value in zip(
-                                argument.keys,
-                                argument.values,
-                                strict=False,
+                        elif isinstance(argument, ast.Dict):
+                            assignments.extend(
+                                ([key.value], item_value)
+                                for key, item_value in zip(
+                                    argument.keys,
+                                    argument.values,
+                                    strict=False,
+                                )
+                                if isinstance(key, ast.Constant)
+                                and isinstance(key.value, str)
+                                and key.value.endswith(_DEADLINE_SUFFIX)
                             )
-                            if isinstance(key, ast.Constant)
-                            and isinstance(key.value, str)
-                            and key.value.endswith(_DEADLINE_SUFFIX)
-                        )
-            for targets, value in assignments:
-                for target in targets:
-                    if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(
-                        value,
-                        application_clock_names,
-                        application_clock_calls,
-                    ):
-                        findings.append(
-                            DurableLeaseClockFinding(
-                                file=path.relative_to(repo_root).as_posix(),
-                                line=node.lineno,
-                                column=node.col_offset,
-                                target=target,
+                for targets, value in assignments:
+                    for target in targets:
+                        if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(
+                            value,
+                            application_clock_names,
+                            application_clock_calls,
+                        ):
+                            findings.append(
+                                DurableLeaseClockFinding(
+                                    file=path.relative_to(repo_root).as_posix(),
+                                    line=node.lineno,
+                                    column=node.col_offset,
+                                    target=target,
+                                )
                             )
-                        )
     return findings
 
 

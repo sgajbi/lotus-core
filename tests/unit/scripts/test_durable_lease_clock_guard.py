@@ -135,3 +135,27 @@ def test_durable_lease_clock_guard_rejects_injected_clock_helpers(
         "lease_expires_at",
         "lease_expires_at",
     ]
+
+
+def test_durable_lease_clock_guard_scopes_taint_to_each_function(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n"
+        "from sqlalchemy import func\n"
+        "\n"
+        "def application_clock_deadline():\n"
+        "    now = datetime.now(timezone.utc)\n"
+        "    build(lease_expires_at=now)\n"
+        "\n"
+        "def database_clock_deadline():\n"
+        "    now = func.clock_timestamp()\n"
+        "    build(lease_expires_at=now)\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert [(finding.target, finding.line) for finding in findings] == [
+        ("lease_expires_at", 6),
+    ]
