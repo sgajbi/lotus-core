@@ -481,6 +481,34 @@ async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dep
     )
 
 
+async def test_core_snapshot_carried_forward_reporting_fx_invalidates_readiness(
+    mock_dependencies,
+):
+    (_, _, _, _, fx_repo, _) = mock_dependencies
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 26), rate=Decimal("1.1"))
+    ]
+    service = _service(mock_dependencies)
+
+    response = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            reporting_currency="SGD",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.valuation_context.effective_as_of_date is None
+    assert response.valuation_context.supportability == "UNAVAILABLE"
+    assert response.valuation_context.reason_code == "MARKET_DATA_AS_OF_CONFLICT"
+    assert response.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert response.source_provenance.market_data.as_of is None
+    assert response.source_provenance.market_data.freshness_status == "PARTIAL"
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
+
+
 async def test_core_snapshot_simulation_success(mock_dependencies):
     (_, _, simulation_repo, _, _, _) = mock_dependencies
     simulation_repo.get_changes.return_value = [
