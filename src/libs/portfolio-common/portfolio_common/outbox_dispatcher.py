@@ -270,7 +270,22 @@ class OutboxDispatcher:
             # A large batch can spend meaningful time enqueueing messages. Refresh
             # again before flush/result fencing so the full publish pipeline stays
             # inside the current claim lease.
-            self._renew_claims_for_delivery(events_to_process)
+            if not self._renew_claims_for_delivery(events_to_process):
+                # Do not flush an ambiguous batch after losing durable ownership:
+                # the next dispatcher may already own these rows. Purge the local
+                # producer queue and leave the outbox rows retryable.
+                self._producer.reset_after_flush_failure()
+                logger.warning(
+                    "Outbox delivery claims expired before result fencing; batch aborted.",
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.claim_renewal_aborted",
+                        operation="outbox.dispatch",
+                        status="fenced",
+                        reason_code="claim_renewal_incomplete_after_publish",
+                        event_count=len(events_to_process),
+                    ),
+                )
+                return 0
             self._flush_delivery_results(events_to_process, delivery_ack, delivery_errs)
 
             with self._session_factory() as db:
