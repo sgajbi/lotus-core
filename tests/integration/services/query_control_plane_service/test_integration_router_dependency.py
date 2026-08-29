@@ -14,9 +14,15 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
     CoreSnapshotNotFoundError,
     CoreSnapshotUnavailableSectionError,
 )
+from src.services.query_control_plane_service.app.application.transaction_economics import (
+    performance as performance_economics,
+)
 from src.services.query_control_plane_service.app.contracts.integration_policy import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
+)
+from src.services.query_control_plane_service.app.contracts.performance_component_economics import (
+    PerformanceComponentEconomicsRequest,
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_assignment_service,
@@ -1277,6 +1283,58 @@ async def test_performance_component_economics_not_found_maps_to_problem_details
         "portfolio_id": "PB_MISSING",
         "reason": "LookupError",
     }
+
+
+async def test_performance_component_economics_authoritative_empty_is_ready(
+    async_test_client,
+):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+    )
+    mock_integration_service.get_performance_component_economics = AsyncMock(
+        return_value=performance_economics.build_performance_component_economics_response(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+            rows=[],
+            transactions=[],
+            portfolio_base_currency="USD",
+            generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+        )
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PB_SG_GLOBAL_BAL_001/performance-component-economics",
+        json={
+            "as_of_date": "2026-04-10",
+            "window": {"start_date": "2026-04-01", "end_date": "2026-04-10"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["supportability"] == {
+        "state": "READY",
+        "reason": "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY",
+        "source_owner": "lotus-core",
+        "downstream_consumer": "lotus-performance",
+        "source_row_count": 0,
+        "supported_component_families": [
+            "cashflow",
+            "fee",
+            "income",
+            "tax",
+            "realized_capital_pnl",
+            "realized_fx_pnl",
+            "realized_total_pnl",
+            "fx_context",
+        ],
+        "observed_component_families": [],
+        "missing_component_families": [],
+    }
+    assert body["data_quality_status"] == "COMPLETE"
+    assert body["rows"] == []
 
 
 async def test_benchmark_assignment_success(async_test_client):

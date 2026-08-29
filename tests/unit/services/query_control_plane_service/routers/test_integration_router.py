@@ -1555,14 +1555,14 @@ async def test_get_performance_component_economics_success_path() -> None:
                 "next_page_token": None,
             },
             "supportability": {
-                "state": "UNAVAILABLE",
-                "reason": "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND",
+                "state": "READY",
+                "reason": "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY",
                 "source_owner": "lotus-core",
                 "downstream_consumer": "lotus-performance",
                 "source_row_count": 0,
                 "supported_component_families": ["cashflow", "fee"],
                 "observed_component_families": [],
-                "missing_component_families": ["cashflow", "fee"],
+                "missing_component_families": [],
             },
             "lineage": {"contract_version": "performance_component_economics_v1"},
         }
