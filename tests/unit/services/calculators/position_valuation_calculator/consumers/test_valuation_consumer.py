@@ -623,6 +623,46 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
     mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
 
+async def test_authoritative_valuation_persists_selected_fx_effective_date(
+    mock_event: PortfolioValuationRequiredEvent,
+) -> None:
+    snapshot = DailyPositionSnapshot(
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.valuation_date,
+        epoch=mock_event.epoch,
+    )
+    price_fact = MarketPriceSourceFact(
+        scope=ValuationAuthorityScope("TENANT-SG", "BOOK-SG", mock_event.security_id),
+        price_date=mock_event.valuation_date,
+        price=Decimal("100"),
+        currency="EUR",
+        quote_basis=MarketPriceQuoteBasis.UNIT_PRICE,
+        source_reference=_source_reference("market-price"),
+        fact_status=MarketPriceSourceFactStatus.ACTIVE,
+        fact_version=1,
+    )
+    valuation_result = MagicMock(
+        market_value_reporting=Decimal("1100"),
+        market_value_local=Decimal("1000"),
+        unrealized_total_reporting=Decimal("200"),
+        unrealized_total_local=Decimal("100"),
+        unrealized_price_reporting=Decimal("110"),
+        unrealized_fx_reporting=Decimal("90"),
+    )
+    selected_fx = FxRate(rate=Decimal("1.1"), rate_date=date(2025, 7, 31))
+
+    ValuationJobProcessor._apply_authoritative_valuation_result(
+        snapshot=snapshot,
+        price_fact=price_fact,
+        result=valuation_result,
+        fx_rate=selected_fx,
+    )
+
+    assert snapshot.valuation_status == "VALUED_CURRENT"
+    assert snapshot.valuation_fx_rate_date == date(2025, 7, 31)
+
+
 async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
     mock_event: PortfolioValuationRequiredEvent,
     mock_dependencies: dict,
@@ -914,7 +954,10 @@ async def test_valuation_consumer_success(
     mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
         price=Decimal("90"), currency="EUR", price_date=mock_event.valuation_date
     )
-    mock_valuation_repo.get_fx_rate.return_value = FxRate(rate=Decimal("1.1"))
+    mock_valuation_repo.get_fx_rate.return_value = FxRate(
+        rate=Decimal("1.1"),
+        rate_date=date(2025, 7, 31),
+    )
 
     persisted_snapshot = DailyPositionSnapshot(
         id=1,
@@ -938,6 +981,8 @@ async def test_valuation_consumer_success(
     mock_valuation_repo.get_last_position_history_before_date.assert_called_once_with(
         mock_event.portfolio_id, mock_event.security_id, mock_event.valuation_date, mock_event.epoch
     )
+    valuation_candidate = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
+    assert valuation_candidate.valuation_fx_rate_date == date(2025, 7, 31)
     mock_outbox_repo.create_outbox_event.assert_called_once()
 
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
@@ -1032,6 +1077,7 @@ async def test_valuation_consumer_normalizes_same_currency_without_fx_lookup(
     assert persisted_snapshot.market_value == Decimal("9000")
     assert persisted_snapshot.market_value_local == Decimal("9000")
     assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
+    assert persisted_snapshot.valuation_fx_rate_date is None
     mock_outbox_repo.create_outbox_event.assert_called_once()
 
 

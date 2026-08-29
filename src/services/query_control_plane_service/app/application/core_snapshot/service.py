@@ -299,6 +299,7 @@ class CoreSnapshotService:
             requested_as_of_date=request.as_of_date,
             position_rows=baseline.source_rows,
             use_snapshot=baseline.use_snapshot,
+            portfolio_currency=currency_context.portfolio_currency,
             reporting_fx=currency_context.reporting_fx,
             projected_market_data=projected_market_data,
         )

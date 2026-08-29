@@ -379,6 +379,7 @@ class ValuationJobProcessor:
         portfolio: Portfolio,
         price: MarketPrice | None,
     ) -> ValuationSnapshotResult:
+        snapshot.valuation_fx_rate_date = None
         book_scope = resolve_optional_valuation_book_scope(
             tenant_id=portfolio.tenant_id,
             legal_book_id=portfolio.legal_book_id,
@@ -512,7 +513,13 @@ class ValuationJobProcessor:
             instrument_to_portfolio_fx_rate=fx_rate.rate if fx_rate else None,
         )
         if valuation_result:
-            self._apply_valuation_result(snapshot, price, event, valuation_result)
+            self._apply_valuation_result(
+                snapshot=snapshot,
+                price=price,
+                event=event,
+                valuation_result=valuation_result,
+                fx_rate=fx_rate,
+            )
             return ValuationSnapshotResult(
                 snapshot=snapshot,
                 job_failure_reason=None,
@@ -625,6 +632,7 @@ class ValuationJobProcessor:
             snapshot=snapshot,
             price_fact=price_fact,
             result=result,
+            fx_rate=fx_rate,
         )
         assignment = policy_resolution.assignment
         return ValuationSnapshotResult(
@@ -648,6 +656,7 @@ class ValuationJobProcessor:
         snapshot: DailyPositionSnapshot,
         price_fact: MarketPriceSourceFact,
         result: AuthoritativeValuationResult,
+        fx_rate: FxRate | None,
     ) -> None:
         snapshot.market_price = price_fact.price
         snapshot.market_value = result.market_value_reporting
@@ -657,6 +666,7 @@ class ValuationJobProcessor:
         snapshot.unrealized_price_gain_loss = result.unrealized_price_reporting
         snapshot.unrealized_fx_gain_loss = result.unrealized_fx_reporting
         snapshot.valuation_status = VALUATION_VALUED_CURRENT
+        snapshot.valuation_fx_rate_date = fx_rate.rate_date if fx_rate is not None else None
 
     @staticmethod
     async def _instrument_to_portfolio_fx_rate(
@@ -702,10 +712,12 @@ class ValuationJobProcessor:
 
     @staticmethod
     def _apply_valuation_result(
+        *,
         snapshot: DailyPositionSnapshot,
         price: MarketPrice,
         event: PortfolioValuationRequiredEvent,
         valuation_result: ValuationComponents,
+        fx_rate: FxRate | None,
     ) -> None:
         snapshot.market_price = price.price
         snapshot.market_value = valuation_result.market_value_base
@@ -719,6 +731,7 @@ class ValuationJobProcessor:
             if price.price_date == event.valuation_date
             else VALUATION_VALUED_STALE
         )
+        snapshot.valuation_fx_rate_date = fx_rate.rate_date if fx_rate is not None else None
 
     async def _complete_valuation_job(
         self,

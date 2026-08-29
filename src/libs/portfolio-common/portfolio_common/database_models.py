@@ -127,7 +127,6 @@ class Portfolio(Base):
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
-
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",
@@ -296,6 +295,7 @@ class DailyPositionSnapshot(Base):
     unrealized_price_gain_loss = Column(ExactNumeric(18, 10), nullable=True)
     unrealized_fx_gain_loss = Column(ExactNumeric(18, 10), nullable=True)
     valuation_status = Column(String, nullable=False, server_default="UNVALUED", index=True)
+    valuation_fx_rate_date = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
