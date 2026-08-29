@@ -194,3 +194,16 @@ def test_durable_lease_clock_guard_rejects_now_utc_clock_port(tmp_path: Path) ->
     assert [(finding.target, finding.line) for finding in findings] == [
         ("lease_expires_at", 1),
     ]
+
+
+def test_durable_lease_clock_guard_allows_database_clock_with_duration(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import timedelta\n"
+        "from sqlalchemy import func\n"
+        "lease_expires_at = func.clock_timestamp() + timedelta(seconds=30)\n",
+        encoding="utf-8",
+    )
+
+    assert find_durable_lease_clock_findings(repo_root=tmp_path) == []

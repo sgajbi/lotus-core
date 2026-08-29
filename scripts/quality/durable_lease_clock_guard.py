@@ -80,11 +80,6 @@ def _contains_application_clock(
                 or "deadline" in chain[-1].lower()
             ):
                 return True
-            if chain and chain[-1] in {"timedelta", "make_interval"}:
-                # timedelta is an application-side duration when paired with a clock call;
-                # make_interval is a database expression and is explicitly safe.
-                if chain[-1] == "timedelta":
-                    return True
     return False
 
 
