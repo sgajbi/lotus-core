@@ -1,0 +1,88 @@
+{
+  "schema_version": "lotus.core.maintainability-baseline.v1",
+  "max_allowed_rank": "B",
+  "recorded_on": "2026-08-29",
+  "tracked_files_only": true,
+  "entries": [
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
+      "rank": "C",
+      "mi": 0.0,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing enterprise-readiness hotspot; new or changed debt is forbidden.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
+      "rank": "C",
+      "mi": 0.0,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing shared-consumer hotspot scheduled for bounded decomposition.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py",
+      "rank": "C",
+      "mi": 4.982343175350029,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing reprocessing repository hotspot; baseline has zero growth headroom.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/valuation_repository_base.py",
+      "rank": "C",
+      "mi": 4.576263289875044,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing valuation repository hotspot; baseline has zero growth headroom.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py",
+      "rank": "C",
+      "mi": 1.3931009027885954,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing cost-basis calculation hotspot; financial behaviour is preserved while debt is reduced.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/services/portfolio_transaction_processing_service/app/infrastructure/corporate_action_event_graph/repository.py",
+      "rank": "C",
+      "mi": 0.0,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing corporate-action repository hotspot; baseline has zero growth headroom.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
+      "rank": "C",
+      "mi": 5.761932500404426,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing analytics application hotspot scheduled for family-aligned decomposition.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/application/operations/service.py",
+      "rank": "C",
+      "mi": 0.0,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing operations application hotspot scheduled for route-family decomposition.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
+      "rank": "C",
+      "mi": 1.9433536063927517,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing operations repository hotspot scheduled for route-family decomposition.",
+      "issue": "#462"
+    },
+    {
+      "path": "src/services/query_service/app/services/reporting_service.py",
+      "rank": "C",
+      "mi": 3.9782736778138945,
+      "owner": "lotus-core maintainers",
+      "rationale": "Existing reporting hotspot; follow-up layering work is tracked separately.",
+      "issue": "#1064"
+    }
+  ]
+}
