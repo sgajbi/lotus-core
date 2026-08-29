@@ -127,21 +127,26 @@ def resolve_core_snapshot_source_provenance(
             }
         ),
     )
-    valuation_timestamp = _latest_position_timestamp(position_rows)
+    portfolio_timestamp = _latest_portfolio_timestamp(position_rows)
+    market_timestamp = _latest_market_timestamp(
+        position_rows=position_rows,
+        use_snapshot=use_snapshot,
+        market_observations=market_observations,
+    )
     provenance = CoreSnapshotSourceProvenance(
         portfolio=_source_record(
             source_kind="PORTFOLIO",
             portfolio_id=portfolio_id,
             source_hash=portfolio_source_hash,
             source_date=portfolio_date,
-            valuation_timestamp=valuation_timestamp,
+            valuation_timestamp=portfolio_timestamp,
         ),
         market_data=_source_record(
             source_kind="MARKET_DATA",
             portfolio_id=portfolio_id,
             source_hash=market_source_hash,
             source_date=market_date,
-            valuation_timestamp=valuation_timestamp,
+            valuation_timestamp=market_timestamp,
         ),
     )
     effective_date, supportability, reason = _valuation_readiness(
@@ -190,6 +195,8 @@ def _has_required_baseline_market_evidence(
     *,
     portfolio_currency: str,
 ) -> bool:
+    if row.market_value_local is None:
+        return False
     if not _has_required_baseline_price_evidence(row):
         return False
     if _requires_baseline_fx_evidence(row, portfolio_currency=portfolio_currency):
@@ -338,18 +345,36 @@ def _source_record(
     )
 
 
-def _latest_position_timestamp(
+def _latest_portfolio_timestamp(
     rows: tuple[CoreSnapshotPositionSource, ...],
 ) -> datetime | None:
     timestamps = (
         timestamp
         for row in rows
         for timestamp in (
-            row.source_created_at,
-            row.source_updated_at,
-            row.state_created_at,
-            row.state_updated_at,
+            row.portfolio_fact_created_at,
+            row.portfolio_fact_updated_at,
         )
         if timestamp is not None
     )
     return max(timestamps, default=None)
+
+
+def _latest_market_timestamp(
+    *,
+    position_rows: tuple[CoreSnapshotPositionSource, ...],
+    use_snapshot: bool,
+    market_observations: tuple[MarketDataObservation, ...],
+) -> datetime | None:
+    baseline_timestamps = (
+        timestamp
+        for row in position_rows
+        for timestamp in (row.source_created_at, row.source_updated_at)
+        if use_snapshot and timestamp is not None
+    )
+    observation_timestamps = (
+        observation.evidence_timestamp
+        for observation in market_observations
+        if observation.evidence_timestamp is not None
+    )
+    return max((*baseline_timestamps, *observation_timestamps), default=None)

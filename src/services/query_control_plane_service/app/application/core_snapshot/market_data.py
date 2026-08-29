@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal, cast
 
@@ -23,6 +23,7 @@ class MarketDataObservation:
     value: Decimal
     effective_as_of_date: date
     currency: str | None = None
+    evidence_timestamp: datetime | None = None
 
     def lineage_payload(self) -> dict[str, object]:
         return {
@@ -42,6 +43,7 @@ class ResolvedFxRate:
     effective_as_of_date: date | None
     from_currency: str
     to_currency: str
+    evidence_timestamp: datetime | None = None
 
     def lineage_payload(self) -> dict[str, object]:
         return {
@@ -64,6 +66,7 @@ class ResolvedFxRate:
             source_key=f"{self.from_currency}/{self.to_currency}",
             value=self.value,
             effective_as_of_date=self.effective_as_of_date,
+            evidence_timestamp=self.evidence_timestamp,
         )
 
 
@@ -99,6 +102,7 @@ async def get_fx_rate_or_raise(
         effective_as_of_date=latest_rate.rate_date,
         from_currency=normalized_from_currency,
         to_currency=normalized_to_currency,
+        evidence_timestamp=latest_rate.evidence_timestamp,
     )
 
 

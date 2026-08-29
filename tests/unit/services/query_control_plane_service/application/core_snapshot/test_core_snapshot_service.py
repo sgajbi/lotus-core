@@ -137,6 +137,8 @@ def _position_source(
         valuation_status=getattr(row, "valuation_status", "VALUED_CURRENT"),
         valuation_fx_rate_date=getattr(row, "valuation_fx_rate_date", None),
         valuation_fx_rate=getattr(row, "valuation_fx_rate", None),
+        portfolio_fact_created_at=getattr(row, "created_at", None),
+        portfolio_fact_updated_at=getattr(row, "updated_at", None),
     )
 
 
@@ -540,6 +542,32 @@ async def test_core_snapshot_stale_baseline_valuation_invalidates_readiness(
     assert response.source_provenance.portfolio.as_of == date(2026, 2, 27)
     assert response.source_provenance.market_data.as_of is None
     assert response.source_provenance.market_data.freshness_status == "UNAVAILABLE"
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
+
+
+async def test_core_snapshot_missing_local_market_value_invalidates_readiness(
+    mock_dependencies,
+):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    current = position_repo.get_latest_positions_by_portfolio_as_of_date.return_value[0]
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        replace(current, market_value_local=None)
+    ]
+    service = _service(mock_dependencies)
+
+    response = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.valuation_context.effective_as_of_date is None
+    assert response.valuation_context.supportability == "UNAVAILABLE"
+    assert response.valuation_context.reason_code == "MARKET_DATA_AS_OF_UNAVAILABLE"
+    assert response.source_provenance.market_data.as_of is None
     assert response.source_evidence_current is False
     assert response.freshness_status == "UNAVAILABLE"
 

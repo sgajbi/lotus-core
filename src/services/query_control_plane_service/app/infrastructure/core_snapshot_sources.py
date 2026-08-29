@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
@@ -62,6 +62,8 @@ class SqlAlchemyCoreSnapshotSourceReader:
         ranked = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
+                latest_history.c.source_created_at,
+                latest_history.c.source_updated_at,
                 func.row_number()
                 .over(
                     partition_by=(DailyPositionSnapshot.portfolio_id, snapshot_security_id),
@@ -86,7 +88,13 @@ class SqlAlchemyCoreSnapshotSourceReader:
             .subquery()
         )
         statement = (
-            select(DailyPositionSnapshot, Instrument, PositionState)
+            select(
+                DailyPositionSnapshot,
+                Instrument,
+                PositionState,
+                ranked.c.source_created_at,
+                ranked.c.source_updated_at,
+            )
             .join(
                 ranked,
                 and_(
@@ -107,8 +115,15 @@ class SqlAlchemyCoreSnapshotSourceReader:
         )
         result = await self._session.execute(statement)
         return [
-            _position_source(row, instrument, state, use_snapshot=True)
-            for row, instrument, state in result.all()
+            _position_source(
+                row,
+                instrument,
+                state,
+                use_snapshot=True,
+                portfolio_fact_created_at=source_created_at,
+                portfolio_fact_updated_at=source_updated_at,
+            )
+            for row, instrument, state, source_created_at, source_updated_at in result.all()
         ]
 
     async def get_position_history(
@@ -224,6 +239,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 price_date=row.price_date,
                 price=row.price,
                 currency=row.currency,
+                evidence_timestamp=_row_evidence_timestamp(row),
             )
             for row in result.scalars().all()
         ]
@@ -249,7 +265,11 @@ class SqlAlchemyCoreSnapshotSourceReader:
             .order_by(FxRate.rate_date.asc(), FxRate.id.asc())
         )
         return [
-            CoreSnapshotFxRate(rate_date=row.rate_date, rate=row.rate)
+            CoreSnapshotFxRate(
+                rate_date=row.rate_date,
+                rate=row.rate,
+                evidence_timestamp=_row_evidence_timestamp(row),
+            )
             for row in result.scalars().all()
         ]
 
@@ -263,6 +283,8 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
+                PositionHistory.created_at.label("source_created_at"),
+                PositionHistory.updated_at.label("source_updated_at"),
                 func.row_number()
                 .over(
                     partition_by=(PositionHistory.portfolio_id, history_security_id),
@@ -310,6 +332,8 @@ def _position_source(
     state: PositionState,
     *,
     use_snapshot: bool,
+    portfolio_fact_created_at: datetime | None = None,
+    portfolio_fact_updated_at: datetime | None = None,
 ) -> CoreSnapshotPositionSource:
     return CoreSnapshotPositionSource(
         security_id=normalize_lookup_identifier(row.security_id),
@@ -331,4 +355,19 @@ def _position_source(
             getattr(row, "valuation_fx_rate_date", None) if use_snapshot else None
         ),
         valuation_fx_rate=(getattr(row, "valuation_fx_rate", None) if use_snapshot else None),
+        portfolio_fact_created_at=(
+            portfolio_fact_created_at if use_snapshot else getattr(row, "created_at", None)
+        ),
+        portfolio_fact_updated_at=(
+            portfolio_fact_updated_at if use_snapshot else getattr(row, "updated_at", None)
+        ),
     )
+
+
+def _row_evidence_timestamp(row: object) -> datetime | None:
+    timestamps = tuple(
+        value
+        for attribute in ("created_at", "updated_at")
+        if isinstance((value := getattr(row, attribute, None)), datetime)
+    )
+    return max(timestamps, default=None)

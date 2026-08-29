@@ -33,11 +33,16 @@ for source-effective dates.
   valuation supportability result.
 - Source provenance is bound into input lineage, response content identity, and runtime lineage;
   same-date FX corrections change market-data identity without conflating holdings changes.
+- Portfolio and market-data provenance timestamps are derived independently. Portfolio timestamps
+  come from the selected current-epoch position facts; market-data timestamps come from the
+  persisted valuation snapshot plus each price and non-identity FX observation actually used.
+  Re-observing market evidence can therefore advance only the market timestamp without rewriting
+  portfolio evidence or changing value-based source identity.
 - `source_evidence_current` additionally requires valuation supportability `READY`.
 
-Historical cost-basis fallback, missing valued rows, mixed dates, current-price rows with missing
-FX lineage, and carried-forward price or FX evidence remain unavailable. No test timeout,
-assertion, quality gate, or failure mapping was weakened.
+Historical cost-basis fallback, incomplete local or reporting values, mixed dates, current-price
+rows with missing FX lineage, and carried-forward price or FX evidence remain unavailable. No test
+timeout, assertion, quality gate, or failure mapping was weakened.
 
 The required persisted FX fact adds nine lines to the legacy shared ORM module's exact
 source-size ceiling under #1035; #462 remains the owner of its decomposition. The same branch banks
@@ -51,6 +56,8 @@ Focused proof covers:
 - exact coherent date readiness and stable identity under input reordering;
 - missing, mixed, stale, historical-fallback, carried-forward, and same-date-corrected evidence;
 - projected price and FX date propagation;
+- independent portfolio/market observation timestamps and stable value identities;
+- fail-closed response behavior when a non-flat current row lacks its local market value;
 - service lineage and current-evidence classification;
 - recursive OpenAPI documentation; and
 - canonical `PB_SG_GLOBAL_BAL_001` route serialization without field loss.

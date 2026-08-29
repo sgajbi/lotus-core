@@ -262,6 +262,7 @@ class CoreSnapshotProjectedPositionResolver:
                 value=price,
                 effective_as_of_date=latest_price.price_date,
                 currency=currency,
+                evidence_timestamp=latest_price.evidence_timestamp,
             ),
         )
 
