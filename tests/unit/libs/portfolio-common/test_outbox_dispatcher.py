@@ -473,6 +473,37 @@ def test_dispatcher_refreshes_claim_between_published_events(monkeypatch) -> Non
     assert renew_claims.call_args_list == [((events,), {})]
 
 
+def test_dispatcher_revalidates_claim_after_each_publish_call(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    dispatcher = module.OutboxDispatcher(kafka_producer=producer)
+    now = module.datetime.now(module.timezone.utc)
+    event = module._ClaimedOutboxEvent(
+        id=203,
+        aggregate_type="PublishCallBoundary",
+        aggregate_id="agg-203",
+        partition_key="PORT_001|SEC_203",
+        event_type="TestEvent",
+        payload={},
+        topic="publish-call.topic",
+        correlation_id=None,
+        traceparent=None,
+        retry_count=0,
+        created_at=now,
+        claim_token="claim-203",
+        claim_expires_at=now + timedelta(seconds=30),
+    )
+    renew_claims = MagicMock(return_value=False)
+    monkeypatch.setattr(dispatcher, "_renew_claims_for_delivery", renew_claims)
+
+    assert dispatcher._publish_events([event], {}, {}) is False
+
+    producer.publish_message.assert_called_once()
+    producer.reset_after_flush_failure.assert_called_once_with()
+    renew_claims.assert_called_once_with([event])
+
+
 def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:
     import portfolio_common.outbox_dispatcher as module
 

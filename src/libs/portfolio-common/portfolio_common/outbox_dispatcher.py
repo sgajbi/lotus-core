@@ -452,23 +452,6 @@ class OutboxDispatcher:
         delivery_errs: Dict[int, str],
     ) -> bool:
         for index, event in enumerate(events_to_process):
-            # The batch was refreshed immediately before entering this loop. Refresh
-            # again between records so a long serialization/producer pause cannot
-            # carry the loop beyond the durable claim owned by this dispatcher.
-            if index and not self._renew_claims_for_delivery(events_to_process):
-                self._producer.reset_after_flush_failure()
-                logger.warning(
-                    "Outbox delivery claims expired during publish; batch aborted.",
-                    extra=operation_log_extra(
-                        event_name="outbox.dispatcher.claim_renewal_aborted",
-                        operation="outbox.dispatch",
-                        status="fenced",
-                        reason_code="claim_renewal_incomplete_during_publish",
-                        event_count=len(events_to_process),
-                        published_count=index,
-                    ),
-                )
-                return False
             try:
                 self._producer.publish_message(
                     topic=event.topic,
@@ -493,6 +476,22 @@ class OutboxDispatcher:
                         topic=event.topic,
                     ),
                 )
+            # Revalidate after every producer call. A long serialization/produce/poll
+            # operation can cross the lease boundary even when the preceding check passed.
+            if not self._renew_claims_for_delivery(events_to_process):
+                self._producer.reset_after_flush_failure()
+                logger.warning(
+                    "Outbox delivery claims expired during publish; batch aborted.",
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.claim_renewal_aborted",
+                        operation="outbox.dispatch",
+                        status="fenced",
+                        reason_code="claim_renewal_incomplete_during_publish",
+                        event_count=len(events_to_process),
+                        published_count=index + 1,
+                    ),
+                )
+                return False
         return True
 
     def _flush_delivery_results(
