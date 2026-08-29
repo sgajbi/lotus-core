@@ -39,7 +39,7 @@ def build_performance_component_economics_response(
     request_scope_fingerprint: str | None = None,
     has_more: bool = False,
     next_page_token: str | None = None,
-    is_initial_page: bool = True,
+    is_initial_page: bool,
 ) -> PerformanceComponentEconomicsResponse:
     observed_component_families = observed_performance_component_families(rows)
     authoritative_empty = not rows and not has_more and is_initial_page
@@ -49,6 +49,11 @@ def build_performance_component_economics_response(
         is_initial_page=is_initial_page,
     )
     reason = performance_component_economics_supportability_reason(
+        rows=rows,
+        has_more=has_more,
+        is_initial_page=is_initial_page,
+    )
+    data_quality_status = performance_component_economics_data_quality_status(
         rows=rows,
         has_more=has_more,
         is_initial_page=is_initial_page,
@@ -92,11 +97,7 @@ def build_performance_component_economics_response(
             as_of_date=request.as_of_date,
             generated_at=generated_at,
             tenant_id=request.tenant_id,
-            data_quality_status=performance_component_economics_data_quality_status(
-                rows=rows,
-                has_more=has_more,
-                is_initial_page=is_initial_page,
-            ),
+            data_quality_status=data_quality_status,
             latest_evidence_timestamp=latest_performance_evidence_timestamp(transactions),
             content_payload={
                 "portfolio_id": portfolio_id,
@@ -106,6 +107,10 @@ def build_performance_component_economics_response(
                 "rows": [row.model_dump(mode="json") for row in rows],
                 "portfolio_base_currency": portfolio_base_currency,
                 "has_more": has_more,
+                "is_initial_page": is_initial_page,
+                "supportability_state": state,
+                "supportability_reason": reason,
+                "data_quality_status": data_quality_status,
             },
             lineage=performance_component_economics_source_lineage(),
             source_evidence_current=True if authoritative_empty else None,
