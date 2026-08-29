@@ -61,7 +61,8 @@ class ReportingCurrencySupportResponse(BaseModel):
     observed_selector_currency: bool | None = Field(
         default=None,
         description=(
-            "Whether the requested code appears in Core's selector catalog. This is an observed "
-            "selector fact only and never implies restatement support."
+            "Whether the requested code is observed in the tenant's portfolio base currencies "
+            "or historically held instruments. This tenant-scoped fact never implies "
+            "restatement support."
         ),
     )

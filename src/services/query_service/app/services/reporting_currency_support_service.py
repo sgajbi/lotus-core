@@ -23,11 +23,17 @@ class ReportingCurrencySupportService:
         portfolio_id = query.portfolio_id.strip()
         if not portfolio_id:
             raise ValueError("portfolio_id must not be blank")
+        tenant_id = query.tenant_id.strip()
+        if not tenant_id:
+            raise ValueError("tenant_id must not be blank")
         reporting_currency = normalize_currency_code(query.reporting_currency)
-        observed = await self._repository.is_selector_currency_observed(currency=reporting_currency)
+        observed = await self._repository.is_selector_currency_observed(
+            currency=reporting_currency,
+            tenant_id=tenant_id,
+        )
         base = dict(
             portfolio_id=portfolio_id,
-            tenant_id=query.tenant_id,
+            tenant_id=tenant_id,
             reporting_currency=reporting_currency,
             as_of_date=query.as_of_date,
             observed_selector_currency=observed,
@@ -35,7 +41,7 @@ class ReportingCurrencySupportService:
         try:
             source = await self._repository.get_portfolio_currency_source(
                 portfolio_id=portfolio_id,
-                tenant_id=query.tenant_id,
+                tenant_id=tenant_id,
                 as_of_date=query.as_of_date,
             )
         except ValueError as exc:
@@ -60,7 +66,7 @@ class ReportingCurrencySupportService:
         position_source_currencies = tuple(
             currency for currency in source.source_currencies if currency != source.base_currency
         )
-        position_rate_dates = await self._repository.get_latest_fx_rate_dates(
+        position_rate_dates = await self._repository.get_exact_fx_rate_dates(
             from_currencies=position_source_currencies,
             to_currency=source.base_currency,
             as_of_date=query.as_of_date,
@@ -68,7 +74,7 @@ class ReportingCurrencySupportService:
         reporting_rate_dates = (
             {}
             if source.base_currency == reporting_currency
-            else await self._repository.get_latest_fx_rate_dates(
+            else await self._repository.get_exact_fx_rate_dates(
                 from_currencies=(source.base_currency,),
                 to_currency=reporting_currency,
                 as_of_date=query.as_of_date,

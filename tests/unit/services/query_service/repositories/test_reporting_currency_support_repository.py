@@ -98,7 +98,7 @@ async def test_portfolio_currency_source_returns_none_when_portfolio_missing() -
 
     source = await repository.get_portfolio_currency_source(
         portfolio_id="MISSING",
-        tenant_id=None,
+        tenant_id="tenant-1",
         as_of_date=date(2026, 8, 28),
     )
 
@@ -128,7 +128,9 @@ async def test_portfolio_currency_source_fails_closed_before_portfolio_inception
 async def test_portfolio_currency_source_fails_closed_for_invalid_persisted_currency() -> None:
     repository, db = _repository(
         _result(
-            scalar=SimpleNamespace(tenant_id=None, base_currency="USD", open_date=date(2026, 1, 1))
+            scalar=SimpleNamespace(
+                tenant_id="tenant-1", base_currency="USD", open_date=date(2026, 1, 1)
+            )
         ),
         _result(scalars=["US1"]),
     )
@@ -136,7 +138,7 @@ async def test_portfolio_currency_source_fails_closed_for_invalid_persisted_curr
     with pytest.raises(ValueError, match="three-letter ISO 4217"):
         await repository.get_portfolio_currency_source(
             portfolio_id="PF-1",
-            tenant_id=None,
+            tenant_id="tenant-1",
             as_of_date=date(2026, 8, 28),
         )
 
@@ -164,30 +166,32 @@ async def test_portfolio_currency_source_fails_closed_for_unresolved_position_cu
         )
 
 
-async def test_latest_fx_dates_batches_sources_and_ignores_null_rates() -> None:
-    repository, db = _repository(_result(rows=[("EUR", date(2026, 8, 20)), ("GBP", None)]))
+async def test_exact_fx_dates_batch_sources_and_ignore_null_rates() -> None:
+    repository, db = _repository(_result(rows=[("EUR", date(2026, 8, 28)), ("GBP", None)]))
 
-    dates = await repository.get_latest_fx_rate_dates(
+    dates = await repository.get_exact_fx_rate_dates(
         from_currencies=(" eur ", "GBP"),
         to_currency=" usd ",
         as_of_date=date(2026, 8, 28),
     )
 
-    assert dates == {"EUR": date(2026, 8, 20)}
+    assert dates == {"EUR": date(2026, 8, 28)}
     db.execute.assert_awaited_once()
     sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) IN ('EUR', 'GBP')" in sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in sql
     assert "fx_rates.rate_date = '2026-08-28'" in sql
     assert "fx_rates.rate_date <=" not in sql
-    assert "GROUP BY upper(trim(fx_rates.from_currency))" in sql
+    assert "max(" not in sql.lower()
+    assert "GROUP BY" not in sql
+    assert "SELECT DISTINCT" in sql
 
 
-async def test_latest_fx_dates_skips_empty_source_set() -> None:
+async def test_exact_fx_dates_skip_empty_source_set() -> None:
     repository, db = _repository()
 
     assert (
-        await repository.get_latest_fx_rate_dates(
+        await repository.get_exact_fx_rate_dates(
             from_currencies=(), to_currency="USD", as_of_date=date(2026, 8, 28)
         )
         == {}
@@ -213,19 +217,32 @@ async def test_selector_observation_checks_portfolios_then_instruments(
     )
     repository, db = _repository(*results)
 
-    observed = await repository.is_selector_currency_observed(currency=" eur ")
+    observed = await repository.is_selector_currency_observed(
+        currency=" eur ", tenant_id="tenant-1"
+    )
 
     assert observed is expected
     assert db.execute.await_count == len(results)
     first_sql = str(
         db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
     )
+    assert "portfolios.tenant_id = 'tenant-1'" in first_sql
     assert "upper(trim(portfolios.base_currency)) = 'EUR'" in first_sql
+    if instrument_result is not None:
+        instrument_sql = str(
+            db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+        )
+        assert "JOIN position_history" in instrument_sql
+        assert "JOIN portfolios" in instrument_sql
+        assert "portfolios.tenant_id = 'tenant-1'" in instrument_sql
 
 
 async def test_selector_observation_normalizes_code_before_query() -> None:
     repository, db = _repository(_result(scalar="PF-1"))
 
-    assert await repository.is_selector_currency_observed(currency="usd") is True
+    assert (
+        await repository.is_selector_currency_observed(currency="usd", tenant_id="tenant-1") is True
+    )
     sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-1'" in sql
     assert "upper(trim(portfolios.base_currency)) = 'USD'" in sql

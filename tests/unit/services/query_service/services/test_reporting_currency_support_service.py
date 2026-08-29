@@ -32,13 +32,13 @@ async def test_support_is_true_only_when_every_source_currency_has_as_of_fx() ->
         tenant_id="tenant-1", base_currency="USD", source_currencies=("EUR", "USD")
     )
     repository.is_selector_currency_observed.return_value = True
-    repository.get_latest_fx_rate_dates.side_effect = [
-        {"EUR": date(2026, 8, 20)},
+    repository.get_exact_fx_rate_dates.side_effect = [
+        {"EUR": date(2026, 8, 28)},
     ]
     service = _service(repository)
 
     result = await service.evaluate(
-        ReportingCurrencySupportQuery("PF-1", "usd", date(2026, 8, 28), "tenant-1")
+        ReportingCurrencySupportQuery("PF-1", "usd", date(2026, 8, 28), " tenant-1 ")
     )
 
     assert result.status == "SUPPORTED"
@@ -47,10 +47,18 @@ async def test_support_is_true_only_when_every_source_currency_has_as_of_fx() ->
     assert result.missing_source_currencies == ()
     assert result.observed_selector_currency is True
     assert result.fx_evidence == (
-        FxSupportEvidence("EUR", date(2026, 8, 20), True),
+        FxSupportEvidence("EUR", date(2026, 8, 28), True),
         FxSupportEvidence("USD", date(2026, 8, 28), True),
     )
-    repository.get_latest_fx_rate_dates.assert_awaited_once_with(
+    repository.is_selector_currency_observed.assert_awaited_once_with(
+        currency="USD", tenant_id="tenant-1"
+    )
+    repository.get_portfolio_currency_source.assert_awaited_once_with(
+        portfolio_id="PF-1",
+        tenant_id="tenant-1",
+        as_of_date=date(2026, 8, 28),
+    )
+    repository.get_exact_fx_rate_dates.assert_awaited_once_with(
         from_currencies=("EUR",),
         to_currency="USD",
         as_of_date=date(2026, 8, 28),
@@ -60,13 +68,15 @@ async def test_support_is_true_only_when_every_source_currency_has_as_of_fx() ->
 async def test_observed_selector_currency_does_not_imply_restatement_support() -> None:
     repository = AsyncMock(spec=ReportingCurrencySupportRepository)
     repository.get_portfolio_currency_source.return_value = PortfolioCurrencySource(
-        tenant_id=None, base_currency="USD", source_currencies=("EUR", "USD")
+        tenant_id="tenant-1", base_currency="USD", source_currencies=("EUR", "USD")
     )
     repository.is_selector_currency_observed.return_value = True
-    repository.get_latest_fx_rate_dates.side_effect = [{}, {}]
+    repository.get_exact_fx_rate_dates.side_effect = [{}, {}]
     service = _service(repository)
 
-    result = await service.evaluate(ReportingCurrencySupportQuery("PF-1", "EUR", date(2026, 8, 28)))
+    result = await service.evaluate(
+        ReportingCurrencySupportQuery("PF-1", "EUR", date(2026, 8, 28), "tenant-1")
+    )
 
     assert result.status == "UNSUPPORTED"
     assert result.reason_code == "required_fx_source_unavailable"
@@ -80,9 +90,9 @@ async def test_support_uses_position_to_base_then_base_to_reporting_legs() -> No
         tenant_id="tenant-1", base_currency="USD", source_currencies=("EUR", "USD")
     )
     repository.is_selector_currency_observed.return_value = True
-    repository.get_latest_fx_rate_dates.side_effect = [
-        {"EUR": date(2026, 8, 20)},
-        {"USD": date(2026, 8, 21)},
+    repository.get_exact_fx_rate_dates.side_effect = [
+        {"EUR": date(2026, 8, 28)},
+        {"USD": date(2026, 8, 28)},
     ]
     service = _service(repository)
 
@@ -92,14 +102,14 @@ async def test_support_uses_position_to_base_then_base_to_reporting_legs() -> No
 
     assert result.status == "SUPPORTED"
     assert result.missing_source_currencies == ()
-    assert result.fx_evidence[0] == FxSupportEvidence("EUR", date(2026, 8, 20), True)
-    assert result.fx_evidence[1] == FxSupportEvidence("USD", date(2026, 8, 21), True)
-    assert repository.get_latest_fx_rate_dates.await_args_list[0].kwargs == {
+    assert result.fx_evidence[0] == FxSupportEvidence("EUR", date(2026, 8, 28), True)
+    assert result.fx_evidence[1] == FxSupportEvidence("USD", date(2026, 8, 28), True)
+    assert repository.get_exact_fx_rate_dates.await_args_list[0].kwargs == {
         "from_currencies": ("EUR",),
         "to_currency": "USD",
         "as_of_date": date(2026, 8, 28),
     }
-    assert repository.get_latest_fx_rate_dates.await_args_list[1].kwargs == {
+    assert repository.get_exact_fx_rate_dates.await_args_list[1].kwargs == {
         "from_currencies": ("USD",),
         "to_currency": "GBP",
         "as_of_date": date(2026, 8, 28),
@@ -112,9 +122,9 @@ async def test_support_rejects_missing_position_to_base_leg_even_when_direct_cro
         tenant_id="tenant-1", base_currency="USD", source_currencies=("EUR", "USD")
     )
     repository.is_selector_currency_observed.return_value = True
-    repository.get_latest_fx_rate_dates.side_effect = [
+    repository.get_exact_fx_rate_dates.side_effect = [
         {},
-        {"USD": date(2026, 8, 21)},
+        {"USD": date(2026, 8, 28)},
     ]
     service = _service(repository)
 
@@ -133,13 +143,13 @@ async def test_missing_portfolio_is_typed_unavailable_not_plausible_support() ->
     service = _service(repository)
 
     result = await service.evaluate(
-        ReportingCurrencySupportQuery("MISSING", "USD", date(2026, 8, 28))
+        ReportingCurrencySupportQuery("MISSING", "USD", date(2026, 8, 28), "tenant-1")
     )
 
     assert result.status == "UNAVAILABLE"
     assert result.reason_code == "portfolio_source_unavailable"
     assert result.source_currencies == ()
-    repository.get_latest_fx_rate_dates.assert_not_awaited()
+    repository.get_exact_fx_rate_dates.assert_not_awaited()
 
 
 async def test_invalid_persisted_currency_is_typed_unavailable() -> None:
@@ -148,7 +158,9 @@ async def test_invalid_persisted_currency_is_typed_unavailable() -> None:
     repository.is_selector_currency_observed.return_value = False
     service = _service(repository)
 
-    result = await service.evaluate(ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28)))
+    result = await service.evaluate(
+        ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28), "tenant-1")
+    )
 
     assert result.status == "UNAVAILABLE"
     assert result.reason_code == "portfolio_currency_source_invalid"
@@ -162,7 +174,9 @@ async def test_pre_inception_as_of_is_typed_unavailable() -> None:
     repository.is_selector_currency_observed.return_value = True
     service = _service(repository)
 
-    result = await service.evaluate(ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28)))
+    result = await service.evaluate(
+        ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28), "tenant-1")
+    )
 
     assert result.status == "UNAVAILABLE"
     assert result.reason_code == "portfolio_as_of_before_inception"
@@ -176,7 +190,9 @@ async def test_unresolved_position_currency_is_typed_unavailable() -> None:
     repository.is_selector_currency_observed.return_value = True
     service = _service(repository)
 
-    result = await service.evaluate(ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28)))
+    result = await service.evaluate(
+        ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28), "tenant-1")
+    )
 
     assert result.status == "UNAVAILABLE"
     assert result.reason_code == "portfolio_currency_source_invalid"
@@ -188,6 +204,32 @@ async def test_malformed_currency_is_rejected_before_source_queries() -> None:
     service = _service(repository)
 
     with pytest.raises(ValueError, match="three-letter ISO 4217"):
-        await service.evaluate(ReportingCurrencySupportQuery("PF-1", "US1", date(2026, 8, 28)))
+        await service.evaluate(
+            ReportingCurrencySupportQuery("PF-1", "US1", date(2026, 8, 28), "tenant-1")
+        )
 
+    repository.get_portfolio_currency_source.assert_not_awaited()
+
+
+async def test_blank_tenant_is_rejected_before_any_repository_query() -> None:
+    repository = AsyncMock(spec=ReportingCurrencySupportRepository)
+    service = _service(repository)
+
+    with pytest.raises(ValueError, match="tenant_id must not be blank"):
+        await service.evaluate(ReportingCurrencySupportQuery("PF-1", "USD", date(2026, 8, 28), " "))
+
+    repository.is_selector_currency_observed.assert_not_awaited()
+    repository.get_portfolio_currency_source.assert_not_awaited()
+
+
+async def test_blank_portfolio_is_rejected_before_any_repository_query() -> None:
+    repository = AsyncMock(spec=ReportingCurrencySupportRepository)
+    service = _service(repository)
+
+    with pytest.raises(ValueError, match="portfolio_id must not be blank"):
+        await service.evaluate(
+            ReportingCurrencySupportQuery(" ", "USD", date(2026, 8, 28), "tenant-1")
+        )
+
+    repository.is_selector_currency_observed.assert_not_awaited()
     repository.get_portfolio_currency_source.assert_not_awaited()
