@@ -359,7 +359,7 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
         "realized_fx_pnl",
         "fx_context",
     ]
-    assert "realized_capital_pnl" in missing_performance_component_families(observed)
+    assert "realized_capital_pnl" in missing_performance_component_families(rows, observed)
     assert performance_component_economics_source_lineage() == {
         "source_system": "transactions",
         "source_table": "transactions,cashflows,transaction_costs",
@@ -369,18 +369,19 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
 
 def test_performance_component_economics_policy_classifies_empty_and_partial_pages() -> None:
     assert performance_component_economics_supportability_state(rows=[], has_more=False) == (
-        "UNAVAILABLE"
+        "READY"
     )
     assert (
         performance_component_economics_supportability_reason(
             rows=[],
             has_more=False,
         )
-        == "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+        == "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
     )
     assert performance_component_economics_data_quality_status(rows=[], has_more=False) == (
-        "UNKNOWN"
+        "COMPLETE"
     )
+    assert missing_performance_component_families([], []) == []
 
     rows = build_performance_component_economics_rows([_transaction(transaction_id="TXN-PAGE-001")])
 
@@ -532,7 +533,7 @@ def test_performance_component_economics_keeps_anonymous_cost_components_distinc
     assert rows[0].trade_fee_components[0].evidence_count == 2
 
 
-def test_performance_component_economics_empty_response_is_unavailable() -> None:
+def test_performance_component_economics_empty_response_is_authoritative_no_activity() -> None:
     request = PerformanceComponentEconomicsRequest(
         as_of_date=date(2026, 5, 10),
         window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
@@ -547,10 +548,13 @@ def test_performance_component_economics_empty_response_is_unavailable() -> None
         generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
     )
 
-    assert response.supportability.state == "UNAVAILABLE"
-    assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+    assert response.supportability.state == "READY"
+    assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
+    assert response.supportability.source_row_count == 0
     assert response.supportability.observed_component_families == []
-    assert response.data_quality_status == "UNKNOWN"
+    assert response.supportability.missing_component_families == []
+    assert response.rows == []
+    assert response.data_quality_status == "COMPLETE"
 
 
 @pytest.mark.asyncio
@@ -623,6 +627,75 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
             "last_row_key": ["EQ_US_AAPL", "2026-05-10", "TXN-DIV-001"],
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_resolve_performance_component_economics_filtered_empty_is_ready() -> None:
+    captured_scope: dict[str, object] = {}
+
+    class Repository:
+        async def portfolio_exists(self, portfolio_id: str) -> bool:
+            return True
+
+        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+            return "USD"
+
+        async def list_performance_component_economics_evidence(
+            self, **kwargs: object
+        ) -> list[BookedTransactionEconomics]:
+            captured_scope.update(kwargs)
+            return []
+
+    response = await resolve_performance_component_economics_response(
+        repository=Repository(),
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PerformanceComponentEconomicsRequest(
+            as_of_date=date(2026, 4, 10),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+            security_ids=["EQ_US_NO_ACTIVITY"],
+            transaction_types=["DIVIDEND"],
+        ),
+        decode_page_token=lambda _: {},
+        encode_page_token=lambda _: "unexpected-token",
+        generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+    )
+
+    assert captured_scope["security_ids"] == ["EQ_US_NO_ACTIVITY"]
+    assert captured_scope["transaction_types"] == ["DIVIDEND"]
+    assert response.supportability.state == "READY"
+    assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
+    assert response.supportability.source_row_count == 0
+    assert response.supportability.missing_component_families == []
+    assert response.page.next_page_token is None
+    assert response.rows == []
+
+
+@pytest.mark.asyncio
+async def test_component_economics_query_failure_does_not_become_ready_empty() -> None:
+    class Repository:
+        async def portfolio_exists(self, portfolio_id: str) -> bool:
+            return True
+
+        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+            return "USD"
+
+        async def list_performance_component_economics_evidence(
+            self, **kwargs: object
+        ) -> list[BookedTransactionEconomics]:
+            raise RuntimeError("component-economics store unavailable")
+
+    with pytest.raises(RuntimeError, match="component-economics store unavailable"):
+        await resolve_performance_component_economics_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PerformanceComponentEconomicsRequest(
+                as_of_date=date(2026, 4, 10),
+                window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+            ),
+            decode_page_token=lambda _: {},
+            encode_page_token=lambda _: "unexpected-token",
+            generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+        )
 
 
 def test_performance_component_economics_page_scope_rejects_scope_mismatch() -> None:

@@ -73,7 +73,7 @@ def build_performance_component_economics_response(
             source_row_count=len(rows),
             observed_component_families=observed_component_families,
             missing_component_families=missing_performance_component_families(
-                observed_component_families
+                rows, observed_component_families
             ),
         ),
         lineage=performance_component_economics_source_lineage(),

@@ -34,7 +34,7 @@ def performance_component_economics_supportability_state(
     has_more: bool,
 ) -> str:
     if not rows:
-        return "UNAVAILABLE"
+        return "READY"
     if has_more:
         return "DEGRADED"
     return "READY"
@@ -46,7 +46,7 @@ def performance_component_economics_supportability_reason(
     has_more: bool,
 ) -> str:
     if not rows:
-        return "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+        return "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
     if has_more:
         return "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
     return "PERFORMANCE_COMPONENT_ECONOMICS_READY"
@@ -61,7 +61,7 @@ def performance_component_economics_data_quality_status(
         return "PARTIAL"
     if rows:
         return "COMPLETE"
-    return "UNKNOWN"
+    return "COMPLETE"
 
 
 def observed_performance_component_families(
@@ -78,8 +78,11 @@ def observed_performance_component_families(
 
 
 def missing_performance_component_families(
+    rows: list[PerformanceComponentEconomicsRow],
     observed_component_families: list[str],
 ) -> list[str]:
+    if not rows:
+        return []
     return [
         family
         for family in SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES
