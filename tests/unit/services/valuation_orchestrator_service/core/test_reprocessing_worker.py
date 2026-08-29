@@ -407,6 +407,14 @@ async def test_worker_rearms_deadline_watchdog_after_successful_renewal(
     assert jobs.renew_lease.await_count >= 1
 
 
+async def test_worker_renewal_schedule_reserves_write_and_authority_read_budget():
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_renewal_interval_seconds = 10
+    worker._lease_renewal_io_timeout_seconds = 0.5
+
+    assert worker._next_lease_renewal_at(now=10, lease_deadline=20) == 19
+
+
 async def test_worker_does_not_start_operation_until_authority_read_completes(
     mock_dependencies,
 ):
