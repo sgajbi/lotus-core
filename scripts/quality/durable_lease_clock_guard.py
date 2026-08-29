@@ -28,6 +28,7 @@ _TRANSACTION_START_SQL_CLOCKS = {
     "current_timestamp",
     "localtimestamp",
     "now",
+    "transaction_timestamp",
 }
 
 
