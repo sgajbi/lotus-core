@@ -41,7 +41,7 @@ for adding code to hotspots.
 - `make quality-source-size-gate` passes 1,144 tracked modules with 9 reviewed entries.
 - Running the maintainability gate without its baseline returns exit 1 and names all 10 C-ranked
   files and ranks.
-- 61 focused pass/fail, changed-baseline, stale-baseline, expiry, path-traversal, tracked-inventory,
+- 67 focused pass/fail, changed-baseline, stale-baseline, expiry, path-traversal, tracked-inventory,
   real-scanner, and empty-scan tests pass with 98% branch coverage across both gate modules.
 - Static required-check governance passes with 37 manifest-owned checks.
 

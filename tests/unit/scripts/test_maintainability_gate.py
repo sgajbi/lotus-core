@@ -105,6 +105,22 @@ def test_gate_rejects_unobserved_baseline_module() -> None:
     ) == ["src/missing.py: baseline C (4.25) was not observed; remove stale baseline"]
 
 
+@pytest.mark.parametrize("root", ["", "--help", "../src"])
+def test_scan_roots_reject_empty_options_and_traversal(root: str) -> None:
+    with pytest.raises(ValueError, match="must be repository-relative"):
+        gate._validated_roots([root])
+
+
+def test_scan_roots_reject_absolute_path(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="must be repository-relative"):
+        gate._validated_roots([str(tmp_path)])
+
+
+def test_scan_roots_reject_empty_collection() -> None:
+    with pytest.raises(ValueError, match="must not be empty"):
+        gate._validated_roots([])
+
+
 def test_radon_scan_uses_only_git_tracked_python_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
