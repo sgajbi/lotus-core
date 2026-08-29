@@ -281,8 +281,10 @@ security, transaction date, and transaction ID. `component_totals` are scoped to
 `component_totals_scope=returned_page`; consumers that need full-window totals must iterate pages or
 use a future aggregate contract. A successfully queried empty window is authoritative `READY`
 evidence with reason `PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`, zero rows, and no missing
-component families. Missing portfolios, invalid scopes, and persistence failures remain fail-closed
-errors and are never converted to ready-empty evidence. Its
+component families. It carries `source_evidence_current=true` and `freshness_status=CURRENT` while
+leaving `latest_evidence_timestamp` null because no source row exists; `generated_at` records the
+scope-query proof time. Missing portfolios, invalid scopes, and persistence failures remain
+fail-closed errors and are never converted to ready-empty evidence. Its
 implementation-backed methodology is documented in
 `docs/methodologies/source-data-products/performance-component-economics.md`. It is not
 contribution analytics, attribution analytics, a return calculator, tax advice, execution-quality

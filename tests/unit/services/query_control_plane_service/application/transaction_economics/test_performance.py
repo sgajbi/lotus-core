@@ -549,6 +549,9 @@ def test_performance_component_economics_empty_response_is_authoritative_no_acti
     assert response.supportability.missing_component_families == []
     assert response.rows == []
     assert response.data_quality_status == "COMPLETE"
+    assert response.latest_evidence_timestamp is None
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
 
 
 @pytest.mark.asyncio
@@ -662,6 +665,9 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     assert response.supportability.missing_component_families == []
     assert response.page.next_page_token is None
     assert response.rows == []
+    assert response.latest_evidence_timestamp is None
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
 
 
 @pytest.mark.asyncio

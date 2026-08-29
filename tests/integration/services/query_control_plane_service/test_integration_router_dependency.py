@@ -1334,6 +1334,9 @@ async def test_performance_component_economics_authoritative_empty_is_ready(
         "missing_component_families": [],
     }
     assert body["data_quality_status"] == "COMPLETE"
+    assert body["latest_evidence_timestamp"] is None
+    assert body["source_evidence_current"] is True
+    assert body["freshness_status"] == "CURRENT"
     assert body["rows"] == []
 
 
