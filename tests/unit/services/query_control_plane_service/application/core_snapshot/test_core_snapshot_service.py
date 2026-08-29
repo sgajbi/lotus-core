@@ -605,6 +605,48 @@ async def test_core_snapshot_simulation_success(mock_dependencies):
     assert response.policy_version == "snapshot.policy.inline.default"
 
 
+async def test_core_snapshot_simulation_prices_new_short_before_declaring_ready(
+    mock_dependencies,
+):
+    (_, _, simulation_repo, price_repo, _, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_SHORT_US",
+            transaction_type="SELL",
+            quantity=Decimal("1"),
+            amount=None,
+        )
+    ]
+    instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_SHORT_US")]
+    price_repo.get_prices.return_value = [
+        CoreSnapshotMarketPrice(
+            price_date=date(2026, 2, 27),
+            price=Decimal("12"),
+            currency="USD",
+        )
+    ]
+    service = _service(mock_dependencies)
+
+    response = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            snapshot_mode=CoreSnapshotMode.SIMULATION,
+            sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
+            simulation={"session_id": "SIM_1"},
+        ),
+    )
+
+    projected = response.sections.positions_projected
+    assert projected is not None
+    short = next(item for item in projected if item.security_id == "SEC_SHORT_US")
+    assert short.quantity == Decimal("-1")
+    assert short.market_value_base == Decimal("-12")
+    assert response.valuation_context.supportability == "READY"
+    assert response.valuation_context.reason_code == "SOURCE_EVIDENCE_READY"
+    assert response.source_provenance.market_data.as_of == date(2026, 2, 27)
+
+
 async def test_core_snapshot_simulation_identity_is_session_version_bound(mock_dependencies):
     (_, _, simulation_repo, _, _, _) = mock_dependencies
     service = _service(mock_dependencies)
@@ -811,12 +853,16 @@ async def test_core_snapshot_raises_when_new_security_has_no_instrument(mock_dep
         await service.get_core_snapshot("PORT_001", request)
 
 
-async def test_core_snapshot_raises_when_new_security_has_no_market_price(mock_dependencies):
+@pytest.mark.parametrize("transaction_type", ["BUY", "SELL"])
+async def test_core_snapshot_raises_when_new_exposure_has_no_market_price(
+    mock_dependencies,
+    transaction_type,
+):
     (_, _, simulation_repo, price_repo, _, _) = mock_dependencies
     simulation_repo.get_changes.return_value = [
         SimpleNamespace(
             security_id="SEC_NEW_US",
-            transaction_type="BUY",
+            transaction_type=transaction_type,
             quantity=Decimal("2"),
             amount=None,
         )

@@ -149,7 +149,7 @@ def test_projected_baseline_values_ignore_ambient_decimal_precision() -> None:
     assert calculate(6) == calculate(50) == Decimal("0.3333333333333333333333333333")
 
 
-def test_apply_baseline_projected_values_tracks_positive_new_positions_for_pricing() -> None:
+def test_apply_baseline_projected_values_prices_every_nonzero_new_position() -> None:
     projected = {
         "SEC_NEW": {
             "security_id": "SEC_NEW",
@@ -175,9 +175,10 @@ def test_apply_baseline_projected_values_tracks_positive_new_positions_for_prici
         include_zero=True,
     )
 
-    assert price_required == {"SEC_NEW": (projected["SEC_NEW"], Decimal("2"))}
-    assert projected["SEC_NEG"]["market_value_base"] == Decimal("0")
-    assert projected["SEC_NEG"]["market_value_local"] == Decimal("0")
+    assert price_required == {
+        "SEC_NEW": (projected["SEC_NEW"], Decimal("2")),
+        "SEC_NEG": (projected["SEC_NEG"], Decimal("-1")),
+    }
 
 
 def test_filtered_projected_positions_applies_cash_and_zero_filters() -> None:
