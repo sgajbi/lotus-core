@@ -348,9 +348,7 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
         )
         == "PERFORMANCE_COMPONENT_ECONOMICS_READY"
     )
-    assert performance_component_economics_data_quality_status(rows=rows, has_more=False) == (
-        "COMPLETE"
-    )
+    assert performance_component_economics_data_quality_status(has_more=False) == "COMPLETE"
     assert observed == [
         "cashflow",
         "fee",
@@ -378,9 +376,7 @@ def test_performance_component_economics_policy_classifies_empty_and_partial_pag
         )
         == "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
     )
-    assert performance_component_economics_data_quality_status(rows=[], has_more=False) == (
-        "COMPLETE"
-    )
+    assert performance_component_economics_data_quality_status(has_more=False) == "COMPLETE"
     assert missing_performance_component_families([], []) == []
 
     rows = build_performance_component_economics_rows([_transaction(transaction_id="TXN-PAGE-001")])
@@ -395,9 +391,7 @@ def test_performance_component_economics_policy_classifies_empty_and_partial_pag
         )
         == "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
     )
-    assert performance_component_economics_data_quality_status(rows=rows, has_more=True) == (
-        "PARTIAL"
-    )
+    assert performance_component_economics_data_quality_status(has_more=True) == "PARTIAL"
 
 
 def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_currency() -> None:

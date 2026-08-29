@@ -84,7 +84,6 @@ def build_performance_component_economics_response(
             generated_at=generated_at,
             tenant_id=request.tenant_id,
             data_quality_status=performance_component_economics_data_quality_status(
-                rows=rows,
                 has_more=has_more,
             ),
             latest_evidence_timestamp=latest_performance_evidence_timestamp(transactions),
