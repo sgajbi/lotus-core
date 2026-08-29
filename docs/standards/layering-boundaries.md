@@ -34,6 +34,24 @@ This standard defines guardrails for directory organization and dependency bound
 3. CI conformance:
  - OpenAPI, vocabulary, no-alias, and migration checks remain mandatory.
 
+## Module Size Budget
+
+Tracked Python modules under `src/` have a hard budget of 1,500 physical lines. The blocking
+`make quality-source-size-gate` command reads Git's tracked-file inventory so ignored build output
+cannot make local and clean-CI results diverge.
+
+Existing modules above the budget are recorded in `quality/module-size-baseline.v1.json` with an
+owner, rationale, owning issue, review expiry, and exact current line count. The baseline has zero
+headroom:
+
+1. a new module above 1,500 lines fails,
+2. growth of a baseline module fails,
+3. shrinkage or removal fails until the baseline is ratcheted in the same change, and
+4. an expired baseline entry fails.
+
+The baseline is transitional debt authority, not permission to add code to an oversized module.
+Issue #462 owns decomposition and removal of the remaining entries.
+
 ## Transitional Policy
 
 During RFC 057 rollout:
