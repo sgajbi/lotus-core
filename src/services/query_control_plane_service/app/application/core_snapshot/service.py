@@ -480,7 +480,11 @@ class CoreSnapshotService:
                 tenant_id=governance.tenant_id,
                 reconciliation_status=baseline.reconciliation.status,
                 data_quality_status=data_quality_status,
-                latest_evidence_timestamp=(baseline.reconciliation.latest_evidence_timestamp),
+                latest_evidence_timestamp=_latest_product_evidence_timestamp(
+                    baseline.reconciliation.latest_evidence_timestamp,
+                    provenance.source_provenance.portfolio.valuation_timestamp,
+                    provenance.source_provenance.market_data.valuation_timestamp,
+                ),
                 snapshot_id=(
                     f"portfolio_state_snapshot:{calculation_lineage.output_content_hash[:24]}"
                 ),
@@ -605,3 +609,9 @@ class CoreSnapshotService:
             list[InstrumentEnrichmentRecord],
             await self.instrument_enrichment_reader.get_instrument_enrichment_bulk(security_ids),
         )
+
+
+def _latest_product_evidence_timestamp(*timestamps: datetime | None) -> datetime | None:
+    """Return the newest evidence included anywhere in the snapshot product scope."""
+
+    return max((timestamp for timestamp in timestamps if timestamp is not None), default=None)
