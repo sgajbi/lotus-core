@@ -201,6 +201,51 @@ def test_durable_lease_clock_guard_rejects_callable_clock_default(tmp_path: Path
     ]
 
 
+@pytest.mark.parametrize(
+    "clock_source",
+    [
+        "import time\nlease_expires_at = datetime.fromtimestamp(time.time(), timezone.utc)\n",
+        "from time import time as epoch_time\n"
+        "lease_expires_at = datetime.fromtimestamp(epoch_time(), timezone.utc)\n",
+    ],
+)
+def test_durable_lease_clock_guard_rejects_standard_library_timestamp_clock(
+    tmp_path: Path,
+    clock_source: str,
+) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n" + clock_source,
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert [(finding.target, finding.line) for finding in findings] == [
+        ("lease_expires_at", 3),
+    ]
+
+
+def test_durable_lease_clock_guard_allows_local_database_clock_shadowing_module_taint(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n"
+        "from sqlalchemy import func\n"
+        "now = datetime.now(timezone.utc)\n"
+        "\n"
+        "def build_statement():\n"
+        "    now = func.clock_timestamp()\n"
+        "    return update(Job).values(lease_expires_at=now)\n",
+        encoding="utf-8",
+    )
+
+    assert find_durable_lease_clock_findings(repo_root=tmp_path) == []
+
+
 def test_durable_lease_clock_guard_rejects_now_utc_clock_port(tmp_path: Path) -> None:
     source = tmp_path / "src" / "leases.py"
     source.parent.mkdir(parents=True)
