@@ -1851,6 +1851,10 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_response["properties"]["source_provenance"]["description"].startswith(
         "Typed portfolio and market-data evidence"
     )
+    assert (
+        core_snapshot_response["properties"]["valuation_context"]["examples"][0]["reason_code"]
+        == "SOURCE_EVIDENCE_READY"
+    )
     assert core_snapshot_provenance["properties"]["raw_payload_stored"]["const"] is False
     assert core_snapshot_provenance_record["properties"]["as_of"]["description"].startswith(
         "Source-owned effective business date"
