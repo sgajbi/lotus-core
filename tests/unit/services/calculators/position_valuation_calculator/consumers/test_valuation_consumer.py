@@ -657,11 +657,15 @@ async def test_authoritative_valuation_persists_selected_fx_fact(
         price_fact=price_fact,
         result=valuation_result,
         fx_rate=selected_fx,
+        source_currency="EUR",
+        reporting_currency="USD",
     )
 
     assert snapshot.valuation_status == "VALUED_CURRENT"
     assert snapshot.valuation_fx_rate_date == date(2025, 7, 31)
     assert snapshot.valuation_fx_rate == Decimal("1.1")
+    assert snapshot.valuation_source_currency == "EUR"
+    assert snapshot.valuation_reporting_currency == "USD"
 
 
 async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
@@ -985,6 +989,8 @@ async def test_valuation_consumer_success(
     valuation_candidate = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert valuation_candidate.valuation_fx_rate_date == date(2025, 7, 31)
     assert valuation_candidate.valuation_fx_rate == Decimal("1.1")
+    assert valuation_candidate.valuation_source_currency == "EUR"
+    assert valuation_candidate.valuation_reporting_currency == "USD"
     mock_outbox_repo.create_outbox_event.assert_called_once()
 
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
@@ -1081,6 +1087,8 @@ async def test_valuation_consumer_normalizes_same_currency_without_fx_lookup(
     assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
     assert persisted_snapshot.valuation_fx_rate_date is None
     assert persisted_snapshot.valuation_fx_rate is None
+    assert persisted_snapshot.valuation_source_currency == "USD"
+    assert persisted_snapshot.valuation_reporting_currency == "USD"
     mock_outbox_repo.create_outbox_event.assert_called_once()
 
 

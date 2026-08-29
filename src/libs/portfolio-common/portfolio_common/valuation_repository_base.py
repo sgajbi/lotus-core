@@ -797,6 +797,8 @@ class ValuationRepositoryBase:
                 "unrealized_price_gain_loss": snapshot.unrealized_price_gain_loss,
                 "unrealized_fx_gain_loss": snapshot.unrealized_fx_gain_loss,
                 "valuation_status": snapshot.valuation_status,
+                "valuation_source_currency": snapshot.valuation_source_currency,
+                "valuation_reporting_currency": snapshot.valuation_reporting_currency,
                 "valuation_fx_rate_date": snapshot.valuation_fx_rate_date,
                 "valuation_fx_rate": snapshot.valuation_fx_rate,
             }
@@ -815,6 +817,8 @@ class ValuationRepositoryBase:
                 "unrealized_price_gain_loss": stmt.excluded.unrealized_price_gain_loss,
                 "unrealized_fx_gain_loss": stmt.excluded.unrealized_fx_gain_loss,
                 "valuation_status": stmt.excluded.valuation_status,
+                "valuation_source_currency": stmt.excluded.valuation_source_currency,
+                "valuation_reporting_currency": stmt.excluded.valuation_reporting_currency,
                 "valuation_fx_rate_date": stmt.excluded.valuation_fx_rate_date,
                 "valuation_fx_rate": stmt.excluded.valuation_fx_rate,
                 "updated_at": func.now(),

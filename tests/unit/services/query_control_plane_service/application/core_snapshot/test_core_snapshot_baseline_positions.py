@@ -77,6 +77,8 @@ def _source(row: SimpleNamespace, instrument: CoreSnapshotInstrument) -> CoreSna
         state_updated_at=None,
         instrument=instrument,
         valuation_status="VALUED_CURRENT",
+        valuation_source_currency=getattr(row, "valuation_source_currency", None),
+        valuation_reporting_currency=getattr(row, "valuation_reporting_currency", None),
     )
 
 
@@ -122,6 +124,22 @@ def test_baseline_position_entries_uses_history_cost_basis_and_reporting_fx() ->
 
     assert entries["SEC_BOND"]["market_value_base"] == Decimal("67.5")
     assert entries["SEC_BOND"]["market_value_local"] == Decimal("45")
+
+
+def test_baseline_position_entries_preserves_valuation_time_currency() -> None:
+    row = _snapshot_row("SEC_RELABELED")
+    row.valuation_source_currency = "EUR"
+    row.valuation_reporting_currency = "USD"
+
+    entries = baseline_position_entries(
+        rows=[_source(row, _instrument("SEC_RELABELED", currency="GBP"))],
+        use_snapshot=True,
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    assert entries["SEC_RELABELED"]["currency"] == "EUR"
 
 
 def test_baseline_position_entries_filters_cash_and_zero_positions() -> None:

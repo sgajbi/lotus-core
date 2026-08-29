@@ -67,6 +67,7 @@ def baseline_position_entry(
         market_value_base=market_value_base,
         market_value_local=market_value_local,
         instrument=instrument,
+        valuation_currency=(row.valuation_source_currency if use_snapshot else None),
     )
 
 
@@ -109,6 +110,7 @@ def baseline_position_payload(
     market_value_base: Decimal | None,
     market_value_local: Decimal | None,
     instrument: CoreSnapshotInstrument,
+    valuation_currency: str | None = None,
 ) -> dict[str, Any]:
     payload = {
         "security_id": security_id,
@@ -116,13 +118,22 @@ def baseline_position_payload(
         "market_value_base": market_value_base,
         "market_value_local": market_value_local,
     }
-    payload.update(baseline_instrument_payload(instrument))
+    payload.update(
+        baseline_instrument_payload(
+            instrument,
+            valuation_currency=valuation_currency,
+        )
+    )
     return payload
 
 
-def baseline_instrument_payload(instrument: CoreSnapshotInstrument) -> dict[str, Any]:
+def baseline_instrument_payload(
+    instrument: CoreSnapshotInstrument,
+    *,
+    valuation_currency: str | None = None,
+) -> dict[str, Any]:
     return {
-        "currency": instrument.currency,
+        "currency": valuation_currency or instrument.currency,
         "instrument_name": instrument.name,
         "asset_class": instrument.asset_class,
         "sector": instrument.sector,

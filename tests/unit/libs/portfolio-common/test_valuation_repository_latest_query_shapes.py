@@ -79,6 +79,8 @@ async def test_snapshot_upsert_preserves_valuation_fx_effective_date() -> None:
         cost_basis=Decimal("900"),
         cost_basis_local=Decimal("800"),
         valuation_status="VALUED_CURRENT",
+        valuation_source_currency="EUR",
+        valuation_reporting_currency="USD",
         valuation_fx_rate_date=date(2026, 8, 20),
         valuation_fx_rate=Decimal("1.2345"),
     )
@@ -92,3 +94,7 @@ async def test_snapshot_upsert_preserves_valuation_fx_effective_date() -> None:
     assert "valuation_fx_rate" in sql
     assert "1.2345" in sql
     assert "valuation_fx_rate = excluded.valuation_fx_rate" in sql.lower()
+    assert "valuation_source_currency" in sql
+    assert "valuation_source_currency = excluded.valuation_source_currency" in sql.lower()
+    assert "valuation_reporting_currency" in sql
+    assert "valuation_reporting_currency = excluded.valuation_reporting_currency" in sql.lower()

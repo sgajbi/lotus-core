@@ -135,6 +135,8 @@ def _position_source(
         instrument=instrument,
         business_date=date(2026, 2, 27),
         valuation_status=getattr(row, "valuation_status", "VALUED_CURRENT"),
+        valuation_source_currency=getattr(row, "valuation_source_currency", instrument.currency),
+        valuation_reporting_currency=getattr(row, "valuation_reporting_currency", "USD"),
         valuation_fx_rate_date=getattr(row, "valuation_fx_rate_date", None),
         valuation_fx_rate=getattr(row, "valuation_fx_rate", None),
         portfolio_fact_created_at=getattr(row, "created_at", None),
@@ -581,6 +583,7 @@ async def test_core_snapshot_carried_forward_baseline_fx_invalidates_readiness(
         replace(
             current,
             instrument=replace(current.instrument, currency="EUR"),
+            valuation_source_currency="EUR",
             valuation_fx_rate_date=date(2026, 2, 26),
             valuation_fx_rate=Decimal("1.35"),
         )
