@@ -36,7 +36,7 @@ def core_snapshot_reconciliation_scopes(
     return collective_holdings_reconciliation_scopes(
         [
             HoldingsReconciliationSource(
-                business_date=row.business_date,
+                business_date=row.portfolio_business_date,
                 row_epoch=row.epoch,
                 state_epoch=row.epoch,
                 latest_evidence_timestamp=_latest_timestamp(
@@ -78,6 +78,7 @@ def _core_snapshot_source_row_payload(row: CoreSnapshotPositionSource) -> dict[s
         "valuation_fx_rate": row.valuation_fx_rate,
         "cost_basis": row.cost_basis,
         "cost_basis_local": row.cost_basis_local,
+        "portfolio_business_date": row.portfolio_business_date,
         "business_date": row.business_date,
         "epoch": row.epoch,
         "source_created_at": row.source_created_at,

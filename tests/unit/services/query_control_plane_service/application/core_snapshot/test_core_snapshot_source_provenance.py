@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import cast
@@ -31,6 +32,7 @@ def _row(
     security_id: str,
     *,
     business_date: date | None = date(2026, 2, 27),
+    portfolio_business_date: date | None = date(2026, 2, 27),
     quantity: Decimal = Decimal("10"),
     market_price: Decimal | None = Decimal("10"),
     market_value: Decimal | None = Decimal("100"),
@@ -46,10 +48,12 @@ def _row(
     valuation_reporting_currency: str | None = "USD",
     market_evidence_timestamp: datetime | None = None,
     portfolio_evidence_timestamp: datetime | None = None,
+    instrument_evidence_timestamp: datetime | None = None,
 ) -> CoreSnapshotPositionSource:
     evidence_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
     market_timestamp = market_evidence_timestamp or evidence_timestamp
     portfolio_timestamp = portfolio_evidence_timestamp or evidence_timestamp
+    instrument_timestamp = instrument_evidence_timestamp or portfolio_timestamp
     return CoreSnapshotPositionSource(
         security_id=security_id,
         quantity=quantity,
@@ -80,6 +84,8 @@ def _row(
             ultimate_parent_issuer_id=None,
             ultimate_parent_issuer_name=None,
             liquidity_tier=None,
+            created_at=instrument_timestamp,
+            updated_at=instrument_timestamp,
         ),
         business_date=business_date,
         valuation_status=valuation_status,
@@ -93,6 +99,7 @@ def _row(
         valuation_fx_rate=valuation_fx_rate,
         portfolio_fact_created_at=portfolio_timestamp,
         portfolio_fact_updated_at=portfolio_timestamp,
+        portfolio_business_date=portfolio_business_date,
     )
 
 
@@ -148,7 +155,7 @@ def test_source_provenance_is_ready_only_for_coherent_exact_date_evidence() -> N
 def test_source_provenance_rejects_mixed_portfolio_business_dates() -> None:
     resolution = _resolve(
         _row("SEC_A"),
-        _row("SEC_B", business_date=date(2026, 2, 26)),
+        _row("SEC_B", portfolio_business_date=date(2026, 2, 26)),
     )
 
     assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
@@ -156,6 +163,21 @@ def test_source_provenance_rejects_mixed_portfolio_business_dates() -> None:
     assert resolution.effective_as_of_date is None
     assert resolution.source_provenance.portfolio.as_of is None
     assert resolution.source_provenance.portfolio.freshness_status == "PARTIAL"
+
+
+def test_source_provenance_preserves_history_date_when_snapshot_date_is_older() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_A",
+            business_date=date(2026, 2, 26),
+            portfolio_business_date=date(2026, 2, 27),
+        )
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_AS_OF_MISMATCH
+    assert resolution.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert resolution.source_provenance.market_data.as_of == date(2026, 2, 26)
 
 
 def test_source_provenance_rejects_history_cost_basis_as_market_evidence() -> None:
@@ -279,7 +301,11 @@ def test_split_revaluation_changes_market_source_identity() -> None:
 def test_source_provenance_exposes_matching_stale_date_without_claiming_readiness() -> None:
     stale_date = date(2026, 2, 26)
     resolution = _resolve(
-        _row("SEC_A", business_date=stale_date),
+        _row(
+            "SEC_A",
+            business_date=stale_date,
+            portfolio_business_date=stale_date,
+        ),
         requested_as_of_date=date(2026, 2, 27),
     )
 
@@ -338,6 +364,33 @@ def test_source_family_timestamps_follow_their_own_authoritative_evidence() -> N
 
     assert resolution.source_provenance.portfolio.valuation_timestamp == portfolio_timestamp
     assert resolution.source_provenance.market_data.valuation_timestamp == market_timestamp
+
+
+def test_portfolio_timestamp_includes_mutable_instrument_evidence() -> None:
+    original_timestamp = datetime(2026, 2, 27, 8, tzinfo=UTC)
+    corrected_timestamp = datetime(2026, 2, 27, 12, tzinfo=UTC)
+    original = _resolve(
+        _row(
+            "SEC_A",
+            portfolio_evidence_timestamp=original_timestamp,
+            instrument_evidence_timestamp=original_timestamp,
+        )
+    )
+    corrected_row = _row(
+        "SEC_A",
+        portfolio_evidence_timestamp=original_timestamp,
+        instrument_evidence_timestamp=corrected_timestamp,
+    )
+    corrected_row = replace(
+        corrected_row,
+        instrument=replace(corrected_row.instrument, sector="FINANCIALS"),
+    )
+    corrected = _resolve(corrected_row)
+
+    assert original.source_provenance.portfolio.source_hash != (
+        corrected.source_provenance.portfolio.source_hash
+    )
+    assert corrected.source_provenance.portfolio.valuation_timestamp == corrected_timestamp
 
 
 def test_market_reobservation_advances_only_market_timestamp_not_source_identity() -> None:
