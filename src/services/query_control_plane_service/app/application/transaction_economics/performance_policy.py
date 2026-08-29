@@ -54,13 +54,10 @@ def performance_component_economics_supportability_reason(
 
 def performance_component_economics_data_quality_status(
     *,
-    rows: list[PerformanceComponentEconomicsRow],
     has_more: bool,
 ) -> str:
     if has_more:
         return "PARTIAL"
-    if rows:
-        return "COMPLETE"
     return "COMPLETE"
 
 
