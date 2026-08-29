@@ -184,3 +184,22 @@ async def test_reporting_currency_support_contract_distinguishes_selector_observ
     assert payload["observed_selector_currency"] is True
     assert payload["missing_source_currencies"] == ["USD"]
     service.evaluate.assert_awaited_once()
+
+
+async def test_reporting_currency_support_contract_rejects_unscoped_internal_read():
+    service = MagicMock()
+    service.evaluate = AsyncMock()
+    app.dependency_overrides[get_reporting_currency_support_service] = lambda: service
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/reporting-currencies/support?portfolio_id=PF-1"
+            "&reporting_currency=EUR&as_of_date=2026-08-28"
+        )
+
+    app.dependency_overrides.pop(get_reporting_currency_support_service, None)
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "tenant_id is required when authenticated tenant scope is unavailable"
+    )
+    service.evaluate.assert_not_awaited()
