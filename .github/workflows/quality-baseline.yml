@@ -184,6 +184,9 @@ jobs:
         id: enforce
         shell: bash
         run: make quality-maintainability-gate
+      - name: Module-size ratchet
+        shell: bash
+        run: make quality-source-size-gate
 
   complexity-gate:
     name: Quality Baseline / Complexity Gate

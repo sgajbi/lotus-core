@@ -488,6 +488,21 @@ def test_quality_baseline_runs_workflow_governance_gate() -> None:
     assert "make quality-workflow-governance-gate" in workflow_text
 
 
+def test_quality_baseline_runs_source_size_gate_in_blocking_maintainability_job() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
+    )
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+
+    steps = workflow["jobs"]["maintainability-gate"]["steps"]
+    assert "quality-source-size-gate:" in makefile_text
+    assert {
+        "name": "Module-size ratchet",
+        "shell": "bash",
+        "run": "make quality-source-size-gate",
+    } in steps
+
+
 def test_protected_delivery_replays_base_image_evidence_from_registry() -> None:
     for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}

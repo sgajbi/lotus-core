@@ -205,7 +205,7 @@
     ],
     "quality-maintainability-gate": [
       "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py verify radon",
-      "$(REPOSITORY_PYTHON) scripts/quality/maintainability_gate.py src"
+      "$(REPOSITORY_PYTHON) scripts/quality/maintainability_gate.py src --baseline quality/maintainability-baseline.v1.json"
     ],
     "quality-openapi-spectral-gate": [
       "$(REPOSITORY_PYTHON) scripts/quality/openapi_spectral_gate.py --output-dir $(OPENAPI_ARTIFACT_DIR)"
@@ -215,6 +215,9 @@
     ],
     "quality-ruff-gate": [
       "$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check . --statistics"
+    ],
+    "quality-source-size-gate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/source_size_gate.py"
     ],
     "quality-unit-collection-gate": [
       "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite unit --collect-only --quiet"
