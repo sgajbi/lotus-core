@@ -483,6 +483,13 @@ async def test_stale_reprocessing_claim_rolls_back_before_advisory_unlock_on_fai
     unlock_result = MagicMock()
     unlock_result.scalar_one.return_value = True
     call_order: list[str] = []
+    savepoint = AsyncMock()
+
+    async def record_rollback() -> None:
+        call_order.append("savepoint_rollback")
+
+    savepoint.rollback.side_effect = record_rollback
+    mock_db_session.begin_nested.return_value = savepoint
 
     def execute(statement, *_args):
         sql = str(statement)
@@ -499,13 +506,17 @@ async def test_stale_reprocessing_claim_rolls_back_before_advisory_unlock_on_fai
         return discovery_result
 
     mock_db_session.execute.side_effect = execute
-    savepoint = AsyncMock()
-    mock_db_session.begin_nested.return_value = savepoint
 
     with pytest.raises(RuntimeError, match="claim failed"):
         await repository._claim_stale_job_cohort(max_attempts=3)
 
-    assert call_order == ["discovery", "cohort_lock", "row_cohort", "cohort_unlock"]
+    assert call_order == [
+        "discovery",
+        "cohort_lock",
+        "row_cohort",
+        "savepoint_rollback",
+        "cohort_unlock",
+    ]
     savepoint.rollback.assert_awaited_once_with()
     savepoint.commit.assert_not_awaited()
     unlock_result.scalar_one.assert_called_once_with()
