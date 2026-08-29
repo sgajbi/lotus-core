@@ -364,6 +364,49 @@ async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
     jobs.renew_lease.assert_awaited_once()
 
 
+async def test_worker_rearms_deadline_watchdog_after_successful_renewal(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    worker._lease_duration_seconds = 0.5
+    worker._lease_renewal_interval_seconds = 0.01
+    worker._lease_renewal_io_timeout_seconds = 0.005
+    jobs = mock_dependencies["repro_job_repo"]
+    remaining_reads = iter((0.05, 0.5))
+
+    async def read_remaining(*_args, **_kwargs):
+        return next(remaining_reads, 0.5)
+
+    jobs.get_lease_remaining_seconds.side_effect = read_remaining
+    renewal_observed = asyncio.Event()
+
+    async def renew(*_args, **_kwargs):
+        renewal_observed.set()
+        return ReprocessingJobTransitionOutcome.APPLIED
+
+    jobs.renew_lease.side_effect = renew
+
+    async def operation(_terminal_transition_started):
+        await renewal_observed.wait()
+        await asyncio.sleep(0.08)
+
+    job = ReprocessingJob(
+        id=112,
+        job_type="RESET_WATERMARKS",
+        payload={},
+        status="PROCESSING",
+        lease_token=LEASE_TOKEN,
+    )
+
+    await worker._process_with_lease_renewal(
+        job=job,
+        job_type="RESET_WATERMARKS",
+        operation=operation,
+    )
+
+    assert jobs.renew_lease.await_count >= 1
+
+
 async def test_worker_does_not_start_operation_until_authority_read_completes(
     mock_dependencies,
 ):
