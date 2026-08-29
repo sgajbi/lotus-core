@@ -73,6 +73,7 @@ def _core_snapshot_source_row_payload(row: CoreSnapshotPositionSource) -> dict[s
         "market_value_local": row.market_value_local,
         "valuation_status": row.valuation_status,
         "valuation_fx_rate_date": row.valuation_fx_rate_date,
+        "valuation_fx_rate": row.valuation_fx_rate,
         "cost_basis": row.cost_basis,
         "cost_basis_local": row.cost_basis_local,
         "business_date": row.business_date,

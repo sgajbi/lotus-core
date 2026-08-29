@@ -136,6 +136,7 @@ def _position_source(
         business_date=date(2026, 2, 27),
         valuation_status=getattr(row, "valuation_status", "VALUED_CURRENT"),
         valuation_fx_rate_date=getattr(row, "valuation_fx_rate_date", None),
+        valuation_fx_rate=getattr(row, "valuation_fx_rate", None),
     )
 
 
@@ -553,6 +554,7 @@ async def test_core_snapshot_carried_forward_baseline_fx_invalidates_readiness(
             current,
             instrument=replace(current.instrument, currency="EUR"),
             valuation_fx_rate_date=date(2026, 2, 26),
+            valuation_fx_rate=Decimal("1.35"),
         )
     ]
     service = _service(mock_dependencies)

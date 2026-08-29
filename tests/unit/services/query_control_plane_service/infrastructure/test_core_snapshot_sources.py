@@ -121,6 +121,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
         cost_basis_local=Decimal("950"),
         valuation_status="VALUED_STALE",
         valuation_fx_rate_date=date(2026, 4, 9),
+        valuation_fx_rate=Decimal("1.35"),
         created_at=datetime(2026, 4, 10, 1, 0, tzinfo=UTC),
         updated_at=datetime(2026, 4, 10, 2, 0, tzinfo=UTC),
     )
@@ -140,6 +141,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].business_date == date(2026, 4, 10)
     assert records[0].valuation_status == "VALUED_STALE"
     assert records[0].valuation_fx_rate_date == date(2026, 4, 9)
+    assert records[0].valuation_fx_rate == Decimal("1.35")
     assert records[0].instrument.name == "Global Bond"
 
     sql = str(
@@ -178,6 +180,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert records[0].business_date == date(2026, 4, 9)
     assert records[0].valuation_status is None
     assert records[0].valuation_fx_rate_date is None
+    assert records[0].valuation_fx_rate is None
 
     sql = str(
         session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})

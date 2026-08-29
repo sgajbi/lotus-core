@@ -380,6 +380,7 @@ class ValuationJobProcessor:
         price: MarketPrice | None,
     ) -> ValuationSnapshotResult:
         snapshot.valuation_fx_rate_date = None
+        snapshot.valuation_fx_rate = None
         book_scope = resolve_optional_valuation_book_scope(
             tenant_id=portfolio.tenant_id,
             legal_book_id=portfolio.legal_book_id,
@@ -667,6 +668,7 @@ class ValuationJobProcessor:
         snapshot.unrealized_fx_gain_loss = result.unrealized_fx_reporting
         snapshot.valuation_status = VALUATION_VALUED_CURRENT
         snapshot.valuation_fx_rate_date = fx_rate.rate_date if fx_rate is not None else None
+        snapshot.valuation_fx_rate = fx_rate.rate if fx_rate is not None else None
 
     @staticmethod
     async def _instrument_to_portfolio_fx_rate(
@@ -732,6 +734,7 @@ class ValuationJobProcessor:
             else VALUATION_VALUED_STALE
         )
         snapshot.valuation_fx_rate_date = fx_rate.rate_date if fx_rate is not None else None
+        snapshot.valuation_fx_rate = fx_rate.rate if fx_rate is not None else None
 
     async def _complete_valuation_job(
         self,

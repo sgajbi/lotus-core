@@ -806,6 +806,28 @@ def test_position_state_numeric_models_enforce_finite_domain_policy(
         assert sign_term in str(constraints[sign_constraint_name].sqltext)
 
 
+def test_daily_snapshot_requires_one_complete_positive_finite_fx_fact() -> None:
+    constraint = next(
+        item
+        for item in DailyPositionSnapshot.__table__.constraints
+        if item.name == "ck_daily_position_snapshot_valuation_fx_fact"
+    )
+
+    constraint_sql = str(constraint.sqltext)
+    assert "valuation_fx_rate_date IS NULL AND valuation_fx_rate IS NULL" in constraint_sql
+    assert "valuation_fx_rate_date IS NOT NULL" in constraint_sql
+    assert "valuation_fx_rate IS NOT NULL" in constraint_sql
+    assert (
+        "CAST(valuation_fx_rate AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')" in constraint_sql
+    )
+    positive_constraint = next(
+        item
+        for item in DailyPositionSnapshot.__table__.constraints
+        if item.name == "ck_daily_snapshot_fx_rate_positive"
+    )
+    assert str(positive_constraint.sqltext) == "valuation_fx_rate > 0"
+
+
 def test_transaction_numeric_model_preserves_signed_economics_and_fences_special_values() -> None:
     constraints = {
         constraint.name: str(constraint.sqltext)

@@ -330,4 +330,5 @@ def _position_source(
         valuation_fx_rate_date=(
             getattr(row, "valuation_fx_rate_date", None) if use_snapshot else None
         ),
+        valuation_fx_rate=(getattr(row, "valuation_fx_rate", None) if use_snapshot else None),
     )

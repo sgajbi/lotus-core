@@ -296,6 +296,7 @@ class DailyPositionSnapshot(Base):
     unrealized_fx_gain_loss = Column(ExactNumeric(18, 10), nullable=True)
     valuation_status = Column(String, nullable=False, server_default="UNVALUED", index=True)
     valuation_fx_rate_date = Column(Date, nullable=True)
+    valuation_fx_rate = Column(ExactNumeric(18, 10), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -319,6 +320,14 @@ class DailyPositionSnapshot(Base):
             "market_price > 0",
             name="ck_daily_position_snapshot_price_positive",
         ),
+        CheckConstraint(
+            "(valuation_fx_rate_date IS NULL AND valuation_fx_rate IS NULL) OR "
+            "(valuation_fx_rate_date IS NOT NULL "
+            "AND valuation_fx_rate IS NOT NULL "
+            "AND CAST(valuation_fx_rate AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity'))",
+            name="ck_daily_position_snapshot_valuation_fx_fact",
+        ),
+        CheckConstraint("valuation_fx_rate > 0", name="ck_daily_snapshot_fx_rate_positive"),
         UniqueConstraint(
             "portfolio_id", "security_id", "date", "epoch", name="_portfolio_security_date_epoch_uc"
         ),

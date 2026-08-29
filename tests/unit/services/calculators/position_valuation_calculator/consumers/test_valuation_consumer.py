@@ -623,7 +623,7 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
     mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
 
-async def test_authoritative_valuation_persists_selected_fx_effective_date(
+async def test_authoritative_valuation_persists_selected_fx_fact(
     mock_event: PortfolioValuationRequiredEvent,
 ) -> None:
     snapshot = DailyPositionSnapshot(
@@ -661,6 +661,7 @@ async def test_authoritative_valuation_persists_selected_fx_effective_date(
 
     assert snapshot.valuation_status == "VALUED_CURRENT"
     assert snapshot.valuation_fx_rate_date == date(2025, 7, 31)
+    assert snapshot.valuation_fx_rate == Decimal("1.1")
 
 
 async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
@@ -983,6 +984,7 @@ async def test_valuation_consumer_success(
     )
     valuation_candidate = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert valuation_candidate.valuation_fx_rate_date == date(2025, 7, 31)
+    assert valuation_candidate.valuation_fx_rate == Decimal("1.1")
     mock_outbox_repo.create_outbox_event.assert_called_once()
 
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
@@ -1078,6 +1080,7 @@ async def test_valuation_consumer_normalizes_same_currency_without_fx_lookup(
     assert persisted_snapshot.market_value_local == Decimal("9000")
     assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
     assert persisted_snapshot.valuation_fx_rate_date is None
+    assert persisted_snapshot.valuation_fx_rate is None
     mock_outbox_repo.create_outbox_event.assert_called_once()
 
 
