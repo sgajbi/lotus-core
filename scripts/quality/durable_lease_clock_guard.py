@@ -170,6 +170,20 @@ def _expanded_deadline_targets(
     mappings: dict[str, set[str]] = {}
     for node in _walk_lexical_scope(tree):
         if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Name)
+                    and isinstance(target.slice, ast.Constant)
+                    and isinstance(target.slice.value, str)
+                    and target.slice.value.endswith(_DEADLINE_SUFFIX)
+                    and _contains_application_clock(
+                        node.value,
+                        application_clock_names,
+                        application_clock_calls,
+                    )
+                ):
+                    mappings.setdefault(target.value.id, set()).add(target.slice.value)
             assignments = [(_target_names(target), node.value) for target in node.targets]
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             assignments = [(_target_names(node.target), node.value)]
@@ -294,10 +308,16 @@ def find_durable_lease_clock_findings(
                             )
                 for targets, value in assignments:
                     for target in targets:
-                        if target.endswith(_DEADLINE_SUFFIX) and _contains_application_clock(
-                            value,
-                            application_clock_names,
-                            application_clock_calls,
+                        mapped_deadline = isinstance(
+                            value, ast.Name
+                        ) and target in expanded_deadline_targets.get(value.id, set())
+                        if target.endswith(_DEADLINE_SUFFIX) and (
+                            mapped_deadline
+                            or _contains_application_clock(
+                                value,
+                                application_clock_names,
+                                application_clock_calls,
+                            )
                         ):
                             findings.append(
                                 DurableLeaseClockFinding(
