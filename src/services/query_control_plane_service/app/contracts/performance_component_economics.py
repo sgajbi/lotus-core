@@ -29,6 +29,22 @@ SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES = (
 
 MAX_PERFORMANCE_COMPONENT_ECONOMICS_WINDOW_DAYS = 366
 
+PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION = (
+    "What: Return source-authored transaction, cashflow, fee, tax, income, realized P&L, and "
+    "FX-context economics evidence for contribution analytics.\n"
+    "How: Reads core transaction rows with linked cashflow and transaction-cost records, returns "
+    "deterministic row-level evidence plus component-family totals and coverage metadata, and "
+    "preserves source lineage for downstream proof. A successful authoritative read with no "
+    "matching activity returns READY with reason PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY, "
+    "zero rows, and no missing component families. Missing portfolios, invalid scopes, and "
+    "persistence failures remain fail-closed transport errors and are never converted to empty "
+    "READY evidence.\n"
+    "When: Used by lotus-performance to replace local or inferred component economics in stateful "
+    "contribution analytics. This route does not calculate contribution, attribution, performance "
+    "returns, tax advice, execution quality, best execution, or OMS acknowledgement; "
+    "lotus-performance remains responsible for contribution math."
+)
+
 
 def _normalize_optional_identifiers(values: list[str] | None, field_name: str) -> list[str] | None:
     if values is None:
@@ -298,8 +314,14 @@ class PerformanceComponentEconomicsSupportability(BaseModel):
     )
     reason: str = Field(
         ...,
-        description="Machine-readable supportability reason.",
-        examples=["PERFORMANCE_COMPONENT_ECONOMICS_READY"],
+        description=(
+            "Machine-readable supportability reason. A successful authoritative empty read uses "
+            "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY."
+        ),
+        examples=[
+            "PERFORMANCE_COMPONENT_ECONOMICS_READY",
+            "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY",
+        ],
     )
     source_owner: Literal["lotus-core"] = Field(
         "lotus-core", description="Repository that owns this source economics contract."
@@ -325,9 +347,10 @@ class PerformanceComponentEconomicsSupportability(BaseModel):
     missing_component_families: list[str] = Field(
         default_factory=list,
         description=(
-            "Supported component families with no evidence in this response. Missing does not "
-            "mean fabricated zero; downstream must decide whether the requested workflow needs "
-            "that family."
+            "Supported component families missing from returned source rows. This list is empty "
+            "for an authoritative no-activity window; no activity is not incomplete evidence. "
+            "For non-empty responses, missing does not mean fabricated zero and downstream must "
+            "decide whether the requested workflow needs that family."
         ),
     )
 
