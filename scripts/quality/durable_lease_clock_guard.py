@@ -13,6 +13,7 @@ _APPLICATION_CLOCK_CALLS = {
     ("datetime", "utcnow"),
     ("datetime", "today"),
     ("timezone", "now"),
+    ("time", "time"),
 }
 _APPLICATION_CLOCK_HELPER_NAMES = {
     "utc_now",
@@ -95,7 +96,9 @@ def _contains_application_clock(
                 return True
         elif isinstance(child, ast.Call):
             chain = _attribute_chain(child.func)
-            if len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls:
+            if (len(chain) >= 2 and tuple(chain[-2:]) in application_clock_calls) or (
+                len(chain) == 1 and (chain[0], "time") in application_clock_calls
+            ):
                 return True
             if (
                 len(chain) >= 2
@@ -115,15 +118,23 @@ def _contains_application_clock(
 def _application_clock_calls(tree: ast.AST) -> set[tuple[str, str]]:
     calls = set(_APPLICATION_CLOCK_CALLS)
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom) or node.module != "datetime":
-            continue
-        for imported in node.names:
-            if imported.name == "datetime":
-                alias = imported.asname or imported.name
-                calls.update((alias, method) for method in ("now", "utcnow", "today"))
-            elif imported.name == "timezone":
-                alias = imported.asname or imported.name
-                calls.add((alias, "now"))
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "datetime":
+                for imported in node.names:
+                    if imported.name == "datetime":
+                        alias = imported.asname or imported.name
+                        calls.update((alias, method) for method in ("now", "utcnow", "today"))
+                    elif imported.name == "timezone":
+                        alias = imported.asname or imported.name
+                        calls.add((alias, "now"))
+            elif node.module == "time":
+                for imported in node.names:
+                    if imported.name == "time":
+                        calls.add((imported.asname or imported.name, "time"))
+        elif isinstance(node, ast.Import):
+            for imported in node.names:
+                if imported.name == "time":
+                    calls.add(((imported.asname or imported.name).split(".")[-1], "time"))
     return calls
 
 
@@ -174,6 +185,29 @@ def _application_clock_names(
                 names.update(targets)
                 changed = changed or len(names) != before
     return names
+
+
+def _scope_shadowed_names(scope: ast.AST) -> set[str]:
+    """Return names locally bound by a function, excluding explicit globals."""
+
+    if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return set()
+    names = {target for targets, _value in _assignment_pairs(scope) for target in targets}
+    arguments = scope.args
+    names.update(argument.arg for argument in arguments.posonlyargs)
+    names.update(argument.arg for argument in arguments.args)
+    names.update(argument.arg for argument in arguments.kwonlyargs)
+    if arguments.vararg:
+        names.add(arguments.vararg.arg)
+    if arguments.kwarg:
+        names.add(arguments.kwarg.arg)
+    global_names = {
+        name
+        for node in _walk_lexical_scope(scope)
+        if isinstance(node, ast.Global)
+        for name in node.names
+    }
+    return names - global_names
 
 
 def _expanded_deadline_targets(
@@ -259,10 +293,13 @@ def find_durable_lease_clock_findings(
         ]
         scopes.insert(0, tree)
         for scope in scopes:
+            scope_initial_names = (
+                module_names - _scope_shadowed_names(scope) if scope is not tree else None
+            )
             application_clock_names = _application_clock_names(
                 scope,
                 application_clock_calls,
-                initial_names=module_names if scope is not tree else None,
+                initial_names=scope_initial_names,
             )
             expanded_deadline_targets = _expanded_deadline_targets(
                 scope,
