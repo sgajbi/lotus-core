@@ -441,20 +441,21 @@ class ReprocessingWorker:
         asyncio.create_task(drain())
 
     def _next_lease_renewal_at(self, *, now: float, lease_deadline: float) -> float:
-        """Wake before the durable deadline, retaining bounded renewal I/O budget."""
+        """Wake early enough for renewal and post-renewal authority reads."""
 
+        safety_margin_seconds = 2 * self._lease_renewal_io_timeout_seconds
         return max(
             now,
             min(
                 now + self._lease_renewal_interval_seconds,
-                lease_deadline - self._lease_renewal_io_timeout_seconds,
+                lease_deadline - safety_margin_seconds,
             ),
         )
 
     def _next_lease_renewal_retry_at(self, *, now: float, lease_deadline: float) -> float:
         """Back off failed renewals without scheduling beyond the safety margin."""
 
-        safety_margin_deadline = lease_deadline - self._lease_renewal_io_timeout_seconds
+        safety_margin_deadline = lease_deadline - (2 * self._lease_renewal_io_timeout_seconds)
         if now >= safety_margin_deadline:
             return now + self._lease_renewal_io_timeout_seconds
         return min(now + self._lease_renewal_io_timeout_seconds, safety_margin_deadline)
