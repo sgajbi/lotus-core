@@ -113,6 +113,51 @@ async def test_reporting_currency_support_rejects_blank_explicit_tenant_without_
 
 
 @pytest.mark.asyncio
+async def test_reporting_currency_support_rejects_omitted_tenant_without_auth_scope() -> None:
+    service = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_reporting_currency_support(
+            request=SimpleNamespace(state=SimpleNamespace()),
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id=None,
+            service=service,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == (
+        "tenant_id is required when authenticated tenant scope is unavailable"
+    )
+    service.evaluate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_currency_support_accepts_explicit_internal_tenant_scope() -> None:
+    service = AsyncMock()
+    service.evaluate.return_value = _result("TENANT_A")
+
+    await get_reporting_currency_support(
+        request=SimpleNamespace(state=SimpleNamespace()),
+        portfolio_id="PF-1",
+        reporting_currency="USD",
+        as_of_date=date(2026, 8, 28),
+        tenant_id=" TENANT_A ",
+        service=service,
+    )
+
+    service.evaluate.assert_awaited_once_with(
+        ReportingCurrencySupportQuery(
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id="TENANT_A",
+        )
+    )
+
+
+@pytest.mark.asyncio
 async def test_reporting_currency_support_maps_service_validation_errors() -> None:
     service = AsyncMock()
     service.evaluate.side_effect = ValueError("portfolio source invalid")
@@ -123,7 +168,7 @@ async def test_reporting_currency_support_maps_service_validation_errors() -> No
             portfolio_id="PF-1",
             reporting_currency="USD",
             as_of_date=date(2026, 8, 28),
-            tenant_id=None,
+            tenant_id="TENANT_A",
             service=service,
         )
 

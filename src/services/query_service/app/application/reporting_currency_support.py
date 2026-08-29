@@ -9,7 +9,7 @@ class ReportingCurrencySupportQuery:
     portfolio_id: str
     reporting_currency: str
     as_of_date: date
-    tenant_id: str | None = None
+    tenant_id: str
 
 
 @dataclass(frozen=True, slots=True)

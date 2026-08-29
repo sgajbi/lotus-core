@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-28T06:23:10.605897+00:00",
+  "generatedAt": "2026-08-29T07:41:52.233312+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -5778,7 +5778,7 @@
       "semanticId": "lotus.observed_selector_currency",
       "canonicalTerm": "observed_selector_currency",
       "preferredName": "observed_selector_currency",
-      "description": "Whether the requested code appears in Core's selector catalog. This is an observed selector fact only and never implies restatement support.",
+      "description": "Whether the requested code is observed in the tenant's portfolio base currencies or historically held instruments. This tenant-scoped fact never implies restatement support.",
       "example": true,
       "type": "object",
       "locations": [
@@ -12587,7 +12587,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "Optional tenant fence for portfolio resolution.",
+      "description": "Tenant fence. Required for trusted internal callers without an authenticated principal; authenticated calls are always bound to their verified tenant.",
       "example": "TENANT_SG",
       "behaviorImpact": "Affects get_reporting_currency_support request behavior.",
       "exposure": "consumer_visible",
@@ -23731,7 +23731,7 @@
         "Reporting Currency Support"
       ],
       "summary": "Evaluate reporting-currency support",
-      "description": "Returns Core's source-owned, portfolio/as-of supportability decision for performance restatement. Selector presence is reported separately and never implies support. UNSUPPORTED means required FX evidence is missing; UNAVAILABLE means the portfolio source could not be resolved. This contract does not certify downstream lotus-performance execution or client publication.",
+      "description": "Returns Core's source-owned, portfolio/as-of supportability decision for performance restatement. Selector presence is reported separately and never implies support. Authenticated calls are bound to their verified tenant. Trusted internal callers without an authenticated principal must provide an explicit tenant_id. UNSUPPORTED means required FX evidence is missing; UNAVAILABLE means the portfolio source could not be resolved. This contract does not certify downstream lotus-performance execution or client publication.",
       "naming": {
         "boundedContext": "reporting_currency_support",
         "canonicalTerms": [

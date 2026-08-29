@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import cast
 
 from portfolio_common.database_models import (
     FxRate,
@@ -21,7 +20,7 @@ from .currency_query_expressions import currency_code_sql_expr
 
 @dataclass(frozen=True, slots=True)
 class PortfolioCurrencySource:
-    tenant_id: str | None
+    tenant_id: str
     base_currency: str
     source_currencies: tuple[str, ...]
 
@@ -36,12 +35,13 @@ class ReportingCurrencySupportRepository:
         self,
         *,
         portfolio_id: str,
-        tenant_id: str | None,
+        tenant_id: str,
         as_of_date: date,
     ) -> PortfolioCurrencySource | None:
-        portfolio_stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
-        if tenant_id is not None:
-            portfolio_stmt = portfolio_stmt.where(Portfolio.tenant_id == tenant_id)
+        portfolio_stmt = select(Portfolio).where(
+            Portfolio.portfolio_id == portfolio_id,
+            Portfolio.tenant_id == tenant_id,
+        )
         portfolio = (await self.db.execute(portfolio_stmt)).scalar_one_or_none()
         if portfolio is None:
             return None
@@ -112,19 +112,19 @@ class ReportingCurrencySupportRepository:
             sorted({normalized_base, *(normalize_currency_code(c) for c in currencies)})
         )
         return PortfolioCurrencySource(
-            tenant_id=portfolio.tenant_id,
+            tenant_id=tenant_id,
             base_currency=normalized_base,
             source_currencies=source_currencies,
         )
 
-    async def get_latest_fx_rate_dates(
+    async def get_exact_fx_rate_dates(
         self,
         *,
         from_currencies: tuple[str, ...],
         to_currency: str,
         as_of_date: date,
     ) -> dict[str, date]:
-        """Return all latest as-of FX dates in one bounded query."""
+        """Return FX evidence present on the requested valuation date."""
         normalized_sources = tuple(normalize_currency_code(value) for value in from_currencies)
         normalized_target = normalize_currency_code(to_currency)
         if not normalized_sources:
@@ -132,34 +132,45 @@ class ReportingCurrencySupportRepository:
         stmt = (
             select(
                 currency_code_sql_expr(FxRate.from_currency).label("from_currency"),
-                func.max(FxRate.rate_date).label("rate_date"),
+                FxRate.rate_date,
             )
             .where(
                 currency_code_sql_expr(FxRate.from_currency).in_(normalized_sources),
                 currency_code_sql_expr(FxRate.to_currency) == normalized_target,
                 FxRate.rate_date == as_of_date,
             )
-            .group_by(currency_code_sql_expr(FxRate.from_currency))
+            .distinct()
         )
         rows = (await self.db.execute(stmt)).all()
         return {
-            str(from_currency): cast(date, rate_date)
+            str(from_currency): rate_date
             for from_currency, rate_date in rows
             if rate_date is not None
         }
 
-    async def is_selector_currency_observed(self, *, currency: str) -> bool:
+    async def is_selector_currency_observed(self, *, currency: str, tenant_id: str) -> bool:
         code = normalize_currency_code(currency)
         portfolio_match = (
             select(Portfolio.portfolio_id)
-            .where(currency_code_sql_expr(Portfolio.base_currency) == code)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                currency_code_sql_expr(Portfolio.base_currency) == code,
+            )
             .limit(1)
         )
         if (await self.db.execute(portfolio_match)).scalar_one_or_none() is not None:
             return True
         instrument_match = (
             select(Instrument.security_id)
-            .where(currency_code_sql_expr(Instrument.currency) == code)
+            .join(
+                PositionHistory,
+                func.trim(PositionHistory.security_id) == func.trim(Instrument.security_id),
+            )
+            .join(Portfolio, Portfolio.portfolio_id == PositionHistory.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                currency_code_sql_expr(Instrument.currency) == code,
+            )
             .limit(1)
         )
         return (await self.db.execute(instrument_match)).scalar_one_or_none() is not None

@@ -21,6 +21,8 @@ router = APIRouter(prefix="/reporting-currencies", tags=["Reporting Currency Sup
     description=(
         "Returns Core's source-owned, portfolio/as-of supportability decision for performance "
         "restatement. Selector presence is reported separately and never implies support. "
+        "Authenticated calls are bound to their verified tenant. Trusted internal callers "
+        "without an authenticated principal must provide an explicit tenant_id. "
         "UNSUPPORTED means required FX evidence is missing; UNAVAILABLE means the portfolio "
         "source could not be resolved. This contract does not certify downstream lotus-performance "
         "execution or client publication."
@@ -42,7 +44,11 @@ async def get_reporting_currency_support(
         description="Effective date used for portfolio and FX evidence.",
     ),
     tenant_id: str | None = Query(
-        None, description="Optional tenant fence for portfolio resolution."
+        None,
+        description=(
+            "Tenant fence. Required for trusted internal callers without an authenticated "
+            "principal; authenticated calls are always bound to their verified tenant."
+        ),
     ),
     service: ReportingCurrencySupportService = Depends(get_reporting_currency_support_service),
 ) -> ReportingCurrencySupportResponse:
@@ -61,10 +67,10 @@ async def get_reporting_currency_support(
                 detail="requested tenant does not match authenticated tenant scope",
             )
         normalized_tenant_id = normalized_authenticated_tenant_id
-    elif tenant_id is not None and not normalized_tenant_id:
+    elif not normalized_tenant_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="tenant_id must not be blank",
+            detail="tenant_id is required when authenticated tenant scope is unavailable",
         )
     try:
         result = await service.evaluate(
@@ -72,7 +78,7 @@ async def get_reporting_currency_support(
                 portfolio_id=portfolio_id,
                 reporting_currency=reporting_currency,
                 as_of_date=as_of_date,
-                tenant_id=normalized_tenant_id or None,
+                tenant_id=normalized_tenant_id,
             )
         )
     except ValueError as exc:
