@@ -798,6 +798,7 @@ class ValuationRepositoryBase:
                 "unrealized_fx_gain_loss": snapshot.unrealized_fx_gain_loss,
                 "valuation_status": snapshot.valuation_status,
                 "valuation_fx_rate_date": snapshot.valuation_fx_rate_date,
+                "valuation_fx_rate": snapshot.valuation_fx_rate,
             }
 
             stmt = pg_insert(DailyPositionSnapshot).values(**insert_values)
@@ -815,6 +816,7 @@ class ValuationRepositoryBase:
                 "unrealized_fx_gain_loss": stmt.excluded.unrealized_fx_gain_loss,
                 "valuation_status": stmt.excluded.valuation_status,
                 "valuation_fx_rate_date": stmt.excluded.valuation_fx_rate_date,
+                "valuation_fx_rate": stmt.excluded.valuation_fx_rate,
                 "updated_at": func.now(),
             }
 

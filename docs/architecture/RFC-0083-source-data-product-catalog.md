@@ -462,11 +462,14 @@ stable unavailable reason. The request date and generation time are never substi
 evidence. Downstream advisory consumers must consume this aggregated contract rather than compose
 plausible valuation truth from weaker routes.
 
-For snapshot-backed cross-currency positions, market-data evidence includes both the exact price
-date and the persisted `valuation_fx_rate_date` used to calculate the stored value. A current price
-status alone does not certify FX freshness. Legacy or new cross-currency rows without that lineage,
-and rows whose FX date precedes the requested date, are unavailable until revaluation produces
-exact-date evidence. Same-currency valuation has no FX input and therefore retains a null FX date.
+For snapshot-backed cross-currency positions, market-data evidence includes the exact price date
+and the persisted `valuation_fx_rate_date` plus `valuation_fx_rate` used to calculate the stored
+value. The FX pair is database-enforced as jointly null or jointly present with a positive finite
+rate, and the exact value is bound into market-data identity so a same-date FX correction changes
+lineage. A current price status alone does not certify FX freshness. Legacy or new cross-currency
+rows without both parts of that lineage, and rows whose FX date precedes the requested date, are
+unavailable until revaluation produces exact-date evidence. Same-currency valuation has no FX
+input and therefore retains null FX evidence.
 
 The response publishes a deterministic `portfolio_state_snapshot:<hash>` identity and explicit
 input, calculation, and output SHA-256 lineage. The input hash binds portfolio, tenant, as-of date,

@@ -4312,12 +4312,14 @@ Most relevant current governance:
      fail on empty scans, and intentionally ignore untracked generated build output. Do not add
      headroom, silent exclusions, or baseline entries without owning backlog evidence.
 
-257. A `DailyPositionSnapshot` cross-currency valuation must preserve the exact effective date of
-     the FX row used in `valuation_fx_rate_date`. `VALUED_CURRENT` proves exact-date price evidence;
-     it does not prove FX currency conversion freshness. QCP snapshot readiness requires that
-     persisted FX date to equal the requested business date for every cross-currency baseline row.
-     Same-currency rows retain null FX evidence. Legacy or newly produced cross-currency rows with
-     missing or carried-forward FX dates fail closed and require revaluation; never reconstruct the
+257. A `DailyPositionSnapshot` cross-currency valuation must preserve the exact FX fact used in
+     `valuation_fx_rate_date` and `valuation_fx_rate`. The pair is jointly present or jointly null;
+     a positive finite value is required when present. `VALUED_CURRENT` proves exact-date price
+     evidence; it does not prove FX currency conversion freshness or identity. QCP snapshot
+     readiness requires the persisted FX date to equal the requested business date and binds the
+     exact rate into market-data lineage for every cross-currency baseline row. Same-currency rows
+     retain null FX evidence. Legacy or newly produced cross-currency rows with missing, invalid,
+     or carried-forward FX facts fail closed and require revaluation; never reconstruct the
      historical valuation input from the current FX table.
 
 ## Context Maintenance Rule

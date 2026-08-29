@@ -80,6 +80,7 @@ async def test_snapshot_upsert_preserves_valuation_fx_effective_date() -> None:
         cost_basis_local=Decimal("800"),
         valuation_status="VALUED_CURRENT",
         valuation_fx_rate_date=date(2026, 8, 20),
+        valuation_fx_rate=Decimal("1.2345"),
     )
 
     await repository.upsert_daily_snapshot(snapshot)
@@ -88,3 +89,6 @@ async def test_snapshot_upsert_preserves_valuation_fx_effective_date() -> None:
     assert "valuation_fx_rate_date" in sql
     assert "2026-08-20" in sql
     assert "valuation_fx_rate_date = excluded.valuation_fx_rate_date" in sql.lower()
+    assert "valuation_fx_rate" in sql
+    assert "1.2345" in sql
+    assert "valuation_fx_rate = excluded.valuation_fx_rate" in sql.lower()

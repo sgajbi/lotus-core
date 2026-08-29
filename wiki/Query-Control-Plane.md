@@ -229,10 +229,11 @@ router inside the operational read plane.
   A valuation context is `READY` only when all selected portfolio rows and every material price or
   FX observation prove one effective date equal to the requested business date. Missing values,
   mixed dates, historical cost-basis fallback, and carried-forward price or FX evidence remain
-  explicit `UNAVAILABLE` reasons. Cross-currency baseline positions use the FX effective date
-  persisted with the valuation; a current price status cannot substitute for missing FX lineage.
-  Same-currency positions need no FX date; consumers must not replace them with request or
-  wall-clock dates
+  explicit `UNAVAILABLE` reasons. Cross-currency baseline positions use the exact FX effective date
+  and value persisted with the valuation. The value is part of market-data identity, so a same-date
+  correction cannot retain stale lineage; a current price status cannot substitute for missing FX
+  evidence. Same-currency positions need no FX fact; consumers must not replace it with current
+  reference data, request dates, or wall-clock dates
 - effective integration policy contracts and resolution must remain QCP package-owned; environment
   configuration and clock construction stay at dependency composition, while precedence,
   section filtering, provenance, and warnings remain deterministic application policy

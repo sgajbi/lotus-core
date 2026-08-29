@@ -9,9 +9,9 @@
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5630,
+      "lines": 5639,
       "owner": "lotus-core maintainers",
-      "rationale": "Legacy shared ORM monolith; bounded-context decomposition is tracked by #462.",
+      "rationale": "Legacy shared ORM monolith; #1035 requires the persisted valuation FX fact, while bounded-context decomposition remains tracked by #462.",
       "issue": "#462",
       "expires_on": "2027-02-28"
     },

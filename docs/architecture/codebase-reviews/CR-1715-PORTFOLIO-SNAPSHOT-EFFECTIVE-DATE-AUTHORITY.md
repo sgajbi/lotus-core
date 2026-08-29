@@ -24,25 +24,32 @@ for source-effective dates.
 
 - `ResolvedFxRate` and projected-position resolution retain exact source dates without attaching a
   fabricated date to same-currency identity conversion.
-- `DailyPositionSnapshot` persists the actual FX effective date used by cross-currency valuation;
+- `DailyPositionSnapshot` persists the actual FX effective date and exact rate used by
+  cross-currency valuation. The database enforces their atomicity and positive finite value;
   legacy rows without that lineage and carried-forward rates fail closed until revaluation.
 - One QCP application policy resolves source-family dates, deterministic hashes and snapshot ids,
   freshness, readiness, and stable failure reasons.
 - `CoreSnapshotResponse` publishes a typed `lotus.source-provenance.v1` envelope and an explicit
   valuation supportability result.
-- Source provenance is bound into input lineage, response content identity, and runtime lineage.
+- Source provenance is bound into input lineage, response content identity, and runtime lineage;
+  same-date FX corrections change market-data identity without conflating holdings changes.
 - `source_evidence_current` additionally requires valuation supportability `READY`.
 
 Historical cost-basis fallback, missing valued rows, mixed dates, current-price rows with missing
 FX lineage, and carried-forward price or FX evidence remain unavailable. No test timeout,
 assertion, quality gate, or failure mapping was weakened.
 
+The required persisted FX fact adds nine lines to the legacy shared ORM module's exact
+source-size ceiling under #1035; #462 remains the owner of its decomposition. The same branch banks
+a 13-line reduction in the oversized QCP integration router, so aggregate governed exception size
+still decreases and neither baseline receives headroom.
+
 ## Proof
 
 Focused proof covers:
 
 - exact coherent date readiness and stable identity under input reordering;
-- missing, mixed, stale, historical-fallback, and carried-forward evidence;
+- missing, mixed, stale, historical-fallback, carried-forward, and same-date-corrected evidence;
 - projected price and FX date propagation;
 - service lineage and current-evidence classification;
 - recursive OpenAPI documentation; and

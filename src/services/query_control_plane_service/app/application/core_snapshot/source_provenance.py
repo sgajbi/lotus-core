@@ -61,7 +61,10 @@ def resolve_core_snapshot_source_provenance(
         and row.market_value is not None
         and row.business_date is not None
         and row.valuation_status == "VALUED_CURRENT"
-        and _has_required_baseline_price_evidence(row)
+        and _has_required_baseline_market_evidence(
+            row,
+            portfolio_currency=portfolio_currency,
+        )
     )
     market_observations = _market_observations(
         reporting_fx=reporting_fx,
@@ -105,6 +108,7 @@ def resolve_core_snapshot_source_provenance(
                         "market_price_date": row.business_date,
                         "valuation_status": row.valuation_status,
                         "valuation_fx_rate_date": row.valuation_fx_rate_date,
+                        "valuation_fx_rate": row.valuation_fx_rate,
                     }
                     for row in sorted(position_rows, key=lambda item: item.security_id)
                 ],
@@ -179,6 +183,22 @@ def _has_required_baseline_price_evidence(row: CoreSnapshotPositionSource) -> bo
     if _is_quote_independent_flat_position(row):
         return bool(row.market_value == 0 and row.market_value_local == 0)
     return row.market_price is not None
+
+
+def _has_required_baseline_market_evidence(
+    row: CoreSnapshotPositionSource,
+    *,
+    portfolio_currency: str,
+) -> bool:
+    if not _has_required_baseline_price_evidence(row):
+        return False
+    if _requires_baseline_fx_evidence(row, portfolio_currency=portfolio_currency):
+        return bool(
+            row.valuation_fx_rate_date is not None
+            and row.valuation_fx_rate is not None
+            and row.valuation_fx_rate > 0
+        )
+    return row.valuation_fx_rate_date is None and row.valuation_fx_rate is None
 
 
 def _is_quote_independent_flat_position(row: CoreSnapshotPositionSource) -> bool:
