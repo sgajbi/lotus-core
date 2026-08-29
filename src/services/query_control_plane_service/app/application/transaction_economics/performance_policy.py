@@ -32,9 +32,10 @@ def performance_component_economics_supportability_state(
     *,
     rows: list[PerformanceComponentEconomicsRow],
     has_more: bool,
+    is_initial_page: bool,
 ) -> str:
     if not rows:
-        return "READY"
+        return "READY" if is_initial_page else "UNAVAILABLE"
     if has_more:
         return "DEGRADED"
     return "READY"
@@ -44,9 +45,12 @@ def performance_component_economics_supportability_reason(
     *,
     rows: list[PerformanceComponentEconomicsRow],
     has_more: bool,
+    is_initial_page: bool,
 ) -> str:
     if not rows:
-        return "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
+        if is_initial_page:
+            return "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
+        return "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED"
     if has_more:
         return "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
     return "PERFORMANCE_COMPONENT_ECONOMICS_READY"
@@ -54,8 +58,12 @@ def performance_component_economics_supportability_reason(
 
 def performance_component_economics_data_quality_status(
     *,
+    rows: list[PerformanceComponentEconomicsRow],
     has_more: bool,
+    is_initial_page: bool,
 ) -> str:
+    if not rows and not is_initial_page:
+        return "UNKNOWN"
     if has_more:
         return "PARTIAL"
     return "COMPLETE"
@@ -77,8 +85,10 @@ def observed_performance_component_families(
 def missing_performance_component_families(
     rows: list[PerformanceComponentEconomicsRow],
     observed_component_families: list[str],
+    *,
+    authoritative_empty: bool,
 ) -> list[str]:
-    if not rows:
+    if authoritative_empty:
         return []
     return [
         family

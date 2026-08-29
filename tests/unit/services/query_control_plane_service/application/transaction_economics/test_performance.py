@@ -338,17 +338,26 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
 
     observed = observed_performance_component_families(rows)
 
-    assert performance_component_economics_supportability_state(rows=rows, has_more=False) == (
-        "READY"
+    assert (
+        performance_component_economics_supportability_state(
+            rows=rows, has_more=False, is_initial_page=True
+        )
+        == "READY"
     )
     assert (
         performance_component_economics_supportability_reason(
             rows=rows,
             has_more=False,
+            is_initial_page=True,
         )
         == "PERFORMANCE_COMPONENT_ECONOMICS_READY"
     )
-    assert performance_component_economics_data_quality_status(has_more=False) == "COMPLETE"
+    assert (
+        performance_component_economics_data_quality_status(
+            rows=rows, has_more=False, is_initial_page=True
+        )
+        == "COMPLETE"
+    )
     assert observed == [
         "cashflow",
         "fee",
@@ -357,7 +366,9 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
         "realized_fx_pnl",
         "fx_context",
     ]
-    assert "realized_capital_pnl" in missing_performance_component_families(rows, observed)
+    assert "realized_capital_pnl" in missing_performance_component_families(
+        rows, observed, authoritative_empty=False
+    )
     assert performance_component_economics_source_lineage() == {
         "source_system": "transactions",
         "source_table": "transactions,cashflows,transaction_costs",
@@ -366,32 +377,50 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
 
 
 def test_performance_component_economics_policy_classifies_empty_and_partial_pages() -> None:
-    assert performance_component_economics_supportability_state(rows=[], has_more=False) == (
-        "READY"
+    assert (
+        performance_component_economics_supportability_state(
+            rows=[], has_more=False, is_initial_page=True
+        )
+        == "READY"
     )
     assert (
         performance_component_economics_supportability_reason(
             rows=[],
             has_more=False,
+            is_initial_page=True,
         )
         == "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
     )
-    assert performance_component_economics_data_quality_status(has_more=False) == "COMPLETE"
-    assert missing_performance_component_families([], []) == []
+    assert (
+        performance_component_economics_data_quality_status(
+            rows=[], has_more=False, is_initial_page=True
+        )
+        == "COMPLETE"
+    )
+    assert missing_performance_component_families([], [], authoritative_empty=True) == []
 
     rows = build_performance_component_economics_rows([_transaction(transaction_id="TXN-PAGE-001")])
 
-    assert performance_component_economics_supportability_state(rows=rows, has_more=True) == (
-        "DEGRADED"
+    assert (
+        performance_component_economics_supportability_state(
+            rows=rows, has_more=True, is_initial_page=True
+        )
+        == "DEGRADED"
     )
     assert (
         performance_component_economics_supportability_reason(
             rows=rows,
             has_more=True,
+            is_initial_page=True,
         )
         == "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
     )
-    assert performance_component_economics_data_quality_status(has_more=True) == "PARTIAL"
+    assert (
+        performance_component_economics_data_quality_status(
+            rows=rows, has_more=True, is_initial_page=True
+        )
+        == "PARTIAL"
+    )
 
 
 def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_currency() -> None:
@@ -597,7 +626,7 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
             ),
             decode_page_token=lambda _: {},
             encode_page_token=encode,
-            generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+            clock=lambda: datetime(2026, 5, 10, 15, tzinfo=UTC),
         )
         return response, calls, encoded_payloads
 
@@ -629,6 +658,7 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
 @pytest.mark.asyncio
 async def test_resolve_performance_component_economics_filtered_empty_is_ready() -> None:
     captured_scope: dict[str, object] = {}
+    events: list[str] = []
 
     class Repository:
         async def portfolio_exists(self, portfolio_id: str) -> bool:
@@ -640,8 +670,13 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
         async def list_performance_component_economics_evidence(
             self, **kwargs: object
         ) -> list[BookedTransactionEconomics]:
+            events.append("evidence_query_completed")
             captured_scope.update(kwargs)
             return []
+
+    def clock() -> datetime:
+        events.append("completion_timestamp_captured")
+        return datetime(2026, 4, 10, 15, tzinfo=UTC)
 
     response = await resolve_performance_component_economics_response(
         repository=Repository(),
@@ -654,7 +689,7 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
         ),
         decode_page_token=lambda _: {},
         encode_page_token=lambda _: "unexpected-token",
-        generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+        clock=clock,
     )
 
     assert captured_scope["security_ids"] == ["EQ_US_NO_ACTIVITY"]
@@ -668,6 +703,55 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     assert response.latest_evidence_timestamp is None
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
+    assert events == ["evidence_query_completed", "completion_timestamp_captured"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_performance_component_economics_empty_continuation_is_unavailable() -> None:
+    class Repository:
+        async def portfolio_exists(self, portfolio_id: str) -> bool:
+            return True
+
+        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+            return "USD"
+
+        async def list_performance_component_economics_evidence(
+            self, **kwargs: object
+        ) -> list[BookedTransactionEconomics]:
+            assert kwargs["after_key"] == (
+                "EQ_US_AAPL",
+                "2026-04-05",
+                "TXN-PREVIOUS-PAGE",
+            )
+            return []
+
+    response = await resolve_performance_component_economics_response(
+        repository=Repository(),
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PerformanceComponentEconomicsRequest(
+            as_of_date=date(2026, 4, 10),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+            page={"page_token": "signed-continuation"},
+        ),
+        decode_page_token=lambda token: {
+            "last_row_key": ["EQ_US_AAPL", "2026-04-05", "TXN-PREVIOUS-PAGE"]
+        },
+        encode_page_token=lambda _: "unexpected-token",
+        clock=lambda: datetime(2026, 4, 10, 15, tzinfo=UTC),
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED"
+    assert response.supportability.source_row_count == 0
+    assert response.supportability.observed_component_families == []
+    assert response.supportability.missing_component_families == list(
+        response.supportability.supported_component_families
+    )
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp is None
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
+    assert response.rows == []
 
 
 @pytest.mark.asyncio
@@ -694,7 +778,7 @@ async def test_component_economics_query_failure_does_not_become_ready_empty() -
             ),
             decode_page_token=lambda _: {},
             encode_page_token=lambda _: "unexpected-token",
-            generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
+            clock=lambda: datetime(2026, 4, 10, 15, tzinfo=UTC),
         )
 
 

@@ -59,5 +59,5 @@ class TransactionEconomicsService:
             request=request,
             decode_page_token=self._page_tokens.decode,
             encode_page_token=self._page_tokens.encode,
-            generated_at=self._clock.utc_now(),
+            clock=self._clock.utc_now,
         )
