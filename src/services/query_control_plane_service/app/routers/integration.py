@@ -78,6 +78,7 @@ from ..contracts.client_restriction_profile import (
 from ..contracts.client_tax_profile import ClientTaxProfileRequest, ClientTaxProfileResponse
 from ..contracts.client_tax_rule_set import ClientTaxRuleSetRequest, ClientTaxRuleSetResponse
 from ..contracts.core_snapshot import (
+    CORE_SNAPSHOT_ROUTE_DESCRIPTION,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
     CoreSnapshotSection,
@@ -754,24 +755,7 @@ async def get_effective_integration_policy(
         ),
     },
     summary="Fetch governed core snapshot contract",
-    description=(
-        "What: Return a governed multi-section portfolio snapshot contract for downstream "
-        "integration consumers.\n"
-        "How: Applies tenant and consumer policy, resolves baseline or simulation state, "
-        "and returns reproducibility metadata including request fingerprint and freshness.\n"
-        "When: Used directly by lotus-gateway workspace state sourcing and lotus-risk "
-        "concentration or rolling-Sharpe context flows that need policy-aware positions, "
-        "totals, delta, or enrichment views without direct query-service coupling. Other "
-        "downstream consumers may adopt it later, but this route publishes portfolio-state "
-        "source data, not downstream analytics conclusions such as performance returns, "
-        "risk metrics, or advisory recommendation ownership.\n"
-        "Contract note: the governed response does not publish a legacy nested `portfolio` "
-        "or `metadata` envelope. Consumer context should be read from the top-level "
-        "source-data runtime metadata, typed `source_provenance`, `valuation_context`, and the "
-        "requested `sections`. Portfolio and market-data effective dates are source-owned; "
-        "missing, mixed, stale, or mismatched dates remain explicit and never fall back to the "
-        "caller-requested date."
-    ),
+    description=CORE_SNAPSHOT_ROUTE_DESCRIPTION,
     openapi_extra=source_data_product_openapi_extra("PortfolioStateSnapshot"),
 )
 async def create_core_snapshot(

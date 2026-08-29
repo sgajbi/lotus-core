@@ -10,6 +10,25 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+CORE_SNAPSHOT_ROUTE_DESCRIPTION = (
+    "What: Return a governed multi-section portfolio snapshot contract for downstream "
+    "integration consumers.\n"
+    "How: Applies tenant and consumer policy, resolves baseline or simulation state, "
+    "and returns reproducibility metadata including request fingerprint and freshness.\n"
+    "When: Used directly by lotus-gateway workspace state sourcing and lotus-risk "
+    "concentration or rolling-Sharpe context flows that need policy-aware positions, "
+    "totals, delta, or enrichment views without direct query-service coupling. Other "
+    "downstream consumers may adopt it later, but this route publishes portfolio-state "
+    "source data, not downstream analytics conclusions such as performance returns, "
+    "risk metrics, or advisory recommendation ownership.\n"
+    "Contract note: the governed response does not publish a legacy nested `portfolio` "
+    "or `metadata` envelope. Consumer context should be read from the top-level "
+    "source-data runtime metadata, typed `source_provenance`, `valuation_context`, and the "
+    "requested `sections`. Portfolio and market-data effective dates are source-owned; "
+    "missing, mixed, stale, or mismatched dates remain explicit and never fall back to the "
+    "caller-requested date."
+)
+
 
 class CoreSnapshotMode(str, Enum):
     BASELINE = "BASELINE"
