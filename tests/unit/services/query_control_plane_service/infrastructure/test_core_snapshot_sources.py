@@ -157,7 +157,10 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
                 snapshot,
                 _instrument(),
                 _state(),
+                "SEC_1",
                 date(2026, 4, 10),
+                Decimal("975"),
+                Decimal("970"),
                 portfolio_created_at,
                 portfolio_updated_at,
             )
@@ -173,7 +176,8 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].security_id == "SEC_1"
     assert records[0].market_price == Decimal("100")
     assert records[0].market_value == Decimal("1000")
-    assert records[0].cost_basis == Decimal("950")
+    assert records[0].cost_basis == Decimal("975")
+    assert records[0].cost_basis_local == Decimal("970")
     assert records[0].epoch == 4
     assert records[0].business_date == date(2026, 4, 9)
     assert records[0].portfolio_business_date == date(2026, 4, 10)
@@ -194,7 +198,62 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert "daily_position_snapshots.epoch" in sql
     assert "daily_position_snapshots.date <= '2026-04-10'" in sql
     assert "position_history.position_date" in sql
+    assert "quantity != 0" in sql
     assert "row_number() over" in sql
+    assert "left outer join daily_position_snapshots" in sql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_source", ["snapshot", "instrument"])
+async def test_snapshot_read_fails_closed_for_incomplete_current_position_coverage(
+    missing_source: str,
+) -> None:
+    snapshot = SimpleNamespace(
+        date=date(2026, 4, 10),
+        security_id="SEC_1",
+        quantity=Decimal("10"),
+        market_price=Decimal("100"),
+        market_value=Decimal("1000"),
+        market_value_local=Decimal("1000"),
+        valuation_status="VALUED_CURRENT",
+        valuation_source_currency="SGD",
+        valuation_reporting_currency="SGD",
+        valuation_fx_rate_date=None,
+        valuation_fx_rate=None,
+        created_at=datetime(2026, 4, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 4, 10, 2, tzinfo=UTC),
+    )
+    complete_row = (
+        snapshot,
+        _instrument("SEC_1"),
+        _state(),
+        "SEC_1",
+        date(2026, 4, 10),
+        Decimal("950"),
+        Decimal("950"),
+        datetime(2026, 4, 10, 1, tzinfo=UTC),
+        datetime(2026, 4, 10, 2, tzinfo=UTC),
+    )
+    incomplete_row = (
+        None if missing_source == "snapshot" else snapshot,
+        None if missing_source == "instrument" else _instrument("SEC_2"),
+        _state(),
+        "SEC_2",
+        date(2026, 4, 10),
+        Decimal("500"),
+        Decimal("500"),
+        datetime(2026, 4, 10, 1, tzinfo=UTC),
+        datetime(2026, 4, 10, 2, tzinfo=UTC),
+    )
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.return_value = _Result([complete_row, incomplete_row])
+
+    records = await SqlAlchemyCoreSnapshotSourceReader(session).get_position_snapshot(
+        portfolio_id="P1",
+        as_of_date=date(2026, 4, 10),
+    )
+
+    assert records == []
 
 
 @pytest.mark.asyncio
