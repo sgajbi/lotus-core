@@ -13,6 +13,8 @@ class CoreSnapshotPortfolio:
 
     portfolio_id: str
     base_currency: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

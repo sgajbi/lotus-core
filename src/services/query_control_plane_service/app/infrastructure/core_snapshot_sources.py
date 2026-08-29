@@ -49,6 +49,8 @@ class SqlAlchemyCoreSnapshotSourceReader:
         return CoreSnapshotPortfolio(
             portfolio_id=row.portfolio_id,
             base_currency=row.base_currency,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
         )
 
     async def get_position_snapshot(

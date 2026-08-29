@@ -37,6 +37,7 @@ from src.services.query_control_plane_service.app.contracts.core_snapshot import
     CoreSnapshotMode,
     CoreSnapshotRequest,
     CoreSnapshotSection,
+    CoreSnapshotValuationSupportability,
 )
 from src.services.query_control_plane_service.app.domain.core_snapshot import (
     CoreSnapshotFxRate,
@@ -171,6 +172,8 @@ def mock_dependencies():
     portfolio_repo.get_by_id.return_value = SimpleNamespace(
         portfolio_id="PORT_001",
         base_currency="USD",
+        created_at=datetime(2026, 2, 27, 8, tzinfo=UTC),
+        updated_at=datetime(2026, 2, 27, 9, tzinfo=UTC),
     )
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
         _position_source(
@@ -472,6 +475,8 @@ async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dep
     portfolio_repo.get_by_id.return_value = SimpleNamespace(
         portfolio_id="PORT_001",
         base_currency=" usd ",
+        created_at=datetime(2026, 2, 27, 8, tzinfo=UTC),
+        updated_at=datetime(2026, 2, 27, 9, tzinfo=UTC),
     )
     service = _service(mock_dependencies)
     request = CoreSnapshotRequest(
@@ -491,6 +496,37 @@ async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dep
         start_date=date.min,
         end_date=date(2026, 2, 27),
     )
+
+
+async def test_core_snapshot_withholds_values_after_portfolio_currency_correction(
+    mock_dependencies,
+):
+    (_, portfolio_repo, _, _, _, _) = mock_dependencies
+    corrected_at = datetime(2026, 2, 27, 12, tzinfo=UTC)
+    portfolio_repo.get_by_id.return_value = SimpleNamespace(
+        portfolio_id="PORT_001",
+        base_currency="GBP",
+        created_at=datetime(2026, 2, 27, 8, tzinfo=UTC),
+        updated_at=corrected_at,
+    )
+    service = _service(mock_dependencies)
+
+    response = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            snapshot_mode=CoreSnapshotMode.BASELINE,
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    position = response.sections.positions_baseline[0]
+    assert position.market_value_base is None
+    assert position.market_value_local is None
+    assert (
+        response.valuation_context.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    )
+    assert response.source_provenance.portfolio.valuation_timestamp == corrected_at
 
 
 async def test_core_snapshot_carried_forward_reporting_fx_invalidates_readiness(
@@ -722,6 +758,7 @@ async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_
     baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -746,6 +783,7 @@ async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_d
     baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -777,6 +815,7 @@ async def test_resolve_baseline_positions_withholds_legacy_money_without_currenc
     baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -882,6 +921,8 @@ async def test_core_snapshot_raises_when_fx_rate_missing(mock_dependencies):
     portfolio_repo.get_by_id.return_value = SimpleNamespace(
         portfolio_id="PORT_001",
         base_currency="EUR",
+        created_at=datetime(2026, 2, 27, 8, tzinfo=UTC),
+        updated_at=datetime(2026, 2, 27, 9, tzinfo=UTC),
     )
     fx_repo.get_fx_rates.return_value = []
     service = _service(mock_dependencies)
@@ -995,6 +1036,7 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
     baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -1085,6 +1127,7 @@ async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_e
     baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -1112,6 +1155,7 @@ async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dep
     baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=False,
         include_zero=False,

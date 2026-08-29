@@ -17,6 +17,7 @@ def baseline_position_entries(
     *,
     rows: list[CoreSnapshotPositionSource],
     use_snapshot: bool,
+    portfolio_currency: str,
     reporting_fx: Decimal,
     include_cash: bool,
     include_zero: bool,
@@ -27,6 +28,7 @@ def baseline_position_entries(
             row=row,
             instrument=row.instrument,
             use_snapshot=use_snapshot,
+            portfolio_currency=portfolio_currency,
             reporting_fx=reporting_fx,
             include_cash=include_cash,
             include_zero=include_zero,
@@ -41,6 +43,7 @@ def baseline_position_entry(
     row: CoreSnapshotPositionSource,
     instrument: CoreSnapshotInstrument,
     use_snapshot: bool,
+    portfolio_currency: str,
     reporting_fx: Decimal,
     include_cash: bool,
     include_zero: bool,
@@ -59,6 +62,7 @@ def baseline_position_entry(
     market_value_base, market_value_local = baseline_market_values(
         row=row,
         use_snapshot=use_snapshot,
+        portfolio_currency=portfolio_currency,
         reporting_fx=reporting_fx,
     )
     position_currency = row.valuation_source_currency if use_snapshot else instrument.currency
@@ -90,10 +94,16 @@ def baseline_market_values(
     *,
     row: CoreSnapshotPositionSource,
     use_snapshot: bool,
+    portfolio_currency: str,
     reporting_fx: Decimal,
 ) -> tuple[Decimal | None, Decimal | None]:
     if use_snapshot:
-        if not row.valuation_source_currency or not row.valuation_reporting_currency:
+        receipt_reporting_currency = str(row.valuation_reporting_currency or "").strip().upper()
+        if (
+            not row.valuation_source_currency
+            or not receipt_reporting_currency
+            or receipt_reporting_currency != portfolio_currency.strip().upper()
+        ):
             return None, None
         market_value_base_raw = decimal_or_none(row.market_value)
         market_value_local = decimal_or_none(row.market_value_local)

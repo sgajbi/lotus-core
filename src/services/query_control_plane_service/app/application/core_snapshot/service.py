@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -38,7 +38,7 @@ from ...contracts.core_snapshot import (
     CoreSnapshotValuationSupportability,
 )
 from ...contracts.instrument_enrichment import InstrumentEnrichmentRecord
-from ...domain.core_snapshot import CoreSnapshotPositionSource
+from ...domain.core_snapshot import CoreSnapshotPortfolio, CoreSnapshotPositionSource
 from ...ports.core_snapshot import CoreSnapshotSourceReader
 from ...ports.simulation import SimulationStore
 from .baseline_metadata import baseline_freshness_metadata
@@ -87,6 +87,8 @@ class _CoreSnapshotCurrencyContext:
     portfolio_currency: str
     reporting_currency: str
     reporting_fx: ResolvedFxRate
+    portfolio_created_at: datetime | None
+    portfolio_updated_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -154,7 +156,7 @@ class CoreSnapshotService:
             raise CoreSnapshotNotFoundError(f"Portfolio {portfolio_id} not found")
 
         currency_context = await self._snapshot_currency_context(
-            portfolio_base_currency=portfolio.base_currency,
+            portfolio=portfolio,
             requested_reporting_currency=request.reporting_currency,
             as_of_date=request.as_of_date,
         )
@@ -162,6 +164,7 @@ class CoreSnapshotService:
         baseline = await self._resolve_baseline_positions(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
+            portfolio_currency=currency_context.portfolio_currency,
             reporting_fx=currency_context.reporting_fx.value,
             include_cash=request.options.include_cash_positions,
             include_zero=request.options.include_zero_quantity_positions,
@@ -201,13 +204,13 @@ class CoreSnapshotService:
     async def _snapshot_currency_context(
         self,
         *,
-        portfolio_base_currency: str,
+        portfolio: CoreSnapshotPortfolio,
         requested_reporting_currency: str | None,
         as_of_date: date,
     ) -> _CoreSnapshotCurrencyContext:
-        portfolio_currency = normalize_currency_code(str(portfolio_base_currency))
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
         reporting_currency = normalize_currency_code(
-            str(requested_reporting_currency or portfolio_base_currency)
+            str(requested_reporting_currency or portfolio_currency)
         )
         return _CoreSnapshotCurrencyContext(
             portfolio_currency=portfolio_currency,
@@ -218,6 +221,8 @@ class CoreSnapshotService:
                 to_currency=reporting_currency,
                 as_of_date=as_of_date,
             ),
+            portfolio_created_at=portfolio.created_at,
+            portfolio_updated_at=portfolio.updated_at,
         )
 
     async def _snapshot_projection(
@@ -300,6 +305,8 @@ class CoreSnapshotService:
             position_rows=baseline.source_rows,
             use_snapshot=baseline.use_snapshot,
             portfolio_currency=currency_context.portfolio_currency,
+            portfolio_created_at=currency_context.portfolio_created_at,
+            portfolio_updated_at=currency_context.portfolio_updated_at,
             reporting_fx=currency_context.reporting_fx,
             projected_market_data=projected_market_data,
         )
@@ -533,6 +540,7 @@ class CoreSnapshotService:
         self,
         portfolio_id: str,
         as_of_date: date,
+        portfolio_currency: str,
         reporting_fx: Decimal,
         include_cash: bool,
         include_zero: bool,
@@ -544,6 +552,7 @@ class CoreSnapshotService:
         baseline = baseline_position_entries(
             rows=baseline_rows.rows,
             use_snapshot=baseline_rows.use_snapshot,
+            portfolio_currency=portfolio_currency,
             reporting_fx=reporting_fx,
             include_cash=include_cash,
             include_zero=include_zero,
