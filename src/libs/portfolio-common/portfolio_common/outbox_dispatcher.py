@@ -266,7 +266,8 @@ class OutboxDispatcher:
             # or serialization latency cannot consume the delivery lease.
             if not self._renew_claims_for_delivery(events_to_process):
                 return 0
-            self._publish_events(events_to_process, delivery_ack, delivery_errs)
+            if not self._publish_events(events_to_process, delivery_ack, delivery_errs):
+                return 0
             # A large batch can spend meaningful time enqueueing messages. Refresh
             # again before flush/result fencing so the full publish pipeline stays
             # inside the current claim lease.
@@ -449,8 +450,25 @@ class OutboxDispatcher:
         events_to_process: list[_ClaimedOutboxEvent],
         delivery_ack: Dict[int, bool],
         delivery_errs: Dict[int, str],
-    ) -> None:
-        for event in events_to_process:
+    ) -> bool:
+        for index, event in enumerate(events_to_process):
+            # The batch was refreshed immediately before entering this loop. Refresh
+            # again between records so a long serialization/producer pause cannot
+            # carry the loop beyond the durable claim owned by this dispatcher.
+            if index and not self._renew_claims_for_delivery(events_to_process):
+                self._producer.reset_after_flush_failure()
+                logger.warning(
+                    "Outbox delivery claims expired during publish; batch aborted.",
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.claim_renewal_aborted",
+                        operation="outbox.dispatch",
+                        status="fenced",
+                        reason_code="claim_renewal_incomplete_during_publish",
+                        event_count=len(events_to_process),
+                        published_count=index,
+                    ),
+                )
+                return False
             try:
                 self._producer.publish_message(
                     topic=event.topic,
@@ -475,6 +493,7 @@ class OutboxDispatcher:
                         topic=event.topic,
                     ),
                 )
+        return True
 
     def _flush_delivery_results(
         self,
