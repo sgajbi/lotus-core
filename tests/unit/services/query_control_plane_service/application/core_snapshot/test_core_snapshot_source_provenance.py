@@ -142,6 +142,34 @@ def test_source_provenance_rejects_carried_forward_fx_date() -> None:
     assert resolution.source_provenance.market_data.freshness_status == "PARTIAL"
 
 
+def test_market_source_identity_changes_with_authoritative_fx_fact() -> None:
+    first = _resolve(
+        _row("SEC_A"),
+        reporting_fx=ResolvedFxRate(
+            value=Decimal("1.1"),
+            effective_as_of_date=date(2026, 2, 27),
+            from_currency="EUR",
+            to_currency="USD",
+        ),
+    )
+    revised = _resolve(
+        _row("SEC_A"),
+        reporting_fx=ResolvedFxRate(
+            value=Decimal("1.2"),
+            effective_as_of_date=date(2026, 2, 27),
+            from_currency="EUR",
+            to_currency="USD",
+        ),
+    )
+
+    assert first.source_provenance.market_data.source_hash != (
+        revised.source_provenance.market_data.source_hash
+    )
+    assert first.source_provenance.market_data.source_id != (
+        revised.source_provenance.market_data.source_id
+    )
+
+
 def test_source_provenance_exposes_matching_stale_date_without_claiming_readiness() -> None:
     stale_date = date(2026, 2, 26)
     resolution = _resolve(
