@@ -30,6 +30,7 @@ _STALE_RESET_RESERVED_BINDS = 5
 _LEASE_OWNER_MAX_LENGTH = 128
 _DEFAULT_LEASE_DURATION_SECONDS = 15 * 60
 _OWNED_TRANSITION_STATUSES = frozenset({"COMPLETE", "FAILED"})
+_STALE_RECOVERY_COHORT_LOCK_KEY = "lotus-core:reprocessing-stale-cohort"
 _REPLAY_TEXT_TRIM_CHARS = (
     "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680"
     "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029"
@@ -768,16 +769,20 @@ class ReprocessingJobRepository:
                     if identity is not None:
                         identity_keys.append(identity.identity_key)
                 await self._lock_effective_dated_replay_identities(identity_keys)
-                claimed_rows = list(
-                    (
-                        await self.db.execute(
-                            _stale_reprocessing_jobs_stmt(
-                                job_ids=[int(row.id) for row in stale_rows],
-                                lock_rows=True,
+                await self._lock_stale_recovery_cohort_claim()
+                try:
+                    claimed_rows = list(
+                        (
+                            await self.db.execute(
+                                _stale_reprocessing_jobs_stmt(
+                                    job_ids=[int(row.id) for row in stale_rows],
+                                    lock_rows=True,
+                                )
                             )
-                        )
-                    ).all()
-                )
+                        ).all()
+                    )
+                finally:
+                    await self._unlock_stale_recovery_cohort_claim()
                 if claimed_rows:
                     await savepoint.commit()
                     return claimed_rows
@@ -788,6 +793,32 @@ class ReprocessingJobRepository:
             last_row = stale_rows[-1]
             cursor = (cast(datetime, last_row.lease_expires_at), int(last_row.id))
         return []
+
+    async def _lock_stale_recovery_cohort_claim(self) -> None:
+        """Serialize the bounded row-lock statement without holding a transaction lock.
+
+        ``FOR UPDATE SKIP LOCKED`` can interleave row-by-row when two recovery
+        sessions start together, producing arbitrary sub-cohorts (for example
+        110/890 instead of the intended 1/1000 split). A session-level advisory
+        lock covers only the claim statement; row locks remain transaction-owned,
+        so concurrent callers still receive disjoint cohorts without a barrier
+        deadlock while waiting for the outer transaction to commit.
+        """
+
+        await self.db.execute(
+            text("SELECT pg_advisory_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": _STALE_RECOVERY_COHORT_LOCK_KEY},
+        )
+
+    async def _unlock_stale_recovery_cohort_claim(self) -> None:
+        unlocked = (
+            await self.db.execute(
+                text("SELECT pg_advisory_unlock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": _STALE_RECOVERY_COHORT_LOCK_KEY},
+            )
+        ).scalar_one()
+        if unlocked is not True:
+            raise RuntimeError("stale recovery cohort advisory lock was not held")
 
     async def _find_stale_job_rows(
         self,
