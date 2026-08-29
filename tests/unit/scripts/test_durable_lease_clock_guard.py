@@ -230,3 +230,22 @@ def test_durable_lease_clock_guard_rejects_transaction_start_sql_clock(
     assert [(finding.target, finding.line) for finding in findings] == [
         ("lease_expires_at", 3),
     ]
+
+
+def test_durable_lease_clock_guard_rejects_mutated_deadline_mapping(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "leases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from datetime import datetime, timezone\n"
+        "from sqlalchemy import update\n"
+        "values = {}\n"
+        'values["lease_expires_at"] = datetime.now(timezone.utc)\n'
+        "stmt = update(Job).values(**values)\n",
+        encoding="utf-8",
+    )
+
+    findings = find_durable_lease_clock_findings(repo_root=tmp_path)
+
+    assert [(finding.target, finding.line) for finding in findings] == [
+        ("lease_expires_at", 5),
+    ]
