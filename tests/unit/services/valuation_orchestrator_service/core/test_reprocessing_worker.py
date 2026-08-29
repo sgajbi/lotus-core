@@ -324,6 +324,7 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
 
 async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
     mock_dependencies,
+    monkeypatch,
 ):
     worker = ReprocessingWorker(poll_interval=0.1)
     worker._lease_renewal_interval_seconds = 0.5
@@ -331,7 +332,10 @@ async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
     jobs = mock_dependencies["repro_job_repo"]
     jobs.get_lease_remaining_seconds.return_value = 0.05
 
+    renewal_started = asyncio.Event()
+
     async def renew(*_args, **_kwargs):
+        renewal_started.set()
         await asyncio.Event().wait()
 
     jobs.renew_lease.side_effect = renew
@@ -343,6 +347,15 @@ async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
         finally:
             operation_cancelled.set()
 
+    async def expire_after_renewal_starts(**_kwargs):
+        await renewal_started.wait()
+
+    monkeypatch.setattr(
+        worker,
+        "_wait_until_lease_deadline",
+        expire_after_renewal_starts,
+    )
+
     job = ReprocessingJob(
         id=108,
         job_type="RESET_WATERMARKS",
@@ -351,7 +364,6 @@ async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
         lease_token=LEASE_TOKEN,
     )
 
-    started_at = asyncio.get_running_loop().time()
     with pytest.raises(ReprocessingJobOwnershipLostError, match="deadline was exhausted"):
         await worker._process_with_lease_renewal(
             job=job,
@@ -359,9 +371,9 @@ async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
             operation=operation,
         )
 
-    assert asyncio.get_running_loop().time() - started_at < 0.25
     assert operation_cancelled.is_set()
     jobs.renew_lease.assert_awaited_once()
+    mock_dependencies["observe_lease_renewal"].assert_not_called()
 
 
 async def test_worker_rearms_deadline_watchdog_after_successful_renewal(
@@ -413,6 +425,7 @@ async def test_worker_renewal_schedule_reserves_write_and_authority_read_budget(
     worker._lease_renewal_io_timeout_seconds = 0.5
 
     assert worker._next_lease_renewal_at(now=10, lease_deadline=20) == 19
+    assert worker._next_lease_renewal_at(now=10, lease_deadline=10.05) == 10
 
 
 async def test_worker_retry_schedule_preserves_remaining_io_window():
