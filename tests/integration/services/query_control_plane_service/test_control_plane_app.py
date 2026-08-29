@@ -2462,6 +2462,18 @@ async def test_openapi_fully_documents_performance_component_economics_schema_fa
         schema,
         PERFORMANCE_COMPONENT_ECONOMICS_SCHEMA_ROOTS,
     )
+    supportability = schema["components"]["schemas"]["PerformanceComponentEconomicsSupportability"]
+    assert (
+        "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY"
+        in supportability["properties"]["reason"]["examples"]
+    )
+    route_description = schema["paths"][
+        "/integration/portfolios/{portfolio_id}/performance-component-economics"
+    ]["post"]["description"]
+    assert (
+        "successful authoritative read with no matching activity returns READY" in route_description
+    )
+    assert "persistence failures remain fail-closed transport errors" in route_description
 
 
 async def test_openapi_fully_documents_dpm_market_data_coverage_schema_family(

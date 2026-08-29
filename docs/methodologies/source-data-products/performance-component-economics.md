@@ -117,13 +117,46 @@ The QCP implementation keeps the source-data anti-corruption boundary in four st
 
 ## Supportability
 
-`READY` means at least one source row was returned and no additional page is indicated. `DEGRADED`
-with reason `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL` means the current response is a valid
-partial page and `page.next_page_token` must be followed to exhaust the requested window.
-`UNAVAILABLE` means the portfolio exists but no source rows matched the requested scope.
-`observed_component_families` and `missing_component_families` describe coverage for the returned
-page; downstream consumers must decide which families are required for a specific performance
-workflow.
+`READY` with reason `PERFORMANCE_COMPONENT_ECONOMICS_READY` means at least one source row was
+returned and no additional page is indicated. `READY` with reason
+`PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY` means Core proved the portfolio and base-currency
+authority, successfully queried the complete bounded request scope, and found no matching activity.
+That authoritative empty result has `source_row_count=0`, `rows=[]`, no observed families, no missing
+families, and `data_quality_status=COMPLETE`; it is not evidence that every component amount was
+zero.
+
+`DEGRADED` with reason `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL` means the current response is
+a valid partial page and `page.next_page_token` must be followed to exhaust the requested window.
+Missing portfolios and invalid request or cursor scopes fail closed through the documented HTTP
+problem contract. Persistence/query failures remain errors; Core does not convert an unproved scope
+into `READY / PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`.
+
+For non-empty pages, `observed_component_families` and `missing_component_families` describe
+coverage for the returned rows; downstream consumers must decide which families are required for a
+specific performance workflow. For an authoritative empty window, both lists are empty because the
+absence of activity does not make supported families incomplete.
+
+## Authoritative Empty Example
+
+For canonical portfolio `PB_SG_GLOBAL_BAL_001`, a successfully queried interval with no component
+economics activity, such as `2026-04-01` through `2026-04-10`, returns:
+
+```json
+{
+  "supportability": {
+    "state": "READY",
+    "reason": "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY",
+    "source_row_count": 0,
+    "observed_component_families": [],
+    "missing_component_families": []
+  },
+  "rows": [],
+  "data_quality_status": "COMPLETE"
+}
+```
+
+This example states the contract posture for a successful empty read. Canonical runtime evidence is
+still required after deployment; documentation does not substitute for a live database query.
 
 ## Explicit Non-Claims
 

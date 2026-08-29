@@ -279,7 +279,10 @@ must not be treated as an ISO currency. Fee components use the same normalized
 bounded to 366 inclusive transaction-date days and row-level evidence is cursor-paged by normalized
 security, transaction date, and transaction ID. `component_totals` are scoped to the returned page, with
 `component_totals_scope=returned_page`; consumers that need full-window totals must iterate pages or
-use a future aggregate contract. Its
+use a future aggregate contract. A successfully queried empty window is authoritative `READY`
+evidence with reason `PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`, zero rows, and no missing
+component families. Missing portfolios, invalid scopes, and persistence failures remain fail-closed
+errors and are never converted to ready-empty evidence. Its
 implementation-backed methodology is documented in
 `docs/methodologies/source-data-products/performance-component-economics.md`. It is not
 contribution analytics, attribution analytics, a return calculator, tax advice, execution-quality

@@ -135,6 +135,7 @@ from ..contracts.model_portfolio_targets import (
     ModelPortfolioTargetResponse,
 )
 from ..contracts.performance_component_economics import (
+    PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
 )
@@ -1160,17 +1161,7 @@ async def get_transaction_cost_curve(
     "/portfolios/{portfolio_id}/performance-component-economics",
     response_model=PerformanceComponentEconomicsResponse,
     summary="Resolve performance component economics source evidence",
-    description=(
-        "What: Return source-authored transaction, cashflow, fee, tax, income, realized P&L, "
-        "and FX-context economics evidence for contribution analytics.\n"
-        "How: Reads core transaction rows with linked cashflow and transaction-cost records, "
-        "returns deterministic row-level evidence plus component-family totals and coverage "
-        "metadata, and preserves source lineage for downstream proof.\n"
-        "When: Used by lotus-performance to replace local or inferred component economics in "
-        "stateful contribution analytics. This route does not calculate contribution, "
-        "attribution, performance returns, tax advice, execution quality, best execution, or "
-        "OMS acknowledgement; lotus-performance remains responsible for contribution math."
-    ),
+    description=PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION,
     responses={
         404: problem_response(
             "Portfolio not found",
