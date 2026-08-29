@@ -25,6 +25,7 @@ def _row(
     *,
     business_date: date | None = date(2026, 2, 27),
     market_value: Decimal | None = Decimal("100"),
+    valuation_status: str | None = "VALUED_CURRENT",
 ) -> CoreSnapshotPositionSource:
     evidence_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
     return CoreSnapshotPositionSource(
@@ -54,6 +55,7 @@ def _row(
             liquidity_tier=None,
         ),
         business_date=business_date,
+        valuation_status=valuation_status,
     )
 
 
@@ -212,4 +214,18 @@ def test_source_provenance_rejects_partially_valued_snapshot() -> None:
     assert resolution.source_provenance.market_data.as_of is None
     assert resolution.source_provenance.market_data.source_hash != (
         complete.source_provenance.market_data.source_hash
+    )
+
+
+def test_source_provenance_rejects_carried_forward_baseline_price() -> None:
+    current = _resolve(_row("SEC_A"))
+    resolution = _resolve(_row("SEC_A", valuation_status="VALUED_STALE"))
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.market_data.as_of is None
+    assert resolution.source_provenance.market_data.freshness_status == "UNAVAILABLE"
+    assert resolution.source_provenance.market_data.source_hash != (
+        current.source_provenance.market_data.source_hash
     )

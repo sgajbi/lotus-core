@@ -75,6 +75,7 @@ def _source(row: SimpleNamespace, instrument: CoreSnapshotInstrument) -> CoreSna
         state_created_at=None,
         state_updated_at=None,
         instrument=instrument,
+        valuation_status="VALUED_CURRENT",
     )
 
 

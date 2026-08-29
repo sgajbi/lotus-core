@@ -21,6 +21,7 @@ def _row(
     epoch: int = 4,
     updated_at: datetime = datetime(2026, 4, 10, 2, tzinfo=UTC),
     security_id: str = "SEC_1",
+    valuation_status: str = "VALUED_CURRENT",
 ) -> CoreSnapshotPositionSource:
     return CoreSnapshotPositionSource(
         security_id=security_id,
@@ -49,6 +50,7 @@ def _row(
             liquidity_tier=None,
         ),
         business_date=business_date,
+        valuation_status=valuation_status,
     )
 
 
@@ -99,6 +101,9 @@ def test_core_snapshot_source_hash_is_order_independent_and_value_sensitive() ->
     )
     assert core_snapshot_source_content_hash([first, second]) != (
         core_snapshot_source_content_hash([first, corrected])
+    )
+    assert core_snapshot_source_content_hash([first]) != core_snapshot_source_content_hash(
+        [_row(valuation_status="VALUED_STALE")]
     )
 
 

@@ -48,6 +48,7 @@ def _row_state(
             ultimate_parent_issuer_name=None,
             liquidity_tier=None,
         ),
+        valuation_status="VALUED_CURRENT",
     )
 
 
