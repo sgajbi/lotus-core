@@ -25,6 +25,7 @@ def _row(
     *,
     business_date: date | None = date(2026, 2, 27),
     quantity: Decimal = Decimal("10"),
+    market_price: Decimal | None = Decimal("10"),
     market_value: Decimal | None = Decimal("100"),
     cost_basis: Decimal = Decimal("80"),
     cost_basis_local: Decimal = Decimal("80"),
@@ -36,6 +37,7 @@ def _row(
     return CoreSnapshotPositionSource(
         security_id=security_id,
         quantity=quantity,
+        market_price=market_price,
         market_value=market_value,
         market_value_local=market_value,
         cost_basis=cost_basis,
@@ -194,6 +196,32 @@ def test_market_value_correction_does_not_restate_portfolio_source_identity() ->
     )
     assert original.source_provenance.market_data.source_id != (
         corrected.source_provenance.market_data.source_id
+    )
+
+
+def test_split_revaluation_changes_market_source_identity() -> None:
+    original = _resolve(
+        _row(
+            "SEC_A",
+            quantity=Decimal("10"),
+            market_price=Decimal("10"),
+            market_value=Decimal("100"),
+        )
+    )
+    split_adjusted = _resolve(
+        _row(
+            "SEC_A",
+            quantity=Decimal("20"),
+            market_price=Decimal("5"),
+            market_value=Decimal("100"),
+        )
+    )
+
+    assert original.source_provenance.market_data.source_hash != (
+        split_adjusted.source_provenance.market_data.source_hash
+    )
+    assert original.source_provenance.market_data.source_id != (
+        split_adjusted.source_provenance.market_data.source_id
     )
 
 

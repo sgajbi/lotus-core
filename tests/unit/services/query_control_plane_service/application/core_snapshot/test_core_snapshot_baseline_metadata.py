@@ -25,6 +25,7 @@ def _row_state(
     return CoreSnapshotPositionSource(
         security_id="SEC_TEST",
         quantity=Decimal("1"),
+        market_price=Decimal("1"),
         market_value=Decimal("1"),
         market_value_local=Decimal("1"),
         cost_basis=None,

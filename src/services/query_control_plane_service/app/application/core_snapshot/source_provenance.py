@@ -101,6 +101,7 @@ def resolve_core_snapshot_source_provenance(
                         "security_id": row.security_id,
                         "business_date": row.business_date,
                         "epoch": row.epoch,
+                        "market_price": row.market_price,
                         "market_value": row.market_value,
                         "market_value_local": row.market_value_local,
                         "valuation_status": row.valuation_status,
