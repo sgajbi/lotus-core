@@ -253,6 +253,7 @@ def test_load_policy_accepts_reviewed_entry(tmp_path: Path) -> None:
         ("threshold", "threshold_lines must be a positive integer"),
         ("roots", "scan_roots must be a non-empty list"),
         ("duplicate_root", "must not contain duplicates"),
+        ("root_option", "scan_roots must be repository-relative"),
         ("root_traversal", "scan_roots must be repository-relative"),
         ("entries", "entries must be a list"),
         ("entry", "entry 0 must be an object"),
@@ -283,6 +284,8 @@ def test_load_policy_rejects_malformed_contract(tmp_path: Path, case: str, messa
         payload["scan_roots"] = []
     elif case == "duplicate_root":
         roots.append("src")
+    elif case == "root_option":
+        roots[0] = "--help"
     elif case == "root_traversal":
         roots[0] = "../src"
     elif case == "entries":

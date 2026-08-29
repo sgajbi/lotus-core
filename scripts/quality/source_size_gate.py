@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+
+# A fixed Git executable uses an argument vector and never invokes a shell.
+import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -52,7 +54,10 @@ def load_policy(path: Path) -> SourceSizePolicy:
     if len(set(scan_roots)) != len(scan_roots):
         raise ValueError("Module-size scan_roots must not contain duplicates.")
     if any(
-        PurePosixPath(root).is_absolute() or ".." in PurePosixPath(root).parts
+        root.startswith("-")
+        or Path(root).is_absolute()
+        or PurePosixPath(root).is_absolute()
+        or ".." in PurePosixPath(root).parts
         for root in scan_roots
     ):
         raise ValueError("Module-size scan_roots must be repository-relative.")
@@ -98,7 +103,10 @@ def load_policy(path: Path) -> SourceSizePolicy:
 
 def tracked_python_line_counts(repo_root: Path, scan_roots: tuple[str, ...]) -> dict[str, int]:
     command = ["git", "-C", str(repo_root), "ls-files", "--", *scan_roots]
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    # The executable is fixed; policy-validated roots follow Git's option terminator.
+    completed = subprocess.run(  # nosec B603
+        command, check=False, capture_output=True, text=True
+    )
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr.strip() or "git ls-files failed")
     paths = sorted(

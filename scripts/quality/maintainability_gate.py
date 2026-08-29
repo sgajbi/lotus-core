@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import subprocess
+
+# Fixed Git/Radon executables use argument vectors and never invoke a shell.
+import subprocess  # nosec B404
 import sys
 from collections.abc import Mapping, Sequence
 from datetime import date
@@ -15,6 +17,24 @@ DEFAULT_ALLOWED_RANK = "B"
 
 def _normalized_path(path: str) -> str:
     return PurePosixPath(path.replace("\\", "/")).as_posix().removeprefix("./")
+
+
+def _validated_roots(roots: Sequence[str]) -> tuple[str, ...]:
+    validated: list[str] = []
+    for root in roots:
+        normalized = _normalized_path(root)
+        if (
+            not root.strip()
+            or root.startswith("-")
+            or Path(root).is_absolute()
+            or PurePosixPath(normalized).is_absolute()
+            or ".." in PurePosixPath(normalized).parts
+        ):
+            raise ValueError(f"Maintainability scan root must be repository-relative: {root}")
+        validated.append(normalized)
+    if not validated:
+        raise ValueError("Maintainability scan roots must not be empty.")
+    return tuple(validated)
 
 
 def load_baseline(path: Path, *, max_allowed_rank: str) -> dict[str, tuple[str, float]]:
@@ -128,8 +148,12 @@ def maintainability_violations(
 
 
 def tracked_python_paths(roots: Sequence[str]) -> set[str]:
-    command = ["git", "ls-files", "--", *roots]
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    validated_roots = _validated_roots(roots)
+    command = ["git", "ls-files", "--", *validated_roots]
+    # The executable is fixed; roots are validated and follow Git's option terminator.
+    completed = subprocess.run(  # nosec B603
+        command, check=False, capture_output=True, text=True
+    )
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr.strip() or "git ls-files failed")
     paths = {
@@ -143,12 +167,16 @@ def tracked_python_paths(roots: Sequence[str]) -> set[str]:
 
 
 def run_radon_maintainability(roots: Sequence[str]) -> dict[str, dict[str, object]]:
-    command = [sys.executable, "-m", "radon", "mi", *roots, "-j"]
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    validated_roots = _validated_roots(roots)
+    command = [sys.executable, "-m", "radon", "mi", *validated_roots, "-j"]
+    # The interpreter/module are fixed, roots are validated, and no shell is used.
+    completed = subprocess.run(  # nosec B603
+        command, check=False, capture_output=True, text=True
+    )
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
     report = json.loads(completed.stdout or "{}")
-    tracked = tracked_python_paths(roots)
+    tracked = tracked_python_paths(validated_roots)
     return {
         _normalized_path(path): metrics
         for path, metrics in report.items()
