@@ -82,6 +82,34 @@ async def async_test_client():
                 "reporting_currency": "USD",
                 "position_basis": "market_value_base",
                 "weight_basis": "total_market_value_base",
+                "effective_as_of_date": "2026-02-27",
+                "supportability": "READY",
+                "reason_code": "SOURCE_EVIDENCE_READY",
+            },
+            "source_provenance": {
+                "schema_version": "lotus.source-provenance.v1",
+                "source_system": "LOTUS_CORE",
+                "portfolio": {
+                    "source_system": "LOTUS_CORE",
+                    "source_kind": "PORTFOLIO",
+                    "source_id": "lotus-core:portfolio-state-snapshot:portfolio:PORT-INT-001:aaa",
+                    "as_of": "2026-02-27",
+                    "contract_version": "PortfolioStateSnapshot:v1",
+                    "source_hash": "d" * 64,
+                    "valuation_timestamp": "2026-02-27T00:00:00Z",
+                    "freshness_status": "CURRENT",
+                },
+                "market_data": {
+                    "source_system": "LOTUS_CORE",
+                    "source_kind": "MARKET_DATA",
+                    "source_id": "lotus-core:portfolio-state-snapshot:market_data:PORT-INT-001:bbb",
+                    "as_of": "2026-02-27",
+                    "contract_version": "PortfolioStateSnapshot:v1",
+                    "source_hash": "e" * 64,
+                    "valuation_timestamp": "2026-02-27T00:00:00Z",
+                    "freshness_status": "CURRENT",
+                },
+                "raw_payload_stored": False,
             },
             "calculation_lineage": {
                 "algorithm_id": "PORTFOLIO_STATE_SNAPSHOT",
@@ -902,6 +930,12 @@ async def test_core_snapshot_success(async_test_client):
 async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_test_client):
     client, mock_core_snapshot_service, mock_integration_service = async_test_client
     mock_core_snapshot_service.get_core_snapshot.return_value["freshness_status"] = "CURRENT"
+    snapshot = mock_core_snapshot_service.get_core_snapshot.return_value
+    snapshot["portfolio_id"] = "PB_SG_GLOBAL_BAL_001"
+    snapshot["as_of_date"] = date(2026, 4, 10)
+    snapshot["valuation_context"]["effective_as_of_date"] = "2026-04-10"
+    snapshot["source_provenance"]["portfolio"]["as_of"] = "2026-04-10"
+    snapshot["source_provenance"]["market_data"]["as_of"] = "2026-04-10"
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-idea",
         tenant_id="default",
@@ -932,6 +966,20 @@ async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_t
     payload = response.json()
     assert payload["freshness"] == "CURRENT"
     assert payload["freshness_metadata"]["freshness_status"] == "CURRENT_SNAPSHOT"
+    assert payload["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
+    assert payload["valuation_context"] == {
+        "portfolio_currency": "USD",
+        "reporting_currency": "USD",
+        "position_basis": "market_value_base",
+        "weight_basis": "total_market_value_base",
+        "effective_as_of_date": "2026-04-10",
+        "supportability": "READY",
+        "reason_code": "SOURCE_EVIDENCE_READY",
+    }
+    assert payload["source_provenance"]["portfolio"]["as_of"] == "2026-04-10"
+    assert payload["source_provenance"]["market_data"]["as_of"] == "2026-04-10"
+    assert payload["source_provenance"]["portfolio"]["source_id"]
+    assert payload["source_provenance"]["market_data"]["source_id"]
     mock_integration_service.get_effective_policy.assert_called_once_with(
         consumer_system="lotus-idea",
         tenant_id="default",

@@ -1798,6 +1798,8 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     core_snapshot_freshness = components["CoreSnapshotFreshnessMetadata"]
     core_snapshot_request = components["CoreSnapshotRequest"]
     core_snapshot_response = components["CoreSnapshotResponse"]
+    core_snapshot_provenance = components["CoreSnapshotSourceProvenance"]
+    core_snapshot_provenance_record = components["CoreSnapshotSourceProvenanceRecord"]
     core_snapshot_sections = components["CoreSnapshotSections"]
 
     assert policy_response["properties"]["policy_provenance"]["description"] == (
@@ -1846,6 +1848,13 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     assert core_snapshot_response["properties"]["request_fingerprint"]["description"] == (
         "Deterministic fingerprint of the full core snapshot request contract."
     )
+    assert core_snapshot_response["properties"]["source_provenance"]["description"].startswith(
+        "Typed portfolio and market-data evidence"
+    )
+    assert core_snapshot_provenance["properties"]["raw_payload_stored"]["const"] is False
+    assert core_snapshot_provenance_record["properties"]["as_of"]["description"].startswith(
+        "Source-owned effective business date"
+    )
     assert "portfolio-state source data" in core_snapshot["description"]
     assert (
         "does not publish a legacy nested `portfolio` or `metadata` envelope"
@@ -1853,6 +1862,7 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     )
     assert "top-level source-data runtime metadata" in core_snapshot["description"]
     assert "valuation_context" in core_snapshot["description"]
+    assert "never fall back to the caller-requested date" in core_snapshot["description"]
     assert core_snapshot_request["properties"]["simulation"]["description"].startswith(
         "Simulation options required only when snapshot_mode=SIMULATION."
     )

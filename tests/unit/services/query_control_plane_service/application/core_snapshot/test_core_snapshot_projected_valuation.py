@@ -10,7 +10,11 @@ import pytest
 from src.services.query_control_plane_service.app.application.core_snapshot.projected_valuation import (  # noqa: E501
     CoreSnapshotProjectedPositionResolver,
 )
-from src.services.query_control_plane_service.app.domain.core_snapshot import CoreSnapshotInstrument
+from src.services.query_control_plane_service.app.domain.core_snapshot import (
+    CoreSnapshotFxRate,
+    CoreSnapshotInstrument,
+    CoreSnapshotMarketPrice,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -44,8 +48,12 @@ def resolver_dependencies():
     fx_repo = AsyncMock()
     simulation_repo.get_changes.return_value = []
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_US")]
-    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency="USD")]
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1"))]
+    price_repo.get_prices.return_value = [
+        CoreSnapshotMarketPrice(price_date=date(2026, 2, 27), price=Decimal("10"), currency="USD")
+    ]
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1"))
+    ]
     return simulation_repo, instrument_repo, price_repo, fx_repo
 
 
@@ -86,7 +94,7 @@ async def test_projected_position_resolver_handles_non_positive_quantity_branch(
         include_cash=True,
     )
 
-    assert projected["SEC_NEG"]["market_value_base"] == Decimal("0")
+    assert projected.positions["SEC_NEG"]["market_value_base"] == Decimal("0")
 
 
 async def test_projected_position_resolver_normalizes_change_security_ids(
@@ -137,8 +145,8 @@ async def test_projected_position_resolver_normalizes_change_security_ids(
         include_cash=True,
     )
 
-    assert projected["SEC_EXISTING"]["quantity"] == Decimal("5")
-    assert projected["SEC_NEW"]["security_id"] == "SEC_NEW"
+    assert projected.positions["SEC_EXISTING"]["quantity"] == Decimal("5")
+    assert projected.positions["SEC_NEW"]["security_id"] == "SEC_NEW"
     instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_NEW"])
 
 
@@ -155,8 +163,12 @@ async def test_projected_position_resolver_prices_new_security_with_fx(
         )
     ]
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_EUR", "EUR", "EQUITY")]
-    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency="EUR")]
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.2"))]
+    price_repo.get_prices.return_value = [
+        CoreSnapshotMarketPrice(price_date=date(2026, 2, 27), price=Decimal("10"), currency="EUR")
+    ]
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1.2"))
+    ]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
         session_id="SIM_1",
@@ -168,8 +180,11 @@ async def test_projected_position_resolver_prices_new_security_with_fx(
         include_cash=True,
     )
 
-    assert projected["SEC_NEW_EUR"]["market_value_local"] == Decimal("20")
-    assert projected["SEC_NEW_EUR"]["market_value_base"] == Decimal("36")
+    assert projected.positions["SEC_NEW_EUR"]["market_value_local"] == Decimal("20")
+    assert projected.positions["SEC_NEW_EUR"]["market_value_base"] == Decimal("36")
+    assert {item.effective_as_of_date for item in projected.market_data_observations} == {
+        date(2026, 2, 27)
+    }
     fx_repo.get_fx_rates.assert_awaited_once_with(
         from_currency="EUR",
         to_currency="USD",
@@ -192,9 +207,15 @@ async def test_projected_market_value_ignores_ambient_decimal_precision(
     ]
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_EUR", "EUR")]
     price_repo.get_prices.return_value = [
-        SimpleNamespace(price=Decimal("1.234567890123456789"), currency="EUR")
+        CoreSnapshotMarketPrice(
+            price_date=date(2026, 2, 27),
+            price=Decimal("1.234567890123456789"),
+            currency="EUR",
+        )
     ]
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.111111111111111111"))]
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1.111111111111111111"))
+    ]
     resolver = _resolver(resolver_dependencies)
 
     async def calculate(ambient_precision: int) -> Decimal:
@@ -209,7 +230,7 @@ async def test_projected_market_value_ignores_ambient_decimal_precision(
                 include_zero=True,
                 include_cash=True,
             )
-        return projected["SEC_NEW_EUR"]["market_value_base"]
+        return projected.positions["SEC_NEW_EUR"]["market_value_base"]
 
     assert await calculate(6) == await calculate(50)
 
@@ -236,8 +257,12 @@ async def test_projected_position_resolver_reuses_market_fx_per_currency(
         _instrument("SEC_NEW_EUR_A", "EUR", "EQUITY"),
         _instrument("SEC_NEW_EUR_B", "EUR", "EQUITY"),
     ]
-    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency=" eur ")]
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.2"))]
+    price_repo.get_prices.return_value = [
+        CoreSnapshotMarketPrice(price_date=date(2026, 2, 27), price=Decimal("10"), currency=" eur ")
+    ]
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1.2"))
+    ]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
         session_id="SIM_1",
@@ -249,8 +274,8 @@ async def test_projected_position_resolver_reuses_market_fx_per_currency(
         include_cash=True,
     )
 
-    assert projected["SEC_NEW_EUR_A"]["market_value_base"] == Decimal("36.0")
-    assert projected["SEC_NEW_EUR_B"]["market_value_base"] == Decimal("54.0")
+    assert projected.positions["SEC_NEW_EUR_A"]["market_value_base"] == Decimal("36.0")
+    assert projected.positions["SEC_NEW_EUR_B"]["market_value_base"] == Decimal("54.0")
     fx_repo.get_fx_rates.assert_awaited_once_with(
         from_currency="EUR",
         to_currency="USD",
@@ -287,14 +312,24 @@ async def test_projected_position_resolver_reads_new_security_prices_sequentiall
         assert end_date == date(2026, 2, 27)
         if security_id == "SEC_NEW_US_A":
             call_order.append("SEC_NEW_US_A")
-            return [SimpleNamespace(price=Decimal("10"), currency="USD")]
+            return [
+                CoreSnapshotMarketPrice(
+                    price_date=date(2026, 2, 27), price=Decimal("10"), currency="USD"
+                )
+            ]
         if security_id == "SEC_NEW_US_B":
             call_order.append("SEC_NEW_US_B")
-            return [SimpleNamespace(price=Decimal("20"), currency="USD")]
+            return [
+                CoreSnapshotMarketPrice(
+                    price_date=date(2026, 2, 27), price=Decimal("20"), currency="USD"
+                )
+            ]
         raise AssertionError(f"unexpected security {security_id}")
 
     price_repo.get_prices.side_effect = get_prices
-    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1"))]
+    fx_repo.get_fx_rates.return_value = [
+        CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1"))
+    ]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
         session_id="SIM_1",
@@ -306,8 +341,8 @@ async def test_projected_position_resolver_reads_new_security_prices_sequentiall
         include_cash=True,
     )
 
-    assert projected["SEC_NEW_US_A"]["market_value_base"] == Decimal("20")
-    assert projected["SEC_NEW_US_B"]["market_value_base"] == Decimal("60")
+    assert projected.positions["SEC_NEW_US_A"]["market_value_base"] == Decimal("20")
+    assert projected.positions["SEC_NEW_US_B"]["market_value_base"] == Decimal("60")
     assert sorted(call_order) == ["SEC_NEW_US_A", "SEC_NEW_US_B"]
     assert price_repo.get_prices.await_count == 2
 
@@ -365,4 +400,4 @@ async def test_projected_position_resolver_filters_cash_and_zero_quantity(
         include_cash=False,
     )
 
-    assert projected == {}
+    assert projected.positions == {}
