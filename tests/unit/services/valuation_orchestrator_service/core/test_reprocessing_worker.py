@@ -322,7 +322,7 @@ async def test_worker_renews_live_lease_until_job_operation_finishes(mock_depend
     )
 
 
-async def test_worker_wakes_by_measured_deadline_when_interval_is_longer(
+async def test_worker_attempts_renewal_inside_io_margin_before_deadline(
     mock_dependencies,
 ):
     worker = ReprocessingWorker(poll_interval=0.1)
@@ -330,6 +330,11 @@ async def test_worker_wakes_by_measured_deadline_when_interval_is_longer(
     worker._lease_renewal_io_timeout_seconds = 0.1
     jobs = mock_dependencies["repro_job_repo"]
     jobs.get_lease_remaining_seconds.return_value = 0.05
+
+    async def renew(*_args, **_kwargs):
+        await asyncio.Event().wait()
+
+    jobs.renew_lease.side_effect = renew
     operation_cancelled = asyncio.Event()
 
     async def operation(_terminal_transition_started):
@@ -356,7 +361,7 @@ async def test_worker_wakes_by_measured_deadline_when_interval_is_longer(
 
     assert asyncio.get_running_loop().time() - started_at < 0.25
     assert operation_cancelled.is_set()
-    jobs.renew_lease.assert_not_awaited()
+    jobs.renew_lease.assert_awaited_once()
 
 
 async def test_worker_does_not_start_operation_until_authority_read_completes(
