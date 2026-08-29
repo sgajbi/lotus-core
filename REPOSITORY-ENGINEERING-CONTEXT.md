@@ -3510,6 +3510,11 @@ Most relevant current governance:
      date. Historical cost-basis fallback, missing valuations, mixed dates, and carried-forward
      observations fail closed with stable reason codes. Do not let consumers synthesize these
      dates from request fields, wall-clock time, or several weaker routes.
+     Treat a missing local or reporting market value as incomplete valuation evidence even when
+     price/status fields look current. Derive portfolio provenance timestamps only from the
+     selected position facts, and market provenance timestamps from the persisted valuation row
+     plus the price and non-identity FX observations actually used; never let a market-only
+     revaluation advance the portfolio timestamp.
 213. App-local Compose must start every worker-capable service through the same owned runtime entry
      point as its Dockerfile. Do not override `financial_reconciliation_service` with the pure HTTP
      `app.main` application: `app.runtime` owns the reconciliation-request consumer, outbox

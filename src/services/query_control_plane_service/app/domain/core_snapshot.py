@@ -54,6 +54,8 @@ class CoreSnapshotPositionSource:
     valuation_status: str | None = None
     valuation_fx_rate_date: date | None = None
     valuation_fx_rate: Decimal | None = None
+    portfolio_fact_created_at: datetime | None = None
+    portfolio_fact_updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,7 @@ class CoreSnapshotMarketPrice:
     price_date: date
     price: Decimal
     currency: str
+    evidence_timestamp: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,3 +74,4 @@ class CoreSnapshotFxRate:
 
     rate_date: date
     rate: Decimal
+    evidence_timestamp: datetime | None = None

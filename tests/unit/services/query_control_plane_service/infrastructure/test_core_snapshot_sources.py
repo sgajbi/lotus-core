@@ -56,6 +56,9 @@ def _state(epoch: int = 4) -> SimpleNamespace:
 
 @pytest.mark.asyncio
 async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
+    price_created_at = datetime(2026, 4, 10, 1, 0, tzinfo=UTC)
+    price_updated_at = datetime(2026, 4, 10, 3, 0, tzinfo=UTC)
+    fx_created_at = datetime(2026, 4, 10, 2, 0, tzinfo=UTC)
     session = AsyncMock(spec=AsyncSession)
     session.execute.side_effect = [
         _Result([SimpleNamespace(portfolio_id="P1", base_currency="SGD")]),
@@ -66,6 +69,8 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
                     price_date=date(2026, 4, 10),
                     price=Decimal("101.25"),
                     currency="SGD",
+                    created_at=price_created_at,
+                    updated_at=price_updated_at,
                 )
             ]
         ),
@@ -74,6 +79,8 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
                 SimpleNamespace(
                     rate_date=date(2026, 4, 10),
                     rate=Decimal("1.35"),
+                    created_at=fx_created_at,
+                    updated_at=None,
                 )
             ]
         ),
@@ -93,7 +100,9 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     assert portfolio is not None and portfolio.base_currency == "SGD"
     assert [item.security_id for item in instruments] == ["SEC_1"]
     assert prices[0].price == Decimal("101.25")
+    assert prices[0].evidence_timestamp == price_updated_at
     assert rates[0].rate == Decimal("1.35")
+    assert rates[0].evidence_timestamp == fx_created_at
 
     instrument_sql = str(
         session.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
@@ -109,6 +118,8 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
 
 @pytest.mark.asyncio
 async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None:
+    portfolio_created_at = datetime(2026, 4, 9, 8, 0, tzinfo=UTC)
+    portfolio_updated_at = datetime(2026, 4, 9, 9, 0, tzinfo=UTC)
     session = AsyncMock(spec=AsyncSession)
     snapshot = SimpleNamespace(
         date=date(2026, 4, 10),
@@ -125,7 +136,17 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
         created_at=datetime(2026, 4, 10, 1, 0, tzinfo=UTC),
         updated_at=datetime(2026, 4, 10, 2, 0, tzinfo=UTC),
     )
-    session.execute.return_value = _Result([(snapshot, _instrument(), _state())])
+    session.execute.return_value = _Result(
+        [
+            (
+                snapshot,
+                _instrument(),
+                _state(),
+                portfolio_created_at,
+                portfolio_updated_at,
+            )
+        ]
+    )
     reader = SqlAlchemyCoreSnapshotSourceReader(session)
 
     records = await reader.get_position_snapshot(
@@ -142,6 +163,8 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].valuation_status == "VALUED_STALE"
     assert records[0].valuation_fx_rate_date == date(2026, 4, 9)
     assert records[0].valuation_fx_rate == Decimal("1.35")
+    assert records[0].portfolio_fact_created_at == portfolio_created_at
+    assert records[0].portfolio_fact_updated_at == portfolio_updated_at
     assert records[0].instrument.name == "Global Bond"
 
     sql = str(
@@ -181,6 +204,8 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert records[0].valuation_status is None
     assert records[0].valuation_fx_rate_date is None
     assert records[0].valuation_fx_rate is None
+    assert records[0].portfolio_fact_created_at == history.created_at
+    assert records[0].portfolio_fact_updated_at == history.updated_at
 
     sql = str(
         session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})

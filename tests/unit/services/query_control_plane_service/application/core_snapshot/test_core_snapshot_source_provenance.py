@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import cast
 
 from src.services.query_control_plane_service.app.application.core_snapshot.market_data import (
     MarketDataObservation,
@@ -22,6 +23,8 @@ from src.services.query_control_plane_service.app.domain.core_snapshot import (
     CoreSnapshotPositionSource,
 )
 
+_USE_MARKET_VALUE = object()
+
 
 def _row(
     security_id: str,
@@ -30,6 +33,7 @@ def _row(
     quantity: Decimal = Decimal("10"),
     market_price: Decimal | None = Decimal("10"),
     market_value: Decimal | None = Decimal("100"),
+    market_value_local: Decimal | None | object = _USE_MARKET_VALUE,
     cost_basis: Decimal = Decimal("80"),
     cost_basis_local: Decimal = Decimal("80"),
     epoch: int = 7,
@@ -37,19 +41,27 @@ def _row(
     instrument_currency: str = "USD",
     valuation_fx_rate_date: date | None = None,
     valuation_fx_rate: Decimal | None = None,
+    market_evidence_timestamp: datetime | None = None,
+    portfolio_evidence_timestamp: datetime | None = None,
 ) -> CoreSnapshotPositionSource:
     evidence_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
+    market_timestamp = market_evidence_timestamp or evidence_timestamp
+    portfolio_timestamp = portfolio_evidence_timestamp or evidence_timestamp
     return CoreSnapshotPositionSource(
         security_id=security_id,
         quantity=quantity,
         market_price=market_price,
         market_value=market_value,
-        market_value_local=market_value,
+        market_value_local=(
+            market_value
+            if market_value_local is _USE_MARKET_VALUE
+            else cast(Decimal | None, market_value_local)
+        ),
         cost_basis=cost_basis,
         cost_basis_local=cost_basis_local,
         epoch=epoch,
-        source_created_at=evidence_timestamp,
-        source_updated_at=evidence_timestamp,
+        source_created_at=market_timestamp,
+        source_updated_at=market_timestamp,
         state_created_at=evidence_timestamp,
         state_updated_at=evidence_timestamp,
         instrument=CoreSnapshotInstrument(
@@ -70,6 +82,8 @@ def _row(
         valuation_status=valuation_status,
         valuation_fx_rate_date=valuation_fx_rate_date,
         valuation_fx_rate=valuation_fx_rate,
+        portfolio_fact_created_at=portfolio_timestamp,
+        portfolio_fact_updated_at=portfolio_timestamp,
     )
 
 
@@ -289,6 +303,80 @@ def test_source_provenance_rejects_nonflat_snapshot_without_market_price() -> No
     assert resolution.effective_as_of_date is None
     assert resolution.source_provenance.market_data.as_of is None
     assert resolution.source_provenance.market_data.freshness_status == "UNAVAILABLE"
+
+
+def test_source_provenance_rejects_nonflat_snapshot_without_local_market_value() -> None:
+    resolution = _resolve(_row("SEC_A", market_value_local=None))
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.market_data.as_of is None
+    assert resolution.source_provenance.market_data.freshness_status == "UNAVAILABLE"
+
+
+def test_source_family_timestamps_follow_their_own_authoritative_evidence() -> None:
+    portfolio_timestamp = datetime(2026, 2, 27, 8, tzinfo=UTC)
+    market_timestamp = datetime(2026, 2, 27, 11, tzinfo=UTC)
+
+    resolution = _resolve(
+        _row(
+            "SEC_A",
+            market_evidence_timestamp=market_timestamp,
+            portfolio_evidence_timestamp=portfolio_timestamp,
+        )
+    )
+
+    assert resolution.source_provenance.portfolio.valuation_timestamp == portfolio_timestamp
+    assert resolution.source_provenance.market_data.valuation_timestamp == market_timestamp
+
+
+def test_market_reobservation_advances_only_market_timestamp_not_source_identity() -> None:
+    portfolio_timestamp = datetime(2026, 2, 27, 8, tzinfo=UTC)
+    original = _resolve(
+        _row(
+            "SEC_A",
+            market_evidence_timestamp=datetime(2026, 2, 27, 10, tzinfo=UTC),
+            portfolio_evidence_timestamp=portfolio_timestamp,
+        )
+    )
+    reobserved = _resolve(
+        _row(
+            "SEC_A",
+            market_evidence_timestamp=datetime(2026, 2, 27, 12, tzinfo=UTC),
+            portfolio_evidence_timestamp=portfolio_timestamp,
+        )
+    )
+
+    assert original.source_provenance.portfolio == reobserved.source_provenance.portfolio
+    assert original.source_provenance.market_data.source_id == (
+        reobserved.source_provenance.market_data.source_id
+    )
+    assert original.source_provenance.market_data.source_hash == (
+        reobserved.source_provenance.market_data.source_hash
+    )
+    assert original.source_provenance.market_data.valuation_timestamp < (
+        reobserved.source_provenance.market_data.valuation_timestamp
+    )
+
+
+def test_projected_market_observation_advances_market_timestamp() -> None:
+    observation_timestamp = datetime(2026, 2, 27, 13, tzinfo=UTC)
+    resolution = _resolve(
+        _row("SEC_A"),
+        projected_market_data=(
+            MarketDataObservation(
+                observation_type="MARKET_PRICE",
+                source_key="SEC_A",
+                value=Decimal("11"),
+                effective_as_of_date=date(2026, 2, 27),
+                currency="USD",
+                evidence_timestamp=observation_timestamp,
+            ),
+        ),
+    )
+
+    assert resolution.source_provenance.market_data.valuation_timestamp == observation_timestamp
 
 
 def test_source_provenance_rejects_carried_forward_baseline_price() -> None:

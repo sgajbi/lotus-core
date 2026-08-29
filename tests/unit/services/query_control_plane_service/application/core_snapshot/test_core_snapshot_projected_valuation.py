@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal, localcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -49,7 +49,12 @@ def resolver_dependencies():
     simulation_repo.get_changes.return_value = []
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_US")]
     price_repo.get_prices.return_value = [
-        CoreSnapshotMarketPrice(price_date=date(2026, 2, 27), price=Decimal("10"), currency="USD")
+        CoreSnapshotMarketPrice(
+            price_date=date(2026, 2, 27),
+            price=Decimal("10"),
+            currency="USD",
+            evidence_timestamp=datetime(2026, 2, 27, 11, tzinfo=UTC),
+        )
     ]
     fx_repo.get_fx_rates.return_value = [
         CoreSnapshotFxRate(rate_date=date(2026, 2, 27), rate=Decimal("1"))
@@ -99,6 +104,9 @@ async def test_projected_position_resolver_prices_new_short_position(
     assert len(projected.market_data_observations) == 1
     assert projected.market_data_observations[0].source_key == "SEC_NEG"
     assert projected.market_data_observations[0].effective_as_of_date == date(2026, 2, 27)
+    assert projected.market_data_observations[0].evidence_timestamp == datetime(
+        2026, 2, 27, 11, tzinfo=UTC
+    )
     price_repo.get_prices.assert_awaited_once_with(
         security_id="SEC_NEG",
         end_date=date(2026, 2, 27),

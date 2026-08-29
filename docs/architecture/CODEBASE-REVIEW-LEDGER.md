@@ -6,7 +6,10 @@ stable Core values but not the source-owned portfolio and market-data dates need
 valuation horizon. Core now preserves position, price, and FX dates through snapshot assembly,
 publishes independent deterministic source records, and requires coherent exact-date evidence
 before claiming `READY` or current source evidence. Historical cost-basis fallback, missing valued
-rows, mixed dates, and carried-forward market observations fail closed with stable reason codes.
+or local outputs, mixed dates, and carried-forward market observations fail closed with stable
+reason codes. Portfolio timestamps derive only from selected position facts; market timestamps
+derive from the valuation snapshot and exact price/FX observations, so a market-only correction
+cannot restate portfolio evidence.
 The request date and generation clock cannot become financial evidence. Focused application,
 service, OpenAPI, and canonical `PB_SG_GLOBAL_BAL_001` route-contract tests protect the boundary.
 Downstream adoption and live memo/report-package proof remain owned by `lotus-advise#557` after the
