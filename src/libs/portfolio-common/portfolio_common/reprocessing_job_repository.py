@@ -756,6 +756,9 @@ class ReprocessingJobRepository:
         while stale_rows := await self._find_stale_job_rows(after=cursor):
             savepoint = self.db.begin_nested()
             await savepoint.start()
+            savepoint_closed = False
+            cohort_lock_acquired = False
+            cohort_lock_released = False
             try:
                 identity_keys = []
                 for row in stale_rows:
@@ -770,25 +773,41 @@ class ReprocessingJobRepository:
                         identity_keys.append(identity.identity_key)
                 await self._lock_effective_dated_replay_identities(identity_keys)
                 await self._lock_stale_recovery_cohort_claim()
+                cohort_lock_acquired = True
                 try:
-                    claimed_rows = list(
-                        (
-                            await self.db.execute(
-                                _stale_reprocessing_jobs_stmt(
-                                    job_ids=[int(row.id) for row in stale_rows],
-                                    lock_rows=True,
+                    try:
+                        claimed_rows = list(
+                            (
+                                await self.db.execute(
+                                    _stale_reprocessing_jobs_stmt(
+                                        job_ids=[int(row.id) for row in stale_rows],
+                                        lock_rows=True,
+                                    )
                                 )
-                            )
-                        ).all()
-                    )
+                            ).all()
+                        )
+                    except BaseException:
+                        # A failed statement aborts the savepoint. Roll it back
+                        # before releasing the session-level advisory lock so the
+                        # unlock can execute on a usable transaction.
+                        await savepoint.rollback()
+                        savepoint_closed = True
+                        raise
                 finally:
                     await self._unlock_stale_recovery_cohort_claim()
+                    cohort_lock_released = True
                 if claimed_rows:
                     await savepoint.commit()
+                    savepoint_closed = True
                     return claimed_rows
                 await savepoint.rollback()
-            except Exception:
-                await savepoint.rollback()
+                savepoint_closed = True
+            except BaseException:
+                if not savepoint_closed:
+                    await savepoint.rollback()
+                    savepoint_closed = True
+                if cohort_lock_acquired and not cohort_lock_released:
+                    await self._unlock_stale_recovery_cohort_claim()
                 raise
             last_row = stale_rows[-1]
             cursor = (cast(datetime, last_row.lease_expires_at), int(last_row.id))
