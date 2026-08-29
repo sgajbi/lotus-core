@@ -38,7 +38,8 @@ PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION = (
     "matching activity returns READY with reason PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY, "
     "zero rows, and no missing component families. Missing portfolios, invalid scopes, and "
     "persistence failures remain fail-closed transport errors and are never converted to empty "
-    "READY evidence.\n"
+    "READY evidence. An empty continuation page is UNAVAILABLE because it cannot prove that the "
+    "complete window had no activity.\n"
     "When: Used by lotus-performance to replace local or inferred component economics in stateful "
     "contribution analytics. This route does not calculate contribution, attribution, performance "
     "returns, tax advice, execution quality, best execution, or OMS acknowledgement; "
@@ -321,6 +322,7 @@ class PerformanceComponentEconomicsSupportability(BaseModel):
         examples=[
             "PERFORMANCE_COMPONENT_ECONOMICS_READY",
             "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY",
+            "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED",
         ],
     )
     source_owner: Literal["lotus-core"] = Field(
@@ -348,9 +350,11 @@ class PerformanceComponentEconomicsSupportability(BaseModel):
         default_factory=list,
         description=(
             "Supported component families missing from returned source rows. This list is empty "
-            "for an authoritative no-activity window; no activity is not incomplete evidence. "
-            "For non-empty responses, missing does not mean fabricated zero and downstream must "
-            "decide whether the requested workflow needs that family."
+            "for an authoritative no-activity initial page; no activity is not incomplete "
+            "evidence. An unexpectedly empty continuation lists every family as missing because "
+            "the complete paged scope is unproved. For non-empty responses, missing does not "
+            "mean fabricated zero and downstream must decide whether the requested workflow "
+            "needs that family."
         ),
     )
 

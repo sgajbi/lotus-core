@@ -39,13 +39,19 @@ def build_performance_component_economics_response(
     request_scope_fingerprint: str | None = None,
     has_more: bool = False,
     next_page_token: str | None = None,
+    is_initial_page: bool = True,
 ) -> PerformanceComponentEconomicsResponse:
     observed_component_families = observed_performance_component_families(rows)
-    authoritative_empty = not rows and not has_more
-    state = performance_component_economics_supportability_state(rows=rows, has_more=has_more)
+    authoritative_empty = not rows and not has_more and is_initial_page
+    state = performance_component_economics_supportability_state(
+        rows=rows,
+        has_more=has_more,
+        is_initial_page=is_initial_page,
+    )
     reason = performance_component_economics_supportability_reason(
         rows=rows,
         has_more=has_more,
+        is_initial_page=is_initial_page,
     )
     fingerprint = request_scope_fingerprint or performance_component_economics_request_fingerprint(
         portfolio_id=portfolio_id, request=request
@@ -74,7 +80,9 @@ def build_performance_component_economics_response(
             source_row_count=len(rows),
             observed_component_families=observed_component_families,
             missing_component_families=missing_performance_component_families(
-                rows, observed_component_families
+                rows,
+                observed_component_families,
+                authoritative_empty=authoritative_empty,
             ),
         ),
         lineage=performance_component_economics_source_lineage(),
@@ -85,7 +93,9 @@ def build_performance_component_economics_response(
             generated_at=generated_at,
             tenant_id=request.tenant_id,
             data_quality_status=performance_component_economics_data_quality_status(
+                rows=rows,
                 has_more=has_more,
+                is_initial_page=is_initial_page,
             ),
             latest_evidence_timestamp=latest_performance_evidence_timestamp(transactions),
             content_payload={

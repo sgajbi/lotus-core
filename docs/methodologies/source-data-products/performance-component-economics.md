@@ -120,15 +120,19 @@ The QCP implementation keeps the source-data anti-corruption boundary in four st
 `READY` with reason `PERFORMANCE_COMPONENT_ECONOMICS_READY` means at least one source row was
 returned and no additional page is indicated. `READY` with reason
 `PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY` means Core proved the portfolio and base-currency
-authority, successfully queried the complete bounded request scope, and found no matching activity.
-That authoritative empty result has `source_row_count=0`, `rows=[]`, no observed families, no missing
-families, `data_quality_status=COMPLETE`, `source_evidence_current=true`, and
+authority, successfully queried the initial page of the complete bounded request scope, and found no
+matching activity. That authoritative empty result has `source_row_count=0`, `rows=[]`, no observed
+families, no missing families, `data_quality_status=COMPLETE`, `source_evidence_current=true`, and
 `freshness_status=CURRENT`. `latest_evidence_timestamp` remains null because there is no source row;
-`generated_at` records when Core completed the authoritative scope query. The result is not evidence
-that every component amount was zero.
+`generated_at` is captured after Core completes the authoritative scope query. The result is not
+evidence that every component amount was zero.
 
 `DEGRADED` with reason `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL` means the current response is
 a valid partial page and `page.next_page_token` must be followed to exhaust the requested window.
+An unexpectedly empty continuation page is `UNAVAILABLE` with reason
+`PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED`, `data_quality_status=UNKNOWN`, and all
+supported families missing. A continuation can prove only the suffix after its cursor, not that the
+complete bounded request scope had no activity; concurrent source changes therefore fail closed.
 Missing portfolios and invalid request or cursor scopes fail closed through the documented HTTP
 problem contract. Persistence/query failures remain errors; Core does not convert an unproved scope
 into `READY / PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`.

@@ -114,7 +114,7 @@ async def resolve_performance_component_economics_response(
     request: PerformanceComponentEconomicsRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
     encode_page_token: Callable[[dict[str, Any]], str],
-    generated_at: datetime,
+    clock: Callable[[], datetime],
 ) -> PerformanceComponentEconomicsResponse:
     if not await repository.portfolio_exists(portfolio_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
@@ -156,5 +156,6 @@ async def resolve_performance_component_economics_response(
         request_scope_fingerprint=page_scope.request_fingerprint,
         has_more=has_more,
         next_page_token=next_page_token,
-        generated_at=generated_at,
+        is_initial_page=not page_scope.after_key,
+        generated_at=clock(),
     )

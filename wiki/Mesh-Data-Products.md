@@ -283,8 +283,9 @@ use a future aggregate contract. A successfully queried empty window is authorit
 evidence with reason `PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`, zero rows, and no missing
 component families. It carries `source_evidence_current=true` and `freshness_status=CURRENT` while
 leaving `latest_evidence_timestamp` null because no source row exists; `generated_at` records the
-scope-query proof time. Missing portfolios, invalid scopes, and persistence failures remain
-fail-closed errors and are never converted to ready-empty evidence. Its
+post-query proof time. An unexpectedly empty continuation page is `UNAVAILABLE` because it cannot
+prove that the complete window had no activity. Missing portfolios, invalid scopes, and persistence
+failures remain fail-closed errors and are never converted to ready-empty evidence. Its
 implementation-backed methodology is documented in
 `docs/methodologies/source-data-products/performance-component-economics.md`. It is not
 contribution analytics, attribution analytics, a return calculator, tax advice, execution-quality
