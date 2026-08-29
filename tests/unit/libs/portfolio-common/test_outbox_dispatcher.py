@@ -331,6 +331,7 @@ def test_dispatcher_retains_claim_when_ambiguous_producer_reset_fails(
     event = MagicMock()
     monkeypatch.setattr(dispatcher, "_read_pending_gauge", MagicMock())
     monkeypatch.setattr(dispatcher, "_claim_pending_events", MagicMock(return_value=[event]))
+    monkeypatch.setattr(dispatcher, "_renew_claims_for_delivery", MagicMock(return_value=True))
     monkeypatch.setattr(dispatcher, "_publish_events", MagicMock())
     persist_results = MagicMock()
     monkeypatch.setattr(dispatcher, "_persist_delivery_results", persist_results)
@@ -353,6 +354,7 @@ def test_dispatcher_retains_claim_when_timed_out_producer_reset_fails(
     event = MagicMock()
     monkeypatch.setattr(dispatcher, "_read_pending_gauge", MagicMock())
     monkeypatch.setattr(dispatcher, "_claim_pending_events", MagicMock(return_value=[event]))
+    monkeypatch.setattr(dispatcher, "_renew_claims_for_delivery", MagicMock(return_value=True))
     monkeypatch.setattr(dispatcher, "_publish_events", MagicMock())
     persist_results = MagicMock()
     monkeypatch.setattr(dispatcher, "_persist_delivery_results", persist_results)
@@ -362,6 +364,49 @@ def test_dispatcher_retains_claim_when_timed_out_producer_reset_fails(
 
     producer.reset_after_flush_failure.assert_called_once_with()
     persist_results.assert_not_called()
+
+
+def test_dispatcher_refreshes_claim_around_publish_pipeline(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    session = MagicMock()
+    session_factory = MagicMock(return_value=session)
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=producer,
+        db_session_factory=session_factory,
+    )
+    event = MagicMock(spec=module._ClaimedOutboxEvent)
+    monkeypatch.setattr(dispatcher, "_read_pending_gauge", MagicMock())
+    monkeypatch.setattr(dispatcher, "_claim_pending_events", MagicMock(return_value=[event]))
+    renew_claims = MagicMock(side_effect=[True, True])
+    monkeypatch.setattr(dispatcher, "_renew_claims_for_delivery", renew_claims)
+    monkeypatch.setattr(dispatcher, "_publish_events", MagicMock())
+    monkeypatch.setattr(dispatcher, "_flush_delivery_results", MagicMock())
+    monkeypatch.setattr(dispatcher, "_persist_delivery_results", MagicMock())
+
+    assert dispatcher._process_batch_sync() == 1
+
+    assert renew_claims.call_args_list == [
+        (([event],), {}),
+        (([event],), {}),
+    ]
+
+
+def test_dispatcher_fences_publish_when_claim_refresh_is_incomplete(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    dispatcher = module.OutboxDispatcher(kafka_producer=producer)
+    event = MagicMock(spec=module._ClaimedOutboxEvent)
+    monkeypatch.setattr(dispatcher, "_read_pending_gauge", MagicMock())
+    monkeypatch.setattr(dispatcher, "_claim_pending_events", MagicMock(return_value=[event]))
+    monkeypatch.setattr(dispatcher, "_renew_claims_for_delivery", MagicMock(return_value=False))
+    publish_events = MagicMock()
+    monkeypatch.setattr(dispatcher, "_publish_events", publish_events)
+
+    assert dispatcher._process_batch_sync() == 0
+    publish_events.assert_not_called()
 
 
 def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:

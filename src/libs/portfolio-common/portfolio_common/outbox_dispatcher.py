@@ -261,7 +261,16 @@ class OutboxDispatcher:
             delivery_ack: Dict[int, bool] = {}
             delivery_errs: Dict[int, str] = {}
 
+            # Claiming and publishing are separate transactions. Refresh the
+            # durable claim immediately before producer work so head-selection
+            # or serialization latency cannot consume the delivery lease.
+            if not self._renew_claims_for_delivery(events_to_process):
+                return 0
             self._publish_events(events_to_process, delivery_ack, delivery_errs)
+            # A large batch can spend meaningful time enqueueing messages. Refresh
+            # again before flush/result fencing so the full publish pipeline stays
+            # inside the current claim lease.
+            self._renew_claims_for_delivery(events_to_process)
             self._flush_delivery_results(events_to_process, delivery_ack, delivery_errs)
 
             with self._session_factory() as db:
@@ -375,6 +384,50 @@ class OutboxDispatcher:
                         )
                     )
                 return claimed_events
+
+    def _renew_claims_for_delivery(
+        self,
+        events_to_process: list[_ClaimedOutboxEvent],
+    ) -> bool:
+        """Extend all live claims immediately around producer work."""
+
+        if not events_to_process:
+            return True
+        with self._session_factory() as db:
+            with db.begin():
+                renewed_rows = db.execute(
+                    update(OutboxEvent)
+                    .where(or_(*(_owned_delivery_claim(event) for event in events_to_process)))
+                    .values(
+                        claim_expires_at=func.clock_timestamp()
+                        + func.make_interval(
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            self._claim_lease_seconds,
+                        )
+                    )
+                    .returning(OutboxEvent.id)
+                ).scalars()
+                renewed_ids = {int(event_id) for event_id in renewed_rows}
+        expected_ids = {int(event.id) for event in events_to_process}
+        if renewed_ids == expected_ids:
+            return True
+        logger.warning(
+            "Outbox delivery claims were not renewed for the complete batch.",
+            extra=operation_log_extra(
+                event_name="outbox.dispatcher.claim_renewal_incomplete",
+                operation="outbox.dispatch",
+                status="fenced",
+                reason_code="claim_renewal_incomplete",
+                event_count=len(expected_ids),
+                renewed_count=len(renewed_ids),
+            ),
+        )
+        return False
 
     def _publish_events(
         self,
