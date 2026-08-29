@@ -346,19 +346,98 @@ class ReprocessingWorker:
                 initial_lease_deadline=initial_lease_deadline,
             )
         )
+        deadline_task = asyncio.create_task(self._wait_until_lease_deadline(initial_lease_deadline))
+        deadline_expired = False
         try:
             done, _pending = await asyncio.wait(
-                {operation_task, renewal_task},
+                {operation_task, renewal_task, deadline_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            if deadline_task in done:
+                deadline_expired = True
+                stop_renewal.set()
+                # Cancel both tasks before waiting for either one. This keeps an
+                # uncooperative renewal I/O cleanup from delaying operation
+                # cancellation beyond the measured durable lease deadline.
+                if not operation_task.done():
+                    operation_task.cancel()
+                if not renewal_task.done():
+                    renewal_task.cancel()
+                for completed_task in (operation_task, renewal_task):
+                    if completed_task.done():
+                        try:
+                            completed_task.result()
+                        except BaseException:
+                            pass
+                await self._await_task_cleanup(operation_task)
+                self._schedule_task_cleanup(renewal_task)
+                raise ReprocessingJobOwnershipLostError(
+                    f"reprocessing job {self._job_id(job)} lease renewal deadline was exhausted"
+                )
             if renewal_task in done:
                 await renewal_task
             await operation_task
         finally:
             stop_renewal.set()
-            if not operation_task.done():
-                operation_task.cancel()
-            await asyncio.gather(operation_task, renewal_task, return_exceptions=True)
+            if not deadline_task.done():
+                deadline_task.cancel()
+            if deadline_expired:
+                self._schedule_task_cleanup(deadline_task)
+            else:
+                if not operation_task.done():
+                    operation_task.cancel()
+                await asyncio.gather(operation_task, renewal_task, return_exceptions=True)
+
+    @staticmethod
+    async def _wait_until_lease_deadline(deadline: float) -> None:
+        remaining_seconds = deadline - asyncio.get_running_loop().time()
+        if remaining_seconds > 0:
+            await asyncio.sleep(remaining_seconds)
+
+    async def _await_task_cleanup(self, task: asyncio.Task[object]) -> None:
+        if task.done():
+            return
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(task),
+                timeout=self._lease_renewal_io_timeout_seconds,
+            )
+        except BaseException:
+            return
+
+    def _schedule_task_cleanup(self, task: asyncio.Task[object]) -> None:
+        if task.done():
+            return
+
+        async def drain() -> None:
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(task),
+                    timeout=self._lease_renewal_io_timeout_seconds,
+                )
+            except BaseException:
+                return
+
+        asyncio.create_task(drain())
+
+    def _next_lease_renewal_at(self, *, now: float, lease_deadline: float) -> float:
+        """Wake before the durable deadline, retaining bounded renewal I/O budget."""
+
+        return max(
+            now,
+            min(
+                now + self._lease_renewal_interval_seconds,
+                lease_deadline - self._lease_renewal_io_timeout_seconds,
+            ),
+        )
+
+    def _next_lease_renewal_retry_at(self, *, now: float, lease_deadline: float) -> float:
+        """Back off failed renewals without scheduling beyond the safety margin."""
+
+        safety_margin_deadline = lease_deadline - self._lease_renewal_io_timeout_seconds
+        if now >= safety_margin_deadline:
+            return now + self._lease_renewal_io_timeout_seconds
+        return min(now + self._lease_renewal_io_timeout_seconds, safety_margin_deadline)
 
     async def _renew_lease_while_processing(
         self,
@@ -387,9 +466,9 @@ class ReprocessingWorker:
                 )
         # A delayed worker may receive less authority than the normal heartbeat interval.
         # Wake at the measured durable deadline rather than sleeping past it.
-        next_renewal_at = min(
-            scheduled_at + self._lease_renewal_interval_seconds,
-            lease_deadline,
+        next_renewal_at = self._next_lease_renewal_at(
+            now=scheduled_at,
+            lease_deadline=lease_deadline,
         )
         while True:
             wait_seconds = max(0.0, next_renewal_at - loop.time())
@@ -454,9 +533,9 @@ class ReprocessingWorker:
                 )
                 if stop_event.is_set() or terminal_transition_started.is_set():
                     return
-                next_renewal_at = min(
-                    loop.time() + self._lease_renewal_io_timeout_seconds,
-                    lease_deadline,
+                next_renewal_at = self._next_lease_renewal_retry_at(
+                    now=loop.time(),
+                    lease_deadline=lease_deadline,
                 )
                 continue
             if stop_event.is_set() or terminal_transition_started.is_set():
@@ -477,9 +556,9 @@ class ReprocessingWorker:
                     raise ReprocessingJobOwnershipLostError(
                         f"reprocessing job {self._job_id(job)} lease authority was lost"
                     )
-                next_renewal_at = min(
-                    renewed_at + self._lease_renewal_interval_seconds,
-                    lease_deadline,
+                next_renewal_at = self._next_lease_renewal_at(
+                    now=renewed_at,
+                    lease_deadline=lease_deadline,
                 )
                 continue
 
