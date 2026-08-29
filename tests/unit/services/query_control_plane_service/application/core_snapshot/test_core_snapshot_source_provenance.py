@@ -24,6 +24,7 @@ from src.services.query_control_plane_service.app.domain.core_snapshot import (
 )
 
 _USE_MARKET_VALUE = object()
+_USE_INSTRUMENT_CURRENCY = object()
 
 
 def _row(
@@ -41,6 +42,8 @@ def _row(
     instrument_currency: str = "USD",
     valuation_fx_rate_date: date | None = None,
     valuation_fx_rate: Decimal | None = None,
+    valuation_source_currency: str | None | object = _USE_INSTRUMENT_CURRENCY,
+    valuation_reporting_currency: str | None = "USD",
     market_evidence_timestamp: datetime | None = None,
     portfolio_evidence_timestamp: datetime | None = None,
 ) -> CoreSnapshotPositionSource:
@@ -80,6 +83,12 @@ def _row(
         ),
         business_date=business_date,
         valuation_status=valuation_status,
+        valuation_source_currency=(
+            instrument_currency
+            if valuation_source_currency is _USE_INSTRUMENT_CURRENCY
+            else cast(str | None, valuation_source_currency)
+        ),
+        valuation_reporting_currency=valuation_reporting_currency,
         valuation_fx_rate_date=valuation_fx_rate_date,
         valuation_fx_rate=valuation_fx_rate,
         portfolio_fact_created_at=portfolio_timestamp,
@@ -454,6 +463,65 @@ def test_source_provenance_accepts_exact_date_baseline_fx() -> None:
     assert resolution.supportability is CoreSnapshotValuationSupportability.READY
     assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_EVIDENCE_READY
     assert resolution.effective_as_of_date == date(2026, 2, 27)
+
+
+def test_source_provenance_uses_persisted_currency_pair_after_master_data_correction() -> None:
+    original = _resolve(
+        _row(
+            "SEC_EUR",
+            instrument_currency="EUR",
+            valuation_fx_rate_date=date(2026, 2, 27),
+            valuation_fx_rate=Decimal("1.35"),
+        ),
+        portfolio_currency="USD",
+    )
+    relabeled_master = _resolve(
+        _row(
+            "SEC_EUR",
+            instrument_currency="GBP",
+            valuation_source_currency="EUR",
+            valuation_fx_rate_date=date(2026, 2, 27),
+            valuation_fx_rate=Decimal("1.35"),
+        ),
+        portfolio_currency="USD",
+    )
+
+    assert relabeled_master.supportability is CoreSnapshotValuationSupportability.READY
+    assert original.source_provenance.market_data.source_hash == (
+        relabeled_master.source_provenance.market_data.source_hash
+    )
+    assert original.source_provenance.market_data.source_id == (
+        relabeled_master.source_provenance.market_data.source_id
+    )
+
+
+def test_source_provenance_rejects_missing_valuation_currency_pair() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_A",
+            valuation_source_currency=None,
+            valuation_reporting_currency=None,
+        )
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.source_provenance.market_data.as_of is None
+
+
+def test_source_provenance_rejects_changed_portfolio_reporting_currency() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_A",
+            valuation_source_currency="USD",
+            valuation_reporting_currency="EUR",
+        ),
+        portfolio_currency="USD",
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.source_provenance.market_data.as_of is None
 
 
 def test_market_source_identity_changes_with_same_date_baseline_fx_correction() -> None:

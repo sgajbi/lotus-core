@@ -52,6 +52,8 @@ class CoreSnapshotPositionSource:
     instrument: CoreSnapshotInstrument
     business_date: date | None = None
     valuation_status: str | None = None
+    valuation_source_currency: str | None = None
+    valuation_reporting_currency: str | None = None
     valuation_fx_rate_date: date | None = None
     valuation_fx_rate: Decimal | None = None
     portfolio_fact_created_at: datetime | None = None

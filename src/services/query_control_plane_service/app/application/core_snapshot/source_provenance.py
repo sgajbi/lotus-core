@@ -104,7 +104,8 @@ def resolve_core_snapshot_source_provenance(
                     {
                         "security_id": row.security_id,
                         "market_price": row.market_price,
-                        "market_price_currency": row.instrument.currency.strip().upper(),
+                        "market_price_currency": row.valuation_source_currency,
+                        "valuation_reporting_currency": row.valuation_reporting_currency,
                         "market_price_date": row.business_date,
                         "valuation_status": row.valuation_status,
                         "valuation_fx_rate_date": row.valuation_fx_rate_date,
@@ -178,9 +179,7 @@ def _requires_baseline_fx_evidence(
     *,
     portfolio_currency: str,
 ) -> bool:
-    is_cross_currency = (
-        row.instrument.currency.strip().upper() != portfolio_currency.strip().upper()
-    )
+    is_cross_currency = row.valuation_source_currency != portfolio_currency.strip().upper()
     return is_cross_currency and not _is_quote_independent_flat_position(row)
 
 
@@ -197,6 +196,11 @@ def _has_required_baseline_market_evidence(
 ) -> bool:
     if row.market_value_local is None:
         return False
+    if not _has_required_baseline_currency_evidence(
+        row,
+        portfolio_currency=portfolio_currency,
+    ):
+        return False
     if not _has_required_baseline_price_evidence(row):
         return False
     if _requires_baseline_fx_evidence(row, portfolio_currency=portfolio_currency):
@@ -206,6 +210,20 @@ def _has_required_baseline_market_evidence(
             and row.valuation_fx_rate > 0
         )
     return row.valuation_fx_rate_date is None and row.valuation_fx_rate is None
+
+
+def _has_required_baseline_currency_evidence(
+    row: CoreSnapshotPositionSource,
+    *,
+    portfolio_currency: str,
+) -> bool:
+    source_currency = str(row.valuation_source_currency or "").strip().upper()
+    reporting_currency = str(row.valuation_reporting_currency or "").strip().upper()
+    return bool(
+        len(source_currency) == 3
+        and len(reporting_currency) == 3
+        and reporting_currency == portfolio_currency.strip().upper()
+    )
 
 
 def _is_quote_independent_flat_position(row: CoreSnapshotPositionSource) -> bool:

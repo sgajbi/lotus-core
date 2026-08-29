@@ -4317,15 +4317,18 @@ Most relevant current governance:
      fail on empty scans, and intentionally ignore untracked generated build output. Do not add
      headroom, silent exclusions, or baseline entries without owning backlog evidence.
 
-257. A `DailyPositionSnapshot` cross-currency valuation must preserve the exact FX fact used in
-     `valuation_fx_rate_date` and `valuation_fx_rate`. The pair is jointly present or jointly null;
-     a positive finite value is required when present. `VALUED_CURRENT` proves exact-date price
-     evidence; it does not prove FX currency conversion freshness or identity. QCP snapshot
-     readiness requires the persisted FX date to equal the requested business date and binds the
-     exact rate into market-data lineage for every cross-currency baseline row. Same-currency rows
-     retain null FX evidence. Legacy or newly produced cross-currency rows with missing, invalid,
-     or carried-forward FX facts fail closed and require revaluation; never reconstruct the
-     historical valuation input from the current FX table.
+257. A `DailyPositionSnapshot` valuation must preserve its valuation-time source/reporting currency
+     pair. A cross-currency valuation must additionally preserve the exact FX fact used in
+     `valuation_fx_rate_date` and `valuation_fx_rate`. Each pair is jointly present or jointly null;
+     a positive finite FX value is required when present. `VALUED_CURRENT` proves exact-date price
+     evidence; it does not prove currency or FX conversion freshness or identity. QCP snapshot
+     readiness uses the persisted source currency, requires the persisted reporting currency to
+     equal the current portfolio context, requires the FX date to equal the requested business
+     date, and binds the exact pair and rate into market-data lineage. Same-currency rows retain
+     null FX evidence. Legacy rows with missing currency receipt, or cross-currency rows with
+     missing, invalid, or carried-forward FX facts, fail closed and require revaluation. Never
+     reconstruct historical valuation inputs from mutable instrument master data or the current FX
+     table.
 
 ## Context Maintenance Rule
 

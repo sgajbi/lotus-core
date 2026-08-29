@@ -171,6 +171,8 @@ section shape and derive the usage line from a fresh scan rather than copying a 
   - `unrealized_gain_loss` (Numeric): Domain attribute used by the owning module.
   - `unrealized_gain_loss_local` (Numeric): Domain attribute used by the owning module.
   - `valuation_status` (String): Domain attribute used by the owning module.
+  - `valuation_source_currency` (String(3), nullable): Canonical currency of the price/local value actually used by the valuation; jointly present with `valuation_reporting_currency` for newly evaluated snapshots.
+  - `valuation_reporting_currency` (String(3), nullable): Canonical portfolio reporting currency actually used by the valuation; jointly present with `valuation_source_currency` so mutable master data cannot relabel historical evidence.
   - `valuation_fx_rate_date` (Date, nullable): Exact effective date of the FX row used for a cross-currency valuation; null for same-currency, unvalued, failed, or legacy snapshots without authoritative lineage.
   - `valuation_fx_rate` (Numeric(18,10), nullable): Exact positive finite FX value paired with `valuation_fx_rate_date`; both fields must be present or both null so a same-date source correction changes lineage deterministically.
   - `created_at` (DateTime): Server timestamp when row was created.

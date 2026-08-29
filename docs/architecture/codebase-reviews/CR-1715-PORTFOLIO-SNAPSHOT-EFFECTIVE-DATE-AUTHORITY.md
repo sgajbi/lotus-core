@@ -24,15 +24,20 @@ for source-effective dates.
 
 - `ResolvedFxRate` and projected-position resolution retain exact source dates without attaching a
   fabricated date to same-currency identity conversion.
-- `DailyPositionSnapshot` persists the actual FX effective date and exact rate used by
-  cross-currency valuation. The database enforces their atomicity and positive finite value;
-  legacy rows without that lineage and carried-forward rates fail closed until revaluation.
+- `DailyPositionSnapshot` persists the source and reporting currencies used by valuation plus the
+  actual FX effective date and exact rate used by cross-currency valuation. The database enforces
+  canonical currency-pair atomicity and positive finite FX evidence; legacy rows without that
+  receipt and carried-forward rates fail closed until revaluation.
 - One QCP application policy resolves source-family dates, deterministic hashes and snapshot ids,
   freshness, readiness, and stable failure reasons.
 - `CoreSnapshotResponse` publishes a typed `lotus.source-provenance.v1` envelope and an explicit
   valuation supportability result.
 - Source provenance is bound into input lineage, response content identity, and runtime lineage;
   same-date FX corrections change market-data identity without conflating holdings changes.
+- Baseline positions and market-data lineage use the persisted valuation-time currency pair, not
+  mutable current instrument master data. A later instrument-currency correction therefore cannot
+  relabel historical price or FX evidence; a changed portfolio reporting currency fails closed
+  until the position is revalued in that reporting context.
 - Portfolio and market-data provenance timestamps are derived independently. Portfolio timestamps
   come from the selected current-epoch position facts; market-data timestamps come from the
   persisted valuation snapshot plus each price and non-identity FX observation actually used.
@@ -44,10 +49,11 @@ Historical cost-basis fallback, incomplete local or reporting values, mixed date
 rows with missing FX lineage, and carried-forward price or FX evidence remain unavailable. No test
 timeout, assertion, quality gate, or failure mapping was weakened.
 
-The required persisted FX fact adds nine lines to the legacy shared ORM module's exact
+The complete persisted valuation receipt adds 23 lines to the legacy shared ORM module's exact
 source-size ceiling under #1035; #462 remains the owner of its decomposition. The same branch banks
-a 13-line reduction in the oversized QCP integration router, so aggregate governed exception size
-still decreases and neither baseline receives headroom.
+a 13-line reduction in the oversized QCP integration router. The tracked exception total therefore
+increases by ten necessary lines without adding headroom: both files remain exact-ratcheted, and
+future growth or stale baselines fail the source-size gate.
 
 ## Proof
 
@@ -56,6 +62,8 @@ Focused proof covers:
 - exact coherent date readiness and stable identity under input reordering;
 - missing, mixed, stale, historical-fallback, carried-forward, and same-date-corrected evidence;
 - projected price and FX date propagation;
+- stable valuation currency identity after mutable instrument-master correction and fail-closed
+  behavior after reporting-currency drift;
 - independent portfolio/market observation timestamps and stable value identities;
 - fail-closed response behavior when a non-flat current row lacks its local market value;
 - service lineage and current-evidence classification;

@@ -295,6 +295,8 @@ class DailyPositionSnapshot(Base):
     unrealized_price_gain_loss = Column(ExactNumeric(18, 10), nullable=True)
     unrealized_fx_gain_loss = Column(ExactNumeric(18, 10), nullable=True)
     valuation_status = Column(String, nullable=False, server_default="UNVALUED", index=True)
+    valuation_source_currency = Column(String(3), nullable=True)
+    valuation_reporting_currency = Column(String(3), nullable=True)
     valuation_fx_rate_date = Column(Date, nullable=True)
     valuation_fx_rate = Column(ExactNumeric(18, 10), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -324,8 +326,20 @@ class DailyPositionSnapshot(Base):
             "(valuation_fx_rate_date IS NULL AND valuation_fx_rate IS NULL) OR "
             "(valuation_fx_rate_date IS NOT NULL "
             "AND valuation_fx_rate IS NOT NULL "
+            "AND valuation_source_currency IS NOT NULL "
+            "AND valuation_reporting_currency IS NOT NULL "
+            "AND valuation_source_currency <> valuation_reporting_currency "
             "AND CAST(valuation_fx_rate AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity'))",
             name="ck_daily_position_snapshot_valuation_fx_fact",
+        ),
+        CheckConstraint(
+            "(valuation_source_currency IS NULL AND valuation_reporting_currency IS NULL) OR "
+            "(valuation_source_currency IS NOT NULL AND valuation_reporting_currency IS NOT NULL "
+            "AND valuation_source_currency = upper(btrim(valuation_source_currency)) "
+            "AND valuation_reporting_currency = upper(btrim(valuation_reporting_currency)) "
+            "AND char_length(valuation_source_currency) = 3 "
+            "AND char_length(valuation_reporting_currency) = 3)",
+            name="ck_daily_snapshot_valuation_currency_pair",
         ),
         CheckConstraint("valuation_fx_rate > 0", name="ck_daily_snapshot_fx_rate_positive"),
         UniqueConstraint(

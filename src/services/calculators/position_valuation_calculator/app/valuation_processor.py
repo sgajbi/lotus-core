@@ -381,6 +381,8 @@ class ValuationJobProcessor:
     ) -> ValuationSnapshotResult:
         snapshot.valuation_fx_rate_date = None
         snapshot.valuation_fx_rate = None
+        snapshot.valuation_source_currency = None
+        snapshot.valuation_reporting_currency = None
         book_scope = resolve_optional_valuation_book_scope(
             tenant_id=portfolio.tenant_id,
             legal_book_id=portfolio.legal_book_id,
@@ -447,8 +449,14 @@ class ValuationJobProcessor:
         portfolio: Portfolio,
         price: MarketPrice | None,
     ) -> ValuationSnapshotResult:
+        instrument_currency = _normalize_currency_code(instrument.currency)
+        portfolio_currency = _normalize_currency_code(portfolio.base_currency)
         if self._is_flat_position(snapshot):
-            self._apply_flat_position_valuation(snapshot)
+            self._apply_flat_position_valuation(
+                snapshot,
+                source_currency=instrument_currency,
+                reporting_currency=portfolio_currency,
+            )
             return ValuationSnapshotResult(
                 snapshot=snapshot,
                 job_failure_reason=None,
@@ -483,8 +491,6 @@ class ValuationJobProcessor:
                 job_failure_reason=BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
             )
 
-        instrument_currency = _normalize_currency_code(instrument.currency)
-        portfolio_currency = _normalize_currency_code(portfolio.base_currency)
         price_currency = _normalize_currency_code(price.currency)
         fx_rate = await self._instrument_to_portfolio_fx_rate(
             repo=repo,
@@ -520,6 +526,8 @@ class ValuationJobProcessor:
                 event=event,
                 valuation_result=valuation_result,
                 fx_rate=fx_rate,
+                source_currency=price_currency,
+                reporting_currency=portfolio_currency,
             )
             return ValuationSnapshotResult(
                 snapshot=snapshot,
@@ -550,7 +558,12 @@ class ValuationJobProcessor:
         )
 
     @staticmethod
-    def _apply_flat_position_valuation(snapshot: DailyPositionSnapshot) -> None:
+    def _apply_flat_position_valuation(
+        snapshot: DailyPositionSnapshot,
+        *,
+        source_currency: str,
+        reporting_currency: str,
+    ) -> None:
         """Persist an exact zero valuation without fabricating price authority."""
 
         snapshot.market_value = ZERO
@@ -560,6 +573,11 @@ class ValuationJobProcessor:
         snapshot.unrealized_price_gain_loss = ZERO
         snapshot.unrealized_fx_gain_loss = ZERO
         snapshot.valuation_status = VALUATION_VALUED_CURRENT
+        ValuationJobProcessor._apply_valuation_currency_pair(
+            snapshot,
+            source_currency=source_currency,
+            reporting_currency=reporting_currency,
+        )
 
     async def _value_authoritative_snapshot(
         self,
@@ -634,6 +652,8 @@ class ValuationJobProcessor:
             price_fact=price_fact,
             result=result,
             fx_rate=fx_rate,
+            source_currency=price_fact.currency,
+            reporting_currency=portfolio_currency,
         )
         assignment = policy_resolution.assignment
         return ValuationSnapshotResult(
@@ -658,6 +678,8 @@ class ValuationJobProcessor:
         price_fact: MarketPriceSourceFact,
         result: AuthoritativeValuationResult,
         fx_rate: FxRate | None,
+        source_currency: str,
+        reporting_currency: str,
     ) -> None:
         snapshot.market_price = price_fact.price
         snapshot.market_value = result.market_value_reporting
@@ -669,6 +691,11 @@ class ValuationJobProcessor:
         snapshot.valuation_status = VALUATION_VALUED_CURRENT
         snapshot.valuation_fx_rate_date = fx_rate.rate_date if fx_rate is not None else None
         snapshot.valuation_fx_rate = fx_rate.rate if fx_rate is not None else None
+        ValuationJobProcessor._apply_valuation_currency_pair(
+            snapshot,
+            source_currency=source_currency,
+            reporting_currency=reporting_currency,
+        )
 
     @staticmethod
     async def _instrument_to_portfolio_fx_rate(
@@ -720,6 +747,8 @@ class ValuationJobProcessor:
         event: PortfolioValuationRequiredEvent,
         valuation_result: ValuationComponents,
         fx_rate: FxRate | None,
+        source_currency: str,
+        reporting_currency: str,
     ) -> None:
         snapshot.market_price = price.price
         snapshot.market_value = valuation_result.market_value_base
@@ -735,6 +764,21 @@ class ValuationJobProcessor:
         )
         snapshot.valuation_fx_rate_date = fx_rate.rate_date if fx_rate is not None else None
         snapshot.valuation_fx_rate = fx_rate.rate if fx_rate is not None else None
+        ValuationJobProcessor._apply_valuation_currency_pair(
+            snapshot,
+            source_currency=source_currency,
+            reporting_currency=reporting_currency,
+        )
+
+    @staticmethod
+    def _apply_valuation_currency_pair(
+        snapshot: DailyPositionSnapshot,
+        *,
+        source_currency: str,
+        reporting_currency: str,
+    ) -> None:
+        snapshot.valuation_source_currency = _normalize_currency_code(source_currency)
+        snapshot.valuation_reporting_currency = _normalize_currency_code(reporting_currency)
 
     async def _complete_valuation_job(
         self,

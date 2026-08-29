@@ -229,11 +229,13 @@ router inside the operational read plane.
   A valuation context is `READY` only when all selected portfolio rows and every material price or
   FX observation prove one effective date equal to the requested business date. Missing values,
   mixed dates, historical cost-basis fallback, and carried-forward price or FX evidence remain
-  explicit `UNAVAILABLE` reasons. Cross-currency baseline positions use the exact FX effective date
-  and value persisted with the valuation. The value is part of market-data identity, so a same-date
-  correction cannot retain stale lineage; a current price status cannot substitute for missing FX
-  evidence, and an otherwise current row with a missing local or reporting value remains
-  unavailable. Portfolio and market-data timestamps follow their own evidence families, so a
+  explicit `UNAVAILABLE` reasons. Baseline positions use the source and reporting currencies
+  persisted with the valuation, not mutable current instrument master data. Cross-currency rows
+  additionally use the exact persisted FX effective date and value. The currency pair and FX value
+  are part of market-data identity, so a master-data or same-date FX correction cannot retain stale
+  lineage; a changed portfolio reporting currency, current price status with missing FX evidence,
+  or otherwise current row with a missing local or reporting value remains unavailable. Portfolio
+  and market-data timestamps follow their own evidence families, so a
   market-only revaluation cannot advance the portfolio timestamp. Same-currency positions need no
   FX fact. Source-owned dates remain authoritative:
   consumers must not replace them with request or wall-clock dates, and missing cross-currency FX

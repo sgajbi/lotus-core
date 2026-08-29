@@ -351,6 +351,12 @@ def _position_source(
         instrument=_instrument_record(instrument),
         business_date=(row.date if use_snapshot else row.position_date),
         valuation_status=getattr(row, "valuation_status", None) if use_snapshot else None,
+        valuation_source_currency=(
+            getattr(row, "valuation_source_currency", None) if use_snapshot else None
+        ),
+        valuation_reporting_currency=(
+            getattr(row, "valuation_reporting_currency", None) if use_snapshot else None
+        ),
         valuation_fx_rate_date=(
             getattr(row, "valuation_fx_rate_date", None) if use_snapshot else None
         ),
