@@ -47,7 +47,7 @@ def resolve_core_snapshot_source_provenance(
 ) -> CoreSnapshotSourceProvenanceResolution:
     """Build source-owned dates without substituting the caller's requested date."""
 
-    portfolio_dates = tuple(row.business_date for row in position_rows)
+    portfolio_dates = tuple(row.portfolio_business_date for row in position_rows)
     portfolio_date = _resolve_family_date(
         dates=portfolio_dates,
         requested_as_of_date=requested_as_of_date,
@@ -249,7 +249,7 @@ def _portfolio_source_hash(
                         "quantity": row.quantity,
                         "cost_basis": row.cost_basis,
                         "cost_basis_local": row.cost_basis_local,
-                        "business_date": row.business_date,
+                        "portfolio_business_date": row.portfolio_business_date,
                         "epoch": row.epoch,
                         "instrument": {
                             "security_id": row.instrument.security_id,
@@ -372,6 +372,8 @@ def _latest_portfolio_timestamp(
         for timestamp in (
             row.portfolio_fact_created_at,
             row.portfolio_fact_updated_at,
+            row.instrument.created_at,
+            row.instrument.updated_at,
         )
         if timestamp is not None
     )

@@ -62,6 +62,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
         ranked = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
+                latest_history.c.portfolio_business_date,
                 latest_history.c.source_created_at,
                 latest_history.c.source_updated_at,
                 func.row_number()
@@ -92,6 +93,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 DailyPositionSnapshot,
                 Instrument,
                 PositionState,
+                ranked.c.portfolio_business_date,
                 ranked.c.source_created_at,
                 ranked.c.source_updated_at,
             )
@@ -120,10 +122,18 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 instrument,
                 state,
                 use_snapshot=True,
+                portfolio_business_date=portfolio_business_date,
                 portfolio_fact_created_at=source_created_at,
                 portfolio_fact_updated_at=source_updated_at,
             )
-            for row, instrument, state, source_created_at, source_updated_at in result.all()
+            for (
+                row,
+                instrument,
+                state,
+                portfolio_business_date,
+                source_created_at,
+                source_updated_at,
+            ) in result.all()
         ]
 
     async def get_position_history(
@@ -283,6 +293,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
+                PositionHistory.position_date.label("portfolio_business_date"),
                 PositionHistory.created_at.label("source_created_at"),
                 PositionHistory.updated_at.label("source_updated_at"),
                 func.row_number()
@@ -323,6 +334,8 @@ def _instrument_record(row: Instrument) -> CoreSnapshotInstrument:
         ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
         ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
         liquidity_tier=row.liquidity_tier,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -332,6 +345,7 @@ def _position_source(
     state: PositionState,
     *,
     use_snapshot: bool,
+    portfolio_business_date: date | None = None,
     portfolio_fact_created_at: datetime | None = None,
     portfolio_fact_updated_at: datetime | None = None,
 ) -> CoreSnapshotPositionSource:
@@ -366,6 +380,9 @@ def _position_source(
         ),
         portfolio_fact_updated_at=(
             portfolio_fact_updated_at if use_snapshot else getattr(row, "updated_at", None)
+        ),
+        portfolio_business_date=(
+            portfolio_business_date if use_snapshot else getattr(row, "position_date", None)
         ),
     )
 

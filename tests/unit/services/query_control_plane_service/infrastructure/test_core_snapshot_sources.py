@@ -30,6 +30,7 @@ class _Result:
 
 
 def _instrument(security_id: str = " SEC_1 ") -> SimpleNamespace:
+    created_at = datetime(2026, 4, 8, 1, 0, tzinfo=UTC)
     return SimpleNamespace(
         security_id=security_id,
         name="Global Bond",
@@ -43,6 +44,8 @@ def _instrument(security_id: str = " SEC_1 ") -> SimpleNamespace:
         ultimate_parent_issuer_id="ISS_1",
         ultimate_parent_issuer_name="Singapore Treasury",
         liquidity_tier="T1",
+        created_at=created_at,
+        updated_at=datetime(2026, 4, 9, 1, 0, tzinfo=UTC),
     )
 
 
@@ -122,7 +125,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     portfolio_updated_at = datetime(2026, 4, 9, 9, 0, tzinfo=UTC)
     session = AsyncMock(spec=AsyncSession)
     snapshot = SimpleNamespace(
-        date=date(2026, 4, 10),
+        date=date(2026, 4, 9),
         security_id=" SEC_1 ",
         quantity=Decimal("10"),
         market_price=Decimal("100"),
@@ -144,6 +147,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
                 snapshot,
                 _instrument(),
                 _state(),
+                date(2026, 4, 10),
                 portfolio_created_at,
                 portfolio_updated_at,
             )
@@ -161,7 +165,8 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].market_value == Decimal("1000")
     assert records[0].cost_basis == Decimal("950")
     assert records[0].epoch == 4
-    assert records[0].business_date == date(2026, 4, 10)
+    assert records[0].business_date == date(2026, 4, 9)
+    assert records[0].portfolio_business_date == date(2026, 4, 10)
     assert records[0].valuation_status == "VALUED_STALE"
     assert records[0].valuation_source_currency == "EUR"
     assert records[0].valuation_reporting_currency == "SGD"
@@ -170,6 +175,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].portfolio_fact_created_at == portfolio_created_at
     assert records[0].portfolio_fact_updated_at == portfolio_updated_at
     assert records[0].instrument.name == "Global Bond"
+    assert records[0].instrument.created_at == datetime(2026, 4, 8, 1, 0, tzinfo=UTC)
 
     sql = str(
         session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
@@ -177,6 +183,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert "position_history.epoch = position_state.epoch" in sql
     assert "daily_position_snapshots.epoch" in sql
     assert "daily_position_snapshots.date <= '2026-04-10'" in sql
+    assert "position_history.position_date" in sql
     assert "row_number() over" in sql
 
 
@@ -205,6 +212,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert records[0].market_value_local is None
     assert records[0].cost_basis == Decimal("950")
     assert records[0].business_date == date(2026, 4, 9)
+    assert records[0].portfolio_business_date == date(2026, 4, 9)
     assert records[0].valuation_status is None
     assert records[0].valuation_source_currency is None
     assert records[0].valuation_reporting_currency is None

@@ -141,6 +141,7 @@ def _position_source(
         valuation_fx_rate=getattr(row, "valuation_fx_rate", None),
         portfolio_fact_created_at=getattr(row, "created_at", None),
         portfolio_fact_updated_at=getattr(row, "updated_at", None),
+        portfolio_business_date=getattr(row, "portfolio_business_date", date(2026, 2, 27)),
     )
 
 

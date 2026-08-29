@@ -18,6 +18,7 @@ from src.services.query_control_plane_service.app.domain.core_snapshot import (
 def _row(
     *,
     business_date: date | None = date(2026, 4, 10),
+    portfolio_business_date: date | None = date(2026, 4, 10),
     epoch: int = 4,
     updated_at: datetime = datetime(2026, 4, 10, 2, tzinfo=UTC),
     security_id: str = "SEC_1",
@@ -56,6 +57,7 @@ def _row(
         valuation_status=valuation_status,
         valuation_fx_rate_date=valuation_fx_rate_date,
         valuation_fx_rate=valuation_fx_rate,
+        portfolio_business_date=portfolio_business_date,
     )
 
 
@@ -90,10 +92,24 @@ def test_core_snapshot_scopes_coalesce_mixed_epochs_at_collective_target() -> No
 
 
 def test_core_snapshot_scopes_fail_closed_for_unscoped_rows() -> None:
-    scopes = core_snapshot_reconciliation_scopes([_row(business_date=None)])
+    scopes = core_snapshot_reconciliation_scopes([_row(portfolio_business_date=None)])
 
     assert scopes.items == ()
     assert scopes.unscoped_source_row_count == 1
+
+
+def test_core_snapshot_scopes_use_position_history_date_not_market_snapshot_date() -> None:
+    scopes = core_snapshot_reconciliation_scopes(
+        [
+            _row(
+                business_date=date(2026, 4, 9),
+                portfolio_business_date=date(2026, 4, 10),
+            )
+        ]
+    )
+
+    assert len(scopes.items) == 1
+    assert scopes.items[0].business_date == date(2026, 4, 10)
 
 
 def test_core_snapshot_source_hash_is_order_independent_and_value_sensitive() -> None:

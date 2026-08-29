@@ -31,6 +31,8 @@ class CoreSnapshotInstrument:
     ultimate_parent_issuer_id: str | None
     ultimate_parent_issuer_name: str | None
     liquidity_tier: str | None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,7 @@ class CoreSnapshotPositionSource:
     valuation_fx_rate: Decimal | None = None
     portfolio_fact_created_at: datetime | None = None
     portfolio_fact_updated_at: datetime | None = None
+    portfolio_business_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
