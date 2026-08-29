@@ -468,6 +468,49 @@ async def test_stale_reprocessing_claim_locks_rows_only_after_identity_phase(
     savepoint.rollback.assert_not_awaited()
 
 
+async def test_stale_reprocessing_claim_rolls_back_before_advisory_unlock_on_failure(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    stale_row = MagicMock(
+        id=10,
+        attempt_count=1,
+        job_type="LEASE_LIFECYCLE_PROOF",
+        lease_expires_at=LEASE_EXPIRES_AT,
+    )
+    discovery_result = MagicMock()
+    discovery_result.all.return_value = [stale_row]
+    unlock_result = MagicMock()
+    unlock_result.scalar_one.return_value = True
+    call_order: list[str] = []
+
+    def execute(statement, *_args):
+        sql = str(statement)
+        if "pg_advisory_lock" in sql:
+            call_order.append("cohort_lock")
+            return MagicMock()
+        if "pg_advisory_unlock" in sql:
+            call_order.append("cohort_unlock")
+            return unlock_result
+        if "FOR UPDATE" in sql:
+            call_order.append("row_cohort")
+            raise RuntimeError("claim failed")
+        call_order.append("discovery")
+        return discovery_result
+
+    mock_db_session.execute.side_effect = execute
+    savepoint = AsyncMock()
+    mock_db_session.begin_nested.return_value = savepoint
+
+    with pytest.raises(RuntimeError, match="claim failed"):
+        await repository._claim_stale_job_cohort(max_attempts=3)
+
+    assert call_order == ["discovery", "cohort_lock", "row_cohort", "cohort_unlock"]
+    savepoint.rollback.assert_awaited_once_with()
+    savepoint.commit.assert_not_awaited()
+    unlock_result.scalar_one.assert_called_once_with()
+
+
 async def test_stale_reprocessing_recovery_logs_counts_without_identifier_collections(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
