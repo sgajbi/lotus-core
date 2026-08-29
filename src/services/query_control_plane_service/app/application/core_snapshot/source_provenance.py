@@ -61,6 +61,7 @@ def resolve_core_snapshot_source_provenance(
         and row.market_value is not None
         and row.business_date is not None
         and row.valuation_status == "VALUED_CURRENT"
+        and _has_required_baseline_price_evidence(row)
     )
     market_observations = _market_observations(
         reporting_fx=reporting_fx,
@@ -96,14 +97,12 @@ def resolve_core_snapshot_source_provenance(
         str,
         canonical_content_hash(
             {
-                "position_valuations": [
+                "baseline_price_evidence": [
                     {
                         "security_id": row.security_id,
-                        "business_date": row.business_date,
-                        "epoch": row.epoch,
                         "market_price": row.market_price,
-                        "market_value": row.market_value,
-                        "market_value_local": row.market_value_local,
+                        "market_price_currency": row.instrument.currency.strip().upper(),
+                        "market_price_date": row.business_date,
                         "valuation_status": row.valuation_status,
                         "valuation_fx_rate_date": row.valuation_fx_rate_date,
                     }
@@ -173,12 +172,23 @@ def _requires_baseline_fx_evidence(
     is_cross_currency = (
         row.instrument.currency.strip().upper() != portfolio_currency.strip().upper()
     )
-    is_flat = is_quote_independent_flat_position(
-        quantity=row.quantity,
-        cost_basis_reporting=row.cost_basis,
-        cost_basis_local=row.cost_basis_local,
+    return is_cross_currency and not _is_quote_independent_flat_position(row)
+
+
+def _has_required_baseline_price_evidence(row: CoreSnapshotPositionSource) -> bool:
+    if _is_quote_independent_flat_position(row):
+        return bool(row.market_value == 0 and row.market_value_local == 0)
+    return row.market_price is not None
+
+
+def _is_quote_independent_flat_position(row: CoreSnapshotPositionSource) -> bool:
+    return bool(
+        is_quote_independent_flat_position(
+            quantity=row.quantity,
+            cost_basis_reporting=row.cost_basis,
+            cost_basis_local=row.cost_basis_local,
+        )
     )
-    return is_cross_currency and not is_flat
 
 
 def _portfolio_source_hash(

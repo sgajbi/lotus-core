@@ -7,6 +7,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.mark
     MarketDataObservation,
     ResolvedFxRate,
 )
+from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
+    core_snapshot_source_content_hash,
+)
 from src.services.query_control_plane_service.app.application.core_snapshot.source_provenance import (  # noqa: E501
     resolve_core_snapshot_source_provenance,
 )
@@ -29,6 +32,7 @@ def _row(
     market_value: Decimal | None = Decimal("100"),
     cost_basis: Decimal = Decimal("80"),
     cost_basis_local: Decimal = Decimal("80"),
+    epoch: int = 7,
     valuation_status: str | None = "VALUED_CURRENT",
     instrument_currency: str = "USD",
     valuation_fx_rate_date: date | None = None,
@@ -42,7 +46,7 @@ def _row(
         market_value_local=market_value,
         cost_basis=cost_basis,
         cost_basis_local=cost_basis_local,
-        epoch=7,
+        epoch=epoch,
         source_created_at=evidence_timestamp,
         source_updated_at=evidence_timestamp,
         state_created_at=evidence_timestamp,
@@ -181,9 +185,11 @@ def test_market_source_identity_changes_with_authoritative_fx_fact() -> None:
     )
 
 
-def test_market_value_correction_does_not_restate_portfolio_source_identity() -> None:
-    original = _resolve(_row("SEC_A", market_value=Decimal("100")))
-    corrected = _resolve(_row("SEC_A", market_value=Decimal("105")))
+def test_market_value_correction_changes_aggregate_not_source_family_identities() -> None:
+    original_row = _row("SEC_A", market_value=Decimal("100"))
+    corrected_row = _row("SEC_A", market_value=Decimal("105"))
+    original = _resolve(original_row)
+    corrected = _resolve(corrected_row)
 
     assert original.source_provenance.portfolio.source_hash == (
         corrected.source_provenance.portfolio.source_hash
@@ -191,11 +197,31 @@ def test_market_value_correction_does_not_restate_portfolio_source_identity() ->
     assert original.source_provenance.portfolio.source_id == (
         corrected.source_provenance.portfolio.source_id
     )
-    assert original.source_provenance.market_data.source_hash != (
+    assert original.source_provenance.market_data.source_hash == (
         corrected.source_provenance.market_data.source_hash
     )
-    assert original.source_provenance.market_data.source_id != (
+    assert original.source_provenance.market_data.source_id == (
         corrected.source_provenance.market_data.source_id
+    )
+    assert core_snapshot_source_content_hash([original_row]) != core_snapshot_source_content_hash(
+        [corrected_row]
+    )
+
+
+def test_holdings_change_does_not_restate_market_source_identity() -> None:
+    original = _resolve(_row("SEC_A", quantity=Decimal("10"), market_value=Decimal("100"), epoch=7))
+    increased = _resolve(
+        _row("SEC_A", quantity=Decimal("12"), market_value=Decimal("120"), epoch=8)
+    )
+
+    assert original.source_provenance.portfolio.source_hash != (
+        increased.source_provenance.portfolio.source_hash
+    )
+    assert original.source_provenance.market_data.source_hash == (
+        increased.source_provenance.market_data.source_hash
+    )
+    assert original.source_provenance.market_data.source_id == (
+        increased.source_provenance.market_data.source_id
     )
 
 
@@ -251,6 +277,16 @@ def test_source_provenance_rejects_partially_valued_snapshot() -> None:
     assert resolution.source_provenance.market_data.source_hash != (
         complete.source_provenance.market_data.source_hash
     )
+
+
+def test_source_provenance_rejects_nonflat_snapshot_without_market_price() -> None:
+    resolution = _resolve(_row("SEC_A", market_price=None))
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.market_data.as_of is None
+    assert resolution.source_provenance.market_data.freshness_status == "UNAVAILABLE"
 
 
 def test_source_provenance_rejects_carried_forward_baseline_price() -> None:
@@ -318,6 +354,7 @@ def test_source_provenance_does_not_fabricate_fx_for_flat_position() -> None:
             "SEC_EUR",
             instrument_currency="EUR",
             quantity=Decimal("0"),
+            market_price=None,
             cost_basis=Decimal("0"),
             cost_basis_local=Decimal("0"),
             market_value=Decimal("0"),
@@ -328,3 +365,20 @@ def test_source_provenance_does_not_fabricate_fx_for_flat_position() -> None:
     assert resolution.supportability is CoreSnapshotValuationSupportability.READY
     assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_EVIDENCE_READY
     assert resolution.effective_as_of_date == date(2026, 2, 27)
+
+
+def test_source_provenance_rejects_unpriced_flat_position_with_nonzero_value() -> None:
+    resolution = _resolve(
+        _row(
+            "SEC_ZERO_INVALID",
+            quantity=Decimal("0"),
+            market_price=None,
+            cost_basis=Decimal("0"),
+            cost_basis_local=Decimal("0"),
+            market_value=Decimal("1"),
+        )
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
+    assert resolution.source_provenance.market_data.as_of is None
