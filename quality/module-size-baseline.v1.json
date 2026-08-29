@@ -1,0 +1,83 @@
+{
+  "schema_version": "lotus.core.module-size-baseline.v1",
+  "threshold_lines": 1500,
+  "scan_roots": [
+    "src"
+  ],
+  "recorded_on": "2026-08-29",
+  "tracked_files_only": true,
+  "entries": [
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
+      "lines": 5630,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy shared ORM monolith; bounded-context decomposition is tracked by #462.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/contracts/operations.py",
+      "lines": 3013,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy QCP operations contract monolith pending route-family decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/routers/integration.py",
+      "lines": 2598,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy QCP integration router pending route-family decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/application/operations/service.py",
+      "lines": 2032,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy QCP operations application service pending route-family decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
+      "lines": 1850,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy QCP operations repository pending route-family decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
+      "lines": 1649,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy shared consumer pending lifecycle, decoding, dispatch and telemetry decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
+      "lines": 1600,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy analytics application service pending family-aligned decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py",
+      "lines": 1597,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy reprocessing repository pending bounded repository decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    },
+    {
+      "path": "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py",
+      "lines": 1555,
+      "owner": "lotus-core maintainers",
+      "rationale": "Legacy cost-basis calculator pending invariant-preserving domain decomposition.",
+      "issue": "#462",
+      "expires_on": "2027-02-28"
+    }
+  ]
+}
