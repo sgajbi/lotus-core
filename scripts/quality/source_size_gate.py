@@ -34,13 +34,21 @@ def load_policy(path: Path) -> SourceSizePolicy:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != "lotus.core.module-size-baseline.v1":
         raise ValueError("Module-size baseline has an unsupported schema_version.")
+    if payload.get("tracked_files_only") is not True:
+        raise ValueError("Module-size baseline must set tracked_files_only to true.")
+    try:
+        date.fromisoformat(str(payload.get("recorded_on", "")))
+    except ValueError as exc:
+        raise ValueError("Module-size baseline recorded_on must be an ISO date.") from exc
     threshold = payload.get("threshold_lines")
     if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 1:
         raise ValueError("Module-size threshold_lines must be a positive integer.")
     roots = payload.get("scan_roots")
     if not isinstance(roots, list) or not roots:
         raise ValueError("Module-size scan_roots must be a non-empty list.")
-    scan_roots = tuple(_normalized_path(str(root)) for root in roots)
+    if any(not isinstance(root, str) or not root.strip() for root in roots):
+        raise ValueError("Module-size scan_roots entries must be non-empty strings.")
+    scan_roots = tuple(_normalized_path(root) for root in roots)
     if len(set(scan_roots)) != len(scan_roots):
         raise ValueError("Module-size scan_roots must not contain duplicates.")
     if any(

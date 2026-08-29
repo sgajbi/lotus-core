@@ -6,6 +6,7 @@ import math
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
+from datetime import date
 from pathlib import Path, PurePosixPath
 
 RANK_ORDER = {"A": 0, "B": 1, "C": 2}
@@ -25,6 +26,12 @@ def load_baseline(path: Path, *, max_allowed_rank: str) -> dict[str, tuple[str, 
             "Maintainability baseline max_allowed_rank does not match the active gate: "
             f"{payload.get('max_allowed_rank')!r} != {max_allowed_rank!r}."
         )
+    if payload.get("tracked_files_only") is not True:
+        raise ValueError("Maintainability baseline must set tracked_files_only to true.")
+    try:
+        date.fromisoformat(str(payload.get("recorded_on", "")))
+    except ValueError as exc:
+        raise ValueError("Maintainability baseline recorded_on must be an ISO date.") from exc
     entries = payload.get("entries")
     if not isinstance(entries, list):
         raise ValueError("Maintainability baseline entries must be a list.")
@@ -78,7 +85,11 @@ def maintainability_violations(
     observed_debt: set[str] = set()
     for path, metrics in sorted(normalized_report.items()):
         rank = str(metrics.get("rank", "")).upper()
-        mi = float(metrics.get("mi", 0.0))
+        raw_mi = metrics.get("mi")
+        if not isinstance(raw_mi, int | float) or isinstance(raw_mi, bool):
+            violations.append(f"{path}: maintainability index is missing or non-numeric")
+            continue
+        mi = float(raw_mi)
         if rank not in RANK_ORDER:
             violations.append(f"{path}: unknown maintainability rank {rank or 'EMPTY'} ({mi:.2f})")
             continue
@@ -100,12 +111,7 @@ def maintainability_violations(
             )
             continue
         baseline_rank, baseline_mi = accepted
-        if rank != baseline_rank:
-            violations.append(
-                f"{path}: maintainability rank {rank} ({mi:.2f}) differs from baseline "
-                f"{baseline_rank} ({baseline_mi:.2f})"
-            )
-        elif not math.isclose(mi, baseline_mi, abs_tol=1e-6):
+        if not math.isclose(mi, baseline_mi, abs_tol=1e-6):
             direction = "improved" if mi > baseline_mi else "worsened"
             violations.append(
                 f"{path}: maintainability {direction} from baseline {baseline_rank} "
