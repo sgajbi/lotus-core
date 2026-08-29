@@ -729,6 +729,9 @@ class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
                 "reporting_currency": "USD",
                 "position_basis": "market_value_base",
                 "weight_basis": "total_market_value_base",
+                "effective_as_of_date": "2026-02-27",
+                "supportability": "READY",
+                "reason_code": "SOURCE_EVIDENCE_READY",
             }
         ],
     )
