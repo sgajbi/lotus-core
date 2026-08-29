@@ -64,7 +64,16 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     fx_created_at = datetime(2026, 4, 10, 2, 0, tzinfo=UTC)
     session = AsyncMock(spec=AsyncSession)
     session.execute.side_effect = [
-        _Result([SimpleNamespace(portfolio_id="P1", base_currency="SGD")]),
+        _Result(
+            [
+                SimpleNamespace(
+                    portfolio_id="P1",
+                    base_currency="SGD",
+                    created_at=datetime(2026, 4, 8, 1, tzinfo=UTC),
+                    updated_at=datetime(2026, 4, 9, 1, tzinfo=UTC),
+                )
+            ]
+        ),
         _Result([_instrument()]),
         _Result(
             [
@@ -101,6 +110,7 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     )
 
     assert portfolio is not None and portfolio.base_currency == "SGD"
+    assert portfolio.updated_at == datetime(2026, 4, 9, 1, tzinfo=UTC)
     assert [item.security_id for item in instruments] == ["SEC_1"]
     assert prices[0].price == Decimal("101.25")
     assert prices[0].evidence_timestamp == price_updated_at

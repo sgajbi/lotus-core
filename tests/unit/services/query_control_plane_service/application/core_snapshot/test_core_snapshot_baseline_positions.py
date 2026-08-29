@@ -93,6 +93,7 @@ def test_baseline_position_entries_normalizes_security_ids_and_sorts() -> None:
             _source(_snapshot_row(" SEC_A "), _instrument("SEC_A")),
         ],
         use_snapshot=True,
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -107,6 +108,7 @@ def test_baseline_position_entries_preserves_blank_optional_market_values() -> N
     entries = baseline_position_entries(
         rows=[_source(_snapshot_row("SEC_BLANK", "3", " ", ""), _instrument("SEC_BLANK"))],
         use_snapshot=True,
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -121,6 +123,7 @@ def test_baseline_position_entries_uses_history_cost_basis_and_reporting_fx() ->
     entries = baseline_position_entries(
         rows=[_source(_history_row("SEC_BOND"), _instrument("SEC_BOND", asset_class="BOND"))],
         use_snapshot=False,
+        portfolio_currency="USD",
         reporting_fx=Decimal("1.5"),
         include_cash=True,
         include_zero=True,
@@ -138,6 +141,7 @@ def test_baseline_position_entries_preserves_valuation_time_currency() -> None:
     entries = baseline_position_entries(
         rows=[_source(row, _instrument("SEC_RELABELED", currency="GBP"))],
         use_snapshot=True,
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -163,6 +167,7 @@ def test_baseline_position_entries_withholds_legacy_snapshot_money_without_curre
             )
         ],
         use_snapshot=True,
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
@@ -171,6 +176,32 @@ def test_baseline_position_entries_withholds_legacy_snapshot_money_without_curre
     assert entries["SEC_LEGACY"]["currency"] is None
     assert entries["SEC_LEGACY"]["market_value_local"] is None
     assert entries["SEC_LEGACY"]["market_value_base"] is None
+
+
+def test_baseline_position_entries_withholds_money_when_reporting_receipt_is_stale() -> None:
+    entries = baseline_position_entries(
+        rows=[
+            _source(
+                _snapshot_row(
+                    "SEC_STALE_REPORTING",
+                    market_value=Decimal("33"),
+                    market_value_local=Decimal("30"),
+                    valuation_source_currency="EUR",
+                    valuation_reporting_currency="USD",
+                ),
+                _instrument("SEC_STALE_REPORTING", currency="EUR"),
+            )
+        ],
+        use_snapshot=True,
+        portfolio_currency="GBP",
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    assert entries["SEC_STALE_REPORTING"]["currency"] == "EUR"
+    assert entries["SEC_STALE_REPORTING"]["market_value_local"] is None
+    assert entries["SEC_STALE_REPORTING"]["market_value_base"] is None
 
 
 def test_baseline_position_entries_filters_cash_and_zero_positions() -> None:
@@ -190,6 +221,7 @@ def test_baseline_position_entries_filters_cash_and_zero_positions() -> None:
             ),
         ],
         use_snapshot=True,
+        portfolio_currency="USD",
         reporting_fx=Decimal("1"),
         include_cash=False,
         include_zero=False,

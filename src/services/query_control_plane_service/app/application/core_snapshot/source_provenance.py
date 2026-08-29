@@ -42,6 +42,8 @@ def resolve_core_snapshot_source_provenance(
     position_rows: tuple[CoreSnapshotPositionSource, ...],
     use_snapshot: bool,
     portfolio_currency: str,
+    portfolio_created_at: datetime | None = None,
+    portfolio_updated_at: datetime | None = None,
     reporting_fx: ResolvedFxRate,
     projected_market_data: tuple[MarketDataObservation, ...],
 ) -> CoreSnapshotSourceProvenanceResolution:
@@ -95,7 +97,10 @@ def resolve_core_snapshot_source_provenance(
         evidence_expected=market_evidence_expected,
     )
 
-    portfolio_source_hash = _portfolio_source_hash(position_rows)
+    portfolio_source_hash = _portfolio_source_hash(
+        position_rows,
+        portfolio_currency=portfolio_currency,
+    )
     market_source_hash = cast(
         str,
         canonical_content_hash(
@@ -128,7 +133,11 @@ def resolve_core_snapshot_source_provenance(
             }
         ),
     )
-    portfolio_timestamp = _latest_portfolio_timestamp(position_rows)
+    portfolio_timestamp = _latest_portfolio_timestamp(
+        position_rows,
+        portfolio_created_at=portfolio_created_at,
+        portfolio_updated_at=portfolio_updated_at,
+    )
     market_timestamp = _latest_market_timestamp(
         position_rows=position_rows,
         use_snapshot=use_snapshot,
@@ -238,11 +247,14 @@ def _is_quote_independent_flat_position(row: CoreSnapshotPositionSource) -> bool
 
 def _portfolio_source_hash(
     position_rows: tuple[CoreSnapshotPositionSource, ...],
+    *,
+    portfolio_currency: str,
 ) -> str:
     return cast(
         str,
         canonical_content_hash(
             {
+                "portfolio_currency": portfolio_currency.strip().upper(),
                 "positions": [
                     {
                         "security_id": row.security_id,
@@ -269,7 +281,7 @@ def _portfolio_source_hash(
                         },
                     }
                     for row in sorted(position_rows, key=lambda item: item.security_id)
-                ]
+                ],
             }
         ),
     )
@@ -365,8 +377,11 @@ def _source_record(
 
 def _latest_portfolio_timestamp(
     rows: tuple[CoreSnapshotPositionSource, ...],
+    *,
+    portfolio_created_at: datetime | None,
+    portfolio_updated_at: datetime | None,
 ) -> datetime | None:
-    timestamps = (
+    row_timestamps = (
         timestamp
         for row in rows
         for timestamp in (
@@ -377,7 +392,14 @@ def _latest_portfolio_timestamp(
         )
         if timestamp is not None
     )
-    return max(timestamps, default=None)
+    return max(
+        (
+            timestamp
+            for timestamp in (*row_timestamps, portfolio_created_at, portfolio_updated_at)
+            if timestamp is not None
+        ),
+        default=None,
+    )
 
 
 def _latest_market_timestamp(

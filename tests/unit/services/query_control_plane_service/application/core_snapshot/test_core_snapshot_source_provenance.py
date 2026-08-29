@@ -117,6 +117,8 @@ def _resolve(
     requested_as_of_date: date = date(2026, 2, 27),
     use_snapshot: bool = True,
     portfolio_currency: str = "USD",
+    portfolio_created_at: datetime | None = None,
+    portfolio_updated_at: datetime | None = None,
     reporting_fx: ResolvedFxRate | None = None,
     projected_market_data: tuple[MarketDataObservation, ...] = (),
 ):
@@ -126,6 +128,8 @@ def _resolve(
         position_rows=tuple(rows),
         use_snapshot=use_snapshot,
         portfolio_currency=portfolio_currency,
+        portfolio_created_at=portfolio_created_at,
+        portfolio_updated_at=portfolio_updated_at,
         reporting_fx=reporting_fx or _identity_fx(),
         projected_market_data=projected_market_data,
     )
@@ -386,6 +390,29 @@ def test_portfolio_timestamp_includes_mutable_instrument_evidence() -> None:
         instrument=replace(corrected_row.instrument, sector="FINANCIALS"),
     )
     corrected = _resolve(corrected_row)
+
+    assert original.source_provenance.portfolio.source_hash != (
+        corrected.source_provenance.portfolio.source_hash
+    )
+    assert corrected.source_provenance.portfolio.valuation_timestamp == corrected_timestamp
+
+
+def test_portfolio_currency_correction_changes_portfolio_identity_and_timestamp() -> None:
+    corrected_timestamp = datetime(2026, 2, 27, 12, tzinfo=UTC)
+    row = _row("SEC_A")
+
+    original = _resolve(row, portfolio_currency="USD")
+    corrected = _resolve(
+        row,
+        portfolio_currency="GBP",
+        portfolio_updated_at=corrected_timestamp,
+        reporting_fx=ResolvedFxRate(
+            value=Decimal("1"),
+            effective_as_of_date=None,
+            from_currency="GBP",
+            to_currency="GBP",
+        ),
+    )
 
     assert original.source_provenance.portfolio.source_hash != (
         corrected.source_provenance.portfolio.source_hash
