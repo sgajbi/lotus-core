@@ -27,6 +27,7 @@ def _row(
     return CoreSnapshotPositionSource(
         security_id=security_id,
         quantity=Decimal("1"),
+        market_price=Decimal("100"),
         market_value=Decimal("100"),
         market_value_local=Decimal("100"),
         cost_basis=None,

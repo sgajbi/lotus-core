@@ -114,6 +114,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
         date=date(2026, 4, 10),
         security_id=" SEC_1 ",
         quantity=Decimal("10"),
+        market_price=Decimal("100"),
         market_value=Decimal("1000"),
         market_value_local=Decimal("1000"),
         cost_basis=Decimal("950"),
@@ -132,6 +133,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     )
 
     assert records[0].security_id == "SEC_1"
+    assert records[0].market_price == Decimal("100")
     assert records[0].market_value == Decimal("1000")
     assert records[0].cost_basis == Decimal("950")
     assert records[0].epoch == 4
@@ -169,6 +171,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
         as_of_date=date(2026, 4, 10),
     )
 
+    assert records[0].market_price is None
     assert records[0].market_value is None
     assert records[0].market_value_local is None
     assert records[0].cost_basis == Decimal("950")

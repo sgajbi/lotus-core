@@ -39,6 +39,7 @@ class CoreSnapshotPositionSource:
 
     security_id: str
     quantity: Decimal
+    market_price: Decimal | None
     market_value: Decimal | None
     market_value_local: Decimal | None
     cost_basis: Decimal | None

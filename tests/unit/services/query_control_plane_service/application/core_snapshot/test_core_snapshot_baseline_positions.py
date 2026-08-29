@@ -65,6 +65,7 @@ def _source(row: SimpleNamespace, instrument: CoreSnapshotInstrument) -> CoreSna
     return CoreSnapshotPositionSource(
         security_id=row.security_id,
         quantity=row.quantity,
+        market_price=getattr(row, "market_price", None),
         market_value=getattr(row, "market_value", None),
         market_value_local=getattr(row, "market_value_local", None),
         cost_basis=getattr(row, "cost_basis", None),

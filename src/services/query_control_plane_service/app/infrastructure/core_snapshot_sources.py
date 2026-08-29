@@ -314,6 +314,7 @@ def _position_source(
     return CoreSnapshotPositionSource(
         security_id=normalize_lookup_identifier(row.security_id),
         quantity=row.quantity,
+        market_price=getattr(row, "market_price", None) if use_snapshot else None,
         market_value=getattr(row, "market_value", None) if use_snapshot else None,
         market_value_local=getattr(row, "market_value_local", None) if use_snapshot else None,
         cost_basis=getattr(row, "cost_basis", None),
