@@ -421,12 +421,19 @@ async def test_stale_reprocessing_claim_locks_rows_only_after_identity_phase(
     )
     discovery_result = MagicMock()
     discovery_result.all.return_value = [stale_row]
+    lock_result = MagicMock()
     claim_result = MagicMock()
     claim_result.all.return_value = [stale_row]
-    results = iter([discovery_result, claim_result])
+    unlock_result = MagicMock()
+    unlock_result.scalar_one.return_value = True
+    results = iter([discovery_result, lock_result, claim_result, unlock_result])
     call_order: list[str] = []
 
-    def execute(statement):
+    def execute(statement, *_args):
+        if "pg_advisory_lock" in str(statement):
+            call_order.append("cohort_lock")
+        if "pg_advisory_unlock" in str(statement):
+            call_order.append("cohort_unlock")
         if "FOR UPDATE" in str(statement):
             call_order.append("row_cohort")
         return next(results)
@@ -443,12 +450,16 @@ async def test_stale_reprocessing_claim_locks_rows_only_after_identity_phase(
     assert claimed == [stale_row]
     discovery_sql = str(mock_db_session.execute.await_args_list[0].args[0])
     claim_sql = str(
-        mock_db_session.execute.await_args_list[1].args[0].compile(dialect=postgresql.dialect())
+        next(
+            call.args[0]
+            for call in mock_db_session.execute.await_args_list
+            if "FOR UPDATE" in str(call.args[0])
+        ).compile(dialect=postgresql.dialect())
     )
     assert "FOR UPDATE" not in discovery_sql
     assert "FOR UPDATE" in claim_sql
     assert "SKIP LOCKED" in claim_sql
-    assert call_order == ["identity_set", "row_cohort"]
+    assert call_order == ["identity_set", "cohort_lock", "row_cohort", "cohort_unlock"]
     repository._lock_effective_dated_replay_identities.assert_awaited_once_with(
         ["RESET_WATERMARKS|6:BOND-1"]
     )
