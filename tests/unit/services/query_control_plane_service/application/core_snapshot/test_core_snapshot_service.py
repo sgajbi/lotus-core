@@ -80,12 +80,14 @@ def _snapshot_row(
     market_value_local: Decimal = Decimal("100"),
     created_at: datetime | None = None,
     updated_at: datetime | None = None,
+    market_price: Decimal | None = Decimal("10"),
 ):
     return SimpleNamespace(
         security_id=security_id,
         quantity=quantity,
         market_value=market_value,
         market_value_local=market_value_local,
+        market_price=market_price,
         created_at=created_at,
         updated_at=updated_at,
     )
