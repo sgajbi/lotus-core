@@ -5,8 +5,7 @@ on:
     types: [opened, reopened, synchronize, ready_for_review, labeled]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -27,12 +26,16 @@ jobs:
     steps:
       - name: Enable auto-merge queue (rebase)
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LOTUS_AUTOMERGE_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HAS_AUTOMERGE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'automerge') }}
         run: |
           if [ "$HAS_AUTOMERGE_LABEL" != "true" ]; then
             echo "Skipping auto-merge queue because the automerge label is absent."
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::LOTUS_AUTOMERGE_TOKEN is required for automatic rebase merge so post-merge releasability dispatch is triggered by a non-GITHUB_TOKEN actor. Skipping auto-merge; use an authorized human or release actor to rebase merge this PR."
             exit 0
           fi
           set +e

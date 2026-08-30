@@ -360,6 +360,37 @@ def test_pr_auto_merge_does_not_emit_skipped_checks_for_label_removal() -> None:
     assert "Skipping auto-merge queue because the automerge label is absent." in workflow_text
 
 
+def test_pr_auto_merge_uses_non_suppressed_token_with_read_only_permissions() -> None:
+    workflow_path = Path(".github/workflows/pr-auto-merge.yml")
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "secrets.LOTUS_AUTOMERGE_TOKEN" in workflow_text
+    assert "github.token" not in workflow_text
+    assert "LOTUS_AUTOMERGE_TOKEN is required" in workflow_text
+    assert "Skipping auto-merge; use an authorized human or release actor" in workflow_text
+
+
+def test_merged_pr_dispatcher_targets_immutable_merge_revision() -> None:
+    workflow_path = Path(".github/workflows/merged-pr-main-releasability.yml")
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert workflow[True]["pull_request_target"]["types"] == ["closed"]
+    assert workflow["permissions"] == {"actions": "write", "contents": "write"}
+    job = workflow["jobs"]["dispatch-main-releasability"]
+    assert "github.event.pull_request.merged == true" in job["if"]
+    command = job["steps"][0]["run"]
+    assert 'dispatch_ref="main-releasability-${MERGE_COMMIT_SHA}"' in command
+    assert 'if [ "$existing_ref_sha" != "$MERGE_COMMIT_SHA" ]' in command
+    assert "gh workflow run main-releasability.yml" in command
+    assert '--ref "$dispatch_ref"' in command
+    assert '-f expected_sha="$MERGE_COMMIT_SHA"' in command
+    assert '-f triggering_pr="$PR_NUMBER"' in command
+    assert '-f source_branch="main"' in command
+
+
 def test_automerge_label_event_does_not_restart_the_full_pr_merge_gate() -> None:
     merge_gate = yaml.safe_load(
         Path(".github/workflows/pr-merge-gate.yml").read_text(encoding="utf-8")
