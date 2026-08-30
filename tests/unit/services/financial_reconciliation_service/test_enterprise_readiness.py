@@ -148,7 +148,7 @@ async def test_financial_reconciliation_enterprise_middleware_emits_denied_write
             "type": "http",
             "method": "POST",
             "path": "/reconciliation/runs/transaction-cashflow",
-            "headers": [(b"content-length", b"0")],
+            "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),

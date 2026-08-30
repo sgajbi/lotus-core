@@ -288,14 +288,14 @@ def test_validate_enterprise_runtime_config_accepts_source_data_default_rules(mo
 
 
 @pytest.mark.asyncio
-async def test_enterprise_middleware_denies_write_without_headers(monkeypatch):
+async def test_enterprise_middleware_denies_write_with_only_tenant(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     middleware = build_enterprise_audit_middleware()
     scope = {
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [(b"content-length", b"0")],
+        "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
@@ -336,14 +336,14 @@ async def test_enterprise_middleware_allows_write_with_minimum_headers(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_enterprise_middleware_denies_read_without_headers_when_enabled(monkeypatch):
+async def test_enterprise_middleware_denies_read_with_only_tenant_when_enabled(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     middleware = build_enterprise_audit_middleware()
     scope = {
         "type": "http",
         "method": "GET",
         "path": "/api/v1/portfolios/PB1",
-        "headers": [],
+        "headers": [(b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
@@ -430,7 +430,10 @@ async def test_enterprise_middleware_handles_invalid_content_length(monkeypatch)
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [(b"content-length", b"invalid")],
+        "headers": [
+            (b"content-length", b"invalid"),
+            (b"x-tenant-id", b"tenant-test"),
+        ],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
@@ -453,7 +456,7 @@ async def test_enterprise_middleware_omits_not_set_correlation_on_denied_audit(m
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [(b"content-length", b"0")],
+        "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
@@ -483,7 +486,7 @@ async def test_enterprise_middleware_omits_not_set_correlation_on_write_audit(mo
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [(b"content-length", b"0")],
+        "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),

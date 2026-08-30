@@ -156,7 +156,7 @@ async def test_ingestion_enterprise_middleware_emits_denied_write_audit(monkeypa
             "type": "http",
             "method": "POST",
             "path": "/ingest/portfolios",
-            "headers": [(b"content-length", b"0")],
+            "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
