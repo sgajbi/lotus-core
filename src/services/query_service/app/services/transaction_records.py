@@ -214,6 +214,10 @@ def transaction_ledger_reconstruction_evidence(
         raise ValueError(
             "input_evidence.latest_evidence_timestamp must match latest_evidence_timestamp"
         )
+    qualifiers = _transaction_ledger_qualifiers(
+        ledger_filters=ledger_filters,
+        reporting_currency=reporting_currency,
+    )
     return build_reconstruction_scope_evidence(
         ProductReconstructionScope(
             product="TransactionLedgerWindow",
@@ -222,25 +226,7 @@ def transaction_ledger_reconstruction_evidence(
             source_data_products=("TransactionLedgerWindow",),
             restatement_version=CURRENT_RESTATEMENT_VERSION,
             policy_version=TRANSACTION_LEDGER_POLICY_VERSION,
-            qualifiers=(
-                ("transaction_id", ledger_filters.transaction_id),
-                ("instrument_id", ledger_filters.instrument_id),
-                ("security_id", ledger_filters.security_id),
-                ("transaction_type", ledger_filters.transaction_type),
-                ("component_type", ledger_filters.component_type),
-                (
-                    "linked_transaction_group_id",
-                    ledger_filters.linked_transaction_group_id,
-                ),
-                ("fx_contract_id", ledger_filters.fx_contract_id),
-                ("swap_event_id", ledger_filters.swap_event_id),
-                ("near_leg_group_id", ledger_filters.near_leg_group_id),
-                ("far_leg_group_id", ledger_filters.far_leg_group_id),
-                ("start_date", ledger_filters.start_date),
-                ("end_date", ledger_filters.end_date),
-                ("as_of_date", ledger_filters.as_of_date),
-                ("reporting_currency", reporting_currency),
-            ),
+            qualifiers=qualifiers,
             material_evidence=(
                 ("matching_transaction_count", total_count),
                 ("latest_evidence_timestamp", latest_evidence_timestamp),
@@ -251,3 +237,31 @@ def transaction_ledger_reconstruction_evidence(
             ),
         )
     )
+
+
+def _transaction_ledger_qualifiers(
+    *,
+    ledger_filters: TransactionLedgerFilters,
+    reporting_currency: str | None,
+) -> tuple[tuple[str, object], ...]:
+    legacy_ledger_qualifiers: tuple[tuple[str, object], ...] = (
+        ("instrument_id", ledger_filters.instrument_id),
+        ("security_id", ledger_filters.security_id),
+        ("transaction_type", ledger_filters.transaction_type),
+        ("component_type", ledger_filters.component_type),
+        (
+            "linked_transaction_group_id",
+            ledger_filters.linked_transaction_group_id,
+        ),
+        ("fx_contract_id", ledger_filters.fx_contract_id),
+        ("swap_event_id", ledger_filters.swap_event_id),
+        ("near_leg_group_id", ledger_filters.near_leg_group_id),
+        ("far_leg_group_id", ledger_filters.far_leg_group_id),
+        ("start_date", ledger_filters.start_date),
+        ("end_date", ledger_filters.end_date),
+        ("as_of_date", ledger_filters.as_of_date),
+        ("reporting_currency", reporting_currency),
+    )
+    if ledger_filters.transaction_id is None:
+        return legacy_ledger_qualifiers
+    return (("transaction_id", ledger_filters.transaction_id), *legacy_ledger_qualifiers)
