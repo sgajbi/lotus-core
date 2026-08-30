@@ -455,9 +455,12 @@ unknown, or source-older controls fail closed as `UNRECONCILED`, `PARTIAL`, `BLO
 
 The top-level `source_provenance` envelope publishes independent deterministic portfolio and
 market-data source identities, hashes, freshness, timestamps, and source-owned effective dates.
-`valuation_context.supportability=READY` requires one coherent portfolio date and one coherent
-market-data date, both equal to the requested date. Missing or mixed dates, historical cost-basis
-fallback, incomplete valued rows, and carried-forward projected price or FX observations produce a
+For current snapshots, the coherent portfolio date is the daily valued-position snapshot date;
+per-security position-history dates remain mutation and reconciliation lineage and may differ.
+`valuation_context.supportability=READY` requires one coherent daily snapshot date and one coherent
+market-data date, both equal to the requested date. Missing or mixed daily snapshot dates,
+historical cost-basis fallback, incomplete valued rows, and carried-forward projected price or FX
+observations produce a
 stable unavailable reason. The request date and generation time are never substituted for source
 evidence. Downstream advisory consumers must consume this aggregated contract rather than compose
 plausible valuation truth from weaker routes.

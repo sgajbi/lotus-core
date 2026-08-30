@@ -43,8 +43,10 @@ collapsed into structural `PARTIAL`. Stale coverage carries both `freshness_stat
 running, failed, unknown, or older than its selected position evidence. A response is current only
 when reconciliation is complete, data quality is complete or partial, timestamp evidence exists,
 and typed portfolio and market-data provenance proves one source-owned effective date equal to the
-requested date. Historical cost-basis fallback, missing valuations, mixed position dates, and
-carried-forward price or FX observations cannot claim current valuation evidence.
+requested date. For a current snapshot, the portfolio date is the daily valued-position snapshot
+date; per-security position-history dates remain mutation and reconciliation lineage and may differ.
+Historical cost-basis fallback, missing valuations, mixed daily snapshot dates, and carried-forward
+price or FX observations cannot claim current valuation evidence.
 Cross-currency baseline valuations must preserve the effective date of the FX row that produced
 the stored value. Missing legacy lineage or a carried-forward FX date fails closed until
 revaluation; same-currency valuation does not fabricate FX evidence.
