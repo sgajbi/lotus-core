@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.query_control_plane_service.app.application.dpm_source_readiness import readiness
 from src.services.query_control_plane_service.app.contracts.dpm_source_readiness import (
@@ -15,6 +16,7 @@ from src.services.query_control_plane_service.app.contracts.dpm_source_readiness
 GENERATED_AT = datetime(2026, 4, 10, 12, tzinfo=UTC)
 EARLIER_EVIDENCE = datetime(2026, 4, 10, 9, tzinfo=UTC)
 LATEST_EVIDENCE = datetime(2026, 4, 10, 10, tzinfo=UTC)
+TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-1"))
 
 
 def _request() -> DpmSourceReadinessRequest:
@@ -204,7 +206,9 @@ async def test_service_resolves_identity_unions_target_scope_and_orders_families
         tax_lots=tax_lots,  # type: ignore[arg-type]
         market_data=market_data,  # type: ignore[arg-type]
         clock=lambda: GENERATED_AT,
-    ).resolve(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+    ).resolve(
+        tenant_context=TENANT_CONTEXT, portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()
+    )
 
     assert response.model_portfolio_id == "MODEL_FROM_MANDATE"
     assert response.evaluated_instrument_ids == ["HELD_1", "TARGET_1"]
@@ -261,7 +265,9 @@ async def test_model_expansion_over_capacity_fails_closed_before_universe_reads(
         tax_lots=tax_lots,  # type: ignore[arg-type]
         market_data=market_data,  # type: ignore[arg-type]
         clock=lambda: GENERATED_AT,
-    ).resolve(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+    ).resolve(
+        tenant_context=TENANT_CONTEXT, portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()
+    )
 
     assert response.evaluated_instrument_ids == []
     assert response.supportability.state == "UNAVAILABLE"
@@ -315,7 +321,9 @@ async def test_source_owned_model_target_overflow_skips_composed_universe_reads(
         tax_lots=tax_lots,  # type: ignore[arg-type]
         market_data=market_data,  # type: ignore[arg-type]
         clock=lambda: GENERATED_AT,
-    ).resolve(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+    ).resolve(
+        tenant_context=TENANT_CONTEXT, portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()
+    )
 
     assert response.evaluated_instrument_ids == []
     assert response.supportability.state == "UNAVAILABLE"

@@ -13,8 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 CORE_SNAPSHOT_ROUTE_DESCRIPTION = (
     "What: Return a governed multi-section portfolio snapshot contract for downstream "
     "integration consumers.\n"
-    "How: Applies tenant and consumer policy, resolves baseline or simulation state, "
-    "and returns reproducibility metadata including request fingerprint and freshness.\n"
+    "How: Binds the request tenant and portfolio lookup to admitted tenant authority, applies "
+    "consumer policy, resolves baseline or simulation state, and returns reproducibility "
+    "metadata including request fingerprint and freshness.\n"
     "When: Used directly by lotus-gateway workspace state sourcing and lotus-risk "
     "concentration or rolling-Sharpe context flows that need policy-aware positions, "
     "totals, delta, or enrichment views without direct query-service coupling. Other "

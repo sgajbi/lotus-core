@@ -258,6 +258,7 @@ async def _acquire_idempotency_key_lock(
 async def mark_job_queued(
     *,
     job_id: str,
+    tenant_id: str,
     session_factory,
     expected_statuses: Sequence[str] | None = None,
 ) -> bool:
@@ -269,6 +270,7 @@ async def mark_job_queued(
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
                     status=IngestionJobStatus.QUEUED.value,
@@ -297,6 +299,7 @@ async def mark_job_failed(
     failure_code: str | None = None,
     failure_detail: dict[str, Any] | None = None,
     failure_headers: dict[str, str] | None = None,
+    tenant_id: str,
 ) -> bool:
     expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
         IngestionJobTransition.MARK_FAILED
@@ -320,6 +323,7 @@ async def mark_job_failed(
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
                     status=IngestionJobStatus.FAILED.value,
@@ -435,6 +439,7 @@ async def mark_job_retried_and_queued(
     job_id: str,
     session_factory,
     expected_statuses: Sequence[str] | None = None,
+    tenant_id: str,
 ) -> bool:
     expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
         IngestionJobTransition.RETRY_TO_QUEUED
@@ -444,6 +449,7 @@ async def mark_job_retried_and_queued(
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
                     status=IngestionJobStatus.QUEUED.value,
@@ -474,10 +480,14 @@ async def get_job_response(
     session_factory,
     reference_key_id: str,
     reference_hmac_secret: str,
+    tenant_id: str,
 ) -> IngestionJobResponse | None:
     async for db in session_factory():
         row = await db.scalar(
-            select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+            select(DBIngestionJob)
+            .where(DBIngestionJob.job_id == job_id)
+            .where(DBIngestionJob.tenant_id == tenant_id)
+            .limit(1)
         )
         return (
             to_job_response(
@@ -496,10 +506,14 @@ async def get_job_replay_context_response(
     *,
     job_id: str,
     session_factory,
+    tenant_id: str,
 ) -> IngestionJobReplayContext | None:
     async for db in session_factory():
         row = await db.scalar(
-            select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+            select(DBIngestionJob)
+            .where(DBIngestionJob.job_id == job_id)
+            .where(DBIngestionJob.tenant_id == tenant_id)
+            .limit(1)
         )
         if row is None:
             return None

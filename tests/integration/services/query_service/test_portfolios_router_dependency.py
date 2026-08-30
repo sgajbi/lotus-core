@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dependencies import get_portfolio_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.portfolio_service import PortfolioService
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -93,6 +93,13 @@ async def test_get_portfolio_by_id_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P2"
+    mock_service.get_portfolio_by_id.assert_awaited_once_with(
+        tenant_context=ANY,
+        portfolio_id="P2",
+    )
+    assert mock_service.get_portfolio_by_id.await_args.kwargs["tenant_context"].tenant_id_text == (
+        TEST_TENANT_ID
+    )
 
 
 async def test_get_portfolio_by_id_not_found_maps_to_404(async_test_client):
@@ -124,10 +131,14 @@ async def test_get_portfolios_forwards_portfolio_ids(async_test_client):
 
     assert response.status_code == 200
     mock_service.get_portfolios.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id=None,
         portfolio_ids=["P1", "P2"],
         client_id=None,
         booking_center_code=None,
+    )
+    assert mock_service.get_portfolios.await_args.kwargs["tenant_context"].tenant_id_text == (
+        TEST_TENANT_ID
     )
 
 
@@ -146,8 +157,12 @@ async def test_get_portfolios_forwards_discovery_filters(async_test_client):
 
     assert response.status_code == 200
     mock_service.get_portfolios.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         portfolio_ids=None,
         client_id="CIF-1",
         booking_center_code="SGPB",
+    )
+    assert mock_service.get_portfolios.await_args.kwargs["tenant_context"].tenant_id_text == (
+        TEST_TENANT_ID
     )

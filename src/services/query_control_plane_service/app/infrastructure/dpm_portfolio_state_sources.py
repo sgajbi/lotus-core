@@ -23,9 +23,14 @@ class SqlAlchemyDpmPortfolioStateReader:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
+    async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
         statement = (
-            select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
         )
         return (await self._session.execute(statement)).scalar_one_or_none() is not None
 

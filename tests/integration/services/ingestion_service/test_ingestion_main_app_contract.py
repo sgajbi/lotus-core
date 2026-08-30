@@ -102,17 +102,17 @@ async def test_metrics_include_http_series_samples(async_test_client):
     assert "http_request_latency_seconds_count{" in metrics_text
 
 
-async def test_enterprise_middleware_denies_ingestion_write_without_headers(
+async def test_enterprise_middleware_requires_tenant_before_write_authorization(
     async_test_client, monkeypatch
 ):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
 
     response = await async_test_client.post("/ingest/portfolios", json={"portfolios": []})
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     detail = response.json()
-    assert detail["detail"] == "authorization_policy_denied"
-    assert detail["reason"].startswith("missing_headers:")
+    assert detail["status"] == 401
+    assert detail["error_code"] == "TENANT_CONTEXT_REQUIRED"
 
 
 async def test_enterprise_middleware_denies_ingestion_write_missing_capability(
@@ -157,6 +157,7 @@ async def test_openapi_declares_upload_400_contracts(async_test_client):
     paths = response.json()["paths"]
     assert "400" in paths["/ingest/uploads/preview"]["post"]["responses"]
     assert "400" in paths["/ingest/uploads/commit"]["post"]["responses"]
+    assert "403" in paths["/ingest/uploads/commit"]["post"]["responses"]
     assert "410" in paths["/ingest/uploads/preview"]["post"]["responses"]
     assert "410" in paths["/ingest/uploads/commit"]["post"]["responses"]
     assert "410" in paths["/ingest/portfolio-bundle"]["post"]["responses"]

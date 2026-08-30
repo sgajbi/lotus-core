@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-30T12:54:04.208260+00:00",
+  "generatedAt": "2026-08-30T17:40:46.938288+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -11443,15 +11443,15 @@
       "semanticId": "lotus.include_projected"
     },
     {
-      "name": "x-tenant-id",
+      "name": "X-Tenant-Id",
       "kind": "request_option",
       "location": "header",
-      "type": "object",
-      "required": false,
+      "type": "string",
+      "required": true,
       "default": "",
       "allowedValues": [],
-      "description": "Tenant scope bound into runtime receipt metadata when supplied by the caller.",
-      "example": "default",
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
       "behaviorImpact": "Affects get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
@@ -15602,10 +15602,10 @@
             "attributeRef": "lotus.include_projected"
           },
           {
-            "name": "x-tenant-id",
+            "name": "X-Tenant-Id",
             "location": "header",
-            "required": false,
-            "type": "object",
+            "required": true,
+            "type": "string",
             "semanticId": "lotus.x_tenant_id",
             "attributeRef": "lotus.x_tenant_id"
           }
@@ -27641,7 +27641,7 @@
         "Transactions"
       ],
       "summary": "Ingest a single transaction",
-      "description": "What: Accept one canonical transaction record for ledger ingestion.\nHow: Validate contract, enforce mode and rate controls, propagate any idempotency key as publish lineage, then publish asynchronously to Kafka.\nWhen: Use for low-volume operational corrections or single-record onboarding.",
+      "description": "What: Accept one canonical transaction record for ledger ingestion.\nHow: Validate contract and admitted portfolio ownership, enforce mode and rate controls, propagate any idempotency key as publish lineage, then publish asynchronously to Kafka.\nWhen: Use for low-volume operational corrections or single-record onboarding.",
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
@@ -28658,7 +28658,7 @@
         "Transactions"
       ],
       "summary": "Ingest a transaction batch",
-      "description": "What: Accept a batch of canonical transaction records.\nHow: Persist ingestion job metadata, validate payload, and publish all valid records asynchronously.\nWhen: Use for standard API-driven batch ingestion workflows.",
+      "description": "What: Accept a batch of canonical transaction records.\nHow: Validate every portfolio against admitted tenant authority, persist ingestion job metadata, and publish all valid records asynchronously.\nWhen: Use for standard API-driven batch ingestion workflows.",
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
@@ -31322,7 +31322,7 @@
         "Portfolio Bundle"
       ],
       "summary": "Ingest a complete portfolio bundle",
-      "description": "What: Accept a mixed onboarding bundle containing portfolio, instrument, transaction, market-price, FX-rate, and business-date records.\nHow: Validate adapter payload and fan out records into existing canonical ingestion topics.\nWhen: Use for adapter-mode onboarding (UI/manual/file workflows), not primary upstream integration.",
+      "description": "What: Accept a mixed onboarding bundle containing portfolio, instrument, transaction, market-price, FX-rate, and business-date records.\nHow: Validate adapter payload and portfolio ownership against admitted tenant authority, then fan out records into existing canonical ingestion topics.\nWhen: Use for adapter-mode onboarding (UI/manual/file workflows), not primary upstream integration.",
       "naming": {
         "boundedContext": "portfolio_bundle",
         "canonicalTerms": [

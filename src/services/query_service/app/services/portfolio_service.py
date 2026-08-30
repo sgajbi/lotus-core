@@ -2,6 +2,7 @@
 import logging
 from typing import Optional
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,8 @@ class PortfolioService:
 
     async def get_portfolios(
         self,
+        *,
+        tenant_context: TenantContext,
         portfolio_id: Optional[str] = None,
         portfolio_ids: Optional[list[str]] = None,
         client_id: Optional[str] = None,
@@ -46,6 +49,7 @@ class PortfolioService:
         )
 
         db_results = await self.repo.get_portfolios(
+            tenant_id=tenant_context.tenant_id_text,
             portfolio_id=portfolio_id,
             portfolio_ids=portfolio_ids,
             client_id=client_id,
@@ -59,12 +63,14 @@ class PortfolioService:
     async def search_portfolio_lookup_items(
         self,
         *,
+        tenant_context: TenantContext,
         client_id: str | None = None,
         booking_center_code: str | None = None,
         q: str | None = None,
         limit: int,
     ) -> list[LookupItem]:
         portfolio_ids = await self.repo.search_portfolio_lookup_ids(
+            tenant_id=tenant_context.tenant_id_text,
             client_id=client_id,
             booking_center_code=booking_center_code,
             q=q,
@@ -75,13 +81,23 @@ class PortfolioService:
     async def list_currency_lookup_items(
         self,
         *,
+        tenant_context: TenantContext,
         q: str | None = None,
         limit: int,
     ) -> list[LookupItem]:
-        codes = await self.repo.list_currency_lookup_codes(q=q, limit=limit)
+        codes = await self.repo.list_currency_lookup_codes(
+            tenant_id=tenant_context.tenant_id_text,
+            q=q,
+            limit=limit,
+        )
         return [LookupItem(id=code, label=code) for code in codes]
 
-    async def get_portfolio_by_id(self, portfolio_id: str) -> PortfolioRecord:
+    async def get_portfolio_by_id(
+        self,
+        *,
+        tenant_context: TenantContext,
+        portfolio_id: str,
+    ) -> PortfolioRecord:
         """
         Retrieves a single portfolio by its ID.
         Raises an exception if the portfolio is not found.
@@ -95,7 +111,10 @@ class PortfolioService:
                 reason_code="request_received",
             ),
         )
-        db_portfolio = await self.repo.get_by_id(portfolio_id)
+        db_portfolio = await self.repo.get_by_id(
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
         if not db_portfolio:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         return PortfolioRecord.model_validate(db_portfolio)

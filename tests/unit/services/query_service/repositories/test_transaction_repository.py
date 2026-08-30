@@ -64,6 +64,19 @@ def _query_spec(
     )
 
 
+async def test_portfolio_ownership_query_requires_tenant_and_portfolio_identity(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="P1")
+
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled = statement.compile(compile_kwargs={"literal_binds": True})
+    sql = str(compiled)
+    assert "portfolios.tenant_id = 'tenant-a'" in sql
+    assert "portfolios.portfolio_id = 'P1'" in sql
+
+
 async def test_get_transactions_default_sort(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):

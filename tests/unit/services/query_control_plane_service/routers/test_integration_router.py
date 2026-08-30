@@ -1,6 +1,8 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.query_control_plane_service.app.application import (
     sustainability_preference_profile as preference_application,
@@ -266,6 +268,17 @@ def assert_query_control_plane_problem(
         assert problem.metadata == metadata
 
 
+def _tenant_request(tenant_id: str = "default") -> SimpleNamespace:
+    return SimpleNamespace(
+        state=SimpleNamespace(
+            tenant_context=TenantContext(
+                tenant_id=TenantId(tenant_id),
+                identity_verified=True,
+            )
+        )
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_effective_integration_policy_router_function() -> None:
     mock_service = MagicMock(spec=IntegrationPolicyService)
@@ -286,6 +299,7 @@ async def test_get_effective_integration_policy_router_function() -> None:
     }
 
     response = await get_effective_integration_policy(
+        http_request=_tenant_request("tenant-a"),
         consumer_system="lotus-manage",
         tenant_id="tenant-a",
         include_sections=["OVERVIEW"],
@@ -298,6 +312,29 @@ async def test_get_effective_integration_policy_router_function() -> None:
         include_sections=["OVERVIEW"],
     )
     assert response["consumer_system"] == "lotus-manage"
+
+
+@pytest.mark.asyncio
+async def test_effective_policy_rejects_tenant_query_outside_admitted_authority() -> None:
+    mock_service = MagicMock(spec=IntegrationPolicyService)
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_effective_integration_policy(
+            http_request=_tenant_request("tenant-a"),
+            consumer_system="lotus-manage",
+            tenant_id="tenant-b",
+            include_sections=None,
+            integration_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "IntegrationPolicy"},
+    )
+    mock_service.get_effective_policy.assert_not_called()
 
 
 def test_get_classification_taxonomy_service_factory_returns_narrow_service() -> None:
@@ -423,6 +460,7 @@ async def test_create_core_snapshot_router_function() -> None:
     response = await create_core_snapshot(
         portfolio_id="PORT_001",
         request=request,
+        http_request=_tenant_request(),
         service=mock_service,
         integration_service=mock_integration_service,
     )
@@ -434,6 +472,38 @@ async def test_create_core_snapshot_router_function() -> None:
         tenant_id="default",
         include_sections=["POSITIONS_BASELINE"],
     )
+
+
+@pytest.mark.asyncio
+async def test_create_core_snapshot_rejects_body_tenant_outside_admitted_scope() -> None:
+    mock_service = MagicMock(spec=CoreSnapshotService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        consumer_system="lotus-performance",
+        tenant_id="tenant-b",
+    )
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await create_core_snapshot(
+            portfolio_id="PORT_001",
+            request=request,
+            http_request=_tenant_request("tenant-a"),
+            service=mock_service,
+            integration_service=mock_integration_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "PortfolioStateSnapshot"},
+    )
+    mock_integration_service.get_effective_policy.assert_not_called()
+    mock_service.get_core_snapshot.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -466,6 +536,7 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_404",
             request=request,
+            http_request=_tenant_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -508,6 +579,7 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_tenant_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -551,6 +623,7 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_tenant_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -594,6 +667,7 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_tenant_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -635,6 +709,7 @@ async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_tenant_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -713,6 +788,7 @@ async def test_create_core_snapshot_filters_sections_in_non_strict_mode() -> Non
     await create_core_snapshot(
         portfolio_id="PORT_001",
         request=request,
+        http_request=_tenant_request(),
         service=mock_service,
         integration_service=mock_integration_service,
     )
@@ -1398,6 +1474,7 @@ async def test_get_portfolio_tax_lot_window_success_path() -> None:
     )
 
     response = await get_portfolio_tax_lot_window(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         dpm_source_service=mock_service,
@@ -1405,9 +1482,36 @@ async def test_get_portfolio_tax_lot_window_success_path() -> None:
 
     assert response["product_name"] == "PortfolioTaxLotWindow"
     mock_service.get_portfolio_tax_lot_window.assert_awaited_once_with(
+        tenant_context=_tenant_request().state.tenant_context,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
-        request=request,
+        request=request.model_copy(update={"tenant_id": "default"}),
     )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_rejects_mismatched_tenant_before_source_read() -> None:
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
+    mock_service.get_portfolio_tax_lot_window = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_portfolio_tax_lot_window(
+            http_request=_tenant_request("tenant-a"),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PortfolioTaxLotWindowRequest(
+                as_of_date="2026-04-10",
+                tenant_id="tenant-b",
+            ),
+            dpm_source_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "PortfolioTaxLotWindow"},
+    )
+    mock_service.get_portfolio_tax_lot_window.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1417,6 +1521,7 @@ async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_tax_lot_window(
+            http_request=_tenant_request(),
             portfolio_id="P404",
             request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
             dpm_source_service=mock_service,
@@ -1442,6 +1547,7 @@ async def test_get_portfolio_tax_lot_window_maps_bad_token_to_400() -> None:
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_tax_lot_window(
+            http_request=_tenant_request(),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
             dpm_source_service=mock_service,
@@ -1803,6 +1909,7 @@ async def test_get_dpm_source_readiness_router_function() -> None:
     )
 
     response = await get_dpm_source_readiness(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         dpm_source_service=mock_service,
@@ -1810,9 +1917,37 @@ async def test_get_dpm_source_readiness_router_function() -> None:
 
     assert response["product_name"] == "DpmSourceReadiness"
     mock_service.get_source_readiness.assert_awaited_once_with(
+        tenant_context=_tenant_request().state.tenant_context,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
-        request=request,
+        request=request.model_copy(update={"tenant_id": "default"}),
     )
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_rejects_mismatched_tenant_before_source_reads() -> None:
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
+    mock_service.get_source_readiness = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_dpm_source_readiness(
+            http_request=_tenant_request("tenant-a"),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=DpmSourceReadinessRequest(
+                as_of_date="2026-04-10",
+                instrument_ids=["FO_EQ_AAPL_US"],
+                tenant_id="tenant-b",
+            ),
+            dpm_source_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "DpmSourceReadiness"},
+    )
+    mock_service.get_source_readiness.assert_not_awaited()
 
 
 @pytest.mark.asyncio

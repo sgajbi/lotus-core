@@ -23,6 +23,7 @@ class SqlAlchemyIngestionIdempotencyReplayReader:
     async def find_matching_job(
         self,
         *,
+        tenant_id: str,
         endpoint: str,
         idempotency_key: str | None,
         request_payload: dict[str, Any] | None,
@@ -34,6 +35,7 @@ class SqlAlchemyIngestionIdempotencyReplayReader:
             select(DBIngestionJob)
             .where(
                 and_(
+                    DBIngestionJob.tenant_id == tenant_id,
                     DBIngestionJob.endpoint == endpoint,
                     DBIngestionJob.idempotency_key == idempotency_key,
                 )

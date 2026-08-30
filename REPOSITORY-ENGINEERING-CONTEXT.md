@@ -722,8 +722,23 @@ Tenant authority boundary:
 4. portfolio ingestion requires source-owned `tenant_id`, while `legal_book_id` remains an optional,
    independent business dimension,
 5. persisted portfolios require a normalized tenant; the cutover migration stops and reports
-   unattributable rows instead of assigning a synthetic tenant,
-6. the tenant-ownership architecture guard blocks synthetic production defaults now and reports the
+   unattributable rows instead of assigning a synthetic tenant. Legacy ingestion jobs are
+   backfilled only from one verified `ingestion_service` POST/ALLOW audit with the exact endpoint,
+   correlation, trace, and bounded audit-before-submission time relationship,
+6. all single, batch, upload, and portfolio-bundle transaction publication paths validate every
+   referenced portfolio against admitted tenant authority before replay, job creation, or publish;
+   a bundle may introduce a new admitted portfolio only when its identifier is not already owned,
+7. Core snapshot HTTP requests bind the body tenant to admitted request authority and the source
+   reader requires tenant plus portfolio predicates before any position or snapshot evidence read,
+8. position-history, latest-holdings, and portfolio-maturity reads carry the admitted tenant through
+   the service boundary and require tenant plus portfolio ownership before any holdings query; a
+   cross-tenant portfolio identifier is indistinguishable from a missing portfolio,
+9. transaction-ledger, exact transaction-record, realized-tax summary, QCP portfolio tax-lot, and
+   aggregate DPM source-readiness reads require tenant plus portfolio ownership before reading
+   financial evidence; policy and capability query tenants are bound to admitted authority and
+   cannot widen request scope,
+10. the tenant-ownership architecture guard blocks synthetic production defaults and optional tenant
+   parameters on these critical persistence boundaries, while reporting the
    banked tenantless-table census for the remaining staged slices of issue `#798`.
 
 ## Repo-Native Commands
@@ -2034,6 +2049,10 @@ Most relevant current governance:
      complete snapshot application is owned by
      `query_control_plane_service/app/application/core_snapshot`; do not recreate snapshot DTOs,
      use cases, policies, or repository orchestration under `query_service`.
+     Core snapshot HTTP tenant binding, integration-policy section mapping, problem translation,
+     and consumer-specific response representation belong in
+     `query_control_plane_service/app/routers/core_snapshot.py`; keep the broad integration router
+     limited to route declaration and dependency delegation.
      Core snapshot governance mapping belongs in `core_snapshot/governance.py`; do not re-add
      request policy provenance, applied/dropped section, or inline-default governance mapping to the
      broad service.

@@ -856,10 +856,11 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     maturity_tenant = next(
         parameter
         for parameter in maturity_summary["parameters"]
-        if parameter["name"] == "x-tenant-id"
+        if parameter["name"] == "X-Tenant-Id"
     )
     assert maturity_tenant["in"] == "header"
-    assert "bound into runtime receipt metadata" in maturity_tenant["description"]
+    assert maturity_tenant["required"] is True
+    assert "Missing or blank values fail closed" in maturity_tenant["description"]
     assert (
         maturity_summary_response["properties"]["product_name"]["default"]
         == "PortfolioMaturitySummary"

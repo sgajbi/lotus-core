@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,7 @@ from ..dtos.position_dto import (
     PortfolioPositionsResponse,
 )
 from ..repositories.position_repository import PositionRepository
-from .portfolio_validation import ensure_portfolio_exists
+from .portfolio_validation import ensure_portfolio_owned
 from .position_history_reads import position_history_response
 from .position_holdings_reads import effective_holdings_read_as_of_date
 from .position_holdings_response import portfolio_holdings_response
@@ -32,6 +33,8 @@ class PositionService:
 
     async def get_position_history(
         self,
+        *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         security_id: str,
         start_date: Optional[date] = None,
@@ -57,7 +60,11 @@ class PositionService:
             ),
         )
 
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
 
         return await position_history_response(
             repository=self.repo,
@@ -69,6 +76,8 @@ class PositionService:
 
     async def get_portfolio_positions(
         self,
+        *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         as_of_date: Optional[date] = None,
         include_projected: bool = False,
@@ -88,7 +97,11 @@ class PositionService:
             ),
         )
 
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
         effective_as_of_date = await effective_holdings_read_as_of_date(
             repository=self.repo,
             requested_as_of_date=as_of_date,
@@ -103,11 +116,12 @@ class PositionService:
 
     async def get_portfolio_maturity_summary(
         self,
+        *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         as_of_date: Optional[date] = None,
         horizon_days: int = 90,
         include_projected: bool = False,
-        tenant_id: str | None = None,
     ) -> PortfolioMaturitySummaryResponse:
         """
         Retrieves the Core-owned maturity summary for a portfolio holdings window.
@@ -128,6 +142,7 @@ class PositionService:
         )
 
         holdings = await self.get_portfolio_positions(
+            tenant_context=tenant_context,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             include_projected=include_projected,
@@ -137,5 +152,5 @@ class PositionService:
             holdings=holdings,
             horizon_days=horizon_days,
             include_projected=include_projected,
-            tenant_id=tenant_id,
+            tenant_id=tenant_context.tenant_id_text,
         )

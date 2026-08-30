@@ -98,6 +98,7 @@ class ReferenceDataIngestionCommandHandler:
         accepted_count = command.registry_command.accepted_count(command.request)
         request_payload = command.registry_command.request_payload(command.request)
         replay_job = await self.idempotency_replay_reader.find_matching_job(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=request_payload,
@@ -113,7 +114,10 @@ class ReferenceDataIngestionCommandHandler:
             return self._replay_result(command, job_result.job)
 
         await self._persist_or_mark_failed(command, job_result.job.job_id)
-        await self._mark_queued_or_raise(job_id=job_result.job.job_id)
+        await self._mark_queued_or_raise(
+            job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
+        )
         return ReferenceDataIngestionCommandResult(
             message=f"{entity_type} accepted for asynchronous ingestion processing.",
             entity_type=entity_type,
@@ -197,6 +201,7 @@ class ReferenceDataIngestionCommandHandler:
         except MarketPriceSourceFactError as exc:
             await self._mark_failed_and_raise(
                 job_id=job_id,
+                tenant_id=command.tenant_context.tenant_id_text,
                 status_code=HTTP_CONFLICT,
                 code="MARKET_PRICE_SOURCE_FACT_CONFLICT",
                 exc=exc,
@@ -204,6 +209,7 @@ class ReferenceDataIngestionCommandHandler:
         except ValuationPolicyAssignmentError as exc:
             await self._mark_failed_and_raise(
                 job_id=job_id,
+                tenant_id=command.tenant_context.tenant_id_text,
                 status_code=HTTP_CONFLICT,
                 code="VALUATION_POLICY_ASSIGNMENT_CONFLICT",
                 exc=exc,
@@ -211,6 +217,7 @@ class ReferenceDataIngestionCommandHandler:
         except Exception as exc:
             await self._mark_failed_and_raise(
                 job_id=job_id,
+                tenant_id=command.tenant_context.tenant_id_text,
                 status_code=HTTP_INTERNAL_SERVER_ERROR,
                 code="REFERENCE_DATA_PERSIST_FAILED",
                 exc=exc,
@@ -220,6 +227,7 @@ class ReferenceDataIngestionCommandHandler:
         self,
         *,
         job_id: str,
+        tenant_id: str,
         status_code: int,
         code: str,
         exc: Exception,
@@ -238,6 +246,7 @@ class ReferenceDataIngestionCommandHandler:
         await self.ingestion_job_service.mark_failed(
             job_id,
             evidence.reason,
+            tenant_id=tenant_id,
             failure_phase="persist",
             failure_status_code=status_code,
             failure_code=code,
@@ -245,9 +254,12 @@ class ReferenceDataIngestionCommandHandler:
         )
         raise ReferenceDataIngestionCommandError(status_code, detail) from exc
 
-    async def _mark_queued_or_raise(self, *, job_id: str) -> None:
+    async def _mark_queued_or_raise(self, *, job_id: str, tenant_id: str) -> None:
         try:
-            queued = await self.ingestion_job_service.mark_queued(job_id)
+            queued = await self.ingestion_job_service.mark_queued(
+                job_id,
+                tenant_id=tenant_id,
+            )
         except Exception as exc:
             detail = await self._record_bookkeeping_failure(
                 job_id=job_id,

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, TypeVar
 
+from portfolio_common.domain.tenant import TenantContext
+
 from ...contracts.discretionary_mandate_binding import (
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
@@ -97,12 +99,17 @@ class DpmSourceReadinessService:
     async def get_portfolio_tax_lot_window(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         request: PortfolioTaxLotWindowRequest,
     ) -> PortfolioTaxLotWindowResponse:
         """Resolve the tax-lot constituent through the capability boundary."""
 
-        return await self.tax_lots.resolve(portfolio_id=portfolio_id, request=request)
+        return await self.tax_lots.resolve(
+            tenant_context=tenant_context,
+            portfolio_id=portfolio_id,
+            request=request,
+        )
 
     async def get_market_data_coverage(
         self,
@@ -115,16 +122,22 @@ class DpmSourceReadinessService:
     async def get_source_readiness(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
         """Evaluate aggregate readiness through the capability boundary."""
 
-        return await self.resolve(portfolio_id=portfolio_id, request=request)
+        return await self.resolve(
+            tenant_context=tenant_context,
+            portfolio_id=portfolio_id,
+            request=request,
+        )
 
     async def resolve(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
@@ -200,6 +213,7 @@ class DpmSourceReadinessService:
         )
         tax_lots = await _read_or_none(
             self.tax_lots.resolve(
+                tenant_context=tenant_context,
                 portfolio_id=portfolio_id,
                 request=_tax_lot_request(request, evaluated_instrument_ids),
             )

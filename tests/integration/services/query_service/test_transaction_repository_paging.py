@@ -23,7 +23,7 @@ from src.services.query_service.app.services.transaction_records import (
     transaction_ledger_reconstruction_evidence,
 )
 from src.services.query_service.app.services.transaction_service import TransactionService
-from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -163,6 +163,7 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -263,6 +264,7 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
     event.listen(sync_engine, "before_cursor_execute", capture_sql)
     try:
         response = await TransactionService(async_db_session).get_transaction_record(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
             as_of_date=date(2026, 1, 31),
@@ -278,7 +280,8 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
         for statement in statements
         if statement.lstrip().upper().startswith(("SELECT", "WITH"))
     ]
-    assert len(data_reads) == 3
+    assert len(data_reads) == 4
+    assert "portfolios.tenant_id" in data_reads[0]
     assert any("transactions.transaction_id =" in statement for statement in data_reads)
     assert any("LIMIT" in statement for statement in data_reads)
 
@@ -592,6 +595,7 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
     event.listen(sync_engine, "after_cursor_execute", commit_correction_after_evidence)
     try:
         snapshot_response = await TransactionService(async_db_session).get_transactions(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="PORT-SNAPSHOT",
             skip=0,
             limit=10,
@@ -610,6 +614,7 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
 
     await async_db_session.rollback()
     corrected_response = await TransactionService(async_db_session).get_transactions(
+        tenant_context=TEST_TENANT_CONTEXT,
         portfolio_id="PORT-SNAPSHOT",
         skip=0,
         limit=10,

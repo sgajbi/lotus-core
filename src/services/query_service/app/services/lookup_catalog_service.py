@@ -1,3 +1,5 @@
+from portfolio_common.domain.tenant import TenantContext
+
 from ..application.lookup_catalog import (
     CurrencyLookupQuery,
     InstrumentLookupQuery,
@@ -44,9 +46,12 @@ class LookupCatalogService:
     async def search_portfolio_lookup_items(
         self,
         query: PortfolioLookupQuery,
+        *,
+        tenant_context: TenantContext,
     ) -> LookupCatalogResult:
         return _lookup_result_from_raw_items(
             await self._portfolio_service.search_portfolio_lookup_items(
+                tenant_context=tenant_context,
                 client_id=query.client_id,
                 booking_center_code=query.booking_center_code,
                 q=query.q,
@@ -69,12 +74,16 @@ class LookupCatalogService:
     async def list_currency_lookup_items(
         self,
         query: CurrencyLookupQuery,
+        *,
+        tenant_context: TenantContext,
     ) -> LookupCatalogResult:
         source_scope = query.source.upper()
         portfolio_items = (
             _lookup_result_from_raw_items(
                 await self._portfolio_service.list_currency_lookup_items(
-                    q=query.q, limit=query.limit
+                    tenant_context=tenant_context,
+                    q=query.q,
+                    limit=query.limit,
                 )
             ).items
             if source_scope in {"ALL", "PORTFOLIOS"}

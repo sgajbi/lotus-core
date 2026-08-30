@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.transaction_query import TransactionRecordUnavailableError
@@ -66,6 +66,7 @@ EXACT_TRANSACTION_SOURCE_UNAVAILABLE_RESPONSE_EXAMPLE = {
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def get_transactions(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -159,6 +160,7 @@ async def get_transactions(
 ):
     try:
         return await service.get_transactions(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             instrument_id=instrument_id,
             security_id=security_id,
@@ -231,6 +233,7 @@ async def get_transactions(
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def get_transaction_record(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         min_length=1,
@@ -270,6 +273,7 @@ async def get_transaction_record(
 ):
     try:
         return await service.get_transaction_record(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
             as_of_date=as_of_date,
@@ -318,6 +322,7 @@ async def get_transaction_record(
     openapi_extra=source_data_product_openapi_extra("PortfolioRealizedTaxSummary"),
 )
 async def get_realized_tax_summary(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -350,6 +355,7 @@ async def get_realized_tax_summary(
 ):
     try:
         return await service.get_realized_tax_summary(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             start_date=start_date,
             end_date=end_date,

@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -15,7 +15,7 @@ from src.services.query_service.app.dependencies import (
     get_reporting_currency_support_service,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,10 +72,17 @@ async def test_portfolio_lookup_contract_sorted_filtered_and_limited(async_test_
         {"id": "PF_20", "label": "PF_20"},
     ]
     mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
+        tenant_context=ANY,
         client_id=None,
         booking_center_code=None,
         q="PF_",
         limit=2,
+    )
+    assert (
+        mock_portfolio_service.search_portfolio_lookup_items.await_args.kwargs[
+            "tenant_context"
+        ].tenant_id_text
+        == TEST_TENANT_ID
     )
     mock_portfolio_service.get_portfolios.assert_not_awaited()
 
@@ -136,7 +143,17 @@ async def test_currency_lookup_contract_all_merges_bounded_source_queries(async_
         {"id": "CHF", "label": "CHF"},
         {"id": "EUR", "label": "EUR"},
     ]
-    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=2)
+    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(
+        tenant_context=ANY,
+        q=None,
+        limit=2,
+    )
+    assert (
+        mock_portfolio_service.list_currency_lookup_items.await_args.kwargs[
+            "tenant_context"
+        ].tenant_id_text
+        == TEST_TENANT_ID
+    )
     mock_instrument_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=2)
     mock_portfolio_service.get_portfolios.assert_not_awaited()
     mock_instrument_service.get_instruments.assert_not_awaited()

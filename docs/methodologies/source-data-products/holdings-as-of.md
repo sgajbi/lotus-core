@@ -42,6 +42,7 @@ contract described by this methodology.
 
 | Input | Source | Required | Meaning |
 | --- | --- | --- | --- |
+| `X-Tenant-Id` | Admitted request context | Yes | Tenant authority that must own the path portfolio before any holdings or maturity-source read. A portfolio owned by another tenant is treated as missing. |
 | `portfolio_id` | Path parameter | Yes | Portfolio whose holdings or cash balances are queried. |
 | `as_of_date` | Query parameter | No | Booked-state cap for holdings and cash balances. |
 | `include_projected` | Positions query parameter | No, default `false` | Controls whether the default latest-business-date cap is skipped for positions when no explicit `as_of_date` is supplied. |
@@ -51,7 +52,7 @@ contract described by this methodology.
 
 | Source | Used fields | Inclusion rule |
 | --- | --- | --- |
-| `portfolios` | `portfolio_id`, `base_currency` | Portfolio must exist. Base currency is used for cash reporting defaults. |
+| `portfolios` | `tenant_id`, `portfolio_id`, `base_currency` | Portfolio must exist under the admitted tenant. Base currency is used for cash reporting defaults. |
 | `business_dates` | `date`, `calendar_code` | Supplies default effective `as_of_date` for booked holdings and cash reads. |
 | `position_state` | `portfolio_id`, `security_id`, `epoch`, `status`, `created_at`, `updated_at` | Constrains holdings to the active epoch for each portfolio-security key and supplies reprocessing supportability. |
 | `position_history` | `security_id`, `position_date`, `quantity`, `cost_basis`, `cost_basis_local`, `epoch` | Authoritative booked quantity and cost-basis stream. Also supplements missing snapshot rows when snapshot materialization lags. |

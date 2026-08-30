@@ -39,7 +39,10 @@ class DpmSourceReadinessRequest(BaseModel):
     )
     tenant_id: str | None = Field(
         None,
-        description="Optional tenant identifier carried for lineage and future policy resolution.",
+        description=(
+            "Optional tenant assertion. When supplied it must match admitted request authority; "
+            "Core always records the admitted canonical tenant in readiness lineage."
+        ),
         examples=["tenant_sg_pb"],
     )
     mandate_id: str | None = Field(

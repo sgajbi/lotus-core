@@ -158,6 +158,11 @@ admitted `TenantContext` into its durable ingestion job. Portfolio and portfolio
 payload ownership that differs from that authority before publication and stamp the verified value
 onto accepted records. The persisted job tenant remains separate from retained domain payload, so
 idempotency, replay lineage, and operator evidence do not depend on a caller-supplied tenant field.
+Single, batch, and portfolio-bundle transaction commands resolve every referenced portfolio through
+one tenant-ownership reader before idempotency replay, job creation, or event publication. A bundle
+may introduce a new portfolio and its transactions together only when that identifier does not
+already belong to another tenant. Missing and cross-tenant references return the same source-safe
+`403 INGESTION_PORTFOLIO_TENANT_MISMATCH` outcome without creating a job or publishing a record.
 
 ### Portfolio-bundle ingestion
 
@@ -173,6 +178,11 @@ Use upload flows for adapter-mode bulk onboarding:
   summaries by default
 - `POST /ingest/uploads/commit`
   commit validated bulk content for processing
+
+Commit revalidates every portfolio-scoped non-portfolio row against persisted ownership for the
+admitted tenant immediately before publication. Unknown and cross-tenant portfolio references fail
+closed with the same source-safe response, and `allow_partial=true` cannot bypass this authority
+boundary. Preview remains a schema/data-quality operation and does not authorize publication.
 
 This is the right contract family for CSV/XLSX-style onboarding, not the replay family. Upload
 files are bounded by byte, row, column, and cell-length budgets; content-type and extension must
@@ -212,6 +222,9 @@ cutover.
 - every ingestion job has a normalized, non-blank tenant authority. The tenant comes from admitted
   request context, is returned by job APIs, and scopes replay lineage; legacy rows are migrated only
   from unambiguous verified security-audit correlation evidence or the migration stops
+- event-replay job detail, listing, evidence, failure, record-status, and retry paths apply that
+  admitted tenant in the database predicate. Cross-tenant identifiers resolve as not found, and a
+  rejected cross-tenant retry performs no publication or lifecycle mutation
 - duplicate `X-Idempotency-Key` use for the same endpoint and same source-safe canonical payload
   resolves from durable lifecycle evidence: a replay-safe queued job returns its existing `202`
   acknowledgement, a durable failed outcome reproduces its original status/code/safe detail and
@@ -227,6 +240,8 @@ cutover.
   lookup/create; both lock and lookup are tenant-and-endpoint scoped so equal caller keys in
   different tenants remain independent. Idempotency diagnostics classify cross-endpoint reuse
   separately from same-tenant/same-endpoint payload-fingerprint conflicts
+- preliminary idempotency replay lookup is also tenant-and-endpoint scoped; a caller cannot receive
+  another tenant's job identity or durable failure outcome before job creation
 - ingestion job lifecycle updates are expected-state guarded; stale replay, failure, or
   bookkeeping-repair mutations return conflict outcomes instead of overwriting newer operator
   truth

@@ -20,6 +20,7 @@ from src.services.query_service.app.services.position_holdings import (
     latest_holdings_evidence_timestamp,
 )
 from src.services.query_service.app.services.position_service import PositionService
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -113,6 +114,7 @@ async def test_get_position_history(mock_position_repo: AsyncMock):
     ):
         service = PositionService(AsyncMock())
         params = {
+            "tenant_context": TEST_TENANT_CONTEXT,
             "portfolio_id": "P1",
             "security_id": " S1 ",
             "start_date": date(2025, 1, 1),
@@ -144,7 +146,11 @@ async def test_get_position_history_rejects_missing_window(mock_position_repo: A
         service = PositionService(AsyncMock())
 
         with pytest.raises(ValueError, match="requires start_date and end_date"):
-            await service.get_position_history(portfolio_id="P1", security_id="S1")
+            await service.get_position_history(
+                tenant_context=TEST_TENANT_CONTEXT,
+                portfolio_id="P1",
+                security_id="S1",
+            )
 
         mock_position_repo.portfolio_exists.assert_not_awaited()
         mock_position_repo.get_position_history_by_security.assert_not_awaited()
@@ -160,7 +166,10 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         service = PositionService(AsyncMock())
 
         # ACT
-        response = await service.get_portfolio_positions(portfolio_id="P1")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+        )
 
         # ASSERT
         mock_position_repo.get_latest_business_date.assert_awaited_once()
@@ -218,6 +227,7 @@ async def test_get_latest_positions_reads_snapshot_and_history_sequentially(
     ):
         service = PositionService(AsyncMock())
         response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             as_of_date=date(2025, 1, 1),
         )
@@ -261,6 +271,7 @@ async def test_get_latest_positions_reads_support_evidence_sequentially(
     ):
         service = PositionService(AsyncMock())
         response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             as_of_date=date(2025, 1, 1),
         )
@@ -274,8 +285,9 @@ async def test_get_latest_positions_reads_portfolio_exists_and_default_date_sequ
 ) -> None:
     call_order: list[str] = []
 
-    async def portfolio_exists(portfolio_id: str) -> bool:
+    async def portfolio_exists(*, tenant_id: str, portfolio_id: str) -> bool:
         call_order.append("portfolio")
+        assert tenant_id == TEST_TENANT_ID
         assert portfolio_id == "P1"
         return True
 
@@ -291,7 +303,10 @@ async def test_get_latest_positions_reads_portfolio_exists_and_default_date_sequ
         return_value=mock_position_repo,
     ):
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions(portfolio_id="P1")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+        )
 
     assert response.as_of_date == date(2025, 1, 1)
     assert call_order == ["portfolio", "date"]
@@ -306,6 +321,7 @@ async def test_get_latest_positions_explicit_date_skips_default_date_lookup(
     ):
         service = PositionService(AsyncMock())
         response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             as_of_date=date(2025, 1, 1),
         )
@@ -382,7 +398,10 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
         }
 
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions(portfolio_id="P2")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P2",
+        )
 
         mock_position_repo.get_latest_positions_by_portfolio_as_of_date.assert_awaited_once_with(
             "P2", date(2025, 1, 1)
@@ -418,6 +437,7 @@ async def test_get_position_history_raises_when_portfolio_missing(mock_position_
 
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_position_history(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P404",
                 security_id="S1",
                 start_date=date(2025, 1, 1),
@@ -434,7 +454,18 @@ async def test_get_portfolio_positions_raises_when_portfolio_missing(mock_positi
         service = PositionService(AsyncMock())
 
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_portfolio_positions("P404")
+            await service.get_portfolio_positions(
+                tenant_context=TEST_TENANT_CONTEXT,
+                portfolio_id="P404",
+            )
+
+        mock_position_repo.portfolio_exists.assert_awaited_once_with(
+            tenant_id=TEST_TENANT_ID,
+            portfolio_id="P404",
+        )
+        mock_position_repo.get_latest_business_date.assert_not_awaited()
+        mock_position_repo.get_latest_positions_by_portfolio.assert_not_awaited()
+        mock_position_repo.get_latest_positions_by_portfolio_as_of_date.assert_not_awaited()
 
 
 async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
@@ -487,9 +518,9 @@ async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
         service = PositionService(AsyncMock())
 
         response = await service.get_portfolio_maturity_summary(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             horizon_days=60,
-            tenant_id="TENANT-PB",
         )
 
         assert response.product_name == "PortfolioMaturitySummary"
@@ -500,7 +531,7 @@ async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
         assert response.maturity_bearing_holding_count == 1
         assert response.supportability_status == "SUPPORTED"
         assert response.reconciliation_status == "COMPLETE"
-        assert response.tenant_id == "TENANT-PB"
+        assert response.tenant_id == TEST_TENANT_ID
         assert response.snapshot_id is not None
         assert response.calculation_lineage.algorithm_id == (
             "PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY"
@@ -551,7 +582,10 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
         mock_position_repo.get_latest_snapshot_valuation_map.return_value = {}
 
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions("P9")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P9",
+        )
 
         assert response.positions[0].valuation is not None
         assert response.positions[0].valuation.market_price is None
@@ -573,7 +607,10 @@ async def test_get_latest_positions_marks_stale_when_market_prices_are_not_curre
         mock_position_repo.get_latest_market_price_dates.return_value = {"S1": date(2024, 12, 30)}
         service = PositionService(AsyncMock())
 
-        response = await service.get_portfolio_positions(portfolio_id="P1")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+        )
 
         mock_position_repo.get_latest_market_price_dates.assert_awaited_once_with(
             security_ids=["S1"],
@@ -644,7 +681,11 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
         }
 
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions("P1", as_of_date=date(2025, 1, 1))
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
+        )
 
         assert {position.security_id for position in response.positions} == {
             "SNAP_ONLY",
@@ -747,7 +788,11 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
         ]
 
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions("P1", as_of_date=date(2025, 1, 1))
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
+        )
 
         assert [position.security_id for position in response.positions] == [
             "SNAP_ONLY",
@@ -778,7 +823,11 @@ async def test_get_latest_positions_include_projected_uses_unbounded_latest(
     ):
         service = PositionService(AsyncMock())
 
-        await service.get_portfolio_positions(portfolio_id="P1", include_projected=True)
+        await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+            include_projected=True,
+        )
 
         mock_position_repo.get_latest_business_date.assert_not_awaited()
         mock_position_repo.get_latest_positions_by_portfolio.assert_awaited_once_with("P1")
@@ -794,7 +843,10 @@ async def test_get_latest_positions_defaults_to_today_when_business_date_absent(
         mock_position_repo.get_latest_business_date.return_value = None
         service = PositionService(AsyncMock())
 
-        await service.get_portfolio_positions(portfolio_id="P1")
+        await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+        )
 
         mock_position_repo.get_latest_positions_by_portfolio_as_of_date.assert_awaited_once_with(
             "P1", date.today()
@@ -823,7 +875,10 @@ async def test_get_latest_positions_weight_zero_when_all_values_zero(mock_positi
         mock_position_repo.get_held_since_dates.return_value = {}
 
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions("P1")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+        )
 
         assert len(response.positions) == 1
         assert response.positions[0].weight == Decimal(0)
@@ -854,6 +909,9 @@ async def test_get_latest_positions_uses_default_held_since_when_map_missing(
         mock_position_repo.get_held_since_dates.return_value = {}
 
         service = PositionService(AsyncMock())
-        response = await service.get_portfolio_positions("P1")
+        response = await service.get_portfolio_positions(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="P1",
+        )
 
         assert response.positions[0].held_since_date == date(2025, 1, 2)

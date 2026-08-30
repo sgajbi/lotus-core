@@ -31,6 +31,7 @@ from tests.integration.services.persistence_service.consumers import (
 pytestmark = [pytest.mark.asyncio, pytest.mark.lifecycle]
 
 JOB_ID = "JOB_LIFECYCLE_DB_001"
+TENANT_ID = "tenant-test"
 IDEMPOTENCY_KEY = "IDEMPOTENCY_LIFECYCLE_DB_001"
 CORRELATION_ID = "CID-BOUNDARY-01"
 REQUEST_ID = "REQ_LIFECYCLE_DB_001"
@@ -84,6 +85,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
 
     created = await create_or_get_job_result(
         job_id=JOB_ID,
+        tenant_id=TENANT_ID,
         endpoint="/ingest/transactions",
         entity_type="transaction",
         accepted_count=1,
@@ -109,7 +111,14 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
         key_id=FINGERPRINT_KEY_ID,
         hmac_secret=FINGERPRINT_SECRET,
     )
-    assert await mark_job_queued(job_id=JOB_ID, session_factory=session_provider) is True
+    assert (
+        await mark_job_queued(
+            job_id=JOB_ID,
+            tenant_id=TENANT_ID,
+            session_factory=session_provider,
+        )
+        is True
+    )
 
     await transaction_boundary._seed_portfolio(async_db_session)
     consumer = TransactionPersistenceConsumer(
@@ -159,6 +168,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
 
     durable_job = await get_job_response(
         job_id=JOB_ID,
+        tenant_id=TENANT_ID,
         session_factory=session_provider,
         reference_key_id="ops-test",
         reference_hmac_secret="integration-test-idempotency-reference-secret",

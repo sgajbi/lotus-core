@@ -24,6 +24,40 @@ from tests.test_support.tenant import TEST_TENANT_ID
 pytestmark = pytest.mark.asyncio
 
 
+async def test_portfolio_ownership_check_fails_closed_for_another_tenant(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+) -> None:
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                tenant_id="tenant-owner",
+                portfolio_id="P-TENANT-FENCE",
+                base_currency="USD",
+                open_date=date(2026, 1, 1),
+                risk_exposure="balanced",
+                investment_time_horizon="long_term",
+                portfolio_type="discretionary",
+                booking_center_code="SGPB",
+                client_id="CLIENT-TENANT-FENCE",
+                status="active",
+            )
+        )
+        session.commit()
+
+    repository = PositionRepository(async_db_session)
+
+    assert await repository.portfolio_exists(
+        tenant_id="tenant-owner",
+        portfolio_id="P-TENANT-FENCE",
+    )
+    assert not await repository.portfolio_exists(
+        tenant_id="tenant-other",
+        portfolio_id="P-TENANT-FENCE",
+    )
+
+
 async def test_get_holdings_reconciliation_controls_reads_only_exact_scope(
     clean_db,
     db_engine,

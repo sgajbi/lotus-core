@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from ..application.capabilities_service import CapabilitiesService
 from ..contracts.capabilities import (
@@ -8,6 +8,8 @@ from ..contracts.capabilities import (
     IntegrationCapabilitiesResponse,
 )
 from ..infrastructure import SqlAlchemyBusinessDateProvider
+from .response_helpers import problem_response
+from .tenant_authority import bind_admitted_tenant_id, tenant_scope_forbidden_example
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -19,6 +21,12 @@ def get_capabilities_service() -> CapabilitiesService:
 @router.get(
     "/capabilities",
     response_model=IntegrationCapabilitiesResponse,
+    responses={
+        403: problem_response(
+            "Requested tenant does not match admitted tenant authority.",
+            tenant_scope_forbidden_example("IntegrationCapabilities"),
+        )
+    },
     summary="Get lotus-core Integration Capabilities",
     description=(
         "What: Return policy-resolved integration capabilities for a consumer and tenant context.\n"
@@ -33,6 +41,7 @@ def get_capabilities_service() -> CapabilitiesService:
     ),
 )
 async def get_integration_capabilities(
+    request: Request,
     consumer_system: ConsumerSystem = Query(
         "lotus-gateway",
         description="Consumer requesting capability metadata.",
@@ -45,6 +54,11 @@ async def get_integration_capabilities(
     ),
     service: CapabilitiesService = Depends(get_capabilities_service),
 ) -> IntegrationCapabilitiesResponse:
+    tenant_id = bind_admitted_tenant_id(
+        requested_tenant_id=tenant_id,
+        tenant_context=request.state.tenant_context,
+        source_product="IntegrationCapabilities",
+    )
     capabilities_service: CapabilitiesService = service
     response = capabilities_service.get_integration_capabilities(
         consumer_system=consumer_system,

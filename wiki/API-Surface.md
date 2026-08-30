@@ -35,6 +35,23 @@ Operational read contracts for:
 - lookups
 - reporting-oriented source-data reads
 
+Portfolio discovery, detail, selector, and portfolio-derived currency lookups apply the admitted
+tenant at the repository query boundary. A portfolio owned by another tenant is indistinguishable
+from a missing portfolio; caller filters cannot widen the admitted scope.
+
+Position history, latest `HoldingsAsOf`, and portfolio maturity summary reads apply the same rule:
+the admitted request tenant must own the path portfolio before Core reads any position rows or
+assembles maturity evidence. Cross-tenant identifiers return the same not-found contract as absent
+portfolios and never disclose holdings or ownership.
+
+Transaction ledger, exact transaction-record, and realized-tax summary reads also require the
+admitted tenant to own the path portfolio before Core reads ledger or tax evidence. The Query
+Control Plane `PortfolioTaxLotWindow` and aggregate `DpmSourceReadiness` apply the same
+tenant-plus-portfolio ownership check before reading lot or instrument evidence. Optional body
+tenant assertions are overwritten with admitted authority when equivalent and rejected when they
+differ. These routes return the same not-found contract for absent and cross-tenant portfolio
+identifiers.
+
 `GET /reporting-currencies/support` is the source-owned, portfolio/as-of preflight for performance
 restatement. It returns explicit `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` status based on
 source currencies and the same two-leg as-of FX path used by performance: position currency to
@@ -105,6 +122,10 @@ See also:
 ### `event_replay_service`
 
 Replay, ingestion-health, DLQ, and operations control-plane contracts.
+Job detail, list, evidence, failure, record-status, and retry operations are tenant-bound from the
+admitted request context through their database predicates. A job owned by another tenant is
+indistinguishable from a missing job, and cross-tenant retry cannot publish or mutate lifecycle
+state.
 
 ### `financial_reconciliation_service`
 
@@ -168,13 +189,20 @@ GET /integration/capabilities?consumer_system=lotus-performance&tenant_id=tenant
 ```
 
 Do not document or call these routes with camelCase aliases such as `consumerSystem` or
-`tenantId`.
+`tenantId`. Their required `tenant_id` query value must match admitted `X-Tenant-Id` authority;
+a mismatch fails with `403 QCP_TENANT_SCOPE_FORBIDDEN` before policy or capability resolution.
 
 Governed snapshot:
 
 ```text
 POST /integration/portfolios/{portfolio_id}/core-snapshot
 ```
+
+The required body `tenant_id` must match the admitted `X-Tenant-Id` authority. Core overwrites
+equivalent normalized input with the admitted canonical value and tenant-filters the portfolio
+lookup before reading positions or assembling snapshot evidence. A mismatched tenant returns
+`403 QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN`; a portfolio outside that tenant remains indistinguishable
+from a missing portfolio.
 
 Analytics input:
 

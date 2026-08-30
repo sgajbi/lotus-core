@@ -20,6 +20,7 @@ from ..services.ingestion_publish_commands import (
 )
 from .publish_errors import (
     ingestion_idempotency_conflict_response,
+    ingestion_portfolio_tenant_mismatch_response,
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
     raise_ingestion_publish_unavailable,
@@ -57,6 +58,7 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IngestionAcceptedResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: ingestion_portfolio_tenant_mismatch_response(),
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the single-transaction request.",
             "content": {"application/json": {"example": TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
@@ -70,8 +72,9 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     summary="Ingest a single transaction",
     description=(
         "What: Accept one canonical transaction record for ledger ingestion.\n"
-        "How: Validate contract, enforce mode and rate controls, propagate any "
-        "idempotency key as publish lineage, then publish asynchronously to Kafka.\n"
+        "How: Validate contract and admitted portfolio ownership, enforce mode and rate "
+        "controls, propagate any idempotency key as publish lineage, then publish "
+        "asynchronously to Kafka.\n"
         "When: Use for low-volume operational corrections or single-record onboarding."
     ),
 )
@@ -86,6 +89,7 @@ async def ingest_transaction(
     try:
         result = await command_handler.ingest_transaction(
             SinglePublishIngestionCommand(
+                tenant_context=request.state.tenant_context,
                 endpoint=str(request.url.path),
                 entity_type="transaction",
                 record=transaction,
@@ -117,6 +121,7 @@ async def ingest_transaction(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: ingestion_portfolio_tenant_mismatch_response(),
         status.HTTP_409_CONFLICT: ingestion_idempotency_conflict_response(),
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the transaction batch request.",
@@ -133,8 +138,8 @@ async def ingest_transaction(
     summary="Ingest a transaction batch",
     description=(
         "What: Accept a batch of canonical transaction records.\n"
-        "How: Persist ingestion job metadata, validate payload, and publish "
-        "all valid records asynchronously.\n"
+        "How: Validate every portfolio against admitted tenant authority, persist ingestion "
+        "job metadata, and publish all valid records asynchronously.\n"
         "When: Use for standard API-driven batch ingestion workflows."
     ),
 )

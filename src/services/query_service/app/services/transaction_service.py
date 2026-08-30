@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import NoReturn, Optional, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ from ..dtos.transaction_dto import (
 )
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
-from .portfolio_validation import ensure_portfolio_exists
+from .portfolio_validation import ensure_portfolio_owned
 from .transaction_dates import (
     realized_tax_effective_as_of_date,
     transaction_ledger_effective_as_of_date,
@@ -75,6 +76,8 @@ class TransactionService:
 
     async def get_transactions(
         self,
+        *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         skip: int,
         limit: int,
@@ -118,7 +121,11 @@ class TransactionService:
         )
 
         await self.repo.establish_transaction_ledger_read_snapshot()
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
         effective_as_of_date = await transaction_ledger_effective_as_of_date(
             repository=self.repo,
             as_of_date=as_of_date,
@@ -178,6 +185,7 @@ class TransactionService:
     async def get_transaction_record(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         transaction_id: str,
         as_of_date: date | None = None,
@@ -203,6 +211,11 @@ class TransactionService:
         )
         try:
             await self.repo.establish_transaction_ledger_read_snapshot()
+            await ensure_portfolio_owned(
+                repository=self.repo,
+                tenant_id=tenant_context.tenant_id_text,
+                portfolio_id=portfolio_id,
+            )
             effective_as_of_date = await transaction_ledger_effective_as_of_date(
                 repository=self.repo,
                 as_of_date=as_of_date,
@@ -276,6 +289,7 @@ class TransactionService:
     async def get_realized_tax_summary(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
@@ -296,6 +310,11 @@ class TransactionService:
             ),
         )
 
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
         base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")

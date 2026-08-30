@@ -14,6 +14,9 @@ from src.services.ingestion_service.app.DTOs.corporate_action_manifest_dto impor
 from src.services.ingestion_service.app.DTOs.fixed_income_book_cost_authority_dto import (
     FixedIncomeBookCostAuthorityIngestionRequest,
 )
+from src.services.ingestion_service.app.ports.portfolio_tenant_reader import (
+    PortfolioTenantOwnership,
+)
 from src.services.ingestion_service.app.ports.transaction_reprocessing import (
     TransactionReprocessingTargetReadError,
 )
@@ -26,6 +29,7 @@ from src.services.ingestion_service.app.services.ingestion_publish_commands impo
     IngestionPublishCommandError,
     IngestionPublishCommandHandler,
     IngestionPublishUnavailable,
+    PortfolioBundlePublishIngestionCommand,
     SinglePublishIngestionCommand,
 )
 from src.services.ingestion_service.app.services.ingestion_service import IngestionPublishError
@@ -75,6 +79,14 @@ def _handler() -> IngestionPublishCommandHandler:
         mark_queued=AsyncMock(return_value=True),
         record_failure_observation=AsyncMock(),
     )
+    portfolio_tenant_reader = SimpleNamespace(
+        resolve_ownership=AsyncMock(
+            side_effect=lambda *, tenant_id, portfolio_ids: PortfolioTenantOwnership(
+                existing_ids=frozenset(portfolio_ids),
+                owned_ids=frozenset(portfolio_ids),
+            )
+        )
+    )
     return IngestionPublishCommandHandler(
         ingestion_service=ingestion_service,
         ingestion_job_service=job_service,
@@ -90,6 +102,7 @@ def _handler() -> IngestionPublishCommandHandler:
                 )
             )
         ),
+        portfolio_tenant_reader=portfolio_tenant_reader,
     )
 
 
@@ -174,7 +187,10 @@ async def test_batch_publish_command_creates_job_publishes_and_marks_queued() ->
     assert result.job_id == "job-1"
     assert result.accepted_count == 2
     publisher.assert_awaited_once()
-    handler.ingestion_job_service.mark_queued.assert_awaited_once_with("job-1")
+    handler.ingestion_job_service.mark_queued.assert_awaited_once_with(
+        "job-1",
+        tenant_id="tenant-test",
+    )
     handler.ingestion_job_service.mark_failed.assert_not_awaited()
     assert (
         handler.ingestion_job_service.create_or_get_job.await_args.kwargs["tenant_context"]
@@ -299,6 +315,10 @@ async def test_durable_batch_replay_bypasses_write_controls() -> None:
     )
 
     assert result.replayed is True
+    assert (
+        handler.idempotency_replay_reader.find_matching_job.await_args.kwargs["tenant_id"]
+        == "tenant-test"
+    )
     handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
     handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
     publisher.assert_not_awaited()
@@ -368,6 +388,7 @@ async def test_batch_publish_command_marks_failed_on_publish_error() -> None:
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "job-1",
         "Ingestion publishing failed before durable queue confirmation.",
+        tenant_id="tenant-test",
         failed_record_keys=["T1"],
         failure_status_code=503,
         failure_code="INGESTION_PUBLISH_FAILED",
@@ -425,6 +446,7 @@ async def test_single_publish_command_has_no_job_lifecycle() -> None:
 
     result = await handler.ingest_single(
         SinglePublishIngestionCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
             endpoint="/ingest/transaction",
             entity_type="transaction",
             record={"transaction_id": "T1"},
@@ -441,6 +463,96 @@ async def test_single_publish_command_has_no_job_lifecycle() -> None:
 
 
 @pytest.mark.asyncio
+async def test_transaction_batch_rejects_cross_tenant_portfolio_before_replay_or_publish() -> None:
+    handler = _handler()
+    handler.portfolio_tenant_reader.resolve_ownership.return_value = PortfolioTenantOwnership(
+        existing_ids=frozenset({"PORT-B"}),
+        owned_ids=frozenset(),
+    )
+    handler.portfolio_tenant_reader.resolve_ownership.side_effect = None
+    publisher = AsyncMock()
+
+    with pytest.raises(IngestionPublishCommandError) as exc_info:
+        await handler.ingest_batch(
+            BatchPublishIngestionCommand(
+                endpoint="/ingest/transactions",
+                entity_type="transaction",
+                records=[SimpleNamespace(portfolio_id="PORT-B")],
+                idempotency_key="tenant-boundary",
+                request_payload={"transactions": [{"portfolio_id": "PORT-B"}]},
+                accepted_message="Transactions accepted.",
+            ),
+            publisher,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "INGESTION_PORTFOLIO_TENANT_MISMATCH"
+    handler.idempotency_replay_reader.find_matching_job.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    publisher.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_portfolio_bundle_accepts_new_admitted_portfolio_and_its_transaction() -> None:
+    handler = _handler()
+    handler.portfolio_tenant_reader.resolve_ownership.return_value = PortfolioTenantOwnership(
+        existing_ids=frozenset(),
+        owned_ids=frozenset(),
+    )
+    handler.portfolio_tenant_reader.resolve_ownership.side_effect = None
+    handler.ingestion_service.publish_portfolio_bundle = AsyncMock(
+        return_value={"portfolios": 1, "transactions": 1}
+    )
+    request = SimpleNamespace(
+        portfolios=[SimpleNamespace(portfolio_id="PORT-NEW")],
+        transactions=[SimpleNamespace(portfolio_id="PORT-NEW")],
+    )
+
+    result = await handler.ingest_portfolio_bundle(
+        PortfolioBundlePublishIngestionCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
+            endpoint="/ingest/portfolio-bundle",
+            request=request,
+            idempotency_key=None,
+            request_payload={"portfolios": [{}], "transactions": [{}]},
+            accepted_count=2,
+        )
+    )
+
+    assert result.accepted_count == 2
+    handler.ingestion_service.publish_portfolio_bundle.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_portfolio_bundle_rejects_existing_other_tenant_portfolio_before_job() -> None:
+    handler = _handler()
+    handler.portfolio_tenant_reader.resolve_ownership.return_value = PortfolioTenantOwnership(
+        existing_ids=frozenset({"PORT-B"}),
+        owned_ids=frozenset(),
+    )
+    handler.portfolio_tenant_reader.resolve_ownership.side_effect = None
+    request = SimpleNamespace(
+        portfolios=[SimpleNamespace(portfolio_id="PORT-B")],
+        transactions=[SimpleNamespace(portfolio_id="PORT-B")],
+    )
+
+    with pytest.raises(IngestionPublishCommandError) as exc_info:
+        await handler.ingest_portfolio_bundle(
+            PortfolioBundlePublishIngestionCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
+                endpoint="/ingest/portfolio-bundle",
+                request=request,
+                idempotency_key=None,
+                request_payload={"portfolios": [{}], "transactions": [{}]},
+                accepted_count=2,
+            )
+        )
+
+    assert exc_info.value.status_code == 403
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_command_error_maps_blocked_mode_without_router_logic() -> None:
     handler = _handler()
     handler.ingestion_job_service.assert_ingestion_writable.side_effect = PermissionError(
@@ -450,6 +562,7 @@ async def test_command_error_maps_blocked_mode_without_router_logic() -> None:
     with pytest.raises(IngestionPublishCommandError) as exc_info:
         await handler.ingest_single(
             SinglePublishIngestionCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
                 endpoint="/ingest/transaction",
                 entity_type="transaction",
                 record={"transaction_id": "T1"},

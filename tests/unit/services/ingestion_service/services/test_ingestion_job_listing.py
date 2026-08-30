@@ -44,6 +44,7 @@ def test_ingestion_job_list_page_has_no_cursor_when_final_page():
 def test_build_ingestion_job_list_statement_applies_filters_and_cursor():
     statement = build_ingestion_job_list_statement(
         filters=IngestionJobListFilters(
+            tenant_id="tenant-a",
             status="accepted",
             entity_type="transaction",
             submitted_from=datetime(2026, 6, 1, tzinfo=UTC),
@@ -56,15 +57,20 @@ def test_build_ingestion_job_list_statement_applies_filters_and_cursor():
     compiled_sql = str(statement)
 
     assert "ingestion_jobs.status = :status_1" in compiled_sql
+    assert "ingestion_jobs.tenant_id = :tenant_id_1" in compiled_sql
     assert "ingestion_jobs.entity_type = :entity_type_1" in compiled_sql
     assert "ingestion_jobs.submitted_at >= :submitted_at_1" in compiled_sql
     assert "ingestion_jobs.submitted_at <= :submitted_at_2" in compiled_sql
     assert "ingestion_jobs.id < :id_1" in compiled_sql
     assert "ORDER BY ingestion_jobs.id DESC" in compiled_sql
+    assert statement.compile().params["tenant_id_1"] == "tenant-a"
 
 
 def test_build_unique_replayable_correlation_lookup_statement_is_index_shaped():
-    statement = build_unique_replayable_correlation_lookup_statement(correlation_id="corr-001")
+    statement = build_unique_replayable_correlation_lookup_statement(
+        correlation_id="corr-001",
+        tenant_id="tenant-a",
+    )
 
     compiled = statement.compile()
     compiled_sql = str(compiled)
@@ -73,6 +79,7 @@ def test_build_unique_replayable_correlation_lookup_statement_is_index_shaped():
     assert "ingestion_jobs.status IN" in compiled_sql
     assert "ORDER BY ingestion_jobs.id DESC" in compiled_sql
     assert compiled.params["correlation_id_1"] == "corr-001"
+    assert compiled.params["tenant_id_1"] == "tenant-a"
     assert tuple(compiled.params["status_1"]) == REPLAYABLE_INGESTION_JOB_STATUSES
 
 
@@ -159,6 +166,7 @@ async def test_load_job_list_response_maps_rows_and_next_cursor():
 
     result, next_cursor = await load_job_list_response(
         filters=IngestionJobListFilters(
+            tenant_id="tenant-a",
             status="queued",
             entity_type="transaction",
             submitted_from=datetime(2026, 6, 1, tzinfo=UTC),
@@ -190,7 +198,7 @@ async def test_load_job_list_response_without_filters_preserves_key_disclosure_p
     session = _FakeSession([keyed_row, unkeyed_row])
 
     result, next_cursor = await load_job_list_response(
-        filters=IngestionJobListFilters(),
+        filters=IngestionJobListFilters(tenant_id="tenant-a"),
         cursor=None,
         limit=2,
         session_factory=lambda: _SingleSessionAsyncIterable(session),
@@ -214,6 +222,7 @@ async def test_load_unique_replayable_job_by_correlation_id_maps_only_row():
 
     result = await load_unique_replayable_job_by_correlation_id(
         correlation_id="corr-job_500_plus",
+        tenant_id="tenant-a",
         session_factory=lambda: _SingleSessionAsyncIterable(session),
         reference_key_id=_REFERENCE_KEY_ID,
         reference_hmac_secret=_REFERENCE_HMAC_SECRET,
@@ -236,6 +245,7 @@ async def test_load_unique_replayable_job_by_correlation_id_fails_closed(rows):
 
     result = await load_unique_replayable_job_by_correlation_id(
         correlation_id="corr-missing",
+        tenant_id="tenant-a",
         session_factory=lambda: _SingleSessionAsyncIterable(session),
         reference_key_id=_REFERENCE_KEY_ID,
         reference_hmac_secret=_REFERENCE_HMAC_SECRET,

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Literal, cast
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint
 
@@ -49,10 +50,14 @@ class PortfolioTaxLotService:
     async def resolve(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         request: PortfolioTaxLotWindowRequest,
     ) -> PortfolioTaxLotWindowResponse:
-        if not await self.reader.portfolio_exists(portfolio_id):
+        if not await self.reader.portfolio_exists(
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        ):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         scope = portfolio_tax_lot_request_scope(
             portfolio_id=portfolio_id,

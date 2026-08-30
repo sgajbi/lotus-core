@@ -14,6 +14,7 @@ from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots i
 from src.services.query_control_plane_service.app.domain.dpm_source_readiness import (
     PortfolioTaxLotEvidence,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 GENERATED_AT = datetime(2026, 4, 10, 12, tzinfo=UTC)
 EVIDENCE_AT = datetime(2026, 4, 10, 10, tzinfo=UTC)
@@ -142,7 +143,8 @@ def test_page_token_is_bound_to_request_scope() -> None:
 @pytest.mark.asyncio
 async def test_service_fetches_page_size_plus_one_and_encodes_last_returned_lot() -> None:
     class Reader:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
+            self.ownership_scope = (tenant_id, portfolio_id)
             return True
 
         async def list_portfolio_tax_lots(self, **kwargs: object):
@@ -167,10 +169,41 @@ async def test_service_fetches_page_size_plus_one_and_encodes_last_returned_lot(
         page_tokens=tokens,
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TEST_TENANT_CONTEXT,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=_request("EQ_US_AAPL", page_size=1),
     )
 
+    assert reader.ownership_scope == (TEST_TENANT_ID, "PB_SG_GLOBAL_BAL_001")
     assert reader.read["limit"] == 2
     assert response.page.next_page_token == "encoded"
     assert tokens.payload["last_lot_id"] == "LOT_1"
+
+
+@pytest.mark.asyncio
+async def test_service_rejects_cross_tenant_portfolio_before_tax_lot_read() -> None:
+    class Reader:
+        async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
+            self.ownership_scope = (tenant_id, portfolio_id)
+            return False
+
+        async def list_portfolio_tax_lots(self, **_: object):
+            raise AssertionError("tax-lot evidence must not be read across tenants")
+
+        async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
+            raise AssertionError("instrument evidence must not be read across tenants")
+
+    reader = Reader()
+    tokens = type("Tokens", (), {"decode": lambda _self, _token: {}})()
+
+    with pytest.raises(LookupError, match="Portfolio with id PB_OTHER not found"):
+        await portfolio_tax_lots.PortfolioTaxLotService(
+            reader=reader,  # type: ignore[arg-type]
+            page_tokens=tokens,  # type: ignore[arg-type]
+        ).resolve(
+            tenant_context=TEST_TENANT_CONTEXT,
+            portfolio_id="PB_OTHER",
+            request=_request(),
+        )
+
+    assert reader.ownership_scope == (TEST_TENANT_ID, "PB_OTHER")

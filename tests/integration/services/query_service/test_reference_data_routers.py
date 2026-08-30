@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -16,7 +16,7 @@ from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrume
 from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
 from src.services.query_service.app.dtos.price_dto import MarketPriceResponse
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -214,11 +214,17 @@ async def test_get_portfolio_lookups(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "PF_1", "label": "PF_1"}]
     mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
+        tenant_context=ANY,
         client_id=None,
         booking_center_code=None,
         q=None,
         limit=500,
     )
+    tenant_context = mock_portfolio_service.search_portfolio_lookup_items.await_args.kwargs[
+        "tenant_context"
+    ]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
     mock_portfolio_service.get_portfolios.assert_not_awaited()
 
 
@@ -232,11 +238,17 @@ async def test_get_portfolio_lookups_filters_query_and_limit(async_test_client):
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "PF_1", "label": "PF_1"}]
     mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
+        tenant_context=ANY,
         client_id="CIF-9",
         booking_center_code=None,
         q="PF_",
         limit=1,
     )
+    tenant_context = mock_portfolio_service.search_portfolio_lookup_items.await_args.kwargs[
+        "tenant_context"
+    ]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
     mock_portfolio_service.get_portfolios.assert_not_awaited()
 
 
@@ -288,7 +300,16 @@ async def test_get_currency_lookups(async_test_client):
         {"id": "EUR", "label": "EUR"},
         {"id": "USD", "label": "USD"},
     ]
-    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=500)
+    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(
+        tenant_context=ANY,
+        q=None,
+        limit=500,
+    )
+    tenant_context = mock_portfolio_service.list_currency_lookup_items.await_args.kwargs[
+        "tenant_context"
+    ]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
     mock_instrument_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=500)
     mock_portfolio_service.get_portfolios.assert_not_awaited()
     mock_instrument_service.get_instruments.assert_not_awaited()

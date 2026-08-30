@@ -1,7 +1,7 @@
 # services/query-service/app/routers/portfolios.py
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 
 from ..dependencies import get_portfolio_service
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
@@ -26,6 +26,7 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-DISC-0
     ),
 )
 async def get_portfolios(
+    request: Request,
     portfolio_id: Optional[str] = Query(
         None,
         description="Filter by a single, specific portfolio ID.",
@@ -49,6 +50,7 @@ async def get_portfolios(
     service: PortfolioService = Depends(get_portfolio_service),
 ):
     return await service.get_portfolios(
+        tenant_context=request.state.tenant_context,
         portfolio_id=portfolio_id,
         portfolio_ids=portfolio_ids,
         client_id=client_id,
@@ -74,6 +76,7 @@ async def get_portfolios(
     ),
 )
 async def get_portfolio_by_id(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -86,7 +89,10 @@ async def get_portfolio_by_id(
     Returns a `404 Not Found` if the portfolio does not exist.
     """
     try:
-        portfolio = await service.get_portfolio_by_id(portfolio_id)
+        portfolio = await service.get_portfolio_by_id(
+            tenant_context=request.state.tenant_context,
+            portfolio_id=portfolio_id,
+        )
         return portfolio
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

@@ -69,12 +69,17 @@ async def test_mark_job_queued_after_publish_records_rejected_transition():
         await mark_job_queued_after_publish_or_raise(
             ingestion_job_service=ingestion_job_service,
             job_id="job_rejected",
+            tenant_id="tenant-test",
             published_record_count=2,
         )
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
     assert exc_info.value.detail["published_record_count"] == 2
+    ingestion_job_service.mark_queued.assert_awaited_once_with(
+        "job_rejected",
+        tenant_id="tenant-test",
+    )
     ingestion_job_service.record_failure_observation.assert_awaited_once_with(
         "job_rejected",
         "job queue transition was rejected",

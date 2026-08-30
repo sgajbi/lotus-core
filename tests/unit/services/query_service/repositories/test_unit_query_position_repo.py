@@ -331,9 +331,13 @@ async def test_portfolio_exists_true(repository: PositionRepository, mock_db_ses
     mock_result.scalar_one_or_none.return_value = "P1"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P1")
+    exists = await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="P1")
 
     assert exists is True
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled_query = _compile_postgresql(statement)
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
 
 
 async def test_portfolio_exists_false(repository: PositionRepository, mock_db_session: AsyncMock):
@@ -341,7 +345,7 @@ async def test_portfolio_exists_false(repository: PositionRepository, mock_db_se
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P404")
+    exists = await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="P404")
 
     assert exists is False
 

@@ -13,8 +13,9 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.integration.ingestion_job_sql_fixture import (
-    transaction_payload_evidence_insert_fragments,
+    transaction_ingestion_job_insert_fragments,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -69,9 +70,7 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
     with db_engine.begin() as connection:
         operations = _bind_operations(migration, connection)
         _normalize_to_previous_revision(operations, connection)
-        evidence_columns, evidence_values = transaction_payload_evidence_insert_fragments(
-            connection
-        )
+        evidence_columns, evidence_values = transaction_ingestion_job_insert_fragments(connection)
         for job_id, correlation_id in (
             ("job-unique", "corr-unique"),
             ("job-shared-1", "corr-shared"),
@@ -89,7 +88,11 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
                     )
                     """
                 ),
-                {"job_id": job_id, "correlation_id": correlation_id},
+                {
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "tenant_id": TEST_TENANT_ID,
+                },
             )
         for event_id, correlation_id in (
             ("dlq-unique", "corr-unique"),

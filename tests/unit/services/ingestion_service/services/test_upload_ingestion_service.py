@@ -11,6 +11,9 @@ from src.services.ingestion_service.app.application.upload_commands import (
     UploadCommitCommand,
     UploadPreviewCommand,
 )
+from src.services.ingestion_service.app.ports.portfolio_tenant_reader import (
+    PortfolioTenantOwnership,
+)
 from src.services.ingestion_service.app.services.upload_ingestion_service import (
     UploadIngestionService,
 )
@@ -37,9 +40,17 @@ def _xlsx_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
 def upload_service() -> UploadIngestionService:
     publisher = AsyncMock()
     publisher.publish_records = AsyncMock()
+    portfolio_tenant_reader = AsyncMock()
+    portfolio_tenant_reader.resolve_ownership.side_effect = lambda *, tenant_id, portfolio_ids: (
+        PortfolioTenantOwnership(
+            existing_ids=frozenset(portfolio_ids),
+            owned_ids=frozenset(portfolio_ids),
+        )
+    )
     return UploadIngestionService(
         validator=BulkUploadValidator(),
         publisher=publisher,
+        portfolio_tenant_reader=portfolio_tenant_reader,
     )
 
 
@@ -189,6 +200,46 @@ async def test_commit_upload_allows_partial(upload_service: UploadIngestionServi
     assert response.published_rows == 1
     assert response.skipped_rows == 1
     upload_service._publisher.publish_records.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_commit_upload_rejects_portfolio_outside_admitted_tenant(
+    upload_service: UploadIngestionService,
+) -> None:
+    upload_service._portfolio_tenant_reader.resolve_ownership.return_value = (
+        PortfolioTenantOwnership(
+            existing_ids=frozenset({"P-OTHER"}),
+            owned_ids=frozenset(),
+        )
+    )
+    upload_service._portfolio_tenant_reader.resolve_ownership.side_effect = None
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+                "T1,P-OTHER,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            ]
+        )
+    )
+
+    with pytest.raises(ValidationRejected) as exc_info:
+        await upload_service.commit_upload(
+            UploadCommitCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
+                entity_type="transactions",
+                filename="transactions.csv",
+                content=content,
+                allow_partial=True,
+            )
+        )
+
+    assert exc_info.value.reason_code == "upload_portfolio_tenant_mismatch"
+    assert exc_info.value.detail["code"] == "INGESTION_UPLOAD_PORTFOLIO_TENANT_MISMATCH"
+    upload_service._portfolio_tenant_reader.resolve_ownership.assert_awaited_once_with(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id_text,
+        portfolio_ids={"P-OTHER"},
+    )
+    upload_service._publisher.publish_records.assert_not_awaited()
 
 
 @pytest.mark.asyncio

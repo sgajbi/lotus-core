@@ -22,6 +22,7 @@ from ..services.ingestion_publish_commands import (
 )
 from .publish_errors import (
     ingestion_idempotency_conflict_response,
+    ingestion_portfolio_tenant_mismatch_response,
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
     raise_ingestion_publish_unavailable,
@@ -63,6 +64,7 @@ PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: ingestion_portfolio_tenant_mismatch_response(),
         status.HTTP_409_CONFLICT: ingestion_idempotency_conflict_response(),
         status.HTTP_410_GONE: {
             "description": "Portfolio bundle adapter mode disabled for this environment.",
@@ -84,8 +86,8 @@ PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     description=(
         "What: Accept a mixed onboarding bundle containing portfolio, instrument, transaction, "
         "market-price, FX-rate, and business-date records.\n"
-        "How: Validate adapter payload and fan out records into existing canonical "
-        "ingestion topics.\n"
+        "How: Validate adapter payload and portfolio ownership against admitted tenant "
+        "authority, then fan out records into existing canonical ingestion topics.\n"
         "When: Use for adapter-mode onboarding (UI/manual/file workflows), "
         "not primary upstream integration."
     ),

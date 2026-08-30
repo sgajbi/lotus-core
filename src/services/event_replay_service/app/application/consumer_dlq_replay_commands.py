@@ -4,6 +4,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
 from src.services.ingestion_service.app.application.ingestion_failure_evidence import (
@@ -30,6 +31,7 @@ CONSUMER_DLQ_REPLAY_RECOVERY_PATH = "consumer_dlq_replay"
 
 @dataclass(frozen=True)
 class ConsumerDlqReplayCommand:
+    tenant_context: TenantContext
     dry_run: bool
     requested_by: str | None
 
@@ -68,6 +70,7 @@ class ConsumerDlqReplayCommandService:
         event_id: str,
         command: ConsumerDlqReplayCommand,
     ) -> ConsumerDlqReplayResult:
+        tenant_id = command.tenant_context.tenant_id_text
         event = await self._required_consumer_dlq_event(event_id)
         ingestion_job_id = getattr(event, "ingestion_job_id", None)
         if not event.correlation_id and not ingestion_job_id:
@@ -95,6 +98,7 @@ class ConsumerDlqReplayCommandService:
             ingestion_job_id=ingestion_job_id,
             dry_run=command.dry_run,
             requested_by=command.requested_by,
+            tenant_id=tenant_id,
         )
         if isinstance(replay_candidate, ConsumerDlqReplayResult):
             return replay_candidate
@@ -242,11 +246,13 @@ class ConsumerDlqReplayCommandService:
         correlation_id: str | None,
         dry_run: bool,
         requested_by: str | None,
+        tenant_id: str,
         ingestion_job_id: str | None = None,
     ) -> ConsumerDlqReplayCandidate | ConsumerDlqReplayResult:
         replay_job = await self._correlated_consumer_dlq_replay_job(
             correlation_id=correlation_id,
             ingestion_job_id=ingestion_job_id,
+            tenant_id=tenant_id,
         )
         if replay_job is None:
             return await self._consumer_dlq_not_replayable_result(
@@ -262,7 +268,10 @@ class ConsumerDlqReplayCommandService:
             )
 
         replay_job_id = self._replay_job_id(replay_job)
-        context = await self.ingestion_job_service.get_job_replay_context(replay_job_id)
+        context = await self.ingestion_job_service.get_job_replay_context(
+            replay_job_id,
+            tenant_id=tenant_id,
+        )
         replay_fingerprint = self._consumer_dlq_replay_fingerprint(
             event_id=event_id,
             correlation_id=correlation_id,
@@ -296,16 +305,21 @@ class ConsumerDlqReplayCommandService:
         *,
         correlation_id: str | None,
         ingestion_job_id: str | None,
+        tenant_id: str,
     ) -> Any | None:
         if ingestion_job_id is not None:
-            replay_job = await self.ingestion_job_service.get_job(ingestion_job_id)
+            replay_job = await self.ingestion_job_service.get_job(
+                ingestion_job_id,
+                tenant_id=tenant_id,
+            )
             if replay_job is None or replay_job.status not in {"failed", "queued", "accepted"}:
                 return None
             return replay_job
         if correlation_id is None:
             return None
         return await self.ingestion_job_service.get_unique_replayable_job_by_correlation_id(
-            correlation_id
+            correlation_id,
+            tenant_id=tenant_id,
         )
 
     async def _consumer_dlq_not_replayable_result(
@@ -477,7 +491,10 @@ class ConsumerDlqReplayCommandService:
         requested_by: str | None,
     ) -> ConsumerDlqReplayResult:
         try:
-            transitioned = await self.ingestion_job_service.mark_retried_and_queued(job_id)
+            transitioned = await self.ingestion_job_service.mark_retried_and_queued(
+                job_id,
+                tenant_id=context.tenant_id,
+            )
             if not transitioned:
                 replay_audit_id = await self._record_mandatory_replay_audit(
                     event_id=event_id,

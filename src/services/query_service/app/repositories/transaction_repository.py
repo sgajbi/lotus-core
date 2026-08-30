@@ -172,8 +172,15 @@ class TransactionRepository:
             Transaction.other_interest_deductions_amount.is_not(None)
         )
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+    async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
+        stmt = (
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
     async def get_portfolio_base_currency(self, portfolio_id: str) -> Optional[str]:

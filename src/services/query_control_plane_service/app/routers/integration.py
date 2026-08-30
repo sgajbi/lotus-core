@@ -1,7 +1,6 @@
 from typing import NoReturn, cast
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
 from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
@@ -16,15 +15,9 @@ from ..application.client_liquidity_evidence import ClientLiquidityEvidenceServi
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
 from ..application.client_tax_rule_set import ClientTaxRuleSetService
-from ..application.core_snapshot.governance import (
-    SnapshotGovernanceContext,
-)
 from ..application.core_snapshot.service import (
     CoreSnapshotBadRequestError,
-    CoreSnapshotConflictError,
-    CoreSnapshotNotFoundError,
     CoreSnapshotService,
-    CoreSnapshotUnavailableSectionError,
 )
 from ..application.dpm_portfolio_population import DpmPortfolioPopulationService
 from ..application.dpm_source_readiness.readiness import DpmSourceReadinessService
@@ -81,7 +74,6 @@ from ..contracts.core_snapshot import (
     CORE_SNAPSHOT_ROUTE_DESCRIPTION,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
-    CoreSnapshotSection,
 )
 from ..contracts.discretionary_mandate_binding import (
     DiscretionaryMandateBindingRequest,
@@ -187,12 +179,24 @@ from ..dependencies import (
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
 )
+from .core_snapshot import (
+    bind_core_snapshot_tenant_authority,
+    core_snapshot_response_or_http_error,
+    governed_core_snapshot_request,
+    lotus_idea_core_snapshot_payload,
+)
 from .response_helpers import (
     problem_example,
+    problem_examples_response,
     problem_or_validation_response,
     problem_response,
     raise_problem,
 )
+from .source_evidence_errors import (
+    raise_source_evidence_invalid_request,
+    raise_source_evidence_not_found,
+)
+from .tenant_authority import bind_admitted_tenant_id, tenant_scope_forbidden_example
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -282,6 +286,13 @@ INTEGRATION_POLICY_BLOCKED_EXAMPLE = problem_example(
     title="Core snapshot sections blocked by policy",
     detail="Requested snapshot sections are blocked by strict integration policy.",
     error_code="QCP_CORE_SNAPSHOT_POLICY_BLOCKED",
+    metadata={"source_product": "PortfolioStateSnapshot"},
+)
+CORE_SNAPSHOT_TENANT_FORBIDDEN_EXAMPLE = problem_example(
+    status_code=status.HTTP_403_FORBIDDEN,
+    title="Core snapshot tenant scope forbidden",
+    detail="Requested tenant does not match admitted tenant authority.",
+    error_code="QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN",
     metadata={"source_product": "PortfolioStateSnapshot"},
 )
 CORE_SNAPSHOT_INVALID_REQUEST_EXAMPLE = problem_example(
@@ -628,67 +639,15 @@ def _raise_instrument_enrichment_invalid_request(exc: Exception) -> NoReturn:
     raise AssertionError("raise_problem returned unexpectedly")
 
 
-def _raise_source_evidence_problem(
-    *,
-    status_code: int,
-    title: str,
-    detail: str,
-    error_code: str,
-    source_product: str,
-    portfolio_id: str,
-    reason: str,
-) -> NoReturn:
-    raise_problem(
-        status_code=status_code,
-        title=title,
-        detail=detail,
-        error_code=error_code,
-        metadata={
-            "source_product": source_product,
-            "portfolio_id": portfolio_id,
-            "reason": reason,
-        },
-    )
-    raise AssertionError("raise_problem returned unexpectedly")
-
-
-def _raise_source_evidence_not_found(
-    *,
-    source_product: str,
-    portfolio_id: str,
-    exc: Exception,
-) -> NoReturn:
-    _raise_source_evidence_problem(
-        status_code=status.HTTP_404_NOT_FOUND,
-        title="Portfolio source evidence not found",
-        detail="Requested portfolio source evidence was not found.",
-        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
-        source_product=source_product,
-        portfolio_id=portfolio_id,
-        reason=exc.__class__.__name__,
-    )
-
-
-def _raise_source_evidence_invalid_request(
-    *,
-    source_product: str,
-    portfolio_id: str,
-    exc: Exception,
-) -> NoReturn:
-    _raise_source_evidence_problem(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        title="Portfolio source evidence request is invalid",
-        detail="Portfolio source evidence request is invalid.",
-        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
-        source_product=source_product,
-        portfolio_id=portfolio_id,
-        reason=exc.__class__.__name__,
-    )
-
-
 @router.get(
     "/policy/effective",
     response_model=EffectiveIntegrationPolicyResponse,
+    responses={
+        403: problem_response(
+            "Requested tenant does not match admitted tenant authority.",
+            tenant_scope_forbidden_example("IntegrationPolicy"),
+        )
+    },
     summary="Get effective lotus-core integration policy",
     description=(
         "What: Return effective integration policy diagnostics for a consumer and tenant "
@@ -705,6 +664,7 @@ def _raise_source_evidence_invalid_request(
     ),
 )
 async def get_effective_integration_policy(
+    http_request: Request,
     consumer_system: str = Query(
         "lotus-gateway",
         description="Downstream consumer system requesting policy resolution.",
@@ -722,6 +682,11 @@ async def get_effective_integration_policy(
     ),
     integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> EffectiveIntegrationPolicyResponse:
+    tenant_id = bind_admitted_tenant_id(
+        requested_tenant_id=tenant_id,
+        tenant_context=http_request.state.tenant_context,
+        source_product="IntegrationPolicy",
+    )
     response = integration_service.get_effective_policy(
         consumer_system=consumer_system,
         tenant_id=tenant_id,
@@ -738,9 +703,12 @@ async def get_effective_integration_policy(
             "Invalid request payload or invalid section/mode combination.",
             CORE_SNAPSHOT_INVALID_REQUEST_EXAMPLE,
         ),
-        status.HTTP_403_FORBIDDEN: problem_response(
-            "Requested sections are blocked by strict integration policy.",
-            INTEGRATION_POLICY_BLOCKED_EXAMPLE,
+        status.HTTP_403_FORBIDDEN: problem_examples_response(
+            "Tenant authority or strict integration policy blocked the request.",
+            {
+                "tenant_scope_forbidden": CORE_SNAPSHOT_TENANT_FORBIDDEN_EXAMPLE,
+                "policy_blocked": INTEGRATION_POLICY_BLOCKED_EXAMPLE,
+            },
         ),
         status.HTTP_404_NOT_FOUND: problem_response(
             "Portfolio or simulation session not found.",
@@ -761,6 +729,7 @@ async def get_effective_integration_policy(
 )
 async def create_core_snapshot(
     request: CoreSnapshotRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier for the snapshot request.",
@@ -769,208 +738,23 @@ async def create_core_snapshot(
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> CoreSnapshotResponse | JSONResponse:
-    effective_request, governance = _governed_core_snapshot_request(
+    request = bind_core_snapshot_tenant_authority(
+        request=request,
+        tenant_context=http_request.state.tenant_context,
+    )
+    effective_request, governance = governed_core_snapshot_request(
         request=request,
         integration_service=integration_service,
     )
-    response = await _core_snapshot_response_or_http_error(
+    response = await core_snapshot_response_or_http_error(
         service=service,
         portfolio_id=portfolio_id,
         request=effective_request,
         governance=governance,
     )
     if request.consumer_system == "lotus-idea":
-        return JSONResponse(content=_lotus_idea_core_snapshot_payload(response))
+        return JSONResponse(content=lotus_idea_core_snapshot_payload(response))
     return response
-
-
-def _lotus_idea_core_snapshot_payload(response: CoreSnapshotResponse | dict) -> dict:
-    payload = cast(
-        dict,
-        jsonable_encoder(
-            response.model_dump(mode="json")
-            if isinstance(response, CoreSnapshotResponse)
-            else response
-        ),
-    )
-    payload["freshness_metadata"] = payload.get("freshness")
-    payload["freshness"] = payload.get("freshness_status", "UNAVAILABLE")
-    return payload
-
-
-def _governed_core_snapshot_request(
-    *,
-    request: CoreSnapshotRequest,
-    integration_service: IntegrationPolicyService,
-) -> tuple[CoreSnapshotRequest, SnapshotGovernanceContext]:
-    requested_sections = list(request.sections)
-    policy = integration_service.get_effective_policy(
-        consumer_system=request.consumer_system,
-        tenant_id=request.tenant_id,
-        include_sections=_policy_section_codes(requested_sections),
-    )
-    applied_sections, dropped_sections, warnings = _policy_applied_snapshot_sections(
-        requested_sections=requested_sections,
-        policy=policy,
-    )
-    _assert_core_snapshot_sections_allowed(
-        applied_sections=applied_sections,
-        dropped_sections=dropped_sections,
-        strict_mode=policy.policy_provenance.strict_mode,
-    )
-    return (
-        request.model_copy(update={"sections": applied_sections}),
-        _core_snapshot_governance(
-            policy=policy,
-            requested_sections=requested_sections,
-            applied_sections=applied_sections,
-            dropped_sections=dropped_sections,
-            warnings=warnings,
-        ),
-    )
-
-
-def _policy_section_codes(sections: list[CoreSnapshotSection]) -> list[str]:
-    return [section.value.upper() for section in sections]
-
-
-def _policy_applied_snapshot_sections(
-    *,
-    requested_sections: list[CoreSnapshotSection],
-    policy,
-) -> tuple[list[CoreSnapshotSection], list[CoreSnapshotSection], list[str]]:
-    if "NO_ALLOWED_SECTION_RESTRICTION" in policy.warnings:
-        return requested_sections, [], list(policy.warnings)
-
-    allowed_policy_sections = set(policy.allowed_sections)
-    applied_sections = [
-        section
-        for section in requested_sections
-        if _snapshot_section_allowed_by_policy(section, allowed_policy_sections)
-    ]
-    dropped_sections = [
-        section
-        for section in requested_sections
-        if not _snapshot_section_allowed_by_policy(section, allowed_policy_sections)
-    ]
-    warnings = list(policy.warnings)
-    if dropped_sections and not policy.policy_provenance.strict_mode:
-        warnings.append("SECTIONS_DROPPED_NON_STRICT_MODE")
-    return applied_sections, dropped_sections, warnings
-
-
-def _snapshot_section_allowed_by_policy(
-    section: CoreSnapshotSection, allowed_policy_sections: set[str]
-) -> bool:
-    if section.value.upper() in allowed_policy_sections:
-        return True
-    return (
-        section == CoreSnapshotSection.PORTFOLIO_STATE
-        and CoreSnapshotSection.POSITIONS_BASELINE.value.upper() in allowed_policy_sections
-    )
-
-
-def _assert_core_snapshot_sections_allowed(
-    *,
-    applied_sections: list[CoreSnapshotSection],
-    dropped_sections: list[CoreSnapshotSection],
-    strict_mode: bool,
-) -> None:
-    if dropped_sections and strict_mode:
-        raise_problem(
-            status_code=status.HTTP_403_FORBIDDEN,
-            title="Core snapshot sections blocked by policy",
-            detail="Requested snapshot sections are blocked by strict integration policy.",
-            error_code="QCP_CORE_SNAPSHOT_POLICY_BLOCKED",
-            metadata={
-                "source_product": "PortfolioStateSnapshot",
-                "blocked_sections": [section.value for section in dropped_sections],
-            },
-        )
-
-    if not applied_sections:
-        raise_problem(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            title="Core snapshot request is invalid",
-            detail="No core snapshot sections remain after policy evaluation.",
-            error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
-            metadata={"source_product": "PortfolioStateSnapshot"},
-        )
-
-
-def _core_snapshot_governance(
-    *,
-    policy,
-    requested_sections: list[CoreSnapshotSection],
-    applied_sections: list[CoreSnapshotSection],
-    dropped_sections: list[CoreSnapshotSection],
-    warnings: list[str],
-) -> SnapshotGovernanceContext:
-    return SnapshotGovernanceContext(
-        consumer_system=policy.consumer_system,
-        tenant_id=policy.tenant_id,
-        requested_sections=requested_sections,
-        applied_sections=applied_sections,
-        dropped_sections=dropped_sections,
-        policy_version=policy.policy_provenance.policy_version,
-        policy_source=policy.policy_provenance.policy_source,
-        matched_rule_id=policy.policy_provenance.matched_rule_id,
-        strict_mode=policy.policy_provenance.strict_mode,
-        warnings=warnings,
-    )
-
-
-async def _core_snapshot_response_or_http_error(
-    *,
-    service: CoreSnapshotService,
-    portfolio_id: str,
-    request: CoreSnapshotRequest,
-    governance: SnapshotGovernanceContext,
-) -> CoreSnapshotResponse:
-    try:
-        response = await service.get_core_snapshot(
-            portfolio_id=portfolio_id,
-            request=request,
-            governance=governance,
-        )
-        return cast(CoreSnapshotResponse, response)
-    except CoreSnapshotBadRequestError as exc:
-        raise_problem(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            title="Core snapshot request is invalid",
-            detail="Core snapshot request is invalid.",
-            error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    except CoreSnapshotNotFoundError as exc:
-        raise_problem(
-            status_code=status.HTTP_404_NOT_FOUND,
-            title="Core snapshot not found",
-            detail="Portfolio or simulation session was not found.",
-            error_code="QCP_CORE_SNAPSHOT_NOT_FOUND",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    except CoreSnapshotConflictError as exc:
-        raise_problem(
-            status_code=status.HTTP_409_CONFLICT,
-            title="Core snapshot conflict",
-            detail=(
-                "Core snapshot request conflicts with the current portfolio or simulation state."
-            ),
-            error_code="QCP_CORE_SNAPSHOT_CONFLICT",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    except CoreSnapshotUnavailableSectionError as exc:
-        raise_problem(
-            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-            title="Core snapshot section unavailable",
-            detail=(
-                "Requested core snapshot section cannot be fulfilled from available source data."
-            ),
-            error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    raise AssertionError("problem response helper returned unexpectedly")
 
 
 @router.post(
@@ -1045,6 +829,10 @@ async def resolve_instrument_eligibility_bulk(
         "operational transaction routes for ledger browsing."
     ),
     responses={
+        403: problem_response(
+            "Requested tenant does not match admitted tenant authority.",
+            tenant_scope_forbidden_example("PortfolioTaxLotWindow"),
+        ),
         404: problem_response(
             "Portfolio not found",
             PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE,
@@ -1066,6 +854,7 @@ async def resolve_instrument_eligibility_bulk(
     openapi_extra=source_data_product_openapi_extra("PortfolioTaxLotWindow"),
 )
 async def get_portfolio_tax_lot_window(
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose tax-lot window should be returned.",
@@ -1075,18 +864,28 @@ async def get_portfolio_tax_lot_window(
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> PortfolioTaxLotWindowResponse:
     try:
+        request = request.model_copy(
+            update={
+                "tenant_id": bind_admitted_tenant_id(
+                    requested_tenant_id=request.tenant_id,
+                    tenant_context=http_request.state.tenant_context,
+                    source_product="PortfolioTaxLotWindow",
+                )
+            }
+        )
         return await dpm_source_service.get_portfolio_tax_lot_window(
+            tenant_context=http_request.state.tenant_context,
             portfolio_id=portfolio_id,
             request=request,
         )
     except LookupError as exc:
-        _raise_source_evidence_not_found(
+        raise_source_evidence_not_found(
             source_product="PortfolioTaxLotWindow",
             portfolio_id=portfolio_id,
             exc=exc,
         )
     except ValueError as exc:
-        _raise_source_evidence_invalid_request(
+        raise_source_evidence_invalid_request(
             source_product="PortfolioTaxLotWindow",
             portfolio_id=portfolio_id,
             exc=exc,
@@ -1144,13 +943,13 @@ async def get_transaction_cost_curve(
             request=request,
         )
     except LookupError as exc:
-        _raise_source_evidence_not_found(
+        raise_source_evidence_not_found(
             source_product="TransactionCostCurve",
             portfolio_id=portfolio_id,
             exc=exc,
         )
     except ValueError as exc:
-        _raise_source_evidence_invalid_request(
+        raise_source_evidence_invalid_request(
             source_product="TransactionCostCurve",
             portfolio_id=portfolio_id,
             exc=exc,
@@ -1191,13 +990,13 @@ async def get_performance_component_economics(
             request=request,
         )
     except LookupError as exc:
-        _raise_source_evidence_not_found(
+        raise_source_evidence_not_found(
             source_product="PerformanceComponentEconomics",
             portfolio_id=portfolio_id,
             exc=exc,
         )
     except ValueError as exc:
-        _raise_source_evidence_invalid_request(
+        raise_source_evidence_invalid_request(
             source_product="PerformanceComponentEconomics",
             portfolio_id=portfolio_id,
             exc=exc,
@@ -1448,6 +1247,10 @@ async def resolve_dpm_portfolio_universe_candidates(
         "not use it as an all-in-one data feed; call the individual source products for data."
     ),
     responses={
+        403: problem_response(
+            "Requested tenant does not match admitted tenant authority.",
+            tenant_scope_forbidden_example("DpmSourceReadiness"),
+        ),
         422: problem_response(
             "Invalid DPM source-readiness request",
             {"detail": "instrument_ids must not contain duplicates"},
@@ -1456,6 +1259,7 @@ async def resolve_dpm_portfolio_universe_candidates(
     openapi_extra=source_data_product_openapi_extra("DpmSourceReadiness"),
 )
 async def get_dpm_source_readiness(
+    http_request: Request,
     request: DpmSourceReadinessRequest,
     portfolio_id: str = Path(
         ...,
@@ -1464,7 +1268,17 @@ async def get_dpm_source_readiness(
     ),
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> DpmSourceReadinessResponse:
+    request = request.model_copy(
+        update={
+            "tenant_id": bind_admitted_tenant_id(
+                requested_tenant_id=request.tenant_id,
+                tenant_context=http_request.state.tenant_context,
+                source_product="DpmSourceReadiness",
+            )
+        }
+    )
     return await dpm_source_service.get_source_readiness(
+        tenant_context=http_request.state.tenant_context,
         portfolio_id=portfolio_id,
         request=request,
     )

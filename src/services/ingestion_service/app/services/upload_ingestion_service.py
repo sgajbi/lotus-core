@@ -11,6 +11,7 @@ from ..application.upload_commands import (
     UploadPreviewResult,
     UploadRowIssue,
 )
+from ..ports.portfolio_tenant_reader import PortfolioTenantReader
 from ..ports.upload_record_publisher import UploadRecordPublisher
 from .upload_validation import BulkUploadValidator, UploadValidationReport
 
@@ -57,9 +58,11 @@ class UploadIngestionService:
         self,
         validator: BulkUploadValidator,
         publisher: UploadRecordPublisher,
+        portfolio_tenant_reader: PortfolioTenantReader,
     ) -> None:
         self._validator = validator
         self._publisher = publisher
+        self._portfolio_tenant_reader = portfolio_tenant_reader
 
     def preview_upload(
         self,
@@ -96,8 +99,39 @@ class UploadIngestionService:
             content=command.content,
         )
         self._validate_commit(validation, command.allow_partial)
+        await self._validate_portfolio_tenant_authority(command, validation)
         await self._publisher.publish_records(command.entity_type, validation.valid_models)
         return self._commit_response(command.entity_type, validation)
+
+    async def _validate_portfolio_tenant_authority(
+        self,
+        command: UploadCommitCommand,
+        validation: UploadValidationReport,
+    ) -> None:
+        if command.entity_type == "portfolios":
+            return
+        portfolio_ids = {
+            portfolio_id
+            for model in validation.valid_models
+            if isinstance((portfolio_id := getattr(model, "portfolio_id", None)), str)
+        }
+        if not portfolio_ids:
+            return
+        ownership = await self._portfolio_tenant_reader.resolve_ownership(
+            tenant_id=command.tenant_context.tenant_id_text,
+            portfolio_ids=portfolio_ids,
+        )
+        if ownership.owned_ids != portfolio_ids:
+            raise ValidationRejected(
+                reason_code="upload_portfolio_tenant_mismatch",
+                detail={
+                    "code": "INGESTION_UPLOAD_PORTFOLIO_TENANT_MISMATCH",
+                    "message": (
+                        "Every portfolio-scoped upload row must reference a portfolio owned by "
+                        "the admitted tenant."
+                    ),
+                },
+            )
 
     def _validate_commit(self, validation: UploadValidationReport, allow_partial: bool) -> None:
         if validation.total_rows == 0:

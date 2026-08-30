@@ -10,7 +10,11 @@ from ..application.upload_commands import (
     UploadPreviewCommand,
     UploadPreviewResult,
 )
-from ..dependencies import get_ingestion_service, require_upload_adapter_enabled
+from ..dependencies import (
+    get_ingestion_service,
+    get_portfolio_tenant_reader,
+    require_upload_adapter_enabled,
+)
 from ..DTOs.upload_dto import (
     UploadCommitResponse,
     UploadEntityType,
@@ -19,6 +23,7 @@ from ..DTOs.upload_dto import (
 )
 from ..enterprise_readiness import authorize_capability, emit_audit_event
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..ports.portfolio_tenant_reader import PortfolioTenantReader
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.ingestion_service import (
     IngestionPublishError,
@@ -63,6 +68,7 @@ UPLOAD_APPLICATION_ERROR_STATUS = {
     "empty_upload": status.HTTP_400_BAD_REQUEST,
     "upload_invalid_rows": HTTP_422_UNPROCESSABLE_CONTENT,
     "upload_no_valid_rows": HTTP_422_UNPROCESSABLE_CONTENT,
+    "upload_portfolio_tenant_mismatch": status.HTTP_403_FORBIDDEN,
 }
 
 UPLOAD_INVALID_EXAMPLE = {"detail": "Unsupported upload file format. Expected CSV or XLSX."}
@@ -94,6 +100,15 @@ UPLOAD_CONTENT_TYPE_MISMATCH_EXAMPLE = {
         "message": "Upload content type does not match the file extension.",
     }
 }
+UPLOAD_PORTFOLIO_TENANT_MISMATCH_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_UPLOAD_PORTFOLIO_TENANT_MISMATCH",
+        "message": (
+            "Every portfolio-scoped upload row must reference a portfolio owned by the admitted "
+            "tenant."
+        ),
+    }
+}
 UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     message=(
         "Failed to publish transaction 'T2' after 1 earlier record(s) were already "
@@ -106,6 +121,7 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
 
 def get_upload_ingestion_service(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
+    portfolio_tenant_reader: PortfolioTenantReader = Depends(get_portfolio_tenant_reader),
 ) -> UploadIngestionService:
     adapter_settings = get_ingestion_service_settings().adapter_mode
     return UploadIngestionService(
@@ -117,6 +133,7 @@ def get_upload_ingestion_service(
             )
         ),
         publisher=IngestionServiceUploadPublisher(ingestion_service),
+        portfolio_tenant_reader=portfolio_tenant_reader,
     )
 
 
@@ -434,6 +451,10 @@ async def preview_upload(
         status.HTTP_400_BAD_REQUEST: {
             "description": "Invalid upload file format or content.",
             "content": {"application/json": {"example": UPLOAD_INVALID_EXAMPLE}},
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "description": "A row references a portfolio outside the admitted tenant scope.",
+            "content": {"application/json": {"example": UPLOAD_PORTFOLIO_TENANT_MISMATCH_EXAMPLE}},
         },
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the commit request.",

@@ -4,6 +4,8 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantContext
+
 from src.services.ingestion_service.app.bookkeeping_recovery import (
     POST_BOOKKEEPING_FAILURE_PHASES,
     POST_BOOKKEEPING_REPAIR_ACTION,
@@ -45,8 +47,14 @@ class BookkeepingRepairResult:
 class BookkeepingRepairCommandService:
     ingestion_job_service: IngestionJobService
 
-    async def repair_ingestion_job_bookkeeping(self, job_id: str) -> BookkeepingRepairResult:
-        job = await self._required_ingestion_job_for_bookkeeping_repair(job_id)
+    async def repair_ingestion_job_bookkeeping(
+        self, job_id: str, *, tenant_context: TenantContext
+    ) -> BookkeepingRepairResult:
+        tenant_id = tenant_context.tenant_id_text
+        job = await self._required_ingestion_job_for_bookkeeping_repair(
+            job_id,
+            tenant_id=tenant_id,
+        )
         previous_status = str(_job_field(job, "status"))
         failures = await self.ingestion_job_service.list_failures(job_id=job_id, limit=25)
         bookkeeping_phase = self._bookkeeping_repair_phase_or_error(
@@ -57,9 +65,10 @@ class BookkeepingRepairCommandService:
         if previous_status == "accepted":
             await self._mark_ingestion_job_queued_for_bookkeeping_repair(
                 job_id=job_id,
+                tenant_id=tenant_id,
                 previous_status=previous_status,
             )
-        repaired = await self.ingestion_job_service.get_job(job_id)
+        repaired = await self.ingestion_job_service.get_job(job_id, tenant_id=tenant_id)
         repaired_status = str(_job_field(repaired or job, "status"))
         return self._bookkeeping_repair_result(
             job_id=job_id,
@@ -68,8 +77,10 @@ class BookkeepingRepairCommandService:
             bookkeeping_phase=bookkeeping_phase,
         )
 
-    async def _required_ingestion_job_for_bookkeeping_repair(self, job_id: str) -> Any:
-        job = await self.ingestion_job_service.get_job(job_id)
+    async def _required_ingestion_job_for_bookkeeping_repair(
+        self, job_id: str, *, tenant_id: str
+    ) -> Any:
+        job = await self.ingestion_job_service.get_job(job_id, tenant_id=tenant_id)
         if job is None:
             raise BookkeepingRepairCommandError(
                 HTTP_NOT_FOUND,
@@ -104,10 +115,14 @@ class BookkeepingRepairCommandService:
         self,
         *,
         job_id: str,
+        tenant_id: str,
         previous_status: str,
     ) -> None:
         try:
-            transitioned = await self.ingestion_job_service.mark_queued(job_id)
+            transitioned = await self.ingestion_job_service.mark_queued(
+                job_id,
+                tenant_id=tenant_id,
+            )
             if not transitioned:
                 raise BookkeepingRepairCommandError(
                     HTTP_CONFLICT,

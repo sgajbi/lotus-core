@@ -151,6 +151,26 @@ def problem_response(description: str, example: dict[str, Any]) -> dict[str, obj
     }
 
 
+def problem_examples_response(
+    description: str,
+    examples: dict[str, dict[str, Any]],
+) -> dict[str, object]:
+    """Document multiple governed problem outcomes for one HTTP status."""
+
+    return {
+        "description": description,
+        "content": {
+            "application/problem+json": {
+                "schema": QueryControlPlaneProblemDetails.model_json_schema(),
+                "examples": {
+                    key: {"summary": value["title"], "value": value}
+                    for key, value in examples.items()
+                },
+            }
+        },
+    }
+
+
 def problem_or_validation_response(description: str, example: dict[str, Any]) -> dict[str, object]:
     response = problem_response(description, example)
     if _is_problem_details_example(example):

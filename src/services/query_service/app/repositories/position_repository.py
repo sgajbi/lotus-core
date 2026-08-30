@@ -46,8 +46,15 @@ class PositionRepository:
         ]
         return sorted(set(normalized_security_ids))
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+    async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
+        stmt = (
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
     async def get_latest_business_date(self) -> Optional[date]:

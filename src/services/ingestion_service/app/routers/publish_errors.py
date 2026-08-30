@@ -31,6 +31,15 @@ INGESTION_REQUEST_IN_PROGRESS_EXAMPLE = {
         "status": "accepted",
     }
 }
+INGESTION_PORTFOLIO_TENANT_MISMATCH_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+        "message": (
+            "Every transaction must reference a portfolio owned by the admitted tenant or "
+            "introduced by the same admitted portfolio bundle."
+        ),
+    }
+}
 
 
 def ingestion_publish_failed_detail(
@@ -127,6 +136,15 @@ def ingestion_idempotency_conflict_response() -> dict[str, object]:
                 }
             }
         },
+    }
+
+
+def ingestion_portfolio_tenant_mismatch_response() -> dict[str, object]:
+    return {
+        "description": (
+            "A transaction or bundled portfolio does not belong to the admitted tenant scope."
+        ),
+        "content": {"application/json": {"example": INGESTION_PORTFOLIO_TENANT_MISMATCH_EXAMPLE}},
     }
 
 

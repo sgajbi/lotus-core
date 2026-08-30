@@ -251,6 +251,7 @@ def _service(mock_dependencies, *, clock=None) -> CoreSnapshotService:
 
 
 async def test_core_snapshot_baseline_success(mock_dependencies):
+    _, portfolio_repo, _, _, _, _ = mock_dependencies
     service = _service(mock_dependencies)
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
@@ -265,6 +266,10 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
 
     response = await service.get_core_snapshot("PORT_001", request)
 
+    portfolio_repo.get_by_id.assert_awaited_once_with(
+        tenant_id=TEST_TENANT_ID,
+        portfolio_id="PORT_001",
+    )
     assert response.portfolio_id == "PORT_001"
     assert response.sections.portfolio_state is not None
     assert len(response.sections.portfolio_state) == 1

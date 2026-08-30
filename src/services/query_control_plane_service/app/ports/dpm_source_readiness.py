@@ -78,7 +78,7 @@ class DpmReferenceDataReader(Protocol):
 class DpmPortfolioStateReader(Protocol):
     """Read portfolio and tax-lot evidence for DPM readiness assessment."""
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool: ...
+    async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool: ...
 
     async def list_portfolio_tax_lots(
         self,

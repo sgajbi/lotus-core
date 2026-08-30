@@ -33,6 +33,7 @@ from ..ports.ingestion_idempotency_replay import (
     IngestionIdempotencyReplay,
     IngestionIdempotencyReplayReader,
 )
+from ..ports.portfolio_tenant_reader import PortfolioTenantReader
 from ..ports.transaction_reprocessing import TransactionReprocessingTargetReadError
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_lifecycle import IngestionJobCreateResult
@@ -42,6 +43,7 @@ from .ingestion_service import IngestionPublishError, IngestionService
 logger = logging.getLogger(__name__)
 
 HTTP_TOO_MANY_REQUESTS = 429
+HTTP_FORBIDDEN = 403
 HTTP_CONFLICT = 409
 HTTP_NOT_FOUND = 404
 HTTP_SERVICE_UNAVAILABLE = 503
@@ -111,6 +113,7 @@ class PortfolioBundlePublishIngestionCommand:
 
 @dataclass(frozen=True, slots=True)
 class SinglePublishIngestionCommand:
+    tenant_context: TenantContext
     endpoint: str
     entity_type: str
     record: Any
@@ -135,6 +138,7 @@ class IngestionPublishCommandHandler:
     ingestion_job_service: IngestionJobService
     idempotency_replay_reader: IngestionIdempotencyReplayReader
     resolve_transaction_reprocessing_targets: ResolveTransactionReprocessingTargets
+    portfolio_tenant_reader: PortfolioTenantReader
 
     async def ingest_portfolios(
         self, command: BatchPublishIngestionCommand
@@ -178,6 +182,7 @@ class IngestionPublishCommandHandler:
         self, command: BatchPublishIngestionCommand
     ) -> IngestionCommandResult:
         replay_job = await self._find_matching_replay(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
@@ -201,6 +206,7 @@ class IngestionPublishCommandHandler:
         )
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=len(command.records),
         )
         return IngestionCommandResult(
@@ -230,7 +236,13 @@ class IngestionPublishCommandHandler:
     async def ingest_portfolio_bundle(
         self, command: PortfolioBundlePublishIngestionCommand
     ) -> IngestionCommandResult:
+        await self._assert_transaction_portfolio_authority(
+            tenant_context=command.tenant_context,
+            records=command.request.transactions,
+            pending_portfolios=command.request.portfolios,
+        )
         replay_job = await self._find_matching_replay(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
@@ -258,6 +270,7 @@ class IngestionPublishCommandHandler:
         )
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=command.accepted_count,
         )
         return IngestionCommandResult(
@@ -282,7 +295,13 @@ class IngestionPublishCommandHandler:
         command: BatchPublishIngestionCommand,
         publisher: BatchPublisher,
     ) -> IngestionCommandResult:
+        if command.entity_type == "transaction":
+            await self._assert_transaction_portfolio_authority(
+                tenant_context=command.tenant_context,
+                records=command.records,
+            )
         replay_job = await self._find_matching_replay(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
@@ -307,6 +326,7 @@ class IngestionPublishCommandHandler:
         await self._publish_batch_or_mark_failed(command, job_result.job.job_id, publisher)
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=len(command.records),
         )
         return IngestionCommandResult(
@@ -322,6 +342,11 @@ class IngestionPublishCommandHandler:
         command: SinglePublishIngestionCommand,
         publisher: SinglePublisher,
     ) -> IngestionCommandResult:
+        if command.entity_type == "transaction":
+            await self._assert_transaction_portfolio_authority(
+                tenant_context=command.tenant_context,
+                records=(command.record,),
+            )
         await self._assert_ingestion_writable()
         self._enforce_rate_limit(command.endpoint, 1)
         try:
@@ -335,6 +360,44 @@ class IngestionPublishCommandHandler:
             accepted_count=1,
             idempotency_key=command.idempotency_key,
         )
+
+    async def _assert_transaction_portfolio_authority(
+        self,
+        *,
+        tenant_context: TenantContext,
+        records: Sequence[Any],
+        pending_portfolios: Sequence[Any] = (),
+    ) -> None:
+        transaction_portfolio_ids = {
+            portfolio_id
+            for record in records
+            if isinstance((portfolio_id := getattr(record, "portfolio_id", None)), str)
+        }
+        pending_portfolio_ids = {
+            portfolio_id
+            for portfolio in pending_portfolios
+            if isinstance((portfolio_id := getattr(portfolio, "portfolio_id", None)), str)
+        }
+        required_ids = transaction_portfolio_ids | pending_portfolio_ids
+        if not required_ids:
+            return
+        ownership = await self.portfolio_tenant_reader.resolve_ownership(
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_ids=required_ids,
+        )
+        new_pending_ids = pending_portfolio_ids - ownership.existing_ids
+        allowed_ids = ownership.owned_ids | new_pending_ids
+        if allowed_ids != required_ids:
+            raise IngestionPublishCommandError(
+                HTTP_FORBIDDEN,
+                {
+                    "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+                    "message": (
+                        "Every transaction must reference a portfolio owned by the admitted "
+                        "tenant or introduced by the same admitted portfolio bundle."
+                    ),
+                },
+            )
 
     async def publish_portfolios(self, records: Sequence[Any], idempotency_key: str | None) -> None:
         await self.ingestion_service.publish_portfolios(records, idempotency_key=idempotency_key)
@@ -404,11 +467,13 @@ class IngestionPublishCommandHandler:
     async def _find_matching_replay(
         self,
         *,
+        tenant_id: str,
         endpoint: str,
         idempotency_key: str | None,
         request_payload: dict[str, Any],
     ) -> IngestionIdempotencyReplay | None:
         return await self.idempotency_replay_reader.find_matching_job(
+            tenant_id=tenant_id,
             endpoint=endpoint,
             idempotency_key=idempotency_key,
             request_payload=request_payload,
@@ -525,6 +590,7 @@ class IngestionPublishCommandHandler:
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(detail["message"]),
+                tenant_id=command.tenant_context.tenant_id_text,
                 failed_record_keys=exc.failed_record_keys,
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
@@ -533,7 +599,11 @@ class IngestionPublishCommandHandler:
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc))
+            await self.ingestion_job_service.mark_failed(
+                job_id,
+                str(exc),
+                tenant_id=command.tenant_context.tenant_id_text,
+            )
             raise
 
     async def _publish_bundle_or_mark_failed(
@@ -555,6 +625,7 @@ class IngestionPublishCommandHandler:
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(detail["message"]),
+                tenant_id=command.tenant_context.tenant_id_text,
                 failed_record_keys=exc.failed_record_keys,
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
@@ -563,7 +634,11 @@ class IngestionPublishCommandHandler:
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc))
+            await self.ingestion_job_service.mark_failed(
+                job_id,
+                str(exc),
+                tenant_id=command.tenant_context.tenant_id_text,
+            )
             raise
 
     @staticmethod
@@ -604,9 +679,14 @@ class IngestionPublishCommandHandler:
             ),
         )
 
-    async def _mark_queued_or_raise(self, *, job_id: str, published_record_count: int) -> None:
+    async def _mark_queued_or_raise(
+        self, *, job_id: str, tenant_id: str, published_record_count: int
+    ) -> None:
         try:
-            queued = await self.ingestion_job_service.mark_queued(job_id)
+            queued = await self.ingestion_job_service.mark_queued(
+                job_id,
+                tenant_id=tenant_id,
+            )
         except Exception as exc:
             detail = await self._record_bookkeeping_failure(
                 job_id=job_id,

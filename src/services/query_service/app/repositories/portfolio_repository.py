@@ -20,6 +20,8 @@ class PortfolioRepository:
 
     async def get_portfolios(
         self,
+        *,
+        tenant_id: str,
         portfolio_id: Optional[str] = None,
         portfolio_ids: Optional[list[str]] = None,
         client_id: Optional[str] = None,
@@ -28,7 +30,7 @@ class PortfolioRepository:
         """
         Retrieves a list of portfolios with optional filters.
         """
-        stmt = select(Portfolio)
+        stmt = select(Portfolio).where(Portfolio.tenant_id == tenant_id)
 
         if portfolio_id:
             stmt = stmt.filter_by(portfolio_id=portfolio_id)
@@ -63,13 +65,14 @@ class PortfolioRepository:
     async def search_portfolio_lookup_ids(
         self,
         *,
+        tenant_id: str,
         client_id: str | None = None,
         booking_center_code: str | None = None,
         q: str | None = None,
         limit: int,
     ) -> list[str]:
         """Return bounded portfolio IDs for selector workflows."""
-        stmt = select(Portfolio.portfolio_id)
+        stmt = select(Portfolio.portfolio_id).where(Portfolio.tenant_id == tenant_id)
 
         if client_id:
             stmt = stmt.where(Portfolio.client_id == client_id)
@@ -86,6 +89,7 @@ class PortfolioRepository:
     async def list_currency_lookup_codes(
         self,
         *,
+        tenant_id: str,
         q: str | None = None,
         limit: int,
     ) -> list[str]:
@@ -94,6 +98,7 @@ class PortfolioRepository:
         stmt = (
             select(currency_code)
             .distinct()
+            .where(Portfolio.tenant_id == tenant_id)
             .where(Portfolio.base_currency.is_not(None))
             .where(func.trim(Portfolio.base_currency) != "")
         )
@@ -104,8 +109,11 @@ class PortfolioRepository:
         result = await self.db.execute(stmt.order_by(currency_code.asc()).limit(limit))
         return list(result.scalars().all())
 
-    async def get_by_id(self, portfolio_id: str) -> Optional[Portfolio]:
+    async def get_by_id(self, *, tenant_id: str, portfolio_id: str) -> Optional[Portfolio]:
         """Retrieves a single portfolio by its unique portfolio_id."""
-        stmt = select(Portfolio).filter_by(portfolio_id=portfolio_id)
+        stmt = select(Portfolio).where(
+            Portfolio.tenant_id == tenant_id,
+            Portfolio.portfolio_id == portfolio_id,
+        )
         result = await self.db.execute(stmt)
         return result.scalars().first()

@@ -39,6 +39,24 @@ def _lot(*, security_id: str, lot_id: str, acquisition_date: date) -> SimpleName
 
 
 @pytest.mark.asyncio
+async def test_portfolio_ownership_query_requires_admitted_tenant_scope() -> None:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = "PB_1"
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result)
+
+    exists = await dpm_portfolio_state_sources.SqlAlchemyDpmPortfolioStateReader(
+        session
+    ).portfolio_exists(tenant_id="tenant-a", portfolio_id="PB_1")
+
+    statement = session.execute.await_args.args[0]
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert exists is True
+    assert "portfolios.tenant_id = 'tenant-a'" in sql
+    assert "portfolios.portfolio_id = 'PB_1'" in sql
+
+
+@pytest.mark.asyncio
 async def test_tax_lot_read_is_bounded_ordered_and_keyset_paginated() -> None:
     lot = SimpleNamespace(
         portfolio_id="PB_1",

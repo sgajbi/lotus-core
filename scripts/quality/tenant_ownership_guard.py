@@ -9,7 +9,117 @@ from pathlib import Path
 from typing import Any, Literal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GuardMode = Literal["report", "enforce-defaults", "enforce"]
+GuardMode = Literal["report", "enforce-defaults", "enforce-critical", "enforce"]
+
+INGESTION_JOB_SERVICE_PATH = Path(
+    "src/services/ingestion_service/app/services/ingestion_job_service.py"
+)
+TENANT_SCOPED_INGESTION_JOB_METHODS = frozenset(
+    {
+        "get_job",
+        "get_job_record_status",
+        "get_job_replay_context",
+        "get_unique_replayable_job_by_correlation_id",
+        "list_jobs",
+        "mark_failed",
+        "mark_queued",
+        "mark_retried_and_queued",
+    }
+)
+CRITICAL_TENANT_BOUNDARIES = (
+    (
+        INGESTION_JOB_SERVICE_PATH,
+        "IngestionJobService",
+        TENANT_SCOPED_INGESTION_JOB_METHODS,
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/ingestion_service/app/infrastructure/"
+            "ingestion_idempotency_replay_reader.py"
+        ),
+        "SqlAlchemyIngestionIdempotencyReplayReader",
+        frozenset({"find_matching_job"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/ingestion_service/app/repositories/portfolio_tenant_repository.py"),
+        "SqlAlchemyPortfolioTenantReader",
+        frozenset({"resolve_ownership"}),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/core_snapshot_sources.py"
+        ),
+        "SqlAlchemyCoreSnapshotSourceReader",
+        frozenset({"get_portfolio"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/position_repository.py"),
+        "PositionRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/position_service.py"),
+        "PositionService",
+        frozenset(
+            {
+                "get_position_history",
+                "get_portfolio_positions",
+                "get_portfolio_maturity_summary",
+            }
+        ),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/transaction_repository.py"),
+        "TransactionRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/transaction_service.py"),
+        "TransactionService",
+        frozenset(
+            {
+                "get_transactions",
+                "get_transaction_record",
+                "get_realized_tax_summary",
+            }
+        ),
+        "tenant_context",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "dpm_portfolio_state_sources.py"
+        ),
+        "SqlAlchemyDpmPortfolioStateReader",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/application/"
+            "dpm_source_readiness/portfolio_tax_lots.py"
+        ),
+        "PortfolioTaxLotService",
+        frozenset({"resolve"}),
+        "tenant_context",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/application/"
+            "dpm_source_readiness/readiness.py"
+        ),
+        "DpmSourceReadinessService",
+        frozenset({"get_portfolio_tax_lot_window", "get_source_readiness", "resolve"}),
+        "tenant_context",
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +170,77 @@ def find_synthetic_default_findings(root: Path) -> list[TenantOwnershipFinding]:
                         line=node.lineno,
                         rule="synthetic-default-tenant",
                         detail="production tenant ownership cannot use the literal 'default'",
+                    )
+                )
+    return findings
+
+
+def find_critical_tenant_boundary_findings(root: Path) -> list[TenantOwnershipFinding]:
+    """Require fail-closed tenant scope on critical application and persistence boundaries."""
+
+    findings: list[TenantOwnershipFinding] = []
+    for (
+        relative_path,
+        owner_name,
+        required_methods,
+        required_parameter,
+    ) in CRITICAL_TENANT_BOUNDARIES:
+        path = root / relative_path
+        if not path.is_file():
+            findings.append(
+                TenantOwnershipFinding(
+                    path=relative_path.as_posix(),
+                    line=None,
+                    rule="missing-critical-tenant-boundary",
+                    detail=f"{owner_name} source file is missing",
+                )
+            )
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        owner = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef) and node.name == owner_name
+            ),
+            None,
+        )
+        methods = (
+            {
+                node.name: node
+                for node in owner.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            if owner is not None
+            else {}
+        )
+        for method_name in sorted(required_methods):
+            method = methods.get(method_name)
+            if method is None:
+                findings.append(
+                    TenantOwnershipFinding(
+                        path=relative_path.as_posix(),
+                        line=owner.lineno if owner is not None else None,
+                        rule="missing-critical-tenant-boundary",
+                        detail=f"{owner_name}.{method_name} is missing",
+                    )
+                )
+                continue
+            tenant_parameters = [
+                (argument, default)
+                for argument, default in zip(method.args.kwonlyargs, method.args.kw_defaults)
+                if argument.arg == required_parameter
+            ]
+            if not tenant_parameters or tenant_parameters[0][1] is not None:
+                findings.append(
+                    TenantOwnershipFinding(
+                        path=relative_path.as_posix(),
+                        line=method.lineno,
+                        rule="optional-critical-tenant-boundary",
+                        detail=(
+                            f"{owner_name}.{method_name} must require keyword-only "
+                            f"{required_parameter}"
+                        ),
                     )
                 )
     return findings
@@ -140,7 +321,11 @@ def _is_tenant_header_literal(node: ast.AST) -> bool:
 def evaluate_tenant_ownership(root: Path = REPO_ROOT) -> list[TenantOwnershipFinding]:
     from portfolio_common.database_models import Base
 
-    return [*find_orm_tenant_findings(Base), *find_synthetic_default_findings(root)]
+    return [
+        *find_orm_tenant_findings(Base),
+        *find_synthetic_default_findings(root),
+        *find_critical_tenant_boundary_findings(root),
+    ]
 
 
 def _is_blocking(finding: TenantOwnershipFinding, mode: GuardMode) -> bool:
@@ -148,6 +333,12 @@ def _is_blocking(finding: TenantOwnershipFinding, mode: GuardMode) -> bool:
         return False
     if mode == "enforce-defaults":
         return finding.rule == "synthetic-default-tenant"
+    if mode == "enforce-critical":
+        return finding.rule in {
+            "synthetic-default-tenant",
+            "missing-critical-tenant-boundary",
+            "optional-critical-tenant-boundary",
+        }
     return True
 
 
@@ -158,7 +349,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
     parser.add_argument(
         "--mode",
-        choices=("report", "enforce-defaults", "enforce"),
+        choices=("report", "enforce-defaults", "enforce-critical", "enforce"),
         default="report",
     )
     args = parser.parse_args()

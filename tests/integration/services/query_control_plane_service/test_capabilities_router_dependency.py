@@ -12,6 +12,7 @@ from src.services.query_control_plane_service.app.main import app
 from src.services.query_control_plane_service.app.routers.capabilities import (
     get_capabilities_service,
 )
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -41,7 +42,8 @@ async def async_test_client():
 async def test_capabilities_success(async_test_client):
     client, mock_service = async_test_client
     response = await client.get(
-        "/integration/capabilities?consumer_system=lotus-manage&tenant_id=tenant-1"
+        "/integration/capabilities?consumer_system=lotus-manage&tenant_id=tenant-1",
+        headers={"X-Tenant-Id": "tenant-1"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -69,7 +71,8 @@ async def test_capabilities_accepts_idea_consumer(async_test_client):
     }
 
     response = await client.get(
-        "/integration/capabilities?consumer_system=lotus-idea&tenant_id=tenant-idea"
+        "/integration/capabilities?consumer_system=lotus-idea&tenant_id=tenant-idea",
+        headers={"X-Tenant-Id": "tenant-idea"},
     )
 
     assert response.status_code == 200
@@ -82,13 +85,13 @@ async def test_capabilities_accepts_idea_consumer(async_test_client):
     )
 
 
-async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_client):
+async def test_capabilities_defaults_consumer_but_uses_admitted_tenant(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_integration_capabilities.return_value = {
         "contract_version": "v1",
         "source_service": "lotus-core",
         "consumer_system": "lotus-gateway",
-        "tenant_id": "default",
+        "tenant_id": "tenant-test",
         "generated_at": datetime(2026, 2, 23, tzinfo=UTC),
         "as_of_date": date(2026, 2, 23),
         "policy_version": "default-v1",
@@ -97,17 +100,35 @@ async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_cl
         "workflows": [],
     }
 
-    response = await client.get("/integration/capabilities")
+    response = await client.get(
+        "/integration/capabilities?tenant_id=tenant-test",
+        headers=TEST_TENANT_HEADERS,
+    )
 
     assert response.status_code == 200
     body = response.json()
     assert body["consumer_system"] == "lotus-gateway"
-    assert body["tenant_id"] == "default"
+    assert body["tenant_id"] == "tenant-test"
     assert body["policy_version"] == "default-v1"
     mock_service.get_integration_capabilities.assert_called_with(
         consumer_system="lotus-gateway",
-        tenant_id="default",
+        tenant_id="tenant-test",
     )
+
+
+async def test_capabilities_rejects_tenant_query_wider_than_admitted_authority(
+    async_test_client,
+) -> None:
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/integration/capabilities?consumer_system=lotus-manage&tenant_id=tenant-other",
+        headers=TEST_TENANT_HEADERS,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QCP_TENANT_SCOPE_FORBIDDEN"
+    mock_service.get_integration_capabilities.assert_not_called()
 
 
 async def test_get_capabilities_service_returns_service_instance():

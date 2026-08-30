@@ -27,6 +27,7 @@ from src.services.ingestion_service.app.dependencies import (
     get_business_date_ingestion_policy,
     get_ingestion_idempotency_replay_reader,
     get_ingestion_service,
+    get_portfolio_tenant_reader,
     get_transaction_reprocessing_target_resolver,
 )
 from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
@@ -34,6 +35,9 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJ
 from src.services.ingestion_service.app.main import app
 from src.services.ingestion_service.app.ports.ingestion_idempotency_replay import (
     IngestionIdempotencyReplay,
+)
+from src.services.ingestion_service.app.ports.portfolio_tenant_reader import (
+    PortfolioTenantOwnership,
 )
 from src.services.ingestion_service.app.ports.transaction_reprocessing import (
     TransactionReprocessingTargetReadError,
@@ -159,6 +163,29 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     def override_get_ingestion_service():
         return IngestionService(KafkaEventPublisher(mock_kafka_producer))
 
+    class FakePortfolioTenantReader:
+        def __init__(self) -> None:
+            self.allowed_ids: set[str] | None = None
+            self.existing_ids: set[str] | None = None
+
+        async def resolve_ownership(
+            self,
+            *,
+            tenant_id: str,
+            portfolio_ids: set[str],
+        ) -> PortfolioTenantOwnership:
+            _ = tenant_id
+            existing_ids = (
+                portfolio_ids if self.existing_ids is None else portfolio_ids & self.existing_ids
+            )
+            owned_ids = (
+                existing_ids if self.allowed_ids is None else existing_ids & self.allowed_ids
+            )
+            return PortfolioTenantOwnership(
+                existing_ids=frozenset(existing_ids),
+                owned_ids=frozenset(owned_ids),
+            )
+
     class FakeIngestionJobService:
         def __init__(self):
             self.jobs: dict[str, IngestionJobResponse] = {}
@@ -192,7 +219,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if idempotency_key:
                 for existing in self.jobs.values():
                     if (
-                        existing.endpoint == endpoint
+                        existing.tenant_id == tenant_context.tenant_id_text
+                        and existing.endpoint == endpoint
                         and existing.model_dump()["idempotency_key"] == idempotency_key
                     ):
                         existing_payload = self.job_payloads.get(existing.job_id)
@@ -248,7 +276,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.job_evidence[job_id] = payload_evidence
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
-        async def mark_queued(self, job_id: str) -> bool:
+        async def mark_queued(self, job_id: str, *, tenant_id: str) -> bool:
             if self.fail_next_mark_queued:
                 self.fail_next_mark_queued = False
                 raise RuntimeError("queue state write failed")
@@ -257,6 +285,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if job_id not in self.jobs:
                 return False
             record = self.jobs[job_id]
+            if record.tenant_id != tenant_id:
+                return False
             record.status = "queued"
             record.completed_at = datetime.now(UTC)
             self.jobs[job_id] = record
@@ -266,6 +296,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self,
             job_id: str,
             failure_reason: str,
+            *,
+            tenant_id: str,
             failure_phase: str = "publish",
             failed_record_keys: list[str] | None = None,
             failure_status_code: int | None = None,
@@ -276,6 +308,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
+            if record.tenant_id != tenant_id:
+                return
             record.status = "failed"
             record.failure_reason = failure_reason
             record.failure_status_code = failure_status_code
@@ -335,7 +369,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.jobs[job_id] = record
             return True
 
-        async def mark_retried_and_queued(self, job_id: str) -> bool:
+        async def mark_retried_and_queued(self, job_id: str, *, tenant_id: str) -> bool:
             if self.fail_next_mark_queued:
                 self.fail_next_mark_queued = False
                 raise RuntimeError("queue state write failed")
@@ -346,6 +380,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if job_id not in self.jobs:
                 return False
             record = self.jobs[job_id]
+            if record.tenant_id != tenant_id:
+                return False
             if record.status not in {"accepted", "queued", "failed"}:
                 return False
             record.status = "queued"
@@ -378,17 +414,22 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 }
             )
 
-        async def get_job(self, job_id: str) -> IngestionJobResponse | None:
+        async def get_job(self, job_id: str, *, tenant_id: str) -> IngestionJobResponse | None:
             job = self.jobs.get(job_id)
+            if job is not None and job.tenant_id != tenant_id:
+                return None
             return self._operational_job_projection(job) if job is not None else None
 
-        async def get_job_replay_context(self, job_id: str) -> SimpleNamespace | None:
+        async def get_job_replay_context(
+            self, job_id: str, *, tenant_id: str
+        ) -> SimpleNamespace | None:
             record = self.jobs.get(job_id)
-            if record is None:
+            if record is None or record.tenant_id != tenant_id:
                 return None
             evidence = self.job_evidence[job_id]
             return SimpleNamespace(
                 job_id=job_id,
+                tenant_id=record.tenant_id,
                 endpoint=record.endpoint,
                 entity_type=record.entity_type,
                 accepted_count=record.accepted_count,
@@ -405,11 +446,14 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def get_unique_replayable_job_by_correlation_id(
             self,
             correlation_id: str,
+            *,
+            tenant_id: str,
         ) -> IngestionIdempotencyReplay | None:
             replayable_jobs = [
                 job
                 for job in self.jobs.values()
                 if job.correlation_id == correlation_id
+                and job.tenant_id == tenant_id
                 and job.status in {"failed", "queued", "accepted"}
             ]
             if len(replayable_jobs) != 1:
@@ -419,6 +463,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_jobs(
             self,
             *,
+            tenant_id: str,
             status: str | None = None,
             entity_type: str | None = None,
             submitted_from: datetime | None = None,
@@ -434,7 +479,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             filtered = [
                 job
                 for job in values
-                if (status is None or job.status == status)
+                if job.tenant_id == tenant_id
+                and (status is None or job.status == status)
                 and (entity_type is None or job.entity_type == entity_type)
                 and (submitted_from is None or job.submitted_at >= submitted_from)
                 and (submitted_to is None or job.submitted_at <= submitted_to)
@@ -712,9 +758,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "groups": groups,
             }
 
-        async def get_job_record_status(self, job_id: str):
+        async def get_job_record_status(self, job_id: str, *, tenant_id: str):
             job = self.jobs.get(job_id)
-            if not job:
+            if not job or job.tenant_id != tenant_id:
                 return None
             payload = self.job_evidence[job_id].request_payload or {}
             replayable_keys: list[str] = []
@@ -1268,6 +1314,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def find_matching_job(
             self,
             *,
+            tenant_id: str,
             endpoint: str,
             idempotency_key: str | None,
             request_payload: dict | None,
@@ -1276,7 +1323,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 return None
             for existing in self._job_service.jobs.values():
                 if (
-                    existing.endpoint != endpoint
+                    existing.tenant_id != tenant_id
+                    or existing.endpoint != endpoint
                     or existing.model_dump()["idempotency_key"] != idempotency_key
                 ):
                     continue
@@ -1309,6 +1357,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         enforce_monotonic_advance=True,
     )
     fake_reprocessing_target_resolver = FakeTransactionReprocessingTargetResolver()
+    fake_portfolio_tenant_reader = FakePortfolioTenantReader()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -1334,6 +1383,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[get_ingestion_idempotency_replay_reader] = lambda: (
         fake_idempotency_replay_reader
     )
+    app.dependency_overrides[get_portfolio_tenant_reader] = lambda: fake_portfolio_tenant_reader
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
@@ -1355,6 +1405,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         "fake_reference_data_service": fake_reference_data_service,
         "fake_business_calendar_repository": fake_business_calendar_repository,
         "fake_reprocessing_target_resolver": fake_reprocessing_target_resolver,
+        "fake_portfolio_tenant_reader": fake_portfolio_tenant_reader,
     }
 
     for target_app in target_apps:
@@ -1369,6 +1420,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(get_business_date_ingestion_policy, None)
     app.dependency_overrides.pop(get_transaction_reprocessing_target_resolver, None)
     app.dependency_overrides.pop(get_ingestion_idempotency_replay_reader, None)
+    app.dependency_overrides.pop(get_portfolio_tenant_reader, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
@@ -1901,6 +1953,43 @@ async def test_ingest_transactions_endpoint(
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
 
 
+async def test_ingest_transactions_rejects_other_tenant_portfolio_before_job_or_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    ingestion_test_harness,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    ingestion_test_harness["fake_portfolio_tenant_reader"].allowed_ids = set()
+
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX-CROSS-TENANT"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "INGESTION_PORTFOLIO_TENANT_MISMATCH"
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_ingest_single_transaction_rejects_other_tenant_portfolio_before_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    ingestion_test_harness,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    ingestion_test_harness["fake_portfolio_tenant_reader"].allowed_ids = set()
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX-SINGLE-CROSS-TENANT"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "INGESTION_PORTFOLIO_TENANT_MISMATCH"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_transactions_publishes_truthful_zero_price_redemption(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
@@ -2149,6 +2238,48 @@ async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
     assert job_body["completed_at"]
     assert job_body["retry_count"] == 0
     assert job_body["last_retried_at"] is None
+
+
+async def test_ingestion_job_operations_do_not_disclose_or_replay_another_tenants_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    created = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_TENANT_FENCE_001"),
+        headers={"X-Idempotency-Key": "tenant-fence-001"},
+    )
+    assert created.status_code == 202
+    job_id = created.json()["job_id"]
+    publish_count = mock_kafka_producer.publish_message.call_count
+    foreign_tenant_headers = {"X-Tenant-Id": "tenant-other"}
+
+    for path in (
+        f"/ingestion/jobs/{job_id}",
+        f"/ingestion/jobs/{job_id}/evidence",
+        f"/ingestion/jobs/{job_id}/failures",
+        f"/ingestion/jobs/{job_id}/records",
+    ):
+        response = await event_replay_test_client.get(path, headers=foreign_tenant_headers)
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+
+    job_list = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        headers=foreign_tenant_headers,
+    )
+    assert job_list.status_code == 200
+    assert job_list.json() == {"jobs": [], "total": 0, "next_cursor": None}
+
+    retry = await event_replay_test_client.post(
+        f"/ingestion/jobs/{job_id}/retry",
+        headers=foreign_tenant_headers,
+        json={"dry_run": False},
+    )
+    assert retry.status_code == 404
+    assert retry.json()["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+    assert mock_kafka_producer.publish_message.call_count == publish_count
 
 
 async def test_ingestion_jobs_list_endpoint_filters_and_paginates(
@@ -6705,6 +6836,25 @@ async def test_ingest_portfolio_bundle_endpoint(
     )
 
 
+async def test_ingest_portfolio_bundle_rejects_existing_other_tenant_portfolio_before_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    ingestion_test_harness,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    ingestion_test_harness["fake_portfolio_tenant_reader"].allowed_ids = set()
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=_portfolio_bundle_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "INGESTION_PORTFOLIO_TENANT_MISMATCH"
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_portfolio_bundle_replays_duplicate_idempotency_key(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
@@ -7310,6 +7460,30 @@ async def test_upload_commit_transactions_csv_partial(
     assert body["published_rows"] == 1
     assert body["skipped_rows"] == 1
     mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_upload_commit_rejects_cross_tenant_portfolio_before_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_portfolio_tenant_reader"].allowed_ids = set()
+    csv_content = "\n".join(
+        [
+            "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+            "T1,P-OTHER,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+        ]
+    ).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == ("INGESTION_UPLOAD_PORTFOLIO_TENANT_MISMATCH")
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_upload_commit_disabled_by_feature_flag(
@@ -7970,6 +8144,34 @@ async def test_ingest_business_dates_replays_duplicate_idempotency_key(
     assert second.json()["job_id"] == first.json()["job_id"]
     assert second.json()["idempotency_key"] == "business-date-replay-001"
     mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_business_dates_does_not_replay_another_tenants_idempotency_key(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _business_date_batch_payload("2025-01-03")
+    idempotency_key = "business-date-cross-tenant-001"
+
+    first = await async_test_client.post(
+        "/ingest/business-dates",
+        json=payload,
+        headers={"X-Tenant-Id": "tenant-a", "X-Idempotency-Key": idempotency_key},
+    )
+    second = await async_test_client.post(
+        "/ingest/business-dates",
+        json=payload,
+        headers={"X-Tenant-Id": "tenant-b", "X-Idempotency-Key": idempotency_key},
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert second.json()["job_id"] != first.json()["job_id"]
+    assert second.json()["message"] == (
+        "Business dates accepted for asynchronous ingestion processing."
+    )
+    assert mock_kafka_producer.publish_message.call_count == 2
 
 
 async def test_ingest_business_dates_rejects_empty_payload_with_canonical_error(

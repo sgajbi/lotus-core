@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dependencies import get_position_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.position_service import PositionService
-from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -95,6 +95,16 @@ async def test_get_position_history_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["security_id"] == "S1"
     assert "X-Correlation-ID" in response.headers
+    mock_service.get_position_history.assert_awaited_once_with(
+        tenant_context=ANY,
+        portfolio_id="P1",
+        security_id="S1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+    tenant_context = mock_service.get_position_history.await_args.kwargs["tenant_context"]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
 
 
 async def test_get_position_history_unexpected_maps_to_500(async_test_client):
@@ -140,10 +150,14 @@ async def test_get_latest_positions_success(async_test_client):
     assert payload["as_of_date"] == "2025-01-01"
     assert payload["generated_at"]
     mock_service.get_portfolio_positions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=None,
         include_projected=False,
     )
+    tenant_context = mock_service.get_portfolio_positions.await_args.kwargs["tenant_context"]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
 
 
 async def test_get_latest_positions_unexpected_maps_to_500(async_test_client):
@@ -222,10 +236,14 @@ async def test_get_latest_positions_forwards_as_of_and_include_projected(async_t
     assert payload["product_name"] == "HoldingsAsOf"
     assert payload["as_of_date"] == "2026-02-28"
     mock_service.get_portfolio_positions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=date(2026, 2, 28),
         include_projected=True,
     )
+    tenant_context = mock_service.get_portfolio_positions.await_args.kwargs["tenant_context"]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
 
 
 async def test_get_portfolio_maturity_summary_success(async_test_client):
@@ -269,12 +287,15 @@ async def test_get_portfolio_maturity_summary_success(async_test_client):
     assert payload["next_maturity_date"] == "2026-04-15"
     assert payload["maturing_holding_count"] == 1
     mock_service.get_portfolio_maturity_summary.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=None,
         horizon_days=90,
         include_projected=False,
-        tenant_id="TENANT-PB",
     )
+    tenant_context = mock_service.get_portfolio_maturity_summary.await_args.kwargs["tenant_context"]
+    assert tenant_context.tenant_id_text == "TENANT-PB"
+    assert tenant_context.correlation_id
 
 
 async def test_get_portfolio_maturity_summary_rejects_projected_state(async_test_client):
@@ -300,12 +321,15 @@ async def test_get_portfolio_maturity_summary_accepts_explicit_booked_state(asyn
 
     assert response.status_code == 200
     mock_service.get_portfolio_maturity_summary.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=date(2026, 2, 28),
         horizon_days=60,
         include_projected=False,
-        tenant_id=TEST_TENANT_ID,
     )
+    tenant_context = mock_service.get_portfolio_maturity_summary.await_args.kwargs["tenant_context"]
+    assert tenant_context.tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
+    assert tenant_context.correlation_id
 
 
 @pytest.mark.parametrize("horizon_days", [0, 3661])

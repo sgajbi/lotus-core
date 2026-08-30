@@ -99,7 +99,7 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     ]
     reader = SqlAlchemyCoreSnapshotSourceReader(session)
 
-    portfolio = await reader.get_portfolio("P1")
+    portfolio = await reader.get_portfolio(tenant_id="tenant-a", portfolio_id="P1")
     instruments = await reader.get_instruments([" SEC_1 ", "SEC_1"])
     prices = await reader.get_prices(security_id=" SEC_1 ", end_date=date(2026, 4, 10))
     rates = await reader.get_fx_rates(
@@ -116,6 +116,12 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     assert prices[0].evidence_timestamp == price_updated_at
     assert rates[0].rate == Decimal("1.35")
     assert rates[0].evidence_timestamp == fx_created_at
+
+    portfolio_sql = str(
+        session.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolios.tenant_id = 'tenant-a'" in portfolio_sql
+    assert "portfolios.portfolio_id = 'P1'" in portfolio_sql
 
     instrument_sql = str(
         session.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})

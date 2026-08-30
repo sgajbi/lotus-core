@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from ..application.lookup_catalog import (
     CurrencyLookupQuery,
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
     ),
 )
 async def get_portfolio_lookups(
+    request: Request,
     client_id: str | None = Query(
         default=None,
         description="Optional CIF filter for tenant/client scoping.",
@@ -54,7 +55,8 @@ async def get_portfolio_lookups(
             booking_center_code=booking_center_code,
             q=q,
             limit=limit,
-        )
+        ),
+        tenant_context=request.state.tenant_context,
     )
     return lookup_response_from_result(result)
 
@@ -108,6 +110,7 @@ async def get_instrument_lookups(
     ),
 )
 async def get_currency_lookups(
+    request: Request,
     instrument_page_limit: int = Query(
         default=500,
         ge=50,
@@ -143,6 +146,7 @@ async def get_currency_lookups(
 
     return lookup_response_from_result(
         await service.list_currency_lookup_items(
-            CurrencyLookupQuery(source=source, q=q, limit=limit)
+            CurrencyLookupQuery(source=source, q=q, limit=limit),
+            tenant_context=request.state.tenant_context,
         )
     )

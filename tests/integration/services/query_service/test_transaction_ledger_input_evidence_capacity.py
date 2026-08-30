@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.application.transaction_query import TransactionLedgerFilters
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.performance]
 
@@ -23,6 +24,7 @@ async def test_transaction_ledger_input_evidence_is_bounded_at_bank_day_volume(
         insert(Portfolio),
         [
             {
+                "tenant_id": TEST_TENANT_ID,
                 "portfolio_id": "PORT-LEDGER-CAPACITY",
                 "base_currency": "USD",
                 "open_date": date(2024, 1, 1),

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -22,7 +22,7 @@ from src.services.query_service.app.dtos.transaction_dto import (
     TransactionRecordResponse,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -155,6 +155,7 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     assert payload["transactions"][0]["other_interest_deductions_amount"] == "5.00"
     assert payload["transactions"][0]["net_interest_amount"] == "110.00"
     mock_service.get_transactions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         instrument_id="INST_1",
         security_id="SEC_1",
@@ -174,6 +175,10 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
         limit=20,
         sort_by="transaction_date",
         sort_order="asc",
+    )
+    assert (
+        mock_service.get_transactions.await_args.kwargs["tenant_context"].tenant_id_text
+        == TEST_TENANT_ID
     )
 
 
@@ -196,6 +201,7 @@ async def test_get_transaction_record_returns_exact_source_product(async_test_cl
     assert payload["transaction"]["transaction_id"] == "T1"
     assert payload["reason_codes"] == ["TRANSACTION_LEDGER_READY"]
     mock_service.get_transaction_record.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         transaction_id="T1",
         as_of_date=date(2025, 8, 1),
@@ -298,6 +304,7 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
 
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         instrument_id=None,
         security_id=None,
@@ -329,6 +336,7 @@ async def test_get_transactions_for_security_drill_down_defaults_to_latest_first
 
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         instrument_id=None,
         security_id="SEC-HOLDING-1",
@@ -369,6 +377,7 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
 
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         instrument_id=None,
         security_id=None,
@@ -398,6 +407,7 @@ async def test_get_transactions_forwards_reporting_currency(async_test_client):
 
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         instrument_id=None,
         security_id=None,
@@ -500,6 +510,7 @@ async def test_get_realized_tax_summary_returns_source_product(async_test_client
     assert payload["reporting_currency_total_tax_amount"] == "20.40"
     assert payload["reason_codes"] == ["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]
     mock_service.get_realized_tax_summary.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         start_date=datetime(2025, 8, 1, 0, 0).date(),
         end_date=datetime(2025, 8, 31, 0, 0).date(),

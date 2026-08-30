@@ -70,13 +70,14 @@ async def mark_job_queued_after_publish_or_raise(
     *,
     ingestion_job_service: IngestionJobService,
     job_id: str,
+    tenant_id: str,
     failure_phase: str = "queue_bookkeeping",
     publish_state: str = "published",
     work_state: str = "published",
     published_record_count: int | None = None,
 ) -> None:
     try:
-        queued = await ingestion_job_service.mark_queued(job_id)
+        queued = await ingestion_job_service.mark_queued(job_id, tenant_id=tenant_id)
     except Exception as exc:
         await raise_post_publish_bookkeeping_failure(
             ingestion_job_service=ingestion_job_service,

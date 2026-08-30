@@ -90,10 +90,14 @@ async def load_record_status_response(
     *,
     job_id: str,
     session_factory: SessionFactory,
+    tenant_id: str,
 ) -> IngestionJobRecordStatusResponse | None:
     async for db in session_factory():
         job = await db.scalar(
-            select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+            select(DBIngestionJob)
+            .where(DBIngestionJob.job_id == job_id)
+            .where(DBIngestionJob.tenant_id == tenant_id)
+            .limit(1)
         )
         if job is None:
             return None

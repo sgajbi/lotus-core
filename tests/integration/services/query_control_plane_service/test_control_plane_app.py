@@ -257,7 +257,15 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
         "cursor_event_id",
         "component",
         "decision",
+        "X-Tenant-Id",
     }
+    tenant_header = next(
+        parameter
+        for parameter in security_audit["parameters"]
+        if parameter["name"] == "X-Tenant-Id"
+    )
+    assert tenant_header["in"] == "header"
+    assert tenant_header["required"] is True
     assert "tenant_id" not in parameter_names
     for status_code in ("403", "422", "503"):
         assert set(security_audit["responses"][status_code]["content"]) == {
@@ -1780,15 +1788,21 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         parameter["name"] == "tenant_id" for parameter in core_snapshot.get("parameters", [])
     )
 
-    blocked_example = core_snapshot["responses"]["403"]["content"]["application/problem+json"][
-        "example"
+    forbidden_examples = core_snapshot["responses"]["403"]["content"]["application/problem+json"][
+        "examples"
     ]
+    blocked_example = forbidden_examples["policy_blocked"]["value"]
     assert blocked_example["error_code"] == "QCP_CORE_SNAPSHOT_POLICY_BLOCKED"
     assert (
         blocked_example["detail"]
         == "Requested snapshot sections are blocked by strict integration policy."
     )
     assert blocked_example["correlation_id"]
+    tenant_forbidden_example = forbidden_examples["tenant_scope_forbidden"]["value"]
+    assert tenant_forbidden_example["error_code"] == "QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN"
+    assert tenant_forbidden_example["detail"] == (
+        "Requested tenant does not match admitted tenant authority."
+    )
 
     invalid_enrichment = enrichment_bulk["responses"]["400"]["content"]["application/problem+json"][
         "example"

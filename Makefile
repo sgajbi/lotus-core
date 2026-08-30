@@ -398,7 +398,7 @@ durable-lease-clock-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/durable_lease_clock_guard.py
 
 tenant-ownership-guard:
-	$(REPOSITORY_PYTHON) scripts/quality/tenant_ownership_guard.py --mode enforce-defaults
+	$(REPOSITORY_PYTHON) scripts/quality/tenant_ownership_guard.py --mode enforce-critical
 
 architecture-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/architecture_boundary_guard.py --strict

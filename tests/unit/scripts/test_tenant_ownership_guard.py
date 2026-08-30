@@ -5,9 +5,172 @@ from sqlalchemy.orm import registry
 
 from scripts.quality.tenant_ownership_guard import (
     _is_blocking,
+    find_critical_tenant_boundary_findings,
     find_orm_tenant_findings,
     find_synthetic_default_findings,
 )
+
+
+def _write_idempotency_replay_reader(
+    root: Path,
+    *,
+    tenant_parameter: str = "tenant_id",
+) -> None:
+    source = (
+        root
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "infrastructure"
+        / "ingestion_idempotency_replay_reader.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "class SqlAlchemyIngestionIdempotencyReplayReader:\n"
+        f"    async def find_matching_job(self, *, {tenant_parameter}): ...\n",
+        encoding="utf-8",
+    )
+
+
+def _write_portfolio_tenant_reader(
+    root: Path,
+    *,
+    tenant_parameter: str = "tenant_id",
+) -> None:
+    source = (
+        root
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "repositories"
+        / "portfolio_tenant_repository.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "class SqlAlchemyPortfolioTenantReader:\n"
+        f"    async def resolve_ownership(self, *, {tenant_parameter}): ...\n",
+        encoding="utf-8",
+    )
+
+
+def _write_core_snapshot_reader(
+    root: Path,
+    *,
+    tenant_parameter: str = "tenant_id",
+) -> None:
+    source = (
+        root
+        / "src"
+        / "services"
+        / "query_control_plane_service"
+        / "app"
+        / "infrastructure"
+        / "core_snapshot_sources.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "class SqlAlchemyCoreSnapshotSourceReader:\n"
+        f"    async def get_portfolio(self, *, {tenant_parameter}): ...\n",
+        encoding="utf-8",
+    )
+
+
+def _write_position_repository(
+    root: Path,
+    *,
+    tenant_parameter: str = "tenant_id",
+) -> None:
+    source = (
+        root
+        / "src"
+        / "services"
+        / "query_service"
+        / "app"
+        / "repositories"
+        / "position_repository.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "class PositionRepository:\n"
+        f"    async def portfolio_exists(self, *, {tenant_parameter}): ...\n",
+        encoding="utf-8",
+    )
+
+
+def _write_position_service(
+    root: Path,
+    *,
+    tenant_parameter: str = "tenant_context",
+) -> None:
+    source = (
+        root / "src" / "services" / "query_service" / "app" / "services" / "position_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    methods = "\n".join(
+        f"    async def {name}(self, *, {tenant_parameter}): ..."
+        for name in (
+            "get_position_history",
+            "get_portfolio_positions",
+            "get_portfolio_maturity_summary",
+        )
+    )
+    source.write_text(f"class PositionService:\n{methods}\n", encoding="utf-8")
+
+
+def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
+    sources = {
+        (
+            "src/services/query_service/app/repositories/transaction_repository.py",
+            "TransactionRepository",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/transaction_service.py",
+            "TransactionService",
+            ("get_transactions", "get_transaction_record", "get_realized_tax_summary"),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "dpm_portfolio_state_sources.py",
+            "SqlAlchemyDpmPortfolioStateReader",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/"
+            "dpm_source_readiness/portfolio_tax_lots.py",
+            "PortfolioTaxLotService",
+            ("resolve",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/"
+            "dpm_source_readiness/readiness.py",
+            "DpmSourceReadinessService",
+            ("get_portfolio_tax_lot_window", "get_source_readiness", "resolve"),
+            "tenant_context",
+        ),
+    }
+    for relative_path, class_name, method_names, tenant_parameter in sources:
+        source = root / relative_path
+        source.parent.mkdir(parents=True, exist_ok=True)
+        methods = "\n".join(
+            f"    async def {name}(self, *, {tenant_parameter}): ..." for name in method_names
+        )
+        source.write_text(f"class {class_name}:\n{methods}\n", encoding="utf-8")
+
+
+def _write_valid_additional_boundaries(root: Path) -> None:
+    _write_idempotency_replay_reader(root)
+    _write_portfolio_tenant_reader(root)
+    _write_core_snapshot_reader(root)
+    _write_position_repository(root)
+    _write_position_service(root)
+    _write_transaction_and_tax_lot_boundaries(root)
 
 
 def test_orm_report_lists_only_tables_without_tenant_ownership() -> None:
@@ -62,4 +225,159 @@ def test_report_mode_banks_orm_debt_while_default_enforcement_blocks_new_fallbac
 
     assert _is_blocking(finding, "report") is False
     assert _is_blocking(finding, "enforce-defaults") is False
+    assert _is_blocking(finding, "enforce-critical") is False
     assert _is_blocking(finding, "enforce") is True
+
+
+def test_critical_tenant_boundary_scan_requires_keyword_only_tenant_scope(
+    tmp_path: Path,
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "services"
+        / "ingestion_job_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "class IngestionJobService:\n"
+        "    async def get_job(self, job_id, *, tenant_id=None): ...\n"
+        "    async def get_job_record_status(self, job_id, *, tenant_id): ...\n"
+        "    async def get_job_replay_context(self, job_id, *, tenant_id): ...\n"
+        "    async def get_unique_replayable_job_by_correlation_id(\n"
+        "        self, correlation_id, *, tenant_id\n"
+        "    ): ...\n"
+        "    async def list_jobs(self, *, tenant_id): ...\n"
+        "    async def mark_failed(self, job_id, reason, *, tenant_id): ...\n"
+        "    async def mark_queued(self, job_id, *, tenant_id): ...\n"
+        "    async def mark_retried_and_queued(self, job_id, *, tenant_id): ...\n",
+        encoding="utf-8",
+    )
+    _write_valid_additional_boundaries(tmp_path)
+
+    findings = find_critical_tenant_boundary_findings(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].rule == "optional-critical-tenant-boundary"
+    assert "get_job" in findings[0].detail
+    assert _is_blocking(findings[0], "enforce-defaults") is False
+    assert _is_blocking(findings[0], "enforce-critical") is True
+
+
+def test_critical_tenant_boundary_scan_rejects_unscoped_idempotency_replay(
+    tmp_path: Path,
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "services"
+        / "ingestion_job_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    methods = "\n".join(
+        f"    async def {name}(self, *, tenant_id): ..."
+        for name in (
+            "get_job",
+            "get_job_record_status",
+            "get_job_replay_context",
+            "get_unique_replayable_job_by_correlation_id",
+            "list_jobs",
+            "mark_failed",
+            "mark_queued",
+            "mark_retried_and_queued",
+        )
+    )
+    source.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
+    _write_idempotency_replay_reader(tmp_path, tenant_parameter="tenant_id=None")
+    _write_portfolio_tenant_reader(tmp_path)
+    _write_core_snapshot_reader(tmp_path)
+    _write_position_repository(tmp_path)
+    _write_position_service(tmp_path)
+    _write_transaction_and_tax_lot_boundaries(tmp_path)
+
+    findings = find_critical_tenant_boundary_findings(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].rule == "optional-critical-tenant-boundary"
+    assert "SqlAlchemyIngestionIdempotencyReplayReader.find_matching_job" in findings[0].detail
+    assert _is_blocking(findings[0], "enforce-critical") is True
+
+
+def test_critical_tenant_boundary_scan_rejects_unscoped_ownership_adapters(
+    tmp_path: Path,
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "services"
+        / "ingestion_job_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    methods = "\n".join(
+        f"    async def {name}(self, *, tenant_id): ..."
+        for name in (
+            "get_job",
+            "get_job_record_status",
+            "get_job_replay_context",
+            "get_unique_replayable_job_by_correlation_id",
+            "list_jobs",
+            "mark_failed",
+            "mark_queued",
+            "mark_retried_and_queued",
+        )
+    )
+    source.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
+    _write_idempotency_replay_reader(tmp_path)
+    _write_portfolio_tenant_reader(tmp_path, tenant_parameter="tenant_id=None")
+    _write_core_snapshot_reader(tmp_path, tenant_parameter="tenant_id=None")
+    _write_position_repository(tmp_path)
+    _write_position_service(tmp_path)
+    _write_transaction_and_tax_lot_boundaries(tmp_path)
+
+    findings = find_critical_tenant_boundary_findings(tmp_path)
+
+    assert len(findings) == 2
+    assert {finding.detail for finding in findings} == {
+        "SqlAlchemyPortfolioTenantReader.resolve_ownership must require keyword-only tenant_id",
+        "SqlAlchemyCoreSnapshotSourceReader.get_portfolio must require keyword-only tenant_id",
+    }
+    assert all(_is_blocking(finding, "enforce-critical") for finding in findings)
+
+
+def test_critical_tenant_boundary_scan_accepts_required_scope(tmp_path: Path) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "services"
+        / "ingestion_job_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    methods = "\n".join(
+        f"    async def {name}(self, *, tenant_id): ..."
+        for name in (
+            "get_job",
+            "get_job_record_status",
+            "get_job_replay_context",
+            "get_unique_replayable_job_by_correlation_id",
+            "list_jobs",
+            "mark_failed",
+            "mark_queued",
+            "mark_retried_and_queued",
+        )
+    )
+    source.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
+    _write_valid_additional_boundaries(tmp_path)
+
+    assert find_critical_tenant_boundary_findings(tmp_path) == []

@@ -42,15 +42,15 @@ async def test_get_portfolios_no_filters(
     THEN it should construct a simple SELECT statement without any WHERE clauses.
     """
     # ACT
-    portfolios = await repository.get_portfolios()
+    portfolios = await repository.get_portfolios(tenant_id=TEST_TENANT_ID)
 
     # ASSERT
     assert len(portfolios) == 2
     mock_db_session.execute.assert_awaited_once()
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
-    # Check that the compiled query doesn't contain a WHERE clause
-    assert "WHERE" not in str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert f"WHERE portfolios.tenant_id = '{TEST_TENANT_ID}'" in compiled_query
     assert "portfolios" in str(executed_stmt.compile())
 
 
@@ -63,14 +63,15 @@ async def test_get_portfolios_with_portfolio_id_filter(
     THEN it should construct a SELECT statement with a WHERE clause for portfolio_id.
     """
     # ACT
-    await repository.get_portfolios(portfolio_id="P1")
+    await repository.get_portfolios(tenant_id=TEST_TENANT_ID, portfolio_id="P1")
 
     # ASSERT
     mock_db_session.execute.assert_awaited_once()
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "WHERE portfolios.portfolio_id = 'P1'" in compiled_query
+    assert f"portfolios.tenant_id = '{TEST_TENANT_ID}'" in compiled_query
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
 
 
 async def test_get_portfolios_with_all_filters(
@@ -82,7 +83,12 @@ async def test_get_portfolios_with_all_filters(
     THEN it should construct a SELECT statement with all corresponding WHERE clauses.
     """
     # ACT
-    await repository.get_portfolios(portfolio_id="P1", client_id="C100", booking_center_code="SG")
+    await repository.get_portfolios(
+        tenant_id=TEST_TENANT_ID,
+        portfolio_id="P1",
+        client_id="C100",
+        booking_center_code="SG",
+    )
 
     # ASSERT
     mock_db_session.execute.assert_awaited_once()
@@ -97,7 +103,7 @@ async def test_get_portfolios_with_all_filters(
 async def test_get_portfolios_with_portfolio_ids_filter(
     repository: PortfolioRepository, mock_db_session: AsyncMock
 ):
-    await repository.get_portfolios(portfolio_ids=["P1", "P2"])
+    await repository.get_portfolios(tenant_id=TEST_TENANT_ID, portfolio_ids=["P1", "P2"])
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
@@ -109,12 +115,13 @@ async def test_get_portfolios_with_portfolio_ids_filter(
 async def test_get_by_id_returns_first_match(
     repository: PortfolioRepository, mock_db_session: AsyncMock
 ):
-    portfolio = await repository.get_by_id("P1")
+    portfolio = await repository.get_by_id(tenant_id=TEST_TENANT_ID, portfolio_id="P1")
 
     assert portfolio is not None
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "WHERE portfolios.portfolio_id = 'P1'" in compiled_query
+    assert f"portfolios.tenant_id = '{TEST_TENANT_ID}'" in compiled_query
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
 
 
 async def test_get_by_id_returns_none_when_missing(
@@ -124,6 +131,6 @@ async def test_get_by_id_returns_none_when_missing(
     mock_result.scalars.return_value.first.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    portfolio = await repository.get_by_id("P404")
+    portfolio = await repository.get_by_id(tenant_id=TEST_TENANT_ID, portfolio_id="P404")
 
     assert portfolio is None

@@ -17,6 +17,9 @@ from .infrastructure.transaction_reprocessing_target_reader import (
 )
 from .ports.ingestion_idempotency_replay import IngestionIdempotencyReplayReader
 from .repositories.business_calendar_repository import BusinessCalendarRepository
+from .repositories.portfolio_tenant_repository import (
+    SqlAlchemyPortfolioTenantReader,
+)
 from .services.business_date_ingestion_commands import BusinessDateIngestionCommandHandler
 from .services.business_date_ingestion_policy import BusinessDateIngestionPolicy
 from .services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
@@ -63,6 +66,12 @@ def get_business_calendar_repository(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> BusinessCalendarRepository:
     return BusinessCalendarRepository(db)
+
+
+def get_portfolio_tenant_reader(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> SqlAlchemyPortfolioTenantReader:
+    return SqlAlchemyPortfolioTenantReader(db)
 
 
 def get_business_date_ingestion_policy(
@@ -117,12 +126,14 @@ def get_ingestion_publish_command_handler(
     reprocessing_target_resolver: ResolveTransactionReprocessingTargets = Depends(
         get_transaction_reprocessing_target_resolver
     ),
+    portfolio_tenant_reader: SqlAlchemyPortfolioTenantReader = Depends(get_portfolio_tenant_reader),
 ) -> IngestionPublishCommandHandler:
     return IngestionPublishCommandHandler(
         ingestion_service=ingestion_service,
         ingestion_job_service=ingestion_job_service,
         idempotency_replay_reader=idempotency_replay_reader,
         resolve_transaction_reprocessing_targets=reprocessing_target_resolver,
+        portfolio_tenant_reader=portfolio_tenant_reader,
     )
 
 

@@ -94,7 +94,10 @@ async def test_reference_data_command_persists_and_marks_queued() -> None:
     assert result.job_id == "ref-job-1"
     assert result.accepted_count == 2
     registry_command.persist.assert_awaited_once_with(handler.reference_data_service, request)
-    handler.ingestion_job_service.mark_queued.assert_awaited_once_with("ref-job-1")
+    handler.ingestion_job_service.mark_queued.assert_awaited_once_with(
+        "ref-job-1",
+        tenant_id="tenant-test",
+    )
     assert (
         handler.ingestion_job_service.create_or_get_job.await_args.kwargs["tenant_context"]
         is TEST_TENANT_CONTEXT
@@ -155,6 +158,10 @@ async def test_reference_data_replay_bypasses_write_controls() -> None:
     )
 
     assert result.replayed is True
+    assert (
+        handler.idempotency_replay_reader.find_matching_job.await_args.kwargs["tenant_id"]
+        == "tenant-test"
+    )
     handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
     handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
     registry_command.persist.assert_not_awaited()
@@ -248,6 +255,7 @@ async def test_reference_data_command_marks_failed_on_persist_error() -> None:
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
         "Reference-data persistence failed.",
+        tenant_id="tenant-test",
         failure_phase="persist",
         failure_status_code=500,
         failure_code="REFERENCE_DATA_PERSIST_FAILED",
@@ -285,6 +293,7 @@ async def test_reference_data_command_maps_valuation_authority_conflict_to_409()
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
         "Valuation-policy assignment evidence conflicts with persisted authority.",
+        tenant_id="tenant-test",
         failure_phase="persist",
         failure_status_code=409,
         failure_code="VALUATION_POLICY_ASSIGNMENT_CONFLICT",
@@ -324,6 +333,7 @@ async def test_reference_data_command_maps_market_price_authority_conflict_to_40
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
         "Authoritative market-price source evidence conflicts with persisted authority.",
+        tenant_id="tenant-test",
         failure_phase="persist",
         failure_status_code=409,
         failure_code="MARKET_PRICE_SOURCE_FACT_CONFLICT",

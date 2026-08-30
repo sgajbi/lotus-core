@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.collection_window_policy import (
@@ -43,6 +43,7 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-POS-00
     ),
 )
 async def get_position_history(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -72,6 +73,7 @@ async def get_position_history(
             end_date=end_date,
         )
         return await service.get_position_history(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             security_id=security_id,
             start_date=start_date,
@@ -112,6 +114,7 @@ async def get_position_history(
     openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def get_latest_positions(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -137,6 +140,7 @@ async def get_latest_positions(
 ):
     try:
         return await service.get_portfolio_positions(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             include_projected=include_projected,
@@ -172,6 +176,7 @@ async def get_latest_positions(
     openapi_extra=source_data_product_openapi_extra("PortfolioMaturitySummary"),
 )
 async def get_portfolio_maturity_summary(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -204,13 +209,6 @@ async def get_portfolio_maturity_summary(
         examples=[False],
         json_schema_extra={"const": False},
     ),
-    x_tenant_id: str | None = Header(
-        None,
-        description=(
-            "Tenant scope bound into runtime receipt metadata when supplied by the caller."
-        ),
-        examples=["default"],
-    ),
     service: PositionService = Depends(get_position_service),
 ):
     if include_projected:
@@ -220,11 +218,11 @@ async def get_portfolio_maturity_summary(
         )
     try:
         return await service.get_portfolio_maturity_summary(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             horizon_days=horizon_days,
             include_projected=include_projected,
-            tenant_id=x_tenant_id,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
