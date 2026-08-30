@@ -349,6 +349,11 @@ def test_discover_source_data_product_routes_finds_current_catalog_bindings() ->
     ) in product_routes
     assert (
         QUERY_SERVICE,
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}",
+        "TransactionLedgerWindow",
+    ) in product_routes
+    assert (
+        QUERY_SERVICE,
         "/portfolios/{portfolio_id}/realized-tax-summary",
         "PortfolioRealizedTaxSummary",
     ) in product_routes
@@ -367,6 +372,7 @@ def test_discover_response_model_product_identities_finds_current_dto_defaults()
         "PortfolioRealizedTaxSummary",
         "v1",
     )
+    assert identities["TransactionRecordResponse"] == ("TransactionLedgerWindow", "v1")
     assert identities["InstrumentEnrichmentBulkResponse"] == ("InstrumentReferenceBundle", "v1")
 
 

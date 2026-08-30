@@ -137,6 +137,7 @@ def _apply_transaction_date_filters(
 def _ledger_identity_filters(filters: TransactionLedgerFilters) -> dict[str, str]:
     return _identity_filter_kwargs(
         portfolio_id=filters.portfolio_id,
+        transaction_id=filters.transaction_id,
         instrument_id=filters.instrument_id,
         transaction_type=filters.transaction_type,
         component_type=filters.component_type,

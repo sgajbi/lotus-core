@@ -102,7 +102,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         serving_plane=QUERY_SERVICE,
         owner="lotus-core",
         consumers=("lotus-gateway", "lotus-report", "lotus-manage", "lotus-risk"),
-        current_routes=("/portfolios/{portfolio_id}/transactions",),
+        current_routes=(
+            "/portfolios/{portfolio_id}/transactions",
+            "/portfolios/{portfolio_id}/transactions/{transaction_id}",
+        ),
         notes="Deterministically ordered transaction and income ledger window.",
     ),
     SourceDataProductDefinition(

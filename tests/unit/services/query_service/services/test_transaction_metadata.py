@@ -127,6 +127,7 @@ def test_latest_transaction_evidence_timestamp_returns_none_for_empty_evidence()
 def test_transaction_ledger_filters_preserve_repository_filter_shape() -> None:
     assert transaction_ledger_filters(
         portfolio_id="P1",
+        transaction_id="T1",
         instrument_id="I1",
         security_id="S1",
         transaction_type="FX_FORWARD",
@@ -141,6 +142,7 @@ def test_transaction_ledger_filters_preserve_repository_filter_shape() -> None:
         as_of_date=date(2025, 1, 15),
     ) == TransactionLedgerFilters(
         portfolio_id="P1",
+        transaction_id="T1",
         instrument_id="I1",
         security_id="S1",
         transaction_type="FX_FORWARD",

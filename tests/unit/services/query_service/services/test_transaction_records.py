@@ -12,6 +12,7 @@ from src.services.query_service.app.application.transaction_query import (
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.services.transaction_records import (
+    exact_transaction_record_response,
     paginated_transaction_ledger_response,
     transaction_record_from_row,
     transaction_records_from_rows,
@@ -230,6 +231,36 @@ async def test_paginated_transaction_ledger_response_marks_complete_window() -> 
     assert response.reason_codes == ["TRANSACTION_LEDGER_READY"]
     assert response.missing_instrument_reference_count == 0
     assert response.missing_instrument_security_ids == []
+
+
+async def test_exact_transaction_record_response_binds_identity_and_product_proof() -> None:
+    latest_evidence_timestamp = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    filters = _ledger_filters(transaction_id="T1")
+
+    response = exact_transaction_record_response(
+        portfolio_id="P1",
+        reporting_currency="SGD",
+        transaction=_transaction_record("T1"),
+        effective_as_of_date=date(2025, 1, 15),
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        ledger_filters=filters,
+        input_evidence=_input_evidence(
+            transaction_count=1,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        ),
+    )
+
+    assert response.product_name == "TransactionLedgerWindow"
+    assert response.portfolio_id == "P1"
+    assert response.reporting_currency == "SGD"
+    assert response.transaction.transaction_id == "T1"
+    assert response.data_quality_status == COMPLETE
+    assert response.reason_codes == ["TRANSACTION_LEDGER_READY"]
+    assert response.snapshot_id is not None
+    assert response.source_refs == [
+        "lotus-core://source/TransactionLedgerWindow/P1/2025-01-15/transactions/T1"
+    ]
+    assert response.source_lineage["reconstruction_scope_id"] == response.snapshot_id
 
 
 async def test_paginated_transaction_ledger_response_marks_partial_window() -> None:

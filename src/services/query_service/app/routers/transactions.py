@@ -2,11 +2,16 @@
 from datetime import date
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
+from ..application.transaction_query import TransactionRecordUnavailableError
 from ..dependencies import get_transaction_service, pagination_params, sorting_params
-from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
+from ..dtos.transaction_dto import (
+    PaginatedTransactionResponse,
+    PortfolioRealizedTaxSummaryResponse,
+    TransactionRecordResponse,
+)
 from ..services.transaction_service import TransactionService
 from .http_errors import lookup_error_to_http, value_error_to_http
 
@@ -170,6 +175,96 @@ async def get_transactions(
         raise lookup_error_to_http(exc) from exc
     except ValueError as exc:
         raise value_error_to_http(exc) from exc
+
+
+@router.get(
+    "/{portfolio_id}/transactions/{transaction_id}",
+    response_model=TransactionRecordResponse,
+    operation_id="get_portfolio_transaction_record",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Invalid exact transaction query or reporting-currency restatement.",
+            "content": {
+                "application/json": {"example": INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE}
+            },
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": (
+                "No transaction with this identifier is visible within the requested portfolio."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Transaction record not found for requested portfolio"}
+                }
+            },
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "The authoritative transaction source could not be read safely.",
+        },
+    },
+    summary="Get Exact Portfolio Transaction Record",
+    description=(
+        "What: Return exactly one source-owned TransactionLedgerWindow record by portfolio and "
+        "transaction identity.\n"
+        "How: Applies both identifiers in the authoritative Core query, loads canonical cost and "
+        "latest-cashflow evidence under one repeatable-read snapshot, and returns deterministic "
+        "lineage and supportability metadata. A transaction owned by another portfolio is "
+        "indistinguishable from an absent transaction.\n"
+        "When: Use this route for URL rehydration or record drill-down. Do not scan the paginated "
+        "ledger to resolve one transaction. Optional as-of, projected-record, and "
+        "reporting-currency semantics match the portfolio transaction ledger."
+    ),
+    openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
+)
+async def get_transaction_record(
+    portfolio_id: str = Path(
+        ...,
+        min_length=1,
+        description="Portfolio boundary that must own the transaction.",
+        examples=["PORT-TXN-001"],
+    ),
+    transaction_id: str = Path(
+        ...,
+        min_length=1,
+        description="Exact source-owned transaction identifier.",
+        examples=["TXN-2026-0001"],
+    ),
+    as_of_date: Optional[date] = Query(
+        None,
+        description=(
+            "Optional booked-state upper boundary. Defaults to Core's latest business date."
+        ),
+        examples=["2026-03-10"],
+    ),
+    include_projected: bool = Query(
+        False,
+        description="When true, allow an exact future-dated projected transaction record.",
+        examples=[False],
+    ),
+    reporting_currency: Optional[str] = Query(
+        None,
+        description="Optional reporting currency for field-aware monetary restatement.",
+        examples=["SGD"],
+    ),
+    service: TransactionService = Depends(get_transaction_service),
+):
+    try:
+        return await service.get_transaction_record(
+            portfolio_id=portfolio_id,
+            transaction_id=transaction_id,
+            as_of_date=as_of_date,
+            include_projected=include_projected,
+            reporting_currency=reporting_currency,
+        )
+    except LookupError as exc:
+        raise lookup_error_to_http(exc) from exc
+    except ValueError as exc:
+        raise value_error_to_http(exc) from exc
+    except TransactionRecordUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(

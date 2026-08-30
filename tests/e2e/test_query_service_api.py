@@ -143,6 +143,7 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
     return {
         "portfolio_id": portfolio_id,
         "security_1": security_1,
+        "transaction_id": f"{portfolio_id}_T1",
     }
 
 
@@ -162,6 +163,23 @@ def test_transaction_query_default_sort(setup_e2e_data, e2e_api_client: E2EApiCl
     assert data["transactions"][1]["transaction_id"] == f"{portfolio_id}_T4"
     assert data["transactions"][2]["transaction_id"] == f"{portfolio_id}_T3"
     assert data["transactions"][3]["transaction_id"] == f"{portfolio_id}_T1"
+
+
+def test_exact_transaction_record_lookup(setup_e2e_data, e2e_api_client: E2EApiClient):
+    portfolio_id = setup_e2e_data["portfolio_id"]
+    transaction_id = setup_e2e_data["transaction_id"]
+
+    response = e2e_api_client.query(
+        f"/portfolios/{portfolio_id}/transactions/{transaction_id}?as_of_date=2025-08-31"
+    )
+    payload = response.json()
+
+    assert payload["product_name"] == "TransactionLedgerWindow"
+    assert payload["portfolio_id"] == portfolio_id
+    assert payload["transaction"]["transaction_id"] == transaction_id
+    assert payload["transaction"]["security_id"] == setup_e2e_data["security_1"]
+    assert payload["reason_codes"] == ["TRANSACTION_LEDGER_READY"]
+    assert payload["source_lineage"]["source_owner"] == "lotus-core"
 
 
 def test_transaction_query_custom_sort(setup_e2e_data, e2e_api_client: E2EApiClient):

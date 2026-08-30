@@ -156,6 +156,7 @@ async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadat
 
     ledger_response_schemas = [
         components["PaginatedTransactionResponse"],
+        components["TransactionRecordResponse"],
     ]
 
     for response_schema in ledger_response_schemas:
@@ -373,6 +374,10 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/positions"]["get"]["responses"]
     assert "400" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/transactions"]["get"]["responses"]
+    exact_transaction = paths["/portfolios/{portfolio_id}/transactions/{transaction_id}"]["get"]
+    assert "400" in exact_transaction["responses"]
+    assert "404" in exact_transaction["responses"]
+    assert "503" in exact_transaction["responses"]
     assert "400" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
     assert "404" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
@@ -1400,3 +1405,28 @@ async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     assert "/portfolios/{portfolio_id}/performance" not in paths
     assert "/portfolios/{portfolio_id}/performance/mwr" not in paths
     assert "/portfolios/{portfolio_id}/positions-analytics" not in paths
+
+
+async def test_openapi_publishes_exact_transaction_lookup_contract(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    operation = schema["paths"]["/portfolios/{portfolio_id}/transactions/{transaction_id}"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    response_schema = schema["components"]["schemas"]["TransactionRecordResponse"]
+
+    assert operation["operationId"] == "get_portfolio_transaction_record"
+    assert operation["summary"] == "Get Exact Portfolio Transaction Record"
+    assert "Do not scan the paginated ledger" in operation["description"]
+    assert "indistinguishable from an absent transaction" in operation["description"]
+    assert parameters["portfolio_id"]["description"] == (
+        "Portfolio boundary that must own the transaction."
+    )
+    assert parameters["transaction_id"]["description"] == (
+        "Exact source-owned transaction identifier."
+    )
+    assert response_schema["properties"]["product_name"]["default"] == ("TransactionLedgerWindow")
+    assert response_schema["properties"]["transaction"]["description"] == (
+        "The exact canonical transaction record owned by this portfolio."
+    )

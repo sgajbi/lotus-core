@@ -16,6 +16,7 @@ from src.services.query_service.app.application.transaction_sorting import (
 def test_transaction_ledger_filters_capture_api_query_policy() -> None:
     filters = transaction_ledger_filters(
         portfolio_id="P1",
+        transaction_id="T1",
         instrument_id="I1",
         security_id=" S1 ",
         transaction_type="BUY",
@@ -32,6 +33,7 @@ def test_transaction_ledger_filters_capture_api_query_policy() -> None:
 
     assert filters == TransactionLedgerFilters(
         portfolio_id="P1",
+        transaction_id="T1",
         instrument_id="I1",
         security_id=" S1 ",
         transaction_type="BUY",
