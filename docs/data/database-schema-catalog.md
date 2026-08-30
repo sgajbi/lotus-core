@@ -34,7 +34,7 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 - **Description**: Represents valid processing dates per calendar, not trade/event timestamps.
 - **Relationships**: No explicit foreign-key relationships declared.
 - **Usage (modules/features)**: `src/services/ingestion_service/app/routers/business_dates.py`, `src/services/ingestion_service/app/services/ingestion_service.py`, `src/services/persistence_service/app/repositories/business_date_repository.py`, `src/services/persistence_service/app/consumers/business_date_consumer.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`
-- **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Typical access patterns**: Tenant-scoped fingerprint reuse, job lifecycle/status and result reads, and tenant-plus-portfolio operator support queries.
 - **Column definitions**:
   - `calendar_code` (String): Controlled code value from a domain taxonomy/configuration.
   - `date` (Date): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
@@ -1515,14 +1515,15 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 
 ## `analytics_export_jobs`
 
-- **Purpose**: Async export job lifecycle for analytics payloads.
-- **Description**: Tracks request fingerprint, execution state, and persisted export result payloads.
-- **Relationships**: No explicit foreign-key relationships declared.
+- **Purpose**: Durable export job lifecycle for analytics payloads (currently inline execution).
+- **Description**: Tracks tenant-bound request fingerprint, execution state, and persisted export result payloads.
+- **Relationships**: Composite foreign key (`tenant_id`, `portfolio_id`) to the authoritative `portfolios` owner.
 - **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_export_repository.py`, `src/services/query_control_plane_service/app/routers/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `job_id` (String): Identifier for job.
+  - `tenant_id` (String): Immutable admitted tenant authority for lifecycle and result access.
   - `dataset_type` (String): Domain type discriminator used to branch processing behavior.
   - `portfolio_id` (String): Canonical portfolio identifier.
   - `status` (String): Current lifecycle status for the record/work item.

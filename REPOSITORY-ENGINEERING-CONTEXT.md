@@ -1324,6 +1324,12 @@ Most relevant current governance:
     bounded reason text, preserve existing response contracts, and keep a future async export
     runner as a separate lifecycle-mode change rather than an implicit background task using a
     request-scoped database session.
+    Export jobs are durable tenant-owned records: creation, fingerprint reuse, lifecycle mutation,
+    status, result retrieval, and operator listing must all use the immutable admitted tenant.
+    Persist `tenant_id`, bind it to the portfolio through the composite ownership foreign key, and
+    return the same not-found outcome for foreign and absent job or portfolio identifiers. Never
+    use globally unique-looking `job_id`, `portfolio_id`, or request fingerprints as authorization.
+    The tenant-ownership guard enforces this boundary on the export repository and support listing.
 55. Simulation session mutations use an application-owned unit-of-work boundary. Repositories stage
     session rows, change rows, status updates, and deletes only; `SimulationService` owns
     deterministic clock/ID providers, expiry calculation, version increments, commit/refresh, and

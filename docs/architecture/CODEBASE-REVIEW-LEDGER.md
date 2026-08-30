@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1717 tenant-owned analytics export lifecycle (2026-08-31, hardened locally; protected PR and
+exact-main evidence pending): review of issue #798 S1 found that durable analytics export jobs were
+looked up, reused, and mutated by globally unique-looking job IDs and request fingerprints without
+tenant ownership. Core now persists admitted tenant authority, binds every export job to the
+authoritative portfolio through a composite foreign key, and scopes creation, reuse, transitions,
+status/result reads, and the operator listing. Legacy rows are backfilled only through portfolio
+ownership and ambiguous rows stop the migration. Cross-tenant PostgreSQL proof, service/repository
+tests, and an expanded tenant-ownership CI fitness function protect the pattern. The aggregate
+operations overview remains explicitly tracked under issue #798's broader operations-support
+slice. Evidence:
+[CR-1717-TENANT-OWNED-ANALYTICS-EXPORT-LIFECYCLE.md](./codebase-reviews/CR-1717-TENANT-OWNED-ANALYTICS-EXPORT-LIFECYCLE.md).
+
 CR-1715 Portfolio snapshot effective-date authority (2026-08-29, hardened locally; protected PR
 and exact-main evidence pending): issue #1035 showed that downstream advisory context could receive
 stable Core values but not the source-owned portfolio and market-data dates needed to defend the

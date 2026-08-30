@@ -50,8 +50,9 @@ Every `portfolios` row requires a normalized, non-blank `tenant_id`. `legal_book
 optional and independent business dimension; tenant, booking centre, and jurisdiction are not
 legal-book substitutes. Portfolio ingestion cannot move an existing global `portfolio_id` to a
 different tenant. The migration to this invariant stops with bounded diagnostic evidence when any
-legacy row cannot be attributed, rather than fabricating ownership. Cross-tenant composite portfolio
-identity and the remaining tenant-owned tables are later staged slices of issue `#798`.
+legacy row cannot be attributed, rather than fabricating ownership. Simulation sessions and
+analytics export jobs now carry the admitted tenant and enforce composite tenant/portfolio
+ownership. Other tenant-owned tables remain staged slices of issue `#798`.
 
 Every `ingestion_jobs` row also requires a normalized, non-blank `tenant_id` taken from admitted
 request authority. This field is lifecycle and lineage evidence, not an ownership value inferred
@@ -228,6 +229,12 @@ Primary operational tables include:
 
 These tables are part of the supported operational contract. Replay, support, lineage, and
 reconciliation behavior is not incidental implementation detail in `lotus-core`.
+
+`analytics_export_jobs` persists non-blank tenant authority and has a composite foreign key to the
+owning portfolio. Job creation, fingerprint reuse, lifecycle transitions, status/result retrieval,
+and the portfolio support listing are tenant-scoped. A foreign job or portfolio identifier is
+indistinguishable from an absent one. The cutover backfills only from authoritative portfolio
+ownership and stops when any legacy job cannot be attributed; it never assigns a default tenant.
 
 ## Model rules that matter
 

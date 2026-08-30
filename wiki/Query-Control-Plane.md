@@ -118,6 +118,12 @@ Primary contract areas include:
 - simulation session and projected-state contracts
 - analytics export job state
 
+Analytics export jobs are durable tenant-owned control records. The admitted request tenant is
+persisted with the job and fences request-fingerprint reuse, lifecycle transitions, status/result
+reads, and the operator job listing. The database also rejects a job whose tenant and portfolio do
+not match authoritative portfolio ownership. Foreign identifiers return the same not-found
+semantics as missing identifiers; job IDs and fingerprints are never authorization evidence.
+
 For `PortfolioTimeseriesInput` and `PositionTimeseriesInput`, a positive position epoch is
 authoritative restatement lineage rather than stale evidence. A complete window selected through
 the current-position-epoch fence reports `valuation_status=restated` where applicable while
