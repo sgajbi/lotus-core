@@ -115,6 +115,7 @@ def test_provenance_build_args_include_required_image_metadata() -> None:
 def test_ci_image_version_prefers_exact_commit_over_ref_name(monkeypatch) -> None:
     source_sha = "a" * 40
     monkeypatch.delenv("LOTUS_IMAGE_VERSION", raising=False)
+    monkeypatch.delenv("LOTUS_GIT_BRANCH", raising=False)
     monkeypatch.setenv("GITHUB_SHA", source_sha)
     monkeypatch.setenv("GITHUB_REF_NAME", "123/merge")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/runtime-image-set")
@@ -126,6 +127,16 @@ def test_ci_image_version_prefers_exact_commit_over_ref_name(monkeypatch) -> Non
     assert metadata["LOTUS_IMAGE_VERSION"] == source_sha
     assert metadata["LOTUS_GIT_COMMIT_SHA"] == source_sha
     assert metadata["LOTUS_GIT_BRANCH"] == "feat/runtime-image-set"
+
+
+def test_ci_git_branch_prefers_explicit_release_authority(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_GIT_BRANCH", "main")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/runtime-image-set")
+    monkeypatch.setenv("GITHUB_REF_NAME", "123/merge")
+
+    metadata = resolve_build_metadata()
+
+    assert metadata["LOTUS_GIT_BRANCH"] == "main"
 
 
 def test_prebuild_writes_machine_readable_timing_evidence(
