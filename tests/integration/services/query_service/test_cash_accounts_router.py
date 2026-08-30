@@ -8,6 +8,7 @@ import pytest_asyncio
 from src.services.query_service.app.dependencies import get_cash_account_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.cash_account_service import CashAccountService
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -17,7 +18,11 @@ async def async_test_client():
     mock_service = AsyncMock(spec=CashAccountService)
     app.dependency_overrides[get_cash_account_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_cash_account_service, None)
 

@@ -11,6 +11,7 @@ from portfolio_common.source_data_security import (
 )
 
 from src.services.query_service.app.main import app, lifespan
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -41,7 +42,11 @@ SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
 @pytest_asyncio.fixture
 async def async_test_client():
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client
 
 

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dependencies import get_position_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.position_service import PositionService
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -60,7 +61,11 @@ async def async_test_client():
     mock_service = AsyncMock()
     app.dependency_overrides[get_position_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_position_service, None)
 
@@ -299,7 +304,7 @@ async def test_get_portfolio_maturity_summary_accepts_explicit_booked_state(asyn
         as_of_date=date(2026, 2, 28),
         horizon_days=60,
         include_projected=False,
-        tenant_id=None,
+        tenant_id=TEST_TENANT_ID,
     )
 
 

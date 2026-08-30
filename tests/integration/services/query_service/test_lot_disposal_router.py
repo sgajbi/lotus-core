@@ -14,6 +14,7 @@ from src.services.query_service.app.dtos.lot_disposal_dto import (
     LotDisposalReceiptResponse,
 )
 from src.services.query_service.app.main import app
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,7 +73,11 @@ async def client_and_service():
     )
     app.dependency_overrides[get_lot_disposal_service] = lambda: service
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, service
     app.dependency_overrides.pop(get_lot_disposal_service, None)
 
