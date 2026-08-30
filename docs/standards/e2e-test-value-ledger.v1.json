@@ -8,7 +8,7 @@
     "smoke_suite": "e2e-smoke",
     "runtime_mode": "live_worker",
     "environment_profile": "e2e",
-    "expected_full_node_count": 69,
+    "expected_full_node_count": 70,
     "expected_smoke_node_count": 7,
     "baseline_run": "github-actions:29185995035",
     "baseline_full_runtime_seconds": 1082,
@@ -306,6 +306,7 @@
     {"ownership_id": "e2e-066", "nodeid": "tests/e2e/test_transaction_type_coverage_matrix.py::test_transaction_type_coverage_sets_are_registry_derived", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-067", "nodeid": "tests/e2e/test_transaction_type_dual_leg.py::test_dual_leg_upstream_settlement_cashflow_authority", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-068", "nodeid": "tests/e2e/test_transaction_type_dual_leg.py::test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-069", "nodeid": "tests/e2e/test_valuation_pipeline.py::test_full_valuation_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"}
+    {"ownership_id": "e2e-069", "nodeid": "tests/e2e/test_valuation_pipeline.py::test_full_valuation_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-070", "nodeid": "tests/e2e/test_query_service_api.py::test_exact_transaction_record_lookup", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"}
   ]
 }
