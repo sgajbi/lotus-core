@@ -36,6 +36,7 @@ env:
   PYTHON_VERSION: "3.12"
   DOCKER_BUILDKIT: "1"
   COMPOSE_DOCKER_CLI_BUILD: "1"
+  LOTUS_GIT_BRANCH: ${{ inputs.source_branch || github.ref_name }}
 
 jobs:
   exact-revision-assertion:
