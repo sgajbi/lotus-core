@@ -50,6 +50,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 RedemptionLinkedEventValidationError = redemption_domain.RedemptionLinkedEventValidationError
 RedemptionLinkedEventValidationReasonCode = (
@@ -90,6 +91,7 @@ def _dependencies() -> dict[str, object]:
             portfolio_id="PORT-COST-01",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         "instrument": CostBasisInstrumentReference(
             security_id="SECURITY-01",
@@ -192,6 +194,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
             portfolio_id="PORT-COST-01",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=CostBasisInstrumentReference(
             security_id="SECURITY-01",
@@ -224,6 +227,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
             portfolio_id="PORT-COST-01",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         cost_basis_method=CostBasisMethod.FIFO,
         profiles=amortized_cost_profiles,
@@ -368,6 +372,7 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
                 portfolio_id="PORT-COST-01",
                 base_currency="SGD",
                 cost_basis_method=CostBasisMethod.FIFO,
+                tenant_id=TEST_TENANT_ID,
             ),
             instrument=CostBasisInstrumentReference(
                 security_id="SECURITY-01",

@@ -13,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
     CostBasisReferenceData,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -69,7 +70,7 @@ async def test_get_cost_basis_reference_data_retains_portfolio_without_instrumen
         "portfolio_id": "PORT_COST_01",
         "base_currency": "SGD",
         "cost_basis_method": "FIFO",
-        "tenant_id": None,
+        "tenant_id": TEST_TENANT_ID,
         "legal_book_id": None,
         "instrument_security_id": None,
         "instrument_product_type": None,
@@ -87,6 +88,7 @@ async def test_get_cost_basis_reference_data_retains_portfolio_without_instrumen
             portfolio_id="PORT_COST_01",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=None,
     )
@@ -109,11 +111,23 @@ async def test_get_cost_basis_reference_data_returns_none_without_portfolio() ->
     db_session.execute.assert_awaited_once()
 
 
-async def test_portfolio_reference_rejects_partial_accounting_scope() -> None:
-    with pytest.raises(ValueError, match="must be supplied together"):
+async def test_portfolio_reference_accepts_tenant_without_optional_legal_book() -> None:
+    reference = CostBasisPortfolioReference(
+        portfolio_id="PORT_COST_01",
+        base_currency="SGD",
+        cost_basis_method=CostBasisMethod.FIFO,
+        tenant_id=" TENANT_SG ",
+    )
+
+    assert reference.tenant_id == "TENANT_SG"
+    assert reference.legal_book_id is None
+
+
+async def test_portfolio_reference_rejects_blank_tenant() -> None:
+    with pytest.raises(ValueError, match="tenant_id must be nonblank"):
         CostBasisPortfolioReference(
             portfolio_id="PORT_COST_01",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.FIFO,
-            tenant_id="TENANT_SG",
+            tenant_id=" ",
         )

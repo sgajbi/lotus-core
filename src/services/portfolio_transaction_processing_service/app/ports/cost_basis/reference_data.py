@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.tenant import TenantId
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +16,7 @@ class CostBasisPortfolioReference:
     portfolio_id: str
     base_currency: str
     cost_basis_method: CostBasisMethod
-    tenant_id: str | None = None
+    tenant_id: str
     legal_book_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -26,14 +27,11 @@ class CostBasisPortfolioReference:
             object.__setattr__(self, field_name, value.strip())
         if not isinstance(self.cost_basis_method, CostBasisMethod):
             raise TypeError("cost_basis_method must be a CostBasisMethod")
-        if (self.tenant_id is None) != (self.legal_book_id is None):
-            raise ValueError("tenant_id and legal_book_id must be supplied together")
-        for field_name in ("tenant_id", "legal_book_id"):
-            value = getattr(self, field_name)
-            if value is not None:
-                if not isinstance(value, str) or not value.strip():
-                    raise ValueError(f"{field_name} must be a nonblank string when supplied")
-                object.__setattr__(self, field_name, value.strip())
+        object.__setattr__(self, "tenant_id", TenantId(self.tenant_id).value)
+        if self.legal_book_id is not None:
+            if not isinstance(self.legal_book_id, str) or not self.legal_book_id.strip():
+                raise ValueError("legal_book_id must be a nonblank string when supplied")
+            object.__setattr__(self, "legal_book_id", self.legal_book_id.strip())
 
 
 @dataclass(frozen=True, slots=True)
