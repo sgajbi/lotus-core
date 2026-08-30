@@ -69,6 +69,8 @@ This means the portfolio API now supports:
 ### Transactions
 
 - `GET /portfolios/{portfolio_id}/transactions`
+- `GET /portfolios/{portfolio_id}/transactions/{transaction_id}` for exact URL rehydration and
+  record drill-down without a page scan
 
 This remains a portfolio-scoped ledger API because that matches the domain:
 

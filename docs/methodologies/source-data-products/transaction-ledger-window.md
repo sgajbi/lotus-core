@@ -3,7 +3,8 @@
 ## Metric
 
 `TransactionLedgerWindow:v1` is the core-owned operational transaction-ledger product exposed by
-`GET /portfolios/{portfolio_id}/transactions`.
+`GET /portfolios/{portfolio_id}/transactions` and the exact-record projection
+`GET /portfolios/{portfolio_id}/transactions/{transaction_id}`.
 
 It returns governed booked transaction rows for one portfolio with source-data product identity,
 runtime metadata, optional filters, offset pagination, linked cost/cashflow evidence, and
@@ -21,12 +22,14 @@ acknowledgement, or client advice output.
 | Explicit as-of ledger | `as_of_date=<date>` | Returns rows with `transaction_date <= as_of_date`. |
 | Projected-inclusive ledger | `include_projected=true` | Does not apply the default business-date cap when `as_of_date` is omitted, allowing future-dated projected rows that match the other filters. |
 | Reporting-currency restated ledger | `reporting_currency=<ccy>` with an effective `as_of_date` | Adds reporting-currency monetary fields by applying the latest available FX rate on or before the effective `as_of_date`. Raw ledger monetary fields, including explicit FX realized-P&L fields, remain unchanged. |
+| Exact record rehydration | `/{transaction_id}` with the portfolio path boundary | Returns one canonical record and the same material-input proof metadata. Both identities are applied in SQL; an absent record and a record owned by another portfolio return the same `404`. No ledger page scan is performed. |
 
 ## Inputs
 
 | Input | Source | Required | Meaning |
 | --- | --- | --- | --- |
 | `portfolio_id` | Path parameter | Yes | Portfolio whose transaction ledger is queried. |
+| `transaction_id` | Exact-record path parameter | Exact route only | Source-owned record identity, always combined with `portfolio_id`. |
 | `instrument_id` | Query parameter | No | Restricts rows to one instrument. |
 | `security_id` | Query parameter | No | Restricts rows to one security for holdings drill-down. |
 | `transaction_type` | Query parameter | No | Restricts rows to one canonical transaction type. |
@@ -48,7 +51,7 @@ acknowledgement, or client advice output.
 
 | Source | Used fields | Inclusion rule |
 | --- | --- | --- |
-| `portfolios` | `portfolio_id` | Portfolio must exist. |
+| `portfolios` | `portfolio_id` | The collection route validates portfolio existence. The exact route avoids a separate existence probe so absent and wrong-portfolio records are indistinguishable. |
 | `business_dates` | `date`, `calendar_code` | Supplies the default `as_of_date` when the caller omits it and `include_projected=false`. |
 | `transactions` | transaction identity, dates, type, instrument/security ids, quantities, prices, monetary fields, FX fields, linked-event fields, source fields, and `updated_at` | Rows must match the requested portfolio and filters. Date filters use `transaction_date`. |
 | `transaction_costs` | `fee_type`, `amount`, `currency` | Joined as row-level cost evidence and returned without aggregation. |
@@ -108,6 +111,9 @@ this product.
 The matching row set is:
 
 `M = rows where portfolio_id = P and all requested filters F match`
+
+For exact rehydration, `F` includes `transaction_id = T`. The migrated
+`ix_transactions_portfolio_transaction_id` index binds both identity predicates in one access path.
 
 Date filters are applied as:
 
@@ -197,6 +203,9 @@ request or to the next request, never to only the page or only its reconstructio
 | Condition | Behavior |
 | --- | --- |
 | Portfolio id does not exist | Service raises `LookupError`; the API maps it to HTTP `404`. |
+| Exact transaction is absent, outside the as-of boundary, or owned by another portfolio | Returns the same generic HTTP `404`; the route does not disclose which condition applied. |
+| Exact source query raises a database error | Maps to HTTP `503`; it is never rewritten as not-found. |
+| Exact identity evidence is not zero-or-one | Fails closed as unavailable; no arbitrary row is selected. |
 | `reporting_currency` is supplied but no FX rate exists for a required field source currency as of `A` | Service raises `ValueError`; the API maps it to HTTP `400`. |
 | No rows match the filters | Returns an empty page with `total=0` and `data_quality_status=UNKNOWN`. |
 | Returned page is smaller than all matching rows or `skip > 0` | Returns `data_quality_status=PARTIAL`. |
@@ -216,6 +225,7 @@ request or to the next request, never to only the page or only its reconstructio
 | Default sort order | `desc` |
 | Allowed sort fields | `transaction_date`, `settlement_date`, `quantity`, `price`, `gross_transaction_amount` |
 | Default business calendar | `DEFAULT_BUSINESS_CALENDAR_CODE` |
+| Exact lookup index | `ix_transactions_portfolio_transaction_id (portfolio_id, transaction_id)` |
 | Product identity | `TransactionLedgerWindow:v1` |
 
 ## Outputs
@@ -227,6 +237,7 @@ request or to the next request, never to only the page or only its reconstructio
 | `reporting_currency` | Requested reporting currency, if supplied. |
 | `total`, `skip`, `limit` | Matching row count and page controls. |
 | `transactions[]` | Row-level transaction evidence after filters, sorting, and pagination. |
+| `transaction` | Exact-route canonical transaction record; uses the same DTO and proof semantics as a ledger row. |
 | `transactions[].costs[]` | Joined explicit transaction-cost rows without aggregation. |
 | `transactions[].cashflow` | Joined linked cashflow row when present. |
 | `*_reporting_currency` fields | Optional row-level restatement into requested reporting currency. |

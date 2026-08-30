@@ -47,7 +47,7 @@ evidence reference rather than omitting the concept.
 | --- | --- | --- | --- | --- |
 | `PortfolioStateSnapshot` | Snapshot and simulation | `query_control_plane_service` | gateway, advise, manage, risk, idea | `/integration/portfolios/{portfolio_id}/core-snapshot` |
 | `HoldingsAsOf` | Operational read | `query_service` | gateway, risk, report, manage, advise, idea | `/portfolios/{portfolio_id}/positions`, `/portfolios/{portfolio_id}/cash-balances` |
-| `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions` |
+| `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions`, `/portfolios/{portfolio_id}/transactions/{transaction_id}` |
 | `PortfolioRealizedTaxSummary` | Operational read | `query_service` | gateway, report, manage | `/portfolios/{portfolio_id}/realized-tax-summary` |
 | `PortfolioCashflowProjection` | Operational read | `query_service` | gateway, report, manage, idea | `/portfolios/{portfolio_id}/cashflow-projection` |
 | `PortfolioCashMovementSummary` | Operational read | `query_service` | gateway, report, manage, idea | `/portfolios/{portfolio_id}/cash-movement-summary` |

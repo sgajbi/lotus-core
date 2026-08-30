@@ -10566,6 +10566,71 @@
     {
       "service_app": "query_service",
       "method": "GET",
+      "path": "/portfolios/{portfolio_id}/transactions/{transaction_id}",
+      "route_key": "GET /portfolios/{portfolio_id}/transactions/{transaction_id}",
+      "operation_id": "get_portfolio_transaction_record",
+      "summary": "Get Exact Portfolio Transaction Record",
+      "tags": [
+        "Transactions"
+      ],
+      "route_family": "Operational Read",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "read-audit-where-policy-requires",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "TransactionRecordResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "400",
+          "schema": "none",
+          "description": "Invalid exact transaction query or reporting-currency restatement."
+        },
+        {
+          "status_code": "404",
+          "schema": "none",
+          "description": "No transaction with this identifier is visible within the requested portfolio."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "The authoritative transaction source could not be read safely."
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id",
+        "as_of_date"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-report",
+        "lotus-manage",
+        "lotus-risk"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_service",
+      "method": "GET",
       "path": "/portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
       "route_key": "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
       "operation_id": "get_buy_cash_linkage_portfolios__portfolio_id__transactions__transaction_id__cash_linkage_get",

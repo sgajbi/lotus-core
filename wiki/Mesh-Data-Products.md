@@ -213,6 +213,13 @@ instrument master data; exposes `reason_codes`, `missing_instrument_reference_co
 windows without deriving tax advice, FX attribution, cash-movement aggregation, transaction-cost
 curves, execution quality, or OMS acknowledgement.
 
+For URL rehydration and record drill-down, Core also publishes
+`GET /portfolios/{portfolio_id}/transactions/{transaction_id}`. It applies the portfolio and
+transaction identities through one composite database index, returns the canonical row with the
+same costs, latest cashflow, supportability, reporting-currency and reconstruction proof semantics,
+and returns the same `404` for an absent or wrong-portfolio record. Source-query failure is `503`;
+consumers must not replace this contract with a paginated ledger scan.
+
 `PortfolioCashflowProjection:v1` is the governed source for daily booked cashflow, projected
 settlement cashflow, net cashflow points, cumulative cashflow over the returned window,
 booked/projected/net totals, portfolio currency, include-projected posture, evidence timestamp, and
