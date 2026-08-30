@@ -178,7 +178,8 @@
       ],
       "serving_plane": "query_service",
       "current_routes": [
-        "/portfolios/{portfolio_id}/transactions"
+        "/portfolios/{portfolio_id}/transactions",
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}"
       ],
       "freshness_policy": {
         "freshness_class": "daily",
