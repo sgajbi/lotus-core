@@ -55,6 +55,7 @@ from src.services.calculators.position_valuation_calculator.app.valuation_proces
     ValuationProcessorDependencies,
     ValuationReferenceData,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
@@ -192,6 +193,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -262,6 +264,7 @@ async def test_unscoped_bond_fails_without_publishing_a_valued_snapshot(
         product_type="BOND",
     )
     repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -323,6 +326,7 @@ async def test_zero_quantity_bond_with_residual_cost_fails_without_quote_authori
         product_type="BOND",
     )
     repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -694,7 +698,7 @@ async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
         (
             ValuationReferenceData(
                 instrument=None,
-                portfolio=Portfolio(portfolio_id="PORT_VAL_01"),
+                portfolio=Portfolio(tenant_id=TEST_TENANT_ID, portfolio_id="PORT_VAL_01"),
                 price=None,
             ),
             "Instrument 'SEC_VAL_01' not found.",
@@ -739,6 +743,7 @@ async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -801,6 +806,7 @@ async def test_valuation_processor_values_flat_position_without_quote_dependenci
         product_type="BOND",
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency=portfolio_currency,
         portfolio_id=mock_event.portfolio_id,
     )
@@ -851,6 +857,7 @@ async def test_valuation_processor_does_not_zero_value_residual_cost_without_pri
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -893,6 +900,7 @@ async def test_valuation_processor_marks_snapshot_stale_when_price_date_precedes
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -954,7 +962,7 @@ async def test_valuation_consumer_success(
         currency="EUR", security_id=mock_event.security_id
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
-        base_currency="USD", portfolio_id=mock_event.portfolio_id
+        tenant_id=TEST_TENANT_ID, base_currency="USD", portfolio_id=mock_event.portfolio_id
     )
     mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
         price=Decimal("90"), currency="EUR", price_date=mock_event.valuation_date
@@ -1019,6 +1027,7 @@ async def test_valuation_consumer_uses_kafka_delivery_identity_for_idempotency(
     )
     mock_valuation_repo.get_instrument.return_value = Instrument(currency="USD")
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id="PORT_VAL_01",
     )
@@ -1060,6 +1069,7 @@ async def test_valuation_consumer_normalizes_same_currency_without_fx_lookup(
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency=" USD ",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -1154,7 +1164,9 @@ async def test_process_message_handles_unexpected_error(
         quantity=1, cost_basis=1
     )
     mock_valuation_repo.get_instrument.return_value = Instrument(currency="USD")
-    mock_valuation_repo.get_portfolio.return_value = Portfolio(base_currency="USD")
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID, base_currency="USD"
+    )
 
     # ACT
     # Patch the logic layer to raise an unexpected error
@@ -1210,6 +1222,7 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )
@@ -1273,6 +1286,7 @@ async def test_valuation_consumer_skips_success_side_effects_without_terminal_ow
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         portfolio_id=mock_event.portfolio_id,
     )

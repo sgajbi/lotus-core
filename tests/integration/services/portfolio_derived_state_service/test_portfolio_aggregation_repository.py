@@ -27,6 +27,7 @@ from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
     timeseries_generation_repository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
@@ -43,6 +44,7 @@ async def _seed_expired_aggregation_jobs(
     expired_at = datetime.now(UTC) - timedelta(minutes=5)
     portfolios = [
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=f"{prefix}-{index:04d}",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -83,6 +85,7 @@ async def _seed_aggregation_fence_scope(
 ) -> None:
     session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -210,6 +213,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
 
         portfolios = [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P1_STALE",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -221,6 +225,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
                 status="f",
             ),
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2_RECENT",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -232,6 +237,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
                 status="f",
             ),
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P3_PENDING",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -495,6 +501,7 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-AGG-CLAIM",
             base_currency="USD",
             open_date=date(2024, 1, 1),

@@ -6,6 +6,7 @@ from portfolio_common.database_models import Portfolio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -18,8 +19,8 @@ def mock_db_session() -> AsyncMock:
     # Mock the chain of calls to return a sample list of portfolios
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [
-        Portfolio(portfolio_id="P1"),
-        Portfolio(portfolio_id="P2"),
+        Portfolio(tenant_id=TEST_TENANT_ID, portfolio_id="P1"),
+        Portfolio(tenant_id=TEST_TENANT_ID, portfolio_id="P2"),
     ]
     session.execute.return_value = mock_result
 

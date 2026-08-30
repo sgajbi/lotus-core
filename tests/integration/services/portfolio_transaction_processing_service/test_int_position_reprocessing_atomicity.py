@@ -32,6 +32,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
 from src.services.portfolio_transaction_processing_service.app.ports.position_history import (
     PositionHistoryObserver,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -58,6 +59,7 @@ async def setup_repro_atomicity_data(clean_db, async_db_session: AsyncSession) -
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=PORTFOLIO_ID,
                 base_currency="USD",
                 open_date=date(2025, 1, 1),

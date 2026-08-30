@@ -1107,6 +1107,53 @@ async def test_durable_allow_is_written_before_protected_route_with_verified_ide
 
 
 @pytest.mark.asyncio
+async def test_middleware_rejects_tenant_header_changed_after_principal_signing() -> None:
+    runtime = _runtime(
+        authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"POST /portfolios/{portfolio_id}": "portfolio.write"}
+        ),
+    )
+    store = Mock()
+    store.append = AsyncMock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=Mock(),
+        component=SecurityAuditComponent.QUERY,
+        audit_store=store,
+        audit_failure_is_fatal=True,
+    )
+    headers = _signed_enterprise_headers("portfolio.write", tenant_id="tenant-a")
+    headers["X-Tenant-Id"] = "tenant-b"
+    call_next = AsyncMock(return_value=Response(status_code=200))
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/portfolios/PB-001",
+            "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 403
+    assert (
+        response.body
+        == b'{"detail":"authorization_policy_denied","reason":"invalid_auth_context_signature"}'
+    )
+    call_next.assert_not_awaited()
+    event = store.append.await_args.args[0]
+    assert event.decision is SecurityAuditDecision.DENY
+    assert event.identity_posture is SecurityAuditIdentityPosture.UNVERIFIED
+    assert event.tenant_id is None
+
+
+@pytest.mark.asyncio
 async def test_durable_denial_does_not_fabricate_unverified_identity() -> None:
     runtime = _runtime(
         read_authz_enabled=True,

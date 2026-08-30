@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -63,6 +64,7 @@ def _seed_backlog_state(
 ) -> None:
     session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2025, 1, 1),

@@ -11,6 +11,8 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tests.test_support.tenant import TEST_TENANT_ID
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -25,6 +27,7 @@ async def test_find_contiguous_snapshot_dates_handles_empty_first_open_dates(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-EMPTY-OPEN-DATES",
             base_currency="USD",
             open_date=date(2025, 1, 1),

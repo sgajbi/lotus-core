@@ -29,6 +29,7 @@ from src.services.portfolio_derived_state_service.app.domain.portfolio_timeserie
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_timeseries_unit_of_work_provider as unit_of_work_provider_module,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,6 +56,7 @@ async def test_owned_lease_persists_portfolio_output_lineage_atomically(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -167,6 +169,7 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-AGG-INT-01",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),

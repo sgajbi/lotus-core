@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -30,6 +31,7 @@ async def setup_reprocessing_trigger_data(async_db_session: AsyncSession, clean_
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P1",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -41,6 +43,7 @@ async def setup_reprocessing_trigger_data(async_db_session: AsyncSession, clean_
                 status="f",
             ),
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -144,6 +147,7 @@ async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_clos
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P_HELD",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -155,6 +159,7 @@ async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_clos
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P_CLOSED_BEFORE",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -166,6 +171,7 @@ async def test_find_portfolios_holding_security_on_date_excludes_pre_impact_clos
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P_NOT_YET_OPEN",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -322,6 +328,7 @@ async def test_find_portfolios_holding_security_on_date_uses_latest_history_on_o
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P_MIXED",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -445,6 +452,7 @@ async def test_find_portfolios_first_holding_security_after_date_returns_later_o
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P_LATE_OPEN",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -515,6 +523,7 @@ async def test_find_portfolios_holding_security_on_date_ignores_stale_epochs(
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P_EPOCH",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),

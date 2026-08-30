@@ -24,6 +24,7 @@ from src.services.query_control_plane_service.app.infrastructure import (
     SqlAlchemyPortfolioManagerBookReader,
     SqlAlchemyPortfolioPartyRoleReader,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -49,6 +50,7 @@ def _portfolio(
     portfolio_id: str, *, portfolio_type: str = "discretionary", status: str = "active"
 ) -> Portfolio:
     return Portfolio(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id=portfolio_id,
         base_currency="SGD",
         open_date=date(2026, 1, 1),

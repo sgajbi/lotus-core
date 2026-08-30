@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -102,6 +103,7 @@ def setup_holdings_data(db_engine):
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P1",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -113,6 +115,7 @@ def setup_holdings_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P2",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -124,6 +127,7 @@ def setup_holdings_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P3",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -135,6 +139,7 @@ def setup_holdings_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P4",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -292,6 +297,7 @@ def setup_snapshot_data(db_engine):
     with Session(db_engine) as session:
         portfolios = [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=f"P{i}",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -402,6 +408,7 @@ def setup_first_open_date_data(db_engine):
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P1",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -413,6 +420,7 @@ def setup_first_open_date_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P2",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -640,6 +648,7 @@ async def test_price_revaluation_compares_source_with_latest_derived_authority(
     position_updated_at = source_updated_at + timedelta(seconds=-1 if source_is_newer else 1)
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-CURRENT-1",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -1062,6 +1071,7 @@ async def test_find_contiguous_snapshot_dates_skips_non_business_dates(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-CONTIG",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1172,6 +1182,7 @@ async def test_find_contiguous_snapshot_dates_stops_at_unreconciled_snapshot(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-STALE-SNAPSHOT",
             base_currency="USD",
             open_date=date(2026, 1, 1),
@@ -2235,6 +2246,7 @@ async def test_get_latest_business_date_falls_back_to_processing_dates_when_cale
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-FALLBACK-1",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -2322,6 +2334,7 @@ async def test_get_latest_business_date_prefers_calendar_over_future_processing_
         [
             BusinessDate(calendar_code="GLOBAL", date=date(2026, 4, 10)),
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-CALENDAR-BOUND-1",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),

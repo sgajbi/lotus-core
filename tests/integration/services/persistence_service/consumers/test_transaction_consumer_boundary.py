@@ -12,6 +12,7 @@ from src.services.persistence_service.app.consumers import base_consumer as base
 from src.services.persistence_service.app.consumers.transaction_consumer import (
     TransactionPersistenceConsumer,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -64,6 +65,7 @@ def _transaction_payload(transaction_id: str = "TXN_BOUNDARY_01") -> dict:
 async def _seed_portfolio(async_db_session: AsyncSession) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_BOUNDARY_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),

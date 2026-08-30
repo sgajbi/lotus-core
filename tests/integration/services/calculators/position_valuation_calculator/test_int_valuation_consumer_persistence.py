@@ -32,6 +32,7 @@ from src.services.calculators.position_valuation_calculator.app.infrastructure i
 from src.services.calculators.position_valuation_calculator.app.repositories import (
     valuation_repository as valuation_repository_module,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -51,6 +52,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-VAL-INT-01",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -225,6 +227,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-VAL-INT-02",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -428,6 +431,7 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-VAL-INT-03",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),

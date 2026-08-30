@@ -24,6 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.delivery.kafka im
 from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
     build_process_transaction_use_case,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,7 @@ def portfolio_record(
     cost_basis_method: str = "FIFO",
 ) -> Portfolio:
     return Portfolio(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id=portfolio_id,
         base_currency=base_currency,
         open_date=date(2025, 1, 1),
