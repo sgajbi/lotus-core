@@ -112,8 +112,10 @@ The matching row set is:
 
 `M = rows where portfolio_id = P and all requested filters F match`
 
-For exact rehydration, `F` includes `transaction_id = T`. The migrated
-`ix_transactions_portfolio_transaction_id` index binds both identity predicates in one access path.
+For exact rehydration, `F` includes `transaction_id = T`. The globally unique
+`ix_transactions_transaction_id` index narrows the lookup to at most one candidate while the same
+query applies `portfolio_id = P`; portfolio isolation is never performed as a separate discovery
+step.
 
 Date filters are applied as:
 
@@ -227,7 +229,7 @@ request or to the next request, never to only the page or only its reconstructio
 | Default sort order | `desc` |
 | Allowed sort fields | `transaction_date`, `settlement_date`, `quantity`, `price`, `gross_transaction_amount` |
 | Default business calendar | `DEFAULT_BUSINESS_CALENDAR_CODE` |
-| Exact lookup index | `ix_transactions_portfolio_transaction_id (portfolio_id, transaction_id)` |
+| Exact lookup index | `ix_transactions_transaction_id (transaction_id, UNIQUE)`; the same query also requires `portfolio_id` |
 | Product identity | `TransactionLedgerWindow:v1` |
 
 ## Outputs
