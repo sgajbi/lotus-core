@@ -355,12 +355,10 @@ def test_pr_auto_merge_does_not_probe_branch_protection_with_github_token() -> N
 
 
 def test_merged_pr_dispatch_binds_main_releasability_to_exact_sha() -> None:
-    dispatcher = Path(
-        ".github/workflows/merged-pr-main-releasability.yml"
-    ).read_text(encoding="utf-8")
-    main_gate = Path(".github/workflows/main-releasability.yml").read_text(
+    dispatcher = Path(".github/workflows/merged-pr-main-releasability.yml").read_text(
         encoding="utf-8"
     )
+    main_gate = Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")
 
     assert "MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}" in dispatcher
     assert 'dispatch_ref="main-releasability-${MERGE_COMMIT_SHA}"' in dispatcher
