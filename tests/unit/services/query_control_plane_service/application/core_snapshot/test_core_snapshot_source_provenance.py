@@ -156,10 +156,27 @@ def test_source_provenance_is_ready_only_for_coherent_exact_date_evidence() -> N
     )
 
 
-def test_source_provenance_rejects_mixed_portfolio_business_dates() -> None:
+def test_source_provenance_accepts_mixed_mutation_dates_for_coherent_snapshot() -> None:
     resolution = _resolve(
         _row("SEC_A"),
         _row("SEC_B", portfolio_business_date=date(2026, 2, 26)),
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.READY
+    assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_EVIDENCE_READY
+    assert resolution.effective_as_of_date == date(2026, 2, 27)
+    assert resolution.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert resolution.source_provenance.portfolio.freshness_status == "CURRENT"
+
+
+def test_source_provenance_rejects_mixed_snapshot_dates() -> None:
+    resolution = _resolve(
+        _row("SEC_A"),
+        _row(
+            "SEC_B",
+            business_date=date(2026, 2, 26),
+            portfolio_business_date=date(2026, 2, 26),
+        ),
     )
 
     assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
@@ -169,7 +186,19 @@ def test_source_provenance_rejects_mixed_portfolio_business_dates() -> None:
     assert resolution.source_provenance.portfolio.freshness_status == "PARTIAL"
 
 
-def test_source_provenance_preserves_history_date_when_snapshot_date_is_older() -> None:
+def test_source_provenance_rejects_missing_snapshot_date() -> None:
+    resolution = _resolve(
+        _row("SEC_A", business_date=None),
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.PORTFOLIO_AS_OF_UNAVAILABLE
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.portfolio.as_of is None
+    assert resolution.source_provenance.portfolio.freshness_status == "UNAVAILABLE"
+
+
+def test_source_provenance_uses_snapshot_date_when_mutation_date_is_newer() -> None:
     resolution = _resolve(
         _row(
             "SEC_A",
@@ -179,8 +208,9 @@ def test_source_provenance_preserves_history_date_when_snapshot_date_is_older() 
     )
 
     assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
-    assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_AS_OF_MISMATCH
-    assert resolution.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert resolution.reason_code is CoreSnapshotValuationReason.SOURCE_AS_OF_STALE
+    assert resolution.effective_as_of_date == date(2026, 2, 26)
+    assert resolution.source_provenance.portfolio.as_of == date(2026, 2, 26)
     assert resolution.source_provenance.market_data.as_of == date(2026, 2, 26)
 
 
@@ -190,6 +220,20 @@ def test_source_provenance_rejects_history_cost_basis_as_market_evidence() -> No
     assert resolution.reason_code is CoreSnapshotValuationReason.MARKET_DATA_AS_OF_UNAVAILABLE
     assert resolution.source_provenance.portfolio.as_of == date(2026, 2, 27)
     assert resolution.source_provenance.market_data.as_of is None
+
+
+def test_source_provenance_history_fallback_retains_mutation_date_semantics() -> None:
+    resolution = _resolve(
+        _row("SEC_A"),
+        _row("SEC_B", portfolio_business_date=date(2026, 2, 26)),
+        use_snapshot=False,
+    )
+
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.PORTFOLIO_AS_OF_CONFLICT
+    assert resolution.effective_as_of_date is None
+    assert resolution.source_provenance.portfolio.as_of is None
+    assert resolution.source_provenance.portfolio.freshness_status == "PARTIAL"
 
 
 def test_source_provenance_rejects_carried_forward_fx_date() -> None:
