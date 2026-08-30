@@ -189,6 +189,32 @@ def test_enrich_openapi_schema_populates_missing_operation_docs() -> None:
     assert enriched["paths"]["/metrics"]["get"]["tags"] == ["Monitoring"]
 
 
+def test_enrich_openapi_schema_requires_tenant_header_only_on_protected_routes() -> None:
+    schema = {
+        "paths": {
+            "/health/live": {"get": {"responses": {"200": {"description": "ok"}}}},
+            "/portfolios": {"get": {"responses": {"200": {"description": "ok"}}}},
+        },
+        "components": {"schemas": {}},
+    }
+
+    enriched = enrich_openapi_schema(schema, service_name="query_service")
+
+    assert "parameters" not in enriched["paths"]["/health/live"]["get"]
+    tenant_parameter = enriched["paths"]["/portfolios"]["get"]["parameters"][0]
+    assert tenant_parameter == {
+        "name": "X-Tenant-Id",
+        "in": "header",
+        "required": True,
+        "description": (
+            "Source-owned tenant authority for this request. Missing or blank values "
+            "fail closed before protected route execution."
+        ),
+        "schema": {"type": "string", "minLength": 1, "maxLength": 128},
+        "example": "tenant-sg",
+    }
+
+
 def test_enrich_openapi_schema_populates_schema_field_description_and_example() -> None:
     schema = {
         "paths": {},

@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
+from portfolio_common.enterprise_readiness import ENTERPRISE_UNAUTHENTICATED_PATHS
 from portfolio_common.openapi_examples import (
     build_schema_example,
     infer_description,
@@ -190,6 +191,38 @@ def _ensure_operation_documentation(schema: dict[str, Any], service_name: str) -
         _ensure_default_error_response(operation)
 
 
+def _ensure_tenant_header_contract(schema: dict[str, Any]) -> None:
+    for path, _, operation in _iter_operations(schema):
+        normalized_path = path.rstrip("/") or "/"
+        if normalized_path in ENTERPRISE_UNAUTHENTICATED_PATHS:
+            continue
+        parameters = operation.setdefault("parameters", [])
+        if any(
+            isinstance(parameter, dict)
+            and parameter.get("in") == "header"
+            and str(parameter.get("name", "")).lower() == "x-tenant-id"
+            for parameter in parameters
+        ):
+            continue
+        parameters.append(
+            {
+                "name": "X-Tenant-Id",
+                "in": "header",
+                "required": True,
+                "description": (
+                    "Source-owned tenant authority for this request. Missing or blank values "
+                    "fail closed before protected route execution."
+                ),
+                "schema": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                },
+                "example": "tenant-sg",
+            }
+        )
+
+
 def _infer_operation_tag(path: str) -> str:
     if path.startswith("/health/"):
         return "Health"
@@ -290,6 +323,7 @@ def enrich_openapi_schema(schema: dict[str, Any], service_name: str) -> dict[str
         info["description"] = f"{prefix} {branded_desc}".strip()
 
     _ensure_operation_documentation(schema, service_name=service_name)
+    _ensure_tenant_header_contract(schema)
     _ensure_schema_documentation(schema)
     _ensure_parameter_examples(schema)
     _ensure_operation_examples(schema)
