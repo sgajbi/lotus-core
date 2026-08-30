@@ -10,6 +10,7 @@ from zipfile import BadZipFile
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
+from portfolio_common.domain.tenant import TenantContext
 from pydantic import BaseModel, ValidationError
 
 from ..application.errors import UnsupportedOperation, ValidationRejected
@@ -42,6 +43,7 @@ DEFAULT_UPLOAD_MAX_COLUMNS = 200
 DEFAULT_UPLOAD_MAX_CELL_LENGTH = 8_192
 UPLOAD_PARSER_BUDGET_REASON_CODE = "upload_parser_budget_exceeded"
 UPLOAD_PARSER_BUDGET_ERROR_CODE = "INGESTION_UPLOAD_PARSER_BUDGET_EXCEEDED"
+TENANT_EVIDENCE_MISMATCH = "TENANT_EVIDENCE_MISMATCH"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +69,7 @@ class BulkUploadValidator:
     def validate(
         self,
         *,
+        tenant_context: TenantContext,
         entity_type: UploadEntity,
         filename: str,
         content: bytes,
@@ -81,6 +84,16 @@ class BulkUploadValidator:
 
         for index, row in enumerate(rows, start=2):
             normalized_row = _normalize_row(row, alias_index)
+            tenant_issue = _bind_portfolio_tenant_authority(
+                entity_type=entity_type,
+                row=normalized_row,
+                source_row=row,
+                row_number=index,
+                tenant_context=tenant_context,
+            )
+            if tenant_issue is not None:
+                errors.append(tenant_issue)
+                continue
             try:
                 model = model_cls.model_validate(normalized_row)
             except ValidationError as exc:
@@ -103,6 +116,36 @@ class BulkUploadValidator:
             errors=errors,
             total_rows=len(rows),
         )
+
+
+def _bind_portfolio_tenant_authority(
+    *,
+    entity_type: UploadEntity,
+    row: dict[str, Any],
+    source_row: dict[str, Any],
+    row_number: int,
+    tenant_context: TenantContext,
+) -> UploadRowIssue | None:
+    if entity_type != "portfolios":
+        return None
+
+    authenticated_tenant_id = tenant_context.tenant_id_text
+    supplied_tenant_id = row.get("tenant_id")
+    if supplied_tenant_id is not None and supplied_tenant_id != authenticated_tenant_id:
+        return UploadRowIssue(
+            row_number=row_number,
+            message="tenant_id must match the authenticated upload tenant.",
+            code=TENANT_EVIDENCE_MISMATCH,
+            field_path="tenant_id",
+            record_key=record_key_from_payload(source_row),
+            remediation=(
+                "Remove tenant_id from the upload or submit it under the matching "
+                "authenticated tenant scope."
+            ),
+            source_lineage=safe_source_lineage_from_payload(source_row),
+        )
+    row["tenant_id"] = authenticated_tenant_id
+    return None
 
 
 def _row_issue(*, row_number: int, row: dict[str, Any], exc: ValidationError) -> UploadRowIssue:

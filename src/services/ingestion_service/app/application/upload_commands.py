@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from portfolio_common.domain.tenant import TenantContext
+
 UploadEntity = Literal[
     "portfolios",
     "instruments",
@@ -15,6 +17,7 @@ UploadEntity = Literal[
 
 @dataclass(frozen=True, slots=True)
 class UploadPreviewCommand:
+    tenant_context: TenantContext
     entity_type: UploadEntity
     filename: str
     content: bytes
@@ -24,6 +27,7 @@ class UploadPreviewCommand:
 
 @dataclass(frozen=True, slots=True)
 class UploadCommitCommand:
+    tenant_context: TenantContext
     entity_type: UploadEntity
     filename: str
     content: bytes

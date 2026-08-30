@@ -15,6 +15,7 @@ from src.services.ingestion_service.app.services.upload_ingestion_service import
     UploadIngestionService,
 )
 from src.services.ingestion_service.app.services.upload_validation import BulkUploadValidator
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 
 def _csv_bytes(content: str) -> bytes:
@@ -55,6 +56,7 @@ def test_preview_upload_csv_with_mixed_rows(upload_service: UploadIngestionServi
 
     response = upload_service.preview_upload(
         UploadPreviewCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="transactions",
             filename="transactions.csv",
             content=content,
@@ -84,6 +86,7 @@ def test_preview_upload_privileged_sample_rows_are_redacted(
 
     response = upload_service.preview_upload(
         UploadPreviewCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="transactions",
             filename="transactions.csv",
             content=content,
@@ -112,6 +115,7 @@ def test_preview_upload_xlsx_canonical_headers(upload_service: UploadIngestionSe
 
     response = upload_service.preview_upload(
         UploadPreviewCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="instruments",
             filename="instruments.xlsx",
             content=content,
@@ -143,6 +147,7 @@ async def test_commit_upload_rejects_partial_by_default(
     with pytest.raises(ValidationRejected) as exc:
         await upload_service.commit_upload(
             UploadCommitCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
                 entity_type="transactions",
                 filename="transactions.csv",
                 content=content,
@@ -173,6 +178,7 @@ async def test_commit_upload_allows_partial(upload_service: UploadIngestionServi
 
     response = await upload_service.commit_upload(
         UploadCommitCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="transactions",
             filename="transactions.csv",
             content=content,
@@ -194,6 +200,7 @@ async def test_commit_upload_empty_data_rows(upload_service: UploadIngestionServ
     with pytest.raises(ValidationRejected) as exc:
         await upload_service.commit_upload(
             UploadCommitCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
                 entity_type="transactions",
                 filename="transactions.csv",
                 content=content,

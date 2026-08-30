@@ -36,6 +36,7 @@ SENSITIVE_SAMPLE_FIELDS = frozenset(
         "security_id",
         "stamp_duty",
         "tax_amount",
+        "tenant_id",
         "trade_fee",
     }
 )
@@ -65,6 +66,7 @@ class UploadIngestionService:
         command: UploadPreviewCommand,
     ) -> UploadPreviewResult:
         validation = self._validator.validate(
+            tenant_context=command.tenant_context,
             entity_type=command.entity_type,
             filename=command.filename,
             content=command.content,
@@ -88,6 +90,7 @@ class UploadIngestionService:
         command: UploadCommitCommand,
     ) -> UploadCommitResult:
         validation = self._validator.validate(
+            tenant_context=command.tenant_context,
             entity_type=command.entity_type,
             filename=command.filename,
             content=command.content,

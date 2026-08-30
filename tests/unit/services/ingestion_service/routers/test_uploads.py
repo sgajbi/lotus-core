@@ -29,6 +29,7 @@ from src.services.ingestion_service.app.routers.uploads import (
     upload_preview_command_from_api,
     upload_preview_response_from_result,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 
 def _request(headers: dict[str, str]) -> Request:
@@ -91,6 +92,7 @@ def test_upload_application_error_to_http_preserves_validation_detail() -> None:
 
 def test_upload_preview_command_from_api_uses_application_command() -> None:
     command = upload_preview_command_from_api(
+        tenant_context=TEST_TENANT_CONTEXT,
         entity_type="transactions",
         filename="transactions.csv",
         content=b"payload",
@@ -99,6 +101,7 @@ def test_upload_preview_command_from_api_uses_application_command() -> None:
     )
 
     assert command.entity_type == "transactions"
+    assert command.tenant_context is TEST_TENANT_CONTEXT
     assert command.filename == "transactions.csv"
     assert command.content == b"payload"
     assert command.sample_size == 5
@@ -107,6 +110,7 @@ def test_upload_preview_command_from_api_uses_application_command() -> None:
 
 def test_upload_commit_command_from_api_uses_application_command() -> None:
     command = upload_commit_command_from_api(
+        tenant_context=TEST_TENANT_CONTEXT,
         entity_type="transactions",
         filename="transactions.csv",
         content=b"payload",
@@ -114,6 +118,7 @@ def test_upload_commit_command_from_api_uses_application_command() -> None:
     )
 
     assert command.entity_type == "transactions"
+    assert command.tenant_context is TEST_TENANT_CONTEXT
     assert command.allow_partial is True
 
 
