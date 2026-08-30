@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.logging_utils import correlation_id_var, request_id_var, trace_id_var
 from starlette.requests import Request
 
@@ -72,6 +73,7 @@ async def test_route_passes_typed_authority_and_idempotency_to_command_handler()
             "scheme": "http",
         }
     )
+    http_request.state.tenant_context = TenantContext(tenant_id=TenantId("TENANT_SG"))
     tokens = (
         correlation_id_var.set("corr-book-cost-001"),
         request_id_var.set("request-book-cost-001"),
@@ -92,6 +94,7 @@ async def test_route_passes_typed_authority_and_idempotency_to_command_handler()
     assert command.endpoint == "/ingest/fixed-income-book-cost-authorities"
     assert command.idempotency_key == "book-cost-001"
     assert command.entity_type == "fixed_income_book_cost_authority"
+    assert command.tenant_context.tenant_id_text == "TENANT_SG"
     assert tuple(command.records) == tuple(_authority_request().authorities)
     assert response.job_id == "job-book-cost-001"
     assert response.idempotency_key == "book-cost-001"
@@ -111,6 +114,7 @@ async def test_route_rejects_authority_for_another_authenticated_tenant() -> Non
             "scheme": "http",
         }
     )
+    http_request.state.tenant_context = TenantContext(tenant_id=TenantId("TENANT_OTHER"))
 
     with pytest.raises(HTTPException) as exc_info:
         await ingest_fixed_income_book_cost_authorities(

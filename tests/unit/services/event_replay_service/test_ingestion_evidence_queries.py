@@ -18,6 +18,7 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionReplayAuditResponse,
 )
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import to_job_response
+from tests.test_support.tenant import TEST_TENANT_ID
 
 NOW = datetime(2026, 7, 31, 4, 30, tzinfo=UTC)
 
@@ -32,6 +33,7 @@ def _job(
 ) -> IngestionJobResponse:
     return IngestionJobResponse(
         job_id="job-001",
+        tenant_id=TEST_TENANT_ID,
         endpoint="/ingest/transactions",
         entity_type="transaction",
         status=status,

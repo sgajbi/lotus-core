@@ -349,6 +349,7 @@ async def test_record_failure_observation_ignores_unknown_job(
 def _persisted_job(*, request_payload: object) -> SimpleNamespace:
     return SimpleNamespace(
         job_id="job_replayable",
+        tenant_id="tenant-test",
         endpoint="/ingest/transactions",
         entity_type="transaction",
         status="failed",
@@ -402,6 +403,8 @@ async def test_get_job_maps_persisted_row_or_returns_none(
     response = await service.get_job("job_replayable")
 
     assert (response.job_id if response else None) == expected_job_id
+    if response is not None:
+        assert response.tenant_id == "tenant-test"
     assert len(session.executed_statements) == 1
 
 
@@ -435,6 +438,7 @@ async def test_get_job_replay_context_maps_only_object_payloads(
         assert response is None
     else:
         assert response is not None
+        assert response.tenant_id == "tenant-test"
         assert response.request_payload == expected_payload
         assert response.request_payload_policy_version == "ingestion-evidence-policy.v1"
         assert response.request_payload_replay_eligible is True

@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.db import get_async_db_session
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.monitoring import INGESTION_BACKLOG_AGE_SECONDS, INGESTION_MODE_STATE
 
 from ..application.workflow_policies import (
@@ -169,11 +170,13 @@ class IngestionJobService:
         correlation_id: str,
         request_id: str,
         trace_id: str,
+        tenant_context: TenantContext,
         request_payload: dict[str, Any] | None,
     ) -> IngestionJobCreateResult:
         return await self._idempotency_workflow.create_or_get(
             ApplicationCommandEnvelope(
                 command_id=job_id,
+                tenant_context=tenant_context,
                 endpoint=endpoint,
                 entity_type=entity_type,
                 accepted_count=accepted_count,

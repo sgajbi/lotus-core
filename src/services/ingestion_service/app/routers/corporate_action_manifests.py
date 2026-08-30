@@ -81,6 +81,7 @@ async def ingest_corporate_action_manifests(
     try:
         result = await command_handler.ingest_corporate_action_manifests(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="corporate_action_manifest",
                 records=request.manifests,

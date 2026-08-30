@@ -153,7 +153,11 @@ Portfolio ingestion requires a source-owned, normalized, non-blank `tenant_id`. 
 an optional and independent business dimension; the service does not infer it from tenant, booking
 centre, or jurisdiction. Replaying a portfolio under a different tenant fails closed instead of
 moving ownership. Existing database rows must be attributed before the tenant cutover migration can
-complete; Core never assigns a synthetic fallback tenant.
+complete; Core never assigns a synthetic fallback tenant. Every ingestion request carries the
+admitted `TenantContext` into its durable ingestion job. Portfolio and portfolio-bundle routes reject
+payload ownership that differs from that authority before publication and stamp the verified value
+onto accepted records. The persisted job tenant remains separate from retained domain payload, so
+idempotency, replay lineage, and operator evidence do not depend on a caller-supplied tenant field.
 
 ### Portfolio-bundle ingestion
 
@@ -205,6 +209,9 @@ cutover.
 - app-local runtime expects topic creation and migration sequencing to complete before the broader
   stack becomes healthy
 - correlation identity is part of the supported traceability contract
+- every ingestion job has a normalized, non-blank tenant authority. The tenant comes from admitted
+  request context, is returned by job APIs, and scopes replay lineage; legacy rows are migrated only
+  from unambiguous verified security-audit correlation evidence or the migration stops
 - duplicate `X-Idempotency-Key` use for the same endpoint and same source-safe canonical payload
   resolves from durable lifecycle evidence: a replay-safe queued job returns its existing `202`
   acknowledgement, a durable failed outcome reproduces its original status/code/safe detail and
@@ -217,8 +224,9 @@ cutover.
   `INGESTION_JOB_BOOKKEEPING_FAILED` outcome with `retry_safe=false`; operators must confirm work
   state and use governed bookkeeping repair instead of blind resubmission
 - keyed ingestion job creation is serialized with a transaction-scoped database lock before
-  lookup/create, and idempotency diagnostics classify cross-endpoint reuse separately from
-  same-endpoint payload-fingerprint conflicts
+  lookup/create; both lock and lookup are tenant-and-endpoint scoped so equal caller keys in
+  different tenants remain independent. Idempotency diagnostics classify cross-endpoint reuse
+  separately from same-tenant/same-endpoint payload-fingerprint conflicts
 - ingestion job lifecycle updates are expected-state guarded; stale replay, failure, or
   bookkeeping-repair mutations return conflict outcomes instead of overwriting newer operator
   truth

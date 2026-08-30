@@ -132,7 +132,6 @@ def test_classify_ingestion_outcome_rejects_negative_counts() -> None:
 def test_source_batch_evidence_is_derived_only_from_unambiguous_source_payload() -> None:
     evidence = derive_source_batch_evidence(
         {
-            "tenant_id": "tenant-sg",
             "transactions": [
                 {
                     "transaction_id": "TXN-002",
@@ -147,6 +146,7 @@ def test_source_batch_evidence_is_derived_only_from_unambiguous_source_payload()
             ],
         },
         payload_kind="transaction",
+        tenant_id="tenant-sg",
     )
 
     assert evidence is not None

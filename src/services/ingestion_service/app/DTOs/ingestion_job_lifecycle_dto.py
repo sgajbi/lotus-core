@@ -39,6 +39,10 @@ class IngestionJobResponse(BaseModel):
         description="Asynchronous ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     )
+    tenant_id: str = Field(
+        description="Source-owned tenant authority admitted for this ingestion job.",
+        examples=["tenant-sg"],
+    )
     endpoint: str = Field(
         description="Ingestion API endpoint that created this job.",
         examples=["/ingest/transactions"],

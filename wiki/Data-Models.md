@@ -53,6 +53,13 @@ different tenant. The migration to this invariant stops with bounded diagnostic 
 legacy row cannot be attributed, rather than fabricating ownership. Cross-tenant composite portfolio
 identity and the remaining tenant-owned tables are later staged slices of issue `#798`.
 
+Every `ingestion_jobs` row also requires a normalized, non-blank `tenant_id` taken from admitted
+request authority. This field is lifecycle and lineage evidence, not an ownership value inferred
+from a retained business payload. The cutover backfills a legacy job only when its correlation maps
+to exactly one verified tenant in durable security-audit evidence; missing or conflicting evidence
+stops the migration. Tenant-plus-submission-time indexing supports scoped operational reads without
+turning correlation identifiers into authorization keys.
+
 `cash_account_masters` is the governed cash-account identity source for cash-balance account rows.
 Transaction settlement cash-account strings can support fallback mapping only after they validate
 against active/effective cash-account master rows for the same portfolio and cash instrument.

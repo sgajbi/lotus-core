@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -12,15 +13,23 @@ from src.services.ingestion_service.app.DTOs.business_date_dto import (
 )
 from src.services.ingestion_service.app.services.business_date_ingestion_commands import (
     BusinessDateBookkeepingFailed,
-    BusinessDateIngestionCommand,
     BusinessDateIngestionCommandError,
     BusinessDateIngestionCommandHandler,
     BusinessDateIngestionPublishUnavailable,
+)
+from src.services.ingestion_service.app.services.business_date_ingestion_commands import (
+    BusinessDateIngestionCommand as BusinessDateIngestionCommandContract,
 )
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
     IngestionJobCreateResult,
 )
 from src.services.ingestion_service.app.services.ingestion_service import IngestionPublishError
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+BusinessDateIngestionCommand = partial(
+    BusinessDateIngestionCommandContract,
+    tenant_context=TEST_TENANT_CONTEXT,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -143,6 +152,7 @@ async def test_business_date_command_publishes_and_marks_job_queued() -> None:
     assert create_kwargs["endpoint"] == "/ingest/business-dates"
     assert create_kwargs["entity_type"] == "business_date"
     assert create_kwargs["idempotency_key"] == "idem-business-dates"
+    assert create_kwargs["tenant_context"] is TEST_TENANT_CONTEXT
     ingestion_service.publish_business_dates.assert_awaited_once()
     assert observed_job_ids == ["job-business-date"]
     assert ingestion_job_id_var.get() is None

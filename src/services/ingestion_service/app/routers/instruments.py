@@ -82,6 +82,7 @@ async def ingest_instruments(
     try:
         result = await command_handler.ingest_instruments(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="instrument",
                 records=request.instruments,

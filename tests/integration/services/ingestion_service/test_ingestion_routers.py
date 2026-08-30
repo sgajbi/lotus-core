@@ -186,6 +186,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             correlation_id: str,
             request_id: str,
             trace_id: str,
+            tenant_context,
             request_payload: dict | None,
         ) -> SimpleNamespace:
             if idempotency_key:
@@ -219,6 +220,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             )
             self.jobs[job_id] = IngestionJobResponse(
                 job_id=job_id,
+                tenant_id=tenant_context.tenant_id_text,
                 endpoint=endpoint,
                 entity_type=entity_type,
                 status="accepted",

@@ -131,6 +131,7 @@ async def reprocess_transactions(
     try:
         result = await command_handler.ingest_reprocessing_requests(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="reprocessing_request",
                 records=ordered_unique_transaction_ids,

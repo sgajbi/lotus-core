@@ -70,6 +70,7 @@ class IngestionEvidenceBundleBuilder:
         source_batch = derive_source_batch_evidence(
             request_payload,
             payload_kind=job.entity_type,
+            tenant_id=job.tenant_id,
         )
         validation_findings = _validation_finding_references(
             failures=failures,

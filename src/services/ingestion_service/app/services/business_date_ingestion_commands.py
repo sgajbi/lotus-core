@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
 from ..application.ingestion_bookkeeping_outcome import (
@@ -81,6 +82,7 @@ class BusinessDateBookkeepingFailed(Exception):
 
 @dataclass(frozen=True, slots=True)
 class BusinessDateIngestionCommand:
+    tenant_context: TenantContext
     request: BusinessDateIngestionRequest
     endpoint: str
     idempotency_key: str | None
@@ -214,6 +216,7 @@ class BusinessDateIngestionCommandHandler:
             correlation_id=correlation_id,
             request_id=request_id,
             trace_id=trace_id,
+            tenant_context=command.tenant_context,
             request_payload=command.request.model_dump(mode="json"),
         )
 

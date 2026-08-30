@@ -36,6 +36,7 @@ class IngestionJobStore(Protocol):
         self,
         *,
         job_id: str,
+        tenant_id: str,
         endpoint: str,
         entity_type: str,
         accepted_count: int,

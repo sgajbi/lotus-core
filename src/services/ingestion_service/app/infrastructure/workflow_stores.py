@@ -34,6 +34,7 @@ class SqlAlchemyIngestionJobStore:
         self,
         *,
         job_id: str,
+        tenant_id: str,
         endpoint: str,
         entity_type: str,
         accepted_count: int,
@@ -45,6 +46,7 @@ class SqlAlchemyIngestionJobStore:
     ) -> IngestionJobCreateResult:
         return await create_or_get_job_result(
             job_id=job_id,
+            tenant_id=tenant_id,
             endpoint=endpoint,
             entity_type=entity_type,
             accepted_count=accepted_count,

@@ -82,6 +82,7 @@ async def ingest_fx_rates(
     try:
         result = await command_handler.ingest_fx_rates(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="fx_rate",
                 records=request.fx_rates,

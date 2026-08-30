@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any, Awaitable, Callable, Sequence, cast
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
 from ..application import (
@@ -89,6 +90,7 @@ class IngestionPublishBookkeepingFailed(Exception):
 
 @dataclass(frozen=True, slots=True)
 class BatchPublishIngestionCommand:
+    tenant_context: TenantContext
     endpoint: str
     entity_type: str
     records: Sequence[Any]
@@ -99,6 +101,7 @@ class BatchPublishIngestionCommand:
 
 @dataclass(frozen=True, slots=True)
 class PortfolioBundlePublishIngestionCommand:
+    tenant_context: TenantContext
     endpoint: str
     request: Any
     idempotency_key: str | None
@@ -487,6 +490,7 @@ class IngestionPublishCommandHandler:
             correlation_id=correlation_id,
             request_id=request_id,
             trace_id=trace_id,
+            tenant_context=command.tenant_context,
             request_payload=command.request_payload,
         )
 
@@ -503,6 +507,7 @@ class IngestionPublishCommandHandler:
             correlation_id=correlation_id,
             request_id=request_id,
             trace_id=trace_id,
+            tenant_context=command.tenant_context,
             request_payload=command.request_payload,
         )
 

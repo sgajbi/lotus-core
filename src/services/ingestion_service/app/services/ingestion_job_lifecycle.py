@@ -44,6 +44,7 @@ class IngestionIdempotencyConflictError(ValueError):
 @dataclass(slots=True)
 class IngestionJobReplayContext:
     job_id: str
+    tenant_id: str
     endpoint: str
     entity_type: str
     accepted_count: int
@@ -74,6 +75,7 @@ def to_job_response(
     raw_idempotency_key = job.idempotency_key
     return IngestionJobResponse(
         job_id=job.job_id,
+        tenant_id=job.tenant_id,
         endpoint=job.endpoint,
         entity_type=job.entity_type,
         status=job.status,  # type: ignore[arg-type]
@@ -129,6 +131,7 @@ def to_failure_response(failure: DBIngestionJobFailure) -> IngestionJobFailureRe
 async def create_or_get_job_result(
     *,
     job_id: str,
+    tenant_id: str,
     endpoint: str,
     entity_type: str,
     accepted_count: int,
@@ -161,6 +164,7 @@ async def create_or_get_job_result(
             if idempotency_key:
                 await _acquire_idempotency_key_lock(
                     db,
+                    tenant_id=tenant_id,
                     endpoint=endpoint,
                     idempotency_key=idempotency_key,
                 )
@@ -168,6 +172,7 @@ async def create_or_get_job_result(
                     select(DBIngestionJob)
                     .where(
                         and_(
+                            DBIngestionJob.tenant_id == tenant_id,
                             DBIngestionJob.endpoint == endpoint,
                             DBIngestionJob.idempotency_key == idempotency_key,
                         )
@@ -201,6 +206,7 @@ async def create_or_get_job_result(
 
             row = DBIngestionJob(
                 job_id=job_id,
+                tenant_id=tenant_id,
                 endpoint=endpoint,
                 entity_type=entity_type,
                 status=IngestionJobStatus.ACCEPTED.value,
@@ -236,10 +242,16 @@ async def create_or_get_job_result(
     raise RuntimeError(msg)
 
 
-async def _acquire_idempotency_key_lock(db, *, endpoint: str, idempotency_key: str) -> None:
+async def _acquire_idempotency_key_lock(
+    db,
+    *,
+    tenant_id: str,
+    endpoint: str,
+    idempotency_key: str,
+) -> None:
     await db.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
-        {"lock_key": f"{endpoint}|{idempotency_key}"},
+        {"lock_key": f"{tenant_id}|{endpoint}|{idempotency_key}"},
     )
 
 
@@ -494,6 +506,7 @@ async def get_job_replay_context_response(
         payload = row.request_payload if isinstance(row.request_payload, dict) else None
         return IngestionJobReplayContext(
             job_id=row.job_id,
+            tenant_id=row.tenant_id,
             endpoint=row.endpoint,
             entity_type=row.entity_type,
             accepted_count=row.accepted_count,

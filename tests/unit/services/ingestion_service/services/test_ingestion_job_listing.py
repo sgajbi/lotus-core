@@ -131,6 +131,7 @@ class _FakeScalarSession:
 def _job_row(job_id: str):
     return SimpleNamespace(
         job_id=job_id,
+        tenant_id="tenant-test",
         endpoint="/ingest/transactions",
         entity_type="transaction",
         status="queued",
@@ -174,6 +175,7 @@ async def test_load_job_list_response_maps_rows_and_next_cursor():
     assert session.scalars_calls == 1
     assert [job.job_id for job in result] == ["job_3", "job_2"]
     assert result[0].endpoint == "/ingest/transactions"
+    assert result[0].tenant_id == "tenant-test"
     assert result[0].model_dump()["idempotency_key"] is None
     assert result[0].idempotency_key_reference is not None
     assert result[0].idempotency_key_reference.startswith(f"hmac-sha256:v1:{_REFERENCE_KEY_ID}:")

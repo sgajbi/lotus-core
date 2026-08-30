@@ -76,6 +76,7 @@ def derive_source_batch_evidence(
     request_payload: dict[str, Any] | None,
     *,
     payload_kind: str,
+    tenant_id: str | None = None,
 ) -> SourceBatchEvidence | None:
     """Derive source-owned batch evidence only from one unambiguous payload scope."""
 
@@ -83,6 +84,8 @@ def derive_source_batch_evidence(
         return None
     try:
         tenant_ids = {TenantId(value).value for value in _source_tenant_values(request_payload)}
+        if tenant_id is not None:
+            tenant_ids.add(TenantId(tenant_id).value)
     except (TypeError, ValueError):
         return None
     if len(tenant_ids) != 1:

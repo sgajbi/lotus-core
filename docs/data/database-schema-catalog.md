@@ -1336,13 +1336,14 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 ## `ingestion_jobs`
 
 - **Purpose**: Ingestion job tracking and ops visibility.
-- **Description**: Batch/API submission lifecycle records with source-safe failure outcomes and versioned durable request-evidence and replay authority.
+- **Description**: Tenant-bound batch/API submission lifecycle records with source-safe failure outcomes and versioned durable request-evidence and replay authority. Tenant authority is admitted independently of the retained domain payload.
 - **Relationships**: No explicit foreign-key relationships declared.
 - **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/ingestion_service/app/services/ingestion_job_lifecycle.py`, `src/services/ingestion_service/app/services/ingestion_payload_evidence.py`, `src/services/ingestion_service/app/infrastructure/ingestion_idempotency_replay_reader.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`, `src/services/ingestion_service/app/main.py`
-- **Typical access patterns**: As-of/date-range reads, idempotent submission checks against a keyed full-payload fingerprint, status-filtered job polling, and fail-closed replay authorization from the persisted evidence policy and technical expiry.
+- **Typical access patterns**: Tenant-scoped submission-time reads, idempotent submission checks against a keyed full-payload fingerprint, status-filtered job polling, and fail-closed replay authorization from persisted tenant/evidence policy and technical expiry.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `job_id` (String): Identifier for job.
+  - `tenant_id` (String): Normalized, non-blank tenant authority admitted with the request and retained independently of the domain payload.
   - `endpoint` (String): Domain attribute used by the owning module.
   - `entity_type` (String): Domain type discriminator used to branch processing behavior.
   - `status` (String): Current lifecycle status for the record/work item.
