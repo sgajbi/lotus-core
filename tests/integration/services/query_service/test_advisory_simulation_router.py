@@ -7,6 +7,7 @@ from src.services.query_control_plane_service.app.contracts import (
     ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER,
 )
 from src.services.query_control_plane_service.app.main import app
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 
 def _payload() -> dict:
@@ -29,7 +30,7 @@ def _payload() -> dict:
 
 
 def test_advisory_simulation_execution_router_returns_canonical_result():
-    with TestClient(app) as client:
+    with TestClient(app, headers=TEST_TENANT_HEADERS) as client:
         response = client.post(
             "/integration/advisory/proposals/simulate-execution",
             json=_payload(),
@@ -55,7 +56,7 @@ def test_advisory_simulation_execution_router_returns_canonical_result():
 
 
 def test_advisory_simulation_execution_router_rejects_contract_version_mismatch():
-    with TestClient(app) as client:
+    with TestClient(app, headers=TEST_TENANT_HEADERS) as client:
         response = client.post(
             "/integration/advisory/proposals/simulate-execution",
             json=_payload(),
@@ -74,7 +75,7 @@ def test_advisory_simulation_execution_router_rejects_contract_version_mismatch(
 
 
 def test_advisory_simulation_execution_router_returns_problem_details_on_validation_error():
-    with TestClient(app) as client:
+    with TestClient(app, headers=TEST_TENANT_HEADERS) as client:
         response = client.post(
             "/integration/advisory/proposals/simulate-execution",
             json={"portfolio_snapshot": {"portfolio_id": "pf_incomplete"}},
@@ -95,7 +96,7 @@ def test_advisory_simulation_execution_router_returns_problem_details_on_validat
 
 
 def test_non_advisory_validation_errors_keep_default_fastapi_contract():
-    with TestClient(app) as client:
+    with TestClient(app, headers=TEST_TENANT_HEADERS) as client:
         response = client.post(
             "/integration/portfolios/P1/core-snapshot",
             json={},
@@ -113,7 +114,7 @@ def test_advisory_simulation_execution_router_rejects_nonpositive_market_data():
     payload = _payload()
     payload["market_data_snapshot"]["prices"][0]["price"] = "0"
 
-    with TestClient(app) as client:
+    with TestClient(app, headers=TEST_TENANT_HEADERS) as client:
         response = client.post(
             "/integration/advisory/proposals/simulate-execution",
             json=payload,
@@ -140,7 +141,11 @@ def test_advisory_simulation_execution_router_returns_problem_details_on_executi
         _raise_runtime_error,
     )
 
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with TestClient(
+        app,
+        headers=TEST_TENANT_HEADERS,
+        raise_server_exceptions=False,
+    ) as client:
         response = client.post(
             "/integration/advisory/proposals/simulate-execution",
             json=_payload(),
@@ -162,7 +167,7 @@ def test_advisory_simulation_execution_router_returns_problem_details_on_executi
 
 
 def test_advisory_simulation_execution_openapi_documents_contract_header_and_errors():
-    with TestClient(app) as client:
+    with TestClient(app, headers=TEST_TENANT_HEADERS) as client:
         openapi = client.get("/openapi.json").json()
 
     operation = openapi["paths"]["/integration/advisory/proposals/simulate-execution"]["post"]

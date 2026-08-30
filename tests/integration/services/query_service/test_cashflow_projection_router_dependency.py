@@ -10,6 +10,7 @@ from portfolio_common.source_data_product_metadata import (
 
 from src.services.query_service.app.dependencies import get_cashflow_projection_service
 from src.services.query_service.app.main import app
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -52,7 +53,11 @@ async def async_test_client():
     mock_service = AsyncMock()
     app.dependency_overrides[get_cashflow_projection_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_cashflow_projection_service, None)
 
@@ -84,7 +89,7 @@ async def test_cashflow_projection_success(async_test_client):
         horizon_days=10,
         as_of_date=None,
         include_projected=True,
-        tenant_id=None,
+        tenant_id=TEST_TENANT_ID,
     )
 
 

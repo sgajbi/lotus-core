@@ -14,6 +14,7 @@ from src.services.query_service.app.main import app
 from src.services.query_service.app.services.liquidity_ladder_service import (
     PortfolioLiquidityLadderService,
 )
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 BOUNDARY_NOTE = (
@@ -39,7 +40,11 @@ async def async_test_client():
     mock_service = AsyncMock(spec=PortfolioLiquidityLadderService)
     app.dependency_overrides[get_liquidity_ladder_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_liquidity_ladder_service, None)
 

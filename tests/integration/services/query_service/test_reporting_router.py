@@ -9,6 +9,7 @@ import pytest_asyncio
 from src.services.query_service.app.dependencies import get_reporting_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.reporting_service import ReportingService
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -34,7 +35,11 @@ async def async_test_client():
     mock_service = AsyncMock(spec=ReportingService)
     app.dependency_overrides[get_reporting_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_reporting_service, None)
 
