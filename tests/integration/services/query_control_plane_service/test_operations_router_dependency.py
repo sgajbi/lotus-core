@@ -18,6 +18,7 @@ from src.services.query_control_plane_service.app.routers.operations import (
     get_load_run_progress,
     parse_required_iso_date,
 )
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -74,7 +75,11 @@ async def async_test_client():
     mock_operations_service = AsyncMock()
     app.dependency_overrides[get_operations_service] = lambda: mock_operations_service
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_operations_service
     app.dependency_overrides.pop(get_operations_service, None)
 

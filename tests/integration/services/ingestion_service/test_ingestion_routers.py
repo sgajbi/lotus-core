@@ -91,6 +91,7 @@ from src.services.ingestion_service.app.services.ingestion_job_service import (
     get_ingestion_job_service,
 )
 from src.services.ingestion_service.app.services.ingestion_service import IngestionService
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 _OPS_REFERENCE_KEY_ID = "test-router"
 _OPS_REFERENCE_HMAC_SECRET = "test-router-ingestion-evidence-secret"
@@ -1385,7 +1386,10 @@ async def async_test_client(ingestion_test_harness):
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://test",
-        headers={"X-Lotus-Ops-Token": "lotus-core-ops-local"},
+        headers={
+            **TEST_TENANT_HEADERS,
+            "X-Lotus-Ops-Token": "lotus-core-ops-local",
+        },
     ) as client:
         yield client
 
@@ -1396,7 +1400,10 @@ async def event_replay_test_client(ingestion_test_harness):
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://test",
-        headers={"X-Lotus-Ops-Token": "lotus-core-ops-local"},
+        headers={
+            **TEST_TENANT_HEADERS,
+            "X-Lotus-Ops-Token": "lotus-core-ops-local",
+        },
     ) as client:
         yield client
 
@@ -1505,6 +1512,7 @@ def _portfolio_bundle_payload() -> dict[str, object]:
         "portfolios": [
             {
                 "portfolio_id": "P1",
+                "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                 "base_currency": " usd ",
                 "open_date": "2025-01-01",
                 "client_id": "c",
@@ -1557,6 +1565,7 @@ async def test_ingest_portfolios_endpoint(
         "portfolios": [
             {
                 "portfolio_id": "P1",
+                "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                 "base_currency": "USD",
                 "open_date": "2025-01-01",
                 "client_id": "c",
@@ -1593,6 +1602,7 @@ async def test_ingest_portfolios_replays_duplicate_idempotency_key(
         "portfolios": [
             {
                 "portfolio_id": "P1",
+                "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                 "base_currency": "USD",
                 "open_date": "2025-01-01",
                 "client_id": "c",
@@ -1632,6 +1642,7 @@ async def test_ingest_portfolios_returns_503_when_mode_blocks_writes(
             "portfolios": [
                 {
                     "portfolio_id": "P1",
+                    "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                     "base_currency": "USD",
                     "open_date": "2025-01-01",
                     "client_id": "c",
@@ -1670,6 +1681,7 @@ async def test_ingest_portfolios_returns_429_when_rate_limited(
             "portfolios": [
                 {
                     "portfolio_id": "P1",
+                    "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                     "base_currency": "USD",
                     "open_date": "2025-01-01",
                     "client_id": "c",
@@ -1699,6 +1711,7 @@ async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
         "portfolios": [
             {
                 "portfolio_id": "P1",
+                "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                 "base_currency": "USD",
                 "open_date": "2025-01-01",
                 "client_id": "c",
@@ -1710,6 +1723,7 @@ async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
             },
             {
                 "portfolio_id": "P2",
+                "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                 "base_currency": "EUR",
                 "open_date": "2025-01-01",
                 "client_id": "c",
@@ -5616,6 +5630,7 @@ async def test_ingestion_job_record_status_endpoint_returns_supported_source_key
         "portfolios": [
             {
                 "portfolio_id": "P_RECORD_001",
+                "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                 "base_currency": "USD",
                 "open_date": "2025-01-01",
                 "client_id": "client-record",
@@ -7785,6 +7800,7 @@ async def test_reprocess_transactions_records_remaining_unpublished_keys_on_part
                 "portfolios": [
                     {
                         "portfolio_id": "P1",
+                        "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
                         "base_currency": "USD",
                         "open_date": "2025-01-01",
                         "client_id": "c",
