@@ -29,22 +29,22 @@ Original RFC 050 requested:
 ## Current Implementation Reality
 
 Implemented:
-1. Simulation repository tests cover create/get/close/add/delete and rollback behavior.
+1. Simulation persistence-adapter tests cover create/get/close/add/delete and rollback behavior.
 2. Simulation service tests cover session validation, change semantics, and projection paths.
 3. Simulation router dependency tests verify request/response mappings and expected error status behavior.
 4. `openpyxl` is present in `tests/requirements.txt`.
 
 Evidence:
-- `tests/unit/services/query_service/repositories/test_simulation_repository.py`
-- `tests/unit/services/query_service/services/test_simulation_service.py`
-- `tests/integration/services/query_service/test_simulation_router_dependency.py`
+- `tests/unit/services/query_control_plane_service/infrastructure/test_simulation_store.py`
+- `tests/unit/services/query_control_plane_service/application/test_simulation.py`
+- `tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`
 - `tests/requirements.txt`
 
 ## Requirement-to-Implementation Traceability
 
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
-| Repository simulation branch tests | Implemented | simulation repository test suite |
+| Persistence-adapter simulation branch tests | Implemented | simulation store test suite |
 | Service guard/projection tests | Implemented | simulation service test suite |
 | Router error/status mapping tests | Implemented | simulation router dependency tests |
 | Dependency completeness for collection | Implemented | `tests/requirements.txt` includes `openpyxl` |
@@ -71,9 +71,9 @@ No high-value implementation gap identified for RFC 050 wave-1 scope.
 
 ## Test and Validation Evidence
 
-1. `tests/unit/services/query_service/repositories/test_simulation_repository.py`
-2. `tests/unit/services/query_service/services/test_simulation_service.py`
-3. `tests/integration/services/query_service/test_simulation_router_dependency.py`
+1. `tests/unit/services/query_control_plane_service/infrastructure/test_simulation_store.py`
+2. `tests/unit/services/query_control_plane_service/application/test_simulation.py`
+3. `tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`
 
 ## Original Acceptance Criteria Alignment
 

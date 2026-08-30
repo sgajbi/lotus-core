@@ -86,11 +86,11 @@ No high-value implementation gap identified for RFC 046A baseline.
 ## Test and Validation Evidence
 
 1. Router integration tests:
-   - `tests/integration/services/query_service/test_simulation_router_dependency.py`
+   - `tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`
 2. Service logic unit tests:
-   - `tests/unit/services/query_service/services/test_simulation_service.py`
-3. Repository behavior unit tests:
-   - `tests/unit/services/query_service/repositories/test_simulation_repository.py`
+   - `tests/unit/services/query_control_plane_service/application/test_simulation.py`
+3. Persistence-adapter behavior unit tests:
+   - `tests/unit/services/query_control_plane_service/infrastructure/test_simulation_store.py`
 
 ## Original Acceptance Criteria Alignment
 

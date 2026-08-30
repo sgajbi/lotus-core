@@ -138,22 +138,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/sell_state_repository.py:get_sell_disposals": (
         "Transaction",
     ),
-    "src/services/query_service/app/repositories/simulation_repository.py:add_changes": (
-        "SimulationChange",
-        "SimulationSession",
-    ),
-    "src/services/query_service/app/repositories/simulation_repository.py:close_session": (
-        "SimulationSession",
-    ),
-    "src/services/query_service/app/repositories/simulation_repository.py:create_session": (
-        "SimulationSession",
-    ),
-    "src/services/query_service/app/repositories/simulation_repository.py:get_changes": (
-        "SimulationChange",
-    ),
-    "src/services/query_service/app/repositories/simulation_repository.py:get_session": (
-        "SimulationSession",
-    ),
     "src/services/query_service/app/repositories/transaction_repository.py:list_realized_tax_evidence_transactions": (
         "Transaction",
     ),

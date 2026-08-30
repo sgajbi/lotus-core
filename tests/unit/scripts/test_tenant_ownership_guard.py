@@ -277,6 +277,53 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             ("get_portfolio_tax_lot_window", "get_source_readiness", "resolve"),
             "tenant_context",
         ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "transaction_economics_sources.py",
+            "SqlAlchemyTransactionEconomicsReader",
+            ("portfolio_exists", "get_portfolio_base_currency"),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/"
+            "transaction_economics/service.py",
+            "TransactionEconomicsService",
+            ("get_transaction_cost_curve", "get_performance_component_economics"),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
+            "SqlAlchemySimulationStore",
+            (
+                "stage_session",
+                "get_session",
+                "stage_session_close",
+                "stage_changes",
+                "stage_change_delete",
+                "get_changes",
+            ),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
+            "SqlAlchemySimulationBaselineReader",
+            ("portfolio_exists", "get_current_positions"),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/simulation.py",
+            "SimulationService",
+            (
+                "create_session",
+                "get_session",
+                "close_session",
+                "add_changes",
+                "delete_change",
+                "get_projected_positions",
+                "get_projected_summary",
+            ),
+            "tenant_context",
+        ),
     }
     for relative_path, class_name, method_names, tenant_parameter in sources:
         source = root / relative_path
@@ -285,6 +332,30 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             f"    async def {name}(self, *, {tenant_parameter}): ..." for name in method_names
         )
         source.write_text(f"class {class_name}:\n{methods}\n", encoding="utf-8")
+    simulation_source = (
+        root / "src/services/query_control_plane_service/app/infrastructure/simulation_store.py"
+    )
+    simulation_source.write_text(
+        "class SqlAlchemySimulationStore:\n"
+        + "\n".join(
+            f"    async def {name}(self, *, tenant_id): ..."
+            for name in (
+                "stage_session",
+                "get_session",
+                "stage_session_close",
+                "stage_changes",
+                "stage_change_delete",
+                "get_changes",
+            )
+        )
+        + "\n\nclass SqlAlchemySimulationBaselineReader:\n"
+        + "\n".join(
+            f"    async def {name}(self, *, tenant_id): ..."
+            for name in ("portfolio_exists", "get_current_positions")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_valid_additional_boundaries(root: Path) -> None:
@@ -584,4 +655,24 @@ def test_critical_tenant_boundaries_cover_portfolio_financial_reads() -> None:
         ("CashflowRepository", "get_portfolio_currency", "tenant_id"),
         ("CashflowProjectionService", "get_cashflow_projection", "tenant_context"),
         ("CashMovementService", "get_cash_movement_summary", "tenant_context"),
+        ("SqlAlchemyTransactionEconomicsReader", "portfolio_exists", "tenant_id"),
+        (
+            "SqlAlchemyTransactionEconomicsReader",
+            "get_portfolio_base_currency",
+            "tenant_id",
+        ),
+        (
+            "TransactionEconomicsService",
+            "get_transaction_cost_curve",
+            "tenant_context",
+        ),
+        (
+            "TransactionEconomicsService",
+            "get_performance_component_economics",
+            "tenant_context",
+        ),
+        ("SqlAlchemySimulationStore", "get_session", "tenant_id"),
+        ("SqlAlchemySimulationStore", "stage_change_delete", "tenant_id"),
+        ("SqlAlchemySimulationBaselineReader", "get_current_positions", "tenant_id"),
+        ("SimulationService", "get_projected_positions", "tenant_context"),
     } <= guarded_methods

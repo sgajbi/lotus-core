@@ -1498,9 +1498,9 @@ Most relevant current governance:
 70. Repository modules should stage persistence changes and leave transaction completion to an
     explicit unit-of-work boundary. `docs/standards/repository-transaction-boundary-standard.md`
     defines the repo-local transaction ownership rule. `SimulationService` now uses the
-    query-service `UnitOfWork` port and `SqlAlchemyUnitOfWork` infrastructure adapter for commit,
-    rollback, and refresh behavior, while `SimulationRepository` remains a staging repository with
-    no direct transaction completion. `make architecture-guard` now runs
+    QCP `SimulationUnitOfWork` port and SQLAlchemy infrastructure adapter for commit and rollback;
+    `SqlAlchemySimulationStore` only stages tenant-bound session and change state. `make
+    architecture-guard` now runs
     `scripts/quality/repository_transaction_boundary_guard.py`; direct repository `commit()` or
     `rollback()` calls are blocked unless explicitly registered as transitional. The current
     transitional exception is
@@ -2742,8 +2742,8 @@ Most relevant current governance:
      SQLAlchemy mapping/query/UoW behavior under `app/infrastructure`. Routers map requests to
      commands and results to response DTOs. Do not restore query-service simulation DTO/workflow or
      generic UoW files, import query-service repositories from QCP, or mix advisory suitability and
-     recommendation logic into generic projection. The old QS `SimulationRepository` is temporary
-     Core-snapshot compatibility only and must retire with that ownership move. QCP `app.main`
+     recommendation logic into generic projection. The obsolete QS `SimulationRepository` has
+     been removed; Core snapshot simulation reads use the same tenant-bound QCP store. QCP `app.main`
      remains package-closure incomplete until analytics, integration/Core snapshot,
      operations/support, and advisory compatibility no longer import QS implementation modules.
 160. Source-data product runtime metadata is a stable cross-service contract owned by

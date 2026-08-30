@@ -246,6 +246,61 @@ CRITICAL_TENANT_BOUNDARIES = (
         frozenset({"get_portfolio_tax_lot_window", "get_source_readiness", "resolve"}),
         "tenant_context",
     ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "transaction_economics_sources.py"
+        ),
+        "SqlAlchemyTransactionEconomicsReader",
+        frozenset({"portfolio_exists", "get_portfolio_base_currency"}),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/application/"
+            "transaction_economics/service.py"
+        ),
+        "TransactionEconomicsService",
+        frozenset({"get_transaction_cost_curve", "get_performance_component_economics"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/infrastructure/simulation_store.py"),
+        "SqlAlchemySimulationStore",
+        frozenset(
+            {
+                "stage_session",
+                "get_session",
+                "stage_session_close",
+                "stage_changes",
+                "stage_change_delete",
+                "get_changes",
+            }
+        ),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/infrastructure/simulation_store.py"),
+        "SqlAlchemySimulationBaselineReader",
+        frozenset({"portfolio_exists", "get_current_positions"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/application/simulation.py"),
+        "SimulationService",
+        frozenset(
+            {
+                "create_session",
+                "get_session",
+                "close_session",
+                "add_changes",
+                "delete_change",
+                "get_projected_positions",
+                "get_projected_summary",
+            }
+        ),
+        "tenant_context",
+    ),
 )
 
 

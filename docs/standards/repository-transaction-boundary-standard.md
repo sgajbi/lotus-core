@@ -25,8 +25,9 @@ The same service carries a second unit-of-work family for analytics —
 `…/app/ports/analytics.py` with `…/app/infrastructure/analytics_unit_of_work.py` — which is why
 these adapters are named per family rather than as a single `unit_of_work.py`.
 
-`SimulationRepository` stages session rows, change rows, status changes, and deletes only. It does
-not commit, rollback, generate identifiers, or read clocks.
+`SqlAlchemySimulationStore` stages tenant-bound session rows, change rows, status changes, and
+deletes only. It does not commit, rollback, generate identifiers, or read clocks. The obsolete
+query-service simulation repository was removed so generic simulation has one persistence owner.
 
 ## Transitional Exceptions
 

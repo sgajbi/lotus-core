@@ -94,11 +94,12 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 - **Purpose**: Tracks sandbox simulation sessions.
 - **Description**: Session-level envelope for hypothetical changes against a base portfolio.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: QCP generic simulation via `app/infrastructure/simulation_store.py`, `app/application/simulation.py`, `app/contracts/simulation.py`, and `app/routers/simulation.py`; the QS `simulation_repository.py` remains a temporary Core-snapshot reader.
-- **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Usage (modules/features)**: QCP generic simulation and Core snapshot projection via `app/infrastructure/simulation_store.py`, `app/application/simulation.py`, `app/contracts/simulation.py`, and `app/routers/simulation.py`.
+- **Typical access patterns**: Tenant-and-session identity lookup, tenant-fenced lifecycle mutation, and portfolio projection reads.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `session_id` (String): Identifier for session.
+  - `tenant_id` (String): Required admitted tenant owner used to fence every session read and mutation.
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
   - `status` (String): Current lifecycle status for the record/work item.
   - `version` (Integer): Domain attribute used by the owning module.
@@ -112,7 +113,7 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 - **Purpose**: Stores hypothetical transactions within simulation sessions.
 - **Description**: Proposed what-if changes that are not posted to canonical ledger.
 - **Relationships**: `session_id` -> `simulation_sessions.session_id`
-- **Usage (modules/features)**: QCP generic simulation via `app/infrastructure/simulation_store.py`, `app/application/simulation.py`, `app/contracts/simulation.py`, and `app/routers/simulation.py`; the QS `simulation_repository.py` remains a temporary Core-snapshot reader.
+- **Usage (modules/features)**: QCP generic simulation and Core snapshot projection through the tenant-owned parent session in `app/infrastructure/simulation_store.py`.
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

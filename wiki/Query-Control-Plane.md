@@ -45,7 +45,7 @@ analytics conclusions.
 | Analytics inputs | Portfolio and position timeseries inputs, analytics references, and export-job lifecycle for large-window retrieval. | Calculated performance or risk metrics. |
 | Integration contracts | Policy-aware snapshots; QCP-owned client restriction, sustainability, tax, liquidity, transaction-cost, and performance-component evidence; fail-closed external treasury/OMS posture; benchmark/reference, enrichment, taxonomy, and coverage contracts. | Raw ad hoc table access, financial planning, DPM/tax decisioning, performance or attribution calculation, external pricing/execution, treasury/OMS workflow, or unmanaged aliases. |
 | Capabilities and policy | Consumer-aware capability and policy discovery using canonical snake_case query parameters. | Client-specific entitlement adjudication outside the governed policy contract. |
-| Simulation | Deterministic source-owned simulation sessions and projected state. | Recommendation, suitability, or advisor decisioning logic. |
+| Simulation | Deterministic, tenant-owned simulation sessions and projected state. Every portfolio and session lookup is fenced by admitted tenant authority. | Recommendation, suitability, or advisor decisioning logic. |
 
 ## Runtime role
 

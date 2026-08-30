@@ -138,11 +138,11 @@ The following are intentionally out of current RFC-013 implementation scope:
 ## Test and Validation Evidence
 
 1. Simulation router integration behavior:
-   - `tests/integration/services/query_service/test_simulation_router_dependency.py`
+   - `tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`
 2. Simulation service unit coverage:
-   - `tests/unit/services/query_service/services/test_simulation_service.py`
-3. Simulation repository unit coverage:
-   - `tests/unit/services/query_service/repositories/test_simulation_repository.py`
+   - `tests/unit/services/query_control_plane_service/application/test_simulation.py`
+3. Simulation persistence-adapter unit coverage:
+   - `tests/unit/services/query_control_plane_service/infrastructure/test_simulation_store.py`
 
 ## Original Acceptance Criteria Alignment
 

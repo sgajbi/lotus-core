@@ -172,7 +172,6 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
             "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
             "src/services/query_control_plane_service/app/ports/simulation.py",
             "src/services/query_control_plane_service/app/routers/simulation.py",
-            "src/services/query_service/app/repositories/simulation_repository.py",
         ),
         forbidden_module_prefixes=(
             "advisory_simulation",
