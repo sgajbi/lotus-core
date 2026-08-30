@@ -45,6 +45,7 @@ from tests.test_support.async_task_coordination import (
     wait_for_task_signal,
 )
 from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
+from tests.test_support.tenant import TEST_TENANT_ID
 
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
@@ -228,6 +229,7 @@ async def test_newer_snapshot_refreshes_evidence_and_rearms_portfolio_day_once(
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -373,6 +375,7 @@ async def test_unavailable_valuation_invalidates_stale_carry_forward_portfolio_r
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -510,6 +513,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -718,6 +722,7 @@ def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -842,6 +847,7 @@ async def test_claim_eligible_jobs_claims_first_day_without_portfolio_history(
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -903,6 +909,7 @@ async def test_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -1001,6 +1008,7 @@ async def test_claim_eligible_jobs_claims_all_complete_days_without_history_depe
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -1084,6 +1092,7 @@ async def test_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_ha
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -1181,6 +1190,7 @@ async def test_get_all_position_timeseries_for_date_returns_one_authoritative_as
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -1313,6 +1323,7 @@ async def test_get_all_cashflows_for_security_date_returns_latest_restatement_pe
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),

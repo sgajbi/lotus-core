@@ -22,6 +22,7 @@ from src.services.financial_reconciliation_service.app.ports import (
 from src.services.financial_reconciliation_service.app.repositories import (
     reconciliation_repository as reconciliation_repo,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -88,6 +89,7 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
     business_date = date(2026, 4, 10)
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2020, 1, 1),

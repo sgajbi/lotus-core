@@ -33,12 +33,14 @@ from src.services.valuation_orchestrator_service.app.domain.fx_revaluation impor
 from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
     fx_revaluation_repository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
 
 def _portfolio(portfolio_id: str, base_currency: str) -> Portfolio:
     return Portfolio(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id=portfolio_id,
         base_currency=base_currency,
         open_date=date(2026, 1, 1),

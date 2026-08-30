@@ -37,6 +37,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
     SqlAlchemyAccruedIncomeOffsetRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -64,6 +65,7 @@ async def _persist_cost_state_parent(
     transaction_id = f"TXN_COST_CONSTRAINT_{suffix}"
     session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -185,6 +187,7 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_SLICE4_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -399,6 +402,7 @@ async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine
 ) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_SLICE4_02",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -475,6 +479,7 @@ async def test_fifo_disposal_reads_and_updates_only_required_open_lots(
     security_id = "EQ_FIFO_BOUNDED_01"
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -586,6 +591,7 @@ async def test_cost_repository_upserts_buy_lot_state_idempotently(
 ) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_SLICE4_04",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -681,6 +687,7 @@ async def test_cost_repository_applies_costs_and_replaces_breakdown_idempotently
 ) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_SLICE4_03",
             base_currency="USD",
             open_date=date(2024, 1, 1),

@@ -22,6 +22,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
 from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionMaterializationProgress,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -34,6 +35,7 @@ def position_history_repository_data(db_engine) -> None:
     """Seed independently versioned snapshot and history epochs."""
     with Session(db_engine) as session:
         portfolio = Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=PORTFOLIO_ID,
             base_currency="USD",
             open_date=date(2024, 1, 1),

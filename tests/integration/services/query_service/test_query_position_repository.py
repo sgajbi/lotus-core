@@ -19,6 +19,7 @@ from src.services.query_service.app.application.holdings_reconciliation import (
     HoldingsReconciliationScope,
 )
 from src.services.query_service.app.repositories.position_repository import PositionRepository
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -81,6 +82,7 @@ def setup_test_data(db_engine):
     with Session(db_engine) as session:
         # Create prerequisite data
         portfolio = Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="POS_REPO_TEST_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -173,6 +175,7 @@ def setup_held_since_data(db_engine):
         # Prerequisites
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -330,6 +333,7 @@ def setup_snapshot_id_order_mismatch_data(db_engine):
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -442,6 +446,7 @@ def setup_as_of_positive_filter_data(db_engine):
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -606,6 +611,7 @@ def setup_stale_snapshot_reconciliation_data(db_engine):
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),

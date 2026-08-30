@@ -49,6 +49,7 @@ from src.services.query_control_plane_service.app.contracts.operations import (
 from src.services.query_control_plane_service.app.infrastructure.operations.repository import (
     OperationsRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -129,6 +130,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P1",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -275,6 +277,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -391,6 +394,7 @@ async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P2Q",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -449,6 +453,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P3",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -518,6 +523,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
 ) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P6",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -625,6 +631,7 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
 ) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P7",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -742,6 +749,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P4",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -841,6 +849,7 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P5",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -909,6 +918,7 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P6",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -969,6 +979,7 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P7",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -1229,6 +1240,7 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P8",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1392,6 +1404,7 @@ async def test_lineage_returns_coherent_snapshot_under_state_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P8D",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1550,6 +1563,7 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P9",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1623,6 +1637,7 @@ async def test_valuation_jobs_expose_skipped_operational_state(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P9S",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1673,6 +1688,7 @@ async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P9Q",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1730,6 +1746,7 @@ async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P9R",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1775,6 +1792,7 @@ async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P10",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1842,6 +1860,7 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
 ):
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P11",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -2038,6 +2057,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0001",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2050,6 +2070,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
                 status="ACTIVE",
             ),
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2291,6 +2312,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     async_db_session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0001",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2303,6 +2325,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
                 status="ACTIVE",
             ),
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),

@@ -25,6 +25,7 @@ from portfolio_common.enterprise_readiness import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.financial_reconciliation_service.app.main import app, lifespan
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -32,7 +33,7 @@ pytestmark = pytest.mark.asyncio
 def _enterprise_headers(capabilities: str) -> dict[str, str]:
     headers = {
         "X-Actor-Id": "actor-1",
-        "X-Tenant-Id": "tenant-1",
+        "X-Tenant-Id": TEST_TENANT_ID,
         "X-Role": "ops",
         "X-Correlation-Id": "corr-1",
         "X-Service-Identity": "lotus-gateway",
@@ -81,6 +82,7 @@ async def ensure_reconciliation_tables(async_db_session: AsyncSession):
 async def _seed_portfolio(async_db_session: AsyncSession, portfolio_id: str) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2020, 1, 1),
@@ -140,6 +142,7 @@ async def test_enterprise_middleware_denies_reconciliation_write_without_headers
     response = await async_test_client.post(
         "/reconciliation/runs/transaction-cashflow",
         json={"portfolio_id": "PORT-R1", "business_date": "2026-03-08"},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 403
@@ -323,6 +326,7 @@ async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
     response = await async_test_client.post(
         "/reconciliation/runs/transaction-cashflow",
         json={"portfolio_id": "PORT-R1", "business_date": "2026-03-08", "requested_by": "qa"},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 200
@@ -335,7 +339,8 @@ async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
     assert payload["summary"]["passed"] is False
 
     findings_response = await async_test_client.get(
-        f"/reconciliation/runs/{payload['run_id']}/findings"
+        f"/reconciliation/runs/{payload['run_id']}/findings",
+        headers=TEST_TENANT_HEADERS,
     )
     assert findings_response.status_code == 200
     findings = findings_response.json()["findings"]
@@ -372,6 +377,7 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
     response = await async_test_client.post(
         "/reconciliation/runs/position-valuation",
         json={"portfolio_id": "PORT-R2", "business_date": "2026-03-08"},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 200
@@ -381,7 +387,8 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
     assert payload["summary"]["finding_count"] == 2
 
     findings_response = await async_test_client.get(
-        f"/reconciliation/runs/{payload['run_id']}/findings"
+        f"/reconciliation/runs/{payload['run_id']}/findings",
+        headers=TEST_TENANT_HEADERS,
     )
     assert findings_response.status_code == 200
     assert {finding["finding_type"] for finding in findings_response.json()["findings"]} == {
@@ -453,6 +460,7 @@ async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift
     response = await async_test_client.post(
         "/reconciliation/runs/timeseries-integrity",
         json={"portfolio_id": "PORT-R3", "business_date": "2026-03-08", "epoch": 0},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 200
@@ -460,7 +468,8 @@ async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift
     assert payload["summary"]["finding_count"] == 2
 
     findings_response = await async_test_client.get(
-        f"/reconciliation/runs/{payload['run_id']}/findings"
+        f"/reconciliation/runs/{payload['run_id']}/findings",
+        headers=TEST_TENANT_HEADERS,
     )
     findings = findings_response.json()["findings"]
     assert {finding["finding_type"] for finding in findings} == {
@@ -512,6 +521,7 @@ async def test_timeseries_integrity_run_detects_missing_portfolio_timeseries_row
     response = await async_test_client.post(
         "/reconciliation/runs/timeseries-integrity",
         json={"portfolio_id": "PORT-R3B", "business_date": "2026-03-09", "epoch": 1},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 200
@@ -520,7 +530,8 @@ async def test_timeseries_integrity_run_detects_missing_portfolio_timeseries_row
     assert payload["summary"]["passed"] is False
 
     findings_response = await async_test_client.get(
-        f"/reconciliation/runs/{payload['run_id']}/findings"
+        f"/reconciliation/runs/{payload['run_id']}/findings",
+        headers=TEST_TENANT_HEADERS,
     )
     assert findings_response.status_code == 200
     findings = findings_response.json()["findings"]
@@ -567,6 +578,7 @@ async def test_timeseries_integrity_run_detects_missing_position_timeseries_rows
     response = await async_test_client.post(
         "/reconciliation/runs/timeseries-integrity",
         json={"portfolio_id": "PORT-R3C", "business_date": "2026-03-10", "epoch": 2},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 200
@@ -575,7 +587,8 @@ async def test_timeseries_integrity_run_detects_missing_position_timeseries_rows
     assert payload["summary"]["passed"] is False
 
     findings_response = await async_test_client.get(
-        f"/reconciliation/runs/{payload['run_id']}/findings"
+        f"/reconciliation/runs/{payload['run_id']}/findings",
+        headers=TEST_TENANT_HEADERS,
     )
     assert findings_response.status_code == 200
     findings = findings_response.json()["findings"]
@@ -680,6 +693,7 @@ async def test_timeseries_integrity_run_accepts_authoritative_mixed_epoch_asof_a
     response = await async_test_client.post(
         "/reconciliation/runs/timeseries-integrity",
         json={"portfolio_id": "PORT-R3D", "business_date": "2026-03-08", "epoch": 13},
+        headers=TEST_TENANT_HEADERS,
     )
 
     assert response.status_code == 200
@@ -744,12 +758,14 @@ async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_
     cashflow_run = await async_test_client.post(
         "/reconciliation/runs/transaction-cashflow",
         json={"portfolio_id": "PORT-R4A", "business_date": "2026-03-08", "requested_by": "qa"},
+        headers=TEST_TENANT_HEADERS,
     )
     assert cashflow_run.status_code == 200
 
     valuation_run = await async_test_client.post(
         "/reconciliation/runs/position-valuation",
         json={"portfolio_id": "PORT-R4B", "business_date": "2026-03-08"},
+        headers=TEST_TENANT_HEADERS,
     )
     assert valuation_run.status_code == 200
 
@@ -760,6 +776,7 @@ async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_
             "portfolio_id": "PORT-R4B",
             "limit": 1,
         },
+        headers=TEST_TENANT_HEADERS,
     )
     assert list_response.status_code == 200
     body = list_response.json()
@@ -768,7 +785,10 @@ async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_
     assert body["runs"][0]["reconciliation_type"] == "position_valuation"
     assert body["runs"][0]["portfolio_id"] == "PORT-R4B"
 
-    missing_findings = await async_test_client.get("/reconciliation/runs/FRR-MISSING/findings")
+    missing_findings = await async_test_client.get(
+        "/reconciliation/runs/FRR-MISSING/findings",
+        headers=TEST_TENANT_HEADERS,
+    )
     assert missing_findings.status_code == 404
     assert missing_findings.json() == {
         "detail": {

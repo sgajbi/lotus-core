@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -29,6 +30,7 @@ def setup_cashflow_data(db_engine, clean_db):
         # Prerequisites
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -238,6 +240,7 @@ async def test_get_external_flows_uses_latest_cashflow_epoch(clean_db, async_db_
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -316,6 +319,7 @@ async def test_get_portfolio_cashflow_series_uses_latest_cashflow_epoch(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -445,6 +449,7 @@ async def test_cashflows_allow_same_transaction_id_across_epochs(clean_db, async
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2024, 1, 1),

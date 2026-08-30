@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
 from src.services.query_service.app.services.portfolio_service import PortfolioService
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -18,6 +19,7 @@ def mock_portfolio_repo() -> AsyncMock:
     repo = AsyncMock(spec=PortfolioRepository)
     repo.get_portfolios.return_value = [
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -145,6 +147,7 @@ async def test_get_portfolio_by_id_success(mock_portfolio_repo: AsyncMock):
         mock_db_session = AsyncMock(spec=AsyncSession)
         service = PortfolioService(mock_db_session)
         mock_portfolio_repo.get_by_id.return_value = Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             base_currency="USD",
             open_date=date(2025, 1, 1),

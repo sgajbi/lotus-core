@@ -16,10 +16,12 @@ from src.services.persistence_service.app.repositories.instrument_repository imp
 )
 from src.services.persistence_service.app.repositories.portfolio_repository import (
     PortfolioRepository,
+    PortfolioTenantConflictError,
 )
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
@@ -31,6 +33,7 @@ async def test_transaction_reference_availability_resolves_governed_state(
 ) -> None:
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_REFERENCE_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -253,6 +256,7 @@ async def test_portfolio_repository_persists_cost_basis_method(
     repo = PortfolioRepository(async_db_session)
     event = PortfolioEvent(
         portfolio_id="PORT_AVCO_TEST_01",
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         open_date=date(2025, 1, 1),
         client_id="CIF_AVCO_1",
@@ -277,7 +281,7 @@ async def test_portfolio_repository_persists_cost_basis_method(
     assert persisted_portfolio.cost_basis_method == "AVCO"
 
 
-async def test_portfolio_repository_legacy_replay_preserves_authoritative_scope(
+async def test_portfolio_repository_replay_preserves_authoritative_tenant_scope(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
@@ -285,7 +289,7 @@ async def test_portfolio_repository_legacy_replay_preserves_authoritative_scope(
 
     def portfolio_event(
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         legal_book_id: str | None,
         risk_exposure: str,
     ) -> PortfolioEvent:
@@ -314,8 +318,8 @@ async def test_portfolio_repository_legacy_replay_preserves_authoritative_scope(
 
     await repo.create_or_update_portfolio(
         portfolio_event(
-            tenant_id=None,
-            legal_book_id=None,
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
             risk_exposure="Moderate",
         )
     )
@@ -332,25 +336,29 @@ async def test_portfolio_repository_legacy_replay_preserves_authoritative_scope(
     assert persisted.legal_book_id == "PB-SG-01"
     assert persisted.risk_exposure == "Moderate"
 
-    await repo.create_or_update_portfolio(
-        portfolio_event(
-            tenant_id="TENANT-SG-CORRECTED",
-            legal_book_id="PB-SG-02",
-            risk_exposure="Low",
+    with pytest.raises(
+        PortfolioTenantConflictError,
+        match="portfolio_id is already owned by a different tenant",
+    ):
+        await repo.create_or_update_portfolio(
+            portfolio_event(
+                tenant_id="TENANT-OTHER",
+                legal_book_id="PB-OTHER-01",
+                risk_exposure="Low",
+            )
         )
-    )
-    await async_db_session.commit()
+    await async_db_session.rollback()
 
-    corrected = (
+    preserved = (
         await async_db_session.execute(
             select(DBPortfolio)
             .where(DBPortfolio.portfolio_id == "PORT_SCOPE_REPLAY_01")
             .execution_options(populate_existing=True)
         )
     ).scalar_one()
-    assert corrected.tenant_id == "TENANT-SG-CORRECTED"
-    assert corrected.legal_book_id == "PB-SG-02"
-    assert corrected.risk_exposure == "Low"
+    assert preserved.tenant_id == "TENANT-SG"
+    assert preserved.legal_book_id == "PB-SG-01"
+    assert preserved.risk_exposure == "Moderate"
 
 
 async def test_portfolio_event_rejects_legacy_average_cost_alias(
@@ -359,6 +367,7 @@ async def test_portfolio_event_rejects_legacy_average_cost_alias(
     with pytest.raises(ValueError, match="Unsupported cost basis method"):
         PortfolioEvent(
             portfolio_id="PORT_AVERAGE_COST_TEST_01",
+            tenant_id=TEST_TENANT_ID,
             base_currency="USD",
             open_date=date(2025, 1, 1),
             client_id="CIF_AVERAGE_COST_1",
@@ -379,6 +388,7 @@ async def test_transaction_repository_is_idempotent(clean_db, async_db_session: 
     repo = TransactionDBRepository(async_db_session)
 
     test_portfolio = Portfolio(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT_T1",
         base_currency="USD",
         open_date=date(2024, 1, 1),
@@ -433,6 +443,7 @@ async def test_transaction_repository_persists_named_fee_source_authority(
     repo = TransactionDBRepository(async_db_session)
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_FEE_SOURCE_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -527,6 +538,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_META_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -602,6 +614,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_META_INT_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -692,6 +705,7 @@ async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_META_ADJ_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -753,6 +767,7 @@ async def test_transaction_repository_persists_fx_metadata(
 
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PORT_META_FX_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -862,6 +877,7 @@ async def test_instrument_repository_persists_fx_contract_fields(async_db_sessio
     repo = InstrumentRepository(async_db_session)
     async_db_session.add(
         DBPortfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             base_currency="USD",
             open_date=date(2024, 1, 1),

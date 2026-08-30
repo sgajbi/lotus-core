@@ -23,6 +23,7 @@ from src.services.query_service.app.services.transaction_records import (
     transaction_ledger_reconstruction_evidence,
 )
 from src.services.query_service.app.services.transaction_service import TransactionService
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -78,6 +79,7 @@ async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
     with Session(db_engine) as session:
         session.add(
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-PAGE",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
@@ -290,6 +292,7 @@ async def test_transaction_ledger_identity_binds_only_selected_material_inputs(
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="PORT-EVIDENCE",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -301,6 +304,7 @@ async def test_transaction_ledger_identity_binds_only_selected_material_inputs(
                     status="ACTIVE",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="PORT-UNRELATED",
                     base_currency="EUR",
                     open_date=date(2024, 1, 1),
@@ -520,6 +524,7 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="PORT-SNAPSHOT",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -629,6 +634,7 @@ async def test_transaction_ledger_evidence_is_session_invariant_and_matches_fx_s
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="PORT-FX-SELECTOR",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),

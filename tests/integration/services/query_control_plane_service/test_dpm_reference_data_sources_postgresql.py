@@ -23,6 +23,7 @@ from src.services.query_control_plane_service.app.infrastructure import (
 from src.services.query_control_plane_service.app.infrastructure.dpm_reference_data_sources import (
     SqlAlchemyDpmReferenceDataReader,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.db_direct]
 
@@ -107,6 +108,7 @@ async def test_maximum_supported_eligibility_and_tax_lot_filters_remain_one_stat
     present_ids = [security_ids[0], security_ids[-1]]
     async_db_session.add(
         Portfolio(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="PB_DPM_FILTER_CAPACITY",
             base_currency="USD",
             open_date=date(2020, 1, 1),

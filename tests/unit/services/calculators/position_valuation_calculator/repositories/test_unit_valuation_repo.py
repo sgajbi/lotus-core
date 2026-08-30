@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
@@ -90,6 +91,7 @@ def setup_holdings_data(db_engine):
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P1",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -101,6 +103,7 @@ def setup_holdings_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P2",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -112,6 +115,7 @@ def setup_holdings_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P3",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -123,6 +127,7 @@ def setup_holdings_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P4",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -300,6 +305,7 @@ def setup_first_open_date_data(db_engine):
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P1",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
@@ -311,6 +317,7 @@ def setup_first_open_date_data(db_engine):
                     status="f",
                 ),
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id="P2",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),

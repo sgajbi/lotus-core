@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -115,6 +116,7 @@ async def _seed_portfolios(session: AsyncSession) -> None:
     session.add_all(
         [
             Portfolio(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2026, 1, 1),
