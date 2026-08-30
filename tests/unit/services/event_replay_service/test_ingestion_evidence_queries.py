@@ -120,6 +120,7 @@ def test_builds_accepted_bundle_with_source_owned_batch_and_validation_profile()
     bundle = _build_bundle(
         job=_job(),
         request_payload={
+            "tenant_id": "tenant-test",
             "validation_profile": "transaction-ingestion",
             "validation_profile_version": "v2",
             "transactions": [

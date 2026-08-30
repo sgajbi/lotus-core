@@ -38,6 +38,7 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
     sample_payloads_by_schema_model = {
         "PortfolioEvent": {
             "portfolio_id": "P1",
+            "tenant_id": "tenant-test",
             "base_currency": "USD",
             "open_date": "2026-01-01",
             "risk_exposure": "balanced",

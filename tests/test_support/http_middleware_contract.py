@@ -45,7 +45,10 @@ async def assert_standard_http_middleware_contract(
             )
             error_response = await client.get(
                 exception_path,
-                headers={"X-Correlation-ID": correlation_id},
+                headers={
+                    "X-Correlation-ID": correlation_id,
+                    "X-Tenant-Id": "tenant-test",
+                },
             )
 
     assert response.status_code == 200

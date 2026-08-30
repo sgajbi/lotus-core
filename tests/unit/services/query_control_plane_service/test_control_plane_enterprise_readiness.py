@@ -65,7 +65,7 @@ async def test_control_plane_enterprise_middleware_omits_not_set_correlation_on_
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [(b"content-length", b"0")],
+        "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
@@ -99,7 +99,7 @@ async def test_control_plane_enterprise_middleware_omits_not_set_correlation_on_
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [(b"content-length", b"0")],
+        "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
@@ -124,7 +124,7 @@ async def test_control_plane_enterprise_middleware_omits_not_set_correlation_on_
 
 
 @pytest.mark.asyncio
-async def test_control_plane_enterprise_middleware_denies_read_without_headers_when_enabled(
+async def test_control_plane_enterprise_middleware_denies_read_with_only_tenant_when_enabled(
     monkeypatch,
 ):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
@@ -133,7 +133,7 @@ async def test_control_plane_enterprise_middleware_denies_read_without_headers_w
         "type": "http",
         "method": "GET",
         "path": "/integration/portfolios/PB1/analytics/reference",
-        "headers": [],
+        "headers": [(b"x-tenant-id", b"tenant-test")],
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),
