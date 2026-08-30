@@ -206,7 +206,9 @@ request or to the next request, never to only the page or only its reconstructio
 | Exact transaction is absent, outside the as-of boundary, or owned by another portfolio | Returns the same generic HTTP `404`; the route does not disclose which condition applied. |
 | Exact source query raises a database error | Maps to HTTP `503`; it is never rewritten as not-found. |
 | Exact identity evidence is not zero-or-one | Fails closed as unavailable; no arbitrary row is selected. |
-| `reporting_currency` is supplied but no FX rate exists for a required field source currency as of `A` | Service raises `ValueError`; the API maps it to HTTP `400`. |
+| Caller supplies an invalid `reporting_currency` code | Validation fails before source access; the API maps it to HTTP `400`. |
+| Collection route requests restatement but no FX rate exists for a required field source currency as of `A` | Service raises `ValueError`; the collection API maps it to HTTP `400`. |
+| Exact route cannot map persisted transaction evidence or resolve a required authoritative FX rate | Fails closed as source unavailable and maps to HTTP `503`; persisted evidence failures are not attributed to the caller. |
 | No rows match the filters | Returns an empty page with `total=0` and `data_quality_status=UNKNOWN`. |
 | Returned page is smaller than all matching rows or `skip > 0` | Returns `data_quality_status=PARTIAL`. |
 | Any returned row `security_id` does not resolve to `instruments.security_id` | Returns `data_quality_status=PARTIAL`, reason `TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING`, and the bounded missing security ids. |
