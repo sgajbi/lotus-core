@@ -226,10 +226,14 @@ router inside the operational read plane.
   query, and expose deterministic input/calculation/output lineage plus a source-bound snapshot id;
   per-security epochs are last-mutation versions, not separate portfolio-day control requirements
 - `PortfolioStateSnapshot:v1` owns the typed portfolio and market-data `source_provenance` envelope.
-  A valuation context is `READY` only when all selected portfolio rows and every material price or
-  FX observation prove one effective date equal to the requested business date. Missing values,
-  mixed dates, historical cost-basis fallback, and carried-forward price or FX evidence remain
-  explicit `UNAVAILABLE` reasons. Baseline positions use the source and reporting currencies
+  In current snapshot mode, the portfolio effective date is the selected daily valued-position
+  snapshot date. Per-security position-history dates may differ because they record last mutation;
+  they remain source lineage and reconciliation-control evidence rather than competing valuation
+  dates. A valuation context is `READY` only when all selected daily snapshots and every material
+  price or FX observation prove one effective date equal to the requested business date. Missing
+  values, mixed daily snapshot dates, historical cost-basis fallback, and carried-forward price or
+  FX evidence remain explicit `UNAVAILABLE` reasons. Baseline positions use the source and
+  reporting currencies
   persisted with the valuation, not mutable current instrument master data. Cross-currency rows
   additionally use the exact persisted FX effective date and value. The currency pair and FX value
   are part of market-data identity, so a master-data or same-date FX correction cannot retain stale

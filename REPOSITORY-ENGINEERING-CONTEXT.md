@@ -3511,10 +3511,13 @@ Most relevant current governance:
      identity. Keep the DTO/workflow/source extraction in QCP; share only framework-independent
      reconciliation and calculation-lineage primitives.
      The same contract owns portfolio and market-data effective-date truth through its typed
-     `source_provenance` envelope. Preserve actual position business dates, projected price dates,
-     and non-identity FX dates through calculation and serialization. `READY` requires one coherent
-     date per source family, equality between families, and equality to the requested business
-     date. Historical cost-basis fallback, missing valuations, mixed dates, and carried-forward
+     `source_provenance` envelope. In current snapshot mode, derive portfolio effective time from
+     the daily valued-position snapshot date; preserve per-security position-history dates as
+     mutation and reconciliation lineage without treating them as competing valuation dates.
+     Preserve projected price dates and non-identity FX dates through calculation and
+     serialization. `READY` requires one coherent date per source family, equality between
+     families, and equality to the requested business date. Historical cost-basis fallback,
+     missing valuations, mixed daily snapshot dates, and carried-forward
      observations fail closed with stable reason codes. Do not let consumers synthesize these
      dates from request fields, wall-clock time, or several weaker routes.
      Treat a missing local or reporting market value as incomplete valuation evidence even when
