@@ -21,6 +21,12 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-TXN-00
 INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
     "detail": "FX rate not found for USD/SGD as of 2026-03-10."
 }
+INVALID_REPORTING_CURRENCY_CODE_RESPONSE_EXAMPLE = {
+    "detail": "Currency code must be a three-letter ISO 4217 code."
+}
+EXACT_TRANSACTION_SOURCE_UNAVAILABLE_RESPONSE_EXAMPLE = {
+    "detail": "Transaction record source is temporarily unavailable"
+}
 
 
 @router.get(
@@ -185,7 +191,7 @@ async def get_transactions(
         status.HTTP_400_BAD_REQUEST: {
             "description": "Invalid exact transaction query or reporting-currency restatement.",
             "content": {
-                "application/json": {"example": INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE}
+                "application/json": {"example": INVALID_REPORTING_CURRENCY_CODE_RESPONSE_EXAMPLE}
             },
         },
         status.HTTP_404_NOT_FOUND: {
@@ -199,7 +205,15 @@ async def get_transactions(
             },
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "The authoritative transaction source could not be read safely.",
+            "description": (
+                "The authoritative transaction or required FX source could not be read or "
+                "mapped safely."
+            ),
+            "content": {
+                "application/json": {
+                    "example": EXACT_TRANSACTION_SOURCE_UNAVAILABLE_RESPONSE_EXAMPLE
+                }
+            },
         },
     },
     summary="Get Exact Portfolio Transaction Record",

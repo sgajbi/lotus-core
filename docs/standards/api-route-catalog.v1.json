@@ -10606,7 +10606,7 @@
         {
           "status_code": "503",
           "schema": "none",
-          "description": "The authoritative transaction source could not be read safely."
+          "description": "The authoritative transaction or required FX source could not be read or mapped safely."
         }
       ],
       "pagination": [],

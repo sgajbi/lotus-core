@@ -1430,3 +1430,10 @@ async def test_openapi_publishes_exact_transaction_lookup_contract(async_test_cl
     assert response_schema["properties"]["transaction"]["description"] == (
         "The exact canonical transaction record owned by this portfolio."
     )
+    assert operation["responses"]["400"]["content"]["application/json"]["example"] == {
+        "detail": "Currency code must be a three-letter ISO 4217 code."
+    }
+    assert "required FX source" in operation["responses"]["503"]["description"]
+    assert operation["responses"]["503"]["content"]["application/json"]["example"] == {
+        "detail": "Transaction record source is temporarily unavailable"
+    }
