@@ -105,12 +105,12 @@ def resolve_optional_valuation_book_scope(
     tenant_id: str | None,
     legal_book_id: str | None,
 ) -> ValuationBookScope | None:
-    """Resolve staged scope metadata without accepting a partially scoped portfolio."""
+    """Resolve optional legal-book authority within required tenant ownership."""
 
-    if tenant_id is None and legal_book_id is None:
+    if tenant_id is None:
+        raise ValueError("tenant_id is required for valuation authority")
+    if legal_book_id is None:
         return None
-    if tenant_id is None or legal_book_id is None:
-        raise ValueError("tenant_id and legal_book_id must be supplied together")
     return ValuationBookScope(tenant_id=tenant_id, legal_book_id=legal_book_id)
 
 
