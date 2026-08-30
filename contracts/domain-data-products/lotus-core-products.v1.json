@@ -207,6 +207,7 @@
       },
       "identifier_refs": [
         "portfolio_id",
+        "transaction_id",
         "instrument_id",
         "tenant_id"
       ],

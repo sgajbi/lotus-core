@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -20,6 +22,7 @@ VOCABULARY_FILENAMES = (
     "domain-data-product-semantics.v1.json",
     "domain-data-product-trust-metadata.v1.json",
 )
+ROUTE_PARAMETER_PATTERN = re.compile(r"\{([^{}]+)\}")
 
 
 def _platform_root() -> Path:
@@ -103,7 +106,24 @@ def validate_repo_native_contracts(source_directory: Path = LOCAL_DECLARATION_DI
                 temp_vocabulary_dir / vocabulary_file_name,
             )
 
-        return validator.validate_contract_directory(temp_declaration_dir)
+        issues = validator.validate_contract_directory(temp_declaration_dir)
+
+    if issues:
+        return issues
+
+    for declaration_path in sorted(source_directory.glob(PRODUCT_PATTERN)):
+        declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+        for product in declaration["products"]:
+            identifier_refs = set(product["identifier_refs"])
+            for route in product["current_routes"]:
+                missing_refs = sorted(set(ROUTE_PARAMETER_PATTERN.findall(route)) - identifier_refs)
+                if missing_refs:
+                    issues.append(
+                        f"{declaration_path}: product {product['product_name']!r} route "
+                        f"{route!r} has path identifiers absent from identifier_refs: "
+                        f"{', '.join(missing_refs)}"
+                    )
+    return issues
 
 
 def main() -> int:
