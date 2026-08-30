@@ -11,7 +11,8 @@ produced a plausible date, not authoritative financial evidence.
 
 A governed valuation date is supportable only when Core can prove:
 
-1. every selected portfolio row has one coherent business date;
+1. every selected current row has one coherent daily valuation-snapshot date, while its
+   per-security last-mutation date remains lineage rather than valuation-date authority;
 2. every material valued row, projected price, and non-identity FX observation has one coherent
    market-data date;
 3. the portfolio and market-data dates agree; and
@@ -30,6 +31,10 @@ for source-effective dates.
   receipt and carried-forward rates fail closed until revaluation.
 - One QCP application policy resolves source-family dates, deterministic hashes and snapshot ids,
   freshness, readiness, and stable failure reasons.
+- Current snapshot mode derives portfolio effective time from the daily valued-position snapshot
+  date. Per-security position-history dates remain mutation and reconciliation evidence, and the
+  daily snapshot date is included in portfolio source identity so consecutive valuation days cannot
+  publish the same deterministic provenance id.
 - `CoreSnapshotResponse` publishes a typed `lotus.source-provenance.v1` envelope and an explicit
   valuation supportability result.
 - Source provenance is bound into input lineage, response content identity, and runtime lineage;
@@ -45,9 +50,9 @@ for source-effective dates.
   portfolio evidence or changing value-based source identity.
 - `source_evidence_current` additionally requires valuation supportability `READY`.
 
-Historical cost-basis fallback, incomplete local or reporting values, mixed dates, current-price
-rows with missing FX lineage, and carried-forward price or FX evidence remain unavailable. No test
-timeout, assertion, quality gate, or failure mapping was weakened.
+Historical cost-basis fallback, incomplete local or reporting values, mixed daily snapshot dates,
+current-price rows with missing FX lineage, and carried-forward price or FX evidence remain
+unavailable. No test timeout, assertion, quality gate, or failure mapping was weakened.
 
 The complete persisted valuation receipt adds 23 lines to the legacy shared ORM module's exact
 source-size ceiling under #1035; #462 remains the owner of its decomposition. The same branch banks
@@ -60,6 +65,8 @@ future growth or stale baselines fail the source-size gate.
 Focused proof covers:
 
 - exact coherent date readiness and stable identity under input reordering;
+- multi-security daily snapshots with distinct last-mutation dates, and distinct portfolio source
+  identities for consecutive daily valuation snapshots;
 - missing, mixed, stale, historical-fallback, carried-forward, and same-date-corrected evidence;
 - projected price and FX date propagation;
 - stable valuation currency identity after mutable instrument-master correction and fail-closed

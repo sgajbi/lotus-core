@@ -11,6 +11,16 @@ the affected capability. It does not certify every product as production-ready. 
 cardinality limits described below are fixed locally under CR-1699; protected PR, exact-main, and
 wiki publication evidence remain pending until that delivery loop completes.
 
+## Reader Map
+
+| Reader decision | Start with |
+| --- | --- |
+| Identify Core-owned product truth and temporal semantics | [Governed product](#governed-product) |
+| Select a benchmark, index, reconciliation, or ingestion contract | [Market Reference Source Products](#market-reference-source-products) |
+| Understand current discretionary-management source support | [Active DPM Source Products](#active-dpm-source-products) |
+| Distinguish implementation, live validation, and certification | [Proof Posture](#proof-posture) |
+| Route an unavailable or stale source condition | [Operating rule](#operating-rule) |
+
 ## Governed product
 
 - Product ID: `lotus-core:PortfolioStateSnapshot:v1`
