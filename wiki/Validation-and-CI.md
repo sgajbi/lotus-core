@@ -10,7 +10,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 |---|---|---|
 | Local feature confidence | `make ci-local` | Fastest repo-native feature-lane parity check. |
 | PR merge readiness | `make ci` | Pull-request merge-gate parity before opening or updating a PR. |
-| Release/main posture | `make ci-main` | Main-push releasability parity. |
+| Release/main posture | `make ci-main` | Exact-main releasability parity. |
 | Dependency consistency | `make verify-dependencies` | Reuses only an exact, integrity-checked environment. |
 | Clean dependency proof | `make verify-dependencies-clean` | Always bootstraps without a cache read; required on main. |
 | Vulnerability posture | `make security-audit` | Rechecks the environment and runs `pip-audit`. |
@@ -31,7 +31,16 @@ The `automerge` label is consumed only by the small PR Auto Merge workflow. Appl
 does not route to, cancel, or duplicate the full Pull Request Merge Gate for an unchanged head SHA.
 Code-changing `synchronize` events still invalidate stale-head work and run the complete protected
 gate for the new immutable head. Opened, reopened, and ready-for-review events retain their current
-full-gate behavior; broader same-head evidence reuse is outside this bounded control.
+full-gate behavior; broader same-head evidence reuse is outside this bounded control. PR Auto Merge
+uses the explicit `LOTUS_AUTOMERGE_TOKEN` under read-only workflow permissions and safely stops when
+the secret is absent. It never falls back to `github.token`.
+
+Every merged PR is handed to a separate dispatcher. The dispatcher creates or verifies an immutable
+`main-releasability-<merge_sha>` tag, passes that SHA to Main Releasability, and records the PR
+number. Main Releasability checks out the tag, rejects a different SHA, proves that the revision is
+reachable from `main`, and only then releases the remaining jobs. This keeps one post-merge evidence
+run bound to one authoritative main revision. An operator may dispatch the same workflow without an
+expected SHA for deliberate manual validation; the run identifies itself as operator-dispatched.
 
 ### Required Check Authority
 
@@ -131,10 +140,15 @@ check-name-only authority cannot survive alongside the 37 app-bound checks. GitH
 app-bound names into `contexts` on reads, so live verification requires the mirrored list to be
 present, well formed, and set-equal to the check names.
 
+`LOTUS_AUTOMERGE_TOKEN` is a separate fine-grained repository credential with Contents and Pull
+requests write authority. It exists only to ensure that automatic rebase merges use a
+non-suppressed actor; it must not be substituted for the read-only branch-protection token. Missing
+merge authority skips auto-merge, while missing exact-SHA dispatch authority fails the dispatcher.
+
 Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
 platform, installer, dependency/packaging manifests, locks, and the cache implementation. A verified
 miss is saved immediately after dependency proof rather than after unrelated job gates. Main and
-scheduled releasability always run `make verify-dependencies-clean`. Machine-readable clean and audit
+operator-dispatched releasability always run `make verify-dependencies-clean`. Machine-readable clean and audit
 reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the separate
 mainline clean-install report.
 
@@ -269,7 +283,7 @@ used by release enforcement and does not replace protected PR or exact-main proo
 - `make ci`
   PR merge gate parity
 - `make ci-main`
-  main push releasability parity
+  exact-main releasability parity
 - `make lint`
   complete-repository Ruff/format/import-boundary proof plus required-check, domain, and contract
   guards

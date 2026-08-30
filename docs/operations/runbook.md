@@ -186,7 +186,13 @@ after fencing Core repository roots.
    `LOTUS_BRANCH_PROTECTION_READ_TOKEN` secret. That credential must be a fine-grained token with
    Administration read-only authority for this repository; never substitute `github.token` or a
    broad personal token. Missing/inadequate authority and live manifest drift fail the lane closed.
-5. Change branch protection only after the exact PR head has posted and passed every manifest-owned
+5. PR Auto Merge uses the separate repository-scoped `LOTUS_AUTOMERGE_TOKEN`, with Contents and
+   Pull requests write authority, from a workflow that otherwise has read-only permissions. If the
+   secret is absent, auto-merge warns and stops. After every merge, the merged-PR dispatcher creates
+   or verifies an immutable `main-releasability-<merge_sha>` tag and dispatches Main Releasability
+   with that SHA as `expected_sha`; a mismatched or non-main checkout fails before release work.
+   Never reuse the branch-protection read token for merge authority.
+6. Change branch protection only after the exact PR head has posted and passed every manifest-owned
    context. Apply the complete app-bound set atomically; do not add/remove checks incrementally or
    leave a check-name-only legacy context. The generated PATCH body explicitly sends `contexts: []`
    alongside the full app-bound `checks` list. GitHub mirrors those app-bound names into `contexts`
