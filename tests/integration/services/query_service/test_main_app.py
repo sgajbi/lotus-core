@@ -950,9 +950,7 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     assert "calculation_lineage" in projection_response["properties"]
     assert "source_window_trust" in projection_response["properties"]
     tenant_header = next(
-        parameter
-        for parameter in projection["parameters"]
-        if parameter["name"] == "X-Tenant-Id"
+        parameter for parameter in projection["parameters"] if parameter["name"] == "X-Tenant-Id"
     )
     assert tenant_header["in"] == "header"
     assert tenant_header["required"] is True
