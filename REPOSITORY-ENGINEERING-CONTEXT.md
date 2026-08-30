@@ -711,6 +711,21 @@ Boundary rules:
 4. integration and capability metadata are part of the supported contract,
 5. operational correctness and reprocessing reliability are first-class engineering concerns.
 
+Tenant authority boundary:
+
+1. every non-public HTTP request must carry a normalized, non-blank `X-Tenant-Id`; this applies
+   even when enterprise authorization is disabled for a local or trusted-internal profile,
+2. shared ingress constructs the immutable `TenantContext`; service code must consume that scope
+   and must not invent a fallback tenant,
+3. authenticated requests retain verified tenant authority only after the signed service-principal
+   contract succeeds; an unsigned header is request scope, not authenticated identity,
+4. portfolio ingestion requires source-owned `tenant_id`, while `legal_book_id` remains an optional,
+   independent business dimension,
+5. persisted portfolios require a normalized tenant; the cutover migration stops and reports
+   unattributable rows instead of assigning a synthetic tenant,
+6. the tenant-ownership architecture guard blocks synthetic production defaults now and reports the
+   banked tenantless-table census for the remaining staged slices of issue `#798`.
+
 ## Repo-Native Commands
 
 Use these commands as the primary local contract:

@@ -14,6 +14,13 @@ checked by `make api-route-catalog-guard`.
 | Copy-paste examples | Verified API examples catalog | Guarded by `make api-example-catalog-guard`. |
 | Human navigation | This wiki page | Keep prose focused on usage and route-family orientation. |
 
+All non-public operations require a normalized, non-blank `X-Tenant-Id` header. The requirement is
+independent of whether signed enterprise authorization is enabled; an unsigned header establishes
+request scope but is not authenticated tenant identity. Core returns a source-safe RFC 9457-style
+401 problem before route handling when the header is missing or blank. Public health, metrics,
+documentation, and version endpoints are excluded, and the generated OpenAPI contract marks the
+header as required everywhere else.
+
 ## Contract families
 
 ### `query_service`
