@@ -108,7 +108,7 @@ async def test_portfolio_exists_true(
     mock_result.scalar_one_or_none.return_value = "P1"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P1")
+    exists = await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="P1")
 
     assert exists is True
 
@@ -120,7 +120,7 @@ async def test_portfolio_exists_false(
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P404")
+    exists = await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="P404")
 
     assert exists is False
 
@@ -133,12 +133,15 @@ async def test_get_portfolio_base_currency(
     mock_result.scalar_one_or_none.return_value = "USD"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    base_currency = await repository.get_portfolio_base_currency("P1")
+    base_currency = await repository.get_portfolio_base_currency(
+        tenant_id="tenant-a", portfolio_id="P1"
+    )
 
     assert base_currency == "USD"
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolios.base_currency" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
     assert "portfolios.portfolio_id = 'P1'" in compiled_query
 
 

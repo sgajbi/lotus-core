@@ -172,7 +172,7 @@ class ReconciliationFindingResponse(BaseModel):
     resolution_actor: str | None = Field(
         default=None,
         description="Actor that resolved, waived, or suppressed the finding.",
-        examples=["ops.control@lotus.local"],
+        examples=["support.ops@lotus.local"],
     )
     resolved_at: datetime | None = Field(
         default=None,

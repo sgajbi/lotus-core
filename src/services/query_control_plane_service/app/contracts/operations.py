@@ -2650,7 +2650,7 @@ class ReconciliationFindingRecord(BaseModel):
     resolution_actor: Optional[str] = Field(
         None,
         description="Actor that recorded the terminal resolution state.",
-        examples=["ops.control@lotus.local"],
+        examples=["support.ops@lotus.local"],
     )
     resolved_at: Optional[datetime] = Field(
         None,

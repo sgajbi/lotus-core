@@ -12,9 +12,11 @@ TransactionEconomicsPageKey = tuple[str, str, str]
 class TransactionEconomicsReader(Protocol):
     """Read source-authored transaction economics without exposing persistence models."""
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool: ...
+    async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool: ...
 
-    async def get_portfolio_base_currency(self, portfolio_id: str) -> str | None: ...
+    async def get_portfolio_base_currency(
+        self, *, tenant_id: str, portfolio_id: str
+    ) -> str | None: ...
 
     async def list_transaction_cost_curve_keys(
         self,

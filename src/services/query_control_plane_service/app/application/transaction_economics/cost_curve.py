@@ -115,13 +115,14 @@ def transaction_cost_curve_page_token(
 async def resolve_transaction_cost_curve_response(
     *,
     repository: TransactionEconomicsReader,
+    tenant_id: str,
     portfolio_id: str,
     request: TransactionCostCurveRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
     encode_page_token: Callable[[dict[str, Any]], str],
     generated_at: datetime,
 ) -> TransactionCostCurveResponse:
-    if not await repository.portfolio_exists(portfolio_id):
+    if not await repository.portfolio_exists(tenant_id=tenant_id, portfolio_id=portfolio_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
     request_scope = transaction_cost_curve_request_scope(

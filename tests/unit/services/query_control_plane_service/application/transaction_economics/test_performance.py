@@ -594,12 +594,21 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
         calls: list[tuple[str, dict[str, object]]] = []
 
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
-                calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
+            async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
+                calls.append(
+                    ("portfolio_exists", {"tenant_id": tenant_id, "portfolio_id": portfolio_id})
+                )
                 return True
 
-            async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
-                calls.append(("get_portfolio_base_currency", {"portfolio_id": portfolio_id}))
+            async def get_portfolio_base_currency(
+                self, *, tenant_id: str, portfolio_id: str
+            ) -> str:
+                calls.append(
+                    (
+                        "get_portfolio_base_currency",
+                        {"tenant_id": tenant_id, "portfolio_id": portfolio_id},
+                    )
+                )
                 return "USD"
 
             async def list_performance_component_economics_evidence(
@@ -619,6 +628,7 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
 
         response = await resolve_performance_component_economics_response(
             repository=Repository(),
+            tenant_id="tenant-a",
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PerformanceComponentEconomicsRequest(
                 as_of_date=date(2026, 5, 10),
@@ -664,10 +674,10 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     events: list[str] = []
 
     class Repository:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
             return True
 
-        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+        async def get_portfolio_base_currency(self, *, tenant_id: str, portfolio_id: str) -> str:
             return "USD"
 
         async def list_performance_component_economics_evidence(
@@ -683,6 +693,7 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
 
     response = await resolve_performance_component_economics_response(
         repository=Repository(),
+        tenant_id="tenant-a",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=PerformanceComponentEconomicsRequest(
             as_of_date=date(2026, 4, 10),
@@ -712,10 +723,10 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
 @pytest.mark.asyncio
 async def test_resolve_performance_component_economics_empty_continuation_is_unavailable() -> None:
     class Repository:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
             return True
 
-        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+        async def get_portfolio_base_currency(self, *, tenant_id: str, portfolio_id: str) -> str:
             return "USD"
 
         async def list_performance_component_economics_evidence(
@@ -730,6 +741,7 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
 
     response = await resolve_performance_component_economics_response(
         repository=Repository(),
+        tenant_id="tenant-a",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=PerformanceComponentEconomicsRequest(
             as_of_date=date(2026, 4, 10),
@@ -775,10 +787,10 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
 @pytest.mark.asyncio
 async def test_component_economics_query_failure_does_not_become_ready_empty() -> None:
     class Repository:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
             return True
 
-        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+        async def get_portfolio_base_currency(self, *, tenant_id: str, portfolio_id: str) -> str:
             return "USD"
 
         async def list_performance_component_economics_evidence(
@@ -789,6 +801,7 @@ async def test_component_economics_query_failure_does_not_become_ready_empty() -
     with pytest.raises(RuntimeError, match="component-economics store unavailable"):
         await resolve_performance_component_economics_response(
             repository=Repository(),
+            tenant_id="tenant-a",
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PerformanceComponentEconomicsRequest(
                 as_of_date=date(2026, 4, 10),

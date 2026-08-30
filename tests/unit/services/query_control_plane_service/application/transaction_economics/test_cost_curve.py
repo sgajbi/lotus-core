@@ -373,8 +373,10 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
         encoded_payloads: list[dict[str, object]] = []
 
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
-                calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
+            async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
+                calls.append(
+                    ("portfolio_exists", {"tenant_id": tenant_id, "portfolio_id": portfolio_id})
+                )
                 return True
 
             async def list_transaction_cost_curve_keys(
@@ -407,6 +409,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
 
         response = await resolve_transaction_cost_curve_response(
             repository=Repository(),
+            tenant_id="tenant-a",
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=TransactionCostCurveRequest(
                 as_of_date=date(2026, 4, 10),
@@ -486,7 +489,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
 async def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -> None:
     async def run_case() -> None:
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
+            async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
                 return False
 
             async def list_transaction_cost_curve_keys(self, **_: object) -> list[object]:
@@ -502,6 +505,7 @@ async def test_resolve_transaction_cost_curve_response_requires_existing_portfol
 
         await resolve_transaction_cost_curve_response(
             repository=Repository(),
+            tenant_id="tenant-a",
             portfolio_id="PB_UNKNOWN",
             request=TransactionCostCurveRequest(
                 as_of_date=date(2026, 4, 10),
@@ -522,7 +526,7 @@ async def test_resolve_transaction_cost_curve_response_skips_evidence_read_witho
 ):
     async def run_case() -> object:
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
+            async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
                 return True
 
             async def list_transaction_cost_curve_keys(self, **_: object) -> list[object]:
@@ -533,6 +537,7 @@ async def test_resolve_transaction_cost_curve_response_skips_evidence_read_witho
 
         return await resolve_transaction_cost_curve_response(
             repository=Repository(),
+            tenant_id="tenant-a",
             portfolio_id="PB_EMPTY",
             request=TransactionCostCurveRequest(
                 as_of_date=date(2026, 4, 10),

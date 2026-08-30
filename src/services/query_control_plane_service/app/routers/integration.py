@@ -196,7 +196,11 @@ from .source_evidence_errors import (
     raise_source_evidence_invalid_request,
     raise_source_evidence_not_found,
 )
-from .tenant_authority import bind_admitted_tenant_id, tenant_scope_forbidden_example
+from .tenant_authority import (
+    bind_admitted_tenant_id,
+    bind_admitted_tenant_request,
+    tenant_scope_forbidden_response,
+)
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -642,12 +646,7 @@ def _raise_instrument_enrichment_invalid_request(exc: Exception) -> NoReturn:
 @router.get(
     "/policy/effective",
     response_model=EffectiveIntegrationPolicyResponse,
-    responses={
-        403: problem_response(
-            "Requested tenant does not match admitted tenant authority.",
-            tenant_scope_forbidden_example("IntegrationPolicy"),
-        )
-    },
+    responses={403: tenant_scope_forbidden_response("IntegrationPolicy")},
     summary="Get effective lotus-core integration policy",
     description=(
         "What: Return effective integration policy diagnostics for a consumer and tenant "
@@ -829,10 +828,7 @@ async def resolve_instrument_eligibility_bulk(
         "operational transaction routes for ledger browsing."
     ),
     responses={
-        403: problem_response(
-            "Requested tenant does not match admitted tenant authority.",
-            tenant_scope_forbidden_example("PortfolioTaxLotWindow"),
-        ),
+        403: tenant_scope_forbidden_response("PortfolioTaxLotWindow"),
         404: problem_response(
             "Portfolio not found",
             PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE,
@@ -864,14 +860,8 @@ async def get_portfolio_tax_lot_window(
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> PortfolioTaxLotWindowResponse:
     try:
-        request = request.model_copy(
-            update={
-                "tenant_id": bind_admitted_tenant_id(
-                    requested_tenant_id=request.tenant_id,
-                    tenant_context=http_request.state.tenant_context,
-                    source_product="PortfolioTaxLotWindow",
-                )
-            }
+        request = bind_admitted_tenant_request(
+            request, http_request.state.tenant_context, "PortfolioTaxLotWindow"
         )
         return await dpm_source_service.get_portfolio_tax_lot_window(
             tenant_context=http_request.state.tenant_context,
@@ -906,6 +896,7 @@ async def get_portfolio_tax_lot_window(
         "cost evidence from local estimated construction cost in DPM proof packs."
     ),
     responses={
+        403: tenant_scope_forbidden_response("TransactionCostCurve"),
         404: problem_response(
             "Portfolio not found",
             TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE,
@@ -927,6 +918,7 @@ async def get_portfolio_tax_lot_window(
     openapi_extra=source_data_product_openapi_extra("TransactionCostCurve"),
 )
 async def get_transaction_cost_curve(
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose observed transaction-cost evidence is requested.",
@@ -938,7 +930,11 @@ async def get_transaction_cost_curve(
     ),
 ) -> TransactionCostCurveResponse:
     try:
+        request = bind_admitted_tenant_request(
+            request, http_request.state.tenant_context, "TransactionCostCurve"
+        )
         return await transaction_economics_service.get_transaction_cost_curve(
+            tenant_context=http_request.state.tenant_context,
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -962,6 +958,7 @@ async def get_transaction_cost_curve(
     summary="Resolve performance component economics source evidence",
     description=PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION,
     responses={
+        403: tenant_scope_forbidden_response("PerformanceComponentEconomics"),
         404: problem_response(
             "Portfolio not found",
             PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE,
@@ -974,6 +971,7 @@ async def get_transaction_cost_curve(
     openapi_extra=source_data_product_openapi_extra("PerformanceComponentEconomics"),
 )
 async def get_performance_component_economics(
+    http_request: Request,
     request: PerformanceComponentEconomicsRequest,
     portfolio_id: str = Path(
         ...,
@@ -985,7 +983,11 @@ async def get_performance_component_economics(
     ),
 ) -> PerformanceComponentEconomicsResponse:
     try:
+        request = bind_admitted_tenant_request(
+            request, http_request.state.tenant_context, "PerformanceComponentEconomics"
+        )
         return await transaction_economics_service.get_performance_component_economics(
+            tenant_context=http_request.state.tenant_context,
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -1247,10 +1249,7 @@ async def resolve_dpm_portfolio_universe_candidates(
         "not use it as an all-in-one data feed; call the individual source products for data."
     ),
     responses={
-        403: problem_response(
-            "Requested tenant does not match admitted tenant authority.",
-            tenant_scope_forbidden_example("DpmSourceReadiness"),
-        ),
+        403: tenant_scope_forbidden_response("DpmSourceReadiness"),
         422: problem_response(
             "Invalid DPM source-readiness request",
             {"detail": "instrument_ids must not contain duplicates"},
@@ -1268,14 +1267,8 @@ async def get_dpm_source_readiness(
     ),
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> DpmSourceReadinessResponse:
-    request = request.model_copy(
-        update={
-            "tenant_id": bind_admitted_tenant_id(
-                requested_tenant_id=request.tenant_id,
-                tenant_context=http_request.state.tenant_context,
-                source_product="DpmSourceReadiness",
-            )
-        }
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "DpmSourceReadiness"
     )
     return await dpm_source_service.get_source_readiness(
         tenant_context=http_request.state.tenant_context,
