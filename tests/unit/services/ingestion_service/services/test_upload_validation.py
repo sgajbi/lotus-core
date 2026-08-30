@@ -14,9 +14,11 @@ from src.services.ingestion_service.app.DTOs.ingestion_validation_errors import 
     SCHEMA_VALIDATION_FAILED,
 )
 from src.services.ingestion_service.app.services.upload_validation import (
+    TENANT_EVIDENCE_MISMATCH,
     BulkUploadValidator,
     UploadParserBudget,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 
 def _csv_bytes(content: str) -> bytes:
@@ -45,6 +47,7 @@ def test_upload_validator_normalizes_header_spelling_and_ignores_unknown_columns
     )
 
     report = BulkUploadValidator().validate(
+        tenant_context=TEST_TENANT_CONTEXT,
         entity_type="instruments",
         filename="instruments.csv",
         content=content,
@@ -59,6 +62,57 @@ def test_upload_validator_normalizes_header_spelling_and_ignores_unknown_columns
     assert "Ignored Column" not in report.valid_rows[0]
 
 
+def test_upload_validator_binds_authenticated_tenant_to_portfolio_rows() -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                (
+                    "portfolio_id,base_currency,open_date,risk_exposure,"
+                    "investment_time_horizon,portfolio_type,booking_center_code,client_id,status"
+                ),
+                "P1,USD,2025-01-01,balanced,long_term,discretionary,SG,c,active",
+            ]
+        )
+    )
+
+    report = BulkUploadValidator().validate(
+        tenant_context=TEST_TENANT_CONTEXT,
+        entity_type="portfolios",
+        filename="portfolios.csv",
+        content=content,
+    )
+
+    assert report.errors == []
+    assert report.valid_rows[0]["tenant_id"] == TEST_TENANT_ID
+    assert report.valid_models[0].tenant_id == TEST_TENANT_ID
+
+
+def test_upload_validator_rejects_portfolio_tenant_evidence_mismatch() -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                (
+                    "portfolio_id,tenant_id,base_currency,open_date,risk_exposure,"
+                    "investment_time_horizon,portfolio_type,booking_center_code,client_id,status"
+                ),
+                "P1,another-tenant,USD,2025-01-01,balanced,long_term,discretionary,SG,c,active",
+            ]
+        )
+    )
+
+    report = BulkUploadValidator().validate(
+        tenant_context=TEST_TENANT_CONTEXT,
+        entity_type="portfolios",
+        filename="portfolios.csv",
+        content=content,
+    )
+
+    assert report.valid_models == []
+    assert report.errors[0].code == TENANT_EVIDENCE_MISMATCH
+    assert report.errors[0].field_path == "tenant_id"
+    assert report.errors[0].record_key == "portfolio_id:P1"
+
+
 def test_upload_validator_skips_blank_xlsx_rows() -> None:
     content = _xlsx_bytes(
         headers=["security_id", "name", "isin", "currency", "product_type"],
@@ -69,6 +123,7 @@ def test_upload_validator_skips_blank_xlsx_rows() -> None:
     )
 
     report = BulkUploadValidator().validate(
+        tenant_context=TEST_TENANT_CONTEXT,
         entity_type="instruments",
         filename="instruments.xlsx",
         content=content,
@@ -91,6 +146,7 @@ def test_upload_validator_reports_invalid_rows_without_publish_dependency() -> N
     )
 
     report = BulkUploadValidator().validate(
+        tenant_context=TEST_TENANT_CONTEXT,
         entity_type="transactions",
         filename="transactions.csv",
         content=content,
@@ -123,6 +179,7 @@ def test_upload_validator_reports_structured_row_validation_metadata() -> None:
     )
 
     report = BulkUploadValidator().validate(
+        tenant_context=TEST_TENANT_CONTEXT,
         entity_type="transactions",
         filename="transactions.csv",
         content=content,
@@ -145,6 +202,7 @@ def test_upload_validator_reports_structured_row_validation_metadata() -> None:
 def test_upload_validator_rejects_unsupported_file_format() -> None:
     with pytest.raises(UnsupportedOperation) as exc_info:
         BulkUploadValidator().validate(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="transactions",
             filename="transactions.txt",
             content=b"",
@@ -156,6 +214,7 @@ def test_upload_validator_rejects_unsupported_file_format() -> None:
 def test_upload_validator_rejects_invalid_csv_bytes() -> None:
     with pytest.raises(ValidationRejected) as exc_info:
         BulkUploadValidator().validate(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="transactions",
             filename="transactions.csv",
             content=b"\xff",
@@ -177,6 +236,7 @@ def test_upload_validator_rejects_csv_above_row_budget() -> None:
 
     with pytest.raises(ValidationRejected) as exc_info:
         BulkUploadValidator(budget=UploadParserBudget(max_rows=1)).validate(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="instruments",
             filename="instruments.csv",
             content=content,
@@ -198,6 +258,7 @@ def test_upload_validator_rejects_csv_above_column_budget() -> None:
 
     with pytest.raises(ValidationRejected) as exc_info:
         BulkUploadValidator(budget=UploadParserBudget(max_columns=5)).validate(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="instruments",
             filename="instruments.csv",
             content=content,
@@ -220,6 +281,7 @@ def test_upload_validator_rejects_csv_above_cell_length_budget() -> None:
 
     with pytest.raises(ValidationRejected) as exc_info:
         BulkUploadValidator(budget=UploadParserBudget(max_cell_length=12)).validate(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="instruments",
             filename="instruments.csv",
             content=content,
@@ -241,6 +303,7 @@ def test_upload_validator_rejects_xlsx_above_row_budget_without_materializing_wo
 
     with pytest.raises(ValidationRejected) as exc_info:
         BulkUploadValidator(budget=UploadParserBudget(max_rows=1)).validate(
+            tenant_context=TEST_TENANT_CONTEXT,
             entity_type="instruments",
             filename="instruments.xlsx",
             content=content,

@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from portfolio_common.domain.tenant import TenantId
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from ..application.errors import ApplicationError
 from ..application.upload_commands import (
@@ -132,6 +132,7 @@ def upload_application_error_to_http(exc: ApplicationError) -> HTTPException:
 
 def upload_preview_command_from_api(
     *,
+    tenant_context: TenantContext,
     entity_type: UploadEntityType,
     filename: str,
     content: bytes,
@@ -139,6 +140,7 @@ def upload_preview_command_from_api(
     include_sample_rows: bool = False,
 ) -> UploadPreviewCommand:
     return UploadPreviewCommand(
+        tenant_context=tenant_context,
         entity_type=entity_type,
         filename=filename,
         content=content,
@@ -149,12 +151,14 @@ def upload_preview_command_from_api(
 
 def upload_commit_command_from_api(
     *,
+    tenant_context: TenantContext,
     entity_type: UploadEntityType,
     filename: str,
     content: bytes,
     allow_partial: bool,
 ) -> UploadCommitCommand:
     return UploadCommitCommand(
+        tenant_context=tenant_context,
         entity_type=entity_type,
         filename=filename,
         content=content,
@@ -397,6 +401,7 @@ async def preview_upload(
     try:
         result = upload_service.preview_upload(
             upload_preview_command_from_api(
+                tenant_context=request.state.tenant_context,
                 entity_type=entity_type,
                 filename=file.filename or "upload.csv",
                 content=content,
@@ -493,6 +498,7 @@ async def commit_upload(
     try:
         result = await upload_service.commit_upload(
             upload_commit_command_from_api(
+                tenant_context=request.state.tenant_context,
                 entity_type=entity_type,
                 filename=file.filename or "upload.csv",
                 content=content,
