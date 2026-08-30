@@ -73,21 +73,23 @@ def test_valuation_authority_scope_normalizes_without_defaulting() -> None:
     assert scope.book_scope == ValuationBookScope("TENANT-SG", "PB-SG-01")
 
 
-def test_optional_valuation_book_scope_preserves_legacy_absence() -> None:
-    assert resolve_optional_valuation_book_scope(tenant_id=None, legal_book_id=None) is None
+def test_optional_valuation_book_scope_preserves_tenant_without_legal_book() -> None:
+    assert (
+        resolve_optional_valuation_book_scope(
+            tenant_id="TENANT-SG",
+            legal_book_id=None,
+        )
+        is None
+    )
 
 
-@pytest.mark.parametrize(
-    ("tenant_id", "legal_book_id"),
-    [("TENANT-SG", None), (None, "PB-SG-01")],
-)
-def test_optional_valuation_book_scope_rejects_partial_authority(
-    tenant_id: str | None,
+@pytest.mark.parametrize("legal_book_id", [None, "PB-SG-01"])
+def test_optional_valuation_book_scope_rejects_missing_tenant(
     legal_book_id: str | None,
 ) -> None:
-    with pytest.raises(ValueError, match="must be supplied together"):
+    with pytest.raises(ValueError, match="tenant_id is required for valuation authority"):
         resolve_optional_valuation_book_scope(
-            tenant_id=tenant_id,
+            tenant_id=None,
             legal_book_id=legal_book_id,
         )
 
