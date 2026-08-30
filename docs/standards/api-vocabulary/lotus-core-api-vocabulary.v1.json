@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-29T07:41:52.233312+00:00",
+  "generatedAt": "2026-08-30T00:06:06.551676+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -10239,6 +10239,153 @@
       ]
     },
     {
+      "semanticId": "lotus.transaction",
+      "canonicalTerm": "transaction",
+      "preferredName": "transaction",
+      "description": "The exact canonical transaction record owned by this portfolio.",
+      "example": {
+        "transaction_id": "TXN-2026-0001",
+        "transaction_date": "2026-03-01T09:30:00Z",
+        "settlement_date": "2026-03-03T00:00:00Z",
+        "transaction_type": "BUY",
+        "instrument_id": "AAPL",
+        "security_id": "US0378331005",
+        "quantity": 100.0,
+        "price": 185.42,
+        "gross_transaction_amount": 18542.0,
+        "gross_cost": 18542.0,
+        "trade_fee": 12.5,
+        "trade_currency": "USD",
+        "currency": "USD",
+        "net_cost": -3750.0,
+        "realized_gain_loss": 500.0,
+        "net_cost_local": -3750.0,
+        "realized_gain_loss_local": 500.0,
+        "transaction_fx_rate": 1.08,
+        "economic_event_id": "EVT-SELL-PORT-10001-TXN-SELL-2026-0001",
+        "linked_transaction_group_id": "LTG-SELL-PORT-10001-TXN-SELL-2026-0001",
+        "calculation_policy_id": "SELL_FIFO_POLICY",
+        "calculation_policy_version": "1.0.0",
+        "source_system": "OMS_PRIMARY",
+        "cash_entry_mode": "AUTO_GENERATE",
+        "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
+        "settlement_cash_account_id": "CASH-ACC-USD-001",
+        "settlement_cash_instrument_id": "CASH-USD",
+        "movement_direction": "INFLOW",
+        "originating_transaction_id": "TRN001",
+        "originating_transaction_type": "BUY",
+        "adjustment_reason": "BUY_SETTLEMENT",
+        "link_type": "BUY_TO_CASH",
+        "reconciliation_key": "REC-2026-0001",
+        "interest_direction": "INCOME",
+        "withholding_tax_amount": 15.25,
+        "other_interest_deductions_amount": 1.0,
+        "net_interest_amount": 108.2,
+        "gross_transaction_amount_reporting_currency": 171.25,
+        "gross_cost_reporting_currency": 171.25,
+        "trade_fee_reporting_currency": 3.42,
+        "net_cost_reporting_currency": -512.8,
+        "realized_gain_loss_reporting_currency": 500.0,
+        "realized_capital_pnl_local_reporting_currency": 0.0,
+        "realized_fx_pnl_local_reporting_currency": 1700.0,
+        "realized_total_pnl_local_reporting_currency": 1700.0,
+        "withholding_tax_amount_reporting_currency": 13.68,
+        "other_interest_deductions_amount_reporting_currency": 1.37,
+        "net_interest_amount_reporting_currency": 153.84,
+        "component_type": "FX_CASH_SETTLEMENT_BUY",
+        "component_id": "FX-COMP-0001",
+        "linked_component_ids": [
+          "FX-COMP-0002",
+          "FX-COMP-0003"
+        ],
+        "fx_cash_leg_role": "BUY",
+        "linked_fx_cash_leg_id": "FX-SETTLE-SELL-0001",
+        "settlement_status": "PENDING",
+        "pair_base_currency": "EUR",
+        "pair_quote_currency": "USD",
+        "fx_rate_quote_convention": "QUOTE_PER_BASE",
+        "buy_currency": "USD",
+        "sell_currency": "EUR",
+        "buy_amount": 1095000.0,
+        "sell_amount": 1000000.0,
+        "contract_rate": 1.095,
+        "fx_contract_id": "FXC-2026-0001",
+        "fx_contract_open_transaction_id": "FX-OPEN-0001",
+        "fx_contract_close_transaction_id": "FX-CLOSE-0001",
+        "settlement_of_fx_contract_id": "FXC-2026-0001",
+        "swap_event_id": "FXSWAP-2026-0001",
+        "near_leg_group_id": "FXSWAP-2026-0001-NEAR",
+        "far_leg_group_id": "FXSWAP-2026-0001-FAR",
+        "spot_exposure_model": "NONE",
+        "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+        "allocated_cost_basis_local": 50.0,
+        "allocated_cost_basis_base": 50.0,
+        "realized_capital_pnl_local": 0.0,
+        "realized_fx_pnl_local": 1250.0,
+        "realized_total_pnl_local": 1250.0,
+        "realized_capital_pnl_base": 0.0,
+        "realized_fx_pnl_base": 1250.0,
+        "realized_total_pnl_base": 1250.0,
+        "parent_transaction_reference": "CA_PARENT_TXN_001",
+        "linked_parent_event_id": "CA-EVT-2026-0001",
+        "parent_event_reference": "UPSTREAM-CA-REF-2026-0001",
+        "child_role": "SOURCE_POSITION_CLOSE",
+        "child_sequence_hint": 10,
+        "dependency_reference_ids": [
+          "CA-CHILD-OUT-001"
+        ],
+        "source_instrument_id": "OLD_SEC_001",
+        "target_instrument_id": "NEW_SEC_001",
+        "source_transaction_reference": "CA-CHILD-OUT-001",
+        "target_transaction_reference": "CA-CHILD-IN-001",
+        "external_destination_reference": "CUSTODIAN-ACCOUNT-7788",
+        "linked_cash_transaction_id": "CA-CIL-CASH-001",
+        "redemption_price_type": "PAR",
+        "old_factor": 1.0,
+        "new_factor": 0.75,
+        "principal_proceeds_local": 2500.0,
+        "accrued_interest_proceeds_local": 50.0,
+        "embedded_fee_amount_local": 2.0,
+        "embedded_tax_amount_local": 3.0,
+        "has_synthetic_flow": true,
+        "synthetic_flow_effective_date": "2026-03-15",
+        "synthetic_flow_amount_local": -10000.0,
+        "synthetic_flow_currency": "USD",
+        "synthetic_flow_amount_base": -10000.0,
+        "synthetic_flow_fx_rate_to_base": 1.0,
+        "synthetic_flow_price_used": 200.0,
+        "synthetic_flow_quantity_used": 50.0,
+        "synthetic_flow_valuation_method": "MVT_PRICE_X_QTY",
+        "synthetic_flow_classification": "POSITION_TRANSFER_OUT",
+        "synthetic_flow_price_source": "UPSTREAM",
+        "synthetic_flow_fx_source": "FX_SERVICE",
+        "synthetic_flow_source": "UPSTREAM_PROVIDED",
+        "costs": [
+          {
+            "fee_type": "BROKERAGE",
+            "amount": 12.5,
+            "currency": "USD"
+          }
+        ],
+        "cashflow": {
+          "amount": -18542.0,
+          "currency": "USD",
+          "classification": "TRADE_SETTLEMENT",
+          "timing": "SETTLED",
+          "is_position_flow": true,
+          "is_portfolio_flow": false,
+          "calculation_type": "TRANSACTION_DERIVED"
+        }
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "TransactionRecord"
+      ]
+    },
+    {
       "semanticId": "lotus.transaction_calculation_lineage",
       "canonicalTerm": "transaction_calculation_lineage",
       "preferredName": "transaction_calculation_lineage",
@@ -11948,6 +12095,81 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "sort_order",
       "semanticId": "lotus.sort_order"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio boundary that must own the transaction.",
+      "example": "PORT-TXN-001",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "transaction_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Exact source-owned transaction identifier.",
+      "example": "TXN-2026-0001",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "transaction_id",
+      "semanticId": "lotus.transaction_id"
+    },
+    {
+      "name": "as_of_date",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Optional booked-state upper boundary. Defaults to Core's latest business date.",
+      "example": "2026-03-10",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "as_of_date",
+      "semanticId": "lotus.as_of_date"
+    },
+    {
+      "name": "include_projected",
+      "kind": "request_option",
+      "location": "query",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "allowedValues": [],
+      "description": "When true, allow an exact future-dated projected transaction record.",
+      "example": false,
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "include_projected",
+      "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "reporting_currency",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Optional reporting currency for field-aware monetary restatement.",
+      "example": "SGD",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "reporting_currency",
+      "semanticId": "lotus.reporting_currency"
     },
     {
       "name": "portfolio_id",
@@ -20094,6 +20316,1465 @@
           },
           {
             "name": "transactions[].cashflow",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.cashflow",
+            "attributeRef": "lotus.cashflow"
+          },
+          {
+            "name": "reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "missing_instrument_reference_count",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.missing_instrument_reference_count",
+            "attributeRef": "lotus.missing_instrument_reference_count"
+          },
+          {
+            "name": "missing_instrument_security_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.missing_instrument_security_ids",
+            "attributeRef": "lotus.missing_instrument_security_ids"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "get_portfolio_transaction_record",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/transactions/{transaction_id}",
+      "domain": "transactions",
+      "serviceGroup": "query",
+      "tags": [
+        "Transactions"
+      ],
+      "summary": "Get Exact Portfolio Transaction Record",
+      "description": "What: Return exactly one source-owned TransactionLedgerWindow record by portfolio and transaction identity.\nHow: Applies both identifiers in the authoritative Core query, loads canonical cost and latest-cashflow evidence under one repeatable-read snapshot, and returns deterministic lineage and supportability metadata. A transaction owned by another portfolio is indistinguishable from an absent transaction.\nWhen: Use this route for URL rehydration or record drill-down. Do not scan the paginated ledger to resolve one transaction. Optional as-of, projected-record, and reporting-currency semantics match the portfolio transaction ledger.",
+      "naming": {
+        "boundedContext": "transactions",
+        "canonicalTerms": [
+          "accrued_interest_proceeds_local",
+          "adjustment_reason",
+          "affected_fields",
+          "allocated_cost_basis_base",
+          "allocated_cost_basis_local",
+          "amount",
+          "as_of_date",
+          "buy_amount",
+          "buy_currency",
+          "calculation_policy_id",
+          "calculation_policy_version",
+          "cash_entry_mode",
+          "cashflow",
+          "child_role",
+          "child_sequence_hint",
+          "component_id",
+          "component_type",
+          "content_hash",
+          "contract_rate",
+          "correlation_id",
+          "costs",
+          "currency",
+          "data_quality_status",
+          "degradation",
+          "dependency_reference_ids",
+          "details",
+          "economic_event_id",
+          "embedded_fee_amount_local",
+          "embedded_tax_amount_local",
+          "external_cash_transaction_id",
+          "external_destination_reference",
+          "far_leg_group_id",
+          "fee_type",
+          "freshness_status",
+          "fx_cash_leg_role",
+          "fx_contract_close_transaction_id",
+          "fx_contract_id",
+          "fx_contract_open_transaction_id",
+          "fx_rate_quote_convention",
+          "fx_realized_pnl_mode",
+          "generated_at",
+          "gross_cost",
+          "gross_cost_reporting_currency",
+          "gross_transaction_amount",
+          "gross_transaction_amount_reporting_currency",
+          "has_synthetic_flow",
+          "include_projected",
+          "instrument_id",
+          "interest_direction",
+          "latest_evidence_timestamp",
+          "link_type",
+          "linked_cash_transaction_id",
+          "linked_component_ids",
+          "linked_fx_cash_leg_id",
+          "linked_parent_event_id",
+          "linked_transaction_group_id",
+          "missing_instrument_reference_count",
+          "missing_instrument_security_ids",
+          "movement_direction",
+          "near_leg_group_id",
+          "net_cost",
+          "net_cost_local",
+          "net_cost_reporting_currency",
+          "net_interest_amount",
+          "net_interest_amount_reporting_currency",
+          "new_factor",
+          "old_factor",
+          "originating_transaction_id",
+          "originating_transaction_type",
+          "other_interest_deductions_amount",
+          "other_interest_deductions_amount_reporting_currency",
+          "pair_base_currency",
+          "pair_quote_currency",
+          "parent_event_reference",
+          "parent_transaction_reference",
+          "policy_version",
+          "portfolio_id",
+          "price",
+          "principal_proceeds_local",
+          "product_name",
+          "product_version",
+          "quantity",
+          "realized_capital_pnl_base",
+          "realized_capital_pnl_local",
+          "realized_capital_pnl_local_reporting_currency",
+          "realized_fx_pnl_base",
+          "realized_fx_pnl_local",
+          "realized_fx_pnl_local_reporting_currency",
+          "realized_gain_loss",
+          "realized_gain_loss_local",
+          "realized_gain_loss_reporting_currency",
+          "realized_total_pnl_base",
+          "realized_total_pnl_local",
+          "realized_total_pnl_local_reporting_currency",
+          "reason_code",
+          "reason_codes",
+          "reconciliation_key",
+          "reconciliation_status",
+          "record_key",
+          "redemption_price_type",
+          "reporting_currency",
+          "restatement_version",
+          "section",
+          "security_id",
+          "sell_amount",
+          "sell_currency",
+          "settlement_cash_account_id",
+          "settlement_cash_instrument_id",
+          "settlement_date",
+          "settlement_of_fx_contract_id",
+          "settlement_status",
+          "snapshot_id",
+          "source_as_of_date",
+          "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_instrument_id",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
+          "source_system",
+          "source_transaction_reference",
+          "spot_exposure_model",
+          "status",
+          "swap_event_id",
+          "synthetic_flow_amount_base",
+          "synthetic_flow_amount_local",
+          "synthetic_flow_classification",
+          "synthetic_flow_currency",
+          "synthetic_flow_effective_date",
+          "synthetic_flow_fx_rate_to_base",
+          "synthetic_flow_fx_source",
+          "synthetic_flow_price_source",
+          "synthetic_flow_price_used",
+          "synthetic_flow_quantity_used",
+          "synthetic_flow_source",
+          "synthetic_flow_valuation_method",
+          "target_instrument_id",
+          "target_transaction_reference",
+          "tenant_id",
+          "trade_currency",
+          "trade_fee",
+          "trade_fee_reporting_currency",
+          "transaction",
+          "transaction_date",
+          "transaction_fx_rate",
+          "transaction_id",
+          "transaction_type",
+          "withholding_tax_amount",
+          "withholding_tax_amount_reporting_currency"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "transaction_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_id",
+            "attributeRef": "lotus.transaction_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "include_projected",
+            "location": "query",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.include_projected",
+            "attributeRef": "lotus.include_projected"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "TransactionRecordResponse",
+        "fields": [
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "generated_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.generated_at",
+            "attributeRef": "lotus.generated_at"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "restatement_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.restatement_version",
+            "attributeRef": "lotus.restatement_version"
+          },
+          {
+            "name": "reconciliation_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.reconciliation_status",
+            "attributeRef": "lotus.reconciliation_status"
+          },
+          {
+            "name": "data_quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.data_quality_status",
+            "attributeRef": "lotus.data_quality_status"
+          },
+          {
+            "name": "latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_batch_fingerprint",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_fingerprint",
+            "attributeRef": "lotus.source_batch_fingerprint"
+          },
+          {
+            "name": "snapshot_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.snapshot_id",
+            "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.policy_version",
+            "attributeRef": "lotus.policy_version"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "product_name",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.product_name",
+            "attributeRef": "lotus.product_name"
+          },
+          {
+            "name": "product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.product_version",
+            "attributeRef": "lotus.product_version"
+          },
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reporting_currency",
+            "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "transaction",
+            "location": "body",
+            "required": true,
+            "type": "TransactionRecord",
+            "semanticId": "lotus.transaction",
+            "attributeRef": "lotus.transaction"
+          },
+          {
+            "name": "transaction.transaction_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_id",
+            "attributeRef": "lotus.transaction_id"
+          },
+          {
+            "name": "transaction.transaction_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_date",
+            "attributeRef": "lotus.transaction_date"
+          },
+          {
+            "name": "transaction.settlement_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.settlement_date",
+            "attributeRef": "lotus.settlement_date"
+          },
+          {
+            "name": "transaction.transaction_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_type",
+            "attributeRef": "lotus.transaction_type"
+          },
+          {
+            "name": "transaction.instrument_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.instrument_id",
+            "attributeRef": "lotus.instrument_id"
+          },
+          {
+            "name": "transaction.security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "transaction.quantity",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.quantity",
+            "attributeRef": "lotus.quantity"
+          },
+          {
+            "name": "transaction.price",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.price",
+            "attributeRef": "lotus.price"
+          },
+          {
+            "name": "transaction.gross_transaction_amount",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.gross_transaction_amount",
+            "attributeRef": "lotus.gross_transaction_amount"
+          },
+          {
+            "name": "transaction.gross_cost",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_cost",
+            "attributeRef": "lotus.gross_cost"
+          },
+          {
+            "name": "transaction.trade_fee",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.trade_fee",
+            "attributeRef": "lotus.trade_fee"
+          },
+          {
+            "name": "transaction.trade_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.trade_currency",
+            "attributeRef": "lotus.trade_currency"
+          },
+          {
+            "name": "transaction.currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "transaction.net_cost",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_cost",
+            "attributeRef": "lotus.net_cost"
+          },
+          {
+            "name": "transaction.realized_gain_loss",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_gain_loss",
+            "attributeRef": "lotus.realized_gain_loss"
+          },
+          {
+            "name": "transaction.net_cost_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_cost_local",
+            "attributeRef": "lotus.net_cost_local"
+          },
+          {
+            "name": "transaction.realized_gain_loss_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_gain_loss_local",
+            "attributeRef": "lotus.realized_gain_loss_local"
+          },
+          {
+            "name": "transaction.transaction_fx_rate",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.transaction_fx_rate",
+            "attributeRef": "lotus.transaction_fx_rate"
+          },
+          {
+            "name": "transaction.economic_event_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.economic_event_id",
+            "attributeRef": "lotus.economic_event_id"
+          },
+          {
+            "name": "transaction.linked_transaction_group_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.linked_transaction_group_id",
+            "attributeRef": "lotus.linked_transaction_group_id"
+          },
+          {
+            "name": "transaction.calculation_policy_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.calculation_policy_id",
+            "attributeRef": "lotus.calculation_policy_id"
+          },
+          {
+            "name": "transaction.calculation_policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.calculation_policy_version",
+            "attributeRef": "lotus.calculation_policy_version"
+          },
+          {
+            "name": "transaction.source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "transaction.cash_entry_mode",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.cash_entry_mode",
+            "attributeRef": "lotus.cash_entry_mode"
+          },
+          {
+            "name": "transaction.external_cash_transaction_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_cash_transaction_id",
+            "attributeRef": "lotus.external_cash_transaction_id"
+          },
+          {
+            "name": "transaction.settlement_cash_account_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.settlement_cash_account_id",
+            "attributeRef": "lotus.settlement_cash_account_id"
+          },
+          {
+            "name": "transaction.settlement_cash_instrument_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.settlement_cash_instrument_id",
+            "attributeRef": "lotus.settlement_cash_instrument_id"
+          },
+          {
+            "name": "transaction.movement_direction",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.movement_direction",
+            "attributeRef": "lotus.movement_direction"
+          },
+          {
+            "name": "transaction.originating_transaction_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.originating_transaction_id",
+            "attributeRef": "lotus.originating_transaction_id"
+          },
+          {
+            "name": "transaction.originating_transaction_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.originating_transaction_type",
+            "attributeRef": "lotus.originating_transaction_type"
+          },
+          {
+            "name": "transaction.adjustment_reason",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.adjustment_reason",
+            "attributeRef": "lotus.adjustment_reason"
+          },
+          {
+            "name": "transaction.link_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.link_type",
+            "attributeRef": "lotus.link_type"
+          },
+          {
+            "name": "transaction.reconciliation_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.reconciliation_key",
+            "attributeRef": "lotus.reconciliation_key"
+          },
+          {
+            "name": "transaction.interest_direction",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.interest_direction",
+            "attributeRef": "lotus.interest_direction"
+          },
+          {
+            "name": "transaction.withholding_tax_amount",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_amount",
+            "attributeRef": "lotus.withholding_tax_amount"
+          },
+          {
+            "name": "transaction.other_interest_deductions_amount",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_interest_deductions_amount",
+            "attributeRef": "lotus.other_interest_deductions_amount"
+          },
+          {
+            "name": "transaction.net_interest_amount",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_interest_amount",
+            "attributeRef": "lotus.net_interest_amount"
+          },
+          {
+            "name": "transaction.gross_transaction_amount_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_transaction_amount_reporting_currency",
+            "attributeRef": "lotus.gross_transaction_amount_reporting_currency"
+          },
+          {
+            "name": "transaction.gross_cost_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.gross_cost_reporting_currency",
+            "attributeRef": "lotus.gross_cost_reporting_currency"
+          },
+          {
+            "name": "transaction.trade_fee_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.trade_fee_reporting_currency",
+            "attributeRef": "lotus.trade_fee_reporting_currency"
+          },
+          {
+            "name": "transaction.net_cost_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_cost_reporting_currency",
+            "attributeRef": "lotus.net_cost_reporting_currency"
+          },
+          {
+            "name": "transaction.realized_gain_loss_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_gain_loss_reporting_currency",
+            "attributeRef": "lotus.realized_gain_loss_reporting_currency"
+          },
+          {
+            "name": "transaction.realized_capital_pnl_local_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_capital_pnl_local_reporting_currency",
+            "attributeRef": "lotus.realized_capital_pnl_local_reporting_currency"
+          },
+          {
+            "name": "transaction.realized_fx_pnl_local_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_fx_pnl_local_reporting_currency",
+            "attributeRef": "lotus.realized_fx_pnl_local_reporting_currency"
+          },
+          {
+            "name": "transaction.realized_total_pnl_local_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_total_pnl_local_reporting_currency",
+            "attributeRef": "lotus.realized_total_pnl_local_reporting_currency"
+          },
+          {
+            "name": "transaction.withholding_tax_amount_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.withholding_tax_amount_reporting_currency",
+            "attributeRef": "lotus.withholding_tax_amount_reporting_currency"
+          },
+          {
+            "name": "transaction.other_interest_deductions_amount_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.other_interest_deductions_amount_reporting_currency",
+            "attributeRef": "lotus.other_interest_deductions_amount_reporting_currency"
+          },
+          {
+            "name": "transaction.net_interest_amount_reporting_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.net_interest_amount_reporting_currency",
+            "attributeRef": "lotus.net_interest_amount_reporting_currency"
+          },
+          {
+            "name": "transaction.component_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.component_type",
+            "attributeRef": "lotus.component_type"
+          },
+          {
+            "name": "transaction.component_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.component_id",
+            "attributeRef": "lotus.component_id"
+          },
+          {
+            "name": "transaction.linked_component_ids",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.linked_component_ids",
+            "attributeRef": "lotus.linked_component_ids"
+          },
+          {
+            "name": "transaction.fx_cash_leg_role",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.fx_cash_leg_role",
+            "attributeRef": "lotus.fx_cash_leg_role"
+          },
+          {
+            "name": "transaction.linked_fx_cash_leg_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.linked_fx_cash_leg_id",
+            "attributeRef": "lotus.linked_fx_cash_leg_id"
+          },
+          {
+            "name": "transaction.settlement_status",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.settlement_status",
+            "attributeRef": "lotus.settlement_status"
+          },
+          {
+            "name": "transaction.pair_base_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.pair_base_currency",
+            "attributeRef": "lotus.pair_base_currency"
+          },
+          {
+            "name": "transaction.pair_quote_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.pair_quote_currency",
+            "attributeRef": "lotus.pair_quote_currency"
+          },
+          {
+            "name": "transaction.fx_rate_quote_convention",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.fx_rate_quote_convention",
+            "attributeRef": "lotus.fx_rate_quote_convention"
+          },
+          {
+            "name": "transaction.buy_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.buy_currency",
+            "attributeRef": "lotus.buy_currency"
+          },
+          {
+            "name": "transaction.sell_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.sell_currency",
+            "attributeRef": "lotus.sell_currency"
+          },
+          {
+            "name": "transaction.buy_amount",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.buy_amount",
+            "attributeRef": "lotus.buy_amount"
+          },
+          {
+            "name": "transaction.sell_amount",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.sell_amount",
+            "attributeRef": "lotus.sell_amount"
+          },
+          {
+            "name": "transaction.contract_rate",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.contract_rate",
+            "attributeRef": "lotus.contract_rate"
+          },
+          {
+            "name": "transaction.fx_contract_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.fx_contract_id",
+            "attributeRef": "lotus.fx_contract_id"
+          },
+          {
+            "name": "transaction.fx_contract_open_transaction_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.fx_contract_open_transaction_id",
+            "attributeRef": "lotus.fx_contract_open_transaction_id"
+          },
+          {
+            "name": "transaction.fx_contract_close_transaction_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.fx_contract_close_transaction_id",
+            "attributeRef": "lotus.fx_contract_close_transaction_id"
+          },
+          {
+            "name": "transaction.settlement_of_fx_contract_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.settlement_of_fx_contract_id",
+            "attributeRef": "lotus.settlement_of_fx_contract_id"
+          },
+          {
+            "name": "transaction.swap_event_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.swap_event_id",
+            "attributeRef": "lotus.swap_event_id"
+          },
+          {
+            "name": "transaction.near_leg_group_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.near_leg_group_id",
+            "attributeRef": "lotus.near_leg_group_id"
+          },
+          {
+            "name": "transaction.far_leg_group_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.far_leg_group_id",
+            "attributeRef": "lotus.far_leg_group_id"
+          },
+          {
+            "name": "transaction.spot_exposure_model",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.spot_exposure_model",
+            "attributeRef": "lotus.spot_exposure_model"
+          },
+          {
+            "name": "transaction.fx_realized_pnl_mode",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.fx_realized_pnl_mode",
+            "attributeRef": "lotus.fx_realized_pnl_mode"
+          },
+          {
+            "name": "transaction.allocated_cost_basis_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_local",
+            "attributeRef": "lotus.allocated_cost_basis_local"
+          },
+          {
+            "name": "transaction.allocated_cost_basis_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_base",
+            "attributeRef": "lotus.allocated_cost_basis_base"
+          },
+          {
+            "name": "transaction.realized_capital_pnl_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_capital_pnl_local",
+            "attributeRef": "lotus.realized_capital_pnl_local"
+          },
+          {
+            "name": "transaction.realized_fx_pnl_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_fx_pnl_local",
+            "attributeRef": "lotus.realized_fx_pnl_local"
+          },
+          {
+            "name": "transaction.realized_total_pnl_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_total_pnl_local",
+            "attributeRef": "lotus.realized_total_pnl_local"
+          },
+          {
+            "name": "transaction.realized_capital_pnl_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_capital_pnl_base",
+            "attributeRef": "lotus.realized_capital_pnl_base"
+          },
+          {
+            "name": "transaction.realized_fx_pnl_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_fx_pnl_base",
+            "attributeRef": "lotus.realized_fx_pnl_base"
+          },
+          {
+            "name": "transaction.realized_total_pnl_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_total_pnl_base",
+            "attributeRef": "lotus.realized_total_pnl_base"
+          },
+          {
+            "name": "transaction.parent_transaction_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.parent_transaction_reference",
+            "attributeRef": "lotus.parent_transaction_reference"
+          },
+          {
+            "name": "transaction.linked_parent_event_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.linked_parent_event_id",
+            "attributeRef": "lotus.linked_parent_event_id"
+          },
+          {
+            "name": "transaction.parent_event_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.parent_event_reference",
+            "attributeRef": "lotus.parent_event_reference"
+          },
+          {
+            "name": "transaction.child_role",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.child_role",
+            "attributeRef": "lotus.child_role"
+          },
+          {
+            "name": "transaction.child_sequence_hint",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.child_sequence_hint",
+            "attributeRef": "lotus.child_sequence_hint"
+          },
+          {
+            "name": "transaction.dependency_reference_ids",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.dependency_reference_ids",
+            "attributeRef": "lotus.dependency_reference_ids"
+          },
+          {
+            "name": "transaction.source_instrument_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_instrument_id",
+            "attributeRef": "lotus.source_instrument_id"
+          },
+          {
+            "name": "transaction.target_instrument_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.target_instrument_id",
+            "attributeRef": "lotus.target_instrument_id"
+          },
+          {
+            "name": "transaction.source_transaction_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_transaction_reference",
+            "attributeRef": "lotus.source_transaction_reference"
+          },
+          {
+            "name": "transaction.target_transaction_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.target_transaction_reference",
+            "attributeRef": "lotus.target_transaction_reference"
+          },
+          {
+            "name": "transaction.external_destination_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_destination_reference",
+            "attributeRef": "lotus.external_destination_reference"
+          },
+          {
+            "name": "transaction.linked_cash_transaction_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.linked_cash_transaction_id",
+            "attributeRef": "lotus.linked_cash_transaction_id"
+          },
+          {
+            "name": "transaction.redemption_price_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.redemption_price_type",
+            "attributeRef": "lotus.redemption_price_type"
+          },
+          {
+            "name": "transaction.old_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.old_factor",
+            "attributeRef": "lotus.old_factor"
+          },
+          {
+            "name": "transaction.new_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.new_factor",
+            "attributeRef": "lotus.new_factor"
+          },
+          {
+            "name": "transaction.principal_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.principal_proceeds_local",
+            "attributeRef": "lotus.principal_proceeds_local"
+          },
+          {
+            "name": "transaction.accrued_interest_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.accrued_interest_proceeds_local",
+            "attributeRef": "lotus.accrued_interest_proceeds_local"
+          },
+          {
+            "name": "transaction.embedded_fee_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_fee_amount_local",
+            "attributeRef": "lotus.embedded_fee_amount_local"
+          },
+          {
+            "name": "transaction.embedded_tax_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_tax_amount_local",
+            "attributeRef": "lotus.embedded_tax_amount_local"
+          },
+          {
+            "name": "transaction.has_synthetic_flow",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.has_synthetic_flow",
+            "attributeRef": "lotus.has_synthetic_flow"
+          },
+          {
+            "name": "transaction.synthetic_flow_effective_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_effective_date",
+            "attributeRef": "lotus.synthetic_flow_effective_date"
+          },
+          {
+            "name": "transaction.synthetic_flow_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_amount_local",
+            "attributeRef": "lotus.synthetic_flow_amount_local"
+          },
+          {
+            "name": "transaction.synthetic_flow_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_currency",
+            "attributeRef": "lotus.synthetic_flow_currency"
+          },
+          {
+            "name": "transaction.synthetic_flow_amount_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_amount_base",
+            "attributeRef": "lotus.synthetic_flow_amount_base"
+          },
+          {
+            "name": "transaction.synthetic_flow_fx_rate_to_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_fx_rate_to_base",
+            "attributeRef": "lotus.synthetic_flow_fx_rate_to_base"
+          },
+          {
+            "name": "transaction.synthetic_flow_price_used",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_price_used",
+            "attributeRef": "lotus.synthetic_flow_price_used"
+          },
+          {
+            "name": "transaction.synthetic_flow_quantity_used",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_quantity_used",
+            "attributeRef": "lotus.synthetic_flow_quantity_used"
+          },
+          {
+            "name": "transaction.synthetic_flow_valuation_method",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_valuation_method",
+            "attributeRef": "lotus.synthetic_flow_valuation_method"
+          },
+          {
+            "name": "transaction.synthetic_flow_classification",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_classification",
+            "attributeRef": "lotus.synthetic_flow_classification"
+          },
+          {
+            "name": "transaction.synthetic_flow_price_source",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_price_source",
+            "attributeRef": "lotus.synthetic_flow_price_source"
+          },
+          {
+            "name": "transaction.synthetic_flow_fx_source",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_fx_source",
+            "attributeRef": "lotus.synthetic_flow_fx_source"
+          },
+          {
+            "name": "transaction.synthetic_flow_source",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.synthetic_flow_source",
+            "attributeRef": "lotus.synthetic_flow_source"
+          },
+          {
+            "name": "transaction.costs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.costs",
+            "attributeRef": "lotus.costs"
+          },
+          {
+            "name": "transaction.costs[].fee_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.fee_type",
+            "attributeRef": "lotus.fee_type"
+          },
+          {
+            "name": "transaction.costs[].amount",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.amount",
+            "attributeRef": "lotus.amount"
+          },
+          {
+            "name": "transaction.costs[].currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "transaction.cashflow",
             "location": "body",
             "required": false,
             "type": "object",
