@@ -55,19 +55,25 @@ def test_portfolio_tenant_migration_fails_closed_and_is_reversible(monkeypatch) 
 
     assert migration["revision"] == "c165b2c3d52c"
     assert migration["down_revision"] == "c163b2c3d52a"
-    preflight = next(operation[1] for operation in operations if operation[0] == "execute")
+    preflights = [operation[1] for operation in operations if operation[0] == "execute"]
+    preflight = preflights[0]
     assert "LOCK TABLE portfolios IN ACCESS EXCLUSIVE MODE" in preflight
     assert "SET tenant_id = btrim(tenant_id)" in preflight
     assert "tenant_id IS NULL" in preflight
     assert "char_length(tenant_id) > 128" in preflight
     assert "RAISE EXCEPTION USING" in preflight
     assert "do not assign a synthetic or deployment-default tenant" in preflight
+    assert "portfolio tenant downgrade found %s row(s) without legal-book scope" in preflights[1]
+    assert "rollback will not fabricate accounting scope" in preflights[1]
 
     alterations = [operation for operation in operations if operation[0] == "alter_column"]
     assert alterations[0][3]["nullable"] is False
     assert alterations[1][3]["nullable"] is True
     assert operations.index(("execute", preflight)) < next(
         index for index, operation in enumerate(operations) if operation[0] == "alter_column"
+    )
+    assert operations.index(("execute", preflights[1])) < next(
+        index for index, operation in enumerate(operations) if operation[0] == "drop_index"
     )
 
     checks = [operation for operation in operations if operation[0] == "create_check"]

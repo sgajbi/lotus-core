@@ -90,6 +90,15 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
         assert "portfolio tenant cutover found 1 ambiguous root row" in error_text
         assert "TENANT-CUTOVER-AMBIGUOUS" in error_text
 
+        downgrade_savepoint = connection.begin_nested()
+        with pytest.raises(DBAPIError) as downgrade_error:
+            migration["downgrade"]()
+        downgrade_savepoint.rollback()
+        assert "portfolio tenant downgrade found 1 row(s) without legal-book scope" in str(
+            downgrade_error.value
+        )
+        assert "TENANT-CUTOVER-NO-BOOK" in str(downgrade_error.value)
+
         connection.execute(
             text(
                 """

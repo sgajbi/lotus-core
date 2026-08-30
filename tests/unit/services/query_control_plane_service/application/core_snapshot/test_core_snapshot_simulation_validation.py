@@ -36,6 +36,7 @@ async def test_simulation_session_validator_returns_matching_session() -> None:
         portfolio_id="PORT_001",
         request=CoreSnapshotRequest(
             as_of_date="2026-02-27",
+            tenant_id="tenant-test",
             snapshot_mode=CoreSnapshotMode.SIMULATION,
             sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
             simulation={"session_id": "SIM_1", "expected_version": 3},
@@ -69,6 +70,7 @@ async def test_simulation_session_validator_requires_existing_session() -> None:
             portfolio_id="PORT_001",
             request=CoreSnapshotRequest(
                 as_of_date="2026-02-27",
+                tenant_id="tenant-test",
                 snapshot_mode=CoreSnapshotMode.SIMULATION,
                 sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
                 simulation={"session_id": "SIM_1"},
@@ -93,6 +95,7 @@ async def test_simulation_session_validator_rejects_portfolio_mismatch() -> None
             portfolio_id="PORT_001",
             request=CoreSnapshotRequest(
                 as_of_date="2026-02-27",
+                tenant_id="tenant-test",
                 snapshot_mode=CoreSnapshotMode.SIMULATION,
                 sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
                 simulation={"session_id": "SIM_1"},
@@ -114,6 +117,7 @@ async def test_simulation_session_validator_rejects_expected_version_mismatch() 
             portfolio_id="PORT_001",
             request=CoreSnapshotRequest(
                 as_of_date="2026-02-27",
+                tenant_id="tenant-test",
                 snapshot_mode=CoreSnapshotMode.SIMULATION,
                 sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
                 simulation={"session_id": "SIM_1", "expected_version": 99},

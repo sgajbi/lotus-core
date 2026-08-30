@@ -1740,9 +1740,19 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         for parameter in effective_policy["parameters"]
         if parameter["name"] == "consumer_system"
     )
+    tenant_id = next(
+        parameter
+        for parameter in effective_policy["parameters"]
+        if parameter["name"] == "tenant_id"
+    )
     assert consumer_system["description"] == (
         "Downstream consumer system requesting policy resolution."
     )
+    assert tenant_id["description"] == (
+        "Source-owned tenant identifier required for policy resolution."
+    )
+    assert tenant_id["required"] is True
+    assert "default" not in tenant_id["schema"]
     assert (
         "Used directly by lotus-gateway platform/bootstrap flows"
         in (effective_policy["description"])
@@ -1826,8 +1836,10 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "Downstream consumer system requesting the core snapshot contract."
     )
     assert core_snapshot_request["properties"]["tenant_id"]["description"] == (
-        "Tenant identifier used for governance and policy resolution."
+        "Source-owned tenant identifier required for governance, policy resolution, "
+        "and authoritative portfolio scoping. No deployment default is inferred."
     )
+    assert "tenant_id" in core_snapshot_request["required"]
     assert core_snapshot_freshness["properties"]["snapshot_timestamp"]["description"] == (
         "UTC timestamp of the resolved baseline snapshot when one exists."
     )
@@ -2596,8 +2608,11 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
     assert consumer_system["description"] == "Consumer requesting capability metadata."
     assert consumer_system["schema"]["default"] == "lotus-gateway"
     assert "lotus-idea" in consumer_system["schema"]["enum"]
-    assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
-    assert tenant_id["schema"]["default"] == "default"
+    assert tenant_id["description"] == (
+        "Source-owned tenant identifier required for policy resolution."
+    )
+    assert "default" not in tenant_id["schema"]
+    assert tenant_id["required"] is True
     assert (
         "Used directly by lotus-gateway platform capability aggregation"
         in (capabilities["description"])

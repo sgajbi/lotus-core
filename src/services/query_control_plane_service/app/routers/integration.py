@@ -711,8 +711,8 @@ async def get_effective_integration_policy(
         examples=["lotus-performance"],
     ),
     tenant_id: str = Query(
-        "default",
-        description="Tenant identifier used for policy resolution.",
+        ...,
+        description="Source-owned tenant identifier required for policy resolution.",
         examples=["tenant_sg_pb"],
     ),
     include_sections: list[str] | None = Query(

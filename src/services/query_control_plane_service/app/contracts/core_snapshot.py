@@ -194,8 +194,11 @@ class CoreSnapshotRequest(BaseModel):
         examples=["lotus-performance"],
     )
     tenant_id: str = Field(
-        "default",
-        description="Tenant identifier used for governance and policy resolution.",
+        ...,
+        description=(
+            "Source-owned tenant identifier required for governance, policy resolution, "
+            "and authoritative portfolio scoping. No deployment default is inferred."
+        ),
         examples=["tenant_sg_pb"],
     )
     sections: list[CoreSnapshotSection] = Field(

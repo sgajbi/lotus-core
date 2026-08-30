@@ -641,6 +641,60 @@ async def test_missing_optional_legal_book_preserves_standard_cost_without_profi
 
 
 @pytest.mark.asyncio
+async def test_missing_legal_book_preserves_untouched_lot_accounting_carry() -> None:
+    existing_buy = _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "1", "97")
+    existing_buy["net_cost_local"] = Decimal("97")
+    existing_buy["net_cost"] = Decimal("97")
+    carried_buy = _raw_transaction("BUY_2", "2026-01-02T00:00:00Z", "BUY", "2", "194")
+    carry = AmortizedCostCarryState(
+        profile_id="PROFILE-2",
+        profile_version=1,
+        profile_content_hash="b" * 64,
+        recognized_through_date=resolved_fixed_income_book_cost_inputs().assignment.valid_from,
+        scheduled_cost_local=Decimal("194.0000000000"),
+        carrying_amount_local=Decimal("190.0000000000"),
+        carrying_amount_base=Decimal("190.0000000000"),
+        book_cost_fx_rate_to_base=Decimal("1.0000000000"),
+    )
+    carried_buy["amortized_cost_carry_state"] = carry
+    carried_buy["net_cost_local"] = Decimal("194")
+    carried_buy["net_cost"] = Decimal("194")
+    timeline = build_cost_basis_timeline_processor().process_increment(
+        initial_open_lots_raw=[existing_buy, carried_buy],
+        new_transactions_raw=[
+            _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "1", "60")
+        ],
+    )
+    open_lot_states = dict(timeline.open_lot_states)
+    open_lot_states["BUY_2"] = replace(open_lot_states["BUY_2"], amortized_cost=None)
+    calculation = CostBasisCalculationResult(
+        processed=timeline.processed,
+        errored=timeline.errored,
+        open_lot_states=open_lot_states,
+        incremental=False,
+        open_lot_persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
+        average_cost_pool_transition=None,
+        disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
+    )
+
+    result = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=CostBasisPortfolioReference(
+            portfolio_id="P1",
+            base_currency="SGD",
+            cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
+        ),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    assert result is not calculation
+    assert result.open_lot_states["BUY_2"].amortized_cost == carry
+
+
+@pytest.mark.asyncio
 async def test_no_disposals_preserve_calculation_without_profile_query() -> None:
     calculation = _calculation(
         _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "100", "97")
