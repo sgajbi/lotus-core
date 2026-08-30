@@ -1,3 +1,4 @@
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,9 +8,17 @@ from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFact
 
 from src.services.ingestion_service.app.services.reference_data_ingestion_commands import (
     ReferenceDataBookkeepingFailed,
-    ReferenceDataIngestionCommand,
     ReferenceDataIngestionCommandError,
     ReferenceDataIngestionCommandHandler,
+)
+from src.services.ingestion_service.app.services.reference_data_ingestion_commands import (
+    ReferenceDataIngestionCommand as ReferenceDataIngestionCommandContract,
+)
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+ReferenceDataIngestionCommand = partial(
+    ReferenceDataIngestionCommandContract,
+    tenant_context=TEST_TENANT_CONTEXT,
 )
 
 
@@ -86,6 +95,10 @@ async def test_reference_data_command_persists_and_marks_queued() -> None:
     assert result.accepted_count == 2
     registry_command.persist.assert_awaited_once_with(handler.reference_data_service, request)
     handler.ingestion_job_service.mark_queued.assert_awaited_once_with("ref-job-1")
+    assert (
+        handler.ingestion_job_service.create_or_get_job.await_args.kwargs["tenant_context"]
+        is TEST_TENANT_CONTEXT
+    )
 
 
 @pytest.mark.asyncio

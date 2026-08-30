@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, NoReturn, cast
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 
@@ -67,6 +68,7 @@ class ReferenceDataBookkeepingFailed(Exception):
 
 @dataclass(frozen=True, slots=True)
 class ReferenceDataIngestionCommand:
+    tenant_context: TenantContext
     endpoint: str
     idempotency_key: str | None
     registry_command: ReferenceDataRegistryCommand
@@ -181,6 +183,7 @@ class ReferenceDataIngestionCommandHandler:
             correlation_id=correlation_id,
             request_id=request_id,
             trace_id=trace_id,
+            tenant_context=command.tenant_context,
             request_payload=command.registry_command.request_payload(command.request),
         )
 

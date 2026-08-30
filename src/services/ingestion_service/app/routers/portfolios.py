@@ -1,8 +1,10 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from portfolio_common.domain.tenant import TenantAuthorityMismatchError
 
 from ..ack_response import build_batch_ack
+from ..application.portfolio_tenant_authority import bind_portfolio_tenant_authority
 from ..dependencies import (
     get_ingestion_job_service,  # noqa: F401
     get_ingestion_publish_command_handler,
@@ -79,8 +81,19 @@ async def ingest_portfolios(
 ):
     idempotency_key = resolve_idempotency_key(http_request)
     try:
+        bind_portfolio_tenant_authority(
+            request.portfolios,
+            http_request.state.tenant_context,
+        )
+    except TenantAuthorityMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="portfolio tenant scope must match the admitted tenant authority",
+        ) from exc
+    try:
         result = await command_handler.ingest_portfolios(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="portfolio",
                 records=request.portfolios,

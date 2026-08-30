@@ -85,6 +85,7 @@ async def ingest_fixed_income_book_cost_authorities(
     try:
         result = await command_handler.ingest_fixed_income_book_cost_authorities(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="fixed_income_book_cost_authority",
                 records=request.authorities,

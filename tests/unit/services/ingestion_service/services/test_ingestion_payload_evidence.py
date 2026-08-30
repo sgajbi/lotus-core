@@ -26,6 +26,7 @@ from src.services.ingestion_service.app.services.ingestion_payload_evidence impo
 _FINGERPRINT_KEY_ID = "test-key"
 _FINGERPRINT_SECRET = "test-ingestion-evidence-secret-32-bytes"
 _FINGERPRINT_PREVIOUS_KEYS: dict[str, str] = {}
+_TENANT_ID = "tenant-test"
 
 
 def ingestion_payload_fingerprint(payload):
@@ -47,6 +48,7 @@ def build_ingestion_payload_evidence(**kwargs):
 async def create_or_get_job_result(**kwargs):
     return await _create_or_get_job_result(
         **kwargs,
+        tenant_id=_TENANT_ID,
         fingerprint_key_id=_FINGERPRINT_KEY_ID,
         fingerprint_hmac_secret=_FINGERPRINT_SECRET,
         fingerprint_previous_keys=_FINGERPRINT_PREVIOUS_KEYS,
@@ -117,11 +119,13 @@ class _FakeExistingSession:
         self.existing = existing
         self.added_rows = []
         self.lock_calls = []
+        self.scalar_statements = []
 
     def begin(self):
         return _FakeBegin()
 
     async def scalar(self, _stmt):
+        self.scalar_statements.append(_stmt)
         return self.existing
 
     async def execute(self, stmt, params=None):
@@ -139,6 +143,7 @@ def _existing_job(
 ) -> SimpleNamespace:
     return SimpleNamespace(
         job_id="job_existing",
+        tenant_id=_TENANT_ID,
         endpoint="/ingest/transactions",
         entity_type="transaction",
         status=status,
@@ -471,7 +476,7 @@ async def test_create_or_get_job_locks_before_creating_new_idempotent_job() -> N
     assert session.lock_calls == [
         (
             "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
-            {"lock_key": "/ingest/transactions|idem_new"},
+            {"lock_key": "tenant-test|/ingest/transactions|idem_new"},
         )
     ]
     assert session.added_rows[0].request_payload_fingerprint == ingestion_payload_fingerprint(
@@ -507,9 +512,12 @@ async def test_create_or_get_job_replays_same_idempotency_key_and_same_payload()
     assert session.lock_calls == [
         (
             "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
-            {"lock_key": "/ingest/transactions|idem_1"},
+            {"lock_key": "tenant-test|/ingest/transactions|idem_1"},
         )
     ]
+    compiled_lookup = session.scalar_statements[0].compile()
+    assert "ingestion_jobs.tenant_id = :tenant_id_1" in str(compiled_lookup)
+    assert compiled_lookup.params["tenant_id_1"] == "tenant-test"
     assert session.added_rows == []
 
 
@@ -572,7 +580,7 @@ async def test_create_or_get_job_rejects_same_idempotency_key_with_different_pay
     assert session.lock_calls == [
         (
             "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
-            {"lock_key": "/ingest/transactions|idem_1"},
+            {"lock_key": "tenant-test|/ingest/transactions|idem_1"},
         )
     ]
     assert session.added_rows == []

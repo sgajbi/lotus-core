@@ -55,3 +55,22 @@ class TenantContext:
         """Return the canonical identifier for persistence and contracts."""
 
         return self.tenant_id.value
+
+
+class TenantAuthorityMismatchError(ValueError):
+    """Raised when caller-supplied ownership conflicts with admitted authority."""
+
+
+def bind_tenant_authority(
+    supplied_tenant_id: str | None,
+    tenant_context: TenantContext,
+) -> str:
+    """Return admitted authority after rejecting any conflicting supplied tenant."""
+
+    if supplied_tenant_id is not None:
+        supplied = TenantId(supplied_tenant_id).value
+        if supplied != tenant_context.tenant_id_text:
+            raise TenantAuthorityMismatchError(
+                "supplied tenant_id does not match admitted tenant authority"
+            )
+    return tenant_context.tenant_id_text

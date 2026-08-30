@@ -149,6 +149,7 @@ async def ingest_transactions(
     try:
         result = await command_handler.ingest_transactions(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="transaction",
                 records=request.transactions,

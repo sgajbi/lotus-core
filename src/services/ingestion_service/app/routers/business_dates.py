@@ -105,6 +105,7 @@ async def ingest_business_dates(
     try:
         result = await command_handler.ingest_business_dates(
             BusinessDateIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 request=request,
                 endpoint=str(http_request.url.path),
                 idempotency_key=idempotency_key,

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from portfolio_common.domain.tenant import TenantContext
+
 from ..ports.ingestion_workflow_stores import (
     IngestionJobStore,
     ReplayAuditRecord,
@@ -23,6 +25,7 @@ class CorrelationContext:
 @dataclass(frozen=True, slots=True)
 class ApplicationCommandEnvelope:
     command_id: str
+    tenant_context: TenantContext
     endpoint: str
     entity_type: str
     accepted_count: int
@@ -38,6 +41,7 @@ class IdempotencyWorkflow:
     async def create_or_get(self, command: ApplicationCommandEnvelope) -> IngestionJobCreateResult:
         return await self._store.create_or_get_job(
             job_id=command.command_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             entity_type=command.entity_type,
             accepted_count=command.accepted_count,

@@ -10,7 +10,11 @@ from zipfile import BadZipFile
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
-from portfolio_common.domain.tenant import TenantContext
+from portfolio_common.domain.tenant import (
+    TenantAuthorityMismatchError,
+    TenantContext,
+    bind_tenant_authority,
+)
 from pydantic import BaseModel, ValidationError
 
 from ..application.errors import UnsupportedOperation, ValidationRejected
@@ -129,9 +133,10 @@ def _bind_portfolio_tenant_authority(
     if entity_type != "portfolios":
         return None
 
-    authenticated_tenant_id = tenant_context.tenant_id_text
     supplied_tenant_id = row.get("tenant_id")
-    if supplied_tenant_id is not None and supplied_tenant_id != authenticated_tenant_id:
+    try:
+        row["tenant_id"] = bind_tenant_authority(supplied_tenant_id, tenant_context)
+    except (TenantAuthorityMismatchError, TypeError, ValueError):
         return UploadRowIssue(
             row_number=row_number,
             message="tenant_id must match the authenticated upload tenant.",
@@ -144,7 +149,6 @@ def _bind_portfolio_tenant_authority(
             ),
             source_lineage=safe_source_lineage_from_payload(source_row),
         )
-    row["tenant_id"] = authenticated_tenant_id
     return None
 
 

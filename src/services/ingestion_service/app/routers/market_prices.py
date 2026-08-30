@@ -109,6 +109,7 @@ async def ingest_market_prices(
     try:
         result = await command_handler.ingest_market_prices(
             BatchPublishIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 entity_type="market_price",
                 records=request.market_prices,
@@ -196,6 +197,7 @@ async def ingest_authoritative_market_price_source_facts(
     try:
         result = await command_handler.ingest_reference_data(
             ReferenceDataIngestionCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 idempotency_key=idempotency_key,
                 registry_command=command,

@@ -1,3 +1,4 @@
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -18,7 +19,9 @@ from src.services.ingestion_service.app.ports.transaction_reprocessing import (
 )
 from src.services.ingestion_service.app.services import ingestion_publish_commands
 from src.services.ingestion_service.app.services.ingestion_publish_commands import (
-    BatchPublishIngestionCommand,
+    BatchPublishIngestionCommand as BatchPublishIngestionCommandContract,
+)
+from src.services.ingestion_service.app.services.ingestion_publish_commands import (
     IngestionPublishBookkeepingFailed,
     IngestionPublishCommandError,
     IngestionPublishCommandHandler,
@@ -26,6 +29,12 @@ from src.services.ingestion_service.app.services.ingestion_publish_commands impo
     SinglePublishIngestionCommand,
 )
 from src.services.ingestion_service.app.services.ingestion_service import IngestionPublishError
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+BatchPublishIngestionCommand = partial(
+    BatchPublishIngestionCommandContract,
+    tenant_context=TEST_TENANT_CONTEXT,
+)
 
 
 def _job_result(
@@ -167,6 +176,10 @@ async def test_batch_publish_command_creates_job_publishes_and_marks_queued() ->
     publisher.assert_awaited_once()
     handler.ingestion_job_service.mark_queued.assert_awaited_once_with("job-1")
     handler.ingestion_job_service.mark_failed.assert_not_awaited()
+    assert (
+        handler.ingestion_job_service.create_or_get_job.await_args.kwargs["tenant_context"]
+        is TEST_TENANT_CONTEXT
+    )
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ from src.services.ingestion_service.app.services.ingestion_job_lifecycle import 
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,6 +36,7 @@ def _job_response(
 ) -> IngestionJobResponse:
     return IngestionJobResponse(
         job_id=job_id,
+        tenant_id=TEST_TENANT_ID,
         endpoint=endpoint,
         entity_type="transaction",
         status="accepted",
@@ -56,6 +58,7 @@ class _FakeIngestionJobStore:
         self,
         *,
         job_id: str,
+        tenant_id: str,
         endpoint: str,
         entity_type: str,
         accepted_count: int,
@@ -65,6 +68,7 @@ class _FakeIngestionJobStore:
         trace_id: str,
         request_payload: dict[str, Any] | None,
     ) -> IngestionJobCreateResult:
+        assert tenant_id == TEST_TENANT_ID
         if not idempotency_key:
             return IngestionJobCreateResult(
                 job=_job_response(
@@ -130,6 +134,7 @@ async def test_create_or_get_job_uses_job_store_idempotency_conflict_semantics()
 
     created = await service.create_or_get_job(
         job_id="job-001",
+        tenant_context=TEST_TENANT_CONTEXT,
         endpoint="/ingest/transactions",
         entity_type="transaction",
         accepted_count=1,
@@ -141,6 +146,7 @@ async def test_create_or_get_job_uses_job_store_idempotency_conflict_semantics()
     )
     duplicate = await service.create_or_get_job(
         job_id="job-002",
+        tenant_context=TEST_TENANT_CONTEXT,
         endpoint="/ingest/transactions",
         entity_type="transaction",
         accepted_count=1,
@@ -158,6 +164,7 @@ async def test_create_or_get_job_uses_job_store_idempotency_conflict_semantics()
     with pytest.raises(IngestionIdempotencyConflictError):
         await service.create_or_get_job(
             job_id="job-003",
+            tenant_context=TEST_TENANT_CONTEXT,
             endpoint="/ingest/transactions",
             entity_type="transaction",
             accepted_count=1,

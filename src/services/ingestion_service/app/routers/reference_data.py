@@ -99,6 +99,7 @@ async def _handle_reference_ingestion(
     try:
         result = await command_handler.ingest_reference_data(
             ReferenceDataServiceCommand(
+                tenant_context=http_request.state.tenant_context,
                 endpoint=str(http_request.url.path),
                 idempotency_key=idempotency_key,
                 registry_command=command,

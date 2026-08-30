@@ -1,7 +1,13 @@
 from dataclasses import FrozenInstanceError
 
 import pytest
-from portfolio_common.domain.tenant import MAX_TENANT_ID_LENGTH, TenantContext, TenantId
+from portfolio_common.domain.tenant import (
+    MAX_TENANT_ID_LENGTH,
+    TenantAuthorityMismatchError,
+    TenantContext,
+    TenantId,
+    bind_tenant_authority,
+)
 
 
 def test_tenant_id_normalizes_only_boundary_whitespace() -> None:
@@ -42,3 +48,16 @@ def test_tenant_context_is_immutable_and_preserves_verified_authority() -> None:
 def test_tenant_context_requires_canonical_tenant_value_object() -> None:
     with pytest.raises(TypeError, match="must be a TenantId"):
         TenantContext(tenant_id="tenant-sg")  # type: ignore[arg-type]
+
+
+def test_bind_tenant_authority_rejects_conflicting_payload_scope() -> None:
+    context = TenantContext(tenant_id=TenantId("tenant-a"), identity_verified=True)
+
+    with pytest.raises(TenantAuthorityMismatchError, match="does not match"):
+        bind_tenant_authority("tenant-b", context)
+
+
+def test_bind_tenant_authority_overwrites_omitted_scope_with_admitted_value() -> None:
+    context = TenantContext(tenant_id=TenantId("tenant-a"), identity_verified=True)
+
+    assert bind_tenant_authority(None, context) == "tenant-a"

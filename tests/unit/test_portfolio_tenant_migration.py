@@ -35,6 +35,16 @@ def test_portfolio_tenant_migration_fails_closed_and_is_reversible(monkeypatch) 
     )
     monkeypatch.setattr(
         op,
+        "add_column",
+        lambda table, column: operations.append(("add_column", table, column)),
+    )
+    monkeypatch.setattr(
+        op,
+        "drop_column",
+        lambda table, column: operations.append(("drop_column", table, column)),
+    )
+    monkeypatch.setattr(
+        op,
         "create_check_constraint",
         lambda name, table, condition: operations.append(("create_check", name, table, condition)),
     )
@@ -63,25 +73,48 @@ def test_portfolio_tenant_migration_fails_closed_and_is_reversible(monkeypatch) 
     assert "char_length(tenant_id) > 128" in preflight
     assert "RAISE EXCEPTION USING" in preflight
     assert "do not assign a synthetic or deployment-default tenant" in preflight
-    assert "portfolio tenant downgrade found %s row(s) without legal-book scope" in preflights[1]
-    assert "rollback will not fabricate accounting scope" in preflights[1]
+    assert "ingestion job tenant cutover found %s unattributable row(s)" in preflights[1]
+    assert "enterprise_security_audit_events" in preflights[1]
+    assert "do not assign a synthetic or deployment-default tenant" in preflights[1]
+    assert "portfolio tenant downgrade found %s row(s) without legal-book scope" in preflights[2]
+    assert "rollback will not fabricate accounting scope" in preflights[2]
 
     alterations = [operation for operation in operations if operation[0] == "alter_column"]
     assert alterations[0][3]["nullable"] is False
-    assert alterations[1][3]["nullable"] is True
+    assert alterations[1][1:3] == ("ingestion_jobs", "tenant_id")
+    assert alterations[1][3]["nullable"] is False
+    assert alterations[2][3]["nullable"] is True
     assert operations.index(("execute", preflight)) < next(
         index for index, operation in enumerate(operations) if operation[0] == "alter_column"
     )
-    assert operations.index(("execute", preflights[1])) < next(
-        index for index, operation in enumerate(operations) if operation[0] == "drop_index"
+    assert operations.index(("execute", preflights[2])) < next(
+        index
+        for index, operation in enumerate(operations)
+        if operation[0] == "drop_index" and operation[1] == "ix_portfolios_tenant_portfolio_id"
     )
 
     checks = [operation for operation in operations if operation[0] == "create_check"]
     assert "legal_book_id IS NULL OR" in checks[0][3]
-    assert "tenant_id IS NULL AND legal_book_id IS NULL" in checks[1][3]
+    assert checks[1][1:3] == ("ck_ingestion_jobs_tenant_authority", "ingestion_jobs")
+    assert "char_length(tenant_id) <= 128" in checks[1][3]
+    assert "tenant_id IS NULL AND legal_book_id IS NULL" in checks[2][3]
     assert (
         "create_index",
         "ix_portfolios_tenant_portfolio_id",
         "portfolios",
         ["tenant_id", "portfolio_id"],
     ) in operations
+    assert any(
+        operation[0] == "create_index"
+        and operation[1] == "ix_ingestion_jobs_tenant_endpoint_idempotency_submitted"
+        and operation[2] == "ingestion_jobs"
+        and operation[3][:3] == ["tenant_id", "endpoint", "idempotency_key"]
+        for operation in operations
+    )
+    assert any(
+        operation[0] == "add_column"
+        and operation[1] == "ingestion_jobs"
+        and operation[2].name == "tenant_id"
+        for operation in operations
+    )
+    assert ("drop_column", "ingestion_jobs", "tenant_id") in operations

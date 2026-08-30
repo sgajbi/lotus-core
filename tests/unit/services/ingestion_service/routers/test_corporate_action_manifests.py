@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.logging_utils import correlation_id_var, request_id_var, trace_id_var
 from starlette.requests import Request
 
@@ -45,7 +46,7 @@ def _request() -> CorporateActionManifestIngestionRequest:
 
 
 def _http_request(tenant_id: str) -> Request:
-    return Request(
+    request = Request(
         {
             "type": "http",
             "method": "POST",
@@ -59,6 +60,8 @@ def _http_request(tenant_id: str) -> Request:
             "scheme": "http",
         }
     )
+    request.state.tenant_context = TenantContext(tenant_id=TenantId(tenant_id))
+    return request
 
 
 @pytest.mark.asyncio
@@ -91,6 +94,7 @@ async def test_route_delegates_typed_scoped_manifest_batch() -> None:
     assert command.endpoint == "/ingest/corporate-action-manifests"
     assert command.idempotency_key == "manifest-001"
     assert command.entity_type == "corporate_action_manifest"
+    assert command.tenant_context.tenant_id_text == "TENANT_SG"
     assert tuple(command.records) == tuple(_request().manifests)
     assert response.job_id == "job-manifest-001"
 
