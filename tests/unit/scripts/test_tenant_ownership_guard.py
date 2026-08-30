@@ -4,6 +4,8 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import registry
 
 from scripts.quality.tenant_ownership_guard import (
+    CRITICAL_TENANT_BOUNDARIES,
+    TENANT_SCOPED_INGESTION_JOB_METHODS,
     _is_blocking,
     find_critical_tenant_boundary_findings,
     find_orm_tenant_findings,
@@ -122,6 +124,20 @@ def _write_position_service(
 def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
     sources = {
         (
+            "src/services/ingestion_service/app/infrastructure/"
+            "transaction_reprocessing_target_reader.py",
+            "SqlAlchemyTransactionReprocessingTargetReader",
+            ("read_targets",),
+            "tenant_id",
+        ),
+        (
+            "src/services/ingestion_service/app/application/"
+            "resolve_transaction_reprocessing_targets.py",
+            "ResolveTransactionReprocessingTargets",
+            ("execute",),
+            "tenant_id",
+        ),
+        (
             "src/services/query_service/app/repositories/transaction_repository.py",
             "TransactionRepository",
             ("portfolio_exists",),
@@ -131,6 +147,113 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             "src/services/query_service/app/services/transaction_service.py",
             "TransactionService",
             ("get_transactions", "get_transaction_record", "get_realized_tax_summary"),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/reporting_repository.py",
+            "ReportingRepository",
+            ("get_portfolio_by_id", "list_portfolios"),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/cash_balance_service.py",
+            "CashBalanceService",
+            ("get_cash_balances",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/services/liquidity_ladder_service.py",
+            "PortfolioLiquidityLadderService",
+            ("get_liquidity_ladder",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/services/reporting_service.py",
+            "ReportingService",
+            (
+                "get_assets_under_management",
+                "get_asset_allocation",
+                "get_portfolio_summary",
+                "get_bulk_portfolio_summary",
+            ),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/buy_state_repository.py",
+            "BuyStateRepository",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/buy_state_service.py",
+            "BuyStateService",
+            ("get_position_lots", "get_accrued_offsets", "get_buy_cash_linkage"),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/sell_state_repository.py",
+            "SellStateRepository",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/sell_state_service.py",
+            "SellStateService",
+            ("get_sell_disposals", "get_sell_cash_linkage"),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/lot_disposal_repository.py",
+            "LotDisposalRepository",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/lot_disposal_service.py",
+            "LotDisposalService",
+            ("get_latest_receipt",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/lot_basis_transfer_repository.py",
+            "LotBasisTransferRepository",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/lot_basis_transfer_service.py",
+            "LotBasisTransferService",
+            ("get_latest_receipt",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/cash_account_repository.py",
+            "CashAccountRepository",
+            ("portfolio_exists",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/cash_account_service.py",
+            "CashAccountService",
+            ("get_cash_accounts",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/repositories/cashflow_repository.py",
+            "CashflowRepository",
+            ("get_portfolio_currency",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_service/app/services/cashflow_projection_service.py",
+            "CashflowProjectionService",
+            ("get_cashflow_projection",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_service/app/services/cash_movement_service.py",
+            "CashMovementService",
+            ("get_cash_movement_summary",),
             "tenant_context",
         ),
         (
@@ -353,6 +476,48 @@ def test_critical_tenant_boundary_scan_rejects_unscoped_ownership_adapters(
     assert all(_is_blocking(finding, "enforce-critical") for finding in findings)
 
 
+def test_critical_tenant_boundary_scan_rejects_unscoped_reprocessing_target_reader(
+    tmp_path: Path,
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "infrastructure"
+        / "transaction_reprocessing_target_reader.py"
+    )
+    _write_valid_additional_boundaries(tmp_path)
+    source.write_text(
+        "class SqlAlchemyTransactionReprocessingTargetReader:\n"
+        "    async def read_targets(self, transaction_ids): ...\n",
+        encoding="utf-8",
+    )
+    job_service = (
+        tmp_path
+        / "src"
+        / "services"
+        / "ingestion_service"
+        / "app"
+        / "services"
+        / "ingestion_job_service.py"
+    )
+    job_service.parent.mkdir(parents=True)
+    methods = "\n".join(
+        f"    async def {name}(self, *, tenant_id): ..."
+        for name in TENANT_SCOPED_INGESTION_JOB_METHODS
+    )
+    job_service.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
+
+    findings = find_critical_tenant_boundary_findings(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].rule == "optional-critical-tenant-boundary"
+    assert "SqlAlchemyTransactionReprocessingTargetReader.read_targets" in findings[0].detail
+    assert _is_blocking(findings[0], "enforce-critical") is True
+
+
 def test_critical_tenant_boundary_scan_accepts_required_scope(tmp_path: Path) -> None:
     source = (
         tmp_path
@@ -381,3 +546,42 @@ def test_critical_tenant_boundary_scan_accepts_required_scope(tmp_path: Path) ->
     _write_valid_additional_boundaries(tmp_path)
 
     assert find_critical_tenant_boundary_findings(tmp_path) == []
+
+
+def test_critical_tenant_boundaries_cover_portfolio_financial_reads() -> None:
+    guarded_methods = {
+        (class_name, method_name, tenant_parameter)
+        for _, class_name, method_names, tenant_parameter in CRITICAL_TENANT_BOUNDARIES
+        for method_name in method_names
+    }
+
+    assert {
+        ("ReportingRepository", "get_portfolio_by_id", "tenant_id"),
+        ("ReportingRepository", "list_portfolios", "tenant_id"),
+        ("CashBalanceService", "get_cash_balances", "tenant_context"),
+        (
+            "PortfolioLiquidityLadderService",
+            "get_liquidity_ladder",
+            "tenant_context",
+        ),
+        ("ReportingService", "get_assets_under_management", "tenant_context"),
+        ("ReportingService", "get_asset_allocation", "tenant_context"),
+        ("ReportingService", "get_portfolio_summary", "tenant_context"),
+        ("ReportingService", "get_bulk_portfolio_summary", "tenant_context"),
+        ("BuyStateRepository", "portfolio_exists", "tenant_id"),
+        ("BuyStateService", "get_position_lots", "tenant_context"),
+        ("BuyStateService", "get_accrued_offsets", "tenant_context"),
+        ("BuyStateService", "get_buy_cash_linkage", "tenant_context"),
+        ("SellStateRepository", "portfolio_exists", "tenant_id"),
+        ("SellStateService", "get_sell_disposals", "tenant_context"),
+        ("SellStateService", "get_sell_cash_linkage", "tenant_context"),
+        ("LotDisposalRepository", "portfolio_exists", "tenant_id"),
+        ("LotDisposalService", "get_latest_receipt", "tenant_context"),
+        ("LotBasisTransferRepository", "portfolio_exists", "tenant_id"),
+        ("LotBasisTransferService", "get_latest_receipt", "tenant_context"),
+        ("CashAccountRepository", "portfolio_exists", "tenant_id"),
+        ("CashAccountService", "get_cash_accounts", "tenant_context"),
+        ("CashflowRepository", "get_portfolio_currency", "tenant_id"),
+        ("CashflowProjectionService", "get_cashflow_projection", "tenant_context"),
+        ("CashMovementService", "get_cash_movement_summary", "tenant_context"),
+    } <= guarded_methods

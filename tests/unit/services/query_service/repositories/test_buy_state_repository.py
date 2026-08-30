@@ -46,7 +46,11 @@ async def test_portfolio_exists_true():
     db = AsyncMock()
     db.execute.return_value = _mock_result(scalar_one_or_none="PORT-1")
     repo = BuyStateRepository(db)
-    assert await repo.portfolio_exists("PORT-1") is True
+    assert await repo.portfolio_exists(tenant_id="tenant-a", portfolio_id="PORT-1") is True
+    statement = db.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
+    assert "portfolios.portfolio_id = 'PORT-1'" in compiled
 
 
 async def test_get_position_lots_returns_rows():

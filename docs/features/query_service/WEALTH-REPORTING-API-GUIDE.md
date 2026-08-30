@@ -166,6 +166,15 @@ The split keeps the contracts easier to reason about and easier to scale.
 
 ## Reporting APIs
 
+All reporting scopes are bounded by the admitted `X-Tenant-Id` authority before portfolio or
+snapshot resolution. This applies to single-portfolio, explicit portfolio-list, and booking-center
+selectors as well as cash balances and liquidity ladders. A caller cannot widen its scope by
+supplying another tenant's portfolio identifier; foreign and absent identifiers remain
+indistinguishable, and no portfolio-derived evidence is read before ownership is established.
+Cashflow projection, cash-movement summary, and canonical cash-account master reads use the same
+repository-owned tenant plus portfolio predicate; the tenant is admitted request authority, not an
+optional lineage label supplied independently by the caller.
+
 ### Assets Under Management
 
 - `POST /reporting/assets-under-management/query`

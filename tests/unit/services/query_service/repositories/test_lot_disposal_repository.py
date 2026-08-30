@@ -160,8 +160,8 @@ async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
     session.scalars = AsyncMock(return_value=empty_scalar_result)
     repository = LotDisposalRepository(session)
 
-    assert await repository.portfolio_exists("P1") is True
-    assert await repository.portfolio_exists("MISSING") is False
+    assert await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="P1") is True
+    assert await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="MISSING") is False
     assert await repository.get_latest_receipt(portfolio_id="P1", transaction_id="UNKNOWN") is None
 
     assert session.execute.await_count == 2

@@ -9,9 +9,13 @@ import pytest_asyncio
 from src.services.query_service.app.dependencies import get_reporting_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.reporting_service import ReportingService
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
+
+
+def _assert_admitted_tenant(await_args) -> None:
+    assert await_args.kwargs["tenant_context"].tenant_id_text == TEST_TENANT_ID
 
 
 def _runtime_metadata(as_of_date: date) -> dict:
@@ -66,6 +70,7 @@ async def test_query_assets_under_management(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["reporting_currency"] == "USD"
+    _assert_admitted_tenant(mock_service.get_assets_under_management.await_args)
 
 
 async def test_query_asset_allocation(async_test_client):
@@ -138,6 +143,7 @@ async def test_query_asset_allocation(async_test_client):
     assert contributor["booked_security_id"] == "SEC1"
     assert contributor["source_snapshot_id"] == 101
     assert response.json()["calculation_lineage"]["input_content_hash"] == "a" * 64
+    _assert_admitted_tenant(mock_service.get_asset_allocation.await_args)
 
 
 async def test_query_portfolio_summary(async_test_client):
@@ -174,6 +180,7 @@ async def test_query_portfolio_summary(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["totals"]["cash_balance_portfolio_currency"] == "200"
+    _assert_admitted_tenant(mock_service.get_portfolio_summary.await_args)
 
 
 async def test_query_bulk_portfolio_summary(async_test_client):
@@ -200,6 +207,7 @@ async def test_query_bulk_portfolio_summary(async_test_client):
     assert response.status_code == 200
     assert response.json()["contract_version"] == "portfolio-summary-bulk-v1"
     mock_service.get_bulk_portfolio_summary.assert_awaited_once()
+    _assert_admitted_tenant(mock_service.get_bulk_portfolio_summary.await_args)
 
 
 async def test_reporting_router_maps_value_errors_to_400(async_test_client):

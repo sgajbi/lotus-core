@@ -16,5 +16,7 @@ class TransactionReprocessingTargetReader(Protocol):
 
     async def read_targets(
         self,
+        *,
+        tenant_id: str,
         transaction_ids: Sequence[str],
     ) -> tuple[TransactionReprocessingTarget, ...]: ...

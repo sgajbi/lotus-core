@@ -14,7 +14,7 @@ from src.services.query_service.app.main import app
 from src.services.query_service.app.services.liquidity_ladder_service import (
     PortfolioLiquidityLadderService,
 )
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 BOUNDARY_NOTE = (
@@ -78,10 +78,15 @@ async def test_get_liquidity_ladder(async_test_client):
     assert response.status_code == 200
     assert response.json()["product_name"] == "PortfolioLiquidityLadder"
     mock_service.get_liquidity_ladder.assert_awaited_once_with(
+        tenant_context=mock_service.get_liquidity_ladder.await_args.kwargs["tenant_context"],
         portfolio_id="P1",
         as_of_date=date(2026, 3, 27),
         horizon_days=30,
         include_projected=True,
+    )
+    assert (
+        mock_service.get_liquidity_ladder.await_args.kwargs["tenant_context"].tenant_id_text
+        == TEST_TENANT_ID
     )
 
 
@@ -110,6 +115,7 @@ async def test_get_liquidity_ladder_defaults_optional_query_params(async_test_cl
 
     assert response.status_code == 200
     mock_service.get_liquidity_ladder.assert_awaited_once_with(
+        tenant_context=mock_service.get_liquidity_ladder.await_args.kwargs["tenant_context"],
         portfolio_id="P1",
         as_of_date=None,
         horizon_days=30,

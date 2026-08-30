@@ -10,7 +10,7 @@ from portfolio_common.source_data_product_metadata import (
 
 from src.services.query_service.app.dependencies import get_cashflow_projection_service
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -84,13 +84,13 @@ async def test_cashflow_projection_success(async_test_client):
     response = await client.get("/portfolios/P1/cashflow-projection")
 
     assert response.status_code == 200
-    mock_service.get_cashflow_projection.assert_awaited_once_with(
-        portfolio_id="P1",
-        horizon_days=10,
-        as_of_date=None,
-        include_projected=True,
-        tenant_id=TEST_TENANT_ID,
-    )
+    mock_service.get_cashflow_projection.assert_awaited_once()
+    call = mock_service.get_cashflow_projection.await_args.kwargs
+    assert call["portfolio_id"] == "P1"
+    assert call["horizon_days"] == 10
+    assert call["as_of_date"] is None
+    assert call["include_projected"] is True
+    assert call["tenant_context"].tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
 
 
 async def test_cashflow_projection_forwards_params(async_test_client):
@@ -118,13 +118,13 @@ async def test_cashflow_projection_forwards_params(async_test_client):
     )
 
     assert response.status_code == 200
-    mock_service.get_cashflow_projection.assert_awaited_once_with(
-        portfolio_id="P1",
-        horizon_days=5,
-        as_of_date=date(2026, 3, 1),
-        include_projected=False,
-        tenant_id="tenant-a",
-    )
+    mock_service.get_cashflow_projection.assert_awaited_once()
+    call = mock_service.get_cashflow_projection.await_args.kwargs
+    assert call["portfolio_id"] == "P1"
+    assert call["horizon_days"] == 5
+    assert call["as_of_date"] == date(2026, 3, 1)
+    assert call["include_projected"] is False
+    assert call["tenant_context"].tenant_id_text == "tenant-a"
 
 
 async def test_cashflow_projection_not_found_maps_to_404(async_test_client):

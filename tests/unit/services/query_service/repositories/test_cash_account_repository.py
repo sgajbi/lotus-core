@@ -18,12 +18,13 @@ async def test_portfolio_exists_returns_true_when_portfolio_present() -> None:
     db.execute.return_value = execute_result
     repo = CashAccountRepository(db)
 
-    exists = await repo.portfolio_exists("PORT_001")
+    exists = await repo.portfolio_exists(tenant_id="tenant-a", portfolio_id="PORT_001")
 
     assert exists is True
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "FROM portfolios" in compiled
-    assert "WHERE portfolios.portfolio_id = 'PORT_001'" in compiled
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
+    assert "portfolios.portfolio_id = 'PORT_001'" in compiled
 
 
 @pytest.mark.asyncio
@@ -34,7 +35,7 @@ async def test_portfolio_exists_returns_false_when_portfolio_missing() -> None:
     db.execute.return_value = execute_result
     repo = CashAccountRepository(db)
 
-    exists = await repo.portfolio_exists("PORT_MISSING")
+    exists = await repo.portfolio_exists(tenant_id="tenant-a", portfolio_id="PORT_MISSING")
 
     assert exists is False
 

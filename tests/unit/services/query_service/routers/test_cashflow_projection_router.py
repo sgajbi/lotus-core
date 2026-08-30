@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,6 +19,11 @@ from src.services.query_service.app.routers.cashflow_projection import (
 from src.services.query_service.app.services.cashflow_projection_service import (
     CashflowProjectionService,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+
+def _request() -> SimpleNamespace:
+    return SimpleNamespace(state=SimpleNamespace(tenant_context=TEST_TENANT_CONTEXT))
 
 
 def _trust_fields() -> dict[str, object]:
@@ -78,11 +84,11 @@ async def test_get_cashflow_projection_success() -> None:
     )
 
     response = await get_cashflow_projection(
+        request=_request(),
         portfolio_id="P1",
         horizon_days=10,
         as_of_date=date(2026, 3, 1),
         include_projected=True,
-        x_tenant_id="tenant-a",
         service=service,
     )
 
@@ -92,7 +98,7 @@ async def test_get_cashflow_projection_success() -> None:
         horizon_days=10,
         as_of_date=date(2026, 3, 1),
         include_projected=True,
-        tenant_id="tenant-a",
+        tenant_context=TEST_TENANT_CONTEXT,
     )
 
 
@@ -105,11 +111,11 @@ async def test_get_cashflow_projection_maps_value_error_to_404() -> None:
 
     with pytest.raises(HTTPException) as exc_info:
         await get_cashflow_projection(
+            request=_request(),
             portfolio_id="P404",
             horizon_days=10,
             as_of_date=date(2026, 3, 1),
             include_projected=False,
-            x_tenant_id=None,
             service=service,
         )
 
@@ -126,11 +132,11 @@ async def test_get_cashflow_projection_maps_resolution_error_to_400() -> None:
 
     with pytest.raises(HTTPException) as exc_info:
         await get_cashflow_projection(
+            request=_request(),
             portfolio_id="P1",
             horizon_days=367,
             as_of_date=date(2026, 3, 1),
             include_projected=False,
-            x_tenant_id=None,
             service=service,
         )
 

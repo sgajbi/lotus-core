@@ -502,8 +502,19 @@ Current repository posture:
     and may not exceed governed partition capacity. Follow
     `docs/operations/kafka-partition-migration-runbook.md` for pause/drain/cutover/rollback. Current
     transaction reprocessing commands preserve the transaction-id API but resolve source-owned
-    portfolio identity before publication; legacy commands without additive `portfolio_id` remain
-    consumable. Current tenant-blind event families must not be described as tenant-isolation proof.
+    portfolio identity through the admitted tenant before job creation or publication. A missing or
+    foreign-tenant transaction returns the same source-safe not-found outcome and creates no job or
+    repair message; legacy commands without additive `portfolio_id` remain consumable. Current
+    tenant-blind event families must not be described as tenant-isolation proof.
+    Query-service cash balance, liquidity ladder, AUM, allocation, single-summary, and bulk-summary
+    portfolio resolution must carry admitted tenant authority into `ReportingRepository`; the
+    shared repository requires tenant scope for both single and cohort portfolio reads before any
+    snapshot, cash-account, cashflow, or reporting calculation begins.
+    BUY lots, accrued offsets, BUY/SELL cash linkage, SELL disposals, immutable lot-disposal and
+    basis-transfer receipts, canonical cash-account masters, cashflow projection, and cash-movement
+    summary routes apply the same admitted tenant plus portfolio ownership predicate before any
+    cost, realized-gain, cashflow, receipt, allocation, or account evidence read. Do not restore the
+    removed tenant-blind `ensure_portfolio_exists` or optional lineage-only tenant parameters.
 39. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,

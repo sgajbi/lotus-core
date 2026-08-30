@@ -194,7 +194,10 @@ class IngestionPublishCommandHandler:
         await self._assert_reprocessing_publish_allowed(len(command.records))
         self._enforce_rate_limit(command.endpoint, len(command.records))
 
-        resolved_targets = await self._resolve_reprocessing_targets(command.records)
+        resolved_targets = await self._resolve_reprocessing_targets(
+            tenant_id=command.tenant_context.tenant_id_text,
+            transaction_ids=command.records,
+        )
         job_result = await self._create_job(command)
         if not job_result.created:
             return self._reprocessing_replay_result(command, job_result.job)
@@ -508,13 +511,16 @@ class IngestionPublishCommandHandler:
 
     async def _resolve_reprocessing_targets(
         self,
+        *,
+        tenant_id: str,
         transaction_ids: Sequence[Any],
     ) -> Sequence[Any]:
         try:
             return cast(
                 Sequence[Any],
                 await self.resolve_transaction_reprocessing_targets.execute(
-                    [str(transaction_id) for transaction_id in transaction_ids]
+                    tenant_id=tenant_id,
+                    transaction_ids=[str(transaction_id) for transaction_id in transaction_ids],
                 ),
             )
         except TransactionReprocessingTargetNotFound as exc:

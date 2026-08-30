@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import (
@@ -10,6 +11,9 @@ from src.services.query_service.app.repositories.cashflow_repository import (
     CashMovementSummaryEvidence,
 )
 from src.services.query_service.app.services.cash_movement_service import CashMovementService
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+TENANT_B_CONTEXT = TenantContext(tenant_id=TenantId("tenant-b"))
 
 pytestmark = pytest.mark.asyncio
 
@@ -67,6 +71,7 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     mock_repo.get_portfolio_cash_movement_summary.assert_awaited_once_with(
@@ -125,6 +130,7 @@ async def test_cash_movement_summary_converts_bucket_amount_once(mock_repo: Asyn
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.buckets[0].total_amount == Decimal("-2500.00")
@@ -146,6 +152,7 @@ async def test_cash_movement_summary_marks_empty_window_current(mock_repo: Async
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.buckets == []
@@ -169,6 +176,7 @@ async def test_cash_movement_summary_rejects_invalid_window(mock_repo: AsyncMock
                 portfolio_id="P1",
                 start_date=date(2026, 4, 1),
                 end_date=date(2026, 3, 31),
+                tenant_context=TEST_TENANT_CONTEXT,
             )
 
     mock_repo.get_portfolio_cash_movement_summary.assert_not_awaited()
@@ -185,6 +193,7 @@ async def test_cash_movement_summary_rejects_excessive_window(mock_repo: AsyncMo
                 portfolio_id="P1",
                 start_date=date(2026, 1, 1),
                 end_date=date(2027, 1, 2),
+                tenant_context=TEST_TENANT_CONTEXT,
             )
 
     mock_repo.get_portfolio_currency.assert_not_awaited()
@@ -206,7 +215,9 @@ async def test_cash_movement_summary_raises_when_portfolio_missing(
                 portfolio_id="P404",
                 start_date=date(2026, 3, 1),
                 end_date=date(2026, 3, 31),
+                tenant_context=TEST_TENANT_CONTEXT,
             )
+        mock_repo.get_portfolio_cash_movement_summary.assert_not_awaited()
 
 
 async def test_cash_movement_summary_fails_closed_on_count_and_currency_total_mismatch(
@@ -229,6 +240,7 @@ async def test_cash_movement_summary_fails_closed_on_count_and_currency_total_mi
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.reconciliation_status == "BLOCKED"
@@ -252,16 +264,16 @@ async def test_cash_movement_summary_binds_tenant_to_calculation_identity(
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
-            tenant_id=" tenant-a ",
+            tenant_context=TEST_TENANT_CONTEXT,
         )
         tenant_b = await service.get_cash_movement_summary(
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
-            tenant_id="tenant-b",
+            tenant_context=TENANT_B_CONTEXT,
         )
 
-    assert tenant_a.tenant_id == "tenant-a"
+    assert tenant_a.tenant_id == TEST_TENANT_CONTEXT.tenant_id_text
     assert tenant_a.calculation_lineage.input_content_hash != (
         tenant_b.calculation_lineage.input_content_hash
     )

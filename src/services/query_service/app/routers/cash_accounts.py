@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 
 from ..dependencies import get_cash_account_service
 from ..dtos.cash_account_dto import CashAccountQueryResponse
@@ -34,6 +34,7 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-CASH-0
     ),
 )
 async def get_cash_accounts(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -49,6 +50,10 @@ async def get_cash_accounts(
     service: CashAccountService = Depends(get_cash_account_service),
 ):
     try:
-        return await service.get_cash_accounts(portfolio_id, as_of_date=as_of_date)
+        return await service.get_cash_accounts(
+            portfolio_id,
+            tenant_context=request.state.tenant_context,
+            as_of_date=as_of_date,
+        )
     except ValueError as exc:
         raise value_error_to_http(exc, status_code=status.HTTP_404_NOT_FOUND) from exc

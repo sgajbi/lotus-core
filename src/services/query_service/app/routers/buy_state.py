@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Request, status
 
 from ..dependencies import get_buy_state_service
 from ..dtos.buy_state_dto import (
@@ -39,6 +39,7 @@ BUY_CASH_LINKAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     ),
 )
 async def get_position_lots(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -52,7 +53,11 @@ async def get_position_lots(
     service: BuyStateService = Depends(get_buy_state_service),
 ):
     try:
-        return await service.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
+        return await service.get_position_lots(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            tenant_context=request.state.tenant_context,
+        )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
 
@@ -75,6 +80,7 @@ async def get_position_lots(
     ),
 )
 async def get_accrued_offsets(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -88,7 +94,11 @@ async def get_accrued_offsets(
     service: BuyStateService = Depends(get_buy_state_service),
 ):
     try:
-        return await service.get_accrued_offsets(portfolio_id=portfolio_id, security_id=security_id)
+        return await service.get_accrued_offsets(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            tenant_context=request.state.tenant_context,
+        )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
 
@@ -113,6 +123,7 @@ async def get_accrued_offsets(
     ),
 )
 async def get_buy_cash_linkage(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -127,7 +138,9 @@ async def get_buy_cash_linkage(
 ):
     try:
         return await service.get_buy_cash_linkage(
-            portfolio_id=portfolio_id, transaction_id=transaction_id
+            portfolio_id=portfolio_id,
+            transaction_id=transaction_id,
+            tenant_context=request.state.tenant_context,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

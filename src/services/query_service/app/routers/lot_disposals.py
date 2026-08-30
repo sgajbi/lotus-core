@@ -1,6 +1,6 @@
 """Transaction-neutral lot-disposal supportability routes."""
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Request, status
 
 from ..dependencies import get_lot_disposal_service
 from ..dtos.lot_disposal_dto import LotDisposalReceiptResponse
@@ -25,12 +25,14 @@ router = APIRouter(prefix="/portfolios", tags=["Lot Disposal Receipts"])
     ),
 )
 async def get_latest_lot_disposal_receipt(
+    request: Request,
     portfolio_id: str = Path(..., description="Portfolio identifier."),
     transaction_id: str = Path(..., description="Lot-consuming transaction identifier."),
     service: LotDisposalService = Depends(get_lot_disposal_service),
 ) -> LotDisposalReceiptResponse:
     try:
         receipt: LotDisposalReceiptResponse = await service.get_latest_receipt(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
         )

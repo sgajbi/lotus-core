@@ -14,7 +14,7 @@ from src.services.query_service.app.dtos.lot_disposal_dto import (
     LotDisposalReceiptResponse,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -95,10 +95,11 @@ async def test_get_latest_lot_disposal_receipt(client_and_service) -> None:
     assert allocation["amortized_cost_current_local"] == "24.5"
     assert allocation["amortized_cost_book_fx_rate_to_base"] == "0.75"
     assert allocation["amortized_cost_retained_rounding_base"] == "0.375"
-    service.get_latest_receipt.assert_awaited_once_with(
-        portfolio_id="P1",
-        transaction_id="RED-001",
-    )
+    service.get_latest_receipt.assert_awaited_once()
+    call = service.get_latest_receipt.await_args.kwargs
+    assert call["portfolio_id"] == "P1"
+    assert call["transaction_id"] == "RED-001"
+    assert call["tenant_context"].tenant_id_text == TEST_TENANT_CONTEXT.tenant_id_text
 
 
 async def test_lot_disposal_receipt_not_found_maps_to_404(client_and_service) -> None:

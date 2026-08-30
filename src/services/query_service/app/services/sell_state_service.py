@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from portfolio_common.domain.tenant import TenantContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.sell_state_dto import (
@@ -9,7 +10,7 @@ from ..dtos.sell_state_dto import (
 )
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.sell_state_repository import SellStateRepository
-from .portfolio_validation import ensure_portfolio_exists
+from .portfolio_validation import ensure_portfolio_owned
 
 
 class SellStateService:
@@ -30,9 +31,17 @@ class SellStateService:
         return realized - net_cost
 
     async def get_sell_disposals(
-        self, portfolio_id: str, security_id: str
+        self,
+        portfolio_id: str,
+        security_id: str,
+        *,
+        tenant_context: TenantContext,
     ) -> SellDisposalsResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
 
         security_id = normalize_security_id(security_id)
         rows = await self.repo.get_sell_disposals(
@@ -74,9 +83,17 @@ class SellStateService:
         )
 
     async def get_sell_cash_linkage(
-        self, portfolio_id: str, transaction_id: str
+        self,
+        portfolio_id: str,
+        transaction_id: str,
+        *,
+        tenant_context: TenantContext,
     ) -> SellCashLinkageResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
 
         row = await self.repo.get_sell_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id

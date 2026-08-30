@@ -30,7 +30,7 @@ The service routes data from each API endpoint to a specific Kafka topic with a 
 | `/ingest/market-prices` | `market_prices.raw.received` | `securityId` | Group all prices for an instrument. |
 | `/ingest/fx-rates` | `fx_rates.raw.received` | `from_currency|to_currency` (for example, `EUR|USD`) | Preserve effective-dated corrections for one currency pair. |
 | `/ingest/business-dates` | `business_dates.raw.received` | `calendar_code` | Preserve updates for one governed business calendar. |
-| `/reprocess/transactions` | `transactions.reprocessing.requested` | source-owned `portfolio_id` | Preserve portfolio ordering after resolving each requested transaction against the canonical ledger. |
+| `/reprocess/transactions` | `transactions.reprocessing.requested` | source-owned `portfolio_id` | Preserve portfolio ordering after resolving every requested transaction against the canonical ledger through admitted tenant authority; unresolved or foreign-tenant targets fail before job creation or publication. |
 
 ## 3. Design Considerations
 

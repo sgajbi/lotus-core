@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.services.query_service.app.services.lot_disposal_service import LotDisposalService
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 
 @pytest.mark.asyncio
@@ -76,6 +77,7 @@ async def test_latest_receipt_maps_ordered_allocations_and_lineage() -> None:
         return_value=repository,
     ):
         result = await LotDisposalService(MagicMock()).get_latest_receipt(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             transaction_id="RED-001",
         )
@@ -130,6 +132,7 @@ async def test_latest_receipt_raises_when_transaction_has_no_receipt() -> None:
     ):
         with pytest.raises(LookupError, match="RED-404"):
             await LotDisposalService(MagicMock()).get_latest_receipt(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P1",
                 transaction_id="RED-404",
             )

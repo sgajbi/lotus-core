@@ -30,10 +30,17 @@ async def test_resolver_preserves_requested_order() -> None:
         )
     )
 
-    targets = await ResolveTransactionReprocessingTargets(reader).execute(["TXN-1", "TXN-2"])
+    targets = await ResolveTransactionReprocessingTargets(reader).execute(
+        tenant_id="tenant-a",
+        transaction_ids=["TXN-1", "TXN-2"],
+    )
 
     assert [target.transaction_id for target in targets] == ["TXN-1", "TXN-2"]
     assert [target.portfolio_id for target in targets] == ["PORT-1", "PORT-2"]
+    reader.read_targets.assert_awaited_once_with(
+        tenant_id="tenant-a",
+        transaction_ids=("TXN-1", "TXN-2"),
+    )
 
 
 async def test_resolver_rejects_missing_transactions_before_publication() -> None:
@@ -49,7 +56,10 @@ async def test_resolver_rejects_missing_transactions_before_publication() -> Non
     )
 
     with pytest.raises(TransactionReprocessingTargetNotFound) as exc_info:
-        await ResolveTransactionReprocessingTargets(reader).execute(["TXN-1", "TXN-404"])
+        await ResolveTransactionReprocessingTargets(reader).execute(
+            tenant_id="tenant-a",
+            transaction_ids=["TXN-1", "TXN-404"],
+        )
 
     assert exc_info.value.missing_transaction_ids == ("TXN-404",)
     assert exc_info.value.reason_code == "INGESTION_REPROCESSING_SOURCE_NOT_FOUND"

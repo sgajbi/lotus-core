@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from portfolio_common.domain.tenant import TenantContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.cash_account_dto import CashAccountQueryResponse, CashAccountRecord
@@ -13,9 +14,16 @@ class CashAccountService:
         self.repo = CashAccountRepository(db)
 
     async def get_cash_accounts(
-        self, portfolio_id: str, *, as_of_date: date | None = None
+        self,
+        portfolio_id: str,
+        *,
+        tenant_context: TenantContext,
+        as_of_date: date | None = None,
     ) -> CashAccountQueryResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
+        if not await self.repo.portfolio_exists(
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        ):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
         accounts = await self.repo.list_cash_accounts(portfolio_id, as_of_date=as_of_date)

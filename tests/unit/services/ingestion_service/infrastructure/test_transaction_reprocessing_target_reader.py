@@ -28,13 +28,21 @@ async def test_reader_maps_authoritative_transaction_portfolios() -> None:
     targets = (
         await transaction_reprocessing_target_reader.SqlAlchemyTransactionReprocessingTargetReader(
             db
-        ).read_targets(["TXN-1", "TXN-2"])
+        ).read_targets(
+            tenant_id="tenant-a",
+            transaction_ids=["TXN-1", "TXN-2"],
+        )
     )
 
     assert [(target.transaction_id, target.portfolio_id) for target in targets] == [
         ("TXN-1", "PORT-1"),
         ("TXN-2", "PORT-2"),
     ]
+    statement = db.execute.await_args.args[0]
+    compiled = statement.compile()
+    assert "JOIN portfolios ON portfolios.portfolio_id = transactions.portfolio_id" in str(compiled)
+    assert "portfolios.tenant_id =" in str(compiled)
+    assert "tenant-a" in compiled.params.values()
 
 
 async def test_reader_maps_database_failure_to_typed_port_error() -> None:
@@ -47,4 +55,7 @@ async def test_reader_maps_database_failure_to_typed_port_error() -> None:
     ):
         await transaction_reprocessing_target_reader.SqlAlchemyTransactionReprocessingTargetReader(
             db
-        ).read_targets(["TXN-1"])
+        ).read_targets(
+            tenant_id="tenant-a",
+            transaction_ids=["TXN-1"],
+        )

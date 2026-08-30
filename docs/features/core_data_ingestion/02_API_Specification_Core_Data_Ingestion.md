@@ -237,7 +237,7 @@ A JSON object containing a `transactions` key, which holds a list of transaction
 
   * **Method:** `POST`
   * **Path:** `/reprocess/transactions`
-  * **Description:** Triggers a reprocessing flow for a list of specific transaction IDs. This is an operational command rather than a data ingestion endpoint.
+  * **Description:** Triggers a reprocessing flow for a list of specific transaction IDs. Each target must resolve through the admitted tenant to a canonical portfolio before job creation or publication. Missing and foreign-tenant transaction IDs return the same not-found response and cause no repair side effect. This is an operational command rather than a data ingestion endpoint.
 
 #### Example Request
 

@@ -74,9 +74,13 @@ async def test_portfolio_exists_true(repository: SellStateRepository, mock_db_se
     mock_result.scalar_one_or_none.return_value = "PORT-1"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("PORT-1")
+    exists = await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="PORT-1")
 
     assert exists is True
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
+    assert "portfolios.portfolio_id = 'PORT-1'" in compiled
 
 
 async def test_portfolio_exists_false(repository: SellStateRepository, mock_db_session: AsyncMock):
@@ -84,6 +88,6 @@ async def test_portfolio_exists_false(repository: SellStateRepository, mock_db_s
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("PORT-404")
+    exists = await repository.portfolio_exists(tenant_id="tenant-a", portfolio_id="PORT-404")
 
     assert exists is False

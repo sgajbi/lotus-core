@@ -22,6 +22,7 @@ from src.services.query_service.app.services.reporting_service import (
     ReportingService,
     _aum_coverage_state,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -123,9 +124,10 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_assets_under_management(
-            AssetsUnderManagementQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetsUnderManagementQueryRequest(
                 scope=ReportingScope(portfolio_id="P1"),
-            )
+            ),
         )
 
     assert response.reporting_currency == "USD"
@@ -240,9 +242,10 @@ async def test_get_assets_under_management_publishes_presence_for_empty_portfoli
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_assets_under_management(
-            AssetsUnderManagementQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetsUnderManagementQueryRequest(
                 scope=ReportingScope(portfolio_id="P1"),
-            )
+            ),
         )
 
     summary = response.portfolios[0]
@@ -292,10 +295,11 @@ async def test_get_assets_under_management_converts_snapshot_rows_sequentially()
         service = ReportingService(AsyncMock(spec=AsyncSession))
         service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
         response = await service.get_assets_under_management(
-            AssetsUnderManagementQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetsUnderManagementQueryRequest(
                 scope=ReportingScope(portfolio_ids=["P1"]),
                 reporting_currency="SGD",
-            )
+            ),
         )
 
     assert response.totals.aum_reporting_currency == Decimal("225.0")
@@ -327,11 +331,12 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_asset_allocation(
-            AssetAllocationQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetAllocationQueryRequest(
                 scope=ReportingScope(portfolio_ids=["P1"]),
                 reporting_currency="SGD",
                 dimensions=["asset_class", "currency"],
-            )
+            ),
         )
 
     assert response.reporting_currency == "SGD"
@@ -412,7 +417,8 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency=" sgd ")
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency=" sgd "),
         )
 
     assert response.portfolio_currency == "USD"
@@ -471,7 +477,8 @@ async def test_get_portfolio_summary_converts_snapshot_rows_sequentially() -> No
         service = ReportingService(AsyncMock(spec=AsyncSession))
         service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD"),
         )
 
     assert response.totals.total_market_value_reporting_currency == Decimal("1500.0")
@@ -527,7 +534,8 @@ async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_se
         )
         service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD"),
         )
 
     assert response.totals.total_market_value_reporting_currency == Decimal("1200.0")
@@ -542,8 +550,9 @@ async def test_get_portfolio_summary_reads_portfolio_and_default_date_sequential
     repo.list_cash_account_masters.return_value = []
     repo.get_latest_cash_account_ids.return_value = {}
 
-    async def get_portfolio_by_id(portfolio_id: str):
+    async def get_portfolio_by_id(*, tenant_id: str, portfolio_id: str):
         call_order.append("portfolio")
+        assert tenant_id == TEST_TENANT_CONTEXT.tenant_id_text
         portfolio = _portfolio(portfolio_id, base_currency="USD")
         portfolio.portfolio_type = "DISCRETIONARY"
         portfolio.objective = "Growth"
@@ -564,7 +573,8 @@ async def test_get_portfolio_summary_reads_portfolio_and_default_date_sequential
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(portfolio_id="P1")
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=PortfolioSummaryQueryRequest(portfolio_id="P1"),
         )
 
     assert response.resolved_as_of_date == date(2026, 3, 27)
@@ -589,10 +599,11 @@ async def test_get_portfolio_summary_explicit_date_skips_default_date_lookup() -
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=PortfolioSummaryQueryRequest(
                 portfolio_id="P1",
                 as_of_date=date(2026, 3, 26),
-            )
+            ),
         )
 
     assert response.resolved_as_of_date == date(2026, 3, 26)
@@ -609,7 +620,10 @@ async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio()
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P404"))
+            await service.get_portfolio_summary(
+                tenant_context=TEST_TENANT_CONTEXT,
+                request=PortfolioSummaryQueryRequest(portfolio_id="P404"),
+            )
 
 
 async def test_bulk_portfolio_summary_request_is_bounded_and_deduplicated() -> None:
@@ -655,9 +669,10 @@ async def test_bulk_summary_batches_snapshot_read_and_aggregates_members() -> No
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1", "P2"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert [item.portfolio_id for item in response.portfolios] == ["P1", "P2"]
@@ -701,9 +716,10 @@ async def test_bulk_summary_keeps_native_aggregate_fields_null_for_mixed_currenc
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1", "P2"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.aggregate.coverage_state == "COMPLETE"
@@ -737,9 +753,10 @@ async def test_bulk_summary_fails_closed_when_cash_asset_classification_is_missi
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.portfolios[0].coverage_state == "PARTIAL"
@@ -770,9 +787,10 @@ async def test_bulk_summary_fails_closed_when_cash_classifiers_are_blank() -> No
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.portfolios[0].coverage_state == "PARTIAL"
@@ -804,9 +822,10 @@ async def test_bulk_summary_fails_closed_for_non_valued_snapshots(valuation_stat
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.portfolios[0].coverage_state == "PARTIAL"
@@ -840,9 +859,10 @@ async def test_bulk_summary_accepts_canonical_valued_snapshot_statuses(
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.portfolios[0].coverage_state == "COMPLETE"
@@ -878,9 +898,10 @@ async def test_bulk_summary_fails_closed_for_contradictory_cash_classifiers(
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.portfolios[0].coverage_state == "PARTIAL"
@@ -914,9 +935,10 @@ async def test_bulk_summary_caches_negative_fx_lookup_for_repeated_currency_pair
         service = ReportingService(AsyncMock(spec=AsyncSession))
         service._convert_amount = AsyncMock(side_effect=ValueError("FX rate not found"))  # type: ignore[method-assign]
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1", "P2"], reporting_currency="USD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert [item.coverage_state for item in response.portfolios] == [
@@ -951,9 +973,10 @@ async def test_get_bulk_portfolio_summary_is_fail_closed_for_missing_partial_and
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         partial = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1", "P404"], reporting_currency="SGD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert [item.coverage_state for item in partial.portfolios] == ["PARTIAL", "INVALID_PORTFOLIO"]
@@ -988,9 +1011,10 @@ async def test_get_bulk_portfolio_summary_keeps_fx_failure_on_member_and_blocks_
 
         service._convert_amount = AsyncMock(side_effect=fail_fx)  # type: ignore[method-assign]
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P1"], reporting_currency="SGD", as_of_date=date(2026, 3, 27)
-            )
+            ),
         )
 
     assert response.portfolios[0].coverage_state == "FX_UNAVAILABLE"
@@ -1022,11 +1046,12 @@ async def test_get_bulk_portfolio_summary_distinguishes_zero_empty_and_no_snapsh
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=["P0", "PE", "PN"],
                 reporting_currency="USD",
                 as_of_date=date(2026, 3, 27),
-            )
+            ),
         )
 
     assert [item.coverage_state for item in response.portfolios] == [
@@ -1066,17 +1091,19 @@ async def test_bulk_summary_keeps_repository_reads_bounded_at_supported_sizes(
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_bulk_portfolio_summary(
-            BulkPortfolioSummaryQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=BulkPortfolioSummaryQueryRequest(
                 portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
                 reporting_currency="USD",
                 as_of_date=date(2026, 3, 27),
-            )
+            ),
         )
 
     assert len(response.portfolios) == member_count
     assert response.aggregate.coverage_state == "COMPLETE"
     repo.list_portfolios.assert_awaited_once_with(
-        portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios]
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id_text,
+        portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
     )
     repo.list_latest_snapshot_rows.assert_awaited_once_with(
         portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
@@ -1136,11 +1163,12 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_asset_allocation(
-            AssetAllocationQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetAllocationQueryRequest(
                 scope=ReportingScope(portfolio_id="PB_SG_GLOBAL_BAL_001"),
                 dimensions=["region", "asset_class"],
                 look_through_mode="prefer_look_through",
-            )
+            ),
         )
 
     assert response.look_through.applied_mode == "prefer_look_through"
@@ -1209,10 +1237,11 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_asset_allocation(
-            AssetAllocationQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetAllocationQueryRequest(
                 scope=ReportingScope(portfolio_id="P1"),
                 dimensions=["asset_class"],
-            )
+            ),
         )
 
     assert response.look_through.requested_mode == "direct_only"
@@ -1254,11 +1283,12 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_asset_allocation(
-            AssetAllocationQueryRequest(
+            tenant_context=TEST_TENANT_CONTEXT,
+            request=AssetAllocationQueryRequest(
                 scope=ReportingScope(portfolio_id="P1"),
                 dimensions=["asset_class"],
                 look_through_mode="prefer_look_through",
-            )
+            ),
         )
 
     assert response.look_through.applied_mode == "prefer_look_through"
@@ -1492,6 +1522,7 @@ async def test_reporting_service_resolve_scope_requires_business_date() -> None:
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="No business date is available"):
             await service._resolve_scope_portfolios_and_date(
+                TEST_TENANT_CONTEXT,
                 ReportingScope(portfolio_id="P1"),
                 None,
             )
@@ -1510,6 +1541,7 @@ async def test_reporting_service_resolve_scope_requires_matching_portfolios() ->
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="No portfolios matched"):
             await service._resolve_scope_portfolios_and_date(
+                TEST_TENANT_CONTEXT,
                 ReportingScope(portfolio_id="P1"),
                 None,
             )
@@ -1540,6 +1572,7 @@ async def test_reporting_service_resolve_scope_reads_default_date_and_portfolios
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         portfolios, resolved_as_of_date = await service._resolve_scope_portfolios_and_date(
+            TEST_TENANT_CONTEXT,
             ReportingScope(portfolio_id="P1"),
             None,
         )

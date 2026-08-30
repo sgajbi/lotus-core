@@ -93,7 +93,7 @@ def _handler() -> IngestionPublishCommandHandler:
         idempotency_replay_reader=SimpleNamespace(find_matching_job=AsyncMock(return_value=None)),
         resolve_transaction_reprocessing_targets=SimpleNamespace(
             execute=AsyncMock(
-                side_effect=lambda transaction_ids: tuple(
+                side_effect=lambda *, tenant_id, transaction_ids: tuple(
                     TransactionReprocessingTarget(
                         transaction_id=transaction_id,
                         portfolio_id=f"PORT-{transaction_id}",
@@ -598,8 +598,8 @@ async def test_reprocessing_command_preserves_policy_sequence(
     async def publish_reprocessing_requests(records, *, idempotency_key):
         events.append(f"publish:{len(records)}:{idempotency_key}")
 
-    async def resolve_reprocessing_targets(transaction_ids):
-        events.append(f"resolve:{','.join(transaction_ids)}")
+    async def resolve_reprocessing_targets(*, tenant_id, transaction_ids):
+        events.append(f"resolve:{tenant_id}:{','.join(transaction_ids)}")
         return tuple(
             TransactionReprocessingTarget(
                 transaction_id=transaction_id,
@@ -640,7 +640,7 @@ async def test_reprocessing_command_preserves_policy_sequence(
         "writable",
         "policy:2",
         "rate:/reprocess/transactions:2",
-        "resolve:T1,T2",
+        f"resolve:{TEST_TENANT_CONTEXT.tenant_id_text}:T1,T2",
         "publish:2:idem-reprocess",
     ]
 
@@ -742,6 +742,10 @@ async def test_reprocessing_command_rejects_missing_source_before_job_creation()
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail["code"] == "INGESTION_REPROCESSING_SOURCE_NOT_FOUND"
     assert exc_info.value.detail["missing_transaction_ids"] == ["TXN-404"]
+    handler.resolve_transaction_reprocessing_targets.execute.assert_awaited_once_with(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id_text,
+        transaction_ids=["TXN-404"],
+    )
     handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
 
 

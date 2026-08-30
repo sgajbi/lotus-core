@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_liquidity_ladder_service
@@ -48,6 +48,7 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 0 and 36
     openapi_extra=source_data_product_openapi_extra("PortfolioLiquidityLadder"),
 )
 async def get_liquidity_ladder(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -77,6 +78,7 @@ async def get_liquidity_ladder(
 ):
     try:
         return await service.get_liquidity_ladder(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             horizon_days=horizon_days,

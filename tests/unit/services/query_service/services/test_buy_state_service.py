@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
 
 from src.services.query_service.app.repositories.buy_state_repository import BuyStateRepository
 from src.services.query_service.app.services.buy_state_service import BuyStateService
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -87,7 +88,9 @@ async def test_get_position_lots(mock_buy_state_repo: AsyncMock):
         return_value=mock_buy_state_repo,
     ):
         service = BuyStateService(AsyncMock())
-        response = await service.get_position_lots("PORT-1", " US0378331005 ")
+        response = await service.get_position_lots(
+            "PORT-1", " US0378331005 ", tenant_context=TEST_TENANT_CONTEXT
+        )
         assert response.portfolio_id == "PORT-1"
         assert response.security_id == "US0378331005"
         assert len(response.lots) == 1
@@ -107,15 +110,18 @@ async def test_get_position_lots_uses_shared_portfolio_validation(
             return_value=mock_buy_state_repo,
         ),
         patch(
-            "src.services.query_service.app.services.buy_state_service.ensure_portfolio_exists",
+            "src.services.query_service.app.services.buy_state_service.ensure_portfolio_owned",
             new_callable=AsyncMock,
-        ) as ensure_portfolio_exists,
+        ) as ensure_portfolio_owned,
     ):
         service = BuyStateService(AsyncMock())
-        await service.get_position_lots("PORT-1", " US0378331005 ")
+        await service.get_position_lots(
+            "PORT-1", " US0378331005 ", tenant_context=TEST_TENANT_CONTEXT
+        )
 
-    ensure_portfolio_exists.assert_awaited_once_with(
+    ensure_portfolio_owned.assert_awaited_once_with(
         repository=mock_buy_state_repo,
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id_text,
         portfolio_id="PORT-1",
     )
 
@@ -126,7 +132,9 @@ async def test_get_buy_cash_linkage(mock_buy_state_repo: AsyncMock):
         return_value=mock_buy_state_repo,
     ):
         service = BuyStateService(AsyncMock())
-        response = await service.get_buy_cash_linkage("PORT-1", "TXN-1")
+        response = await service.get_buy_cash_linkage(
+            "PORT-1", "TXN-1", tenant_context=TEST_TENANT_CONTEXT
+        )
         assert response.transaction_id == "TXN-1"
         assert response.economic_event_id == "EVT-1"
         assert response.calculation_policy_id == "BUY_DEFAULT_POLICY"
@@ -142,7 +150,10 @@ async def test_get_position_lots_raises_when_portfolio_missing(mock_buy_state_re
         mock_buy_state_repo.portfolio_exists.return_value = False
         service = BuyStateService(AsyncMock())
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_position_lots("P404", "US0378331005")
+            await service.get_position_lots(
+                "P404", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )
+        mock_buy_state_repo.get_position_lots.assert_not_awaited()
 
 
 async def test_get_accrued_offsets_success(mock_buy_state_repo: AsyncMock):
@@ -151,7 +162,9 @@ async def test_get_accrued_offsets_success(mock_buy_state_repo: AsyncMock):
         return_value=mock_buy_state_repo,
     ):
         service = BuyStateService(AsyncMock())
-        response = await service.get_accrued_offsets("PORT-1", " US0378331005 ")
+        response = await service.get_accrued_offsets(
+            "PORT-1", " US0378331005 ", tenant_context=TEST_TENANT_CONTEXT
+        )
         assert response.portfolio_id == "PORT-1"
         assert response.security_id == "US0378331005"
         assert len(response.offsets) == 1
@@ -170,7 +183,10 @@ async def test_get_accrued_offsets_raises_when_portfolio_missing(mock_buy_state_
         mock_buy_state_repo.portfolio_exists.return_value = False
         service = BuyStateService(AsyncMock())
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_accrued_offsets("P404", "US0378331005")
+            await service.get_accrued_offsets(
+                "P404", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )
+        mock_buy_state_repo.get_accrued_offsets.assert_not_awaited()
 
 
 async def test_get_buy_cash_linkage_raises_when_transaction_not_found(
@@ -186,7 +202,9 @@ async def test_get_buy_cash_linkage_raises_when_transaction_not_found(
             LookupError,
             match="BUY cash linkage not found for portfolio PORT-1 and transaction TXN-404",
         ):
-            await service.get_buy_cash_linkage("PORT-1", "TXN-404")
+            await service.get_buy_cash_linkage(
+                "PORT-1", "TXN-404", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_get_position_lots_raises_when_security_has_no_buy_state(
@@ -202,7 +220,9 @@ async def test_get_position_lots_raises_when_security_has_no_buy_state(
             LookupError,
             match="BUY state not found for portfolio PORT-1 and security US0378331005",
         ):
-            await service.get_position_lots("PORT-1", "US0378331005")
+            await service.get_position_lots(
+                "PORT-1", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_get_accrued_offsets_raises_when_security_has_no_buy_state(
@@ -218,4 +238,6 @@ async def test_get_accrued_offsets_raises_when_security_has_no_buy_state(
             LookupError,
             match="BUY state not found for portfolio PORT-1 and security US0378331005",
         ):
-            await service.get_accrued_offsets("PORT-1", "US0378331005")
+            await service.get_accrued_offsets(
+                "PORT-1", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )

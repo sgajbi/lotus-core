@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_cash_balance_service
@@ -46,6 +46,7 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "No business date is available for cas
     openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )
 async def get_cash_balances(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -70,6 +71,7 @@ async def get_cash_balances(
 ):
     try:
         return await service.get_cash_balances(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             reporting_currency=reporting_currency,

@@ -1,6 +1,6 @@
 """Source-to-target lot basis-transfer supportability routes."""
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Request, status
 
 from ..dependencies import get_lot_basis_transfer_service
 from ..dtos.lot_basis_transfer_dto import LotBasisTransferReceiptResponse
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/portfolios", tags=["Lot Basis-Transfer Receipts"])
     ),
 )
 async def get_latest_lot_basis_transfer_receipt(
+    request: Request,
     portfolio_id: str = Path(..., description="Portfolio identifier."),
     source_transaction_id: str = Path(
         ..., description="Source transaction that transferred lot basis."
@@ -33,6 +34,7 @@ async def get_latest_lot_basis_transfer_receipt(
 ) -> LotBasisTransferReceiptResponse:
     try:
         receipt: LotBasisTransferReceiptResponse = await service.get_latest_receipt(
+            tenant_context=request.state.tenant_context,
             portfolio_id=portfolio_id,
             source_transaction_id=source_transaction_id,
         )

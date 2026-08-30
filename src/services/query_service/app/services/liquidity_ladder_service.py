@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +49,7 @@ class PortfolioLiquidityLadderService:
     async def get_liquidity_ladder(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         as_of_date: date | None = None,
         horizon_days: int = DEFAULT_HORIZON_DAYS,
@@ -56,7 +58,10 @@ class PortfolioLiquidityLadderService:
         if horizon_days < 0 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 0 and {MAX_HORIZON_DAYS}.")
 
-        portfolio = await self.reporting_repo.get_portfolio_by_id(portfolio_id)
+        portfolio = await self.reporting_repo.get_portfolio_by_id(
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
         resolved_as_of_date = (

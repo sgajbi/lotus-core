@@ -92,6 +92,9 @@ Current router coverage includes:
   - effective-dated instrument valuation-policy assignments
 - controlled reprocessing initiation
   - reprocessing routes hosted in the ingestion service contract family
+  - transaction targets are resolved from the canonical ledger through admitted tenant authority
+    before any job is created or repair command is published; missing and foreign-tenant transaction
+    identifiers receive the same not-found response
 
 ## Runtime role
 

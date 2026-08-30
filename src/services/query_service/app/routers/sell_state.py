@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Request, status
 
 from ..dependencies import get_sell_state_service
 from ..dtos.sell_state_dto import SellCashLinkageResponse, SellDisposalsResponse
@@ -37,6 +37,7 @@ SELL_CASH_LINKAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     ),
 )
 async def get_sell_disposals(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -50,7 +51,11 @@ async def get_sell_disposals(
     service: SellStateService = Depends(get_sell_state_service),
 ):
     try:
-        return await service.get_sell_disposals(portfolio_id=portfolio_id, security_id=security_id)
+        return await service.get_sell_disposals(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            tenant_context=request.state.tenant_context,
+        )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
 
@@ -75,6 +80,7 @@ async def get_sell_disposals(
     ),
 )
 async def get_sell_cash_linkage(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -89,7 +95,9 @@ async def get_sell_cash_linkage(
 ):
     try:
         return await service.get_sell_cash_linkage(
-            portfolio_id=portfolio_id, transaction_id=transaction_id
+            portfolio_id=portfolio_id,
+            transaction_id=transaction_id,
+            tenant_context=request.state.tenant_context,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

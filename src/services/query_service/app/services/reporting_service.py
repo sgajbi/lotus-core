@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.portfolio_allocation import (
     AllocationContributorInput,
     AllocationContributorResult,
@@ -50,6 +51,7 @@ from ..repositories.reporting_repository import (
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
 from .fx_conversion import CachedFxRateConverter
+from .portfolio_validation import get_owned_portfolio
 
 ZERO = Decimal("0")
 USABLE_VALUATION_STATUSES = frozenset({"VALUED", "VALUED_CURRENT", "VALUED_STALE"})
@@ -398,9 +400,10 @@ class ReportingService:
         )
 
     async def get_assets_under_management(
-        self, request: AssetsUnderManagementQueryRequest
+        self, request: AssetsUnderManagementQueryRequest, *, tenant_context: TenantContext
     ) -> AssetsUnderManagementResponse:
         portfolios, resolved_as_of_date = await self._resolve_scope_portfolios_and_date(
+            tenant_context,
             request.scope,
             request.as_of_date,
         )
@@ -492,9 +495,10 @@ class ReportingService:
         )
 
     async def get_asset_allocation(
-        self, request: AssetAllocationQueryRequest
+        self, request: AssetAllocationQueryRequest, *, tenant_context: TenantContext
     ) -> AssetAllocationResponse:
         portfolios, resolved_as_of_date = await self._resolve_scope_portfolios_and_date(
+            tenant_context,
             request.scope,
             request.as_of_date,
         )
@@ -570,9 +574,13 @@ class ReportingService:
         )
 
     async def get_portfolio_summary(
-        self, request: PortfolioSummaryQueryRequest
+        self, request: PortfolioSummaryQueryRequest, *, tenant_context: TenantContext
     ) -> PortfolioSummaryResponse:
-        portfolio = await self._get_required_portfolio(request.portfolio_id)
+        portfolio = await get_owned_portfolio(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=request.portfolio_id,
+        )
         resolved_as_of_date = await self._resolve_portfolio_summary_date(request.as_of_date)
         portfolio_currency, reporting_currency = _portfolio_summary_currencies(
             portfolio=portfolio,
@@ -620,16 +628,19 @@ class ReportingService:
         )
 
     async def get_bulk_portfolio_summary(
-        self, request: BulkPortfolioSummaryQueryRequest
+        self, request: BulkPortfolioSummaryQueryRequest, *, tenant_context: TenantContext
     ) -> BulkPortfolioSummaryResponse:
         """Resolve a bounded cohort from one source snapshot read.
 
-        The caller supplies already-authorized identifiers. Missing members and source/FX
-        failures remain explicit result items so a partial cohort can never be mistaken for a
-        complete aggregate.
+        Core tenant-filters the caller-supplied identifiers. Missing members and source/FX failures
+        remain explicit result items so a partial cohort can never be mistaken for a complete
+        aggregate.
         """
         resolved_as_of_date = await self._resolve_portfolio_summary_date(request.as_of_date)
-        portfolios = await self.repo.list_portfolios(portfolio_ids=request.portfolio_ids)
+        portfolios = await self.repo.list_portfolios(
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_ids=request.portfolio_ids,
+        )
         portfolios_by_id = {str(portfolio.portfolio_id): portfolio for portfolio in portfolios}
         found_ids = [
             portfolio_id
@@ -825,12 +836,6 @@ class ReportingService:
             totals,
         )
 
-    async def _get_required_portfolio(self, portfolio_id: str):
-        portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
-        if portfolio is None:
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        return portfolio
-
     async def _resolve_portfolio_summary_date(self, requested_as_of_date: date | None) -> date:
         resolved_as_of_date = (
             await self.repo.get_latest_business_date()
@@ -1021,6 +1026,7 @@ class ReportingService:
 
     async def _resolve_scope_portfolios_and_date(
         self,
+        tenant_context: TenantContext,
         scope: ReportingScope,
         requested_as_of_date: date | None,
     ) -> tuple[list, date]:
@@ -1033,6 +1039,7 @@ class ReportingService:
             raise ValueError("No business date is available for reporting queries.")
 
         portfolios = await self.repo.list_portfolios(
+            tenant_id=tenant_context.tenant_id_text,
             portfolio_id=scope.portfolio_id,
             portfolio_ids=scope.portfolio_ids or None,
             booking_center_code=scope.booking_center_code,

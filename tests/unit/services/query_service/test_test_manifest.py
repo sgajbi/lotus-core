@@ -39,6 +39,14 @@ def test_unit_db_suite_tracks_db_dependent_tests() -> None:
     )
     assert "tests/integration/test_ingestion_dlq_job_ownership_migration.py" in unit_db_suite
     assert "tests/integration/test_ingestion_failure_outcome_migration.py" in unit_db_suite
+    assert (
+        "tests/integration/services/ingestion_service/"
+        "test_transaction_reprocessing_target_reader_postgresql.py" in unit_db_suite
+    )
+    assert (
+        "tests/integration/services/query_service/test_reporting_portfolio_scope_postgresql.py"
+        in unit_db_suite
+    )
 
 
 def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> None:

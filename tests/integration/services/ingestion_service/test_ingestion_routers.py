@@ -1281,11 +1281,14 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     class FakeTransactionReprocessingTargetResolver:
         def __init__(self) -> None:
             self.portfolio_by_transaction: dict[str, str] = {}
+            self.tenant_by_transaction: dict[str, str] = {}
             self.missing_transaction_ids: set[str] = set()
             self.unavailable = False
 
         async def execute(
             self,
+            *,
+            tenant_id: str,
             transaction_ids: list[str],
         ) -> tuple[TransactionReprocessingTarget, ...]:
             if self.unavailable:
@@ -1296,6 +1299,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 transaction_id
                 for transaction_id in transaction_ids
                 if transaction_id in self.missing_transaction_ids
+                or self.tenant_by_transaction.get(transaction_id, tenant_id) != tenant_id
             ]
             if missing_ids:
                 raise TransactionReprocessingTargetNotFound(missing_ids)
@@ -7791,6 +7795,30 @@ async def test_reprocess_transactions_returns_404_for_missing_source_identity(
         "message": "One or more transactions are not available for reprocessing.",
         "missing_transaction_ids": ["TXN-MISSING"],
     }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_rejects_foreign_tenant_before_job_or_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    resolver = ingestion_test_harness["fake_reprocessing_target_resolver"]
+    resolver.tenant_by_transaction["TXN-FOREIGN"] = "tenant-other"
+    jobs_before = dict(ingestion_test_harness["fake_job_service"].jobs)
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN-FOREIGN"]},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPROCESSING_SOURCE_NOT_FOUND",
+        "message": "One or more transactions are not available for reprocessing.",
+        "missing_transaction_ids": ["TXN-FOREIGN"],
+    }
+    assert ingestion_test_harness["fake_job_service"].jobs == jobs_before
     mock_kafka_producer.publish_message.assert_not_called()
 
 

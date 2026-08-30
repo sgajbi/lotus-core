@@ -144,19 +144,28 @@ class ReportingRepository:
         )
         return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
-    async def get_portfolio_by_id(self, portfolio_id: str) -> Portfolio | None:
-        stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
+    async def get_portfolio_by_id(
+        self,
+        *,
+        tenant_id: str,
+        portfolio_id: str,
+    ) -> Portfolio | None:
+        stmt = select(Portfolio).where(
+            Portfolio.tenant_id == tenant_id,
+            Portfolio.portfolio_id == portfolio_id,
+        )
         return cast(Portfolio | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def list_portfolios(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str | None = None,
         portfolio_ids: list[str] | None = None,
         client_id: str | None = None,
         booking_center_code: str | None = None,
     ) -> list[Portfolio]:
-        stmt = select(Portfolio)
+        stmt = select(Portfolio).where(Portfolio.tenant_id == tenant_id)
         if portfolio_id:
             stmt = stmt.where(Portfolio.portfolio_id == portfolio_id)
         if portfolio_ids:

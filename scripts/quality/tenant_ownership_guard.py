@@ -50,6 +50,24 @@ CRITICAL_TENANT_BOUNDARIES = (
     ),
     (
         Path(
+            "src/services/ingestion_service/app/infrastructure/"
+            "transaction_reprocessing_target_reader.py"
+        ),
+        "SqlAlchemyTransactionReprocessingTargetReader",
+        frozenset({"read_targets"}),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/ingestion_service/app/application/"
+            "resolve_transaction_reprocessing_targets.py"
+        ),
+        "ResolveTransactionReprocessingTargets",
+        frozenset({"execute"}),
+        "tenant_id",
+    ),
+    (
+        Path(
             "src/services/query_control_plane_service/app/infrastructure/core_snapshot_sources.py"
         ),
         "SqlAlchemyCoreSnapshotSourceReader",
@@ -90,6 +108,115 @@ CRITICAL_TENANT_BOUNDARIES = (
                 "get_realized_tax_summary",
             }
         ),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/reporting_repository.py"),
+        "ReportingRepository",
+        frozenset({"get_portfolio_by_id", "list_portfolios"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/cash_balance_service.py"),
+        "CashBalanceService",
+        frozenset({"get_cash_balances"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/services/liquidity_ladder_service.py"),
+        "PortfolioLiquidityLadderService",
+        frozenset({"get_liquidity_ladder"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/services/reporting_service.py"),
+        "ReportingService",
+        frozenset(
+            {
+                "get_assets_under_management",
+                "get_asset_allocation",
+                "get_portfolio_summary",
+                "get_bulk_portfolio_summary",
+            }
+        ),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/buy_state_repository.py"),
+        "BuyStateRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/buy_state_service.py"),
+        "BuyStateService",
+        frozenset({"get_position_lots", "get_accrued_offsets", "get_buy_cash_linkage"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/sell_state_repository.py"),
+        "SellStateRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/sell_state_service.py"),
+        "SellStateService",
+        frozenset({"get_sell_disposals", "get_sell_cash_linkage"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/lot_disposal_repository.py"),
+        "LotDisposalRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/lot_disposal_service.py"),
+        "LotDisposalService",
+        frozenset({"get_latest_receipt"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/lot_basis_transfer_repository.py"),
+        "LotBasisTransferRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/lot_basis_transfer_service.py"),
+        "LotBasisTransferService",
+        frozenset({"get_latest_receipt"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/cash_account_repository.py"),
+        "CashAccountRepository",
+        frozenset({"portfolio_exists"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/cash_account_service.py"),
+        "CashAccountService",
+        frozenset({"get_cash_accounts"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/repositories/cashflow_repository.py"),
+        "CashflowRepository",
+        frozenset({"get_portfolio_currency"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_service/app/services/cashflow_projection_service.py"),
+        "CashflowProjectionService",
+        frozenset({"get_cashflow_projection"}),
+        "tenant_context",
+    ),
+    (
+        Path("src/services/query_service/app/services/cash_movement_service.py"),
+        "CashMovementService",
+        frozenset({"get_cash_movement_summary"}),
         "tenant_context",
     ),
     (

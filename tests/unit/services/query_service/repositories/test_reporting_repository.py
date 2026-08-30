@@ -40,6 +40,7 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
     repo = ReportingRepository(db)
 
     rows = await repo.list_portfolios(
+        tenant_id="tenant-a",
         portfolio_ids=["P1", "P2"],
         booking_center_code="SGPB",
     )
@@ -47,6 +48,7 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
     assert len(rows) == 2
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
     assert "portfolios.portfolio_id IN ('P1', 'P2')" in compiled
     assert "portfolios.booking_center_code = 'SGPB'" in compiled
     assert "ORDER BY portfolios.portfolio_id ASC" in compiled
@@ -58,13 +60,36 @@ async def test_reporting_repository_lists_portfolios_with_portfolio_and_client_f
     db.execute.return_value = _FakeExecuteResult([SimpleNamespace(portfolio_id="P1")])
     repo = ReportingRepository(db)
 
-    rows = await repo.list_portfolios(portfolio_id="P1", client_id="CIF-1")
+    rows = await repo.list_portfolios(
+        tenant_id="tenant-a",
+        portfolio_id="P1",
+        client_id="CIF-1",
+    )
 
     assert [row.portfolio_id for row in rows] == ["P1"]
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
     assert "portfolios.portfolio_id = 'P1'" in compiled
     assert "portfolios.client_id = 'CIF-1'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_gets_portfolio_only_within_tenant() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    portfolio = SimpleNamespace(portfolio_id="P1")
+    db.execute.return_value = _FakeExecuteResult([portfolio])
+
+    resolved = await ReportingRepository(db).get_portfolio_by_id(
+        tenant_id="tenant-a",
+        portfolio_id="P1",
+    )
+
+    assert resolved is portfolio
+    statement = db.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
+    assert "portfolios.portfolio_id = 'P1'" in compiled
 
 
 @pytest.mark.asyncio

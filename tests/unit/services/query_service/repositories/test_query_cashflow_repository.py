@@ -52,33 +52,22 @@ async def test_latest_cashflows_subquery_prefers_highest_epoch_per_transaction()
     assert "anon_2.rn = 1" in compiled_query.lower()
 
 
-async def test_cashflow_repository_portfolio_exists_uses_limit_one(
-    mock_db_session: AsyncMock,
-) -> None:
-    mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: "P1")
-    repository = CashflowRepository(mock_db_session)
-
-    exists = await repository.portfolio_exists("P1")
-
-    assert exists is True
-    stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolios.portfolio_id = 'P1'" in compiled_query
-    assert "LIMIT 1" in compiled_query
-
-
 async def test_cashflow_repository_portfolio_currency_uses_base_currency(
     mock_db_session: AsyncMock,
 ) -> None:
     mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: "USD")
     repository = CashflowRepository(mock_db_session)
 
-    portfolio_currency = await repository.get_portfolio_currency("P1")
+    portfolio_currency = await repository.get_portfolio_currency(
+        tenant_id="tenant-a",
+        portfolio_id="P1",
+    )
 
     assert portfolio_currency == "USD"
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolios.base_currency" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
     assert "portfolios.portfolio_id = 'P1'" in compiled_query
     assert "LIMIT 1" in compiled_query
 

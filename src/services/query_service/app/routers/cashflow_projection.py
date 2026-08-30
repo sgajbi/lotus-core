@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_cashflow_projection_service
@@ -46,6 +46,7 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 1 and 36
     openapi_extra=source_data_product_openapi_extra("PortfolioCashflowProjection"),
 )
 async def get_cashflow_projection(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -77,10 +78,6 @@ async def get_cashflow_projection(
         ),
         examples=[True],
     ),
-    x_tenant_id: str | None = Header(
-        None,
-        description="Tenant or book-of-record scope carried into the runtime trust receipt.",
-    ),
     service: CashflowProjectionService = Depends(get_cashflow_projection_service),
 ):
     try:
@@ -89,7 +86,7 @@ async def get_cashflow_projection(
             horizon_days=horizon_days,
             as_of_date=as_of_date,
             include_projected=include_projected,
-            tenant_id=x_tenant_id,
+            tenant_context=request.state.tenant_context,
         )
     except ValueError as exc:
         raise_value_error_as_resolution_http(exc)

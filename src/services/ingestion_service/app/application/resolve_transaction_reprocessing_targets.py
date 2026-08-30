@@ -31,10 +31,15 @@ class ResolveTransactionReprocessingTargets:
 
     async def execute(
         self,
+        *,
+        tenant_id: str,
         transaction_ids: Sequence[str],
     ) -> tuple[TransactionReprocessingTarget, ...]:
         ordered_ids = tuple(_normalized_transaction_ids(transaction_ids))
-        targets = await self._reader.read_targets(ordered_ids)
+        targets = await self._reader.read_targets(
+            tenant_id=tenant_id,
+            transaction_ids=ordered_ids,
+        )
         targets_by_id = {target.transaction_id: target for target in targets}
         missing_ids = [
             transaction_id for transaction_id in ordered_ids if transaction_id not in targets_by_id

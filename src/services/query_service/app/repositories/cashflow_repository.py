@@ -71,13 +71,14 @@ class CashflowRepository:
             .subquery()
         )
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
-
-    async def get_portfolio_currency(self, portfolio_id: str) -> str | None:
+    async def get_portfolio_currency(self, *, tenant_id: str, portfolio_id: str) -> str | None:
         stmt = (
-            select(Portfolio.base_currency).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio.base_currency)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 

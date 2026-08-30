@@ -12,7 +12,7 @@ from portfolio_common.source_data_product_metadata import (
 from src.services.query_service.app.dependencies import get_cash_balance_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.cash_balance_service import CashBalanceService
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -69,9 +69,14 @@ async def test_get_cash_balances(async_test_client):
     assert response.status_code == 200
     assert response.json()["product_name"] == "HoldingsAsOf"
     mock_service.get_cash_balances.assert_awaited_once_with(
+        tenant_context=mock_service.get_cash_balances.await_args.kwargs["tenant_context"],
         portfolio_id="P1",
         as_of_date=date(2026, 3, 27),
         reporting_currency="SGD",
+    )
+    assert (
+        mock_service.get_cash_balances.await_args.kwargs["tenant_context"].tenant_id_text
+        == TEST_TENANT_ID
     )
 
 
@@ -98,6 +103,7 @@ async def test_get_cash_balances_defaults_optional_query_params(async_test_clien
 
     assert response.status_code == 200
     mock_service.get_cash_balances.assert_awaited_once_with(
+        tenant_context=mock_service.get_cash_balances.await_args.kwargs["tenant_context"],
         portfolio_id="P1",
         as_of_date=None,
         reporting_currency=None,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from portfolio_common.database_models import Transaction
+from portfolio_common.database_models import Portfolio, Transaction
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,12 +21,17 @@ class SqlAlchemyTransactionReprocessingTargetReader:
 
     async def read_targets(
         self,
+        *,
+        tenant_id: str,
         transaction_ids: Sequence[str],
     ) -> tuple[TransactionReprocessingTarget, ...]:
         try:
             result = await self._db.execute(
-                select(Transaction.transaction_id, Transaction.portfolio_id).where(
-                    Transaction.transaction_id.in_(tuple(transaction_ids))
+                select(Transaction.transaction_id, Transaction.portfolio_id)
+                .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
+                .where(
+                    Portfolio.tenant_id == tenant_id,
+                    Transaction.transaction_id.in_(tuple(transaction_ids)),
                 )
             )
         except SQLAlchemyError as exc:

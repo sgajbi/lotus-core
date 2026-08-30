@@ -72,6 +72,16 @@ The reporting family includes the additive `POST /reporting/portfolio-summary/bu
 (`portfolio-summary-bulk-v1`) source seam. Gateway supplies an already-authorized cohort of up to
 100 portfolio IDs; Core returns per-member total/invested/cash facts and fail-closed coverage,
 with a cohort aggregate only when every requested member is trustworthy.
+Cash balances, liquidity ladder, AUM, allocation, single-summary, and bulk-summary routes also bind
+portfolio resolution to the admitted tenant before reading snapshots, accounts, cashflows, or
+reporting evidence. Foreign-tenant identifiers are indistinguishable from absent identifiers; a
+bulk cohort cannot widen the admitted tenant by supplying additional portfolio IDs.
+
+The same fail-closed ownership boundary protects BUY lots and accrued offsets, BUY/SELL cash
+linkage, SELL disposal state, immutable lot-disposal and basis-transfer receipts, canonical
+cash-account masters, cashflow projection, and cash-movement summaries. Core proves the admitted
+tenant owns the path portfolio before reading any cost, gain, cashflow, receipt, allocation, or
+account evidence; a foreign identifier follows the normal not-found contract.
 
 ### `query_control_plane_service`
 

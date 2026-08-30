@@ -1,5 +1,6 @@
 """Serve immutable lot-consumption supportability across transaction families."""
 
+from portfolio_common.domain.tenant import TenantContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.lot_disposal_dto import (
@@ -7,7 +8,7 @@ from ..dtos.lot_disposal_dto import (
     LotDisposalReceiptResponse,
 )
 from ..repositories.lot_disposal_repository import LotDisposalRepository
-from .portfolio_validation import ensure_portfolio_exists
+from .portfolio_validation import ensure_portfolio_owned
 
 
 class LotDisposalService:
@@ -17,10 +18,15 @@ class LotDisposalService:
     async def get_latest_receipt(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         transaction_id: str,
     ) -> LotDisposalReceiptResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_owned(
+            repository=self.repo,
+            tenant_id=tenant_context.tenant_id_text,
+            portfolio_id=portfolio_id,
+        )
         result = await self.repo.get_latest_receipt(
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
