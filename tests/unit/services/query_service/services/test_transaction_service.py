@@ -324,6 +324,33 @@ async def test_get_transaction_record_maps_database_failure_to_unavailable(
             )
 
 
+async def test_get_transaction_record_maps_fx_source_failure_to_unavailable(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions.return_value = [
+        mock_transaction_repo.get_transactions.return_value[0]
+    ]
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(1)
+    mock_transaction_repo.list_known_instrument_security_ids.return_value = {"S1"}
+    mock_transaction_repo.get_latest_fx_rate.side_effect = SQLAlchemyError("FX source unavailable")
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(
+            TransactionRecordUnavailableError,
+            match="temporarily unavailable",
+        ):
+            await service.get_transaction_record(
+                portfolio_id="P1",
+                transaction_id="T1",
+                as_of_date=date(2025, 1, 15),
+                reporting_currency="SGD",
+            )
+
+
 async def test_get_transaction_record_fails_closed_on_non_unique_evidence(
     mock_transaction_repo: AsyncMock,
 ) -> None:

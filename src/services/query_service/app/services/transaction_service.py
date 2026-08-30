@@ -2,7 +2,7 @@
 import logging
 from datetime import date
 from decimal import Decimal
-from typing import Optional, cast
+from typing import NoReturn, Optional, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.logging_utils import operation_log_extra
@@ -39,6 +39,21 @@ from .transaction_records import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _raise_transaction_record_unavailable(exc: SQLAlchemyError) -> NoReturn:
+    logger.exception(
+        "Exact transaction source query failed.",
+        extra=operation_log_extra(
+            event_name="query.transaction_service.record_unavailable",
+            operation="query.transaction_service.get_transaction_record",
+            status="failed",
+            reason_code="source_query_failed",
+        ),
+    )
+    raise TransactionRecordUnavailableError(
+        "Transaction record source is temporarily unavailable"
+    ) from exc
 
 
 class TransactionService:
@@ -208,18 +223,7 @@ class TransactionService:
                 reporting_currency=reporting_currency,
             )
         except SQLAlchemyError as exc:
-            logger.exception(
-                "Exact transaction source query failed.",
-                extra=operation_log_extra(
-                    event_name="query.transaction_service.record_unavailable",
-                    operation="query.transaction_service.get_transaction_record",
-                    status="failed",
-                    reason_code="source_query_failed",
-                ),
-            )
-            raise TransactionRecordUnavailableError(
-                "Transaction record source is temporarily unavailable"
-            ) from exc
+            _raise_transaction_record_unavailable(exc)
 
         if ledger_page.total_count == 0:
             raise LookupError("Transaction record not found for requested portfolio")
@@ -228,12 +232,15 @@ class TransactionService:
                 "Transaction record source returned inconsistent identity evidence"
             )
 
-        records = await transaction_records_from_rows(
-            rows=ledger_page.rows,
-            reporting_currency=reporting_currency,
-            as_of_date=effective_as_of_date,
-            convert_amount=self._convert_amount,
-        )
+        try:
+            records = await transaction_records_from_rows(
+                rows=ledger_page.rows,
+                reporting_currency=reporting_currency,
+                as_of_date=effective_as_of_date,
+                convert_amount=self._convert_amount,
+            )
+        except SQLAlchemyError as exc:
+            _raise_transaction_record_unavailable(exc)
         if len(records) != 1:
             raise TransactionRecordUnavailableError(
                 "Transaction record source returned inconsistent mapped evidence"
