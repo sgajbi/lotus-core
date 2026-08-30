@@ -236,6 +236,17 @@ def test_source_provenance_history_fallback_retains_mutation_date_semantics() ->
     assert resolution.source_provenance.portfolio.freshness_status == "PARTIAL"
 
 
+def test_source_provenance_history_fallback_preserves_legacy_source_identity() -> None:
+    resolution = _resolve(_row("SEC_A"), use_snapshot=False)
+
+    assert resolution.source_provenance.portfolio.source_hash == (
+        "c79878b4fcc4fc4142eca7fb89ad1a378640b6f3ebd769ed5d8b125996838988"
+    )
+    assert resolution.source_provenance.portfolio.source_id == (
+        "lotus-core:portfolio-state-snapshot:portfolio:PORT_001:c79878b4fcc4fc4142eca7fb"
+    )
+
+
 def test_source_provenance_rejects_carried_forward_fx_date() -> None:
     resolution = _resolve(
         _row("SEC_A"),

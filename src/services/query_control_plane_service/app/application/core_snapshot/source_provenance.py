@@ -265,7 +265,7 @@ def _portfolio_source_hash(
                         "quantity": row.quantity,
                         "cost_basis": row.cost_basis,
                         "cost_basis_local": row.cost_basis_local,
-                        "snapshot_business_date": row.business_date if use_snapshot else None,
+                        **({"snapshot_business_date": row.business_date} if use_snapshot else {}),
                         "portfolio_business_date": row.portfolio_business_date,
                         "epoch": row.epoch,
                         "instrument": {
