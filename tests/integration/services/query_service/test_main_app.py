@@ -949,7 +949,14 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     )
     assert "calculation_lineage" in projection_response["properties"]
     assert "source_window_trust" in projection_response["properties"]
-    assert any(parameter["name"] == "x-tenant-id" for parameter in projection["parameters"])
+    tenant_header = next(
+        parameter
+        for parameter in projection["parameters"]
+        if parameter["name"] == "X-Tenant-Id"
+    )
+    assert tenant_header["in"] == "header"
+    assert tenant_header["required"] is True
+    assert "Missing or blank values fail closed" in tenant_header["description"]
     point_schema = schema["components"]["schemas"]["CashflowProjectionPoint"]
     assert (
         "booked_net_cashflow plus projected_settlement_cashflow"
@@ -991,7 +998,12 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     )
     assert "calculation_lineage" in summary_response["properties"]
     assert "source_window_trust" in summary_response["properties"]
-    assert any(parameter["name"] == "x-tenant-id" for parameter in summary["parameters"])
+    tenant_header = next(
+        parameter for parameter in summary["parameters"] if parameter["name"] == "X-Tenant-Id"
+    )
+    assert tenant_header["in"] == "header"
+    assert tenant_header["required"] is True
+    assert "Missing or blank values fail closed" in tenant_header["description"]
     bucket_schema = schema["components"]["schemas"]["CashMovementBucket"]
     assert bucket_schema["properties"]["movement_direction"]["description"] == (
         "Direction derived from the sign of total_amount only."
