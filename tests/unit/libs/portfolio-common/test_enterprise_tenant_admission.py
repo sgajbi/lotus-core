@@ -1,11 +1,9 @@
-import json
-
 import pytest
 from portfolio_common.enterprise_tenant_admission import (
     TENANT_CONTEXT_REQUIRED_ERROR_CODE,
     TenantContextAdmissionError,
     resolve_enterprise_tenant_context,
-    tenant_context_required_response,
+    tenant_context_required_problem,
 )
 
 
@@ -42,15 +40,13 @@ def test_resolve_enterprise_tenant_context_rejects_missing_authority(
         )
 
 
-def test_tenant_context_required_response_uses_governed_problem_contract() -> None:
-    response = tenant_context_required_response(
+def test_tenant_context_required_problem_uses_governed_contract() -> None:
+    problem = tenant_context_required_problem(
         path="/api/v1/portfolios",
         correlation_id="corr-2",
     )
 
-    assert response.status_code == 401
-    assert response.media_type == "application/problem+json"
-    assert json.loads(response.body) == {
+    assert problem == {
         "type": "https://lotus.local/problems/enterprise/tenant-context-required",
         "title": "Tenant Context Required",
         "status": 401,

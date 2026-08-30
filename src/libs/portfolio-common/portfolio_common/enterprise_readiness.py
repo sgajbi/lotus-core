@@ -31,7 +31,7 @@ from portfolio_common.enterprise_request_context import (
 from portfolio_common.enterprise_tenant_admission import (
     TenantContextAdmissionError,
     resolve_enterprise_tenant_context,
-    tenant_context_required_response,
+    tenant_context_required_problem,
 )
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
@@ -832,7 +832,7 @@ def build_enterprise_audit_middleware(
                 actor_id=request.headers.get("X-Actor-Id"),
                 role=request.headers.get("X-Role"),
                 service_identity=request.headers.get("X-Service-Identity"),
-                correlation_id=request_correlation_id(request),
+                correlation_id=request_correlation_id(request.headers),
                 identity_verified=authorization.principal is not None,
             )
         except TenantContextAdmissionError:
@@ -851,9 +851,13 @@ def build_enterprise_audit_middleware(
                 failure_is_fatal=audit_failure_is_fatal,
             ):
                 return _security_audit_unavailable_response()
-            return tenant_context_required_response(
-                path=request.url.path,
-                correlation_id=request_correlation_id(request),
+            return JSONResponse(
+                status_code=401,
+                media_type="application/problem+json",
+                content=tenant_context_required_problem(
+                    path=request.url.path,
+                    correlation_id=request_correlation_id(request.headers),
+                ),
             )
         request.state.tenant_context = tenant_context
 
@@ -873,12 +877,12 @@ def build_enterprise_audit_middleware(
                 failure_is_fatal=audit_failure_is_fatal,
             ):
                 return _security_audit_unavailable_response()
-            deny_correlation_id = request_correlation_id(request)
+            deny_correlation_id = request_correlation_id(request.headers)
             audit_emitter(
                 action=f"DENY {normalized_method} {authorization.route_template}",
-                actor_id=request_header_value(request, "X-Actor-Id", "unknown"),
+                actor_id=request_header_value(request.headers, "X-Actor-Id", "unknown"),
                 tenant_id=tenant_context.tenant_id_text,
-                role=request_header_value(request, "X-Role", "unknown"),
+                role=request_header_value(request.headers, "X-Role", "unknown"),
                 correlation_id=deny_correlation_id,
                 metadata={"reason": authorization.reason},
             )
@@ -917,25 +921,25 @@ def build_enterprise_audit_middleware(
         response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
         if normalized_method in WRITE_METHODS:
             write_correlation_id = request_correlation_id(
-                request, response.headers.get("X-Correlation-ID")
+                request.headers, response.headers.get("X-Correlation-ID")
             )
             audit_emitter(
                 action=f"{normalized_method} {authorization.route_template}",
-                actor_id=request_header_value(request, "X-Actor-Id", "unknown"),
+                actor_id=request_header_value(request.headers, "X-Actor-Id", "unknown"),
                 tenant_id=tenant_context.tenant_id_text,
-                role=request_header_value(request, "X-Role", "unknown"),
+                role=request_header_value(request.headers, "X-Role", "unknown"),
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
             )
         elif normalized_method in READ_AUDIT_METHODS and _read_audit_required(runtime):
             read_correlation_id = request_correlation_id(
-                request, response.headers.get("X-Correlation-ID")
+                request.headers, response.headers.get("X-Correlation-ID")
             )
             audit_emitter(
                 action=f"{normalized_method} {authorization.route_template}",
-                actor_id=request_header_value(request, "X-Actor-Id", "unknown"),
+                actor_id=request_header_value(request.headers, "X-Actor-Id", "unknown"),
                 tenant_id=tenant_context.tenant_id_text,
-                role=request_header_value(request, "X-Role", "unknown"),
+                role=request_header_value(request.headers, "X-Role", "unknown"),
                 correlation_id=read_correlation_id,
                 metadata={"status_code": response.status_code, "access_type": "read"},
             )
@@ -1010,8 +1014,8 @@ def _security_audit_event(
             if identity_verified
             else SecurityAuditIdentityPosture.UNVERIFIED
         ),
-        correlation_id=request_correlation_id(request),
-        trace_id=request_trace_id(request),
+        correlation_id=request_correlation_id(request.headers),
+        trace_id=request_trace_id(request.headers),
         policy_version=runtime.enterprise_policy_version(),
     )
 

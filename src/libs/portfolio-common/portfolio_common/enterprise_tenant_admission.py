@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from starlette.responses import JSONResponse
-
 from portfolio_common.domain.tenant import TenantContext, TenantId
 
 TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE = (
@@ -42,23 +40,19 @@ def resolve_enterprise_tenant_context(
     )
 
 
-def tenant_context_required_response(
+def tenant_context_required_problem(
     *,
     path: str,
     correlation_id: str | None,
-) -> JSONResponse:
-    """Return the governed problem response for missing tenant authority."""
+) -> dict[str, object]:
+    """Return the governed problem document for missing tenant authority."""
 
-    return JSONResponse(
-        status_code=401,
-        media_type="application/problem+json",
-        content={
-            "type": TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE,
-            "title": "Tenant Context Required",
-            "status": 401,
-            "detail": "A nonblank X-Tenant-Id header is required for this route.",
-            "instance": path,
-            "error_code": TENANT_CONTEXT_REQUIRED_ERROR_CODE,
-            "correlation_id": correlation_id or "",
-        },
-    )
+    return {
+        "type": TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE,
+        "title": "Tenant Context Required",
+        "status": 401,
+        "detail": "A nonblank X-Tenant-Id header is required for this route.",
+        "instance": path,
+        "error_code": TENANT_CONTEXT_REQUIRED_ERROR_CODE,
+        "correlation_id": correlation_id or "",
+    }
