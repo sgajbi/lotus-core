@@ -81,6 +81,81 @@ def test_standard_http_metrics_use_route_template_for_dynamic_paths():
     }
 
 
+def test_standard_http_logs_never_emit_dynamic_path_identifiers():
+    app = FastAPI()
+    logger = MagicMock()
+    sensitive_portfolio_id = "PORT-CUSTOMER-SECRET"
+    sensitive_transaction_id = "TXN-CUSTOMER-SECRET"
+
+    @app.get("/portfolios/{portfolio_id}/transactions/{transaction_id}")
+    def read_transaction(portfolio_id: str, transaction_id: str):
+        return {"portfolio_id": portfolio_id, "transaction_id": transaction_id}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=logger,
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    response = TestClient(app).get(
+        f"/portfolios/{sensitive_portfolio_id}/transactions/{sensitive_transaction_id}"
+    )
+
+    assert response.status_code == 200
+    completion_call = next(
+        call for call in logger.info.call_args_list if call.args == ("http_request_completed",)
+    )
+    completion_fields = completion_call.kwargs["extra"]
+    assert set(completion_fields) == {"method", "route_template", "status_code", "duration_ms"}
+    assert completion_fields["method"] == "GET"
+    assert completion_fields["route_template"] == (
+        "/portfolios/{portfolio_id}/transactions/{transaction_id}"
+    )
+    assert completion_fields["status_code"] == 200
+    assert isinstance(completion_fields["duration_ms"], float)
+    assert completion_fields["duration_ms"] >= 0
+    rendered_call = repr(completion_call)
+    assert sensitive_portfolio_id not in rendered_call
+    assert sensitive_transaction_id not in rendered_call
+
+
+def test_standard_http_error_logs_use_route_template_without_dynamic_identifiers():
+    app = FastAPI()
+    logger = MagicMock()
+    sensitive_transaction_id = "TXN-CUSTOMER-SECRET"
+
+    @app.get("/transactions/{transaction_id}")
+    def fail_transaction(transaction_id: str):
+        raise RuntimeError("source unavailable")
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=logger,
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    response = TestClient(app, raise_server_exceptions=False).get(
+        f"/transactions/{sensitive_transaction_id}"
+    )
+
+    assert response.status_code == 500
+    failure_call = next(
+        call
+        for call in logger.critical.call_args_list
+        if call.args == ("http_request_unhandled_exception",)
+    )
+    assert failure_call.kwargs["extra"] == {
+        "correlation_id": "TST-id",
+        "method": "GET",
+        "route_template": "/transactions/{transaction_id}",
+    }
+    assert sensitive_transaction_id not in repr(failure_call)
+
+
 def test_standard_health_app_exposes_shared_observability_contract():
     latency_metric = MagicMock()
     request_metric = MagicMock()

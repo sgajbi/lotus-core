@@ -386,10 +386,15 @@ def configure_standard_http_app(
             try:
                 response = await call_next(request)
             except Exception as exc:
+                route_template = http_metric_path_template(request)
                 logger.critical(
-                    f"Unhandled exception for request {request.method} {request.url}",
+                    "http_request_unhandled_exception",
                     exc_info=exc,
-                    extra={"correlation_id": correlation_id},
+                    extra={
+                        "correlation_id": correlation_id,
+                        "method": request.method,
+                        "route_template": route_template,
+                    },
                 )
                 response = _standard_unhandled_exception_response(correlation_id)
             _apply_lineage_response_headers(
@@ -425,7 +430,6 @@ def configure_standard_http_app(
             "http_request_completed",
             extra={
                 "method": request.method,
-                "path": request.url.path,
                 "route_template": route_template,
                 "status_code": response.status_code,
                 "duration_ms": round(elapsed * 1000, 2),
@@ -451,10 +455,15 @@ def configure_standard_http_app(
         if not traceparent:  # pragma: no cover - uuid4-generated trace IDs should be valid.
             trace_id = uuid4().hex
             traceparent = traceparent_from_trace_id(trace_id)
+        route_template = http_metric_path_template(request)
         logger.critical(
-            f"Unhandled exception for request {request.method} {request.url}",
+            "http_request_unhandled_exception",
             exc_info=exc,
-            extra={"correlation_id": correlation_id},
+            extra={
+                "correlation_id": correlation_id,
+                "method": request.method,
+                "route_template": route_template,
+            },
         )
         response = _standard_unhandled_exception_response(correlation_id)
         _apply_lineage_response_headers(
