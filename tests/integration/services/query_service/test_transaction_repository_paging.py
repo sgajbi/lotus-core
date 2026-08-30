@@ -150,7 +150,7 @@ async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
     assert select_statements[0].index("LIMIT") < select_statements[0].index("JOIN LATERAL")
 
 
-async def test_exact_transaction_record_is_index_backed_and_bounded(
+async def test_exact_transaction_record_reuses_unique_identity_index_and_is_bounded(
     clean_db,
     db_engine,
     async_db_session: AsyncSession,
@@ -241,8 +241,8 @@ async def test_exact_transaction_record_is_index_backed_and_bounded(
             )
         )
 
-    assert "ix_transactions_portfolio_transaction_id" in migrated_indexes
-    assert "ix_transactions_portfolio_transaction_id" in plan
+    assert "ix_transactions_transaction_id" in migrated_indexes
+    assert "ix_transactions_transaction_id" in plan
     assert "portfolio_id" in plan and "transaction_id" in plan
 
     statements: list[str] = []

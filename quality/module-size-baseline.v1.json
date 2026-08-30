@@ -9,9 +9,9 @@
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5658,
+      "lines": 5653,
       "owner": "lotus-core maintainers",
-      "rationale": "Legacy shared ORM monolith; #1026 requires a composite portfolio/transaction lookup index, while bounded-context decomposition remains tracked by #462.",
+      "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Exact lookup deliberately reuses the existing unique transaction-identity index instead of adding redundant schema surface.",
       "issue": "#462",
       "expires_on": "2027-02-28"
     },

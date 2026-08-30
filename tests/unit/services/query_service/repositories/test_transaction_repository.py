@@ -158,7 +158,7 @@ async def test_get_transactions_with_all_filters(
     assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
 
 
-async def test_get_transactions_exact_identity_is_portfolio_scoped_and_index_backed(
+async def test_get_transactions_exact_identity_is_portfolio_scoped_and_reuses_unique_index(
     repository: TransactionRepository,
     mock_db_session: AsyncMock,
 ) -> None:
@@ -177,12 +177,14 @@ async def test_get_transactions_exact_identity_is_portfolio_scoped_and_index_bac
     exact_lookup_index = next(
         index
         for index in Transaction.__table__.indexes
-        if index.name == "ix_transactions_portfolio_transaction_id"
+        if index.name == "ix_transactions_transaction_id"
     )
-    assert [column.name for column in exact_lookup_index.columns] == [
-        "portfolio_id",
-        "transaction_id",
-    ]
+    assert exact_lookup_index.unique is True
+    assert [column.name for column in exact_lookup_index.columns] == ["transaction_id"]
+    assert all(
+        index.name != "ix_transactions_portfolio_transaction_id"
+        for index in Transaction.__table__.indexes
+    )
 
 
 async def test_get_transactions_with_fx_filters(
