@@ -367,6 +367,13 @@ def test_merged_pr_dispatch_binds_main_releasability_to_exact_sha() -> None:
     assert 'actual_sha="$(git rev-parse HEAD)"' in main_gate
     assert "inputs.expected_sha || github.sha" in main_gate
     assert "push:" not in main_gate.split("concurrency:", maxsplit=1)[0]
+    parsed = yaml.safe_load(main_gate)
+    roots = {
+        name
+        for name, job in parsed["jobs"].items()
+        if name != "exact-revision-assertion" and "needs" not in job
+    }
+    assert roots == set()
 
 
 def test_pr_auto_merge_does_not_emit_skipped_checks_for_label_removal() -> None:
