@@ -11,6 +11,7 @@ class SimulationSession:
     """Durable lifecycle state for one generic simulation session."""
 
     session_id: str
+    tenant_id: str
     portfolio_id: str
     status: str
     version: int

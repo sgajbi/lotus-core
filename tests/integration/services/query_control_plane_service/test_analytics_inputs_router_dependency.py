@@ -179,7 +179,11 @@ async def async_test_client():
 
     app.dependency_overrides[get_analytics_timeseries_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Tenant-Id": "tenant-a"},
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_analytics_timeseries_service, None)
 

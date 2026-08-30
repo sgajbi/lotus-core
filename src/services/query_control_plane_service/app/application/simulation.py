@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.domain.decimal_amount import decimal_or_none
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.runtime_providers import Clock, IdGenerator
 
 from ..domain.simulation import SimulationChange, SimulationPositionBaseline, SimulationSession
@@ -138,9 +139,13 @@ class SimulationService:
         self._id_generator = id_generator
 
     async def create_session(
-        self, command: CreateSimulationSessionCommand
+        self, command: CreateSimulationSessionCommand, *, tenant_context: TenantContext
     ) -> SimulationSessionResult:
-        if not await self._baseline_reader.portfolio_exists(command.portfolio_id):
+        tenant_id = tenant_context.tenant_id_text
+        if not await self._baseline_reader.portfolio_exists(
+            tenant_id=tenant_id,
+            portfolio_id=command.portfolio_id,
+        ):
             raise SimulationPortfolioNotFoundError(
                 f"Portfolio with id {command.portfolio_id} not found"
             )
@@ -148,56 +153,93 @@ class SimulationService:
         session_id = self._id_generator.new_id()
         await self._store.stage_session(
             session_id=session_id,
+            tenant_id=tenant_id,
             portfolio_id=command.portfolio_id,
             created_by=command.created_by,
             created_at=now,
             expires_at=now + timedelta(hours=command.ttl_hours),
         )
         await self._commit()
-        return SimulationSessionResult(session=await self._require_session(session_id))
+        return SimulationSessionResult(
+            session=await self._require_session(tenant_id=tenant_id, session_id=session_id)
+        )
 
-    async def get_session(self, session_id: str) -> SimulationSessionResult:
-        return SimulationSessionResult(session=await self._require_session(session_id))
+    async def get_session(
+        self, session_id: str, *, tenant_context: TenantContext
+    ) -> SimulationSessionResult:
+        return SimulationSessionResult(
+            session=await self._require_session(
+                tenant_id=tenant_context.tenant_id_text,
+                session_id=session_id,
+            )
+        )
 
-    async def close_session(self, session_id: str) -> SimulationSessionResult:
-        session = await self._require_session(session_id)
-        await self._store.stage_session_close(session_id, version=session.version + 1)
+    async def close_session(
+        self, session_id: str, *, tenant_context: TenantContext
+    ) -> SimulationSessionResult:
+        tenant_id = tenant_context.tenant_id_text
+        session = await self._require_session(tenant_id=tenant_id, session_id=session_id)
+        await self._store.stage_session_close(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            version=session.version + 1,
+        )
         await self._commit()
-        return SimulationSessionResult(session=await self._require_session(session_id))
+        return SimulationSessionResult(
+            session=await self._require_session(tenant_id=tenant_id, session_id=session_id)
+        )
 
     async def add_changes(
         self,
         session_id: str,
         changes: list[SimulationChangeCommand],
+        *,
+        tenant_context: TenantContext,
     ) -> SimulationChangesResult:
+        tenant_id = tenant_context.tenant_id_text
         self._validate_change_values(changes)
-        session = await self._require_active_session(session_id)
+        session = await self._require_active_session(tenant_id=tenant_id, session_id=session_id)
         await self._store.stage_changes(
             session,
+            tenant_id=tenant_id,
             version=session.version + 1,
             changes=[self._change_payload_with_id(item) for item in changes],
         )
         await self._commit()
-        return await self._changes_result(session_id)
+        return await self._changes_result(tenant_id=tenant_id, session_id=session_id)
 
-    async def delete_change(self, session_id: str, change_id: str) -> SimulationChangesResult:
-        session = await self._require_active_session(session_id)
+    async def delete_change(
+        self,
+        session_id: str,
+        change_id: str,
+        *,
+        tenant_context: TenantContext,
+    ) -> SimulationChangesResult:
+        tenant_id = tenant_context.tenant_id_text
+        session = await self._require_active_session(tenant_id=tenant_id, session_id=session_id)
         deleted = await self._store.stage_change_delete(
-            session_id,
-            change_id,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            change_id=change_id,
             version=session.version + 1,
         )
         if not deleted:
             await self._unit_of_work.rollback()
             raise SimulationChangeNotFoundError(f"Simulation change {change_id} not found")
         await self._commit()
-        return await self._changes_result(session_id)
+        return await self._changes_result(tenant_id=tenant_id, session_id=session_id)
 
-    async def get_projected_positions(self, session_id: str) -> ProjectedPositionsResult:
-        session = await self._require_session(session_id)
-        baselines = await self._baseline_reader.get_current_positions(session.portfolio_id)
+    async def get_projected_positions(
+        self, session_id: str, *, tenant_context: TenantContext
+    ) -> ProjectedPositionsResult:
+        tenant_id = tenant_context.tenant_id_text
+        session = await self._require_session(tenant_id=tenant_id, session_id=session_id)
+        baselines = await self._baseline_reader.get_current_positions(
+            tenant_id=tenant_id,
+            portfolio_id=session.portfolio_id,
+        )
         states = self._projection_states(baselines)
-        changes = await self._store.get_changes(session_id)
+        changes = await self._store.get_changes(tenant_id=tenant_id, session_id=session_id)
         normalized_changes = self._normalized_changes(changes)
         for security_id, _change in normalized_changes:
             states.setdefault(security_id, self._empty_projection_state(security_id))
@@ -210,8 +252,13 @@ class SimulationService:
             positions=self._projected_positions(states),
         )
 
-    async def get_projected_summary(self, session_id: str) -> ProjectedSummaryResult:
-        projected = await self.get_projected_positions(session_id)
+    async def get_projected_summary(
+        self, session_id: str, *, tenant_context: TenantContext
+    ) -> ProjectedSummaryResult:
+        projected = await self.get_projected_positions(
+            session_id,
+            tenant_context=tenant_context,
+        )
         return ProjectedSummaryResult(
             session_id=projected.session_id,
             portfolio_id=projected.portfolio_id,
@@ -225,14 +272,16 @@ class SimulationService:
             ),
         )
 
-    async def _require_session(self, session_id: str) -> SimulationSession:
-        session = await self._store.get_session(session_id)
+    async def _require_session(self, *, tenant_id: str, session_id: str) -> SimulationSession:
+        session = await self._store.get_session(tenant_id=tenant_id, session_id=session_id)
         if session is None:
             raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
         return session
 
-    async def _require_active_session(self, session_id: str) -> SimulationSession:
-        session = await self._require_session(session_id)
+    async def _require_active_session(
+        self, *, tenant_id: str, session_id: str
+    ) -> SimulationSession:
+        session = await self._require_session(tenant_id=tenant_id, session_id=session_id)
         if session.status != "ACTIVE":
             raise SimulationMutationInvalidError(f"Simulation session {session_id} is not active")
         if session.expires_at < self._clock.utc_now():
@@ -260,12 +309,12 @@ class SimulationService:
             await self._unit_of_work.rollback()
             raise
 
-    async def _changes_result(self, session_id: str) -> SimulationChangesResult:
-        session = await self._require_session(session_id)
+    async def _changes_result(self, *, tenant_id: str, session_id: str) -> SimulationChangesResult:
+        session = await self._require_session(tenant_id=tenant_id, session_id=session_id)
         return SimulationChangesResult(
             session_id=session.session_id,
             version=session.version,
-            changes=await self._store.get_changes(session_id),
+            changes=await self._store.get_changes(tenant_id=tenant_id, session_id=session_id),
         )
 
     def _change_payload_with_id(self, change: SimulationChangeCommand) -> dict[str, Any]:

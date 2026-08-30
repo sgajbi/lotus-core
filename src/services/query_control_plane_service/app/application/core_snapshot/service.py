@@ -246,6 +246,7 @@ class CoreSnapshotService:
             request=request,
         )
         resolution = await self.projected_position_resolver.resolve_projected_positions(
+            tenant_id=request.tenant_id,
             session_id=session.session_id,
             as_of_date=request.as_of_date,
             portfolio_base_currency=portfolio_currency,

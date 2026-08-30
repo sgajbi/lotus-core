@@ -24,7 +24,11 @@ async def async_test_client():
     mock_service = AsyncMock()
     app.dependency_overrides[get_simulation_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Tenant-Id": "tenant-a"},
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_simulation_service, None)
 
@@ -67,6 +71,9 @@ async def test_create_simulation_session_success(async_test_client):
 
     assert response.status_code == 201
     assert response.json()["session"]["session_id"] == "S1"
+    assert (
+        mock_service.create_session.await_args.kwargs["tenant_context"].tenant_id_text == "tenant-a"
+    )
 
 
 async def test_get_simulation_session_success(async_test_client):

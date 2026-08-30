@@ -44,7 +44,9 @@ async def test_simulation_session_validator_returns_matching_session() -> None:
     )
 
     assert result is session
-    simulation_repo.get_session.assert_awaited_once_with("SIM_1")
+    simulation_repo.get_session.assert_awaited_once_with(
+        tenant_id="tenant-test", session_id="SIM_1"
+    )
 
 
 async def test_simulation_session_validator_requires_simulation_options() -> None:

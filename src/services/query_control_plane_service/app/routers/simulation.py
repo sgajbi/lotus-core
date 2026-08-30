@@ -1,5 +1,5 @@
 # src/services/query_control_plane_service/app/routers/simulation.py
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Request, status
 from portfolio_common.domain.decimal_amount import decimal_or_none
 
 from ..application.simulation import (
@@ -121,6 +121,7 @@ def _raise_simulation_not_found(exc: ValueError) -> None:
     ),
 )
 async def create_simulation_session(
+    http_request: Request,
     request: SimulationSessionCreateRequest,
     service: SimulationService = Depends(get_simulation_service),
 ):
@@ -130,7 +131,8 @@ async def create_simulation_session(
                 portfolio_id=request.portfolio_id,
                 created_by=request.created_by,
                 ttl_hours=request.ttl_hours,
-            )
+            ),
+            tenant_context=http_request.state.tenant_context,
         )
         return SimulationSessionResponse.model_validate(result, from_attributes=True)
     except SimulationPortfolioNotFoundError as exc:
@@ -163,6 +165,7 @@ async def create_simulation_session(
     description="Get simulation session metadata by session identifier.",
 )
 async def get_simulation_session(
+    http_request: Request,
     session_id: str = Path(
         ...,
         description="Simulation session identifier.",
@@ -171,7 +174,10 @@ async def get_simulation_session(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        result = await service.get_session(session_id)
+        result = await service.get_session(
+            session_id,
+            tenant_context=http_request.state.tenant_context,
+        )
         return SimulationSessionResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
@@ -192,6 +198,7 @@ async def get_simulation_session(
     ),
 )
 async def close_simulation_session(
+    http_request: Request,
     session_id: str = Path(
         ...,
         description="Simulation session identifier.",
@@ -200,7 +207,10 @@ async def close_simulation_session(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        result = await service.close_session(session_id)
+        result = await service.close_session(
+            session_id,
+            tenant_context=http_request.state.tenant_context,
+        )
         return SimulationSessionResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
@@ -225,6 +235,7 @@ async def close_simulation_session(
     ),
 )
 async def add_simulation_changes(
+    http_request: Request,
     request: SimulationChangeUpsertRequest,
     session_id: str = Path(
         ...,
@@ -247,7 +258,11 @@ async def add_simulation_changes(
             )
             for item in request.changes
         ]
-        result = await service.add_changes(session_id, changes)
+        result = await service.add_changes(
+            session_id,
+            changes,
+            tenant_context=http_request.state.tenant_context,
+        )
         return SimulationChangesResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_resource_not_found(exc)
@@ -271,6 +286,7 @@ async def add_simulation_changes(
     description="Delete a simulation change from a session.",
 )
 async def delete_simulation_change(
+    http_request: Request,
     session_id: str = Path(
         ...,
         description="Simulation session identifier.",
@@ -284,7 +300,11 @@ async def delete_simulation_change(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        result = await service.delete_change(session_id, change_id)
+        result = await service.delete_change(
+            session_id,
+            change_id,
+            tenant_context=http_request.state.tenant_context,
+        )
         return SimulationChangesResponse.model_validate(result, from_attributes=True)
     except (SimulationSessionNotFoundError, SimulationChangeNotFoundError) as exc:
         _raise_simulation_resource_not_found(exc)
@@ -308,6 +328,7 @@ async def delete_simulation_change(
     ),
 )
 async def get_projected_positions(
+    http_request: Request,
     session_id: str = Path(
         ...,
         description="Simulation session identifier.",
@@ -316,7 +337,10 @@ async def get_projected_positions(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        result = await service.get_projected_positions(session_id)
+        result = await service.get_projected_positions(
+            session_id,
+            tenant_context=http_request.state.tenant_context,
+        )
         return ProjectedPositionsResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
@@ -338,6 +362,7 @@ async def get_projected_positions(
     ),
 )
 async def get_projected_summary(
+    http_request: Request,
     session_id: str = Path(
         ...,
         description="Simulation session identifier.",
@@ -346,7 +371,10 @@ async def get_projected_summary(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        result = await service.get_projected_summary(session_id)
+        result = await service.get_projected_summary(
+            session_id,
+            tenant_context=http_request.state.tenant_context,
+        )
         return ProjectedSummaryResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)

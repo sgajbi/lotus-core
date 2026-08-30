@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.query_control_plane_service.app.application.simulation import (
     CreateSimulationSessionCommand,
@@ -27,6 +28,7 @@ from src.services.query_control_plane_service.app.domain.simulation_effects impo
 
 pytestmark = pytest.mark.asyncio
 NOW = datetime(2026, 7, 1, 8, 30, tzinfo=timezone.utc)
+TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-a"), identity_verified=True)
 
 
 class _FixedClock:
@@ -48,6 +50,7 @@ class _SequenceIdGenerator:
 def _session(*, status: str = "ACTIVE", version: int = 2, expires_at=None):
     return SimulationSession(
         session_id="S1",
+        tenant_id="tenant-a",
         portfolio_id="P1",
         status=status,
         version=version,
@@ -129,19 +132,24 @@ def _service(dependencies, *ids: str) -> SimulationService:
 
 
 async def test_create_session_stages_and_returns_committed_state(dependencies):
-    store, _, unit_of_work = dependencies
+    store, baseline_reader, unit_of_work = dependencies
     service = _service(dependencies, "SIM-SESSION-1")
 
     result = await service.create_session(
-        CreateSimulationSessionCommand(portfolio_id="P1", created_by="tester", ttl_hours=24)
+        CreateSimulationSessionCommand(portfolio_id="P1", created_by="tester", ttl_hours=24),
+        tenant_context=TENANT_CONTEXT,
     )
 
     store.stage_session.assert_awaited_once_with(
         session_id="SIM-SESSION-1",
+        tenant_id="tenant-a",
         portfolio_id="P1",
         created_by="tester",
         created_at=NOW,
         expires_at=NOW + timedelta(hours=24),
+    )
+    baseline_reader.portfolio_exists.assert_awaited_once_with(
+        tenant_id="tenant-a", portfolio_id="P1"
     )
     unit_of_work.commit.assert_awaited_once()
     assert result.session.session_id == "S1"
@@ -153,10 +161,14 @@ async def test_create_session_rejects_unknown_portfolio(dependencies):
 
     with pytest.raises(SimulationPortfolioNotFoundError, match="Portfolio with id P404 not found"):
         await _service(dependencies).create_session(
-            CreateSimulationSessionCommand(portfolio_id="P404", created_by=None, ttl_hours=24)
+            CreateSimulationSessionCommand(portfolio_id="P404", created_by=None, ttl_hours=24),
+            tenant_context=TENANT_CONTEXT,
         )
 
     store.stage_session.assert_not_awaited()
+    baseline_reader.portfolio_exists.assert_awaited_once_with(
+        tenant_id="tenant-a", portfolio_id="P404"
+    )
     unit_of_work.commit.assert_not_awaited()
 
 
@@ -179,6 +191,7 @@ async def test_mutation_commit_failure_rolls_back(dependencies):
                     metadata=None,
                 )
             ],
+            tenant_context=TENANT_CONTEXT,
         )
 
     unit_of_work.rollback.assert_awaited_once()
@@ -189,11 +202,12 @@ async def test_get_session_rejects_missing_session(dependencies):
     store.get_session.return_value = None
 
     with pytest.raises(SimulationSessionNotFoundError, match="Simulation session S404 not found"):
-        await _service(dependencies).get_session("S404")
+        await _service(dependencies).get_session("S404", tenant_context=TENANT_CONTEXT)
+    store.get_session.assert_awaited_once_with(tenant_id="tenant-a", session_id="S404")
 
 
 async def test_get_session_returns_current_state(dependencies):
-    result = await _service(dependencies).get_session("S1")
+    result = await _service(dependencies).get_session("S1", tenant_context=TENANT_CONTEXT)
     assert result.session == _session()
 
 
@@ -201,9 +215,11 @@ async def test_close_session_increments_version(dependencies):
     store, _, unit_of_work = dependencies
     store.get_session.side_effect = [_session(version=3), _session(status="CLOSED", version=4)]
 
-    result = await _service(dependencies).close_session("S1")
+    result = await _service(dependencies).close_session("S1", tenant_context=TENANT_CONTEXT)
 
-    store.stage_session_close.assert_awaited_once_with("S1", version=4)
+    store.stage_session_close.assert_awaited_once_with(
+        tenant_id="tenant-a", session_id="S1", version=4
+    )
     unit_of_work.commit.assert_awaited_once()
     assert result.session.status == "CLOSED"
     assert result.session.version == 4
@@ -228,6 +244,7 @@ async def test_add_changes_returns_versioned_records(dependencies):
                 metadata={"source": "unit"},
             )
         ],
+        tenant_context=TENANT_CONTEXT,
     )
 
     assert result.version == 3
@@ -259,6 +276,7 @@ async def test_add_changes_rejects_invalid_price_before_staging(dependencies, pr
                     metadata=None,
                 )
             ],
+            tenant_context=TENANT_CONTEXT,
         )
 
     store.get_session.assert_not_awaited()
@@ -306,6 +324,7 @@ async def test_add_changes_rejects_unpersistable_values_before_session_lookup(
                     metadata=None,
                 )
             ],
+            tenant_context=TENANT_CONTEXT,
         )
 
     store.get_session.assert_not_awaited()
@@ -325,7 +344,7 @@ async def test_add_changes_rejects_inactive_or_expired_session(dependencies, ses
     store.get_session.return_value = session
 
     with pytest.raises(SimulationMutationInvalidError, match=message):
-        await _service(dependencies).add_changes("S1", [])
+        await _service(dependencies).add_changes("S1", [], tenant_context=TENANT_CONTEXT)
 
 
 async def test_delete_change_returns_remaining_versioned_changes(dependencies):
@@ -334,9 +353,11 @@ async def test_delete_change_returns_remaining_versioned_changes(dependencies):
     store.stage_change_delete.return_value = True
     store.get_changes.return_value = [_change(security_id="SEC_MSFT_US")]
 
-    result = await _service(dependencies).delete_change("S1", "C1")
+    result = await _service(dependencies).delete_change("S1", "C1", tenant_context=TENANT_CONTEXT)
 
-    store.stage_change_delete.assert_awaited_once_with("S1", "C1", version=3)
+    store.stage_change_delete.assert_awaited_once_with(
+        tenant_id="tenant-a", session_id="S1", change_id="C1", version=3
+    )
     unit_of_work.commit.assert_awaited_once()
     assert result.version == 3
 
@@ -346,14 +367,16 @@ async def test_delete_missing_change_rolls_back(dependencies):
     store.stage_change_delete.return_value = False
 
     with pytest.raises(SimulationChangeNotFoundError, match="Simulation change C404 not found"):
-        await _service(dependencies).delete_change("S1", "C404")
+        await _service(dependencies).delete_change("S1", "C404", tenant_context=TENANT_CONTEXT)
 
     unit_of_work.rollback.assert_awaited_once()
     unit_of_work.commit.assert_not_awaited()
 
 
 async def test_projected_positions_apply_change_delta(dependencies):
-    result = await _service(dependencies).get_projected_positions("S1")
+    result = await _service(dependencies).get_projected_positions(
+        "S1", tenant_context=TENANT_CONTEXT
+    )
 
     assert result.baseline_as_of == date(2025, 9, 10)
     assert result.positions[0].baseline_quantity == Decimal("100")
@@ -367,7 +390,9 @@ async def test_projected_positions_preserve_missing_optional_costs(dependencies)
         _baseline(cost_basis=None, cost_basis_local=None)
     ]
 
-    result = await _service(dependencies).get_projected_positions("S1")
+    result = await _service(dependencies).get_projected_positions(
+        "S1", tenant_context=TENANT_CONTEXT
+    )
 
     assert result.positions[0].cost_basis is None
     assert result.positions[0].cost_basis_local is None
@@ -381,7 +406,9 @@ async def test_projected_positions_add_and_enrich_new_security(dependencies):
         SimulationInstrument("SEC_AAPL_US", "Apple", "Equity"),
     ]
 
-    result = await _service(dependencies).get_projected_positions("S1")
+    result = await _service(dependencies).get_projected_positions(
+        "S1", tenant_context=TENANT_CONTEXT
+    )
 
     microsoft = next(row for row in result.positions if row.security_id == "SEC_MSFT_US")
     assert microsoft.instrument_name == "Microsoft"
@@ -393,13 +420,15 @@ async def test_projected_positions_filter_non_positive_results(dependencies):
     store, _, _ = dependencies
     store.get_changes.return_value = [_change(transaction_type="SELL", quantity=Decimal("100"))]
 
-    result = await _service(dependencies).get_projected_positions("S1")
+    result = await _service(dependencies).get_projected_positions(
+        "S1", tenant_context=TENANT_CONTEXT
+    )
 
     assert result.positions == []
 
 
 async def test_projected_summary_counts_baseline_and_delta(dependencies):
-    result = await _service(dependencies).get_projected_summary("S1")
+    result = await _service(dependencies).get_projected_summary("S1", tenant_context=TENANT_CONTEXT)
 
     assert result.total_baseline_positions == 1
     assert result.total_proposed_positions == 1

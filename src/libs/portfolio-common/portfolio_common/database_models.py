@@ -30,6 +30,7 @@ from .domain.portfolio_party_roles import (
 )
 from .financial_numeric import ExactNumeric
 from .ingestion_job_schema import ingestion_job_table_args
+from .simulation_session_model import SimulationSession as SimulationSession
 from .source_lifecycle_predicates import (
     BENCHMARK_DEFINITION_ACTIVE,
     CLIENT_INCOME_NEEDS_ACTIVE,
@@ -135,6 +136,11 @@ class Portfolio(Base):
             "portfolio_id",
             name="uq_portfolios_book_scope_identity",
         ),
+        UniqueConstraint(
+            "tenant_id",
+            "portfolio_id",
+            name="uq_portfolios_tenant_portfolio_id",
+        ),
         CheckConstraint(
             "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND "
             "(legal_book_id IS NULL OR "
@@ -151,22 +157,6 @@ class Portfolio(Base):
             "close_date",
             "portfolio_id",
         ),
-    )
-
-
-class SimulationSession(Base):
-    __tablename__ = "simulation_sessions"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String, unique=True, index=True, nullable=False)
-    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), index=True, nullable=False)
-    status = Column(String, nullable=False, server_default="ACTIVE")
-    version = Column(Integer, nullable=False, server_default="1")
-    created_by = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

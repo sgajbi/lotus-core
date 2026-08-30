@@ -25,7 +25,10 @@ class CoreSnapshotSimulationSessionValidator:
         request: CoreSnapshotRequest,
     ) -> SimulationSession:
         session_opts = self._required_simulation_options(request)
-        session = await self._required_simulation_session(session_opts.session_id)
+        session = await self._required_simulation_session(
+            tenant_id=request.tenant_id,
+            session_id=session_opts.session_id,
+        )
         self._validate_simulation_portfolio(session=session, portfolio_id=portfolio_id)
         self._validate_simulation_version(
             session=session,
@@ -42,8 +45,13 @@ class CoreSnapshotSimulationSessionValidator:
             )
         return session_opts
 
-    async def _required_simulation_session(self, session_id: str) -> Any:
-        session = await self._simulation_store.get_session(session_id)
+    async def _required_simulation_session(
+        self, *, tenant_id: str, session_id: str
+    ) -> SimulationSession:
+        session = await self._simulation_store.get_session(
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
         if session is None:
             raise CoreSnapshotNotFoundError(f"Simulation session {session_id} not found")
         return session

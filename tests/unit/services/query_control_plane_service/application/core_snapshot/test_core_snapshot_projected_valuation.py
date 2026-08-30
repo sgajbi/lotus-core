@@ -90,6 +90,7 @@ async def test_projected_position_resolver_prices_new_short_position(
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEG")]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
+        tenant_id="tenant-test",
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
@@ -134,6 +135,7 @@ async def test_projected_position_resolver_normalizes_change_security_ids(
     instrument_repo.get_by_security_ids.return_value = [_instrument(" SEC_NEW ")]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
+        tenant_id="tenant-test",
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
@@ -187,6 +189,7 @@ async def test_projected_position_resolver_prices_new_security_with_fx(
     ]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
+        tenant_id="tenant-test",
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
@@ -238,6 +241,7 @@ async def test_projected_market_value_ignores_ambient_decimal_precision(
         with localcontext() as context:
             context.prec = ambient_precision
             projected = await resolver.resolve_projected_positions(
+                tenant_id="tenant-test",
                 session_id="SIM_1",
                 as_of_date=date(2026, 2, 27),
                 portfolio_base_currency="USD",
@@ -281,6 +285,7 @@ async def test_projected_position_resolver_reuses_market_fx_per_currency(
     ]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
+        tenant_id="tenant-test",
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
@@ -348,6 +353,7 @@ async def test_projected_position_resolver_reads_new_security_prices_sequentiall
     ]
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
+        tenant_id="tenant-test",
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
@@ -370,6 +376,7 @@ async def test_projected_position_resolver_filters_cash_and_zero_quantity(
     simulation_repo.get_changes.return_value = []
 
     projected = await _resolver(resolver_dependencies).resolve_projected_positions(
+        tenant_id="tenant-test",
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",

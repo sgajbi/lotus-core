@@ -58,6 +58,7 @@ class CoreSnapshotProjectedPositionResolver:
     async def resolve_projected_positions(
         self,
         *,
+        tenant_id: str,
         session_id: str,
         as_of_date: date,
         portfolio_base_currency: str,
@@ -68,7 +69,10 @@ class CoreSnapshotProjectedPositionResolver:
     ) -> ProjectedPositionsResolution:
         projected = baseline_projected_positions(baseline_positions)
 
-        normalized_changes = await self._normalized_simulation_changes(session_id)
+        normalized_changes = await self._normalized_simulation_changes(
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
         await self._seed_missing_projected_instruments(projected, normalized_changes)
         apply_projected_position_changes(projected, normalized_changes)
         observations = await self._value_projected_positions(
@@ -100,9 +104,12 @@ class CoreSnapshotProjectedPositionResolver:
         )
 
     async def _normalized_simulation_changes(
-        self, session_id: str
+        self, *, tenant_id: str, session_id: str
     ) -> list[tuple[str, SimulationChange]]:
-        changes = await self._simulation_store.get_changes(session_id)
+        changes = await self._simulation_store.get_changes(
+            tenant_id=tenant_id,
+            session_id=session_id,
+        )
         return [self._normalized_simulation_change(change) for change in changes]
 
     @staticmethod

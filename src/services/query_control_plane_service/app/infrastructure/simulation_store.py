@@ -19,7 +19,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.decimal_amount import decimal_or_none, decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.simulation import (
@@ -40,6 +40,7 @@ class SqlAlchemySimulationStore:
         self,
         *,
         session_id: str,
+        tenant_id: str,
         portfolio_id: str,
         created_by: str | None,
         created_at: datetime,
@@ -48,6 +49,7 @@ class SqlAlchemySimulationStore:
         self._db.add(
             SimulationSessionRow(
                 session_id=session_id,
+                tenant_id=tenant_id,
                 portfolio_id=portfolio_id,
                 status="ACTIVE",
                 version=1,
@@ -57,17 +59,23 @@ class SqlAlchemySimulationStore:
             )
         )
 
-    async def get_session(self, session_id: str) -> SimulationSession | None:
+    async def get_session(self, *, tenant_id: str, session_id: str) -> SimulationSession | None:
         result = await self._db.execute(
-            select(SimulationSessionRow).where(SimulationSessionRow.session_id == session_id)
+            select(SimulationSessionRow).where(
+                SimulationSessionRow.tenant_id == tenant_id,
+                SimulationSessionRow.session_id == session_id,
+            )
         )
         row = result.scalars().first()
         return _session_record(row) if row is not None else None
 
-    async def stage_session_close(self, session_id: str, *, version: int) -> None:
+    async def stage_session_close(self, *, tenant_id: str, session_id: str, version: int) -> None:
         await self._db.execute(
             update(SimulationSessionRow)
-            .where(SimulationSessionRow.session_id == session_id)
+            .where(
+                SimulationSessionRow.tenant_id == tenant_id,
+                SimulationSessionRow.session_id == session_id,
+            )
             .values(status="CLOSED", version=version, updated_at=func.now())
         )
 
@@ -75,12 +83,18 @@ class SqlAlchemySimulationStore:
         self,
         session: SimulationSession,
         *,
+        tenant_id: str,
         version: int,
         changes: Sequence[dict[str, Any]],
     ) -> None:
+        if session.tenant_id != tenant_id:
+            raise ValueError("simulation session tenant does not match admitted tenant authority")
         await self._db.execute(
             update(SimulationSessionRow)
-            .where(SimulationSessionRow.session_id == session.session_id)
+            .where(
+                SimulationSessionRow.tenant_id == tenant_id,
+                SimulationSessionRow.session_id == session.session_id,
+            )
             .values(version=version, updated_at=func.now())
         )
         for item in changes:
@@ -102,30 +116,45 @@ class SqlAlchemySimulationStore:
 
     async def stage_change_delete(
         self,
+        *,
+        tenant_id: str,
         session_id: str,
         change_id: str,
-        *,
         version: int,
     ) -> bool:
         result = await self._db.execute(
             delete(SimulationChangeRow).where(
                 SimulationChangeRow.session_id == session_id,
                 SimulationChangeRow.change_id == change_id,
+                exists(
+                    select(1).where(
+                        SimulationSessionRow.tenant_id == tenant_id,
+                        SimulationSessionRow.session_id == session_id,
+                    )
+                ),
             )
         )
         if int(result.rowcount or 0) == 0:
             return False
         await self._db.execute(
             update(SimulationSessionRow)
-            .where(SimulationSessionRow.session_id == session_id)
+            .where(
+                SimulationSessionRow.tenant_id == tenant_id,
+                SimulationSessionRow.session_id == session_id,
+            )
             .values(version=version, updated_at=func.now())
         )
         return True
 
-    async def get_changes(self, session_id: str) -> list[SimulationChange]:
+    async def get_changes(self, *, tenant_id: str, session_id: str) -> list[SimulationChange]:
         result = await self._db.execute(
             select(SimulationChangeRow)
+            .join(
+                SimulationSessionRow,
+                SimulationSessionRow.session_id == SimulationChangeRow.session_id,
+            )
             .where(SimulationChangeRow.session_id == session_id)
+            .where(SimulationSessionRow.tenant_id == tenant_id)
             .order_by(SimulationChangeRow.created_at.asc(), SimulationChangeRow.id.asc())
         )
         rows = cast(list[SimulationChangeRow], result.scalars().all())
@@ -138,19 +167,32 @@ class SqlAlchemySimulationBaselineReader:
     def __init__(self, db: AsyncSession):
         self._db = db
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
+    async def portfolio_exists(self, *, tenant_id: str, portfolio_id: str) -> bool:
         result = await self._db.execute(
-            select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
         )
         return result.scalar_one_or_none() is not None
 
-    async def get_current_positions(self, portfolio_id: str) -> list[SimulationPositionBaseline]:
-        snapshot_rows = await self._current_snapshot_rows(portfolio_id)
+    async def get_current_positions(
+        self, *, tenant_id: str, portfolio_id: str
+    ) -> list[SimulationPositionBaseline]:
+        snapshot_rows = await self._current_snapshot_rows(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+        )
         if snapshot_rows:
             return [
                 _snapshot_baseline(snapshot, instrument) for snapshot, instrument in snapshot_rows
             ]
-        history_rows = await self._current_history_rows(portfolio_id)
+        history_rows = await self._current_history_rows(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+        )
         return [_history_baseline(history, instrument) for history, instrument in history_rows]
 
     async def get_instruments(self, security_ids: list[str]) -> list[SimulationInstrument]:
@@ -170,9 +212,12 @@ class SqlAlchemySimulationBaselineReader:
         return [_instrument_record(row) for row in rows]
 
     async def _current_snapshot_rows(
-        self, portfolio_id: str
+        self, *, tenant_id: str, portfolio_id: str
     ) -> list[tuple[DailyPositionSnapshot, Instrument]]:
-        current_history = _current_position_history_scope(portfolio_id)
+        current_history = _current_position_history_scope(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+        )
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         ranked_snapshots = (
             select(
@@ -200,6 +245,7 @@ class SqlAlchemySimulationBaselineReader:
                 ),
             )
             .where(
+                _owned_portfolio(tenant_id=tenant_id, portfolio_id=portfolio_id),
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
                 DailyPositionSnapshot.quantity != 0,
             )
@@ -220,7 +266,7 @@ class SqlAlchemySimulationBaselineReader:
         return cast(list[tuple[DailyPositionSnapshot, Instrument]], result.all())
 
     async def _current_history_rows(
-        self, portfolio_id: str
+        self, *, tenant_id: str, portfolio_id: str
     ) -> list[tuple[PositionHistory, Instrument]]:
         history_security_id = func.trim(PositionHistory.security_id)
         state_security_id = func.trim(PositionState.security_id)
@@ -243,6 +289,7 @@ class SqlAlchemySimulationBaselineReader:
                 ),
             )
             .where(PositionHistory.portfolio_id == portfolio_id)
+            .where(_owned_portfolio(tenant_id=tenant_id, portfolio_id=portfolio_id))
             .subquery()
         )
         result = await self._db.execute(
@@ -261,7 +308,16 @@ class SqlAlchemySimulationBaselineReader:
         return cast(list[tuple[PositionHistory, Instrument]], result.all())
 
 
-def _current_position_history_scope(portfolio_id: str):
+def _owned_portfolio(*, tenant_id: str, portfolio_id: str):
+    return exists(
+        select(1).where(
+            Portfolio.tenant_id == tenant_id,
+            Portfolio.portfolio_id == portfolio_id,
+        )
+    )
+
+
+def _current_position_history_scope(*, tenant_id: str, portfolio_id: str):
     history_security_id = func.trim(PositionHistory.security_id)
     state_security_id = func.trim(PositionState.security_id)
     ranked_history = (
@@ -286,6 +342,7 @@ def _current_position_history_scope(portfolio_id: str):
             ),
         )
         .where(PositionHistory.portfolio_id == portfolio_id)
+        .where(_owned_portfolio(tenant_id=tenant_id, portfolio_id=portfolio_id))
         .subquery()
     )
     return (
@@ -298,6 +355,7 @@ def _current_position_history_scope(portfolio_id: str):
 def _session_record(row: SimulationSessionRow) -> SimulationSession:
     return SimulationSession(
         session_id=str(row.session_id),
+        tenant_id=str(row.tenant_id),
         portfolio_id=str(row.portfolio_id),
         status=str(row.status),
         version=int(row.version),
