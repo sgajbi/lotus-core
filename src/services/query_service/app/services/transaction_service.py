@@ -41,14 +41,18 @@ from .transaction_records import (
 logger = logging.getLogger(__name__)
 
 
-def _raise_transaction_record_unavailable(exc: SQLAlchemyError) -> NoReturn:
+def _raise_transaction_record_unavailable(
+    exc: Exception,
+    *,
+    reason_code: str,
+) -> NoReturn:
     logger.exception(
-        "Exact transaction source query failed.",
+        "Exact transaction source resolution failed.",
         extra=operation_log_extra(
             event_name="query.transaction_service.record_unavailable",
             operation="query.transaction_service.get_transaction_record",
             status="failed",
-            reason_code="source_query_failed",
+            reason_code=reason_code,
         ),
     )
     raise TransactionRecordUnavailableError(
@@ -178,6 +182,9 @@ class TransactionService:
     ) -> TransactionRecordResponse:
         """Return one portfolio-owned transaction with complete ledger proof metadata."""
 
+        resolved_reporting_currency = (
+            normalize_currency_code(reporting_currency) if reporting_currency is not None else None
+        )
         logger.info(
             "Exact transaction record query requested.",
             extra=operation_log_extra(
@@ -220,10 +227,10 @@ class TransactionService:
                 limit=2,
                 sort_by=None,
                 sort_order="desc",
-                reporting_currency=reporting_currency,
+                reporting_currency=resolved_reporting_currency,
             )
         except SQLAlchemyError as exc:
-            _raise_transaction_record_unavailable(exc)
+            _raise_transaction_record_unavailable(exc, reason_code="source_query_failed")
 
         if ledger_page.total_count == 0:
             raise LookupError("Transaction record not found for requested portfolio")
@@ -235,26 +242,31 @@ class TransactionService:
         try:
             records = await transaction_records_from_rows(
                 rows=ledger_page.rows,
-                reporting_currency=reporting_currency,
+                reporting_currency=resolved_reporting_currency,
                 as_of_date=effective_as_of_date,
                 convert_amount=self._convert_amount,
             )
         except SQLAlchemyError as exc:
-            _raise_transaction_record_unavailable(exc)
+            _raise_transaction_record_unavailable(exc, reason_code="source_query_failed")
+        except ValueError as exc:
+            _raise_transaction_record_unavailable(exc, reason_code="source_evidence_invalid")
         if len(records) != 1:
             raise TransactionRecordUnavailableError(
                 "Transaction record source returned inconsistent mapped evidence"
             )
-        return exact_transaction_record_response(
-            portfolio_id=portfolio_id,
-            reporting_currency=reporting_currency,
-            transaction=records[0],
-            effective_as_of_date=effective_as_of_date,
-            latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
-            ledger_filters=ledger_filters,
-            input_evidence=ledger_page.input_evidence,
-            missing_instrument_security_ids=ledger_page.missing_instrument_security_ids,
-        )
+        try:
+            return exact_transaction_record_response(
+                portfolio_id=portfolio_id,
+                reporting_currency=resolved_reporting_currency,
+                transaction=records[0],
+                effective_as_of_date=effective_as_of_date,
+                latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
+                ledger_filters=ledger_filters,
+                input_evidence=ledger_page.input_evidence,
+                missing_instrument_security_ids=ledger_page.missing_instrument_security_ids,
+            )
+        except ValueError as exc:
+            _raise_transaction_record_unavailable(exc, reason_code="source_evidence_invalid")
 
     async def get_realized_tax_summary(
         self,
