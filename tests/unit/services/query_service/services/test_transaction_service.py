@@ -303,9 +303,10 @@ async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
 
 async def test_get_transaction_record_maps_database_failure_to_unavailable(
     mock_transaction_repo: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     mock_transaction_repo.get_transaction_ledger_input_evidence.side_effect = SQLAlchemyError(
-        "database unavailable"
+        "database unavailable for portfolio PII-PORTFOLIO transaction PII-TRANSACTION"
     )
 
     with patch(
@@ -322,6 +323,10 @@ async def test_get_transaction_record_maps_database_failure_to_unavailable(
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
             )
+
+    assert "Exact transaction source resolution failed." in caplog.text
+    assert "PII-PORTFOLIO" not in caplog.text
+    assert "PII-TRANSACTION" not in caplog.text
 
 
 async def test_get_transaction_record_maps_fx_source_failure_to_unavailable(

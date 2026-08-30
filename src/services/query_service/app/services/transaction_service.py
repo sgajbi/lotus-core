@@ -46,7 +46,7 @@ def _raise_transaction_record_unavailable(
     *,
     reason_code: str,
 ) -> NoReturn:
-    logger.exception(
+    logger.error(
         "Exact transaction source resolution failed.",
         extra=operation_log_extra(
             event_name="query.transaction_service.record_unavailable",
