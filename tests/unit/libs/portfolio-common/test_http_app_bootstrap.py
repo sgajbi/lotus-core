@@ -10,7 +10,13 @@ from portfolio_common.http_app_bootstrap import (
     METRICS_PROTECTED_SCRAPE_MODE,
     SECURE_RESPONSE_HEADERS,
     UNMATCHED_ROUTE_TEMPLATE,
+    MetricsAccessPolicy,
+    configure_cors_policy,
+    configure_metrics_access_policy,
+    configure_secure_response_headers,
     configure_standard_http_app,
+    configure_standard_openapi,
+    configure_trusted_host_policy,
     create_standard_health_app,
     http_metric_path_template,
     normalize_trace_id,
@@ -156,6 +162,120 @@ def test_standard_http_error_logs_use_route_template_without_dynamic_identifiers
     assert sensitive_transaction_id not in repr(failure_call)
 
 
+def test_standard_http_fails_safe_when_lineage_initialization_raises():
+    app = FastAPI()
+    logger = MagicMock()
+    id_generation_attempts = 0
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    def fail_first_id_generation(prefix: str) -> str:
+        nonlocal id_generation_attempts
+        id_generation_attempts += 1
+        if id_generation_attempts == 1:
+            raise RuntimeError("lineage id generator unavailable")
+        return f"{prefix}-fallback"
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=logger,
+        id_generator=fail_first_id_generation,
+    )
+
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/lineage",
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": "Internal Server Error",
+        "message": "An unexpected error occurred. Please contact support.",
+        "correlation_id": "TST-fallback",
+    }
+    assert response.headers["X-Correlation-ID"] == "TST-fallback"
+    assert response.headers["X-Request-Id"] == "REQ-fallback"
+    assert TRACEPARENT_PATTERN.fullmatch(response.headers["traceparent"])
+    for header, value in SECURE_RESPONSE_HEADERS.items():
+        assert response.headers[header] == value
+    failure_call = next(
+        call
+        for call in logger.critical.call_args_list
+        if call.args == ("http_request_unhandled_exception",)
+    )
+    assert failure_call.kwargs["extra"] == {
+        "correlation_id": "TST-fallback",
+        "method": "GET",
+        "route_template": UNMATCHED_ROUTE_TEMPLATE,
+    }
+
+
+def test_shared_http_security_policy_configuration_is_idempotent(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    app = FastAPI()
+    metrics_policy = MetricsAccessPolicy(mode=METRICS_INTERNAL_OPEN_MODE)
+
+    configure_metrics_access_policy(app, metrics_access_policy=metrics_policy)
+    configure_metrics_access_policy(app, metrics_access_policy=metrics_policy)
+    assert configure_cors_policy(app, cors_allow_origins=(" https://workbench.lotus ",)) == (
+        "https://workbench.lotus",
+    )
+    assert configure_cors_policy(app, cors_allow_origins=("https://ignored.lotus",)) == (
+        "https://workbench.lotus",
+    )
+    assert configure_trusted_host_policy(
+        app,
+        service_name="test-service",
+        trusted_hosts=(" api.lotus.local ",),
+    ) == ("api.lotus.local",)
+    assert configure_trusted_host_policy(
+        app,
+        service_name="test-service",
+        trusted_hosts=("ignored.lotus.local",),
+    ) == ("api.lotus.local",)
+    configure_secure_response_headers(app)
+    middleware_count = len(app.user_middleware)
+    configure_secure_response_headers(app)
+
+    assert len(app.user_middleware) == middleware_count
+
+
+def test_metrics_endpoint_fails_closed_for_inconsistent_protected_policy():
+    app = FastAPI()
+    configure_metrics_access_policy(
+        app,
+        metrics_access_policy=MetricsAccessPolicy(
+            mode=METRICS_PROTECTED_SCRAPE_MODE,
+            token=None,
+        ),
+    )
+
+    response = TestClient(app).get("/metrics")
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "METRICS_ACCESS_DENIED"
+
+
+def test_standard_openapi_supports_apps_without_metrics_route():
+    app = FastAPI()
+
+    @app.get("/business")
+    def read_business_state():
+        return {"ok": True}
+
+    configure_standard_openapi(app, service_name="test-service")
+
+    first_schema = app.openapi()
+    second_schema = app.openapi()
+
+    assert first_schema is second_schema
+    assert "/business" in first_schema["paths"]
+    assert "/metrics" not in first_schema["paths"]
+
+
 def test_standard_health_app_exposes_shared_observability_contract():
     latency_metric = MagicMock()
     request_metric = MagicMock()
@@ -174,9 +294,11 @@ def test_standard_health_app_exposes_shared_observability_contract():
         )
         client = TestClient(app)
         response = client.get("/health/live")
+        metrics_response = client.get("/metrics")
         schema = client.get("/openapi.json").json()
 
     assert response.status_code == 200
+    assert metrics_response.status_code == 200
     assert response.json()["runtime"]["service_name"] == "worker_service_web"
     assert response.json()["runtime"]["app_version"] == "1.0.0"
     assert response.headers["X-Correlation-ID"] == "WRK-id"
@@ -228,9 +350,13 @@ def test_standard_http_app_preserves_incoming_traceparent_context():
     )
 
     traceparent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
-    response = TestClient(app).get("/lineage", headers={"traceparent": traceparent})
+    response = TestClient(app).get(
+        "/lineage",
+        headers={"traceparent": traceparent, "X-Request-Id": "REQ-client"},
+    )
 
     assert response.status_code == 200
+    assert response.headers["X-Request-Id"] == "REQ-client"
     assert response.headers["traceparent"] == traceparent
     assert response.headers["X-Trace-Id"] == "0123456789abcdef0123456789abcdef"
 
