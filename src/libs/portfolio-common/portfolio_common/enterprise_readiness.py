@@ -22,6 +22,7 @@ from portfolio_common.domain.security_audit import (
     SecurityAuditMethod,
     SecurityAuditReason,
 )
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
 )
@@ -71,6 +72,10 @@ ENTERPRISE_UNAUTHENTICATED_PATHS = frozenset(
     }
 )
 MAX_SECURITY_AUDIT_AUTHORITY_LENGTH = 128
+TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE = (
+    "https://lotus.local/problems/enterprise/tenant-context-required"
+)
+TENANT_CONTEXT_REQUIRED_ERROR_CODE = "TENANT_CONTEXT_REQUIRED"
 
 
 class EnterpriseSettings(Protocol):
@@ -823,6 +828,36 @@ def build_enterprise_audit_middleware(
             response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
             return response
 
+        try:
+            tenant_id = TenantId(request.headers.get("X-Tenant-Id", ""))
+        except (TypeError, ValueError):
+            event = _security_audit_event(
+                runtime=runtime,
+                component=component,
+                request=request,
+                authorization=authorization,
+                decision=SecurityAuditDecision.DENY,
+                reason=SecurityAuditReason.AUTHORIZATION_POLICY_DENIED,
+            )
+            if not await _persist_security_audit(
+                runtime=runtime,
+                store=audit_store,
+                event=event,
+                failure_is_fatal=audit_failure_is_fatal,
+            ):
+                return _security_audit_unavailable_response()
+            return _tenant_context_required_response(request)
+
+        tenant_context = TenantContext(
+            tenant_id=tenant_id,
+            actor_id=request.headers.get("X-Actor-Id"),
+            role=request.headers.get("X-Role"),
+            service_identity=request.headers.get("X-Service-Identity"),
+            correlation_id=_request_correlation_id(request),
+            identity_verified=authorization.principal is not None,
+        )
+        request.state.tenant_context = tenant_context
+
         if not authorization.authorized:
             event = _security_audit_event(
                 runtime=runtime,
@@ -843,7 +878,7 @@ def build_enterprise_audit_middleware(
             audit_emitter(
                 action=f"DENY {normalized_method} {authorization.route_template}",
                 actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
-                tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
+                tenant_id=tenant_context.tenant_id_text,
                 role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=deny_correlation_id,
                 metadata={"reason": authorization.reason},
@@ -877,8 +912,7 @@ def build_enterprise_audit_middleware(
                 return _security_audit_unavailable_response()
 
         if authorization.principal is not None:
-            verified_headers = _normalize_headers(dict(request.headers))
-            request.state.enterprise_verified_tenant_id = verified_headers["x-tenant-id"]
+            request.state.enterprise_verified_tenant_id = tenant_context.tenant_id_text
 
         response = await call_next(request)
         response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
@@ -889,7 +923,7 @@ def build_enterprise_audit_middleware(
             audit_emitter(
                 action=f"{normalized_method} {authorization.route_template}",
                 actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
-                tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
+                tenant_id=tenant_context.tenant_id_text,
                 role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
@@ -901,7 +935,7 @@ def build_enterprise_audit_middleware(
             audit_emitter(
                 action=f"{normalized_method} {authorization.route_template}",
                 actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
-                tenant_id=_request_header_value(request, "X-Tenant-Id", "default"),
+                tenant_id=tenant_context.tenant_id_text,
                 role=_request_header_value(request, "X-Role", "unknown"),
                 correlation_id=read_correlation_id,
                 metadata={"status_code": response.status_code, "access_type": "read"},
@@ -985,6 +1019,22 @@ def _security_audit_event(
 
 def _security_audit_unavailable_response() -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": "security_audit_unavailable"})
+
+
+def _tenant_context_required_response(request: Request) -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        media_type="application/problem+json",
+        content={
+            "type": TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE,
+            "title": "Tenant Context Required",
+            "status": 401,
+            "detail": "A nonblank X-Tenant-Id header is required for this route.",
+            "instance": request.url.path,
+            "error_code": TENANT_CONTEXT_REQUIRED_ERROR_CODE,
+            "correlation_id": _request_correlation_id(request) or "",
+        },
+    )
 
 
 def _is_unauthenticated_enterprise_path(path: str) -> bool:

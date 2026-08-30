@@ -161,6 +161,14 @@ def test_authorize_preview_sample_rows_requires_signed_capability(monkeypatch) -
     assert exc_info.value.detail["capability"] == UPLOAD_PREVIEW_SAMPLE_CAPABILITY
 
 
+def test_authorize_preview_sample_rows_rejects_missing_tenant_before_audit() -> None:
+    with patch("src.services.ingestion_service.app.routers.uploads.emit_audit_event") as audit:
+        with pytest.raises(ValueError, match="tenant_id must be nonblank"):
+            _authorize_preview_sample_rows(_request({}))
+
+    audit.assert_not_called()
+
+
 def test_authorize_preview_sample_rows_audits_signed_capability(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
     monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")

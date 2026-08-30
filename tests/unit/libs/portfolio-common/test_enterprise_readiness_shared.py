@@ -11,6 +11,7 @@ from portfolio_common.domain.security_audit import (
     SecurityAuditIdentityPosture,
     SecurityAuditReason,
 )
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
     _enterprise_auth_context_signature,
@@ -689,9 +690,46 @@ async def test_shared_enterprise_middleware_uses_injected_audit_emitter_on_denia
 
     response = await middleware(request, _call_next)
 
-    assert response.status_code == 403
-    audit_emitter.assert_called_once()
-    assert audit_emitter.call_args.kwargs["metadata"]["reason"].startswith("missing_headers:")
+    assert response.status_code == 401
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.body == (
+        b'{"type":"https://lotus.local/problems/enterprise/tenant-context-required",'
+        b'"title":"Tenant Context Required","status":401,'
+        b'"detail":"A nonblank X-Tenant-Id header is required for this route.",'
+        b'"instance":"/api/v1/integration","error_code":"TENANT_CONTEXT_REQUIRED",'
+        b'"correlation_id":""}'
+    )
+    audit_emitter.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tenant_header", [b"", b"   "])
+async def test_shared_enterprise_middleware_rejects_missing_or_blank_tenant_before_route(
+    tenant_header: bytes,
+) -> None:
+    middleware = build_enterprise_audit_middleware(
+        runtime=_runtime(),
+        audit_emitter=Mock(),
+    )
+    headers = [] if not tenant_header else [(b"x-tenant-id", tenant_header)]
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/portfolios",
+            "headers": headers,
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+    call_next = AsyncMock(return_value=Response(status_code=200))
+
+    response = await middleware(request, call_next)
+
+    assert response.status_code == 401
+    call_next.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -828,7 +866,10 @@ async def test_explicit_local_enterprise_middleware_does_not_audit_reads_by_defa
             "type": "http",
             "method": "GET",
             "path": "/api/v1/portfolios",
-            "headers": [(b"x-correlation-id", b"corr-read")],
+            "headers": [
+                (b"x-correlation-id", b"corr-read"),
+                (b"x-tenant-id", b"tenant-1"),
+            ],
             "query_string": b"tenant_id=tenant-1",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -863,7 +904,7 @@ async def test_unset_environment_forces_durable_read_audit(monkeypatch) -> None:
             "type": "http",
             "method": "GET",
             "path": "/api/v1/portfolios",
-            "headers": [],
+            "headers": [(b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -899,7 +940,7 @@ async def test_promoted_middleware_forces_durable_read_audit_when_flag_is_false(
             "type": "http",
             "method": "GET",
             "path": "/api/v1/portfolios",
-            "headers": [],
+            "headers": [(b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -961,7 +1002,9 @@ async def test_shared_enterprise_middleware_audits_reads_when_enabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_shared_enterprise_middleware_denies_read_without_headers_when_enabled() -> None:
+async def test_shared_enterprise_middleware_denies_read_with_only_tenant_when_authz_enabled() -> (
+    None
+):
     runtime = _runtime(read_authz_enabled=True)
     audit_emitter = Mock()
     middleware = build_enterprise_audit_middleware(
@@ -973,7 +1016,7 @@ async def test_shared_enterprise_middleware_denies_read_without_headers_when_ena
             "type": "http",
             "method": "GET",
             "path": "/api/v1/portfolios",
-            "headers": [],
+            "headers": [(b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -1031,6 +1074,10 @@ async def test_durable_allow_is_written_before_protected_route_with_verified_ide
 
     async def _call_next(_: Request) -> Response:
         assert request.state.enterprise_verified_tenant_id == "t1"
+        tenant_context = request.state.tenant_context
+        assert isinstance(tenant_context, TenantContext)
+        assert tenant_context.tenant_id_text == "t1"
+        assert tenant_context.identity_verified is True
         ordering.append("route")
         return Response(status_code=200)
 
@@ -1082,7 +1129,10 @@ async def test_durable_denial_does_not_fabricate_unverified_identity() -> None:
             "type": "http",
             "method": "GET",
             "path": "/portfolios/PB-SECRET",
-            "headers": [(b"x-actor-id", b"unverified-advisor")],
+            "headers": [
+                (b"x-actor-id", b"unverified-advisor"),
+                (b"x-tenant-id", b"tenant-1"),
+            ],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -1173,7 +1223,7 @@ async def test_durable_event_preserves_canonical_runtime_trace_context() -> None
             "type": "http",
             "method": "POST",
             "path": "/portfolios/PB-001",
-            "headers": [(b"content-length", b"0")],
+            "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -1232,7 +1282,11 @@ async def test_durable_event_uses_governed_trace_source_precedence(
             "type": "http",
             "method": "POST",
             "path": "/portfolios/PB-001",
-            "headers": [(b"content-length", b"0"), *trace_headers],
+            "headers": [
+                (b"content-length", b"0"),
+                (b"x-tenant-id", b"tenant-1"),
+                *trace_headers,
+            ],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -1299,7 +1353,7 @@ async def test_authorization_denial_stops_when_durable_audit_is_unavailable() ->
             "type": "http",
             "method": "POST",
             "path": "/portfolios/PB-001",
-            "headers": [(b"content-length", b"0")],
+            "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -1330,7 +1384,7 @@ async def test_production_audit_failure_returns_safe_503_before_route_execution(
             "type": "http",
             "method": "POST",
             "path": "/ingest/transactions/secret-id",
-            "headers": [(b"content-length", b"0")],
+            "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
@@ -1398,7 +1452,7 @@ async def test_local_audit_failure_can_continue_without_fabricating_evidence() -
             "type": "http",
             "method": "POST",
             "path": "/ingest/transactions/secret-id",
-            "headers": [(b"content-length", b"0")],
+            "headers": [(b"content-length", b"0"), (b"x-tenant-id", b"tenant-1")],
             "query_string": b"",
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 1234),
