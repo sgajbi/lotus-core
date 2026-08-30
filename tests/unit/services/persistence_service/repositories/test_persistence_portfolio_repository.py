@@ -1,6 +1,6 @@
 # tests/unit/services/persistence_service/repositories/test_portfolio_repository.py
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from portfolio_common.database_models import Portfolio as DBPortfolio
@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import Insert as PGInsert
 
 from src.services.persistence_service.app.repositories.portfolio_repository import (
     PortfolioRepository,
+    PortfolioTenantConflictError,
 )
 
 # FIX: Mark tests as async
@@ -20,14 +21,20 @@ pytestmark = pytest.mark.asyncio
 
 def _upsert_update_clause(statement: PGInsert) -> str:
     compiled = str(statement.compile(dialect=postgresql.dialect()))
-    return compiled.split("DO UPDATE SET", maxsplit=1)[1]
+    return compiled.split("DO UPDATE SET", maxsplit=1)[1].split(" WHERE ", maxsplit=1)[0]
+
+
+def _compiled_upsert(statement: PGInsert) -> str:
+    return str(statement.compile(dialect=postgresql.dialect()))
 
 
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
     """Provides a mock SQLAlchemy AsyncSession."""
     session = AsyncMock()
-    session.execute = AsyncMock()
+    result = Mock()
+    result.scalar_one_or_none.return_value = "TENANT-SG"
+    session.execute = AsyncMock(return_value=result)
     return session
 
 
@@ -84,24 +91,26 @@ async def test_create_or_update_portfolio(
     executed_statement = mock_db_session.execute.call_args[0][0]
     assert isinstance(executed_statement, PGInsert)
     update_clause = _upsert_update_clause(executed_statement)
-    assert "tenant_id = excluded.tenant_id" in update_clause
+    assert "tenant_id = excluded.tenant_id" not in update_clause
     assert "legal_book_id = excluded.legal_book_id" in update_clause
+    assert "WHERE portfolios.tenant_id = excluded.tenant_id" in _compiled_upsert(executed_statement)
 
 
-async def test_legacy_portfolio_upsert_preserves_existing_valuation_book_scope(
+async def test_portfolio_upsert_rejects_cross_tenant_identifier_collision(
     repository: PortfolioRepository,
     mock_db_session: AsyncMock,
     sample_portfolio_event: PortfolioEvent,
 ) -> None:
-    legacy_event = sample_portfolio_event.model_copy(
-        update={"tenant_id": None, "legal_book_id": None}
-    )
+    conflicting_event = sample_portfolio_event.model_copy(update={"tenant_id": "TENANT-HK"})
+    execution_result = Mock()
+    execution_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = execution_result
 
-    await repository.create_or_update_portfolio(legacy_event)
+    with pytest.raises(PortfolioTenantConflictError, match="owned by a different tenant"):
+        await repository.create_or_update_portfolio(conflicting_event)
 
     executed_statement = mock_db_session.execute.call_args.args[0]
     assert isinstance(executed_statement, PGInsert)
     update_clause = _upsert_update_clause(executed_statement)
     assert "tenant_id =" not in update_clause
-    assert "legal_book_id =" not in update_clause
-    assert "risk_exposure = excluded.risk_exposure" in update_clause
+    assert "WHERE portfolios.tenant_id = excluded.tenant_id" in _compiled_upsert(executed_statement)

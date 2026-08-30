@@ -14,6 +14,7 @@ from portfolio_common.events import (
     PortfolioEvent,
     TransactionEvent,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 
 def test_normalize_currency_code_returns_canonical_iso_code() -> None:
@@ -235,6 +236,7 @@ def test_instrument_event_normalizes_currency_codes() -> None:
 def test_portfolio_event_normalizes_base_currency() -> None:
     event = PortfolioEvent(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         base_currency=" usd ",
         open_date="2026-05-28",
         risk_exposure="balanced",

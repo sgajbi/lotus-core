@@ -9,6 +9,7 @@ from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_meth
 from .domain.currency import normalize_currency_code, normalize_optional_currency_code
 from .domain.decimal_amount import decimal_or_none
 from .domain.financial.precision import BOUNDED_18_10_EXACT
+from .domain.tenant import TenantId
 from .domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
@@ -22,7 +23,7 @@ from .domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
 )
-from .domain.valuation.source_facts import resolve_optional_valuation_book_scope
+from .domain.valuation.source_facts import ValuationBookScope
 from .pydantic_financial_numeric import ExactDecimal18_10
 from .temporal import standardize_governed_datetime
 
@@ -84,7 +85,7 @@ class PortfolioEvent(CoreEventModel):
     """
 
     portfolio_id: str = Field(...)
-    tenant_id: Optional[str] = Field(None)
+    tenant_id: str = Field(...)
     legal_book_id: Optional[str] = Field(None)
     base_currency: str = Field(...)
     open_date: date = Field(...)
@@ -111,12 +112,13 @@ class PortfolioEvent(CoreEventModel):
         return normalize_currency_code(value)
 
     @model_validator(mode="after")
-    def _validate_valuation_book_scope(self) -> "PortfolioEvent":
-        scope = resolve_optional_valuation_book_scope(
-            tenant_id=self.tenant_id,
-            legal_book_id=self.legal_book_id,
-        )
-        if scope is not None:
+    def _validate_tenant_and_optional_valuation_book_scope(self) -> "PortfolioEvent":
+        self.tenant_id = TenantId(self.tenant_id).value
+        if self.legal_book_id is not None:
+            scope = ValuationBookScope(
+                tenant_id=self.tenant_id,
+                legal_book_id=self.legal_book_id,
+            )
             self.tenant_id, self.legal_book_id = scope.key
         return self
 

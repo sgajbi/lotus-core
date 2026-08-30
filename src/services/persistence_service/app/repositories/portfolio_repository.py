@@ -12,6 +12,10 @@ from ..adapters.event_record_mapper import event_business_record_values
 logger = logging.getLogger(__name__)
 
 
+class PortfolioTenantConflictError(ValueError):
+    """Raised when a portfolio identifier is already owned by another tenant."""
+
+
 class PortfolioRepository:
     """
     Handles database operations for the Portfolio model.
@@ -33,9 +37,7 @@ class PortfolioRepository:
 
             stmt = pg_insert(DBPortfolio).values(**portfolio_data)
 
-            protected_update_fields = {"id", "portfolio_id"}
-            if event.tenant_id is None and event.legal_book_id is None:
-                protected_update_fields.update({"tenant_id", "legal_book_id"})
+            protected_update_fields = {"id", "portfolio_id", "tenant_id"}
             update_dict = {
                 column.name: column
                 for column in stmt.excluded
@@ -43,10 +45,16 @@ class PortfolioRepository:
             }
 
             final_stmt = stmt.on_conflict_do_update(
-                index_elements=["portfolio_id"], set_=update_dict
-            )
+                index_elements=["portfolio_id"],
+                set_=update_dict,
+                where=DBPortfolio.tenant_id == stmt.excluded.tenant_id,
+            ).returning(DBPortfolio.tenant_id)
 
-            await self.db.execute(final_stmt)
+            result = await self.db.execute(final_stmt)
+            if result.scalar_one_or_none() is None:
+                raise PortfolioTenantConflictError(
+                    "portfolio_id is already owned by a different tenant"
+                )
             logger.debug(
                 "Staged portfolio upsert.",
                 extra={"portfolio_id": event.portfolio_id},

@@ -11,11 +11,13 @@ from portfolio_common.events import (
 from src.services.persistence_service.app.adapters.event_record_mapper import (
     event_business_record_values,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 
 def test_event_business_record_values_preserves_database_native_types() -> None:
     portfolio = PortfolioEvent(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id=TEST_TENANT_ID,
         base_currency="usd",
         open_date="2025-01-06",
         close_date="2026-04-10",
