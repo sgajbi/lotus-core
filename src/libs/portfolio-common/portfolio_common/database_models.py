@@ -2149,6 +2149,11 @@ class Transaction(Base):
         ),
         Index("ix_transactions_portfolio_security", "portfolio_id", "security_id"),
         Index(
+            "ix_transactions_portfolio_transaction_id",
+            "portfolio_id",
+            "transaction_id",
+        ),
+        Index(
             "ix_transactions_portfolio_instrument_date",
             "portfolio_id",
             "instrument_id",

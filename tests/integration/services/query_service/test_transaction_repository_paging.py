@@ -5,6 +5,7 @@ import pytest
 from portfolio_common.database_models import (
     Cashflow,
     FxRate,
+    Instrument,
     Portfolio,
     Transaction,
     TransactionCost,
@@ -147,6 +148,137 @@ async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
     assert "LEFT OUTER JOIN transaction_costs" not in select_statements[0]
     assert "LIMIT" in select_statements[0]
     assert select_statements[0].index("LIMIT") < select_statements[0].index("JOIN LATERAL")
+
+
+async def test_exact_transaction_record_is_index_backed_and_bounded(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+) -> None:
+    transaction_id = "TX-EXACT-LOOKUP"
+    portfolio_id = "PORT-EXACT-LOOKUP"
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                Portfolio(
+                    portfolio_id=portfolio_id,
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="BALANCED",
+                    investment_time_horizon="LONG_TERM",
+                    portfolio_type="ADVISORY",
+                    booking_center_code="SG",
+                    client_id="CLIENT-EXACT-LOOKUP",
+                    status="ACTIVE",
+                ),
+                Instrument(
+                    security_id="SEC-EXACT-LOOKUP",
+                    name="Exact Lookup Instrument",
+                    isin="ISIN-EXACT-LOOKUP",
+                    currency="USD",
+                    product_type="Equity",
+                ),
+                Transaction(
+                    transaction_id=transaction_id,
+                    portfolio_id=portfolio_id,
+                    instrument_id="INST-EXACT-LOOKUP",
+                    security_id="SEC-EXACT-LOOKUP",
+                    transaction_type="BUY",
+                    quantity=Decimal("10"),
+                    price=Decimal("100"),
+                    gross_transaction_amount=Decimal("1000"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2026, 1, 3, tzinfo=UTC),
+                    costs=[
+                        TransactionCost(
+                            transaction_id=transaction_id,
+                            fee_type="BROKERAGE",
+                            amount=Decimal("2"),
+                            currency="USD",
+                        )
+                    ],
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                Transaction(
+                    transaction_id=f"TX-EXACT-OTHER-{sequence:04d}",
+                    portfolio_id=portfolio_id,
+                    instrument_id="INST-EXACT-LOOKUP",
+                    security_id="SEC-EXACT-LOOKUP",
+                    transaction_type="BUY",
+                    quantity=Decimal("1"),
+                    price=Decimal("10"),
+                    gross_transaction_amount=Decimal("10"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2026, 1, 4, tzinfo=UTC),
+                )
+                for sequence in range(300)
+            ]
+        )
+        session.commit()
+        session.execute(text("ANALYZE transactions"))
+        migrated_indexes = set(
+            session.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = current_schema() AND tablename = 'transactions'"
+                )
+            ).scalars()
+        )
+        session.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = "\n".join(
+            row[0]
+            for row in session.execute(
+                text(
+                    "EXPLAIN (FORMAT TEXT) SELECT id FROM transactions "
+                    "WHERE portfolio_id = :portfolio_id AND transaction_id = :transaction_id"
+                ),
+                {"portfolio_id": portfolio_id, "transaction_id": transaction_id},
+            )
+        )
+
+    assert "ix_transactions_portfolio_transaction_id" in migrated_indexes
+    assert "ix_transactions_portfolio_transaction_id" in plan
+    assert "portfolio_id" in plan and "transaction_id" in plan
+
+    statements: list[str] = []
+    sync_engine = async_db_session.bind.sync_engine
+
+    def capture_sql(
+        _connection,
+        _cursor,
+        statement: str,
+        _parameters,
+        _context,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(sync_engine, "before_cursor_execute", capture_sql)
+    try:
+        response = await TransactionService(async_db_session).get_transaction_record(
+            portfolio_id=portfolio_id,
+            transaction_id=transaction_id,
+            as_of_date=date(2026, 1, 31),
+        )
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", capture_sql)
+
+    assert response.transaction.transaction_id == transaction_id
+    assert response.portfolio_id == portfolio_id
+    assert response.data_quality_status == "COMPLETE"
+    data_reads = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith(("SELECT", "WITH"))
+    ]
+    assert len(data_reads) == 3
+    assert any("transactions.transaction_id =" in statement for statement in data_reads)
+    assert any("LIMIT" in statement for statement in data_reads)
 
 
 async def test_transaction_ledger_identity_binds_only_selected_material_inputs(
