@@ -29,6 +29,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py",
         "tests/integration/test_ingestion_dlq_job_ownership_migration.py",
         "tests/integration/test_ingestion_failure_outcome_migration.py",
+        "tests/integration/test_portfolio_tenant_cutover_migration.py",
     ],
     "critical-db-coverage": [
         "tests/integration/libs/portfolio-common/test_database_runtime_identity.py",
