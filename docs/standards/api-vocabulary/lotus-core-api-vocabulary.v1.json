@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-30T05:00:47.586341+00:00",
+  "generatedAt": "2026-08-30T12:54:04.208260+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -11126,8 +11126,8 @@
       "semanticId": "lotus.x_tenant_id",
       "canonicalTerm": "x_tenant_id",
       "preferredName": "x_tenant_id",
-      "description": "Tenant scope bound into runtime receipt metadata when supplied by the caller.",
-      "example": "default",
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
       "type": "string",
       "locations": [
         "header"
@@ -11203,6 +11203,21 @@
       "semanticId": "lotus.booking_center_code"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_portfolios_portfolios__get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11216,6 +11231,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "portfolio_id",
       "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_portfolio_by_id_portfolios__portfolio_id__get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -11278,6 +11308,21 @@
       "semanticId": "lotus.end_date"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_position_history_portfolios__portfolio_id__position_history_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11321,6 +11366,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "include_projected",
       "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_latest_positions_portfolios__portfolio_id__positions_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -11443,6 +11503,21 @@
       "semanticId": "lotus.reporting_currency"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_cash_balances_portfolios__portfolio_id__cash_balances_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11471,6 +11546,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "as_of_date",
       "semanticId": "lotus.as_of_date"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_cash_accounts_portfolios__portfolio_id__cash_accounts_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -11533,6 +11623,21 @@
       "semanticId": "lotus.include_projected"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_liquidity_ladder_portfolios__portfolio_id__liquidity_ladder_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11563,6 +11668,21 @@
       "semanticId": "lotus.source_transaction_id"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_latest_lot_basis_transfer_receipt_portfolios__portfolio_id__transactions__source_transaction_id__lot_basis_transfer_receipt_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11591,6 +11711,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "transaction_id",
       "semanticId": "lotus.transaction_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_latest_lot_disposal_receipt_portfolios__portfolio_id__transactions__transaction_id__lot_disposal_receipt_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -11683,6 +11818,21 @@
       "semanticId": "lotus.security_id"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_position_lots_portfolios__portfolio_id__positions__security_id__lots_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11711,6 +11861,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "security_id",
       "semanticId": "lotus.security_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_accrued_offsets_portfolios__portfolio_id__positions__security_id__accrued_offsets_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -11743,6 +11908,21 @@
       "semanticId": "lotus.transaction_id"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_buy_cash_linkage_portfolios__portfolio_id__transactions__transaction_id__cash_linkage_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11773,6 +11953,21 @@
       "semanticId": "lotus.security_id"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_sell_disposals_portfolios__portfolio_id__positions__security_id__sell_disposals_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -11801,6 +11996,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "transaction_id",
       "semanticId": "lotus.transaction_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_sell_cash_linkage_portfolios__portfolio_id__transactions__transaction_id__sell_cash_linkage_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -12097,6 +12307,21 @@
       "semanticId": "lotus.sort_order"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_transactions_portfolios__portfolio_id__transactions_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -12172,6 +12397,21 @@
       "semanticId": "lotus.reporting_currency"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "path",
@@ -12245,6 +12485,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "reporting_currency",
       "semanticId": "lotus.reporting_currency"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_realized_tax_summary_portfolios__portfolio_id__realized_tax_summary_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "portfolio_id",
@@ -12487,6 +12742,21 @@
       "semanticId": "lotus.limit"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_instruments_instruments__get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "security_id",
       "kind": "request_option",
       "location": "query",
@@ -12530,6 +12800,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "end_date",
       "semanticId": "lotus.end_date"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_prices_prices__get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "from_currency",
@@ -12592,6 +12877,21 @@
       "semanticId": "lotus.end_date"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_fx_rates_fx_rates__get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "client_id",
       "kind": "request_option",
       "location": "query",
@@ -12652,6 +12952,21 @@
       "semanticId": "lotus.limit"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_portfolio_lookups_lookups_portfolios_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "limit",
       "kind": "request_option",
       "location": "query",
@@ -12695,6 +13010,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "q",
       "semanticId": "lotus.q"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_instrument_lookups_lookups_instruments_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "instrument_page_limit",
@@ -12757,6 +13087,81 @@
       "semanticId": "lotus.limit"
     },
     {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_currency_lookups_lookups_currencies_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects query_assets_under_management_reporting_assets_under_management_query_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects query_asset_allocation_reporting_asset_allocation_query_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects query_portfolio_summary_reporting_portfolio_summary_query_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects query_bulk_portfolio_summary_reporting_portfolio_summary_bulk_query_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
       "name": "portfolio_id",
       "kind": "request_option",
       "location": "query",
@@ -12815,6 +13220,591 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "tenant_id",
       "semanticId": "lotus.tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects get_reporting_currency_support request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_portfolios_ingest_portfolios_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_transaction_ingest_transaction_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_transactions_ingest_transactions_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_instruments_ingest_instruments_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_market_prices_ingest_market_prices_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_authoritative_market_price_source_facts_ingest_authoritative_market_price_source_facts_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_fx_rates_ingest_fx_rates_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_business_dates_ingest_business_dates_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_corporate_action_manifests_ingest_corporate_action_manifests_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_fixed_income_book_cost_authorities_ingest_fixed_income_book_cost_authorities_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects reprocess_transactions_reprocess_transactions_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_portfolio_bundle_ingest_portfolio_bundle_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects preview_upload_ingest_uploads_preview_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects commit_upload_ingest_uploads_commit_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_benchmark_assignments_ingest_benchmark_assignments_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_model_portfolios_ingest_model_portfolios_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_model_portfolio_targets_ingest_model_portfolio_targets_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_instrument_eligibility_profiles_ingest_instrument_eligibility_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_mandate_bindings_ingest_mandate_bindings_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_instrument_valuation_policy_assignments_ingest_instrument_valuation_policy_assignments_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_portfolio_party_role_assignments_ingest_portfolio_party_role_assignments_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_client_restriction_profiles_ingest_client_restriction_profiles_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_sustainability_preference_profiles_ingest_sustainability_preferences_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_client_tax_profiles_ingest_client_tax_profiles_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_client_tax_rule_sets_ingest_client_tax_rule_sets_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_client_income_needs_schedules_ingest_client_income_needs_schedules_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_liquidity_reserve_requirements_ingest_liquidity_reserve_requirements_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_planned_withdrawal_schedules_ingest_planned_withdrawal_schedules_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_benchmark_definitions_ingest_benchmark_definitions_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_benchmark_compositions_ingest_benchmark_compositions_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_indices_ingest_indices_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_index_price_series_ingest_index_price_series_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_index_return_series_ingest_index_return_series_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_benchmark_return_series_ingest_benchmark_return_series_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_risk_free_series_ingest_risk_free_series_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_classification_taxonomy_ingest_reference_classification_taxonomy_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_cash_account_masters_ingest_reference_cash_accounts_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_instrument_lookthrough_components_ingest_reference_instrument_lookthrough_components_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "LOTUS_CORE_CAP_SUPPORT_APIS_ENABLED",
@@ -13448,7 +14438,8 @@
           "portfolio_type",
           "portfolios",
           "risk_exposure",
-          "status"
+          "status",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -13484,6 +14475,14 @@
             "type": "object",
             "semanticId": "lotus.booking_center_code",
             "attributeRef": "lotus.booking_center_code"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -13641,7 +14640,8 @@
           "portfolio_id",
           "portfolio_type",
           "risk_exposure",
-          "status"
+          "status",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -13653,6 +14653,14 @@
             "type": "string",
             "semanticId": "lotus.portfolio_id",
             "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -13800,7 +14808,8 @@
           "security_id",
           "start_date",
           "transaction_id",
-          "valuation"
+          "valuation",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -13836,6 +14845,14 @@
             "type": "object",
             "semanticId": "lotus.end_date",
             "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -13993,7 +15010,8 @@
           "status",
           "tenant_id",
           "valuation",
-          "weight"
+          "weight",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -14021,6 +15039,14 @@
             "type": "boolean",
             "semanticId": "lotus.include_projected",
             "attributeRef": "lotus.include_projected"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -15113,7 +16139,8 @@
           "tenant_id",
           "total_balance_portfolio_currency",
           "total_balance_reporting_currency",
-          "totals"
+          "totals",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -15141,6 +16168,14 @@
             "type": "object",
             "semanticId": "lotus.reporting_currency",
             "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -15609,7 +16644,8 @@
           "portfolio_id",
           "resolved_as_of_date",
           "security_id",
-          "source_system"
+          "source_system",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -15629,6 +16665,14 @@
             "type": "object",
             "semanticId": "lotus.as_of_date",
             "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -15812,7 +16856,8 @@
           "start_date",
           "status",
           "tenant_id",
-          "totals"
+          "totals",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -15848,6 +16893,14 @@
             "type": "boolean",
             "semanticId": "lotus.include_projected",
             "attributeRef": "lotus.include_projected"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -16377,7 +17430,8 @@
           "transfer_timestamp",
           "transferred_cost_base",
           "transferred_cost_local",
-          "void_reason"
+          "void_reason",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -16397,6 +17451,14 @@
             "type": "string",
             "semanticId": "lotus.source_transaction_id",
             "attributeRef": "lotus.source_transaction_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -16766,7 +17828,8 @@
           "transaction_calculation_lineage",
           "transaction_id",
           "transaction_type",
-          "void_reason"
+          "void_reason",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -16786,6 +17849,14 @@
             "type": "string",
             "semanticId": "lotus.transaction_id",
             "attributeRef": "lotus.transaction_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -17892,7 +18963,8 @@
           "portfolio_id",
           "security_id",
           "source_system",
-          "source_transaction_id"
+          "source_transaction_id",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -17912,6 +18984,14 @@
             "type": "string",
             "semanticId": "lotus.security_id",
             "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -18100,7 +19180,8 @@
           "remaining_offset_local",
           "security_id",
           "source_system",
-          "source_transaction_id"
+          "source_transaction_id",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -18120,6 +19201,14 @@
             "type": "string",
             "semanticId": "lotus.security_id",
             "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -18274,7 +19363,8 @@
           "linked_transaction_group_id",
           "portfolio_id",
           "transaction_id",
-          "transaction_type"
+          "transaction_type",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -18294,6 +19384,14 @@
             "type": "string",
             "semanticId": "lotus.transaction_id",
             "attributeRef": "lotus.transaction_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -18423,7 +19521,8 @@
           "sell_disposals",
           "source_system",
           "transaction_date",
-          "transaction_id"
+          "transaction_id",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -18443,6 +19542,14 @@
             "type": "string",
             "semanticId": "lotus.security_id",
             "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -18629,7 +19736,8 @@
           "linked_transaction_group_id",
           "portfolio_id",
           "transaction_id",
-          "transaction_type"
+          "transaction_type",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -18649,6 +19757,14 @@
             "type": "string",
             "semanticId": "lotus.transaction_id",
             "attributeRef": "lotus.transaction_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -18919,7 +20035,8 @@
           "transaction_type",
           "transactions",
           "withholding_tax_amount",
-          "withholding_tax_amount_reporting_currency"
+          "withholding_tax_amount_reporting_currency",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -19075,6 +20192,14 @@
             "type": "object",
             "semanticId": "lotus.sort_order",
             "attributeRef": "lotus.sort_order"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -20514,7 +21639,8 @@
           "transaction_id",
           "transaction_type",
           "withholding_tax_amount",
-          "withholding_tax_amount_reporting_currency"
+          "withholding_tax_amount_reporting_currency",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -20558,6 +21684,14 @@
             "type": "object",
             "semanticId": "lotus.reporting_currency",
             "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -21866,7 +23000,8 @@
           "tenant_id",
           "total_tax_amount",
           "transaction_count",
-          "withholding_tax_amount"
+          "withholding_tax_amount",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -21910,6 +23045,14 @@
             "type": "object",
             "semanticId": "lotus.reporting_currency",
             "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -23409,7 +24552,8 @@
           "sell_currency",
           "skip",
           "total",
-          "trade_date"
+          "trade_date",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -23445,6 +24589,14 @@
             "type": "integer",
             "semanticId": "lotus.limit",
             "attributeRef": "lotus.limit"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -23659,7 +24811,8 @@
           "price_date",
           "prices",
           "security_id",
-          "start_date"
+          "start_date",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -23687,6 +24840,14 @@
             "type": "object",
             "semanticId": "lotus.end_date",
             "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -23757,7 +24918,8 @@
           "rate_date",
           "rates",
           "start_date",
-          "to_currency"
+          "to_currency",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -23793,6 +24955,14 @@
             "type": "object",
             "semanticId": "lotus.end_date",
             "attributeRef": "lotus.end_date"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -23863,7 +25033,8 @@
           "items",
           "label",
           "limit",
-          "q"
+          "q",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -23899,6 +25070,14 @@
             "type": "integer",
             "semanticId": "lotus.limit",
             "attributeRef": "lotus.limit"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -23952,7 +25131,8 @@
           "label",
           "limit",
           "product_type",
-          "q"
+          "q",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -23980,6 +25160,14 @@
             "type": "object",
             "semanticId": "lotus.q",
             "attributeRef": "lotus.q"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -24034,7 +25222,8 @@
           "label",
           "limit",
           "q",
-          "source"
+          "source",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -24070,6 +25259,14 @@
             "type": "integer",
             "semanticId": "lotus.limit",
             "attributeRef": "lotus.limit"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -24136,11 +25333,20 @@
           "scope_type",
           "snapshot_date",
           "snapshot_found",
-          "totals"
+          "totals",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "scope",
             "location": "body",
@@ -24435,11 +25641,20 @@
           "supported",
           "total_market_value_reporting_currency",
           "views",
-          "weight"
+          "weight",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "scope",
             "location": "body",
@@ -24934,11 +26149,20 @@
           "total_market_value_reporting_currency",
           "totals",
           "unvalued_position_count",
-          "valued_position_count"
+          "valued_position_count",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "portfolio_id",
             "location": "body",
@@ -25188,11 +26412,20 @@
           "resolved_as_of_date",
           "snapshot_date",
           "snapshot_row_count",
-          "totals"
+          "totals",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "portfolio_ids",
             "location": "body",
@@ -25432,7 +26665,8 @@
           "source_currency",
           "status",
           "supported",
-          "tenant_id"
+          "tenant_id",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -25468,6 +26702,14 @@
             "type": "object",
             "semanticId": "lotus.tenant_id",
             "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
@@ -26166,11 +27408,20 @@
           "risk_exposure",
           "status",
           "tenant_id",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "portfolios",
             "location": "body",
@@ -26190,8 +27441,8 @@
           {
             "name": "portfolios[].tenant_id",
             "location": "body",
-            "required": false,
-            "type": "object",
+            "required": true,
+            "type": "string",
             "semanticId": "lotus.tenant_id",
             "attributeRef": "lotus.tenant_id"
           },
@@ -26502,11 +27753,20 @@
           "transaction_fx_rate",
           "transaction_id",
           "transaction_type",
-          "withholding_tax_amount"
+          "withholding_tax_amount",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "transaction_id",
             "location": "body",
@@ -27512,11 +28772,20 @@
           "transaction_id",
           "transaction_type",
           "transactions",
-          "withholding_tax_amount"
+          "withholding_tax_amount",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "transactions",
             "location": "body",
@@ -28460,11 +29729,20 @@
           "trace_id",
           "trade_date",
           "ultimate_parent_issuer_id",
-          "ultimate_parent_issuer_name"
+          "ultimate_parent_issuer_name",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "instruments",
             "location": "body",
@@ -28764,11 +30042,20 @@
           "price_date",
           "request_id",
           "security_id",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "market_prices",
             "location": "body",
@@ -28918,11 +30205,20 @@
           "source_revision",
           "source_system",
           "tenant_id",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "market_price_source_facts",
             "location": "body",
@@ -29142,11 +30438,20 @@
           "rate_date",
           "request_id",
           "to_currency",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "fx_rates",
             "location": "body",
@@ -29287,11 +30592,20 @@
           "request_id",
           "source_batch_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "business_dates",
             "location": "body",
@@ -29461,11 +30775,20 @@
           "trace_id",
           "transaction_id",
           "transaction_type",
-          "version"
+          "version",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "manifests",
             "location": "body",
@@ -29777,11 +31100,20 @@
           "job_id",
           "message",
           "request_id",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "authorities",
             "location": "body",
@@ -29885,11 +31217,20 @@
           "message",
           "request_id",
           "trace_id",
-          "transaction_ids"
+          "transaction_ids",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "transaction_ids",
             "location": "body",
@@ -30139,11 +31480,20 @@
           "transactions",
           "ultimate_parent_issuer_id",
           "ultimate_parent_issuer_name",
-          "withholding_tax_amount"
+          "withholding_tax_amount",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "source_system",
             "location": "body",
@@ -30227,8 +31577,8 @@
           {
             "name": "portfolios[].tenant_id",
             "location": "body",
-            "required": false,
-            "type": "object",
+            "required": true,
+            "type": "string",
             "semanticId": "lotus.tenant_id",
             "attributeRef": "lotus.tenant_id"
           },
@@ -31549,11 +32899,21 @@
           "severity",
           "source_lineage",
           "total_rows",
-          "valid_rows"
+          "valid_rows",
+          "x_tenant_id"
         ]
       },
       "request": {
-        "fields": []
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          }
+        ]
       },
       "response": {
         "httpStatus": 200,
@@ -31703,11 +33063,21 @@
           "published_rows",
           "skipped_rows",
           "total_rows",
-          "valid_rows"
+          "valid_rows",
+          "x_tenant_id"
         ]
       },
       "request": {
-        "fields": []
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          }
+        ]
       },
       "response": {
         "httpStatus": 202,
@@ -31812,11 +33182,20 @@
           "portfolio_id",
           "request_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "benchmark_assignments",
             "location": "body",
@@ -32015,11 +33394,20 @@
           "risk_profile",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "model_portfolios",
             "location": "body",
@@ -32256,11 +33644,20 @@
           "source_system",
           "target_status",
           "target_weight",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "model_portfolio_targets",
             "location": "body",
@@ -32491,11 +33888,20 @@
           "source_system",
           "trace_id",
           "ultimate_parent_issuer_id",
-          "ultimate_parent_issuer_name"
+          "ultimate_parent_issuer_name",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "eligibility_profiles",
             "location": "body",
@@ -32810,11 +34216,20 @@
           "source_record_id",
           "source_system",
           "tax_awareness_allowed",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "mandate_bindings",
             "location": "body",
@@ -33148,11 +34563,20 @@
           "trace_id",
           "valid_from",
           "valid_to",
-          "valuation_policy_assignments"
+          "valuation_policy_assignments",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "valuation_policy_assignments",
             "location": "body",
@@ -33379,11 +34803,20 @@
           "role_type",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "party_role_assignments",
             "location": "body",
@@ -33595,11 +35028,20 @@
           "restriction_version",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "restriction_profiles",
             "location": "body",
@@ -33882,11 +35324,20 @@
           "source_record_id",
           "source_system",
           "sustainability_preferences",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "sustainability_preferences",
             "location": "body",
@@ -34162,11 +35613,20 @@
           "tax_status",
           "trace_id",
           "treaty_codes",
-          "withholding_tax_rate"
+          "withholding_tax_rate",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "tax_profiles",
             "location": "body",
@@ -34453,11 +35913,20 @@
           "tax_year",
           "threshold_amount",
           "threshold_currency",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "tax_rule_sets",
             "location": "body",
@@ -34762,11 +36231,20 @@
           "source_record_id",
           "source_system",
           "start_date",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "income_needs_schedules",
             "location": "body",
@@ -35024,11 +36502,20 @@
           "reserve_type",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "liquidity_reserve_requirements",
             "location": "body",
@@ -35291,11 +36778,20 @@
           "trace_id",
           "withdrawal_schedule_id",
           "withdrawal_status",
-          "withdrawal_type"
+          "withdrawal_type",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "planned_withdrawal_schedules",
             "location": "body",
@@ -35536,11 +37032,20 @@
           "return_convention",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "benchmark_definitions",
             "location": "body",
@@ -35790,11 +37295,20 @@
           "request_id",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "benchmark_compositions",
             "location": "body",
@@ -35993,11 +37507,20 @@
           "request_id",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "indices",
             "location": "body",
@@ -36231,11 +37754,20 @@
           "source_record_id",
           "source_system",
           "trace_id",
-          "value_convention"
+          "value_convention",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "index_price_series",
             "location": "body",
@@ -36430,11 +37962,20 @@
           "series_id",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "index_return_series",
             "location": "body",
@@ -36637,11 +38178,20 @@
           "series_id",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "benchmark_return_series",
             "location": "body",
@@ -36845,11 +38395,20 @@
           "source_system",
           "trace_id",
           "value",
-          "value_convention"
+          "value_convention",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "risk_free_series",
             "location": "body",
@@ -37060,11 +38619,20 @@
           "source_record_id",
           "source_system",
           "taxonomy_scope",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "classification_taxonomy",
             "location": "body",
@@ -37267,11 +38835,20 @@
           "security_id",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "cash_accounts",
             "location": "body",
@@ -37470,11 +39047,20 @@
           "request_id",
           "source_record_id",
           "source_system",
-          "trace_id"
+          "trace_id",
+          "x_tenant_id"
         ]
       },
       "request": {
         "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
           {
             "name": "lookthrough_components",
             "location": "body",
