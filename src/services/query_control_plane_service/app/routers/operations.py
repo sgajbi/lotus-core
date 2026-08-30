@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.operations.errors import OutboxRecoveryRejected
@@ -785,10 +785,12 @@ async def get_aggregation_jobs(
         "How: Query export job lifecycle records with pagination and optional status filtering.\n"
         "When: Use to investigate stuck, failed, or repeated analytics export requests after "
         "large-window extraction or support escalation. This is operator support evidence, not "
-        "a front-office analytics contract."
+        "a front-office analytics contract. Results are restricted to the admitted request tenant; "
+        "a foreign portfolio is indistinguishable from an absent portfolio."
     ),
 )
 async def get_analytics_export_jobs(
+    request: Request,
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     job_id: Optional[str] = Query(
         None,
@@ -818,6 +820,7 @@ async def get_analytics_export_jobs(
 ):
     return await execute_operations_call(
         service.get_analytics_export_jobs(
+            tenant_id=request.state.tenant_context.tenant_id_text,
             portfolio_id=portfolio_id,
             skip=skip,
             limit=limit,

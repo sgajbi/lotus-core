@@ -20,6 +20,12 @@ MIGRATION = (
     / "versions"
     / "c166b2c3d52d_fix_bind_simulation_session_tenant.py"
 )
+SUCCESSOR = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c167b2c3d52e_fix_bind_analytics_export_job_tenant.py"
+)
 
 
 def _bind_operations(migration: dict[str, Any], connection) -> None:
@@ -33,12 +39,21 @@ def test_simulation_session_tenant_cutover_backfills_and_enforces_portfolio_owne
     db_engine,
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    successor: dict[str, Any] = runpy.run_path(str(SUCCESSOR))
 
     with db_engine.connect() as connection:
         _bind_operations(migration, connection)
+        _bind_operations(successor, connection)
         connection.rollback()
         transaction = connection.begin()
         try:
+            analytics_export_columns = {
+                column["name"]
+                for column in inspect(connection).get_columns("analytics_export_jobs")
+            }
+            if "tenant_id" in analytics_export_columns:
+                successor["downgrade"]()
+
             columns = {
                 column["name"] for column in inspect(connection).get_columns("simulation_sessions")
             }

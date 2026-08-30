@@ -20,6 +20,18 @@ MIGRATION = (
     / "versions"
     / "c165b2c3d52c_fix_require_portfolio_tenant.py"
 )
+SIMULATION_SUCCESSOR = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c166b2c3d52d_fix_bind_simulation_session_tenant.py"
+)
+ANALYTICS_EXPORT_SUCCESSOR = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c167b2c3d52e_fix_bind_analytics_export_job_tenant.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -170,7 +182,24 @@ def _bind_operations(migration: dict[str, Any], connection) -> None:
     migration["downgrade"].__globals__["op"] = operations
 
 
-def _reset_development_cutover(migration: dict[str, Any], connection) -> None:
+def _reset_development_cutover(
+    migration: dict[str, Any],
+    simulation_successor: dict[str, Any],
+    analytics_export_successor: dict[str, Any],
+    connection,
+) -> None:
+    analytics_export_columns = {
+        column["name"] for column in inspect(connection).get_columns("analytics_export_jobs")
+    }
+    if "tenant_id" in analytics_export_columns:
+        analytics_export_successor["downgrade"]()
+
+    simulation_columns = {
+        column["name"] for column in inspect(connection).get_columns("simulation_sessions")
+    }
+    if "tenant_id" in simulation_columns:
+        simulation_successor["downgrade"]()
+
     indexes = {index["name"] for index in inspect(connection).get_indexes("portfolios")}
     if "ix_portfolios_tenant_portfolio_id" not in indexes:
         return
@@ -221,10 +250,19 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
     clean_db,
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    simulation_successor: dict[str, Any] = runpy.run_path(str(SIMULATION_SUCCESSOR))
+    analytics_export_successor: dict[str, Any] = runpy.run_path(str(ANALYTICS_EXPORT_SUCCESSOR))
 
     with db_engine.begin() as connection:
         _bind_operations(migration, connection)
-        _reset_development_cutover(migration, connection)
+        _bind_operations(simulation_successor, connection)
+        _bind_operations(analytics_export_successor, connection)
+        _reset_development_cutover(
+            migration,
+            simulation_successor,
+            analytics_export_successor,
+            connection,
+        )
         connection.execute(
             PORTFOLIO_INSERT,
             {

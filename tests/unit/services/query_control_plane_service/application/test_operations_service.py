@@ -80,6 +80,7 @@ def _portfolio_supportability_metric_lines() -> list[str]:
 def mock_ops_repo() -> AsyncMock:
     repo = AsyncMock()
     repo.portfolio_exists.return_value = True
+    repo.portfolio_exists_for_tenant.return_value = True
     repo.get_reconciliation_finding_summaries.return_value = {}
 
     async def valuation_snapshot(**kwargs):
@@ -1405,7 +1406,9 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         )()
     ]
 
-    response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status=" FAILED ")
+    response = await service.get_analytics_export_jobs(
+        tenant_id="tenant-a", portfolio_id="P1", skip=0, limit=20, status=" FAILED "
+    )
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -1424,6 +1427,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     assert response.items[0].is_terminal_failure is True
     assert response.items[0].operational_state == "FAILED"
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         skip=0,
         limit=20,
@@ -1435,12 +1439,30 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         status="failed",
         job_id=None,
         request_fingerprint=None,
         as_of=response.generated_at_utc,
     )
+
+
+async def test_get_analytics_export_jobs_hides_foreign_portfolio(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.portfolio_exists_for_tenant.return_value = False
+
+    with pytest.raises(ValueError, match="Portfolio FOREIGN-P1 not found"):
+        await service.get_analytics_export_jobs(
+            tenant_id="tenant-a", portfolio_id="FOREIGN-P1", skip=0, limit=20
+        )
+
+    mock_ops_repo.portfolio_exists_for_tenant.assert_awaited_once_with(
+        tenant_id="tenant-a", portfolio_id="FOREIGN-P1"
+    )
+    mock_ops_repo.get_analytics_export_jobs_count.assert_not_awaited()
+    mock_ops_repo.get_analytics_export_jobs.assert_not_awaited()
 
 
 async def test_get_failed_outbox_events_returns_source_safe_operator_records(
@@ -1935,7 +1957,8 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
     mock_ops_repo.get_analytics_export_jobs.return_value = []
 
     response = await service.get_analytics_export_jobs(
-        "P1",
+        tenant_id="tenant-a",
+        portfolio_id="P1",
         skip=0,
         limit=20,
         status=" failed ",
@@ -1944,6 +1967,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
 
     assert response.total == 0
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         status="failed",
         job_id="aexp_1234567890abcdef",
@@ -1951,6 +1975,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         skip=0,
         limit=20,
@@ -2007,7 +2032,8 @@ async def test_get_analytics_export_jobs_forwards_request_fingerprint_filter(
     mock_ops_repo.get_analytics_export_jobs.return_value = []
 
     response = await service.get_analytics_export_jobs(
-        "P1",
+        tenant_id="tenant-a",
+        portfolio_id="P1",
         skip=0,
         limit=20,
         request_fingerprint="fp_portfolio_timeseries_pf001_20260313_v1",
@@ -2016,6 +2042,7 @@ async def test_get_analytics_export_jobs_forwards_request_fingerprint_filter(
 
     assert response.total == 0
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         status=None,
         job_id=None,
@@ -2023,6 +2050,7 @@ async def test_get_analytics_export_jobs_forwards_request_fingerprint_filter(
         as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_analytics_export_jobs.assert_awaited_once_with(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         skip=0,
         limit=20,

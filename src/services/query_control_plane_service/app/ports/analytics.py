@@ -115,6 +115,7 @@ class AnalyticsExportStore(Protocol):
         self,
         *,
         job_id: str,
+        tenant_id: str,
         dataset_type: str,
         portfolio_id: str,
         request_fingerprint: str,
@@ -123,27 +124,31 @@ class AnalyticsExportStore(Protocol):
         compression: str,
     ) -> AnalyticsExportJobRecord: ...
 
-    async def get_job(self, job_id: str) -> AnalyticsExportJobRecord | None: ...
+    async def get_job(self, *, tenant_id: str, job_id: str) -> AnalyticsExportJobRecord | None: ...
 
     async def get_latest_by_fingerprint(
         self,
         *,
+        tenant_id: str,
         request_fingerprint: str,
         dataset_type: str,
     ) -> AnalyticsExportJobRecord | None: ...
 
-    async def mark_running(self, row: AnalyticsExportJobRecord) -> AnalyticsExportJobRecord: ...
+    async def mark_running(
+        self, row: AnalyticsExportJobRecord, *, tenant_id: str
+    ) -> AnalyticsExportJobRecord: ...
 
     async def mark_completed(
         self,
         row: AnalyticsExportJobRecord,
         *,
+        tenant_id: str,
         result_payload: dict[str, object],
         result_row_count: int,
     ) -> AnalyticsExportJobRecord: ...
 
     async def mark_failed(
-        self, row: AnalyticsExportJobRecord, *, error_message: str
+        self, row: AnalyticsExportJobRecord, *, tenant_id: str, error_message: str
     ) -> AnalyticsExportJobRecord: ...
 
 

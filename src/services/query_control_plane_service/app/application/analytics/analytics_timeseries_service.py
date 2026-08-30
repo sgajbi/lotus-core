@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from time import perf_counter
 from typing import Any, cast
-from uuid import uuid4
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_zero
@@ -68,9 +67,10 @@ from .analytics_export_jobs import (
     reused_analytics_export_job_response,
 )
 from .analytics_export_lifecycle import (
-    export_job_is_completed,
-    export_job_is_fresh,
-    export_job_is_inflight,
+    mark_tenant_export_job_completed,
+    mark_tenant_export_job_failed,
+    mark_tenant_export_job_running,
+    reserve_tenant_export_job,
 )
 from .analytics_export_results import (
     AnalyticsExportResultError,
@@ -1328,42 +1328,23 @@ class AnalyticsTimeseriesService:
         request_payload: dict[str, object],
         request_fingerprint: str,
     ) -> tuple[AnalyticsExportJobRecord, bool]:
-        async with self._unit_of_work.transaction():
-            existing = await self.export_repo.get_latest_by_fingerprint(
-                request_fingerprint=request_fingerprint,
-                dataset_type=request.dataset_type,
-            )
-            if existing is not None:
-                if export_job_is_completed(existing):
-                    return existing, True
-                if export_job_is_inflight(existing):
-                    if export_job_is_fresh(
-                        existing,
-                        timeout_minutes=self._analytics_export_stale_timeout_minutes,
-                    ):
-                        return existing, True
-                    await self.export_repo.mark_failed(
-                        existing,
-                        error_message=("Stale analytics export job superseded by a new request."),
-                    )
-
-            row = await self.export_repo.create_job(
-                job_id=f"aexp_{uuid4().hex[:24]}",
-                dataset_type=request.dataset_type,
-                portfolio_id=request.portfolio_id,
-                request_fingerprint=request_fingerprint,
-                request_payload=request_payload,
-                result_format=request.result_format,
-                compression=request.compression,
-            )
-            return row, False
+        return await reserve_tenant_export_job(
+            store=self.export_repo,
+            unit_of_work=self._unit_of_work,
+            tenant_id=self._tenant_id,
+            request=request,
+            request_payload=request_payload,
+            request_fingerprint=request_fingerprint,
+            stale_timeout_minutes=self._analytics_export_stale_timeout_minutes,
+        )
 
     async def _mark_export_job_running(self, job_id: str) -> AnalyticsExportJobRecord:
-        async with self._unit_of_work.transaction():
-            row = await self.export_repo.get_job(job_id)
-            if row is None:
-                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-            return await self.export_repo.mark_running(row)
+        return await mark_tenant_export_job_running(
+            store=self.export_repo,
+            unit_of_work=self._unit_of_work,
+            tenant_id=self._tenant_id,
+            job_id=job_id,
+        )
 
     async def _mark_export_job_completed(
         self,
@@ -1372,28 +1353,30 @@ class AnalyticsTimeseriesService:
         result_payload: dict[str, object],
         result_row_count: int,
     ) -> AnalyticsExportJobRecord:
-        async with self._unit_of_work.transaction():
-            row = await self.export_repo.get_job(job_id)
-            if row is None:
-                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-            return await self.export_repo.mark_completed(
-                row,
-                result_payload=result_payload,
-                result_row_count=result_row_count,
-            )
+        return await mark_tenant_export_job_completed(
+            store=self.export_repo,
+            unit_of_work=self._unit_of_work,
+            tenant_id=self._tenant_id,
+            job_id=job_id,
+            result_payload=result_payload,
+            result_row_count=result_row_count,
+        )
 
     async def _mark_export_job_failed(
         self, job_id: str, *, error_message: str
     ) -> AnalyticsExportJobRecord:
-        async with self._unit_of_work.transaction():
-            row = await self.export_repo.get_job(job_id)
-            if row is None:
-                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-            return await self.export_repo.mark_failed(row, error_message=error_message)
+        return await mark_tenant_export_job_failed(
+            store=self.export_repo,
+            unit_of_work=self._unit_of_work,
+            tenant_id=self._tenant_id,
+            job_id=job_id,
+            error_message=error_message,
+        )
 
     async def create_export_job(
         self, request: AnalyticsExportCreateRequest
     ) -> AnalyticsExportJobResponse:
+        await require_owned_portfolio(self.repo, self._tenant_id, request.portfolio_id)
         request_payload = request.model_dump(mode="json")
         request_fingerprint = self._request_fingerprint(request_payload)
         row, reused = await self._reserve_export_job(
@@ -1539,13 +1522,13 @@ class AnalyticsTimeseriesService:
         )
 
     async def get_export_job(self, job_id: str) -> AnalyticsExportJobResponse:
-        row = await self.export_repo.get_job(job_id)
+        row = await self.export_repo.get_job(tenant_id=self._tenant_id, job_id=job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
         return analytics_export_job_response(row, lifecycle_mode=self._EXPORT_LIFECYCLE_MODE)
 
     async def get_export_result_json(self, job_id: str) -> AnalyticsExportJsonResultResponse:
-        row = await self.export_repo.get_job(job_id)
+        row = await self.export_repo.get_job(tenant_id=self._tenant_id, job_id=job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
         try:
@@ -1556,7 +1539,7 @@ class AnalyticsTimeseriesService:
     async def get_export_result_ndjson(
         self, job_id: str, *, compression: str
     ) -> tuple[bytes, str, str]:
-        row = await self.export_repo.get_job(job_id)
+        row = await self.export_repo.get_job(tenant_id=self._tenant_id, job_id=job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
         try:

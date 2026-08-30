@@ -328,21 +328,46 @@ def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
 def test_analytics_export_job_declares_hot_path_indexes():
     indexes = {index.name: index for index in AnalyticsExportJob.__table__.indexes}
 
-    portfolio_status_created = indexes["ix_analytics_export_jobs_portfolio_status_created_at"]
+    portfolio_status_created = indexes[
+        "ix_analytics_export_jobs_tenant_portfolio_status_created_at"
+    ]
     status_updated = indexes["ix_analytics_export_jobs_status_updated_at"]
-    dataset_fingerprint_id = indexes["ix_analytics_export_jobs_dataset_fingerprint_id"]
+    dataset_fingerprint_id = indexes["ix_analytics_export_jobs_tenant_dataset_fingerprint_id"]
 
     assert [column.name for column in portfolio_status_created.columns] == [
+        "tenant_id",
         "portfolio_id",
         "status",
         "created_at",
     ]
     assert [column.name for column in status_updated.columns] == ["status", "updated_at"]
     assert [str(expression) for expression in dataset_fingerprint_id.expressions] == [
+        "analytics_export_jobs.tenant_id",
         "analytics_export_jobs.dataset_type",
         "analytics_export_jobs.request_fingerprint",
         "analytics_export_jobs.id DESC",
     ]
+
+
+def test_analytics_export_job_enforces_tenant_portfolio_ownership():
+    constraints = {
+        constraint.name: constraint
+        for constraint in AnalyticsExportJob.__table__.constraints
+        if constraint.name is not None
+    }
+
+    foreign_key = constraints["fk_analytics_export_jobs_tenant_portfolio"]
+    assert [element.parent.name for element in foreign_key.elements] == [
+        "tenant_id",
+        "portfolio_id",
+    ]
+    assert [element.target_fullname for element in foreign_key.elements] == [
+        "portfolios.tenant_id",
+        "portfolios.portfolio_id",
+    ]
+    assert "tenant_id = btrim(tenant_id) AND tenant_id <> ''" in str(
+        constraints["ck_analytics_export_jobs_tenant_authority"].sqltext
+    )
 
 
 def test_portfolio_declares_portfolio_manager_book_index():

@@ -19,6 +19,7 @@ class AnalyticsExportRepository:
         self,
         *,
         job_id: str,
+        tenant_id: str,
         dataset_type: str,
         portfolio_id: str,
         request_fingerprint: str,
@@ -28,6 +29,7 @@ class AnalyticsExportRepository:
     ) -> AnalyticsExportJobRecord:
         row = AnalyticsExportJobModel(
             job_id=job_id,
+            tenant_id=tenant_id,
             dataset_type=dataset_type,
             portfolio_id=portfolio_id,
             status="accepted",
@@ -40,16 +42,17 @@ class AnalyticsExportRepository:
         await self.db.flush()
         return _export_job_record(row)
 
-    async def get_job(self, job_id: str) -> AnalyticsExportJobRecord | None:
-        row = await self._get_model(job_id)
+    async def get_job(self, *, tenant_id: str, job_id: str) -> AnalyticsExportJobRecord | None:
+        row = await self._get_model(tenant_id=tenant_id, job_id=job_id)
         return _export_job_record(row) if row is not None else None
 
     async def get_latest_by_fingerprint(
-        self, *, request_fingerprint: str, dataset_type: str
+        self, *, tenant_id: str, request_fingerprint: str, dataset_type: str
     ) -> AnalyticsExportJobRecord | None:
         result = await self.db.execute(
             select(AnalyticsExportJobModel)
             .where(
+                AnalyticsExportJobModel.tenant_id == tenant_id,
                 AnalyticsExportJobModel.request_fingerprint == request_fingerprint,
                 AnalyticsExportJobModel.dataset_type == dataset_type,
             )
@@ -59,8 +62,10 @@ class AnalyticsExportRepository:
         row = result.scalars().first()
         return _export_job_record(row) if row is not None else None
 
-    async def mark_running(self, row: AnalyticsExportJobRecord) -> AnalyticsExportJobRecord:
-        model = await self._require_model(row.job_id)
+    async def mark_running(
+        self, row: AnalyticsExportJobRecord, *, tenant_id: str
+    ) -> AnalyticsExportJobRecord:
+        model = await self._require_model(tenant_id=tenant_id, job_id=row.job_id)
         model.status = "running"
         model.started_at = datetime.now(UTC)
         await self.db.flush()
@@ -70,10 +75,11 @@ class AnalyticsExportRepository:
         self,
         row: AnalyticsExportJobRecord,
         *,
+        tenant_id: str,
         result_payload: dict[str, object],
         result_row_count: int,
     ) -> AnalyticsExportJobRecord:
-        model = await self._require_model(row.job_id)
+        model = await self._require_model(tenant_id=tenant_id, job_id=row.job_id)
         model.status = "completed"
         model.result_payload = result_payload
         model.result_row_count = result_row_count
@@ -82,23 +88,28 @@ class AnalyticsExportRepository:
         return _export_job_record(model)
 
     async def mark_failed(
-        self, row: AnalyticsExportJobRecord, *, error_message: str
+        self, row: AnalyticsExportJobRecord, *, tenant_id: str, error_message: str
     ) -> AnalyticsExportJobRecord:
-        model = await self._require_model(row.job_id)
+        model = await self._require_model(tenant_id=tenant_id, job_id=row.job_id)
         model.status = "failed"
         model.error_message = error_message
         model.completed_at = datetime.now(UTC)
         await self.db.flush()
         return _export_job_record(model)
 
-    async def _get_model(self, job_id: str) -> AnalyticsExportJobModel | None:
+    async def _get_model(self, *, tenant_id: str, job_id: str) -> AnalyticsExportJobModel | None:
         result = await self.db.execute(
-            select(AnalyticsExportJobModel).where(AnalyticsExportJobModel.job_id == job_id).limit(1)
+            select(AnalyticsExportJobModel)
+            .where(
+                AnalyticsExportJobModel.tenant_id == tenant_id,
+                AnalyticsExportJobModel.job_id == job_id,
+            )
+            .limit(1)
         )
         return result.scalars().first()
 
-    async def _require_model(self, job_id: str) -> AnalyticsExportJobModel:
-        row = await self._get_model(job_id)
+    async def _require_model(self, *, tenant_id: str, job_id: str) -> AnalyticsExportJobModel:
+        row = await self._get_model(tenant_id=tenant_id, job_id=job_id)
         if row is None:
             raise LookupError(f"Analytics export job {job_id!r} no longer exists.")
         return row
@@ -107,6 +118,7 @@ class AnalyticsExportRepository:
 def _export_job_record(row: AnalyticsExportJobModel) -> AnalyticsExportJobRecord:
     return AnalyticsExportJobRecord(
         job_id=row.job_id,
+        tenant_id=row.tenant_id,
         dataset_type=row.dataset_type,
         portfolio_id=row.portfolio_id,
         status=row.status,

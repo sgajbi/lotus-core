@@ -4,7 +4,7 @@ import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from portfolio_common.domain.tenant import TenantContext, TenantId
@@ -66,6 +66,14 @@ def make_service() -> AnalyticsTimeseriesService:
             export_execution_timeout_seconds=300,
         ),
     )
+
+
+def _admit_owned_portfolio(
+    service: AnalyticsTimeseriesService, *, portfolio_id: str = "P1"
+) -> AsyncMock:
+    get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id=portfolio_id))
+    service.repo.get_portfolio = get_portfolio
+    return get_portfolio
 
 
 def _position_repo(**methods: object) -> SimpleNamespace:
@@ -3185,6 +3193,7 @@ async def test_get_position_timeseries_missing_fx_rate() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_completed() -> None:
     service = make_service()
+    ownership_lookup = _admit_owned_portfolio(service)
     row = SimpleNamespace(
         job_id="aexp_1",
         dataset_type="portfolio_timeseries",
@@ -3232,11 +3241,13 @@ async def test_create_export_job_completed() -> None:
     assert response.lifecycle_mode == "inline_job_execution"
     assert response.result_available is True
     assert response.result_endpoint.endswith("/aexp_1/result")
+    ownership_lookup.assert_awaited_once_with(tenant_id="tenant-a", portfolio_id="P1")
 
 
 @pytest.mark.asyncio
 async def test_create_export_job_rejects_missing_portfolio_request_after_runtime_guard() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     row = SimpleNamespace(
         job_id="aexp_invalid",
         dataset_type="portfolio_timeseries",
@@ -3285,12 +3296,61 @@ async def test_create_export_job_rejects_missing_portfolio_request_after_runtime
 
 
 @pytest.mark.asyncio
+async def test_create_export_job_rejects_foreign_portfolio_before_reuse_or_creation() -> None:
+    service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=None)
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(),
+        create_job=AsyncMock(),
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service.create_export_job(
+            AnalyticsExportCreateRequest(
+                dataset_type="portfolio_timeseries",
+                portfolio_id="FOREIGN-P1",
+                portfolio_timeseries_request=PortfolioAnalyticsTimeseriesRequest(
+                    as_of_date="2025-12-31",
+                    period="one_month",
+                ),
+            )
+        )
+
+    assert exc_info.value.code == "RESOURCE_NOT_FOUND"
+    service.repo.get_portfolio.assert_awaited_once_with(
+        tenant_id="tenant-a", portfolio_id="FOREIGN-P1"
+    )
+    service.export_repo.get_latest_by_fingerprint.assert_not_awaited()
+    service.export_repo.create_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_export_job_not_found() -> None:
     service = make_service()
     service.export_repo = SimpleNamespace(get_job=AsyncMock(return_value=None))
     with pytest.raises(AnalyticsInputError) as exc_info:
         await service.get_export_job("missing")
     assert exc_info.value.code == "RESOURCE_NOT_FOUND"
+    service.export_repo.get_job.assert_awaited_once_with(tenant_id="tenant-a", job_id="missing")
+
+
+@pytest.mark.asyncio
+async def test_export_status_and_results_never_fall_back_to_unscoped_job_lookup() -> None:
+    service = make_service()
+    service.export_repo = SimpleNamespace(get_job=AsyncMock(return_value=None))
+
+    with pytest.raises(AnalyticsInputError):
+        await service.get_export_job("foreign-job")
+    with pytest.raises(AnalyticsInputError):
+        await service.get_export_result_json("foreign-job")
+    with pytest.raises(AnalyticsInputError):
+        await service.get_export_result_ndjson("foreign-job", compression="none")
+
+    assert service.export_repo.get_job.await_args_list == [
+        call(tenant_id="tenant-a", job_id="foreign-job"),
+        call(tenant_id="tenant-a", job_id="foreign-job"),
+        call(tenant_id="tenant-a", job_id="foreign-job"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -3331,6 +3391,7 @@ def test_jsonable_converts_decimal_and_date() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_reuses_existing() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     existing = SimpleNamespace(
         job_id="aexp_existing",
         dataset_type="portfolio_timeseries",
@@ -3368,6 +3429,7 @@ async def test_create_export_job_reuses_existing() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_reuses_fresh_running_job() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     existing = SimpleNamespace(
         job_id="aexp_running",
         dataset_type="portfolio_timeseries",
@@ -3407,6 +3469,7 @@ async def test_create_export_job_reuses_fresh_running_job() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_replaces_stale_running_job() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     existing = SimpleNamespace(
         job_id="aexp_stale",
         dataset_type="portfolio_timeseries",
@@ -3438,16 +3501,19 @@ async def test_create_export_job_replaces_stale_running_job() -> None:
         updated_at=datetime.now(UTC),
     )
 
-    async def _mark_failed(row, *, error_message):
+    async def _mark_failed(row, *, tenant_id, error_message):
+        assert tenant_id == "tenant-a"
         row.status = "failed"
         row.error_message = error_message
         return row
 
-    async def _mark_running(row):
+    async def _mark_running(row, *, tenant_id):
+        assert tenant_id == "tenant-a"
         row.status = "running"
         return row
 
-    async def _mark_completed(row, *, result_payload, result_row_count):
+    async def _mark_completed(row, *, tenant_id, result_payload, result_row_count):
+        assert tenant_id == "tenant-a"
         row.status = "completed"
         row.result_payload = result_payload
         row.result_row_count = result_row_count
@@ -3486,6 +3552,7 @@ async def test_create_export_job_replaces_stale_running_job() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_input_error() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     row = SimpleNamespace(
         job_id="aexp_2",
         dataset_type="position_timeseries",
@@ -3531,6 +3598,7 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_execution_timeout() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     service._analytics_export_execution_timeout_seconds = 1  # pylint: disable=protected-access
     row = SimpleNamespace(
         job_id="aexp_timeout",
@@ -3593,6 +3661,7 @@ async def test_create_export_job_marks_failed_on_execution_timeout() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_request_cancellation() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     row = SimpleNamespace(
         job_id="aexp_cancelled",
         dataset_type="portfolio_timeseries",
@@ -3649,6 +3718,7 @@ async def test_create_export_job_marks_failed_on_request_cancellation() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_unexpected_error_and_reraises() -> None:
     service = make_service()
+    _admit_owned_portfolio(service)
     row = SimpleNamespace(
         job_id="aexp_3",
         dataset_type="position_timeseries",
@@ -3764,9 +3834,11 @@ async def test_get_export_result_json_success_and_export_job_state_helpers() -> 
         )
         is running_row
     )
-    service.export_repo.mark_running.assert_awaited_once_with(running_row)
+    service.export_repo.mark_running.assert_awaited_once_with(running_row, tenant_id="tenant-a")
     service.export_repo.mark_completed.assert_awaited_once()
-    service.export_repo.mark_failed.assert_awaited_once_with(running_row, error_message="boom")
+    service.export_repo.mark_failed.assert_awaited_once_with(
+        running_row, tenant_id="tenant-a", error_message="boom"
+    )
 
 
 @pytest.mark.asyncio

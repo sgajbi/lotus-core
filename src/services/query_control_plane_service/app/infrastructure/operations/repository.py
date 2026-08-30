@@ -39,8 +39,10 @@ from ...domain.operations import (
     SnapshotValuationCoverageSummary,
 )
 from .operations_analytics_export_queries import (
-    analytics_export_job_priority,
-    apply_analytics_export_job_scope,
+    analytics_export_portfolio_exists,
+    apply_analytics_export_job_portfolio_scope,
+    count_analytics_export_jobs,
+    list_analytics_export_jobs,
 )
 from .operations_health_queries import (
     analytics_export_job_health_aggregate,
@@ -190,6 +192,11 @@ class OperationsRepository:
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
+
+    async def portfolio_exists_for_tenant(self, *, tenant_id: str, portfolio_id: str) -> bool:
+        return await analytics_export_portfolio_exists(
+            self.db, tenant_id=tenant_id, portfolio_id=portfolio_id
+        )
 
     async def get_load_run_progress(
         self,
@@ -401,7 +408,7 @@ class OperationsRepository:
             AnalyticsExportJob.job_id.label("job_id"),
             AnalyticsExportJob.request_fingerprint.label("request_fingerprint"),
         )
-        base_stmt = apply_analytics_export_job_scope(
+        base_stmt = apply_analytics_export_job_portfolio_scope(
             base_stmt,
             portfolio_id=portfolio_id,
             as_of=as_of,
@@ -1129,24 +1136,28 @@ class OperationsRepository:
 
     async def get_analytics_export_jobs_count(
         self,
+        *,
+        tenant_id: str,
         portfolio_id: str,
         status: Optional[str] = None,
         job_id: Optional[str] = None,
         request_fingerprint: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = apply_analytics_export_job_scope(
-            select(func.count()).select_from(AnalyticsExportJob),
+        return await count_analytics_export_jobs(
+            self.db,
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             status=status,
             job_id=job_id,
             request_fingerprint=request_fingerprint,
             as_of=as_of,
         )
-        return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_analytics_export_jobs(
         self,
+        *,
+        tenant_id: str,
         portfolio_id: str,
         skip: int,
         limit: int,
@@ -1157,30 +1168,19 @@ class OperationsRepository:
         reference_now: Optional[datetime] = None,
         as_of: Optional[datetime] = None,
     ) -> list[AnalyticsExportJob]:
-        reference_now = reference_now or datetime.now(timezone.utc)
-        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = apply_analytics_export_job_scope(
-            select(AnalyticsExportJob),
+        return await list_analytics_export_jobs(
+            self.db,
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
+            skip=skip,
+            limit=limit,
             status=status,
             job_id=job_id,
             request_fingerprint=request_fingerprint,
+            stale_minutes=stale_minutes,
+            reference_now=reference_now,
             as_of=as_of,
         )
-        stmt = (
-            stmt.order_by(
-                analytics_export_job_priority(
-                    AnalyticsExportJob.status,
-                    AnalyticsExportJob.updated_at,
-                    stale_threshold,
-                ).asc(),
-                AnalyticsExportJob.created_at.asc(),
-                AnalyticsExportJob.id.asc(),
-            )
-            .offset(skip)
-            .limit(limit)
-        )
-        return list((await self.db.execute(stmt)).scalars().all())
 
     def _failed_outbox_events_stmt(
         self,

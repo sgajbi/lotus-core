@@ -84,6 +84,7 @@ class AnalyticsExportJobRecord:
     """Durable analytics export lifecycle state without ORM identity."""
 
     job_id: str
+    tenant_id: str
     dataset_type: str
     portfolio_id: str
     status: str

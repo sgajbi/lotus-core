@@ -27,6 +27,7 @@ SUITES: dict[str, list[str]] = {
     "unit-db": [
         "tests/unit/libs/portfolio-common/test_position_state_repository.py",
         "tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py",
+        "tests/integration/test_analytics_export_job_tenant_migration.py",
         "tests/integration/test_ingestion_dlq_job_ownership_migration.py",
         "tests/integration/test_ingestion_failure_outcome_migration.py",
         "tests/integration/test_portfolio_tenant_cutover_migration.py",

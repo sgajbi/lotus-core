@@ -18,7 +18,7 @@ from src.services.query_control_plane_service.app.routers.operations import (
     get_load_run_progress,
     parse_required_iso_date,
 )
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -867,6 +867,7 @@ async def test_analytics_export_jobs_success(async_test_client):
     assert response.json()["items"][0]["is_terminal_failure"] is True
     assert response.json()["items"][0]["operational_state"] == "FAILED"
     mock_service.get_analytics_export_jobs.assert_awaited_once_with(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="P1",
         skip=0,
         limit=100,

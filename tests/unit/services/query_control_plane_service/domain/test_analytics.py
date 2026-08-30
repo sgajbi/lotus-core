@@ -78,6 +78,7 @@ def test_export_job_payloads_remain_json_shaped_without_orm_identity() -> None:
     now = datetime(2026, 4, 10, tzinfo=UTC)
     record = AnalyticsExportJobRecord(
         job_id="aexp_1",
+        tenant_id="tenant-a",
         dataset_type="position_timeseries",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         status="completed",

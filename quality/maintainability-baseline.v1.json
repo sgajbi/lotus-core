@@ -58,7 +58,7 @@
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
       "rank": "C",
-      "mi": 6.683473115198914,
+      "mi": 8.522763892030468,
       "owner": "lotus-core maintainers",
       "rationale": "Existing analytics application hotspot scheduled for family-aligned decomposition.",
       "issue": "#462"
@@ -67,7 +67,7 @@
       "path": "src/services/query_control_plane_service/app/application/operations/service.py",
       "rank": "C",
       "mi": 0.0,
-      "raw_mi": -7.444043144193977,
+      "raw_mi": -6.74295894767787,
       "owner": "lotus-core maintainers",
       "rationale": "Existing operations application hotspot scheduled for route-family decomposition.",
       "issue": "#462"
@@ -75,7 +75,7 @@
     {
       "path": "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
       "rank": "C",
-      "mi": 1.9433536063927517,
+      "mi": 2.22686529828842,
       "owner": "lotus-core maintainers",
       "rationale": "Existing operations repository hotspot scheduled for route-family decomposition.",
       "issue": "#462"

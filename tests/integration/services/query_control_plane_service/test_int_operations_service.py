@@ -1879,6 +1879,7 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
         [
             AnalyticsExportJob(
                 job_id="analytics-old",
+                tenant_id=TEST_TENANT_ID,
                 dataset_type="portfolio_positions",
                 portfolio_id="P11",
                 status="running",
@@ -1890,6 +1891,7 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
             ),
             AnalyticsExportJob(
                 job_id="analytics-late",
+                tenant_id=TEST_TENANT_ID,
                 dataset_type="portfolio_positions",
                 portfolio_id="P11",
                 status="failed",
@@ -1907,7 +1909,9 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
     service = OperationsService(OperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_analytics_export_jobs("P11", skip=0, limit=20)
+        response = await service.get_analytics_export_jobs(
+            tenant_id=TEST_TENANT_ID, portfolio_id="P11", skip=0, limit=20
+        )
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
     assert response.total == 1

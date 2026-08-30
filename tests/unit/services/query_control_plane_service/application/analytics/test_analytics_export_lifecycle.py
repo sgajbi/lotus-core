@@ -19,6 +19,7 @@ def _export_job(
     recorded_at = datetime(2026, 6, 4, 12, 0, tzinfo=UTC)
     return AnalyticsExportJobRecord(
         job_id="aexp_1",
+        tenant_id="tenant-a",
         dataset_type="position_timeseries",
         portfolio_id="P1",
         status=status,

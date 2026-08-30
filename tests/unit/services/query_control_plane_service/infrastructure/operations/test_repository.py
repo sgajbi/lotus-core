@@ -686,13 +686,15 @@ async def test_support_job_queries_honor_job_id_filters(
         reference_now=reference_now,
     )
     await repository.get_analytics_export_jobs_count(
-        "P1",
+        tenant_id="tenant-a",
+        portfolio_id="P1",
         status="failed",
         job_id="aexp_1234567890abcdef",
         request_fingerprint="pf-001:positions:csv",
     )
     await repository.get_analytics_export_jobs(
-        "P1",
+        tenant_id="tenant-a",
+        portfolio_id="P1",
         skip=0,
         limit=10,
         status="failed",
@@ -729,11 +731,13 @@ async def test_support_job_queries_honor_job_id_filters(
     assert "portfolio_aggregation_jobs.id = 4402" in compiled_statements[3]
     assert "portfolio_aggregation_jobs.correlation_id = 'corr-agg-4402'" in compiled_statements[3]
     assert "analytics_export_jobs.job_id = 'aexp_1234567890abcdef'" in compiled_statements[4]
+    assert "analytics_export_jobs.tenant_id = 'tenant-a'" in compiled_statements[4]
     assert (
         "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'"
         in compiled_statements[4]
     )
     assert "analytics_export_jobs.job_id = 'aexp_1234567890abcdef'" in compiled_statements[5]
+    assert "analytics_export_jobs.tenant_id = 'tenant-a'" in compiled_statements[5]
     assert (
         "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'"
         in compiled_statements[5]
@@ -1313,6 +1317,20 @@ async def test_portfolio_exists_false(repository: OperationsRepository, mock_db_
     assert exists is False
 
 
+async def test_portfolio_exists_for_tenant_uses_composite_authority(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, "P1")
+
+    assert await repository.portfolio_exists_for_tenant(tenant_id="tenant-a", portfolio_id="P1")
+
+    compiled = str(
+        mock_db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled
+    assert "portfolios.portfolio_id = 'P1'" in compiled
+
+
 async def test_get_latest_financial_reconciliation_control_stage(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -1581,6 +1599,7 @@ async def test_get_analytics_export_jobs_count_with_status(
     as_of = datetime(2025, 8, 31, 12, 0, tzinfo=timezone.utc)
 
     value = await repository.get_analytics_export_jobs_count(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         status="failed",
         request_fingerprint="pf-001:positions:csv",
@@ -1591,6 +1610,7 @@ async def test_get_analytics_export_jobs_count_with_status(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.tenant_id = 'tenant-a'" in compiled
     assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "analytics_export_jobs.status = 'failed'" in compiled
     assert "lower(trim(analytics_export_jobs.status))" not in compiled
@@ -1607,6 +1627,7 @@ async def test_get_analytics_export_jobs_query(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_analytics_export_jobs(
+        tenant_id="tenant-a",
         portfolio_id="P1",
         skip=1,
         limit=3,
@@ -1620,6 +1641,7 @@ async def test_get_analytics_export_jobs_query(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
+    assert "analytics_export_jobs.tenant_id = 'tenant-a'" in compiled
     assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "analytics_export_jobs.status = 'running'" in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled

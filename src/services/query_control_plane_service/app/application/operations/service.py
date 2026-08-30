@@ -25,7 +25,6 @@ from portfolio_common.reconciliation_quality import (
 from ...application.operations.errors import OutboxRecoveryRejected
 from ...contracts.operations import (
     AnalyticsExportJobListResponse,
-    AnalyticsExportJobRecord,
     CalculatorSloResponse,
     FailedOutboxEventListResponse,
     FailedOutboxEventRecord,
@@ -60,6 +59,10 @@ from ...domain.operations import (
     SnapshotValuationCoverageSummary,
 )
 from ...ports.operations import OperationsSupportRepository
+from .analytics_export_listing import (
+    analytics_export_backlog_age_minutes,
+    build_analytics_export_job_list_response,
+)
 from .calculator_slo import build_calculator_slo_response
 from .load_run_progress import build_load_run_progress_response
 from .policy import (
@@ -1017,6 +1020,8 @@ class OperationsService:
 
     async def get_analytics_export_jobs(
         self,
+        *,
+        tenant_id: str,
         portfolio_id: str,
         skip: int,
         limit: int,
@@ -1025,12 +1030,16 @@ class OperationsService:
         request_fingerprint: str | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> AnalyticsExportJobListResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
+        if not await self.repo.portfolio_exists_for_tenant(
+            tenant_id=tenant_id, portfolio_id=portfolio_id
+        ):
+            raise ValueError(f"Portfolio {portfolio_id} not found")
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_analytics_export_status_filter(status)
         total, jobs = await self._read_count_and_page(
             self.repo.get_analytics_export_jobs_count(
+                tenant_id=tenant_id,
                 portfolio_id=portfolio_id,
                 status=normalized_status,
                 job_id=job_id,
@@ -1038,6 +1047,7 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
             self.repo.get_analytics_export_jobs(
+                tenant_id=tenant_id,
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
@@ -1049,46 +1059,14 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
         )
-        return AnalyticsExportJobListResponse(
+        return build_analytics_export_job_list_response(
             portfolio_id=portfolio_id,
             stale_threshold_minutes=stale_threshold_minutes,
             generated_at_utc=generated_at_utc,
             total=total,
             skip=skip,
             limit=limit,
-            items=[
-                AnalyticsExportJobRecord(
-                    job_id=job.job_id,
-                    request_fingerprint=job.request_fingerprint,
-                    dataset_type=job.dataset_type,
-                    status=job.status,
-                    created_at=job.created_at,
-                    started_at=job.started_at,
-                    completed_at=job.completed_at,
-                    updated_at=job.updated_at,
-                    is_stale_running=self._is_analytics_export_job_stale(
-                        job.status,
-                        job.updated_at,
-                        generated_at_utc,
-                        stale_threshold_minutes,
-                    ),
-                    backlog_age_minutes=self._get_analytics_export_backlog_age_minutes(
-                        job.status, job.created_at, generated_at_utc
-                    ),
-                    result_row_count=job.result_row_count,
-                    error_message=job.error_message,
-                    is_terminal_failure=(
-                        self._normalize_analytics_export_status(job.status) == "failed"
-                    ),
-                    operational_state=self._get_analytics_export_operational_state(
-                        job.status,
-                        job.updated_at,
-                        generated_at_utc,
-                        stale_threshold_minutes,
-                    ),
-                )
-                for job in jobs
-            ],
+            jobs=jobs,
         )
 
     async def get_failed_outbox_events(
@@ -2014,11 +1992,7 @@ class OperationsService:
     def _get_analytics_export_backlog_age_minutes(
         status: str | None, created_at: datetime | None, now: datetime | None = None
     ) -> int | None:
-        normalized_status = OperationsService._normalize_analytics_export_status(status)
-        if normalized_status not in {"accepted", "running"} or created_at is None:
-            return None
-        reference_now = now or datetime.now(timezone.utc)
-        return max(0, int((reference_now - created_at).total_seconds() // 60))
+        return analytics_export_backlog_age_minutes(status, created_at, now)
 
 
 def _source_safe_outbox_recovery_reason(reason: str) -> str:

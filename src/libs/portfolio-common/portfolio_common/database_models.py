@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
+from .analytics_export_job_schema import analytics_export_job_table_args
 from .db_base import Base
 from .domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
@@ -5247,6 +5248,7 @@ class AnalyticsExportJob(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(String, unique=True, index=True, nullable=False)
+    tenant_id = Column(String(128), nullable=False)
     dataset_type = Column(String, index=True, nullable=False)
     portfolio_id = Column(String, index=True, nullable=False)
     status = Column(String, index=True, nullable=False, server_default="accepted")
@@ -5264,25 +5266,7 @@ class AnalyticsExportJob(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        Index(
-            "ix_analytics_export_jobs_portfolio_status_created_at",
-            "portfolio_id",
-            "status",
-            "created_at",
-        ),
-        Index(
-            "ix_analytics_export_jobs_status_updated_at",
-            "status",
-            "updated_at",
-        ),
-        Index(
-            "ix_analytics_export_jobs_dataset_fingerprint_id",
-            "dataset_type",
-            "request_fingerprint",
-            id.desc(),
-        ),
-    )
+    __table_args__ = analytics_export_job_table_args(id)
 
 
 class PipelineStageState(Base):

@@ -25,6 +25,8 @@ class OperationsSupportRepository(Protocol):
 
     async def portfolio_exists(self, portfolio_id: str) -> bool: ...
 
+    async def portfolio_exists_for_tenant(self, *, tenant_id: str, portfolio_id: str) -> bool: ...
+
     async def get_load_run_progress(
         self,
         run_id: str,
@@ -230,12 +232,16 @@ class OperationsSupportRepository(Protocol):
 
     async def get_analytics_export_jobs_count(
         self,
+        *,
+        tenant_id: str,
         portfolio_id: str,
         **filters: Any,
     ) -> int: ...
 
     async def get_analytics_export_jobs(
         self,
+        *,
+        tenant_id: str,
         portfolio_id: str,
         skip: int,
         limit: int,
