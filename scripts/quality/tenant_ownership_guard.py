@@ -257,6 +257,24 @@ CRITICAL_TENANT_BOUNDARIES = (
     ),
     (
         Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "analytics_timeseries_repository.py"
+        ),
+        "AnalyticsTimeseriesRepository",
+        frozenset({"get_portfolio"}),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/application/analytics/"
+            "analytics_timeseries_service.py"
+        ),
+        "AnalyticsTimeseriesService",
+        frozenset({"__init__"}),
+        "tenant_context",
+    ),
+    (
+        Path(
             "src/services/query_control_plane_service/app/application/"
             "transaction_economics/service.py"
         ),

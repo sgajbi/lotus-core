@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_zero
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
@@ -55,6 +56,7 @@ from .analytics_cash_flows import (
     portfolio_cash_flows_for_dates,
     position_cash_flows_for_keys,
 )
+from .analytics_errors import AnalyticsInputError as AnalyticsInputError
 from .analytics_export_execution import (
     collect_portfolio_timeseries_for_export,
     collect_position_timeseries_for_export,
@@ -99,6 +101,7 @@ from .analytics_pagination import (
     position_timeseries_next_page_token,
     position_timeseries_scope_fingerprint,
 )
+from .analytics_portfolio_authority import require_owned_portfolio
 from .analytics_portfolio_pages import (
     AnalyticsPortfolioPageError,
     PortfolioObservationPageScope,
@@ -126,13 +129,6 @@ from .analytics_quality import (
     timeseries_source_evidence_current,
 )
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
-
-
-class AnalyticsInputError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
-        self.code = code
-        super().__init__(message)
-
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +192,7 @@ class AnalyticsTimeseriesService:
         export_store: AnalyticsExportStore,
         unit_of_work: AnalyticsUnitOfWork,
         policy: AnalyticsRuntimePolicy,
+        tenant_context: TenantContext,
     ) -> None:
         self.repo = reader
         self.export_repo = export_store
@@ -206,6 +203,7 @@ class AnalyticsTimeseriesService:
         self._page_token_ttl_seconds = policy.page_token_ttl_seconds
         self._analytics_export_stale_timeout_minutes = policy.export_stale_timeout_minutes
         self._analytics_export_execution_timeout_seconds = policy.export_execution_timeout_seconds
+        self._tenant_id = tenant_context.tenant_id_text
 
     def _request_fingerprint(self, payload: dict[str, object]) -> str:
         fingerprint: str = request_fingerprint(payload)
@@ -685,9 +683,7 @@ class AnalyticsTimeseriesService:
         portfolio_id: str,
         request: PortfolioAnalyticsTimeseriesRequest,
     ) -> PortfolioAnalyticsTimeseriesResponse:
-        portfolio = await self.repo.get_portfolio(portfolio_id)
-        if portfolio is None:
-            raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+        portfolio = await require_owned_portfolio(self.repo, self._tenant_id, portfolio_id)
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
 
         resolved_window = self._resolve_window(
@@ -846,9 +842,7 @@ class AnalyticsTimeseriesService:
         portfolio_id: str,
         request: PositionAnalyticsTimeseriesRequest,
     ) -> PositionAnalyticsTimeseriesResponse:
-        portfolio = await self.repo.get_portfolio(portfolio_id)
-        if portfolio is None:
-            raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+        portfolio = await require_owned_portfolio(self.repo, self._tenant_id, portfolio_id)
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
         resolved_window = self._resolve_window(
             as_of_date=request.as_of_date,
@@ -1260,9 +1254,7 @@ class AnalyticsTimeseriesService:
         portfolio_id: str,
         request: PortfolioAnalyticsReferenceRequest,
     ) -> PortfolioAnalyticsReferenceResponse:
-        portfolio = await self.repo.get_portfolio(portfolio_id)
-        if portfolio is None:
-            raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+        portfolio = await require_owned_portfolio(self.repo, self._tenant_id, portfolio_id)
         latest_date = await self._latest_available_performance_date(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,

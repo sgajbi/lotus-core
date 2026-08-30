@@ -1,4 +1,4 @@
-from fastapi import Depends
+from fastapi import Depends, Request
 from portfolio_common.db import get_async_db_session
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
@@ -114,6 +114,7 @@ def get_security_audit_query_service() -> SecurityAuditQueryService:
 
 
 def get_analytics_timeseries_service(
+    request: Request,
     db: AsyncSession = Depends(get_async_db_session),
 ) -> AnalyticsTimeseriesService:
     settings = load_query_control_plane_settings()
@@ -121,6 +122,7 @@ def get_analytics_timeseries_service(
         reader=AnalyticsTimeseriesRepository(db),
         export_store=AnalyticsExportRepository(db),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(db),
+        tenant_context=request.state.tenant_context,
         policy=AnalyticsRuntimePolicy(
             page_token_secret=settings.page_token_secret,
             page_token_key_id=settings.page_token_key_id,

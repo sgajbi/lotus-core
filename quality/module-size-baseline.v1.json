@@ -57,7 +57,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
-      "lines": 1600,
+      "lines": 1592,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy analytics application service pending family-aligned decomposition.",
       "issue": "#462",

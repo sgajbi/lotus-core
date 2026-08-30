@@ -58,7 +58,7 @@
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
       "rank": "C",
-      "mi": 5.761932500404426,
+      "mi": 6.683473115198914,
       "owner": "lotus-core maintainers",
       "rationale": "Existing analytics application hotspot scheduled for family-aligned decomposition.",
       "issue": "#462"

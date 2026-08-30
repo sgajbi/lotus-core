@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_control_plane_service.app.infrastructure import (
     transaction_economics_sources,
 )
+from src.services.query_control_plane_service.app.infrastructure.analytics_timeseries_repository import (  # noqa: E501
+    AnalyticsTimeseriesRepository,
+)
 from src.services.query_service.app.repositories.buy_state_repository import BuyStateRepository
 from src.services.query_service.app.repositories.cash_account_repository import (
     CashAccountRepository,
@@ -133,3 +136,20 @@ async def test_control_plane_economics_excludes_foreign_tenant(
         await economics.get_portfolio_base_currency(tenant_id="tenant-a", portfolio_id="PORT-B")
         is None
     )
+
+
+async def test_control_plane_analytics_excludes_foreign_tenant(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add_all(
+        [
+            _portfolio(tenant_id="tenant-a", portfolio_id="PORT-A"),
+            _portfolio(tenant_id="tenant-b", portfolio_id="PORT-B"),
+        ]
+    )
+    await async_db_session.flush()
+
+    analytics = AnalyticsTimeseriesRepository(async_db_session)
+    assert (await analytics.get_portfolio(tenant_id="tenant-a", portfolio_id="PORT-A")) is not None
+    assert (await analytics.get_portfolio(tenant_id="tenant-a", portfolio_id="PORT-B")) is None

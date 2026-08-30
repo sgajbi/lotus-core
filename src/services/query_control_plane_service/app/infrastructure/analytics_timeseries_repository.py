@@ -244,8 +244,13 @@ class AnalyticsTimeseriesRepository:
 
         return select(ranked).where(ranked.c.rn == 1).order_by(*ordering)
 
-    async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None:
-        stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
+    async def get_portfolio(
+        self, *, tenant_id: str, portfolio_id: str
+    ) -> PortfolioAnalyticsSource | None:
+        stmt = select(Portfolio).where(
+            Portfolio.tenant_id == tenant_id,
+            Portfolio.portfolio_id == portfolio_id,
+        )
         result = await self.db.execute(stmt)
         row = result.scalars().first()
         if row is None:

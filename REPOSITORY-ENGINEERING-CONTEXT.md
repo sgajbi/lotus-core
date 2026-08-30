@@ -744,10 +744,10 @@ Tenant authority boundary:
 8. position-history, latest-holdings, and portfolio-maturity reads carry the admitted tenant through
    the service boundary and require tenant plus portfolio ownership before any holdings query; a
    cross-tenant portfolio identifier is indistinguishable from a missing portfolio,
-9. transaction-ledger, exact transaction-record, realized-tax summary, QCP portfolio tax-lot, and
-   aggregate DPM source-readiness reads require tenant plus portfolio ownership before reading
-   financial evidence; policy and capability query tenants are bound to admitted authority and
-   cannot widen request scope,
+9. transaction-ledger, exact transaction-record, realized-tax summary, transaction economics,
+   analytics timeseries/reference, QCP portfolio tax-lot, and aggregate DPM source-readiness reads
+   require tenant plus portfolio ownership before reading financial evidence; policy and capability
+   query tenants are bound to admitted authority and cannot widen request scope,
 10. the tenant-ownership architecture guard blocks synthetic production defaults and optional tenant
    parameters on these critical persistence boundaries, while reporting the
    banked tenantless-table census for the remaining staged slices of issue `#798`.

@@ -110,8 +110,13 @@ async def test_analytics_timeseries_repository_methods() -> None:
     ]
     repo = AnalyticsTimeseriesRepository(db)
 
-    portfolio = await repo.get_portfolio("P1")
+    portfolio = await repo.get_portfolio(tenant_id="tenant-a", portfolio_id="P1")
     assert portfolio is not None
+    portfolio_sql = str(
+        db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolios.tenant_id = 'tenant-a'" in portfolio_sql
+    assert "portfolios.portfolio_id = 'P1'" in portfolio_sql
 
     latest_date = await repo.get_latest_portfolio_timeseries_date("P1")
     assert latest_date == date(2025, 1, 31)

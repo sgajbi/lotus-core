@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +56,7 @@ def make_service() -> AnalyticsTimeseriesService:
         reader=AnalyticsTimeseriesRepository(session),
         export_store=AnalyticsExportRepository(session),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
+        tenant_context=TenantContext(tenant_id=TenantId("tenant-a")),
         policy=AnalyticsRuntimePolicy(
             page_token_secret="lotus-core-local-dev",
             page_token_key_id="local-dev",
@@ -3115,7 +3117,8 @@ def test_resolve_window_inception_clamp() -> None:
 @pytest.mark.asyncio
 async def test_get_portfolio_timeseries_not_found() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(get_portfolio=AsyncMock(return_value=None))
+    get_portfolio = AsyncMock(return_value=None)
+    service.repo = SimpleNamespace(get_portfolio=get_portfolio)
     with pytest.raises(AnalyticsInputError) as exc_info:
         await service.get_portfolio_timeseries(
             portfolio_id="UNKNOWN",
@@ -3125,6 +3128,7 @@ async def test_get_portfolio_timeseries_not_found() -> None:
             ),
         )
     assert exc_info.value.code == "RESOURCE_NOT_FOUND"
+    get_portfolio.assert_awaited_once_with(tenant_id="tenant-a", portfolio_id="UNKNOWN")
 
 
 @pytest.mark.asyncio

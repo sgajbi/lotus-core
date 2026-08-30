@@ -292,6 +292,20 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             "tenant_context",
         ),
         (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "analytics_timeseries_repository.py",
+            "AnalyticsTimeseriesRepository",
+            ("get_portfolio",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/analytics/"
+            "analytics_timeseries_service.py",
+            "AnalyticsTimeseriesService",
+            ("__init__",),
+            "tenant_context",
+        ),
+        (
             "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
             "SqlAlchemySimulationStore",
             (

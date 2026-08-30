@@ -18,7 +18,9 @@ from ..domain.analytics import (
 class AnalyticsTimeseriesReader(Protocol):
     """Read source portfolio, timeseries, cashflow, calendar, and FX evidence."""
 
-    async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None: ...
+    async def get_portfolio(
+        self, *, tenant_id: str, portfolio_id: str
+    ) -> PortfolioAnalyticsSource | None: ...
 
     async def get_latest_portfolio_timeseries_date(self, portfolio_id: str) -> date | None: ...
 

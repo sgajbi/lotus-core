@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.responses import Response
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
@@ -231,7 +233,10 @@ def test_raise_http_for_analytics_error_unknown_code_maps_to_500() -> None:
 
 
 def test_get_analytics_timeseries_service_factory() -> None:
-    service = get_analytics_timeseries_service(db=MagicMock())
+    request = SimpleNamespace(
+        state=SimpleNamespace(tenant_context=TenantContext(tenant_id=TenantId("tenant-a")))
+    )
+    service = get_analytics_timeseries_service(request=request, db=MagicMock())
     assert service is not None
 
 

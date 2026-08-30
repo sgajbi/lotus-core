@@ -188,6 +188,10 @@ Use this grouping when deciding where a new consumer should bind:
   portfolio timeseries, position timeseries, analytics reference, and
   `/integration/exports/analytics-timeseries/jobs...`
 
+Portfolio and position analytics inputs plus analytics reference metadata resolve the portfolio
+through the admitted request tenant before reading valuations, quantities, cashflows, fees, or
+portfolio metadata. A foreign portfolio identifier is indistinguishable from a missing portfolio.
+
 `PortfolioAnalyticsReference.performance_end_date` is the latest complete performance horizon
 where required portfolio and position analytics source families overlap. It is bounded by the
 requested `as_of_date` and must not advertise a newer isolated source date that downstream
