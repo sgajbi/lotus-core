@@ -21,6 +21,7 @@ from src.services.ingestion_service.app.services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
@@ -47,6 +48,7 @@ async def test_publish_portfolios(
     portfolios = [
         Portfolio(
             portfolio_id="P1",
+            tenant_id=TEST_TENANT_ID,
             base_currency="USD",
             open_date=date(2025, 1, 1),
             risk_exposure="a",
@@ -409,6 +411,7 @@ async def test_publish_with_correlation_id(
     portfolios = [
         Portfolio(
             portfolio_id="P1",
+            tenant_id=TEST_TENANT_ID,
             base_currency="USD",
             open_date=date(2025, 1, 1),
             risk_exposure="a",
@@ -439,6 +442,7 @@ async def test_publish_with_durable_ingestion_job_owner(
 ):
     portfolio = Portfolio(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         base_currency="USD",
         open_date=date(2025, 1, 1),
         risk_exposure="a",
@@ -462,6 +466,7 @@ async def test_publish_with_traceparent_header(
     portfolios = [
         Portfolio(
             portfolio_id="P1",
+            tenant_id=TEST_TENANT_ID,
             base_currency="USD",
             open_date=date(2025, 1, 1),
             risk_exposure="a",
@@ -492,6 +497,7 @@ async def test_publish_with_idempotency_key(
     portfolios = [
         Portfolio(
             portfolio_id="P1",
+            tenant_id=TEST_TENANT_ID,
             base_currency="USD",
             open_date=date(2025, 1, 1),
             risk_exposure="a",
@@ -522,6 +528,7 @@ async def test_publish_omits_not_set_correlation_header(
     portfolios = [
         Portfolio(
             portfolio_id="P1",
+            tenant_id=TEST_TENANT_ID,
             base_currency="USD",
             open_date=date(2025, 1, 1),
             risk_exposure="a",
@@ -548,8 +555,9 @@ async def test_publish_portfolio_bundle(ingestion_service: IngestionService):
         {
             "business_dates": [{"business_date": "2026-01-02"}],
             "portfolios": [
-                {
-                    "portfolio_id": "P1",
+                    {
+                        "portfolio_id": "P1",
+                        "tenant_id": TEST_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2025-01-01",
                     "client_id": "C1",
@@ -617,8 +625,9 @@ async def test_publish_portfolio_bundle_reports_completed_group_counts_before_fa
         {
             "business_dates": [{"business_date": "2026-01-02"}],
             "portfolios": [
-                {
-                    "portfolio_id": "P1",
+                    {
+                        "portfolio_id": "P1",
+                        "tenant_id": TEST_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2025-01-01",
                     "client_id": "C1",

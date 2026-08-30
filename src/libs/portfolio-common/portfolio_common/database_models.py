@@ -108,7 +108,7 @@ class Portfolio(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     portfolio_id = Column(String, unique=True, index=True, nullable=False)
-    tenant_id = Column(String, nullable=True)
+    tenant_id = Column(String(128), nullable=False)
     legal_book_id = Column(String, nullable=True)
     base_currency = Column(String(3), nullable=False)
     open_date = Column(Date, nullable=False)
@@ -135,10 +135,9 @@ class Portfolio(Base):
             name="uq_portfolios_book_scope_identity",
         ),
         CheckConstraint(
-            "(tenant_id IS NULL AND legal_book_id IS NULL) OR "
-            "(tenant_id IS NOT NULL AND legal_book_id IS NOT NULL "
-            "AND tenant_id = btrim(tenant_id) AND legal_book_id = btrim(legal_book_id) "
-            "AND tenant_id <> '' AND legal_book_id <> '')",
+            "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND "
+            "(legal_book_id IS NULL OR "
+            "(legal_book_id = btrim(legal_book_id) AND legal_book_id <> ''))",
             name="ck_portfolios_valuation_book_scope_complete",
         ),
         Index("ix_portfolios_booking_center_code", "booking_center_code"),

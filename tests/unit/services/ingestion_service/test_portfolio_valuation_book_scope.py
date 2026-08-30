@@ -5,11 +5,13 @@ from portfolio_common.events import PortfolioEvent
 from pydantic import BaseModel, ValidationError
 
 from src.services.ingestion_service.app.DTOs.portfolio_dto import Portfolio
+from tests.test_support.tenant import TEST_TENANT_ID
 
 
 def _portfolio_values(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
         "portfolio_id": "PORTFOLIO-001",
+        "tenant_id": TEST_TENANT_ID,
         "base_currency": "USD",
         "open_date": date(2026, 1, 1),
         "risk_exposure": "balanced",
@@ -36,27 +38,38 @@ def test_portfolio_contract_normalizes_complete_valuation_book_scope(
 
 
 @pytest.mark.parametrize("model", [Portfolio, PortfolioEvent])
-def test_portfolio_contract_preserves_legacy_unscoped_payload(
+def test_portfolio_contract_requires_source_owned_tenant(
     model: type[BaseModel],
 ) -> None:
-    portfolio = model.model_validate(_portfolio_values())
+    values = _portfolio_values()
+    values.pop("tenant_id")
 
-    assert portfolio.tenant_id is None
-    assert portfolio.legal_book_id is None
+    with pytest.raises(ValidationError, match="tenant_id"):
+        model.model_validate(values)
 
 
 @pytest.mark.parametrize("model", [Portfolio, PortfolioEvent])
 @pytest.mark.parametrize(
     ("tenant_id", "legal_book_id"),
-    [("TENANT-SG", None), (None, "PB-SG-01")],
+    [(None, "PB-SG-01")],
 )
-def test_portfolio_contract_rejects_partial_valuation_book_scope(
+def test_portfolio_contract_rejects_legal_book_without_tenant(
     model: type[BaseModel],
     tenant_id: str | None,
     legal_book_id: str | None,
 ) -> None:
-    with pytest.raises(ValidationError, match="must be supplied together"):
+    with pytest.raises(ValidationError, match="tenant_id"):
         model.model_validate(_portfolio_values(tenant_id=tenant_id, legal_book_id=legal_book_id))
+
+
+@pytest.mark.parametrize("model", [Portfolio, PortfolioEvent])
+def test_portfolio_contract_allows_tenant_without_legal_book(
+    model: type[BaseModel],
+) -> None:
+    portfolio = model.model_validate(_portfolio_values(legal_book_id=None))
+
+    assert portfolio.tenant_id == TEST_TENANT_ID
+    assert portfolio.legal_book_id is None
 
 
 @pytest.mark.parametrize("model", [Portfolio, PortfolioEvent])

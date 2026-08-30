@@ -3,7 +3,8 @@ from typing import List, Optional
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.domain.currency import normalize_currency_code
-from portfolio_common.domain.valuation import resolve_optional_valuation_book_scope
+from portfolio_common.domain.tenant import TenantId
+from portfolio_common.domain.valuation import ValuationBookScope
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -16,11 +17,11 @@ class Portfolio(BaseModel):
         ),
         examples=["DEMO_DPM_EUR_001"],
     )
-    tenant_id: Optional[str] = Field(
-        None,
+    tenant_id: str = Field(
+        ...,
         description=(
-            "Tenant or book-of-record scope for this source-data product. "
-            "Null until runtime tenant enforcement is available for this product."
+            "Source-owned tenant that has durable authority over this portfolio. "
+            "The value is mandatory and immutable for the portfolio lifetime."
         ),
         examples=["tenant-sg"],
     )
@@ -122,12 +123,13 @@ class Portfolio(BaseModel):
         return normalize_currency_code(value)
 
     @model_validator(mode="after")
-    def _validate_valuation_book_scope(self) -> "Portfolio":
-        scope = resolve_optional_valuation_book_scope(
-            tenant_id=self.tenant_id,
-            legal_book_id=self.legal_book_id,
-        )
-        if scope is not None:
+    def _validate_tenant_and_optional_valuation_book_scope(self) -> "Portfolio":
+        self.tenant_id = TenantId(self.tenant_id).value
+        if self.legal_book_id is not None:
+            scope = ValuationBookScope(
+                tenant_id=self.tenant_id,
+                legal_book_id=self.legal_book_id,
+            )
             self.tenant_id, self.legal_book_id = scope.key
         return self
 
