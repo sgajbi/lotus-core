@@ -320,6 +320,34 @@ def test_holdings_change_does_not_restate_market_source_identity() -> None:
     )
 
 
+def test_daily_snapshot_date_changes_portfolio_source_identity() -> None:
+    first = _resolve(
+        _row(
+            "SEC_A",
+            business_date=date(2026, 2, 26),
+            portfolio_business_date=date(2026, 2, 25),
+        ),
+        requested_as_of_date=date(2026, 2, 26),
+    )
+    next_day = _resolve(
+        _row(
+            "SEC_A",
+            business_date=date(2026, 2, 27),
+            portfolio_business_date=date(2026, 2, 25),
+        ),
+        requested_as_of_date=date(2026, 2, 27),
+    )
+
+    assert first.source_provenance.portfolio.as_of == date(2026, 2, 26)
+    assert next_day.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert first.source_provenance.portfolio.source_hash != (
+        next_day.source_provenance.portfolio.source_hash
+    )
+    assert first.source_provenance.portfolio.source_id != (
+        next_day.source_provenance.portfolio.source_id
+    )
+
+
 def test_split_revaluation_changes_market_source_identity() -> None:
     original = _resolve(
         _row(

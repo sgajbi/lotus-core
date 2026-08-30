@@ -102,6 +102,7 @@ def resolve_core_snapshot_source_provenance(
     portfolio_source_hash = _portfolio_source_hash(
         position_rows,
         portfolio_currency=portfolio_currency,
+        use_snapshot=use_snapshot,
     )
     market_source_hash = cast(
         str,
@@ -251,6 +252,7 @@ def _portfolio_source_hash(
     position_rows: tuple[CoreSnapshotPositionSource, ...],
     *,
     portfolio_currency: str,
+    use_snapshot: bool,
 ) -> str:
     return cast(
         str,
@@ -263,6 +265,7 @@ def _portfolio_source_hash(
                         "quantity": row.quantity,
                         "cost_basis": row.cost_basis,
                         "cost_basis_local": row.cost_basis_local,
+                        "snapshot_business_date": row.business_date if use_snapshot else None,
                         "portfolio_business_date": row.portfolio_business_date,
                         "epoch": row.epoch,
                         "instrument": {
