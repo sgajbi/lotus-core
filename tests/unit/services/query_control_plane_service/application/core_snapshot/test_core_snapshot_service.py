@@ -35,9 +35,11 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
 )
 from src.services.query_control_plane_service.app.contracts.core_snapshot import (
     CoreSnapshotMode,
-    CoreSnapshotRequest,
     CoreSnapshotSection,
     CoreSnapshotValuationSupportability,
+)
+from src.services.query_control_plane_service.app.contracts.core_snapshot import (
+    CoreSnapshotRequest as CoreSnapshotRequestContract,
 )
 from src.services.query_control_plane_service.app.domain.core_snapshot import (
     CoreSnapshotFxRate,
@@ -45,6 +47,16 @@ from src.services.query_control_plane_service.app.domain.core_snapshot import (
     CoreSnapshotMarketPrice,
     CoreSnapshotPositionSource,
 )
+
+TEST_TENANT_ID = "tenant-test"
+
+
+def CoreSnapshotRequest(**values):  # noqa: N802
+    """Build an explicitly tenant-scoped request for service-level tests."""
+
+    values.setdefault("tenant_id", TEST_TENANT_ID)
+    return CoreSnapshotRequestContract(**values)
+
 
 pytestmark = pytest.mark.asyncio
 
@@ -272,11 +284,11 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.freshness.snapshot_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
     assert response.freshness.fallback_reason is None
     assert response.governance.consumer_system == "lotus-performance"
-    assert response.governance.tenant_id == "default"
+    assert response.governance.tenant_id == TEST_TENANT_ID
     assert response.governance.policy_provenance.policy_version == "snapshot.policy.inline.default"
     assert response.product_name == "PortfolioStateSnapshot"
     assert response.product_version == "v1"
-    assert response.tenant_id == "default"
+    assert response.tenant_id == TEST_TENANT_ID
     assert response.restatement_version == "current"
     assert response.reconciliation_status == COMPLETE
     assert response.valuation_context.effective_as_of_date == date(2026, 2, 27)
@@ -743,7 +755,7 @@ async def test_core_snapshot_simulation_success(mock_dependencies):
     assert response.sections.positions_projected is not None
     assert response.sections.positions_delta is not None
     assert response.sections.positions_projected[0].quantity == Decimal("15")
-    assert response.tenant_id == "default"
+    assert response.tenant_id == TEST_TENANT_ID
     assert response.policy_version == "snapshot.policy.inline.default"
 
 

@@ -39,8 +39,8 @@ async def get_integration_capabilities(
         examples=["lotus-performance"],
     ),
     tenant_id: str = Query(
-        "default",
-        description="Tenant or client identifier for policy resolution.",
+        ...,
+        description="Source-owned tenant identifier required for policy resolution.",
         examples=["tenant_sg_pb"],
     ),
     service: CapabilitiesService = Depends(get_capabilities_service),

@@ -76,6 +76,47 @@ _TENANT_PREFLIGHT = sa.text(
     $$
     """
 )
+_DOWNGRADE_PREFLIGHT = sa.text(
+    """
+    DO $$
+    DECLARE
+        incompatible_count bigint;
+        portfolio_samples text;
+    BEGIN
+        SELECT count(*)
+        INTO incompatible_count
+        FROM portfolios
+        WHERE tenant_id IS NOT NULL
+          AND legal_book_id IS NULL;
+
+        SELECT string_agg(portfolio_id, ', ' ORDER BY portfolio_id)
+        INTO portfolio_samples
+        FROM (
+            SELECT portfolio_id
+            FROM portfolios
+            WHERE tenant_id IS NOT NULL
+              AND legal_book_id IS NULL
+            ORDER BY portfolio_id
+            LIMIT 20
+        ) AS incompatible_portfolios;
+
+        IF incompatible_count > 0 THEN
+            RAISE EXCEPTION USING
+                MESSAGE = format(
+                    'portfolio tenant downgrade found %s row(s) without legal-book scope; '
+                    'sample: %s',
+                    incompatible_count,
+                    coalesce(portfolio_samples, '<none>')
+                ),
+                HINT = (
+                    'assign each legal book from authoritative booking evidence before downgrade; '
+                    'the rollback will not fabricate accounting scope'
+                );
+        END IF;
+    END
+    $$
+    """
+)
 
 
 def upgrade() -> None:
@@ -103,6 +144,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Restore nullable compatibility without fabricating lost pre-cutover values."""
 
+    op.execute(_DOWNGRADE_PREFLIGHT)
     op.drop_index(_TENANT_INDEX, table_name=_TABLE)
     op.drop_constraint(_SCOPE_CONSTRAINT, _TABLE, type_="check")
     op.alter_column(

@@ -66,13 +66,15 @@ def find_synthetic_default_findings(root: Path) -> list[TenantOwnershipFinding]:
 
 
 def _is_synthetic_tenant_default(node: ast.AST) -> bool:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return _has_defaulted_tenant_parameter(node.args)
     if isinstance(node, ast.keyword):
         return node.arg == "tenant_id" and _is_default_literal(node.value)
     if isinstance(node, (ast.Assign, ast.AnnAssign)):
         value = node.value
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        return _is_default_literal(value) and any(
-            "tenant_id" in _target_names(item) for item in targets
+        return any("tenant_id" in _target_names(item) for item in targets) and (
+            _is_default_literal(value) or _call_contains_default_literal(value)
         )
     if isinstance(node, ast.Dict):
         return any(
@@ -87,6 +89,32 @@ def _is_synthetic_tenant_default(node: ast.AST) -> bool:
             and _is_default_literal(node.args[1])
         )
     return False
+
+
+def _has_defaulted_tenant_parameter(arguments: ast.arguments) -> bool:
+    positional = [*arguments.posonlyargs, *arguments.args]
+    defaulted_positional = zip(positional[-len(arguments.defaults) :], arguments.defaults)
+    if any(
+        argument.arg == "tenant_id" and _is_synthetic_default_expression(default)
+        for argument, default in defaulted_positional
+    ):
+        return True
+    return any(
+        argument.arg == "tenant_id" and _is_synthetic_default_expression(default)
+        for argument, default in zip(arguments.kwonlyargs, arguments.kw_defaults)
+    )
+
+
+def _call_contains_default_literal(node: ast.AST | None) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    return any(_is_default_literal(argument) for argument in node.args) or any(
+        _is_default_literal(keyword.value) for keyword in node.keywords
+    )
+
+
+def _is_synthetic_default_expression(node: ast.AST | None) -> bool:
+    return _is_default_literal(node) or _call_contains_default_literal(node)
 
 
 def _target_names(node: ast.AST) -> set[str]:

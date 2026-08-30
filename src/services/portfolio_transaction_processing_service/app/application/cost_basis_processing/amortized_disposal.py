@@ -70,7 +70,7 @@ async def apply_effective_amortized_cost_to_disposals(
             calculation.disposals,
             calculation.source_transactions,
         )
-        return calculation
+        return _with_preserved_open_lot_states(calculation, open_lot_states)
 
     transactions_by_id = {
         **calculation.source_transactions,
@@ -100,7 +100,7 @@ async def apply_effective_amortized_cost_to_disposals(
             calculation.disposals,
             calculation.source_transactions,
         )
-        return calculation
+        return _with_preserved_open_lot_states(calculation, open_lot_states)
     if cost_basis_method is not CostBasisMethod.FIFO:
         raise ValueError("lot-level amortized cost requires FIFO source-lot identity")
 
@@ -161,6 +161,15 @@ async def apply_effective_amortized_cost_to_disposals(
         disposals=tuple(decorated_disposals),
         open_lot_states=open_lot_states,
     )
+
+
+def _with_preserved_open_lot_states(
+    calculation: CostBasisCalculationResult,
+    open_lot_states: dict[str, OpenLotState],
+) -> CostBasisCalculationResult:
+    if open_lot_states is calculation.open_lot_states:
+        return calculation
+    return replace(calculation, open_lot_states=open_lot_states)
 
 
 def _require_no_persisted_carry_for_disposals(
