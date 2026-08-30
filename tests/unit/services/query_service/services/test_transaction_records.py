@@ -12,6 +12,7 @@ from src.services.query_service.app.application.transaction_query import (
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.services.transaction_records import (
+    _transaction_ledger_qualifiers,
     exact_transaction_record_response,
     paginated_transaction_ledger_response,
     transaction_record_from_row,
@@ -398,6 +399,34 @@ async def test_transaction_ledger_snapshot_identity_is_pagination_invariant() ->
 
     assert first_page.snapshot_id == later_page.snapshot_id
     assert first_page.source_lineage == later_page.source_lineage
+
+
+async def test_exact_identity_qualifier_does_not_invalidate_legacy_ledger_scope() -> None:
+    legacy_qualifiers = _transaction_ledger_qualifiers(
+        ledger_filters=_ledger_filters(security_id="S1"),
+        reporting_currency="SGD",
+    )
+    exact_qualifiers = _transaction_ledger_qualifiers(
+        ledger_filters=_ledger_filters(transaction_id="T1", security_id="S1"),
+        reporting_currency="SGD",
+    )
+
+    assert [name for name, _value in legacy_qualifiers] == [
+        "instrument_id",
+        "security_id",
+        "transaction_type",
+        "component_type",
+        "linked_transaction_group_id",
+        "fx_contract_id",
+        "swap_event_id",
+        "near_leg_group_id",
+        "far_leg_group_id",
+        "start_date",
+        "end_date",
+        "as_of_date",
+        "reporting_currency",
+    ]
+    assert exact_qualifiers == (("transaction_id", "T1"), *legacy_qualifiers)
 
 
 @pytest.mark.parametrize(
