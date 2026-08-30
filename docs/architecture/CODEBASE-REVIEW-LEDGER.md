@@ -10,7 +10,8 @@ cost-basis fallback, missing valued or local outputs, mixed daily snapshot dates
 currency drift, and carried-forward market observations fail closed with stable reason codes.
 Current portfolio effective time and identity use the daily valued-position snapshot date;
 per-security position-history dates remain mutation and reconciliation lineage without becoming
-competing valuation dates. Portfolio timestamps derive only from selected position facts; market
+competing valuation dates, while historical fallback retains its established source identities.
+Portfolio timestamps derive only from selected position facts; market
 timestamps derive from the valuation snapshot and exact price/FX observations, so a market-only
 correction cannot restate portfolio evidence.
 The request date and generation clock cannot become financial evidence. Focused application,

@@ -34,7 +34,8 @@ for source-effective dates.
 - Current snapshot mode derives portfolio effective time from the daily valued-position snapshot
   date. Per-security position-history dates remain mutation and reconciliation evidence, and the
   daily snapshot date is included in portfolio source identity so consecutive valuation days cannot
-  publish the same deterministic provenance id.
+  publish the same deterministic provenance id. Historical fallback omits the snapshot-only hash
+  field, preserving its established mutation-date source identities.
 - `CoreSnapshotResponse` publishes a typed `lotus.source-provenance.v1` envelope and an explicit
   valuation supportability result.
 - Source provenance is bound into input lineage, response content identity, and runtime lineage;
@@ -67,6 +68,7 @@ Focused proof covers:
 - exact coherent date readiness and stable identity under input reordering;
 - multi-security daily snapshots with distinct last-mutation dates, and distinct portfolio source
   identities for consecutive daily valuation snapshots;
+- the historical fallback's established source hash and id remain unchanged;
 - missing, mixed, stale, historical-fallback, carried-forward, and same-date-corrected evidence;
 - projected price and FX date propagation;
 - stable valuation currency identity after mutable instrument-master correction and fail-closed
