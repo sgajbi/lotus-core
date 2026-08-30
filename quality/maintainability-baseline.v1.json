@@ -1,14 +1,14 @@
 {
   "schema_version": "lotus.core.maintainability-baseline.v1",
   "max_allowed_rank": "B",
-  "recorded_on": "2026-08-29",
+  "recorded_on": "2026-08-30",
   "tracked_files_only": true,
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
       "rank": "C",
       "mi": 0.0,
-      "raw_mi": -3.4824447332949626,
+      "raw_mi": -1.325408777352027,
       "owner": "lotus-core maintainers",
       "rationale": "Existing enterprise-readiness hotspot; new or changed debt is forbidden.",
       "issue": "#462"
