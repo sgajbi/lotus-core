@@ -46,6 +46,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 
 @pytest.mark.asyncio
@@ -71,6 +72,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
             base_currency="SGD",
             portfolio_id="PB-001",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=CostBasisInstrumentReference(
             security_id="SEC-001",
@@ -207,6 +209,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
             base_currency="SGD",
             portfolio_id="PB-001",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=CostBasisInstrumentReference(
             security_id="SEC-001",
@@ -356,6 +359,7 @@ def _cash_account_adapter(
             base_currency="SGD",
             portfolio_id="PB-001",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=instrument,
     )

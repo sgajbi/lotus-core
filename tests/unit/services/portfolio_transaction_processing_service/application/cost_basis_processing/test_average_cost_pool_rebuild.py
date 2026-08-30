@@ -22,6 +22,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -70,6 +71,7 @@ def _reference_data(cost_basis_method: CostBasisMethod) -> AsyncMock:
             portfolio_id="P1",
             base_currency="USD",
             cost_basis_method=cost_basis_method,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=CostBasisInstrumentReference(
             security_id="S1",

@@ -15,6 +15,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
     CostBasisReferenceData,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 from tests.test_support.transaction_processing import instrument_record, portfolio_record
 
 pytestmark = [
@@ -74,6 +75,7 @@ async def test_reference_bundle_uses_one_statement_and_maps_both_owners(
             portfolio_id="PORT-REF-BUNDLE-01",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.AVCO,
+            tenant_id=TEST_TENANT_ID,
         ),
         instrument=CostBasisInstrumentReference(
             security_id="SEC-REF-BUNDLE-01",

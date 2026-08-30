@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 from decimal import Decimal
-from types import SimpleNamespace
 
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
@@ -27,6 +26,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
 )
 from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs
+from tests.test_support.tenant import TEST_TENANT_ID
 
 
 class _EffectiveProfiles:
@@ -604,7 +604,7 @@ async def test_basis_only_lot_change_preserves_independent_book_carry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_accounting_scope_preserves_legacy_calculation_without_query() -> None:
+async def test_missing_optional_legal_book_preserves_standard_cost_without_profile_query() -> None:
     timeline = build_cost_basis_timeline_processor().process_transactions(
         existing_transactions_raw=[],
         new_transactions_raw=[
@@ -630,6 +630,7 @@ async def test_missing_accounting_scope_preserves_legacy_calculation_without_que
             portfolio_id="P1",
             base_currency="SGD",
             cost_basis_method=CostBasisMethod.FIFO,
+            tenant_id=TEST_TENANT_ID,
         ),
         cost_basis_method=CostBasisMethod.FIFO,
         profiles=profiles,  # type: ignore[arg-type]
@@ -655,25 +656,6 @@ async def test_no_disposals_preserve_calculation_without_profile_query() -> None
 
     assert result is calculation
     assert profiles.requests == ()
-
-
-@pytest.mark.asyncio
-async def test_incomplete_accounting_scope_fails_closed() -> None:
-    calculation = _calculation(
-        _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "100", "97"),
-        _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "40", "60"),
-    )
-
-    with pytest.raises(ValueError, match="accounting scope is incomplete"):
-        await apply_effective_amortized_cost_to_disposals(
-            calculation,
-            portfolio=SimpleNamespace(
-                tenant_id="TENANT_SG",
-                legal_book_id=None,
-            ),  # type: ignore[arg-type]
-            cost_basis_method=CostBasisMethod.FIFO,
-            profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
-        )
 
 
 @pytest.mark.asyncio

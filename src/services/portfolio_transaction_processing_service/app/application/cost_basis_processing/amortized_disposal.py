@@ -61,12 +61,16 @@ async def apply_effective_amortized_cost_to_disposals(
         calculation.open_lot_states,
         calculation.source_transactions.values(),
     )
-    if not calculation.disposals or portfolio.tenant_id is None:
+    if not calculation.disposals:
         if open_lot_states is calculation.open_lot_states:
             return calculation
         return replace(calculation, open_lot_states=open_lot_states)
     if portfolio.legal_book_id is None:
-        raise ValueError("portfolio accounting scope is incomplete")
+        _require_no_persisted_carry_for_disposals(
+            calculation.disposals,
+            calculation.source_transactions,
+        )
+        return calculation
 
     transactions_by_id = {
         **calculation.source_transactions,
