@@ -246,7 +246,8 @@ async def get_transaction_record(
     as_of_date: Optional[date] = Query(
         None,
         description=(
-            "Optional booked-state upper boundary. Defaults to Core's latest business date."
+            "Optional transaction/trade-date upper boundary. Defaults to Core's latest business "
+            "date; it does not represent booking or correction receipt time."
         ),
         examples=["2026-03-10"],
     ),
