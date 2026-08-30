@@ -195,6 +195,7 @@
         "GET /portfolios/{portfolio_id}/positions/{security_id}/sell-disposals",
         "GET /portfolios/{portfolio_id}/realized-tax-summary",
         "GET /portfolios/{portfolio_id}/transactions",
+        "GET /portfolios/{portfolio_id}/transactions/{transaction_id}",
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
         "GET /portfolios/{portfolio_id}/transactions/{source_transaction_id}/lot-basis-transfer-receipt",
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt",
