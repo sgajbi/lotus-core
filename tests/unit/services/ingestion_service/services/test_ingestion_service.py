@@ -555,9 +555,9 @@ async def test_publish_portfolio_bundle(ingestion_service: IngestionService):
         {
             "business_dates": [{"business_date": "2026-01-02"}],
             "portfolios": [
-                    {
-                        "portfolio_id": "P1",
-                        "tenant_id": TEST_TENANT_ID,
+                {
+                    "portfolio_id": "P1",
+                    "tenant_id": TEST_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2025-01-01",
                     "client_id": "C1",
@@ -625,9 +625,9 @@ async def test_publish_portfolio_bundle_reports_completed_group_counts_before_fa
         {
             "business_dates": [{"business_date": "2026-01-02"}],
             "portfolios": [
-                    {
-                        "portfolio_id": "P1",
-                        "tenant_id": TEST_TENANT_ID,
+                {
+                    "portfolio_id": "P1",
+                    "tenant_id": TEST_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2025-01-01",
                     "client_id": "C1",
