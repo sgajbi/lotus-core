@@ -510,6 +510,9 @@ Current repository posture:
     query, replay, and scheduler paths must use constant messages plus `event_name`, `operation`,
     `status`, and `reason_code`; do not embed portfolio, account, client, security, request,
     correlation, or trace identifiers in free-text operational log messages.
+    Shared HTTP completion and unhandled-exception logs emit the matched route template only;
+    never add the concrete request path or URL because path parameters can carry protected domain
+    identifiers such as `portfolio_id` and `transaction_id`.
 40. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
