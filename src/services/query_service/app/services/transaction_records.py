@@ -110,12 +110,11 @@ def exact_transaction_record_response(
     ledger_filters: TransactionLedgerFilters,
     input_evidence: TransactionLedgerInputEvidence,
     missing_instrument_security_ids: list[str] | None = None,
-    today: Callable[[], date] = date.today,
 ) -> TransactionRecordResponse:
     """Build one exact record without weakening the ledger product proof contract."""
 
     missing_instrument_security_ids = missing_instrument_security_ids or []
-    response_as_of_date = effective_as_of_date or today()
+    response_as_of_date = effective_as_of_date or transaction.transaction_date.date()
     return TransactionRecordResponse(
         portfolio_id=portfolio_id,
         reporting_currency=reporting_currency,

@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-30T00:06:06.551676+00:00",
+  "generatedAt": "2026-08-30T04:28:27.553934+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -12134,7 +12134,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "Optional transaction/trade-date upper boundary. Defaults to Core's latest business date; it does not represent booking or correction receipt time.",
+      "description": "Optional transaction/trade-date upper boundary. When omitted, it defaults to Core's latest business date unless include_projected is true; a projected exact response then reports the selected transaction's trade date. It does not represent booking or correction receipt time.",
       "example": "2026-03-10",
       "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
       "exposure": "consumer_visible",
