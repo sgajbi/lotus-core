@@ -320,6 +320,46 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.correlation_id is None
 
 
+async def test_core_snapshot_uses_daily_snapshot_date_across_mixed_mutation_dates(
+    mock_dependencies,
+):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    first = position_repo.get_latest_positions_by_portfolio_as_of_date.return_value[0]
+    second = replace(
+        first,
+        security_id="SEC_MSFT_US",
+        instrument=_instrument("SEC_MSFT_US"),
+        portfolio_business_date=date(2026, 2, 26),
+    )
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [first, second]
+    position_repo.get_financial_reconciliation_controls.return_value = [
+        _reconciliation_control(),
+        replace(_reconciliation_control(), business_date=date(2026, 2, 26)),
+    ]
+
+    response = await _service(mock_dependencies).get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            snapshot_mode=CoreSnapshotMode.BASELINE,
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.reconciliation_status == COMPLETE
+    assert response.source_evidence_current is True
+    assert response.valuation_context.effective_as_of_date == date(2026, 2, 27)
+    assert response.valuation_context.supportability == "READY"
+    assert response.valuation_context.reason_code == "SOURCE_EVIDENCE_READY"
+    assert response.source_provenance.portfolio.as_of == date(2026, 2, 27)
+    assert response.source_provenance.market_data.as_of == date(2026, 2, 27)
+    scopes = position_repo.get_financial_reconciliation_controls.await_args.kwargs["scopes"]
+    assert {scope.business_date for scope in scopes} == {
+        date(2026, 2, 26),
+        date(2026, 2, 27),
+    }
+
+
 async def test_core_snapshot_uses_injected_clock_for_generated_metadata(mock_dependencies):
     generated_at = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
     service = _service(mock_dependencies, clock=_FixedClock(generated_at))

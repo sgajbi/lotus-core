@@ -49,7 +49,9 @@ def resolve_core_snapshot_source_provenance(
 ) -> CoreSnapshotSourceProvenanceResolution:
     """Build source-owned dates without substituting the caller's requested date."""
 
-    portfolio_dates = tuple(row.portfolio_business_date for row in position_rows)
+    portfolio_dates = tuple(
+        row.business_date if use_snapshot else row.portfolio_business_date for row in position_rows
+    )
     portfolio_date = _resolve_family_date(
         dates=portfolio_dates,
         requested_as_of_date=requested_as_of_date,

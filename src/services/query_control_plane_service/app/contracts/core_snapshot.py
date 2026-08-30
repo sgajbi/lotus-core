@@ -25,8 +25,9 @@ CORE_SNAPSHOT_ROUTE_DESCRIPTION = (
     "or `metadata` envelope. Consumer context should be read from the top-level "
     "source-data runtime metadata, typed `source_provenance`, `valuation_context`, and the "
     "requested `sections`. Portfolio and market-data effective dates are source-owned; "
-    "missing, mixed, stale, or mismatched dates remain explicit and never fall back to the "
-    "caller-requested date."
+    "current snapshot mode uses the daily valued-position snapshot date while per-security "
+    "position mutation dates remain lineage and reconciliation evidence. Missing, mixed, stale, "
+    "or mismatched dates remain explicit and never fall back to the caller-requested date."
 )
 
 
