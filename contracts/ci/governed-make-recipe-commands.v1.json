@@ -302,6 +302,9 @@
     "temporal-vocabulary-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/temporal_vocabulary_guard.py"
     ],
+    "tenant-ownership-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/tenant_ownership_guard.py --mode enforce-defaults"
+    ],
     "test-critical-lifecycle-db": [
       "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite critical-lifecycle-db --quiet"
     ],
