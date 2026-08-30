@@ -4,12 +4,12 @@
   "scan_roots": [
     "src"
   ],
-  "recorded_on": "2026-08-29",
+  "recorded_on": "2026-08-30",
   "tracked_files_only": true,
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5653,
+      "lines": 5652,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Exact lookup deliberately reuses the existing unique transaction-identity index instead of adding redundant schema surface.",
       "issue": "#462",

@@ -22,19 +22,22 @@ from portfolio_common.domain.security_audit import (
     SecurityAuditMethod,
     SecurityAuditReason,
 )
-from portfolio_common.domain.tenant import TenantContext, TenantId
+from portfolio_common.enterprise_request_context import (
+    audit_authority_headers_are_bounded,
+    request_correlation_id,
+    request_header_value,
+    request_trace_id,
+)
+from portfolio_common.enterprise_tenant_admission import (
+    TenantContextAdmissionError,
+    resolve_enterprise_tenant_context,
+    tenant_context_required_response,
+)
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
 )
 from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFailed
-from portfolio_common.logging_utils import (
-    correlation_id_var,
-    normalize_lineage_value,
-    normalize_trace_id,
-    redact_sensitive,
-    trace_id_from_traceparent,
-    trace_id_var,
-)
+from portfolio_common.logging_utils import redact_sensitive
 from portfolio_common.monitoring import observe_security_audit_delivery
 from portfolio_common.ports.security_audit import SecurityAuditStore
 from portfolio_common.runtime_settings import (
@@ -71,11 +74,6 @@ ENTERPRISE_UNAUTHENTICATED_PATHS = frozenset(
         "/version",
     }
 )
-MAX_SECURITY_AUDIT_AUTHORITY_LENGTH = 128
-TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE = (
-    "https://lotus.local/problems/enterprise/tenant-context-required"
-)
-TENANT_CONTEXT_REQUIRED_ERROR_CODE = "TENANT_CONTEXT_REQUIRED"
 
 
 class EnterpriseSettings(Protocol):
@@ -616,7 +614,7 @@ def _verified_service_principal(
     service_identity = normalized_headers.get("x-service-identity", "").strip()
     if not service_identity:
         return "missing_service_identity"
-    if not _audit_authority_headers_are_bounded(normalized_headers):
+    if not audit_authority_headers_are_bounded(normalized_headers):
         return "invalid_auth_context_field"
 
     secret = settings.enterprise_auth_context_hmac_secret.strip()
@@ -829,8 +827,15 @@ def build_enterprise_audit_middleware(
             return response
 
         try:
-            tenant_id = TenantId(request.headers.get("X-Tenant-Id", ""))
-        except (TypeError, ValueError):
+            tenant_context = resolve_enterprise_tenant_context(
+                tenant_id=request.headers.get("X-Tenant-Id"),
+                actor_id=request.headers.get("X-Actor-Id"),
+                role=request.headers.get("X-Role"),
+                service_identity=request.headers.get("X-Service-Identity"),
+                correlation_id=request_correlation_id(request),
+                identity_verified=authorization.principal is not None,
+            )
+        except TenantContextAdmissionError:
             event = _security_audit_event(
                 runtime=runtime,
                 component=component,
@@ -846,16 +851,10 @@ def build_enterprise_audit_middleware(
                 failure_is_fatal=audit_failure_is_fatal,
             ):
                 return _security_audit_unavailable_response()
-            return _tenant_context_required_response(request)
-
-        tenant_context = TenantContext(
-            tenant_id=tenant_id,
-            actor_id=request.headers.get("X-Actor-Id"),
-            role=request.headers.get("X-Role"),
-            service_identity=request.headers.get("X-Service-Identity"),
-            correlation_id=_request_correlation_id(request),
-            identity_verified=authorization.principal is not None,
-        )
+            return tenant_context_required_response(
+                path=request.url.path,
+                correlation_id=request_correlation_id(request),
+            )
         request.state.tenant_context = tenant_context
 
         if not authorization.authorized:
@@ -874,12 +873,12 @@ def build_enterprise_audit_middleware(
                 failure_is_fatal=audit_failure_is_fatal,
             ):
                 return _security_audit_unavailable_response()
-            deny_correlation_id = _request_correlation_id(request)
+            deny_correlation_id = request_correlation_id(request)
             audit_emitter(
                 action=f"DENY {normalized_method} {authorization.route_template}",
-                actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
+                actor_id=request_header_value(request, "X-Actor-Id", "unknown"),
                 tenant_id=tenant_context.tenant_id_text,
-                role=_request_header_value(request, "X-Role", "unknown"),
+                role=request_header_value(request, "X-Role", "unknown"),
                 correlation_id=deny_correlation_id,
                 metadata={"reason": authorization.reason},
             )
@@ -917,26 +916,26 @@ def build_enterprise_audit_middleware(
         response = await call_next(request)
         response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
         if normalized_method in WRITE_METHODS:
-            write_correlation_id = _request_correlation_id(
+            write_correlation_id = request_correlation_id(
                 request, response.headers.get("X-Correlation-ID")
             )
             audit_emitter(
                 action=f"{normalized_method} {authorization.route_template}",
-                actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
+                actor_id=request_header_value(request, "X-Actor-Id", "unknown"),
                 tenant_id=tenant_context.tenant_id_text,
-                role=_request_header_value(request, "X-Role", "unknown"),
+                role=request_header_value(request, "X-Role", "unknown"),
                 correlation_id=write_correlation_id,
                 metadata={"status_code": response.status_code},
             )
         elif normalized_method in READ_AUDIT_METHODS and _read_audit_required(runtime):
-            read_correlation_id = _request_correlation_id(
+            read_correlation_id = request_correlation_id(
                 request, response.headers.get("X-Correlation-ID")
             )
             audit_emitter(
                 action=f"{normalized_method} {authorization.route_template}",
-                actor_id=_request_header_value(request, "X-Actor-Id", "unknown"),
+                actor_id=request_header_value(request, "X-Actor-Id", "unknown"),
                 tenant_id=tenant_context.tenant_id_text,
-                role=_request_header_value(request, "X-Role", "unknown"),
+                role=request_header_value(request, "X-Role", "unknown"),
                 correlation_id=read_correlation_id,
                 metadata={"status_code": response.status_code, "access_type": "read"},
             )
@@ -1011,8 +1010,8 @@ def _security_audit_event(
             if identity_verified
             else SecurityAuditIdentityPosture.UNVERIFIED
         ),
-        correlation_id=_request_correlation_id(request),
-        trace_id=_request_trace_id(request),
+        correlation_id=request_correlation_id(request),
+        trace_id=request_trace_id(request),
         policy_version=runtime.enterprise_policy_version(),
     )
 
@@ -1021,71 +1020,5 @@ def _security_audit_unavailable_response() -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": "security_audit_unavailable"})
 
 
-def _tenant_context_required_response(request: Request) -> JSONResponse:
-    return JSONResponse(
-        status_code=401,
-        media_type="application/problem+json",
-        content={
-            "type": TENANT_CONTEXT_REQUIRED_PROBLEM_TYPE,
-            "title": "Tenant Context Required",
-            "status": 401,
-            "detail": "A nonblank X-Tenant-Id header is required for this route.",
-            "instance": request.url.path,
-            "error_code": TENANT_CONTEXT_REQUIRED_ERROR_CODE,
-            "correlation_id": _request_correlation_id(request) or "",
-        },
-    )
-
-
 def _is_unauthenticated_enterprise_path(path: str) -> bool:
     return _normalize_path(path) in ENTERPRISE_UNAUTHENTICATED_PATHS
-
-
-def _request_header_value(request: Request, name: str, default: str) -> str:
-    value = request.headers.get(name)
-    if value is None:
-        return default
-    normalized = value.strip()
-    return normalized or default
-
-
-def _request_correlation_id(
-    request: Request, response_correlation_id: str | None = None
-) -> str | None:
-    normalized: str | None = normalize_lineage_value(
-        cast(
-            str | None,
-            request.headers.get("X-Correlation-Id")
-            or request.headers.get("X-Correlation-ID")
-            or response_correlation_id
-            or correlation_id_var.get(),
-        )
-    )
-    return normalized if normalized is not None and len(normalized) <= 128 else None
-
-
-def _audit_authority_headers_are_bounded(normalized_headers: dict[str, str]) -> bool:
-    return all(
-        len(normalized_headers.get(name, "")) <= MAX_SECURITY_AUDIT_AUTHORITY_LENGTH
-        for name in (
-            "x-service-identity",
-            "x-actor-id",
-            "x-tenant-id",
-            "x-role",
-            "x-correlation-id",
-        )
-    )
-
-
-def _request_trace_id(request: Request) -> str | None:
-    traceparent = cast(str | None, request.headers.get("traceparent"))
-    trace_header = cast(str | None, request.headers.get("X-Trace-ID"))
-    context_trace_id = cast(str | None, trace_id_var.get())
-    extracted_trace_id: str | None = trace_id_from_traceparent(traceparent)
-    if extracted_trace_id is not None:
-        return extracted_trace_id
-    normalized_header_trace_id: str | None = normalize_trace_id(trace_header)
-    if normalized_header_trace_id is not None:
-        return normalized_header_trace_id
-    normalized_context_trace_id: str | None = normalize_trace_id(context_trace_id)
-    return normalized_context_trace_id
