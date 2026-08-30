@@ -399,6 +399,7 @@ durable-lease-clock-guard:
 
 architecture-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/architecture_boundary_guard.py --strict
+	$(REPOSITORY_PYTHON) scripts/quality/tenant_ownership_guard.py --mode enforce-defaults
 	$(MAKE) test-import-root-guard
 	$(MAKE) domain-layer-guard
 	$(MAKE) testability-architecture-guard

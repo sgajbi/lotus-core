@@ -121,7 +121,7 @@ class IntegrationCapabilitiesResponse(BaseModel):
                 "contract_version": "v1",
                 "source_service": "lotus-core",
                 "consumer_system": "lotus-gateway",
-                "tenant_id": "default",
+                "tenant_id": "tenant-example",
                 "generated_at": "2026-02-23T21:00:00Z",
                 "as_of_date": "2026-02-23",
                 "policy_version": "tenant-default-v1",
