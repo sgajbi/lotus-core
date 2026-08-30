@@ -246,8 +246,10 @@ async def get_transaction_record(
     as_of_date: Optional[date] = Query(
         None,
         description=(
-            "Optional transaction/trade-date upper boundary. Defaults to Core's latest business "
-            "date; it does not represent booking or correction receipt time."
+            "Optional transaction/trade-date upper boundary. When omitted, it defaults to Core's "
+            "latest business date unless include_projected is true; a projected exact response "
+            "then reports the selected transaction's trade date. It does not represent booking "
+            "or correction receipt time."
         ),
         examples=["2026-03-10"],
     ),

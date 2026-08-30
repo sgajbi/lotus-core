@@ -264,6 +264,51 @@ async def test_exact_transaction_record_response_binds_identity_and_product_proo
     assert response.source_lineage["reconstruction_scope_id"] == response.snapshot_id
 
 
+async def test_projected_exact_record_uses_selected_trade_date_as_proof_boundary() -> None:
+    latest_evidence_timestamp = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    transaction = _transaction_record("T-PROJECTED")
+    transaction.transaction_date = datetime(2027, 6, 15, 9, 30, tzinfo=UTC)
+    filters = _ledger_filters(
+        transaction_id="T-PROJECTED",
+        as_of_date=None,
+    )
+
+    response = exact_transaction_record_response(
+        portfolio_id="P1",
+        reporting_currency=None,
+        transaction=transaction,
+        effective_as_of_date=None,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        ledger_filters=filters,
+        input_evidence=_input_evidence(
+            transaction_count=1,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        ),
+    )
+
+    assert response.as_of_date == date(2027, 6, 15)
+    assert response.source_refs == [
+        "lotus-core://source/TransactionLedgerWindow/P1/2027-06-15/transactions/T-PROJECTED"
+    ]
+    later_transaction = transaction.model_copy(
+        update={"transaction_date": datetime(2027, 6, 16, 9, 30, tzinfo=UTC)}
+    )
+    later_response = exact_transaction_record_response(
+        portfolio_id="P1",
+        reporting_currency=None,
+        transaction=later_transaction,
+        effective_as_of_date=None,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        ledger_filters=filters,
+        input_evidence=_input_evidence(
+            transaction_count=1,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        ),
+    )
+
+    assert response.snapshot_id != later_response.snapshot_id
+
+
 async def test_paginated_transaction_ledger_response_marks_partial_window() -> None:
     response = paginated_transaction_ledger_response(
         portfolio_id="P1",

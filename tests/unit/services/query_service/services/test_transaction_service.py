@@ -277,6 +277,42 @@ async def test_get_transaction_record_returns_one_portfolio_owned_record_with_pr
     mock_transaction_repo.portfolio_exists.assert_not_awaited()
 
 
+async def test_get_projected_transaction_record_reports_selected_trade_date(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    projected = mock_transaction_repo.get_transactions.return_value[0]
+    projected.transaction_date = datetime(2027, 6, 15, 9, 30, tzinfo=UTC)
+    mock_transaction_repo.get_transactions.return_value = [projected]
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        1,
+        projected.updated_at,
+    )
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_transaction_record(
+            portfolio_id="P1",
+            transaction_id="T1",
+            include_projected=True,
+        )
+
+    assert response.as_of_date == date(2027, 6, 15)
+    filters = TransactionLedgerFilters(
+        portfolio_id="P1",
+        transaction_id="T1",
+        as_of_date=None,
+    )
+    mock_transaction_repo.get_latest_business_date.assert_not_awaited()
+    mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once_with(
+        filters=filters,
+        reporting_currency=None,
+        as_of_date=None,
+    )
+
+
 async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
     mock_transaction_repo: AsyncMock,
 ) -> None:
