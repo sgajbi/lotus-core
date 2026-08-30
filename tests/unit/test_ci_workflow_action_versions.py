@@ -349,6 +349,26 @@ def test_pr_auto_merge_does_not_probe_branch_protection_with_github_token() -> N
 
     assert "/branches/main/protection" not in workflow_text
     assert "administration:" not in workflow_text
+    assert "GH_TOKEN: ${{ secrets.LOTUS_AUTOMERGE_TOKEN }}" in workflow_text
+    assert "GH_TOKEN: ${{ github.token }}" not in workflow_text
+    assert "contents: write" not in workflow_text
+
+
+def test_merged_pr_dispatch_binds_main_releasability_to_exact_sha() -> None:
+    dispatcher = Path(
+        ".github/workflows/merged-pr-main-releasability.yml"
+    ).read_text(encoding="utf-8")
+    main_gate = Path(".github/workflows/main-releasability.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}" in dispatcher
+    assert 'dispatch_ref="main-releasability-${MERGE_COMMIT_SHA}"' in dispatcher
+    assert '-f expected_sha="$MERGE_COMMIT_SHA"' in dispatcher
+    assert "expected_sha:" in main_gate
+    assert 'actual_sha="$(git rev-parse HEAD)"' in main_gate
+    assert "inputs.expected_sha || github.sha" in main_gate
+    assert "push:" not in main_gate.split("concurrency:", maxsplit=1)[0]
 
 
 def test_pr_auto_merge_does_not_emit_skipped_checks_for_label_removal() -> None:

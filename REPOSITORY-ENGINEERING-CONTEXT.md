@@ -803,7 +803,10 @@ Important validation expectations:
     Gate for an unchanged head SHA. A `synchronize` event represents new code authority and must
     continue to cancel stale PR-ref work and validate the new immutable head. Do not reintroduce
     `labeled` as a full-gate trigger; broader lifecycle-event or artifact reuse remains under the
-    change-aware CI program.
+    change-aware CI program. Auto-merge must use `LOTUS_AUTOMERGE_TOKEN` with read-only workflow
+    permissions. `.github/workflows/merged-pr-main-releasability.yml` owns post-merge dispatch via
+    an immutable merge-SHA tag, and Main Releasability must assert `expected_sha` before treating a
+    run as mainline evidence. `LOTUS_BRANCH_PROTECTION_READ_TOKEN` remains read-only parity authority.
 
 ## Standards And RFCs That Govern This Repository
 

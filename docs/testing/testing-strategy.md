@@ -196,8 +196,8 @@ The key covers the Python implementation/version, platform, invoking pip version
 Invalid JSON, a missing interpreter, identity drift, or failed `pip check` invalidates the entry.
 Builds occur in disposable staging directories and receive a success marker only after installation
 and `pip check` complete. Feature and PR lanes restore explicitly and save a verified miss
-immediately after dependency proof, so a later unrelated gate failure cannot discard it. Every main
-push and scheduled Main Releasability run executes the clean target. Both lanes upload the JSON
+immediately after dependency proof, so a later unrelated gate failure cannot discard it. Every
+exact-merge and scheduled Main Releasability run executes the clean target. Both lanes upload the JSON
 evidence.
 
 Local Windows evidence on 2026-07-12 measured `208.145s` for clean bootstrap and `1.756s` plus

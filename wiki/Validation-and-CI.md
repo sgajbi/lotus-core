@@ -10,7 +10,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 |---|---|---|
 | Local feature confidence | `make ci-local` | Fastest repo-native feature-lane parity check. |
 | PR merge readiness | `make ci` | Pull-request merge-gate parity before opening or updating a PR. |
-| Release/main posture | `make ci-main` | Main-push releasability parity. |
+| Release/main posture | `make ci-main` | Exact-merge-SHA releasability parity. |
 | Dependency consistency | `make verify-dependencies` | Reuses only an exact, integrity-checked environment. |
 | Clean dependency proof | `make verify-dependencies-clean` | Always bootstraps without a cache read; required on main. |
 | Vulnerability posture | `make security-audit` | Rechecks the environment and runs `pip-audit`. |
@@ -32,6 +32,13 @@ does not route to, cancel, or duplicate the full Pull Request Merge Gate for an 
 Code-changing `synchronize` events still invalidate stale-head work and run the complete protected
 gate for the new immutable head. Opened, reopened, and ready-for-review events retain their current
 full-gate behavior; broader same-head evidence reuse is outside this bounded control.
+
+PR Auto Merge uses the repository-scoped `LOTUS_AUTOMERGE_TOKEN` with read-only workflow
+permissions; an absent token leaves the PR unqueued. After any PR merges to `main`, the closed-PR
+dispatcher creates or verifies `main-releasability-<merge_sha>` and dispatches Main Releasability
+with `expected_sha` and the originating PR number. The gate asserts the checked-out SHA before it
+can become release evidence. `LOTUS_BRANCH_PROTECTION_READ_TOKEN` is a separate read-only secret
+used only for live required-check parity.
 
 ### Required Check Authority
 

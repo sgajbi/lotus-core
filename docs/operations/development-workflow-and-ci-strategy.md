@@ -31,11 +31,16 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
    the new head and may cancel stale work for the prior PR ref. Opened, reopened, and
    ready-for-review events continue to enter the full gate; broader same-head evidence reuse for
    those lifecycle events remains separately governed.
+7. Auto-merge authenticates with the repository-scoped `LOTUS_AUTOMERGE_TOKEN`; when it is absent,
+   the workflow fails safe by leaving the PR unqueued. The closed-PR dispatcher creates or verifies
+   an immutable `main-releasability-<merge_sha>` tag and dispatches Main Releasability with that SHA.
+   The gate rejects a checkout that differs from `expected_sha`. `LOTUS_BRANCH_PROTECTION_READ_TOKEN`
+   remains the separate read-only credential for live required-check parity.
 
 ## CI Gate Tiers
 
 ### Tier 1: Fast PR Gates (blocking)
-Run on every PR and push to `main`:
+Run for every PR and for each exact merged-PR SHA:
 1. Lint and typecheck.
 2. Unit and core integration tests.
 3. Docker smoke contract.
