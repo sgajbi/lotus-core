@@ -32,16 +32,7 @@ def _load_declaration() -> dict:
     return json.loads(DECLARATION_PATH.read_text(encoding="utf-8"))
 
 
-def test_repo_native_domain_data_product_validation_passes_when_platform_is_available() -> None:
-    if not platform_validation_dependencies_available():
-        pytest.skip("lotus-platform validation dependencies are not available in this environment")
-
-    assert validate_repo_native_contracts() == []
-
-
-def test_repo_native_domain_product_validator_uses_configured_platform_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _write_platform_validator_fixture(tmp_path: Path) -> Path:
     platform_root = tmp_path / "checked-out-platform"
     declaration_dir = platform_root / "platform-contracts" / "domain-data-products"
     vocabulary_dir = platform_root / "platform-contracts" / "domain-vocabulary"
@@ -56,6 +47,20 @@ def test_repo_native_domain_product_validator_uses_configured_platform_root(
         "domain-data-product-trust-metadata.v1.json",
     ):
         (vocabulary_dir / file_name).write_text("{}", encoding="utf-8")
+    return platform_root
+
+
+def test_repo_native_domain_data_product_validation_passes_when_platform_is_available() -> None:
+    if not platform_validation_dependencies_available():
+        pytest.skip("lotus-platform validation dependencies are not available in this environment")
+
+    assert validate_repo_native_contracts() == []
+
+
+def test_repo_native_domain_product_validator_uses_configured_platform_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    platform_root = _write_platform_validator_fixture(tmp_path)
 
     local_declaration_dir = tmp_path / "repo-contracts"
     local_declaration_dir.mkdir()
@@ -66,6 +71,38 @@ def test_repo_native_domain_product_validator_uses_configured_platform_root(
 
     assert platform_validation_dependencies_available() is True
     assert validate_repo_native_contracts(local_declaration_dir) == []
+
+
+def test_repo_native_domain_product_validator_rejects_undeclared_route_identifiers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    platform_root = _write_platform_validator_fixture(tmp_path)
+
+    local_declaration_dir = tmp_path / "repo-contracts"
+    local_declaration_dir.mkdir()
+    (local_declaration_dir / "lotus-core-products.v1.json").write_text(
+        json.dumps(
+            {
+                "products": [
+                    {
+                        "product_name": "ExampleProduct",
+                        "current_routes": [
+                            "/portfolios/{portfolio_id}/transactions/{transaction_id}"
+                        ],
+                        "identifier_refs": ["portfolio_id"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LOTUS_PLATFORM_ROOT", str(platform_root))
+
+    issues = validate_repo_native_contracts(local_declaration_dir)
+
+    assert len(issues) == 1
+    assert "ExampleProduct" in issues[0]
+    assert "transaction_id" in issues[0]
 
 
 def test_repo_native_domain_data_product_directory_contains_core_declaration() -> None:
