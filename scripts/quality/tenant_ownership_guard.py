@@ -275,6 +275,44 @@ CRITICAL_TENANT_BOUNDARIES = (
     ),
     (
         Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "analytics_export_repository.py"
+        ),
+        "AnalyticsExportRepository",
+        frozenset(
+            {
+                "create_job",
+                "get_job",
+                "get_latest_by_fingerprint",
+                "mark_running",
+                "mark_completed",
+                "mark_failed",
+            }
+        ),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/operations/repository.py"
+        ),
+        "OperationsRepository",
+        frozenset(
+            {
+                "portfolio_exists_for_tenant",
+                "get_analytics_export_jobs_count",
+                "get_analytics_export_jobs",
+            }
+        ),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/application/operations/service.py"),
+        "OperationsService",
+        frozenset({"get_analytics_export_jobs"}),
+        "tenant_id",
+    ),
+    (
+        Path(
             "src/services/query_control_plane_service/app/application/"
             "transaction_economics/service.py"
         ),

@@ -306,6 +306,36 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             "tenant_context",
         ),
         (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "analytics_export_repository.py",
+            "AnalyticsExportRepository",
+            (
+                "create_job",
+                "get_job",
+                "get_latest_by_fingerprint",
+                "mark_running",
+                "mark_completed",
+                "mark_failed",
+            ),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
+            "OperationsRepository",
+            (
+                "portfolio_exists_for_tenant",
+                "get_analytics_export_jobs_count",
+                "get_analytics_export_jobs",
+            ),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/operations/service.py",
+            "OperationsService",
+            ("get_analytics_export_jobs",),
+            "tenant_id",
+        ),
+        (
             "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
             "SqlAlchemySimulationStore",
             (
