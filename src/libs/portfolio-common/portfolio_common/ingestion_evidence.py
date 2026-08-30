@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantId
+
 SOURCE_BATCH_ID_PREFIX = "srcbatch"
 INGESTION_EVIDENCE_BUNDLE_ID_PREFIX = "ingev"
 
@@ -23,7 +25,7 @@ class SourceBatchIdentityScope:
     source_system: str
     source_batch_id: str
     payload_kind: str
-    tenant_id: str = "default"
+    tenant_id: str
     feed_name: str | None = None
     observed_at: datetime | None = None
     ingested_at: datetime | None = None
@@ -79,6 +81,13 @@ def derive_source_batch_evidence(
 
     if request_payload is None:
         return None
+    try:
+        tenant_ids = {TenantId(value).value for value in _source_tenant_values(request_payload)}
+    except (TypeError, ValueError):
+        return None
+    if len(tenant_ids) != 1:
+        return None
+    tenant_id = next(iter(tenant_ids))
     observations = tuple(_source_observations(request_payload))
     if not observations or any(
         observation["source_system"] is None or observation["source_batch_id"] is None
@@ -107,6 +116,7 @@ def derive_source_batch_evidence(
             source_system=source_system,
             source_batch_id=source_batch_id,
             payload_kind=payload_kind,
+            tenant_id=tenant_id,
             source_record_keys=source_record_keys,
         )
     )
@@ -193,7 +203,7 @@ def _canonical_batch_payload(scope: SourceBatchIdentityScope) -> dict[str, objec
     source_system = _clean_text(scope.source_system, "source_system")
     source_batch_id = _clean_text(scope.source_batch_id, "source_batch_id")
     payload_kind = _clean_text(scope.payload_kind, "payload_kind")
-    tenant_id = _clean_text(scope.tenant_id, "tenant_id")
+    tenant_id = TenantId(scope.tenant_id).value
     feed_name = None
     if scope.feed_name is not None:
         feed_name = _clean_text(scope.feed_name, "feed_name")
@@ -258,6 +268,17 @@ def _source_observations(value: Any):
     elif isinstance(value, list):
         for nested_value in value:
             yield from _source_observations(nested_value)
+
+
+def _source_tenant_values(value: Any):
+    if isinstance(value, dict):
+        if "tenant_id" in value:
+            yield value["tenant_id"]
+        for nested_value in value.values():
+            yield from _source_tenant_values(nested_value)
+    elif isinstance(value, list):
+        for nested_value in value:
+            yield from _source_tenant_values(nested_value)
 
 
 def _optional_clean_text(value: Any) -> str | None:

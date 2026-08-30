@@ -132,6 +132,7 @@ def test_classify_ingestion_outcome_rejects_negative_counts() -> None:
 def test_source_batch_evidence_is_derived_only_from_unambiguous_source_payload() -> None:
     evidence = derive_source_batch_evidence(
         {
+            "tenant_id": "tenant-sg",
             "transactions": [
                 {
                     "transaction_id": "TXN-002",
@@ -143,7 +144,7 @@ def test_source_batch_evidence_is_derived_only_from_unambiguous_source_payload()
                     "source_system": "custody-feed",
                     "source_batch_id": "batch-001",
                 },
-            ]
+            ],
         },
         payload_kind="transaction",
     )
@@ -197,6 +198,52 @@ def test_source_batch_evidence_is_derived_only_from_unambiguous_source_payload()
     ],
 )
 def test_source_batch_evidence_remains_absent_without_single_source_authority(payload) -> None:
+    assert (
+        derive_source_batch_evidence(
+            {"tenant_id": "tenant-sg", **payload},
+            payload_kind="transaction",
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "transactions": [
+                {
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                }
+            ]
+        },
+        {
+            "tenant_id": " ",
+            "transactions": [
+                {
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                }
+            ],
+        },
+        {
+            "transactions": [
+                {
+                    "tenant_id": "tenant-sg",
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+                {
+                    "tenant_id": "tenant-hk",
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+            ]
+        },
+    ],
+)
+def test_source_batch_evidence_requires_one_source_owned_tenant(payload) -> None:
     assert derive_source_batch_evidence(payload, payload_kind="transaction") is None
 
 
