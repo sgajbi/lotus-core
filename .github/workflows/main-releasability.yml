@@ -1,20 +1,28 @@
 name: Main Releasability Gate
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
     inputs:
+      expected_sha:
+        description: "Optional merged pull-request SHA that this run must validate."
+        required: false
+        type: string
+      triggering_pr:
+        description: "Optional pull request number that dispatched this mainline validation."
+        required: false
+        type: string
+      source_branch:
+        description: "Source branch name to stamp into release evidence for immutable-tag dispatch."
+        required: false
+        type: string
       run_institutional_completion:
         description: "Run the approval-grade 1000-portfolio institutional completion and sign-off jobs."
         required: false
         default: false
         type: boolean
-  schedule:
-    - cron: "0 2 * * *"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.expected_sha || github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -30,8 +38,37 @@ env:
   COMPOSE_DOCKER_CLI_BUILD: "1"
 
 jobs:
+  exact-revision-assertion:
+    name: Main Releasability / Exact Revision Assertion
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert expected merged PR SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          TRIGGERING_PR: ${{ inputs.triggering_pr }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "No expected_sha input supplied; treating this as an operator-dispatched main releasability run."
+            exit 0
+          fi
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Main releasability checkout SHA $actual_sha does not match expected merged PR SHA $EXPECTED_SHA for PR ${TRIGGERING_PR:-unknown}."
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$EXPECTED_SHA" origin/main; then
+            echo "::error::Expected SHA $EXPECTED_SHA for PR ${TRIGGERING_PR:-unknown} is not reachable from origin/main; refusing to label this run as mainline release evidence."
+            exit 1
+          fi
+          echo "Validated exact merged PR SHA $EXPECTED_SHA for PR ${TRIGGERING_PR:-unknown}."
+
   workflow-lint:
     name: Main Releasability / Workflow Lint
+    needs: [exact-revision-assertion]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,6 +77,7 @@ jobs:
 
   windows-lock-closures:
     name: Main Releasability / Windows Lock Closure Replay
+    needs: [exact-revision-assertion]
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -216,7 +254,7 @@ jobs:
         env:
           LOTUS_RUNTIME_IMAGE_SET_GROUP: main-runtime-image-set
           LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA: ${{ github.sha }}
-          LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH: ${{ github.ref_name }}
+          LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH: ${{ inputs.source_branch || github.ref_name }}
           LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
           LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID: ${{ github.run_id }}
         run: make build-runtime-image-set
