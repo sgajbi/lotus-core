@@ -56,6 +56,13 @@ It is enforced through:
 
 ## HTTP app security controls
 
+Every non-public operation requires a normalized, non-blank `X-Tenant-Id`, including local and
+trusted-internal profiles where signed enterprise authorization is disabled. Shared ingress stores
+that scope as an immutable `TenantContext`; it does not treat an unsigned header as verified
+identity and does not manufacture a default tenant. Public health, metrics, documentation, and
+version endpoints remain available without tenant scope. OpenAPI marks the header as required on
+the protected operations.
+
 `make security-control-coverage-guard` checks that every FastAPI app is listed in the governed
 matrix and has implementation anchors for:
 

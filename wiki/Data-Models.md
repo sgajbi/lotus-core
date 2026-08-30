@@ -46,11 +46,12 @@ Primary master and reference tables include:
 These tables define the static or slowly changing portfolio and instrument context consumed by
 downstream operational and analytics-input contracts.
 
-`portfolios` can carry an additive valuation-authority pair: `tenant_id` and `legal_book_id`.
-Legacy rows may leave both null during staged migration, but a scoped row must provide both as
-normalized, nonblank identifiers. Booking centre and jurisdiction are not legal-book substitutes.
-Runtime valuation remains on the legacy path until authoritative market-price source facts and both
-valuation consumers complete the governed cutover.
+Every `portfolios` row requires a normalized, non-blank `tenant_id`. `legal_book_id` remains an
+optional and independent business dimension; tenant, booking centre, and jurisdiction are not
+legal-book substitutes. Portfolio ingestion cannot move an existing global `portfolio_id` to a
+different tenant. The migration to this invariant stops with bounded diagnostic evidence when any
+legacy row cannot be attributed, rather than fabricating ownership. Cross-tenant composite portfolio
+identity and the remaining tenant-owned tables are later staged slices of issue `#798`.
 
 `cash_account_masters` is the governed cash-account identity source for cash-balance account rows.
 Transaction settlement cash-account strings can support fallback mapping only after they validate

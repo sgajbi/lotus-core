@@ -149,12 +149,11 @@ POST /ingest/fx-rates
 POST /ingest/business-dates
 ```
 
-Portfolio ingestion accepts optional `tenant_id` and `legal_book_id` valuation authority. Callers
-must supply both or neither; supplied values are normalized and must be nonblank. The fields are
-additive during migration, so existing unscoped portfolio payloads remain compatible and their
-replay cannot clear an already-established persisted scope. A complete incoming pair replaces both
-scope dimensions atomically. The service does not infer legal-book authority from booking centre or
-jurisdiction.
+Portfolio ingestion requires a source-owned, normalized, non-blank `tenant_id`. `legal_book_id` is
+an optional and independent business dimension; the service does not infer it from tenant, booking
+centre, or jurisdiction. Replaying a portfolio under a different tenant fails closed instead of
+moving ownership. Existing database rows must be attributed before the tenant cutover migration can
+complete; Core never assigns a synthetic fallback tenant.
 
 ### Portfolio-bundle ingestion
 
