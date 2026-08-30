@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from portfolio_common.domain.tenant import TenantId
 
 from ..application.errors import ApplicationError
 from ..application.upload_commands import (
@@ -290,6 +291,7 @@ def _enforce_upload_rate_limit(endpoint: str) -> None:
 
 
 def _authorize_preview_sample_rows(request: Request) -> None:
+    tenant_id = TenantId(request.headers.get("X-Tenant-Id", "")).value
     allowed, reason = authorize_capability(
         dict(request.headers),
         UPLOAD_PREVIEW_SAMPLE_CAPABILITY,
@@ -298,7 +300,7 @@ def _authorize_preview_sample_rows(request: Request) -> None:
         emit_audit_event(
             action="DENY POST /ingest/uploads/preview sample_rows",
             actor_id=request.headers.get("X-Actor-Id", "unknown"),
-            tenant_id=request.headers.get("X-Tenant-Id", "default"),
+            tenant_id=tenant_id,
             role=request.headers.get("X-Role", "unknown"),
             correlation_id=request.headers.get("X-Correlation-Id"),
             metadata={"reason": reason, "capability": UPLOAD_PREVIEW_SAMPLE_CAPABILITY},
@@ -315,7 +317,7 @@ def _authorize_preview_sample_rows(request: Request) -> None:
     emit_audit_event(
         action="POST /ingest/uploads/preview sample_rows",
         actor_id=request.headers.get("X-Actor-Id", "unknown"),
-        tenant_id=request.headers.get("X-Tenant-Id", "default"),
+        tenant_id=tenant_id,
         role=request.headers.get("X-Role", "unknown"),
         correlation_id=request.headers.get("X-Correlation-Id"),
         metadata={"capability": UPLOAD_PREVIEW_SAMPLE_CAPABILITY},
