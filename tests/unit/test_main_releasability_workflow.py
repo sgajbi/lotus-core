@@ -41,6 +41,8 @@ def test_main_releasability_is_bound_to_exact_dispatched_main_revision() -> None
     assert workflow["concurrency"]["group"] == (
         "${{ github.workflow }}-${{ inputs.expected_sha || github.sha }}"
     )
+    resolved_source_branch = "${{ inputs.source_branch || github.ref_name }}"
+    assert workflow["env"]["LOTUS_GIT_BRANCH"] == resolved_source_branch
 
     jobs = workflow["jobs"]
     assertion = jobs["exact-revision-assertion"]
@@ -57,9 +59,7 @@ def test_main_releasability_is_bound_to_exact_dispatched_main_revision() -> None
         for step in docker_build["steps"]
         if step.get("name") == "Build exact-source runtime image set"
     )
-    assert build_step["env"]["LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH"] == (
-        "${{ inputs.source_branch || github.ref_name }}"
-    )
+    assert build_step["env"]["LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH"] == resolved_source_branch
 
 
 def test_institutional_completion_gate_is_manual_opt_in() -> None:
