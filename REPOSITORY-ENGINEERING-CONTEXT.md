@@ -803,7 +803,11 @@ Important validation expectations:
     Gate for an unchanged head SHA. A `synchronize` event represents new code authority and must
     continue to cancel stale PR-ref work and validate the new immutable head. Do not reintroduce
     `labeled` as a full-gate trigger; broader lifecycle-event or artifact reuse remains under the
-    change-aware CI program.
+    change-aware CI program. Auto-merge uses only the explicitly provisioned
+    `LOTUS_AUTOMERGE_TOKEN` under read-only workflow permissions and skips safely when the token is
+    absent; it must never fall back to `github.token`. A merged PR dispatches Main Releasability
+    through an immutable `main-releasability-<merge_sha>` tag, passes the exact expected SHA, and
+    fails closed when the checkout differs or is not reachable from `main`.
 
 ## Standards And RFCs That Govern This Repository
 
@@ -886,11 +890,11 @@ Most relevant current governance:
     the newest artifact timestamp: use `full` profile-tier performance-load artifacts ahead of
     newer `fast` artifacts, and prefer exhaustive bank-day reconciliation artifacts where
     `portfolio_count_evaluated == portfolios_ingested` ahead of newer sampled refresh artifacts,
-28. scheduled and manually dispatched main releasability runs own the governed RFC-086
-    institutional completion gate that runs the bank-day load scenario and then exhaustive
-    reconciliation for the generated run before the institutional sign-off pack aggregates
-    artifacts; routine `main` push runs keep the lighter release gates blocking and leave the
-    approval-grade institutional lane to the scheduled/manual path,
+28. manually dispatched Main Releasability runs own the governed RFC-086 institutional completion
+    gate that runs the bank-day load scenario and then exhaustive reconciliation for the generated
+    run before the institutional sign-off pack aggregates artifacts; merged-PR dispatch runs keep
+    the lighter release gates blocking and leave the approval-grade institutional lane to an
+    explicit operator dispatch,
 29. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 30. RFC-087 DPM source-data work is implemented for `DpmModelPortfolioTarget:v1`,

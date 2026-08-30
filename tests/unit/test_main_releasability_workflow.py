@@ -46,7 +46,7 @@ def test_main_releasability_is_bound_to_exact_dispatched_main_revision() -> None
     assertion = jobs["exact-revision-assertion"]
     command = assertion["steps"][1]["run"]
     assert 'if [ "$actual_sha" != "$EXPECTED_SHA" ]' in command
-    assert 'git fetch --no-tags origin main:refs/remotes/origin/main' in command
+    assert "git fetch --no-tags origin main:refs/remotes/origin/main" in command
     assert 'git merge-base --is-ancestor "$EXPECTED_SHA" origin/main' in command
     for job_name in jobs:
         assert _depends_on_exact_revision(job_name, jobs), job_name
@@ -77,9 +77,9 @@ def test_institutional_completion_gate_is_manual_opt_in() -> None:
     ) in workflow
 
 
-def test_institutional_completion_is_not_default_schedule_or_push_truth() -> None:
+def test_institutional_completion_is_not_default_merge_or_manual_truth() -> None:
     runbook = Path("docs/operations/Institutional-Signoff-Runbook.md").read_text(encoding="utf-8")
 
     assert "run_institutional_completion=true" in runbook
-    assert "Routine `main` push, scheduled, and default manual runs intentionally skip" in runbook
+    assert "Exact-merge-SHA dispatcher runs and default manual runs intentionally skip" in runbook
     assert "1000-portfolio institutional completion" in runbook

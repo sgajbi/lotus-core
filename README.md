@@ -380,10 +380,10 @@ Coverage posture:
 Because this repo has a heavy validation contract, targeted local proof plus GitHub-backed heavy
 execution is often the right workflow.
 
-The approval-grade institutional completion and sign-off lane is available through scheduled or
-manual main releasability runs and the `test-institutional-release-gates` make target. Routine
-`main` push runs intentionally skip that 100k-transaction lane while retaining the faster release
-gates as blocking health checks.
+The approval-grade institutional completion and sign-off lane is available through an explicit
+manual Main Releasability run and the `test-institutional-release-gates` Make target. Each merged PR
+dispatches the faster release gates through an immutable tag bound to the exact merge SHA; default
+post-merge and manual runs intentionally skip the 100k-transaction lane.
 
 ## Contract Notes
 

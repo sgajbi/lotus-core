@@ -31,11 +31,17 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
    the new head and may cancel stale work for the prior PR ref. Opened, reopened, and
    ready-for-review events continue to enter the full gate; broader same-head evidence reuse for
    those lifecycle events remains separately governed.
+7. PR Auto Merge uses the repository-scoped `LOTUS_AUTOMERGE_TOKEN` under read-only workflow
+   permissions. When that credential is absent, the workflow warns and stops; it never falls back
+   to `github.token`, whose merges can suppress the post-merge evidence workflow.
+8. Every merged PR dispatches Main Releasability through an immutable
+   `main-releasability-<merge_sha>` tag. The main workflow validates that exact SHA and proves it is
+   reachable from `main` before any release gate can run.
 
 ## CI Gate Tiers
 
 ### Tier 1: Fast PR Gates (blocking)
-Run on every PR and push to `main`:
+Run on every PR and every exact merged `main` revision:
 1. Lint and typecheck.
 2. Unit and core integration tests.
 3. Docker smoke contract.
