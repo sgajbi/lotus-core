@@ -10,6 +10,7 @@ from src.services.query_service.app.application.transaction_query import (
     transaction_ledger_query_spec,
 )
 from src.services.query_service.app.services.transaction_reads import (
+    read_exact_transaction_ledger_record,
     read_realized_tax_evidence,
     read_transaction_ledger_page,
 )
@@ -164,6 +165,58 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_short_page
     assert page.total_count == 2
     assert page.latest_evidence_timestamp == datetime(2025, 1, 20, 9, 0, tzinfo=UTC)
     repository.get_transaction_ledger_input_evidence.assert_awaited_once()
+
+
+async def test_exact_projected_record_resolves_trade_date_before_fx_evidence() -> None:
+    call_order: list[str] = []
+    repository = AsyncMock()
+    projected_trade_date = date(2027, 6, 15)
+    projected = Transaction(
+        transaction_id="T-PROJECTED",
+        transaction_date=datetime(2027, 6, 15, 9, 30, tzinfo=UTC),
+        security_id="S1",
+        updated_at=datetime(2026, 8, 30, 9, 30, tzinfo=UTC),
+    )
+    evidence = _input_evidence(1, projected.updated_at)
+
+    async def get_transactions(**_: object) -> list[Transaction]:
+        call_order.append("record")
+        return [projected]
+
+    async def get_input_evidence(**kwargs: object) -> TransactionLedgerInputEvidence:
+        call_order.append("fx_evidence")
+        assert kwargs["as_of_date"] == projected_trade_date
+        assert kwargs["reporting_currency"] == "SGD"
+        return evidence
+
+    repository.get_transactions.side_effect = get_transactions
+    repository.get_transaction_ledger_input_evidence.side_effect = get_input_evidence
+    repository.list_known_instrument_security_ids.return_value = {"S1"}
+    ledger_filters = TransactionLedgerFilters(
+        portfolio_id="P1",
+        transaction_id="T-PROJECTED",
+        as_of_date=None,
+    )
+
+    page = await read_exact_transaction_ledger_record(
+        repository=repository,
+        ledger_filters=ledger_filters,
+        reporting_currency="SGD",
+    )
+
+    assert page.rows == [projected]
+    assert page.evidence_as_of_date == projected_trade_date
+    assert page.input_evidence is evidence
+    assert call_order == ["record", "fx_evidence"]
+    repository.get_transactions.assert_awaited_once_with(
+        query_spec=transaction_ledger_query_spec(
+            filters=ledger_filters,
+            sort_by=None,
+            sort_order="desc",
+        ),
+        skip=0,
+        limit=2,
+    )
 
 
 async def test_read_realized_tax_evidence_reads_count_and_tax_rows_sequentially() -> None:

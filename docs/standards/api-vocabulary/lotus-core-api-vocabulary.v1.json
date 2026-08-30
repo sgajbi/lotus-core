@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-30T04:28:27.553934+00:00",
+  "generatedAt": "2026-08-30T05:00:47.586341+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -12164,7 +12164,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "Optional reporting currency for field-aware monetary restatement.",
+      "description": "Optional reporting currency for field-aware monetary restatement. An unbounded projected exact record selects FX evidence at the returned transaction's trade date.",
       "example": "SGD",
       "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
       "exposure": "consumer_visible",

@@ -26,7 +26,11 @@ from .transaction_metadata import (
     realized_tax_summary_filters,
     transaction_ledger_filters,
 )
-from .transaction_reads import read_realized_tax_evidence, read_transaction_ledger_page
+from .transaction_reads import (
+    read_exact_transaction_ledger_record,
+    read_realized_tax_evidence,
+    read_transaction_ledger_page,
+)
 from .transaction_realized_tax import (
     portfolio_realized_tax_summary_response,
     realized_tax_currency_totals,
@@ -220,13 +224,9 @@ class TransactionService:
                 end_date=None,
                 as_of_date=effective_as_of_date,
             )
-            ledger_page = await read_transaction_ledger_page(
+            ledger_page = await read_exact_transaction_ledger_record(
                 repository=self.repo,
                 ledger_filters=ledger_filters,
-                skip=0,
-                limit=2,
-                sort_by=None,
-                sort_order="desc",
                 reporting_currency=resolved_reporting_currency,
             )
         except SQLAlchemyError as exc:
@@ -238,12 +238,17 @@ class TransactionService:
             raise TransactionRecordUnavailableError(
                 "Transaction record source returned inconsistent identity evidence"
             )
+        record_as_of_date = ledger_page.evidence_as_of_date
+        if record_as_of_date is None:
+            raise TransactionRecordUnavailableError(
+                "Transaction record source returned incomplete temporal evidence"
+            )
 
         try:
             records = await transaction_records_from_rows(
                 rows=ledger_page.rows,
                 reporting_currency=resolved_reporting_currency,
-                as_of_date=effective_as_of_date,
+                as_of_date=record_as_of_date,
                 convert_amount=self._convert_amount,
             )
         except SQLAlchemyError as exc:
@@ -259,7 +264,7 @@ class TransactionService:
                 portfolio_id=portfolio_id,
                 reporting_currency=resolved_reporting_currency,
                 transaction=records[0],
-                effective_as_of_date=effective_as_of_date,
+                effective_as_of_date=record_as_of_date,
                 latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
                 ledger_filters=ledger_filters,
                 input_evidence=ledger_page.input_evidence,

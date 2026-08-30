@@ -22,7 +22,7 @@ acknowledgement, or client advice output.
 | Explicit as-of ledger | `as_of_date=<date>` | Returns rows with `transaction_date <= as_of_date`. |
 | Projected-inclusive ledger | `include_projected=true` | Does not apply the default business-date cap when `as_of_date` is omitted, allowing future-dated projected rows that match the other filters. |
 | Reporting-currency restated ledger | `reporting_currency=<ccy>` with an effective `as_of_date` | Adds reporting-currency monetary fields by applying the latest available FX rate on or before the effective `as_of_date`. Raw ledger monetary fields, including explicit FX realized-P&L fields, remain unchanged. |
-| Exact record rehydration | `/{transaction_id}` with the portfolio path boundary | Returns one canonical record and the same material-input proof metadata. Both identities are applied in SQL; an absent record and a record owned by another portfolio return the same `404`. No ledger page scan is performed. When `include_projected=true` leaves the request boundary unbounded, response metadata and reconstruction identity use the selected record's transaction/trade date rather than application time. |
+| Exact record rehydration | `/{transaction_id}` with the portfolio path boundary | Returns one canonical record and the same material-input proof metadata. Both identities are applied in SQL; an absent record and a record owned by another portfolio return the same `404`. No ledger page scan is performed. When `include_projected=true` leaves the request boundary unbounded, reporting-currency conversion, selected FX evidence, response metadata, and reconstruction identity all use the selected record's transaction/trade date rather than application time. |
 
 ## Inputs
 
