@@ -6,11 +6,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from portfolio_common.database_models import Cashflow, Transaction
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.application.transaction_query import (
     TransactionLedgerFilters,
     TransactionLedgerInputEvidence,
+    TransactionRecordUnavailableError,
     transaction_ledger_query_spec,
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
@@ -220,6 +222,127 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         mock_transaction_repo.list_known_instrument_security_ids.assert_awaited_once_with(
             ["S1", "S2"]
         )
+
+
+async def test_get_transaction_record_returns_one_portfolio_owned_record_with_proof(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    latest = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    mock_transaction_repo.get_transactions.return_value = [
+        mock_transaction_repo.get_transactions.return_value[0]
+    ]
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        1,
+        latest,
+    )
+    mock_transaction_repo.list_known_instrument_security_ids.return_value = {"S1"}
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_transaction_record(
+            portfolio_id="P1",
+            transaction_id="T1",
+            as_of_date=date(2025, 1, 15),
+            reporting_currency="SGD",
+        )
+
+    filters = TransactionLedgerFilters(
+        portfolio_id="P1",
+        transaction_id="T1",
+        as_of_date=date(2025, 1, 15),
+    )
+    assert response.portfolio_id == "P1"
+    assert response.transaction.transaction_id == "T1"
+    assert response.reporting_currency == "SGD"
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == latest
+    mock_transaction_repo.establish_transaction_ledger_read_snapshot.assert_awaited_once_with()
+    mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once_with(
+        filters=filters,
+        reporting_currency="SGD",
+        as_of_date=date(2025, 1, 15),
+    )
+    mock_transaction_repo.get_transactions.assert_awaited_once_with(
+        query_spec=transaction_ledger_query_spec(
+            filters=filters,
+            sort_by=None,
+            sort_order="desc",
+        ),
+        skip=0,
+        limit=2,
+    )
+    mock_transaction_repo.portfolio_exists.assert_not_awaited()
+
+
+async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(0)
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(
+            LookupError,
+            match="Transaction record not found for requested portfolio",
+        ):
+            await service.get_transaction_record(
+                portfolio_id="OTHER-PORTFOLIO",
+                transaction_id="T1",
+                as_of_date=date(2025, 1, 15),
+            )
+
+    mock_transaction_repo.get_transactions.assert_not_awaited()
+    mock_transaction_repo.portfolio_exists.assert_not_awaited()
+
+
+async def test_get_transaction_record_maps_database_failure_to_unavailable(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transaction_ledger_input_evidence.side_effect = SQLAlchemyError(
+        "database unavailable"
+    )
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(
+            TransactionRecordUnavailableError,
+            match="temporarily unavailable",
+        ):
+            await service.get_transaction_record(
+                portfolio_id="P1",
+                transaction_id="T1",
+                as_of_date=date(2025, 1, 15),
+            )
+
+
+async def test_get_transaction_record_fails_closed_on_non_unique_evidence(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(2)
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(
+            TransactionRecordUnavailableError,
+            match="inconsistent identity evidence",
+        ):
+            await service.get_transaction_record(
+                portfolio_id="P1",
+                transaction_id="T1",
+                as_of_date=date(2025, 1, 15),
+            )
 
 
 async def test_get_transactions_classifies_complete_window(

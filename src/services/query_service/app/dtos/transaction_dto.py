@@ -639,6 +639,47 @@ class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
     )
 
 
+class TransactionRecordResponse(SourceDataProductRuntimeMetadata):
+    """Exact portfolio-scoped transaction record with source-product proof."""
+
+    product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
+    product_version: Literal["v1"] = product_version_field()
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-TXN-001"])
+    reporting_currency: Optional[str] = Field(
+        None,
+        description=(
+            "Resolved reporting currency for optional restated monetary fields; omitted for "
+            "the raw source record."
+        ),
+        examples=["SGD"],
+    )
+    transaction: TransactionRecord = Field(
+        ...,
+        description="The exact canonical transaction record owned by this portfolio.",
+    )
+    reason_codes: list[str] = Field(
+        default_factory=list,
+        description="Bounded supportability reason codes for this transaction record.",
+        examples=[["TRANSACTION_LEDGER_READY"]],
+    )
+    missing_instrument_reference_count: int = Field(
+        0,
+        description=(
+            "Whether the transaction security identifier lacks governed instrument-master "
+            "evidence (zero or one)."
+        ),
+        examples=[0],
+    )
+    missing_instrument_security_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "The transaction security identifier when governed instrument-master evidence is "
+            "missing; otherwise empty."
+        ),
+        examples=[["SEC_UNKNOWN_001"]],
+    )
+
+
 class RealizedTaxCurrencyTotal(BaseModel):
     currency: str = Field(
         ...,

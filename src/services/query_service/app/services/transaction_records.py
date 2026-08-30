@@ -15,7 +15,11 @@ from ..application.transaction_query import (
     TransactionLedgerFilters,
     TransactionLedgerInputEvidence,
 )
-from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
+from ..dtos.transaction_dto import (
+    PaginatedTransactionResponse,
+    TransactionRecord,
+    TransactionRecordResponse,
+)
 from .transaction_metadata import ledger_data_quality_status, ledger_reason_codes
 from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
 
@@ -74,6 +78,76 @@ def paginated_transaction_ledger_response(
 ) -> PaginatedTransactionResponse:
     missing_instrument_security_ids = missing_instrument_security_ids or []
     response_as_of_date = effective_as_of_date or end_date or today()
+    return PaginatedTransactionResponse(
+        portfolio_id=portfolio_id,
+        reporting_currency=reporting_currency,
+        total=total_count,
+        skip=skip,
+        limit=limit,
+        transactions=transactions,
+        **_transaction_ledger_proof_fields(
+            portfolio_id=portfolio_id,
+            reporting_currency=reporting_currency,
+            total_count=total_count,
+            returned_count=len(transactions),
+            skip=skip,
+            response_as_of_date=response_as_of_date,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+            ledger_filters=ledger_filters,
+            input_evidence=input_evidence,
+            missing_instrument_security_ids=missing_instrument_security_ids,
+        ),
+    )
+
+
+def exact_transaction_record_response(
+    *,
+    portfolio_id: str,
+    reporting_currency: str | None,
+    transaction: TransactionRecord,
+    effective_as_of_date: date | None,
+    latest_evidence_timestamp: datetime | None,
+    ledger_filters: TransactionLedgerFilters,
+    input_evidence: TransactionLedgerInputEvidence,
+    missing_instrument_security_ids: list[str] | None = None,
+    today: Callable[[], date] = date.today,
+) -> TransactionRecordResponse:
+    """Build one exact record without weakening the ledger product proof contract."""
+
+    missing_instrument_security_ids = missing_instrument_security_ids or []
+    response_as_of_date = effective_as_of_date or today()
+    return TransactionRecordResponse(
+        portfolio_id=portfolio_id,
+        reporting_currency=reporting_currency,
+        transaction=transaction,
+        **_transaction_ledger_proof_fields(
+            portfolio_id=portfolio_id,
+            reporting_currency=reporting_currency,
+            total_count=1,
+            returned_count=1,
+            skip=0,
+            response_as_of_date=response_as_of_date,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+            ledger_filters=ledger_filters,
+            input_evidence=input_evidence,
+            missing_instrument_security_ids=missing_instrument_security_ids,
+        ),
+    )
+
+
+def _transaction_ledger_proof_fields(
+    *,
+    portfolio_id: str,
+    reporting_currency: str | None,
+    total_count: int,
+    returned_count: int,
+    skip: int,
+    response_as_of_date: date,
+    latest_evidence_timestamp: datetime | None,
+    ledger_filters: TransactionLedgerFilters,
+    input_evidence: TransactionLedgerInputEvidence,
+    missing_instrument_security_ids: list[str],
+) -> dict[str, object]:
     reconstruction_evidence = transaction_ledger_reconstruction_evidence(
         portfolio_id=portfolio_id,
         response_as_of_date=response_as_of_date,
@@ -83,30 +157,25 @@ def paginated_transaction_ledger_response(
         ledger_filters=ledger_filters,
         input_evidence=input_evidence,
     )
-    return PaginatedTransactionResponse(
-        portfolio_id=portfolio_id,
-        reporting_currency=reporting_currency,
-        total=total_count,
-        skip=skip,
-        limit=limit,
-        transactions=transactions,
+    source_ref = (
+        "lotus-core://source/TransactionLedgerWindow/"
+        f"{portfolio_id}/{response_as_of_date.isoformat()}"
+    )
+    if ledger_filters.transaction_id is not None:
+        source_ref = f"{source_ref}/transactions/{ledger_filters.transaction_id}"
+    return {
         **source_data_product_runtime_metadata(
             as_of_date=response_as_of_date,
             data_quality_status=ledger_data_quality_status(
                 total_count=total_count,
-                returned_count=len(transactions),
+                returned_count=returned_count,
                 skip=skip,
                 missing_instrument_security_ids=missing_instrument_security_ids,
             ),
             latest_evidence_timestamp=latest_evidence_timestamp,
             snapshot_id=reconstruction_evidence.scope_id,
             policy_version=TRANSACTION_LEDGER_POLICY_VERSION,
-            source_refs=[
-                (
-                    "lotus-core://source/TransactionLedgerWindow/"
-                    f"{portfolio_id}/{response_as_of_date.isoformat()}"
-                )
-            ],
+            source_refs=[source_ref],
             lineage={
                 "source_owner": "lotus-core",
                 "source_product": "TransactionLedgerWindow",
@@ -114,15 +183,15 @@ def paginated_transaction_ledger_response(
                 **reconstruction_evidence.lineage(),
             },
         ),
-        reason_codes=ledger_reason_codes(
+        "reason_codes": ledger_reason_codes(
             total_count=total_count,
-            returned_count=len(transactions),
+            returned_count=returned_count,
             skip=skip,
             missing_instrument_security_ids=missing_instrument_security_ids,
         ),
-        missing_instrument_reference_count=len(missing_instrument_security_ids),
-        missing_instrument_security_ids=missing_instrument_security_ids,
-    )
+        "missing_instrument_reference_count": len(missing_instrument_security_ids),
+        "missing_instrument_security_ids": missing_instrument_security_ids,
+    }
 
 
 def transaction_ledger_reconstruction_evidence(
@@ -154,6 +223,7 @@ def transaction_ledger_reconstruction_evidence(
             restatement_version=CURRENT_RESTATEMENT_VERSION,
             policy_version=TRANSACTION_LEDGER_POLICY_VERSION,
             qualifiers=(
+                ("transaction_id", ledger_filters.transaction_id),
                 ("instrument_id", ledger_filters.instrument_id),
                 ("security_id", ledger_filters.security_id),
                 ("transaction_type", ledger_filters.transaction_type),

@@ -6,9 +6,14 @@ from datetime import date, datetime
 from .transaction_sorting import normalize_transaction_sort
 
 
+class TransactionRecordUnavailableError(RuntimeError):
+    """The exact transaction source could not be read authoritatively."""
+
+
 @dataclass(frozen=True, slots=True)
 class TransactionLedgerFilters:
     portfolio_id: str
+    transaction_id: str | None = None
     instrument_id: str | None = None
     security_id: str | None = None
     transaction_type: str | None = None
@@ -72,9 +77,11 @@ def transaction_ledger_filters(
     start_date: date | None,
     end_date: date | None,
     as_of_date: date | None,
+    transaction_id: str | None = None,
 ) -> TransactionLedgerFilters:
     return TransactionLedgerFilters(
         portfolio_id=portfolio_id,
+        transaction_id=transaction_id,
         instrument_id=instrument_id,
         security_id=security_id,
         transaction_type=transaction_type,

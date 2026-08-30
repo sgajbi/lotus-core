@@ -9,6 +9,9 @@ from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
 
+from src.services.query_service.app.application.transaction_query import (
+    TransactionRecordUnavailableError,
+)
 from src.services.query_service.app.dependencies import get_transaction_service
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
@@ -16,6 +19,7 @@ from src.services.query_service.app.dtos.transaction_dto import (
     RealizedTaxCurrencyTotal,
     TransactionCostRecord,
     TransactionRecord,
+    TransactionRecordResponse,
 )
 from src.services.query_service.app.main import app
 
@@ -65,6 +69,15 @@ async def async_test_client():
                     net_interest_amount=Decimal("110.00"),
                 )
             ],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 8, 1)),
+        )
+    )
+    mock_transaction_service.get_transaction_record = AsyncMock(
+        return_value=TransactionRecordResponse(
+            portfolio_id="P1",
+            reporting_currency="SGD",
+            transaction=mock_transaction_service.get_transactions.return_value.transactions[0],
+            reason_codes=["TRANSACTION_LEDGER_READY"],
             **source_data_product_runtime_metadata(as_of_date=date(2025, 8, 1)),
         )
     )
@@ -157,6 +170,58 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
         sort_by="transaction_date",
         sort_order="asc",
     )
+
+
+async def test_get_transaction_record_returns_exact_source_product(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/portfolios/P1/transactions/T1",
+        params={
+            "as_of_date": "2025-08-01",
+            "include_projected": "true",
+            "reporting_currency": "SGD",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["product_name"] == "TransactionLedgerWindow"
+    assert payload["portfolio_id"] == "P1"
+    assert payload["transaction"]["transaction_id"] == "T1"
+    assert payload["reason_codes"] == ["TRANSACTION_LEDGER_READY"]
+    mock_service.get_transaction_record.assert_awaited_once_with(
+        portfolio_id="P1",
+        transaction_id="T1",
+        as_of_date=date(2025, 8, 1),
+        include_projected=True,
+        reporting_currency="SGD",
+    )
+    mock_service.get_transactions.assert_not_awaited()
+
+
+async def test_get_transaction_record_hides_wrong_portfolio_as_not_found(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_transaction_record.side_effect = LookupError(
+        "Transaction record not found for requested portfolio"
+    )
+
+    response = await client.get("/portfolios/P2/transactions/T1")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Transaction record not found for requested portfolio"}
+
+
+async def test_get_transaction_record_maps_source_failure_to_503(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_transaction_record.side_effect = TransactionRecordUnavailableError(
+        "Transaction record source is temporarily unavailable"
+    )
+
+    response = await client.get("/portfolios/P1/transactions/T1")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Transaction record source is temporarily unavailable"}
 
 
 async def test_get_transactions_unhandled_error_is_globally_mapped(async_test_client):

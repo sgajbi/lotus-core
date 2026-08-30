@@ -6,9 +6,15 @@ from typing import Optional, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.logging_utils import operation_log_extra
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
+from ..application.transaction_query import TransactionRecordUnavailableError
+from ..dtos.transaction_dto import (
+    PaginatedTransactionResponse,
+    PortfolioRealizedTaxSummaryResponse,
+    TransactionRecordResponse,
+)
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
 from .portfolio_validation import ensure_portfolio_exists
@@ -27,6 +33,7 @@ from .transaction_realized_tax import (
     realized_tax_reporting_currency_total,
 )
 from .transaction_records import (
+    exact_transaction_record_response,
     paginated_transaction_ledger_response,
     transaction_records_from_rows,
 )
@@ -97,6 +104,7 @@ class TransactionService:
 
         ledger_filters = transaction_ledger_filters(
             portfolio_id=portfolio_id,
+            transaction_id=None,
             instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,
@@ -138,6 +146,103 @@ class TransactionService:
             transactions=transactions,
             effective_as_of_date=effective_as_of_date,
             end_date=end_date,
+            latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
+            ledger_filters=ledger_filters,
+            input_evidence=ledger_page.input_evidence,
+            missing_instrument_security_ids=ledger_page.missing_instrument_security_ids,
+        )
+
+    async def get_transaction_record(
+        self,
+        *,
+        portfolio_id: str,
+        transaction_id: str,
+        as_of_date: date | None = None,
+        include_projected: bool = False,
+        reporting_currency: str | None = None,
+    ) -> TransactionRecordResponse:
+        """Return one portfolio-owned transaction with complete ledger proof metadata."""
+
+        logger.info(
+            "Exact transaction record query requested.",
+            extra=operation_log_extra(
+                event_name="query.transaction_service.record_requested",
+                operation="query.transaction_service.get_transaction_record",
+                status="started",
+                reason_code="request_received",
+                has_as_of_date_filter=as_of_date is not None,
+                include_projected=include_projected,
+                has_reporting_currency=reporting_currency is not None,
+            ),
+        )
+        try:
+            await self.repo.establish_transaction_ledger_read_snapshot()
+            effective_as_of_date = await transaction_ledger_effective_as_of_date(
+                repository=self.repo,
+                as_of_date=as_of_date,
+                include_projected=include_projected,
+            )
+            ledger_filters = transaction_ledger_filters(
+                portfolio_id=portfolio_id,
+                transaction_id=transaction_id,
+                instrument_id=None,
+                security_id=None,
+                transaction_type=None,
+                component_type=None,
+                linked_transaction_group_id=None,
+                fx_contract_id=None,
+                swap_event_id=None,
+                near_leg_group_id=None,
+                far_leg_group_id=None,
+                start_date=None,
+                end_date=None,
+                as_of_date=effective_as_of_date,
+            )
+            ledger_page = await read_transaction_ledger_page(
+                repository=self.repo,
+                ledger_filters=ledger_filters,
+                skip=0,
+                limit=2,
+                sort_by=None,
+                sort_order="desc",
+                reporting_currency=reporting_currency,
+            )
+        except SQLAlchemyError as exc:
+            logger.exception(
+                "Exact transaction source query failed.",
+                extra=operation_log_extra(
+                    event_name="query.transaction_service.record_unavailable",
+                    operation="query.transaction_service.get_transaction_record",
+                    status="failed",
+                    reason_code="source_query_failed",
+                ),
+            )
+            raise TransactionRecordUnavailableError(
+                "Transaction record source is temporarily unavailable"
+            ) from exc
+
+        if ledger_page.total_count == 0:
+            raise LookupError("Transaction record not found for requested portfolio")
+        if ledger_page.total_count != 1 or len(ledger_page.rows) != 1:
+            raise TransactionRecordUnavailableError(
+                "Transaction record source returned inconsistent identity evidence"
+            )
+
+        records = await transaction_records_from_rows(
+            rows=ledger_page.rows,
+            reporting_currency=reporting_currency,
+            as_of_date=effective_as_of_date,
+            convert_amount=self._convert_amount,
+        )
+        if len(records) != 1:
+            raise TransactionRecordUnavailableError(
+                "Transaction record source returned inconsistent mapped evidence"
+            )
+        return exact_transaction_record_response(
+            portfolio_id=portfolio_id,
+            reporting_currency=reporting_currency,
+            transaction=records[0],
+            effective_as_of_date=effective_as_of_date,
             latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
             ledger_filters=ledger_filters,
             input_evidence=ledger_page.input_evidence,
