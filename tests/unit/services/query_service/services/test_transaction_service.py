@@ -27,6 +27,7 @@ pytestmark = pytest.mark.asyncio
 def _input_evidence(
     transaction_count: int,
     latest_evidence_timestamp: datetime | None = None,
+    selected_fx_rate_digest: str | None = None,
 ) -> TransactionLedgerInputEvidence:
     return TransactionLedgerInputEvidence(
         transaction_count=transaction_count,
@@ -34,7 +35,7 @@ def _input_evidence(
         transaction_digest="transaction-digest" if transaction_count else None,
         transaction_cost_digest="cost-digest" if transaction_count else None,
         selected_cashflow_digest="cashflow-digest" if transaction_count else None,
-        selected_fx_rate_digest=None,
+        selected_fx_rate_digest=selected_fx_rate_digest,
     )
 
 
@@ -277,7 +278,7 @@ async def test_get_transaction_record_returns_one_portfolio_owned_record_with_pr
     mock_transaction_repo.portfolio_exists.assert_not_awaited()
 
 
-async def test_get_projected_transaction_record_reports_selected_trade_date(
+async def test_get_projected_transaction_record_binds_conversion_and_proof_to_trade_date(
     mock_transaction_repo: AsyncMock,
 ) -> None:
     projected = mock_transaction_repo.get_transactions.return_value[0]
@@ -286,7 +287,17 @@ async def test_get_projected_transaction_record_reports_selected_trade_date(
     mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
         1,
         projected.updated_at,
+        selected_fx_rate_digest="projected-fx-digest",
     )
+
+    async def projected_fx_rate(
+        *, from_currency: str, to_currency: str, as_of_date: date
+    ) -> Decimal | None:
+        assert to_currency == "SGD"
+        assert as_of_date == date(2027, 6, 15)
+        return {"USD": Decimal("1.36"), "EUR": Decimal("1.50")}.get(from_currency)
+
+    mock_transaction_repo.get_latest_fx_rate.side_effect = projected_fx_rate
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -297,9 +308,13 @@ async def test_get_projected_transaction_record_reports_selected_trade_date(
             portfolio_id="P1",
             transaction_id="T1",
             include_projected=True,
+            reporting_currency="SGD",
         )
 
     assert response.as_of_date == date(2027, 6, 15)
+    assert response.reporting_currency == "SGD"
+    assert response.transaction.gross_transaction_amount_reporting_currency == Decimal("1360.00")
+    assert response.transaction.trade_fee_reporting_currency == Decimal("18.750")
     filters = TransactionLedgerFilters(
         portfolio_id="P1",
         transaction_id="T1",
@@ -308,14 +323,16 @@ async def test_get_projected_transaction_record_reports_selected_trade_date(
     mock_transaction_repo.get_latest_business_date.assert_not_awaited()
     mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once_with(
         filters=filters,
-        reporting_currency=None,
-        as_of_date=None,
+        reporting_currency="SGD",
+        as_of_date=date(2027, 6, 15),
     )
+    assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
 
 
 async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
     mock_transaction_repo: AsyncMock,
 ) -> None:
+    mock_transaction_repo.get_transactions.return_value = []
     mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(0)
 
     with patch(
@@ -333,7 +350,20 @@ async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
                 as_of_date=date(2025, 1, 15),
             )
 
-    mock_transaction_repo.get_transactions.assert_not_awaited()
+    filters = TransactionLedgerFilters(
+        portfolio_id="OTHER-PORTFOLIO",
+        transaction_id="T1",
+        as_of_date=date(2025, 1, 15),
+    )
+    mock_transaction_repo.get_transactions.assert_awaited_once_with(
+        query_spec=transaction_ledger_query_spec(
+            filters=filters,
+            sort_by=None,
+            sort_order="desc",
+        ),
+        skip=0,
+        limit=2,
+    )
     mock_transaction_repo.portfolio_exists.assert_not_awaited()
 
 

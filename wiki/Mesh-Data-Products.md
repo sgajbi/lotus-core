@@ -217,8 +217,10 @@ For URL rehydration and record drill-down, Core also publishes
 `GET /portfolios/{portfolio_id}/transactions/{transaction_id}`. It applies the portfolio and
 transaction identities through one composite database index, returns the canonical row with the
 same costs, latest cashflow, supportability, reporting-currency and reconstruction proof semantics,
-and returns the same `404` for an absent or wrong-portfolio record. Source-query failure is `503`;
-consumers must not replace this contract with a paginated ledger scan.
+and returns the same `404` for an absent or wrong-portfolio record. For an unbounded projected exact
+record, its trade date consistently binds reporting-currency conversion, selected FX evidence,
+response metadata, and reconstruction identity. Source-query failure is `503`; consumers must not
+replace this contract with a paginated ledger scan.
 
 `PortfolioCashflowProjection:v1` is the governed source for daily booked cashflow, projected
 settlement cashflow, net cashflow points, cumulative cashflow over the returned window,

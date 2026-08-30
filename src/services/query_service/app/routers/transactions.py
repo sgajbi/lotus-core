@@ -260,7 +260,10 @@ async def get_transaction_record(
     ),
     reporting_currency: Optional[str] = Query(
         None,
-        description="Optional reporting currency for field-aware monetary restatement.",
+        description=(
+            "Optional reporting currency for field-aware monetary restatement. An unbounded "
+            "projected exact record selects FX evidence at the returned transaction's trade date."
+        ),
         examples=["SGD"],
     ),
     service: TransactionService = Depends(get_transaction_service),
