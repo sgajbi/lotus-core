@@ -14,6 +14,7 @@ from portfolio_common.events import (
     PortfolioEvent,
     TransactionEvent,
 )
+
 from tests.test_support.tenant import TEST_TENANT_ID
 
 
