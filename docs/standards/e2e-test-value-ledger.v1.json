@@ -278,6 +278,7 @@
     {"ownership_id": "e2e-038", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_by_non_existent_portfolio_id_returns_404", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-039", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_by_portfolio_id", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-040", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_no_filters", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-070", "nodeid": "tests/e2e/test_query_service_api.py::test_exact_transaction_record_lookup", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-041", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_custom_sort", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-042", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_default_sort", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-043", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_filter_and_sort", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
@@ -306,7 +307,6 @@
     {"ownership_id": "e2e-066", "nodeid": "tests/e2e/test_transaction_type_coverage_matrix.py::test_transaction_type_coverage_sets_are_registry_derived", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-067", "nodeid": "tests/e2e/test_transaction_type_dual_leg.py::test_dual_leg_upstream_settlement_cashflow_authority", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-068", "nodeid": "tests/e2e/test_transaction_type_dual_leg.py::test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-069", "nodeid": "tests/e2e/test_valuation_pipeline.py::test_full_valuation_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-070", "nodeid": "tests/e2e/test_query_service_api.py::test_exact_transaction_record_lookup", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"}
+    {"ownership_id": "e2e-069", "nodeid": "tests/e2e/test_valuation_pipeline.py::test_full_valuation_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"}
   ]
 }
