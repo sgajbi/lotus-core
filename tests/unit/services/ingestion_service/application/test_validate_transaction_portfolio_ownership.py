@@ -16,7 +16,7 @@ async def test_validator_accepts_only_portfolios_owned_by_admitted_tenant() -> N
         read_owned_portfolio_ids=AsyncMock(return_value=frozenset({"PORT-1", "PORT-2"}))
     )
 
-    await subject.ValidateTransactionPortfolioOwnership(reader).execute(
+    await subject.ValidateTransactionPortfolioOwnership(reader).validate(
         tenant_context=TEST_TENANT_CONTEXT,
         portfolio_ids=["PORT-1", "PORT-2", "PORT-1"],
     )
@@ -31,7 +31,7 @@ async def test_validator_rejects_cross_tenant_or_missing_portfolios_before_publi
     reader = SimpleNamespace(read_owned_portfolio_ids=AsyncMock(return_value=frozenset({"PORT-1"})))
 
     with pytest.raises(subject.TransactionPortfolioOwnershipRejected) as exc_info:
-        await subject.ValidateTransactionPortfolioOwnership(reader).execute(
+        await subject.ValidateTransactionPortfolioOwnership(reader).validate(
             tenant_context=TEST_TENANT_CONTEXT,
             portfolio_ids=["PORT-1", "PORT-OTHER-TENANT", "PORT-MISSING"],
         )
