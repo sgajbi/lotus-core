@@ -107,6 +107,7 @@ def test_ingestion_failure_outcome_migration_round_trip_and_constraint(
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        head_schema = connection.begin_nested()
         _bind_operations(migration, connection)
         _normalize_to_previous_revision(migration, connection)
         columns = {column["name"] for column in inspect(connection).get_columns("ingestion_jobs")}
@@ -206,3 +207,4 @@ def test_ingestion_failure_outcome_migration_round_trip_and_constraint(
             "failure_detail",
             "failure_headers",
         } <= final_columns
+        head_schema.rollback()
