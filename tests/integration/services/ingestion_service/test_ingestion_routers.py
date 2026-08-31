@@ -1297,7 +1297,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         def __init__(self) -> None:
             self.rejected_portfolio_ids: set[str] = set()
 
-        async def execute(self, *, tenant_context, portfolio_ids) -> None:
+        async def validate(self, *, tenant_context, portfolio_ids) -> None:
             rejected = tuple(
                 portfolio_id
                 for portfolio_id in dict.fromkeys(portfolio_ids)

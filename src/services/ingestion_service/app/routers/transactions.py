@@ -218,7 +218,7 @@ async def _validate_transaction_portfolio_ownership(
     portfolio_ids: list[str],
 ) -> None:
     try:
-        await validator.execute(
+        await validator.validate(
             tenant_context=tenant_context,
             portfolio_ids=portfolio_ids,
         )

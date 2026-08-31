@@ -19,7 +19,7 @@ class ValidateTransactionPortfolioOwnership:
     def __init__(self, reader: PortfolioTenantOwnershipReader) -> None:
         self._reader = reader
 
-    async def execute(
+    async def validate(
         self,
         *,
         tenant_context: TenantContext,
