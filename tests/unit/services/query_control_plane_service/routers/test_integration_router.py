@@ -1,6 +1,8 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.query_control_plane_service.app.application import (
     sustainability_preference_profile as preference_application,
@@ -251,6 +253,10 @@ SustainabilityPreferenceProfileRequest = preference_contracts.SustainabilityPref
 DpmSourceReadinessService = dpm_readiness_application.DpmSourceReadinessService
 
 
+def _http_request(tenant_id: str = "default") -> SimpleNamespace:
+    return SimpleNamespace(state=SimpleNamespace(tenant_context=TenantContext(TenantId(tenant_id))))
+
+
 def assert_query_control_plane_problem(
     problem: QueryControlPlaneProblem,
     *,
@@ -423,6 +429,7 @@ async def test_create_core_snapshot_router_function() -> None:
     response = await create_core_snapshot(
         portfolio_id="PORT_001",
         request=request,
+        http_request=_http_request(),
         service=mock_service,
         integration_service=mock_integration_service,
     )
@@ -466,6 +473,7 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_404",
             request=request,
+            http_request=_http_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -508,6 +516,7 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_http_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -551,6 +560,7 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_http_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -594,6 +604,7 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_http_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -635,6 +646,7 @@ async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
+            http_request=_http_request(),
             service=mock_service,
             integration_service=mock_integration_service,
         )
@@ -713,6 +725,7 @@ async def test_create_core_snapshot_filters_sections_in_non_strict_mode() -> Non
     await create_core_snapshot(
         portfolio_id="PORT_001",
         request=request,
+        http_request=_http_request(),
         service=mock_service,
         integration_service=mock_integration_service,
     )
