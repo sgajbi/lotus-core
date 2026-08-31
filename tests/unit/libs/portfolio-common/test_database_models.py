@@ -163,6 +163,9 @@ def test_ingestion_job_declares_complete_failure_outcome_contract() -> None:
         "failure_headers",
     } <= set(table.columns.keys())
     assert "ck_ingestion_jobs_failure_outcome_complete" in constraints
+    tenant_constraint = str(constraints["ck_ingestion_jobs_tenant_authority"].sqltext)
+    assert r"\0009\000A" in tenant_constraint
+    assert r"\202F\205F\3000" in tenant_constraint
     fingerprint_constraint = str(
         constraints["ck_ingestion_jobs_payload_fingerprint_format"].sqltext
     )

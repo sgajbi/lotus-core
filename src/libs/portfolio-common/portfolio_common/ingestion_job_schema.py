@@ -6,13 +6,20 @@ from typing import Any
 
 from sqlalchemy import CheckConstraint, Index
 
+_TENANT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
+    r"\2029\202F\205F\3000'"
+)
+
 
 def ingestion_job_table_args(*, submitted_at: Any, row_id: Any) -> tuple[Any, ...]:
     """Return the governed ingestion-job integrity and access-path contract."""
 
     return (
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND char_length(tenant_id) <= 128",
+            f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) "
+            "AND tenant_id <> '' AND char_length(tenant_id) <= 128",
             name="ck_ingestion_jobs_tenant_authority",
         ),
         CheckConstraint(
