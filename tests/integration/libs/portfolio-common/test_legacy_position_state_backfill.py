@@ -46,15 +46,18 @@ async def test_backfill_restores_missing_snapshot_and_history_state_without_over
         text(
             """
             INSERT INTO portfolios (
-                portfolio_id, base_currency, open_date, risk_exposure,
+                portfolio_id, tenant_id, base_currency, open_date, risk_exposure,
                 investment_time_horizon, portfolio_type, booking_center_code,
                 client_id, status, is_leverage_allowed
             ) VALUES
-                ('LEGACY-SNAPSHOT', 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                ('LEGACY-SNAPSHOT', 'LEGACY-STATE-TENANT', 'USD', DATE '2024-01-01',
+                 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LEGACY-CLIENT-1', 'ACTIVE', false),
-                ('LEGACY-HISTORY', 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                ('LEGACY-HISTORY', 'LEGACY-STATE-TENANT', 'USD', DATE '2024-01-01',
+                 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LEGACY-CLIENT-2', 'ACTIVE', false),
-                ('LIVE-STATE', 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                ('LIVE-STATE', 'LEGACY-STATE-TENANT', 'USD', DATE '2024-01-01',
+                 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LEGACY-CLIENT-3', 'ACTIVE', false)
             """
         )

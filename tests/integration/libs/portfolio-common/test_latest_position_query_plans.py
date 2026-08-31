@@ -39,13 +39,13 @@ async def _seed_representative_latest_row_history(
         text(
             """
             INSERT INTO portfolios (
-                portfolio_id, base_currency, open_date, risk_exposure,
+                portfolio_id, tenant_id, base_currency, open_date, risk_exposure,
                 investment_time_horizon, portfolio_type, booking_center_code,
                 client_id, status, is_leverage_allowed
             ) VALUES
-                (:target, 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                (:target, 'LATEST-PLAN-TENANT', 'USD', DATE '2024-01-01', 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LATEST-PLAN-CLIENT', 'ACTIVE', false),
-                (:noise, 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                (:noise, 'LATEST-PLAN-TENANT', 'USD', DATE '2024-01-01', 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LATEST-PLAN-NOISE', 'ACTIVE', false)
             """
         ),
