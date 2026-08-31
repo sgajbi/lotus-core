@@ -20,6 +20,12 @@ def _request(tenant_id: str) -> SimpleNamespace:
     return SimpleNamespace(state=SimpleNamespace(enterprise_verified_tenant_id=tenant_id))
 
 
+def _admitted_request(tenant_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        state=SimpleNamespace(tenant_context=SimpleNamespace(tenant_id_text=tenant_id))
+    )
+
+
 def _result(tenant_id: str) -> ReportingCurrencySupportResult:
     return ReportingCurrencySupportResult(
         portfolio_id="PF-1",
@@ -70,6 +76,49 @@ async def test_reporting_currency_support_rejects_cross_tenant_scope() -> None:
         )
 
     assert exc_info.value.status_code == 403
+    service.evaluate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_currency_support_binds_internal_call_to_admitted_tenant() -> None:
+    service = AsyncMock()
+    service.evaluate.return_value = _result("TENANT_A")
+
+    await get_reporting_currency_support(
+        request=_admitted_request("TENANT_A"),
+        portfolio_id="PF-1",
+        reporting_currency="USD",
+        as_of_date=date(2026, 8, 28),
+        tenant_id=None,
+        service=service,
+    )
+
+    service.evaluate.assert_awaited_once_with(
+        ReportingCurrencySupportQuery(
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id="TENANT_A",
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_reporting_currency_support_rejects_internal_query_scope_override() -> None:
+    service = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_reporting_currency_support(
+            request=_admitted_request("TENANT_A"),
+            portfolio_id="PF-1",
+            reporting_currency="USD",
+            as_of_date=date(2026, 8, 28),
+            tenant_id="TENANT_B",
+            service=service,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "requested tenant does not match admitted tenant scope"
     service.evaluate.assert_not_awaited()
 
 

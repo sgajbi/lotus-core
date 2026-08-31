@@ -1610,6 +1610,18 @@ def test_request_json_rejects_tenant_header_override() -> None:
         )
 
 
+def test_request_json_rejects_conflicting_case_variant_tenant_headers() -> None:
+    with pytest.raises(ValueError, match="must match admitted tool tenant"):
+        demo_data_pack._request_json(
+            "GET",
+            "http://query.dev/portfolios/P1",
+            headers={
+                "X-Tenant-Id": demo_data_pack.DEMO_DATA_PACK_TENANT_ID,
+                "x-tenant-id": "tenant-other",
+            },
+        )
+
+
 def test_source_probe_treats_only_not_found_as_missing(monkeypatch):
     monkeypatch.setattr(
         demo_data_pack,

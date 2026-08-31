@@ -2385,13 +2385,14 @@ def _request_json(
         "X-Tenant-Id": normalized_tenant_id,
     }
     if headers:
-        supplied_tenant_id = next(
-            (value.strip() for name, value in headers.items() if name.lower() == "x-tenant-id"),
-            None,
-        )
-        if supplied_tenant_id is not None and supplied_tenant_id != normalized_tenant_id:
+        supplied_tenant_ids = [
+            value.strip() for name, value in headers.items() if name.lower() == "x-tenant-id"
+        ]
+        if any(value != normalized_tenant_id for value in supplied_tenant_ids):
             raise ValueError("request tenant header must match admitted tool tenant authority")
-        request_headers.update(headers)
+        request_headers.update(
+            {name: value for name, value in headers.items() if name.lower() != "x-tenant-id"}
+        )
         request_headers["X-Tenant-Id"] = normalized_tenant_id
     req = request.Request(
         url=url,

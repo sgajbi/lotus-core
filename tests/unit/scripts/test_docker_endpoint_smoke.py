@@ -58,6 +58,18 @@ def test_smoke_call_binds_tenant_and_rejects_override(
             expected={200},
             headers={"X-Tenant-Id": "tenant-other"},
         )
+    with pytest.raises(ValueError, match="must match the governed tenant"):
+        docker_endpoint_smoke._call(
+            results,
+            name="case-variant-tenant-mismatch",
+            method="GET",
+            url="http://query/portfolios/P1",
+            expected={200},
+            headers={
+                "X-Tenant-Id": docker_endpoint_smoke.SMOKE_TENANT_ID,
+                "x-tenant-id": "tenant-other",
+            },
+        )
 
 
 @pytest.mark.parametrize(

@@ -221,17 +221,20 @@ def _call(
     supplied_headers = kwargs.pop("headers", None)
     headers = {"X-Tenant-Id": SMOKE_TENANT_ID}
     if supplied_headers:
-        supplied_tenant_id = next(
-            (
-                value.strip()
-                for name, value in supplied_headers.items()
-                if name.lower() == "x-tenant-id"
-            ),
-            None,
-        )
-        if supplied_tenant_id is not None and supplied_tenant_id != SMOKE_TENANT_ID:
+        supplied_tenant_ids = [
+            value.strip()
+            for name, value in supplied_headers.items()
+            if name.lower() == "x-tenant-id"
+        ]
+        if any(value != SMOKE_TENANT_ID for value in supplied_tenant_ids):
             raise ValueError("smoke request tenant must match the governed tenant authority")
-        headers.update(supplied_headers)
+        headers.update(
+            {
+                name: value
+                for name, value in supplied_headers.items()
+                if name.lower() != "x-tenant-id"
+            }
+        )
         headers["X-Tenant-Id"] = SMOKE_TENANT_ID
     try:
         response = requests.request(

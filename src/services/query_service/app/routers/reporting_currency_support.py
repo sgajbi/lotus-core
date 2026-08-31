@@ -21,8 +21,9 @@ router = APIRouter(prefix="/reporting-currencies", tags=["Reporting Currency Sup
     description=(
         "Returns Core's source-owned, portfolio/as-of supportability decision for performance "
         "restatement. Selector presence is reported separately and never implies support. "
-        "Authenticated calls are bound to their verified tenant. Trusted internal callers "
-        "without an authenticated principal must provide an explicit tenant_id. "
+        "Every call is bound to the tenant admitted from X-Tenant-Id; authenticated calls also "
+        "carry verified identity authority. An optional tenant_id query must match the admitted "
+        "tenant and cannot widen scope. "
         "UNSUPPORTED means required FX evidence is missing; UNAVAILABLE means the portfolio "
         "source could not be resolved. This contract does not certify downstream lotus-performance "
         "execution or client publication."
@@ -46,27 +47,33 @@ async def get_reporting_currency_support(
     tenant_id: str | None = Query(
         None,
         description=(
-            "Tenant fence. Required for trusted internal callers without an authenticated "
-            "principal; authenticated calls are always bound to their verified tenant."
+            "Optional tenant assertion. When supplied, it must match the tenant admitted from "
+            "X-Tenant-Id; it never selects or widens tenant scope."
         ),
     ),
     service: ReportingCurrencySupportService = Depends(get_reporting_currency_support_service),
 ) -> ReportingCurrencySupportResponse:
+    tenant_context = getattr(request.state, "tenant_context", None)
     authenticated_tenant_id = getattr(request.state, "enterprise_verified_tenant_id", None)
+    admitted_tenant_id = (
+        getattr(tenant_context, "tenant_id_text", None)
+        if tenant_context is not None
+        else authenticated_tenant_id
+    )
     normalized_tenant_id = tenant_id.strip() if tenant_id is not None else ""
-    if authenticated_tenant_id is not None:
-        normalized_authenticated_tenant_id = str(authenticated_tenant_id).strip()
-        if not normalized_authenticated_tenant_id:
+    if admitted_tenant_id is not None:
+        normalized_admitted_tenant_id = str(admitted_tenant_id).strip()
+        if not normalized_admitted_tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="authenticated tenant scope is unavailable",
+                detail="admitted tenant scope is unavailable",
             )
-        if normalized_tenant_id and normalized_tenant_id != normalized_authenticated_tenant_id:
+        if normalized_tenant_id and normalized_tenant_id != normalized_admitted_tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="requested tenant does not match authenticated tenant scope",
+                detail="requested tenant does not match admitted tenant scope",
             )
-        normalized_tenant_id = normalized_authenticated_tenant_id
+        normalized_tenant_id = normalized_admitted_tenant_id
     elif not normalized_tenant_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
