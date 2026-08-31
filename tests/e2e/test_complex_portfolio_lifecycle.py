@@ -200,6 +200,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
         e2e_api_client.ingest("/ingest/business-dates", business_dates_payload).status_code == 202
     )
     assert e2e_api_client.ingest("/ingest/fx-rates", fx_rates_payload).status_code == 202
+    e2e_api_client.poll_for_data(
+        f"/portfolios?portfolio_id={portfolio_id}",
+        lambda data: data.get("portfolios") and len(data["portfolios"]) == 1,
+        fail_message="Tenant-owned portfolio did not materialize before transaction ingestion.",
+    )
     assert e2e_api_client.ingest("/ingest/transactions", transactions_payload).status_code == 202
     assert e2e_api_client.ingest("/ingest/market-prices", market_prices_payload).status_code == 202
 
