@@ -179,7 +179,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
     assert durable_job.request_id == REQUEST_ID
     assert durable_job.trace_id == TRACE_ID
     assert durable_job.accepted_count == 1
-    assert durable_job.idempotency_key is None
+    assert durable_job.model_dump()["idempotency_key"] is None
     assert durable_job.idempotency_key_reference is not None
     assert durable_job.idempotency_key_reference.startswith("hmac-sha256:v1:ops-test:")
     assert durable_job.completed_at is not None

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.persistence_service.app.consumers import base_consumer as base_consumer_module
 from src.services.persistence_service.app.consumers.transaction_consumer import (
+    PortfolioNotFoundError,
     TransactionPersistenceConsumer,
 )
 from tests.test_support.tenant import TEST_TENANT_ID
@@ -41,8 +42,13 @@ class _FakeMessage:
         return [("correlation_id", b"CID-BOUNDARY-01")]
 
 
-def _transaction_payload(transaction_id: str = "TXN_BOUNDARY_01") -> dict:
+def _transaction_payload(
+    transaction_id: str = "TXN_BOUNDARY_01",
+    *,
+    tenant_id: str = TEST_TENANT_ID,
+) -> dict:
     return {
+        "tenant_id": tenant_id,
         "transaction_id": transaction_id,
         "portfolio_id": "PORT_BOUNDARY_01",
         "instrument_id": "INST_BOUNDARY_01",
@@ -169,3 +175,55 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
         )
     ).scalar_one()
     assert outbox_count_after_replay == 1
+
+
+@pytest.mark.lifecycle
+async def test_transaction_consumer_rejects_foreign_tenant_before_any_durable_write(
+    clean_db,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def current_test_session() -> AsyncIterator[AsyncSession]:
+        async with async_factory() as session:
+            yield session
+
+    monkeypatch.setattr(
+        base_consumer_module,
+        "get_async_db_session",
+        current_test_session,
+    )
+    await _seed_portfolio(async_db_session)
+    consumer = TransactionPersistenceConsumer(
+        bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],
+        topic="raw-transactions",
+        group_id="persistence-foreign-tenant-boundary-tests",
+        dlq_topic=None,
+    )
+    payload = _transaction_payload(
+        transaction_id="TXN_FOREIGN_TENANT_01",
+        tenant_id="tenant-foreign",
+    )
+
+    with pytest.raises(PortfolioNotFoundError):
+        await consumer.process_message(_FakeMessage(payload))
+
+    durable_counts = {
+        "transactions": await async_db_session.scalar(
+            select(func.count())
+            .select_from(Transaction)
+            .where(Transaction.transaction_id == "TXN_FOREIGN_TENANT_01")
+        ),
+        "processed_events": await async_db_session.scalar(
+            select(func.count())
+            .select_from(ProcessedEvent)
+            .where(ProcessedEvent.event_id == "TXN_FOREIGN_TENANT_01")
+        ),
+        "outbox": await async_db_session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.aggregate_id == "PORT_BOUNDARY_01")
+        ),
+    }
+    assert durable_counts == {"transactions": 0, "processed_events": 0, "outbox": 0}
