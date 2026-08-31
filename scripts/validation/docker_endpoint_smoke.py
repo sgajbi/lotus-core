@@ -761,6 +761,11 @@ def main(
             ]
         },
     )
+    _wait_portfolio_visible(
+        query_base_url=query,
+        portfolio_id=portfolio_id,
+        timeout_seconds=args.query_visible_timeout_seconds,
+    )
     _call(
         results,
         name="ingest market prices",
@@ -1356,14 +1361,14 @@ def main(
         results,
         name="integration capabilities",
         method="GET",
-        url=f"{query_control}/integration/capabilities",
+        url=(f"{query_control}/integration/capabilities?tenant_id={SMOKE_TENANT_ID}"),
         expected={200},
     )
     _call(
         results,
         name="integration policy",
         method="GET",
-        url=f"{query_control}/integration/policy/effective",
+        url=(f"{query_control}/integration/policy/effective?tenant_id={SMOKE_TENANT_ID}"),
         expected={200},
     )
     _call(
@@ -1381,6 +1386,7 @@ def main(
         url=f"{query_control}/integration/portfolios/{portfolio_id}/core-snapshot",
         expected={200},
         json={
+            "tenant_id": SMOKE_TENANT_ID,
             "as_of_date": trade_date,
             "snapshot_mode": "BASELINE",
             "sections": ["positions_baseline", "portfolio_totals"],
