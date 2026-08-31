@@ -1301,22 +1301,6 @@ async def test_get_aggregation_jobs_snapshot_preserves_empty_page_total(
     assert "LIMIT 5 OFFSET 20" in compiled
 
 
-async def test_portfolio_exists_true(repository: OperationsRepository, mock_db_session: AsyncMock):
-    mock_execute_scalar_one_or_none(mock_db_session, "P1")
-
-    exists = await repository.portfolio_exists("P1")
-
-    assert exists is True
-
-
-async def test_portfolio_exists_false(repository: OperationsRepository, mock_db_session: AsyncMock):
-    mock_execute_scalar_one_or_none(mock_db_session, None)
-
-    exists = await repository.portfolio_exists("P404")
-
-    assert exists is False
-
-
 async def test_portfolio_exists_for_tenant_uses_composite_authority(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

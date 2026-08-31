@@ -160,6 +160,7 @@ async def test_service_resolves_using_all_request_disambiguators() -> None:
     reader = Reader()
     request = DiscretionaryMandateBindingRequest(
         as_of_date=date(2026, 4, 10),
+        tenant_id="tenant-1",
         mandate_id="MANDATE_1",
         booking_center_code="Singapore",
     )
@@ -171,6 +172,7 @@ async def test_service_resolves_using_all_request_disambiguators() -> None:
 
     assert response is not None
     assert reader.kwargs == {
+        "tenant_id": "tenant-1",
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
         "as_of_date": date(2026, 4, 10),
         "mandate_id": "MANDATE_1",
