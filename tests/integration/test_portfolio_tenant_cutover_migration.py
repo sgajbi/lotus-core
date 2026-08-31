@@ -273,6 +273,7 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
         _bind_operations(simulation_successor, connection)
         _bind_operations(analytics_export_successor, connection)
         _bind_operations(reconciliation_successor, connection)
+        test_state = connection.begin_nested()
         _reset_development_cutover(
             migration,
             simulation_successor,
@@ -401,5 +402,10 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
         }
         assert downgraded_columns["tenant_id"]["nullable"] is True
         assert "tenant_id" not in {
+            column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
+        }
+
+        test_state.rollback()
+        assert "tenant_id" in {
             column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
         }
