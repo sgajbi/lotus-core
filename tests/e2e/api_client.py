@@ -149,6 +149,15 @@ class E2EApiClient:
             f"Last response: {last_response_data}. Last error: {last_error}"
         )
 
+    def wait_for_portfolio_authority(self, portfolio_id: str, *, timeout: int = 60) -> None:
+        """Wait until the admitted tenant can read a newly ingested portfolio."""
+        self.poll_for_data(
+            f"/portfolios/{portfolio_id}",
+            lambda data: isinstance(data, dict) and data.get("portfolio_id") == portfolio_id,
+            timeout=timeout,
+            fail_message="Portfolio tenant authority did not become queryable",
+        )
+
     def poll_for_post_query_data(
         self,
         endpoint: str,

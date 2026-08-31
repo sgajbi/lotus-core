@@ -85,3 +85,29 @@ def test_poll_for_data_routes_control_plane_readiness_to_control_client(
 
     assert payload == {"publish_allowed": True, "controls_blocking": False}
     assert calls == ["/support/portfolios/P1/overview"]
+
+
+def test_wait_for_portfolio_authority_requires_tenant_scoped_portfolio_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = E2EApiClient(
+        ingestion_url="http://ingestion",
+        query_url="http://query",
+        query_control_plane_url="http://control",
+    )
+    captured: dict[str, object] = {}
+
+    def poll_for_data(endpoint: str, validation_func, **kwargs):
+        captured.update(endpoint=endpoint, **kwargs)
+        assert validation_func({"portfolio_id": "P1"}) is True
+        assert validation_func({"portfolio_id": "OTHER"}) is False
+
+    monkeypatch.setattr(client, "poll_for_data", poll_for_data)
+
+    client.wait_for_portfolio_authority("P1", timeout=90)
+
+    assert captured == {
+        "endpoint": "/portfolios/P1",
+        "timeout": 90,
+        "fail_message": "Portfolio tenant authority did not become queryable",
+    }
