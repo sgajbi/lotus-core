@@ -94,9 +94,11 @@ def test_portfolio_update_persistence(e2e_api_client: E2EApiClient, clean_db):
     )
 
 
-def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClient, clean_db):
+def test_transaction_requires_durable_tenant_owned_portfolio(
+    e2e_api_client: E2EApiClient, clean_db
+):
     """
-    Tests that a transaction consumer retries and succeeds if the portfolio arrives late.
+    Tests that transaction admission fails closed until portfolio ownership is durable.
     """
     # ARRANGE
     portfolio_id = f"E2E_RETRY_PORT_{uuid.uuid4()}"
@@ -160,16 +162,20 @@ def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClie
         lambda data: data.get("instruments") and len(data["instruments"]) == 1,
     )
 
-    # ACT: Ingest the transaction first and prove it is not queryable before the
-    # dependent portfolio arrives.
-    assert e2e_api_client.ingest("/ingest/transactions", transaction_payload).status_code == 202
+    # ACT: Admission fails before a tenant-owned portfolio exists.
     with pytest.raises(requests.exceptions.HTTPError) as excinfo:
-        e2e_api_client.query(f"/portfolios/{portfolio_id}/transactions")
-    assert excinfo.value.response.status_code == 404
+        e2e_api_client.ingest("/ingest/transactions", transaction_payload)
+    assert excinfo.value.response.status_code == 403
 
     assert e2e_api_client.ingest("/ingest/portfolios", portfolio_payload).status_code == 202
+    e2e_api_client.poll_for_data(
+        f"/portfolios?portfolio_id={portfolio_id}",
+        lambda data: data.get("portfolios") and len(data["portfolios"]) == 1,
+        fail_message="Tenant-owned portfolio did not materialize before transaction retry.",
+    )
+    assert e2e_api_client.ingest("/ingest/transactions", transaction_payload).status_code == 202
 
-    # ASSERT: Poll for the transaction, which should now have been persisted.
+    # ASSERT: The same transaction is accepted only after durable tenant ownership exists.
     poll_url = f"/portfolios/{portfolio_id}/transactions"
 
     def validation_func(data):
