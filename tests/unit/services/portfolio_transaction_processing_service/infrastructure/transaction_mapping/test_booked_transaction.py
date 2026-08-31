@@ -148,6 +148,20 @@ def test_mapper_applies_domain_fields_without_losing_event_envelope() -> None:
     assert mapper.to_booked_transaction(event) == transaction
 
 
+def test_mapper_preserves_transport_tenant_authority() -> None:
+    transaction = _transaction()
+    event = mapper.to_transaction_event(
+        transaction,
+        correlation_id="corr-001",
+        traceparent="trace-001",
+    ).model_copy(update={"tenant_id": "tenant-sg"})
+
+    updated_event = mapper.with_booked_transaction_fields(event, transaction)
+
+    assert updated_event.tenant_id == "tenant-sg"
+    mapper.validate_booked_transaction_event_mapping_contract()
+
+
 def test_mapper_keeps_persisted_calculation_lineage_out_of_transport_contract() -> None:
     lineage = build_calculation_lineage(
         algorithm_id="transaction-cost-basis-calculation",

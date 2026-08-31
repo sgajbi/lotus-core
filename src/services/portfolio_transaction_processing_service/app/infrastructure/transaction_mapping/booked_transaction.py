@@ -16,6 +16,7 @@ _EVENT_DOMAIN_FIELD_NAMES = tuple(
 )
 _EVENT_DOMAIN_FIELD_SET = frozenset(_EVENT_DOMAIN_FIELD_NAMES)
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
+_TRANSACTION_AUTHORITY_FIELDS = frozenset({"tenant_id"})
 
 
 class BookedTransactionEventMappingError(RuntimeError):
@@ -61,7 +62,9 @@ def validate_booked_transaction_event_mapping_contract(
     external_fields = (
         set(TransactionEvent.model_fields) if external_field_names is None else external_field_names
     )
-    business_fields = external_fields - GOVERNED_EVENT_ENVELOPE_FIELDS
+    business_fields = (
+        external_fields - GOVERNED_EVENT_ENVELOPE_FIELDS - _TRANSACTION_AUTHORITY_FIELDS
+    )
     missing_domain_fields = sorted(business_fields - _EVENT_DOMAIN_FIELD_SET)
     extra_domain_fields = sorted(_EVENT_DOMAIN_FIELD_SET - business_fields)
     if missing_domain_fields or extra_domain_fields:
