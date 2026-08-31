@@ -71,10 +71,12 @@ class SqlAlchemyReplayAuditStore:
         *,
         replay_fingerprint: str,
         recovery_path: str | None,
+        tenant_id: str,
     ) -> dict[str, str] | None:
         return await find_successful_replay_audit_by_fingerprint_response(
             replay_fingerprint=replay_fingerprint,
             recovery_path=recovery_path,
+            tenant_id=tenant_id,
             session_factory=self._session_factory,
         )
 
@@ -95,9 +97,10 @@ class SqlAlchemyReplayAuditStore:
             session_factory=self._session_factory,
         )
 
-    async def get_replay_audit(self, *, replay_id: str):
+    async def get_replay_audit(self, *, replay_id: str, tenant_id: str):
         return await get_replay_audit_response(
             replay_id=replay_id,
+            tenant_id=tenant_id,
             session_factory=self._session_factory,
         )
 
@@ -109,6 +112,7 @@ class SqlAlchemyReplayAuditStore:
         replay_status: str | None,
         replay_fingerprint: str | None,
         job_id: str | None,
+        tenant_id: str,
     ):
         return await list_replay_audit_responses(
             limit=limit,
@@ -116,5 +120,6 @@ class SqlAlchemyReplayAuditStore:
             replay_status=replay_status,
             replay_fingerprint=replay_fingerprint,
             job_id=job_id,
+            tenant_id=tenant_id,
             session_factory=self._session_factory,
         )

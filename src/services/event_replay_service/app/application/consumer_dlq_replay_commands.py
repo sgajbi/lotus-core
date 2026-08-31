@@ -111,6 +111,7 @@ class ConsumerDlqReplayCommandService:
             replay_fingerprint=replay_candidate.replay_fingerprint,
             dry_run=command.dry_run,
             requested_by=command.requested_by,
+            tenant_id=tenant_id,
         )
         if duplicate_result is not None:
             return duplicate_result
@@ -410,11 +411,13 @@ class ConsumerDlqReplayCommandService:
         replay_fingerprint: str,
         dry_run: bool,
         requested_by: str | None,
+        tenant_id: str,
     ) -> ConsumerDlqReplayResult | None:
         existing_success = (
             await self.ingestion_job_service.find_successful_replay_audit_by_fingerprint(
                 replay_fingerprint,
                 recovery_path=CONSUMER_DLQ_REPLAY_RECOVERY_PATH,
+                tenant_id=tenant_id,
             )
         )
         if existing_success and not dry_run:

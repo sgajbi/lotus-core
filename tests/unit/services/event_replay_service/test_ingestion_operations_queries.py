@@ -135,6 +135,7 @@ async def test_list_replay_audits_returns_page_with_filters() -> None:
     ingestion_job_service.list_replay_audits = AsyncMock(return_value=audits)
 
     page = await _query_service(ingestion_job_service=ingestion_job_service).list_replay_audits(
+        tenant_context=TENANT_CONTEXT,
         limit=25,
         recovery_path="consumer_dlq_replay",
         replay_status="replayed",
@@ -145,6 +146,7 @@ async def test_list_replay_audits_returns_page_with_filters() -> None:
     assert page.audits == audits
     assert page.total == 1
     ingestion_job_service.list_replay_audits.assert_awaited_once_with(
+        tenant_id="tenant-a",
         limit=25,
         recovery_path="consumer_dlq_replay",
         replay_status="replayed",
@@ -160,8 +162,13 @@ async def test_get_replay_audit_not_found_uses_governed_code() -> None:
 
     with pytest.raises(IngestionOperationsNotFound) as exc_info:
         await _query_service(ingestion_job_service=ingestion_job_service).get_replay_audit(
-            "missing-replay"
+            "missing-replay",
+            tenant_context=TENANT_CONTEXT,
         )
 
     assert exc_info.value.code == "INGESTION_REPLAY_AUDIT_NOT_FOUND"
     assert exc_info.value.message == "Replay audit 'missing-replay' was not found."
+    ingestion_job_service.get_replay_audit.assert_awaited_once_with(
+        "missing-replay",
+        tenant_id="tenant-a",
+    )

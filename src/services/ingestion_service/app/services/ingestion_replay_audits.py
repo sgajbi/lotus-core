@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from portfolio_common.database_models import ConsumerDlqReplayAudit as DBConsumerDlqReplayAudit
+from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.monitoring import (
     INGESTION_REPLAY_AUDIT_TOTAL,
     INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL,
@@ -45,10 +46,15 @@ async def list_replay_audit_responses(
     replay_status: str | None,
     replay_fingerprint: str | None,
     job_id: str | None,
+    tenant_id: str,
     session_factory,
 ) -> list[IngestionReplayAuditResponse]:
     async for db in session_factory():
-        stmt = select(DBConsumerDlqReplayAudit)
+        stmt = (
+            select(DBConsumerDlqReplayAudit)
+            .join(DBIngestionJob, DBIngestionJob.job_id == DBConsumerDlqReplayAudit.job_id)
+            .where(DBIngestionJob.tenant_id == tenant_id)
+        )
         if recovery_path:
             stmt = stmt.where(DBConsumerDlqReplayAudit.recovery_path == recovery_path)
         if replay_status:
@@ -72,12 +78,17 @@ async def list_replay_audit_responses(
 async def get_replay_audit_response(
     *,
     replay_id: str,
+    tenant_id: str,
     session_factory,
 ) -> IngestionReplayAuditResponse | None:
     async for db in session_factory():
         row = await db.scalar(
             select(DBConsumerDlqReplayAudit)
-            .where(DBConsumerDlqReplayAudit.replay_id == replay_id)
+            .join(DBIngestionJob, DBIngestionJob.job_id == DBConsumerDlqReplayAudit.job_id)
+            .where(
+                DBConsumerDlqReplayAudit.replay_id == replay_id,
+                DBIngestionJob.tenant_id == tenant_id,
+            )
             .limit(1)
         )
         return to_replay_audit_response(row) if row else None
@@ -88,13 +99,19 @@ async def find_successful_replay_audit_by_fingerprint_response(
     *,
     replay_fingerprint: str,
     recovery_path: str | None,
+    tenant_id: str,
     session_factory,
 ) -> dict[str, str] | None:
     async for db in session_factory():
-        stmt = select(DBConsumerDlqReplayAudit).where(
-            and_(
-                DBConsumerDlqReplayAudit.replay_fingerprint == replay_fingerprint,
-                DBConsumerDlqReplayAudit.replay_status.in_(_SUCCESSFUL_REPLAY_AUDIT_STATUSES),
+        stmt = (
+            select(DBConsumerDlqReplayAudit)
+            .join(DBIngestionJob, DBIngestionJob.job_id == DBConsumerDlqReplayAudit.job_id)
+            .where(
+                and_(
+                    DBConsumerDlqReplayAudit.replay_fingerprint == replay_fingerprint,
+                    DBConsumerDlqReplayAudit.replay_status.in_(_SUCCESSFUL_REPLAY_AUDIT_STATUSES),
+                    DBIngestionJob.tenant_id == tenant_id,
+                )
             )
         )
         if recovery_path is not None:

@@ -332,6 +332,7 @@ async def test_ingestion_job_retry_duplicate_uses_recovery_detail() -> None:
             context=context,
             replay_fingerprint="fp-001",
             requested_by="ops",
+            tenant_id=TENANT_ID,
         )
 
     assert exc_info.value.status_code == 409
@@ -346,6 +347,11 @@ async def test_ingestion_job_retry_duplicate_uses_recovery_detail() -> None:
         "replay_fingerprint": "fp-001",
     }
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
+    ingestion_job_service.find_successful_replay_audit_by_fingerprint.assert_awaited_once_with(
+        replay_fingerprint="fp-001",
+        recovery_path="ingestion_job_retry",
+        tenant_id=TENANT_ID,
+    )
 
 
 @pytest.mark.asyncio
@@ -367,6 +373,7 @@ async def test_ingestion_job_retry_duplicate_audit_failure_is_governed() -> None
             context=context,
             replay_fingerprint="fp-001",
             requested_by="ops",
+            tenant_id=TENANT_ID,
         )
 
     assert exc_info.value.detail["code"] == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"

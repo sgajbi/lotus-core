@@ -21,6 +21,7 @@ class IngestionEvidenceReader(Protocol):
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         job_id: str,
         limit: int,
         recovery_path: str | None,
@@ -66,6 +67,7 @@ class IngestionEvidenceQueryService:
                 limit=_EVIDENCE_FETCH_LIMIT,
             ),
             self.ingestion_job_service.list_replay_audits(
+                tenant_id=tenant_id,
                 job_id=job_id,
                 limit=_EVIDENCE_FETCH_LIMIT,
                 recovery_path=None,

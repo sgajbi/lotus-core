@@ -369,6 +369,7 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
         limit=501,
     )
     ingestion_job_service.list_replay_audits.assert_awaited_once_with(
+        tenant_id="tenant-a",
         job_id="job-001",
         limit=501,
         recovery_path=None,

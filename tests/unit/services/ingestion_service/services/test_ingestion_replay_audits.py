@@ -42,9 +42,64 @@ class _FakeCounterVec:
         return self.handles.setdefault(key, _FakeCounterHandle())
 
 
-async def test_find_successful_replay_audit_by_fingerprint_returns_latest_identity():
+async def test_list_replay_audits_scopes_rows_through_owning_ingestion_job():
+    captured = {}
+
+    class _Rows:
+        def all(self):
+            return []
+
     class _FakeSession:
-        async def scalar(self, _stmt):
+        async def scalars(self, stmt):
+            captured["stmt"] = stmt
+            return _Rows()
+
+    response = await module.list_replay_audit_responses(
+        tenant_id="tenant-a",
+        limit=10,
+        recovery_path=None,
+        replay_status=None,
+        replay_fingerprint=None,
+        job_id=None,
+        session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    assert response == []
+    compiled = captured["stmt"].compile()
+    sql = str(compiled)
+    assert "JOIN ingestion_jobs" in sql
+    assert "ingestion_jobs.tenant_id" in sql
+    assert "tenant-a" in compiled.params.values()
+
+
+async def test_get_replay_audit_fails_closed_for_ownerless_or_cross_tenant_row():
+    captured = {}
+
+    class _FakeSession:
+        async def scalar(self, stmt):
+            captured["stmt"] = stmt
+            return None
+
+    response = await module.get_replay_audit_response(
+        replay_id="replay-001",
+        tenant_id="tenant-a",
+        session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    assert response is None
+    compiled = captured["stmt"].compile()
+    sql = str(compiled)
+    assert "JOIN ingestion_jobs" in sql
+    assert "ingestion_jobs.tenant_id" in sql
+    assert {"replay-001", "tenant-a"}.issubset(set(compiled.params.values()))
+
+
+async def test_find_successful_replay_audit_by_fingerprint_returns_latest_identity():
+    captured = {}
+
+    class _FakeSession:
+        async def scalar(self, stmt):
+            captured["stmt"] = stmt
             return SimpleNamespace(
                 replay_id="replay_123",
                 replay_status="replayed_bookkeeping_failed",
@@ -53,6 +108,7 @@ async def test_find_successful_replay_audit_by_fingerprint_returns_latest_identi
     response = await module.find_successful_replay_audit_by_fingerprint_response(
         replay_fingerprint="fp_123",
         recovery_path="consumer_dlq_replay",
+        tenant_id="tenant-a",
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 
@@ -60,6 +116,10 @@ async def test_find_successful_replay_audit_by_fingerprint_returns_latest_identi
         "replay_id": "replay_123",
         "replay_status": "replayed_bookkeeping_failed",
     }
+    compiled = captured["stmt"].compile()
+    assert "JOIN ingestion_jobs" in str(compiled)
+    assert "ingestion_jobs.tenant_id" in str(compiled)
+    assert "tenant-a" in compiled.params.values()
 
 
 async def test_find_successful_replay_audit_by_fingerprint_handles_missing_match():
@@ -70,6 +130,7 @@ async def test_find_successful_replay_audit_by_fingerprint_handles_missing_match
     response = await module.find_successful_replay_audit_by_fingerprint_response(
         replay_fingerprint="fp_missing",
         recovery_path=None,
+        tenant_id="tenant-a",
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 

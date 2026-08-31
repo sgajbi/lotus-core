@@ -482,10 +482,13 @@ class IngestionJobService:
         self,
         replay_fingerprint: str,
         recovery_path: str | None = None,
+        *,
+        tenant_id: str,
     ) -> dict[str, str] | None:
         return await self._replay_audit_store_adapter.find_successful_replay_audit_by_fingerprint(
             replay_fingerprint=replay_fingerprint,
             recovery_path=recovery_path,
+            tenant_id=tenant_id,
         )
 
     async def record_consumer_dlq_replay_audit(
@@ -521,9 +524,15 @@ class IngestionJobService:
             )
         )
 
-    async def get_replay_audit(self, replay_id: str) -> IngestionReplayAuditResponse | None:
+    async def get_replay_audit(
+        self,
+        replay_id: str,
+        *,
+        tenant_id: str,
+    ) -> IngestionReplayAuditResponse | None:
         return await self._replay_audit_store_adapter.get_replay_audit(
             replay_id=replay_id,
+            tenant_id=tenant_id,
         )
 
     async def list_replay_audits(
@@ -534,6 +543,7 @@ class IngestionJobService:
         replay_status: str | None = None,
         replay_fingerprint: str | None = None,
         job_id: str | None = None,
+        tenant_id: str,
     ) -> list[IngestionReplayAuditResponse]:
         return await self._replay_audit_store_adapter.list_replay_audits(
             limit=limit,
@@ -541,6 +551,7 @@ class IngestionJobService:
             replay_status=replay_status,
             replay_fingerprint=replay_fingerprint,
             job_id=job_id,
+            tenant_id=tenant_id,
         )
 
     async def get_consumer_lag(

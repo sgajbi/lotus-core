@@ -104,6 +104,7 @@ class _FailingReplayAuditStore:
         *,
         replay_fingerprint: str,
         recovery_path: str | None,
+        tenant_id: str,
     ) -> dict[str, str] | None:
         return None
 
@@ -114,7 +115,7 @@ class _FailingReplayAuditStore:
             reason_code="audit_persistence_failed",
         )
 
-    async def get_replay_audit(self, *, replay_id: str):
+    async def get_replay_audit(self, *, replay_id: str, tenant_id: str):
         return None
 
     async def list_replay_audits(
@@ -125,6 +126,7 @@ class _FailingReplayAuditStore:
         replay_status: str | None,
         replay_fingerprint: str | None,
         job_id: str | None,
+        tenant_id: str,
     ):
         return []
 

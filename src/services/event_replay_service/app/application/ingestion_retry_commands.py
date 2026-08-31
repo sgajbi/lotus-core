@@ -119,6 +119,7 @@ class IngestionRetryCommandService:
             context=context,
             replay_fingerprint=replay_fingerprint,
             requested_by=requested_by,
+            tenant_id=tenant_id,
         )
         self._assert_replay_evidence_authorized(job_id=job_id, context=context)
         await self._publish_ingestion_job_retry(
@@ -304,11 +305,13 @@ class IngestionRetryCommandService:
         context: Any,
         replay_fingerprint: str,
         requested_by: str | None,
+        tenant_id: str,
     ) -> None:
         existing_success = (
             await self.ingestion_job_service.find_successful_replay_audit_by_fingerprint(
                 replay_fingerprint=replay_fingerprint,
                 recovery_path="ingestion_job_retry",
+                tenant_id=tenant_id,
             )
         )
         if existing_success:

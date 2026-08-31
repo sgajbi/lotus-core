@@ -1108,8 +1108,8 @@ async def replay_consumer_dlq_event(
     summary="List ingestion replay audit records",
     description=(
         "What: Return replay audit records across ingestion recovery paths.\n"
-        "How: Query durable replay audit rows with filters for recovery path, "
-        "status, fingerprint, and job.\n"
+        "How: Query durable replay audit rows through tenant-owned ingestion jobs, with filters "
+        "for recovery path, status, fingerprint, and job; ownerless rows fail closed.\n"
         "When: Use for incident forensics and replay governance review."
     ),
     responses={
@@ -1122,6 +1122,7 @@ async def replay_consumer_dlq_event(
     },
 )
 async def list_ingestion_replay_audits(
+    request: Request,
     limit: int = Query(
         default=100,
         ge=1,
@@ -1154,6 +1155,7 @@ async def list_ingestion_replay_audits(
     ),
 ):
     page = await query_service.list_replay_audits(
+        tenant_context=request.state.tenant_context,
         limit=limit,
         recovery_path=recovery_path,
         replay_status=replay_status,
@@ -1171,7 +1173,8 @@ async def list_ingestion_replay_audits(
     summary="Get one ingestion replay audit record",
     description=(
         "What: Return one replay audit row by replay_id.\n"
-        "How: Read durable replay audit event from canonical operations store.\n"
+        "How: Read the durable replay audit event through its tenant-owned ingestion job; "
+        "cross-tenant and ownerless rows are not found.\n"
         "When: Use to inspect a specific replay action referenced in incident timelines."
     ),
     responses={
@@ -1186,6 +1189,7 @@ async def list_ingestion_replay_audits(
     },
 )
 async def get_ingestion_replay_audit(
+    request: Request,
     replay_id: str = Path(
         description="Replay audit identifier.",
         examples=["replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P"],
@@ -1195,7 +1199,10 @@ async def get_ingestion_replay_audit(
     ),
 ):
     try:
-        return await query_service.get_replay_audit(replay_id)
+        return await query_service.get_replay_audit(
+            replay_id,
+            tenant_context=request.state.tenant_context,
+        )
     except IngestionOperationsNotFound as exc:
         raise _not_found_response(exc) from exc
 

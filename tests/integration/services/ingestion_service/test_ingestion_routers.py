@@ -23,6 +23,9 @@ from src.services.ingestion_service.app import ops_controls
 from src.services.ingestion_service.app.application import (
     TransactionReprocessingTargetNotFound,
 )
+from src.services.ingestion_service.app.application import (
+    validate_transaction_portfolio_ownership as transaction_portfolio_ownership,
+)
 from src.services.ingestion_service.app.dependencies import (
     get_business_date_ingestion_policy,
     get_ingestion_idempotency_replay_reader,
@@ -1018,6 +1021,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self,
             replay_fingerprint: str,
             recovery_path: str | None = None,
+            *,
+            tenant_id: str,
         ) -> dict[str, str] | None:
             row = self.replay_audit.get(replay_fingerprint)
             if (
@@ -1072,6 +1077,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_replay_audits(
             self,
             *,
+            tenant_id: str,
             limit: int = 100,
             recovery_path: str | None = None,
             replay_status: str | None = None,
@@ -1092,7 +1098,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             ]
             return filtered[:limit]
 
-        async def get_replay_audit(self, replay_id: str):
+        async def get_replay_audit(self, replay_id: str, *, tenant_id: str):
             for row in self.replay_audit.values():
                 if row.get("replay_id") == replay_id:
                     return row
@@ -1287,6 +1293,21 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 for transaction_id in transaction_ids
             )
 
+    class FakeTransactionPortfolioOwnershipValidator:
+        def __init__(self) -> None:
+            self.rejected_portfolio_ids: set[str] = set()
+
+        async def execute(self, *, tenant_context, portfolio_ids) -> None:
+            rejected = tuple(
+                portfolio_id
+                for portfolio_id in dict.fromkeys(portfolio_ids)
+                if portfolio_id in self.rejected_portfolio_ids
+            )
+            if rejected:
+                raise transaction_portfolio_ownership.TransactionPortfolioOwnershipRejected(
+                    rejected
+                )
+
     class FakeIngestionIdempotencyReplayReader:
         def __init__(self, job_service: FakeIngestionJobService) -> None:
             self._job_service = job_service
@@ -1337,6 +1358,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         enforce_monotonic_advance=True,
     )
     fake_reprocessing_target_resolver = FakeTransactionReprocessingTargetResolver()
+    fake_transaction_portfolio_ownership_validator = FakeTransactionPortfolioOwnershipValidator()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -1358,6 +1380,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[get_business_date_ingestion_policy] = lambda: fake_business_date_policy
     app.dependency_overrides[get_transaction_reprocessing_target_resolver] = lambda: (
         fake_reprocessing_target_resolver
+    )
+    app.dependency_overrides[transactions_router.get_transaction_portfolio_ownership_validator] = (
+        lambda: fake_transaction_portfolio_ownership_validator
     )
     app.dependency_overrides[get_ingestion_idempotency_replay_reader] = lambda: (
         fake_idempotency_replay_reader
@@ -1383,6 +1408,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         "fake_reference_data_service": fake_reference_data_service,
         "fake_business_calendar_repository": fake_business_calendar_repository,
         "fake_reprocessing_target_resolver": fake_reprocessing_target_resolver,
+        "fake_transaction_portfolio_ownership_validator": (
+            fake_transaction_portfolio_ownership_validator
+        ),
     }
 
     for target_app in target_apps:
@@ -1396,6 +1424,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(get_business_date_ingestion_policy, None)
     app.dependency_overrides.pop(get_transaction_reprocessing_target_resolver, None)
+    app.dependency_overrides.pop(
+        transactions_router.get_transaction_portfolio_ownership_validator,
+        None,
+    )
     app.dependency_overrides.pop(get_ingestion_idempotency_replay_reader, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
@@ -1884,6 +1916,24 @@ async def test_ingest_single_transaction_returns_failed_record_keys_when_publish
     assert detail["message"] == SAFE_PUBLISH_FAILURE_MESSAGE
 
 
+async def test_ingest_single_transaction_rejects_cross_tenant_portfolio_before_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    validator = ingestion_test_harness["fake_transaction_portfolio_ownership_validator"]
+    validator.rejected_portfolio_ids.add("P1")
+
+    response = await async_test_client.post(
+        "/ingest/transaction",
+        json=_single_transaction_payload("TX_SINGLE_CROSS_TENANT_001"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "INGESTION_PORTFOLIO_TENANT_MISMATCH"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_transactions_endpoint(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
@@ -1927,6 +1977,29 @@ async def test_ingest_transactions_endpoint(
     assert publish_kwargs["value"]["sell_currency"] == "EUR"
     assert publish_kwargs["value"]["synthetic_flow_currency"] == "SGD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
+
+
+async def test_ingest_transactions_rejects_cross_tenant_portfolio_before_job_or_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    validator = ingestion_test_harness["fake_transaction_portfolio_ownership_validator"]
+    validator.rejected_portfolio_ids.add("P1")
+
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_CROSS_TENANT_PORTFOLIO_001"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+        "message": "One or more transaction portfolios are outside admitted tenant authority.",
+        "portfolio_ids": ["P1"],
+    }
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_ingest_transactions_publishes_truthful_zero_price_redemption(

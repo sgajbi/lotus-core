@@ -9,8 +9,14 @@ from .adapter_mode import (
     ensure_upload_adapter_enabled,
 )
 from .application import ResolveTransactionReprocessingTargets
+from .application.validate_transaction_portfolio_ownership import (
+    ValidateTransactionPortfolioOwnership,
+)
 from .infrastructure.ingestion_idempotency_replay_reader import (
     SqlAlchemyIngestionIdempotencyReplayReader,
+)
+from .infrastructure.portfolio_tenant_ownership_reader import (
+    SqlAlchemyPortfolioTenantOwnershipReader,
 )
 from .infrastructure.transaction_reprocessing_target_reader import (
     SqlAlchemyTransactionReprocessingTargetReader,
@@ -106,6 +112,12 @@ def get_transaction_reprocessing_target_resolver(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ResolveTransactionReprocessingTargets:
     return ResolveTransactionReprocessingTargets(SqlAlchemyTransactionReprocessingTargetReader(db))
+
+
+def get_transaction_portfolio_ownership_validator(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ValidateTransactionPortfolioOwnership:
+    return ValidateTransactionPortfolioOwnership(SqlAlchemyPortfolioTenantOwnershipReader(db))
 
 
 def get_ingestion_publish_command_handler(

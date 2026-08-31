@@ -62,11 +62,17 @@ class ReplayAuditStore(Protocol):
         *,
         replay_fingerprint: str,
         recovery_path: str | None,
+        tenant_id: str,
     ) -> dict[str, str] | None: ...
 
     async def record_consumer_dlq_replay_audit(self, record: ReplayAuditRecord) -> str: ...
 
-    async def get_replay_audit(self, *, replay_id: str) -> IngestionReplayAuditResponse | None: ...
+    async def get_replay_audit(
+        self,
+        *,
+        replay_id: str,
+        tenant_id: str,
+    ) -> IngestionReplayAuditResponse | None: ...
 
     async def list_replay_audits(
         self,
@@ -76,6 +82,7 @@ class ReplayAuditStore(Protocol):
         replay_status: str | None,
         replay_fingerprint: str | None,
         job_id: str | None,
+        tenant_id: str,
     ) -> list[IngestionReplayAuditResponse]: ...
 
 
