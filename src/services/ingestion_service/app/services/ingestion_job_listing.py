@@ -15,6 +15,7 @@ REPLAYABLE_INGESTION_JOB_STATUSES = ("failed", "queued", "accepted")
 
 @dataclass(frozen=True, slots=True)
 class IngestionJobListFilters:
+    tenant_id: str
     status: IngestionJobStatus | None = None
     entity_type: str | None = None
     submitted_from: datetime | None = None
@@ -33,7 +34,7 @@ def build_ingestion_job_list_statement(
     cursor_row: Any | None,
     limit: int,
 ) -> Any:
-    stmt = select(DBIngestionJob)
+    stmt = select(DBIngestionJob).where(DBIngestionJob.tenant_id == filters.tenant_id)
     if filters.status is not None:
         stmt = stmt.where(DBIngestionJob.status == filters.status)
     if filters.entity_type is not None:
@@ -47,14 +48,22 @@ def build_ingestion_job_list_statement(
     return stmt.order_by(desc(DBIngestionJob.id)).limit(limit + 1)
 
 
-def build_cursor_lookup_statement(*, cursor: str) -> Any:
-    return select(DBIngestionJob).where(DBIngestionJob.job_id == cursor).limit(1)
+def build_cursor_lookup_statement(*, cursor: str, tenant_id: str) -> Any:
+    return (
+        select(DBIngestionJob)
+        .where(DBIngestionJob.job_id == cursor)
+        .where(DBIngestionJob.tenant_id == tenant_id)
+        .limit(1)
+    )
 
 
-def build_unique_replayable_correlation_lookup_statement(*, correlation_id: str) -> Any:
+def build_unique_replayable_correlation_lookup_statement(
+    *, correlation_id: str, tenant_id: str
+) -> Any:
     return (
         select(DBIngestionJob)
         .where(DBIngestionJob.correlation_id == correlation_id)
+        .where(DBIngestionJob.tenant_id == tenant_id)
         .where(DBIngestionJob.status.in_(REPLAYABLE_INGESTION_JOB_STATUSES))
         .order_by(desc(DBIngestionJob.id))
         .limit(2)
@@ -85,7 +94,9 @@ async def load_job_list_response(
     async for db in session_factory():
         cursor_row = None
         if cursor is not None:
-            cursor_row = await db.scalar(build_cursor_lookup_statement(cursor=cursor))
+            cursor_row = await db.scalar(
+                build_cursor_lookup_statement(cursor=cursor, tenant_id=filters.tenant_id)
+            )
         stmt = build_ingestion_job_list_statement(
             filters=filters,
             cursor_row=cursor_row,
@@ -111,6 +122,7 @@ async def load_job_list_response(
 async def load_unique_replayable_job_by_correlation_id(
     *,
     correlation_id: str,
+    tenant_id: str,
     session_factory,
     reference_key_id: str,
     reference_hmac_secret: str,
@@ -120,7 +132,8 @@ async def load_unique_replayable_job_by_correlation_id(
             (
                 await db.scalars(
                     build_unique_replayable_correlation_lookup_statement(
-                        correlation_id=correlation_id
+                        correlation_id=correlation_id,
+                        tenant_id=tenant_id,
                     )
                 )
             ).all()

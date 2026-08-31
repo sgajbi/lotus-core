@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.event_replay_service.app.application.ingestion_evidence_queries import (
     IngestionEvidenceQueryService,
@@ -21,6 +22,7 @@ from src.services.ingestion_service.app.services.ingestion_job_lifecycle import 
 from tests.test_support.tenant import TEST_TENANT_ID
 
 NOW = datetime(2026, 7, 31, 4, 30, tzinfo=UTC)
+TENANT_CONTEXT = TenantContext(TenantId("tenant-a"))
 
 
 def _job(
@@ -352,12 +354,16 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
 
     bundle = await IngestionEvidenceQueryService(
         ingestion_job_service=ingestion_job_service
-    ).get_evidence_bundle("job-001")
+    ).get_evidence_bundle("job-001", tenant_context=TENANT_CONTEXT)
 
     assert bundle.job == job
     assert bundle.failures == [failure]
     assert bundle.consumer_dlq_events == [dlq_event]
     assert bundle.replay_audits == [replay]
+    ingestion_job_service.get_job.assert_awaited_once_with("job-001", tenant_id="tenant-a")
+    ingestion_job_service.get_job_replay_context.assert_awaited_once_with(
+        "job-001", tenant_id="tenant-a"
+    )
     ingestion_job_service.list_consumer_dlq_events_by_job_id.assert_awaited_once_with(
         "job-001",
         limit=501,
@@ -392,7 +398,7 @@ async def test_get_bundle_links_dlq_by_replay_event_when_message_correlation_was
 
     bundle = await IngestionEvidenceQueryService(
         ingestion_job_service=ingestion_job_service
-    ).get_evidence_bundle("job-001")
+    ).get_evidence_bundle("job-001", tenant_context=TENANT_CONTEXT)
 
     assert bundle.consumer_dlq_events == [dlq_event]
     assert "consumer-dlq:dlq-001" in bundle.evidence_references
@@ -415,7 +421,7 @@ async def test_get_bundle_rejects_replay_event_owned_by_another_job() -> None:
 
     bundle = await IngestionEvidenceQueryService(
         ingestion_job_service=ingestion_job_service
-    ).get_evidence_bundle("job-001")
+    ).get_evidence_bundle("job-001", tenant_context=TENANT_CONTEXT)
 
     assert bundle.consumer_dlq_events == []
     assert "consumer-dlq:dlq-001" not in bundle.evidence_references
@@ -429,9 +435,10 @@ async def test_get_bundle_rejects_unknown_job_before_fetching_related_evidence()
     with pytest.raises(IngestionOperationsNotFound) as exc_info:
         await IngestionEvidenceQueryService(
             ingestion_job_service=ingestion_job_service
-        ).get_evidence_bundle("missing-job")
+        ).get_evidence_bundle("missing-job", tenant_context=TENANT_CONTEXT)
 
     assert exc_info.value.code == "INGESTION_JOB_NOT_FOUND"
+    ingestion_job_service.get_job.assert_awaited_once_with("missing-job", tenant_id="tenant-a")
     ingestion_job_service.list_failures.assert_not_called()
 
 

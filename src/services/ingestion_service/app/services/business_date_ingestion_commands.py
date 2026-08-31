@@ -110,6 +110,7 @@ class BusinessDateIngestionCommandHandler:
     ) -> BusinessDateIngestionCommandResult:
         accepted_count = len(command.request.business_dates)
         replay_job = await self.idempotency_replay_reader.find_matching_job(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request.model_dump(mode="json"),
@@ -134,6 +135,7 @@ class BusinessDateIngestionCommandHandler:
         )
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=accepted_count,
         )
         return BusinessDateIngestionCommandResult(
@@ -246,6 +248,7 @@ class BusinessDateIngestionCommandHandler:
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(detail["message"]),
+                tenant_id=command.tenant_context.tenant_id_text,
                 failed_record_keys=exc.failed_record_keys,
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
@@ -257,17 +260,25 @@ class BusinessDateIngestionCommandHandler:
                 job_id=job_id,
             ) from exc
         except Exception as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc))
+            await self.ingestion_job_service.mark_failed(
+                job_id,
+                str(exc),
+                tenant_id=command.tenant_context.tenant_id_text,
+            )
             raise
 
     async def _mark_queued_or_raise(
         self,
         *,
         job_id: str,
+        tenant_id: str,
         published_record_count: int,
     ) -> None:
         try:
-            queued = await self.ingestion_job_service.mark_queued(job_id)
+            queued = await self.ingestion_job_service.mark_queued(
+                job_id,
+                tenant_id=tenant_id,
+            )
         except Exception as exc:
             detail = await self._record_bookkeeping_failure(
                 job_id=job_id,

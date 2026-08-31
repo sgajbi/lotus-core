@@ -191,9 +191,10 @@ class IngestionJobService:
             )
         )
 
-    async def mark_queued(self, job_id: str, *, expected_statuses=None) -> bool:
+    async def mark_queued(self, job_id: str, *, tenant_id: str, expected_statuses=None) -> bool:
         return await mark_job_queued(
             job_id=job_id,
+            tenant_id=tenant_id,
             expected_statuses=expected_statuses,
             session_factory=get_async_db_session,
         )
@@ -202,6 +203,8 @@ class IngestionJobService:
         self,
         job_id: str,
         failure_reason: str,
+        *,
+        tenant_id: str,
         failure_phase: str = "publish",
         failed_record_keys: list[str] | None = None,
         failure_status_code: int | None = None,
@@ -218,6 +221,7 @@ class IngestionJobService:
             failure_code=failure_code,
             failure_detail=failure_detail,
             failure_headers=failure_headers,
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
         )
 
@@ -245,35 +249,47 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def mark_retried(self, job_id: str) -> bool:
-        return await mark_job_retried(job_id=job_id, session_factory=get_async_db_session)
-
-    async def mark_retried_and_queued(self, job_id: str) -> bool:
-        return await mark_job_retried_and_queued(
+    async def mark_retried(self, job_id: str, *, tenant_id: str) -> bool:
+        return await mark_job_retried(
             job_id=job_id,
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
         )
 
-    async def get_job(self, job_id: str) -> IngestionJobResponse | None:
+    async def mark_retried_and_queued(self, job_id: str, *, tenant_id: str) -> bool:
+        return await mark_job_retried_and_queued(
+            job_id=job_id,
+            tenant_id=tenant_id,
+            session_factory=get_async_db_session,
+        )
+
+    async def get_job(self, job_id: str, *, tenant_id: str) -> IngestionJobResponse | None:
         return await get_job_response(
             job_id=job_id,
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
             reference_key_id=_SETTINGS.evidence_hmac.key_id,
             reference_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
         )
 
-    async def get_job_replay_context(self, job_id: str) -> IngestionJobReplayContext | None:
+    async def get_job_replay_context(
+        self, job_id: str, *, tenant_id: str
+    ) -> IngestionJobReplayContext | None:
         return await get_job_replay_context_response(
             job_id=job_id,
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
         )
 
     async def get_unique_replayable_job_by_correlation_id(
         self,
         correlation_id: str,
+        *,
+        tenant_id: str,
     ) -> IngestionJobResponse | None:
         return await load_unique_replayable_job_by_correlation_id(
             correlation_id=correlation_id,
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
             reference_key_id=_SETTINGS.evidence_hmac.key_id,
             reference_hmac_secret=_SETTINGS.evidence_hmac.hmac_secret,
@@ -282,6 +298,7 @@ class IngestionJobService:
     async def list_jobs(
         self,
         *,
+        tenant_id: str,
         status: IngestionJobStatus | None = None,
         entity_type: str | None = None,
         submitted_from: datetime | None = None,
@@ -291,6 +308,7 @@ class IngestionJobService:
     ) -> tuple[list[IngestionJobResponse], str | None]:
         return await load_job_list_response(
             filters=IngestionJobListFilters(
+                tenant_id=tenant_id,
                 status=status,
                 entity_type=entity_type,
                 submitted_from=submitted_from,
@@ -533,9 +551,12 @@ class IngestionJobService:
             health_summary_loader=self.get_health_summary,
         )
 
-    async def get_job_record_status(self, job_id: str) -> IngestionJobRecordStatusResponse | None:
+    async def get_job_record_status(
+        self, job_id: str, *, tenant_id: str
+    ) -> IngestionJobRecordStatusResponse | None:
         return await load_record_status_response(
             job_id=job_id,
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
         )
 

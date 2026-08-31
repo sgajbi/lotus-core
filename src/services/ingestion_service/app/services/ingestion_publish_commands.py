@@ -178,6 +178,7 @@ class IngestionPublishCommandHandler:
         self, command: BatchPublishIngestionCommand
     ) -> IngestionCommandResult:
         replay_job = await self._find_matching_replay(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
@@ -201,6 +202,7 @@ class IngestionPublishCommandHandler:
         )
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=len(command.records),
         )
         return IngestionCommandResult(
@@ -231,6 +233,7 @@ class IngestionPublishCommandHandler:
         self, command: PortfolioBundlePublishIngestionCommand
     ) -> IngestionCommandResult:
         replay_job = await self._find_matching_replay(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
@@ -258,6 +261,7 @@ class IngestionPublishCommandHandler:
         )
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=command.accepted_count,
         )
         return IngestionCommandResult(
@@ -283,6 +287,7 @@ class IngestionPublishCommandHandler:
         publisher: BatchPublisher,
     ) -> IngestionCommandResult:
         replay_job = await self._find_matching_replay(
+            tenant_id=command.tenant_context.tenant_id_text,
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
@@ -307,6 +312,7 @@ class IngestionPublishCommandHandler:
         await self._publish_batch_or_mark_failed(command, job_result.job.job_id, publisher)
         await self._mark_queued_or_raise(
             job_id=job_result.job.job_id,
+            tenant_id=command.tenant_context.tenant_id_text,
             published_record_count=len(command.records),
         )
         return IngestionCommandResult(
@@ -404,11 +410,13 @@ class IngestionPublishCommandHandler:
     async def _find_matching_replay(
         self,
         *,
+        tenant_id: str,
         endpoint: str,
         idempotency_key: str | None,
         request_payload: dict[str, Any],
     ) -> IngestionIdempotencyReplay | None:
         return await self.idempotency_replay_reader.find_matching_job(
+            tenant_id=tenant_id,
             endpoint=endpoint,
             idempotency_key=idempotency_key,
             request_payload=request_payload,
@@ -525,6 +533,7 @@ class IngestionPublishCommandHandler:
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(detail["message"]),
+                tenant_id=command.tenant_context.tenant_id_text,
                 failed_record_keys=exc.failed_record_keys,
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
@@ -533,7 +542,11 @@ class IngestionPublishCommandHandler:
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc))
+            await self.ingestion_job_service.mark_failed(
+                job_id,
+                str(exc),
+                tenant_id=command.tenant_context.tenant_id_text,
+            )
             raise
 
     async def _publish_bundle_or_mark_failed(
@@ -555,6 +568,7 @@ class IngestionPublishCommandHandler:
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(detail["message"]),
+                tenant_id=command.tenant_context.tenant_id_text,
                 failed_record_keys=exc.failed_record_keys,
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
@@ -563,7 +577,11 @@ class IngestionPublishCommandHandler:
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc))
+            await self.ingestion_job_service.mark_failed(
+                job_id,
+                str(exc),
+                tenant_id=command.tenant_context.tenant_id_text,
+            )
             raise
 
     @staticmethod
@@ -604,9 +622,14 @@ class IngestionPublishCommandHandler:
             ),
         )
 
-    async def _mark_queued_or_raise(self, *, job_id: str, published_record_count: int) -> None:
+    async def _mark_queued_or_raise(
+        self, *, job_id: str, tenant_id: str, published_record_count: int
+    ) -> None:
         try:
-            queued = await self.ingestion_job_service.mark_queued(job_id)
+            queued = await self.ingestion_job_service.mark_queued(
+                job_id,
+                tenant_id=tenant_id,
+            )
         except Exception as exc:
             detail = await self._record_bookkeeping_failure(
                 job_id=job_id,

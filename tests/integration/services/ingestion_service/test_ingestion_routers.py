@@ -192,7 +192,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if idempotency_key:
                 for existing in self.jobs.values():
                     if (
-                        existing.endpoint == endpoint
+                        existing.tenant_id == tenant_context.tenant_id_text
+                        and existing.endpoint == endpoint
                         and existing.model_dump()["idempotency_key"] == idempotency_key
                     ):
                         existing_payload = self.job_payloads.get(existing.job_id)
@@ -248,7 +249,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.job_evidence[job_id] = payload_evidence
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
-        async def mark_queued(self, job_id: str) -> bool:
+        async def mark_queued(self, job_id: str, *, tenant_id: str) -> bool:
             if self.fail_next_mark_queued:
                 self.fail_next_mark_queued = False
                 raise RuntimeError("queue state write failed")
@@ -257,6 +258,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if job_id not in self.jobs:
                 return False
             record = self.jobs[job_id]
+            if record.tenant_id != tenant_id:
+                return False
             record.status = "queued"
             record.completed_at = datetime.now(UTC)
             self.jobs[job_id] = record
@@ -266,6 +269,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self,
             job_id: str,
             failure_reason: str,
+            *,
+            tenant_id: str,
             failure_phase: str = "publish",
             failed_record_keys: list[str] | None = None,
             failure_status_code: int | None = None,
@@ -276,6 +281,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
+            if record.tenant_id != tenant_id:
+                return
             record.status = "failed"
             record.failure_reason = failure_reason
             record.failure_status_code = failure_status_code
@@ -335,7 +342,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.jobs[job_id] = record
             return True
 
-        async def mark_retried_and_queued(self, job_id: str) -> bool:
+        async def mark_retried_and_queued(self, job_id: str, *, tenant_id: str) -> bool:
             if self.fail_next_mark_queued:
                 self.fail_next_mark_queued = False
                 raise RuntimeError("queue state write failed")
@@ -346,6 +353,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if job_id not in self.jobs:
                 return False
             record = self.jobs[job_id]
+            if record.tenant_id != tenant_id:
+                return False
             if record.status not in {"accepted", "queued", "failed"}:
                 return False
             record.status = "queued"
@@ -378,17 +387,22 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 }
             )
 
-        async def get_job(self, job_id: str) -> IngestionJobResponse | None:
+        async def get_job(self, job_id: str, *, tenant_id: str) -> IngestionJobResponse | None:
             job = self.jobs.get(job_id)
+            if job is not None and job.tenant_id != tenant_id:
+                return None
             return self._operational_job_projection(job) if job is not None else None
 
-        async def get_job_replay_context(self, job_id: str) -> SimpleNamespace | None:
+        async def get_job_replay_context(
+            self, job_id: str, *, tenant_id: str
+        ) -> SimpleNamespace | None:
             record = self.jobs.get(job_id)
-            if record is None:
+            if record is None or record.tenant_id != tenant_id:
                 return None
             evidence = self.job_evidence[job_id]
             return SimpleNamespace(
                 job_id=job_id,
+                tenant_id=record.tenant_id,
                 endpoint=record.endpoint,
                 entity_type=record.entity_type,
                 accepted_count=record.accepted_count,
@@ -405,11 +419,14 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def get_unique_replayable_job_by_correlation_id(
             self,
             correlation_id: str,
+            *,
+            tenant_id: str,
         ) -> IngestionIdempotencyReplay | None:
             replayable_jobs = [
                 job
                 for job in self.jobs.values()
                 if job.correlation_id == correlation_id
+                and job.tenant_id == tenant_id
                 and job.status in {"failed", "queued", "accepted"}
             ]
             if len(replayable_jobs) != 1:
@@ -419,6 +436,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_jobs(
             self,
             *,
+            tenant_id: str,
             status: str | None = None,
             entity_type: str | None = None,
             submitted_from: datetime | None = None,
@@ -434,7 +452,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             filtered = [
                 job
                 for job in values
-                if (status is None or job.status == status)
+                if job.tenant_id == tenant_id
+                and (status is None or job.status == status)
                 and (entity_type is None or job.entity_type == entity_type)
                 and (submitted_from is None or job.submitted_at >= submitted_from)
                 and (submitted_to is None or job.submitted_at <= submitted_to)
@@ -712,9 +731,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "groups": groups,
             }
 
-        async def get_job_record_status(self, job_id: str):
+        async def get_job_record_status(self, job_id: str, *, tenant_id: str):
             job = self.jobs.get(job_id)
-            if not job:
+            if not job or job.tenant_id != tenant_id:
                 return None
             payload = self.job_evidence[job_id].request_payload or {}
             replayable_keys: list[str] = []
@@ -1268,6 +1287,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def find_matching_job(
             self,
             *,
+            tenant_id: str,
             endpoint: str,
             idempotency_key: str | None,
             request_payload: dict | None,
@@ -1276,7 +1296,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 return None
             for existing in self._job_service.jobs.values():
                 if (
-                    existing.endpoint != endpoint
+                    existing.tenant_id != tenant_id
+                    or existing.endpoint != endpoint
                     or existing.model_dump()["idempotency_key"] != idempotency_key
                 ):
                     continue
@@ -8797,3 +8818,69 @@ async def test_fixed_income_authority_openapi_documents_fail_closed_contract() -
     assert operation["summary"] == "Ingest fixed-income book-cost authority"
     assert "never infers face amount" in operation["description"]
     assert {"202", "409", "503", "422"} <= set(operation["responses"])
+
+
+async def test_ingestion_job_operations_do_not_disclose_or_replay_another_tenants_job(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    created = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_TENANT_FENCE_001"),
+        headers={"X-Idempotency-Key": "tenant-fence-001"},
+    )
+    assert created.status_code == 202
+    job_id = created.json()["job_id"]
+    publish_count = mock_kafka_producer.publish_message.call_count
+    foreign_tenant_headers = {"X-Tenant-Id": "tenant-other"}
+
+    for path in (
+        f"/ingestion/jobs/{job_id}",
+        f"/ingestion/jobs/{job_id}/evidence",
+        f"/ingestion/jobs/{job_id}/failures",
+        f"/ingestion/jobs/{job_id}/records",
+    ):
+        response = await event_replay_test_client.get(path, headers=foreign_tenant_headers)
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+
+    job_list = await event_replay_test_client.get(
+        "/ingestion/jobs",
+        headers=foreign_tenant_headers,
+    )
+    assert job_list.status_code == 200
+    assert job_list.json() == {"jobs": [], "total": 0, "next_cursor": None}
+
+    retry = await event_replay_test_client.post(
+        f"/ingestion/jobs/{job_id}/retry",
+        headers=foreign_tenant_headers,
+        json={"dry_run": False},
+    )
+    assert retry.status_code == 404
+    assert retry.json()["detail"]["code"] == "INGESTION_JOB_NOT_FOUND"
+    assert mock_kafka_producer.publish_message.call_count == publish_count
+
+
+async def test_business_date_idempotency_replay_is_tenant_scoped(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _business_date_batch_payload("2025-01-03")
+    idempotency_key = "business-date-cross-tenant-001"
+
+    first = await async_test_client.post(
+        "/ingest/business-dates",
+        json=payload,
+        headers={"X-Tenant-Id": "tenant-a", "X-Idempotency-Key": idempotency_key},
+    )
+    second = await async_test_client.post(
+        "/ingest/business-dates",
+        json=payload,
+        headers={"X-Tenant-Id": "tenant-b", "X-Idempotency-Key": idempotency_key},
+    )
+
+    assert first.status_code == second.status_code == 202
+    assert second.json()["job_id"] != first.json()["job_id"]
+    assert mock_kafka_producer.publish_message.call_count == 2

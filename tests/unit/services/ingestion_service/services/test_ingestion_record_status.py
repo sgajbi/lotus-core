@@ -189,6 +189,7 @@ async def test_load_record_status_response_returns_none_for_missing_job():
 
     response = await load_record_status_response(
         job_id="missing",
+        tenant_id="tenant-test",
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 
@@ -221,6 +222,7 @@ async def test_load_record_status_response_loads_job_and_ordered_failures():
 
     response = await load_record_status_response(
         job_id="job_789",
+        tenant_id="tenant-test",
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 

@@ -26,6 +26,7 @@ class IngestionIdempotencyReplayReader(Protocol):
     async def find_matching_job(
         self,
         *,
+        tenant_id: str,
         endpoint: str,
         idempotency_key: str | None,
         request_payload: dict[str, Any] | None,

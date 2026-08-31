@@ -29,7 +29,7 @@ from src.services.ingestion_service.app.services.ingestion_publish_commands impo
     SinglePublishIngestionCommand,
 )
 from src.services.ingestion_service.app.services.ingestion_service import IngestionPublishError
-from tests.test_support.tenant import TEST_TENANT_CONTEXT
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 BatchPublishIngestionCommand = partial(
     BatchPublishIngestionCommandContract,
@@ -174,7 +174,10 @@ async def test_batch_publish_command_creates_job_publishes_and_marks_queued() ->
     assert result.job_id == "job-1"
     assert result.accepted_count == 2
     publisher.assert_awaited_once()
-    handler.ingestion_job_service.mark_queued.assert_awaited_once_with("job-1")
+    handler.ingestion_job_service.mark_queued.assert_awaited_once_with(
+        "job-1",
+        tenant_id=TEST_TENANT_ID,
+    )
     handler.ingestion_job_service.mark_failed.assert_not_awaited()
     assert (
         handler.ingestion_job_service.create_or_get_job.await_args.kwargs["tenant_context"]
@@ -368,6 +371,7 @@ async def test_batch_publish_command_marks_failed_on_publish_error() -> None:
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "job-1",
         "Ingestion publishing failed before durable queue confirmation.",
+        tenant_id=TEST_TENANT_ID,
         failed_record_keys=["T1"],
         failure_status_code=503,
         failure_code="INGESTION_PUBLISH_FAILED",

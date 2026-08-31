@@ -3,11 +3,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.event_replay_service.app.application.ingestion_operations_queries import (
     IngestionOperationsNotFound,
     IngestionOperationsQueryService,
 )
+
+TENANT_CONTEXT = TenantContext(TenantId("tenant-a"))
 
 
 def _query_service(*, ingestion_job_service: MagicMock | None = None):
@@ -25,6 +28,7 @@ async def test_list_jobs_returns_page_with_total_and_next_cursor() -> None:
     ingestion_job_service.list_jobs = AsyncMock(return_value=(jobs, "job-002"))
 
     page = await _query_service(ingestion_job_service=ingestion_job_service).list_jobs(
+        tenant_context=TENANT_CONTEXT,
         status="failed",
         entity_type="transaction",
         submitted_from=submitted_from,
@@ -37,6 +41,7 @@ async def test_list_jobs_returns_page_with_total_and_next_cursor() -> None:
     assert page.total == 2
     assert page.next_cursor == "job-002"
     ingestion_job_service.list_jobs.assert_awaited_once_with(
+        tenant_id="tenant-a",
         status="failed",
         entity_type="transaction",
         submitted_from=submitted_from,
@@ -54,11 +59,12 @@ async def test_list_job_failures_requires_existing_job() -> None:
     ingestion_job_service.list_failures = AsyncMock(return_value=failures)
 
     page = await _query_service(ingestion_job_service=ingestion_job_service).list_job_failures(
-        job_id="job-001", limit=10
+        tenant_context=TENANT_CONTEXT, job_id="job-001", limit=10
     )
 
     assert page.failures == failures
     assert page.total == 2
+    ingestion_job_service.get_job.assert_awaited_once_with("job-001", tenant_id="tenant-a")
     ingestion_job_service.list_failures.assert_awaited_once_with(job_id="job-001", limit=10)
 
 
@@ -70,6 +76,7 @@ async def test_list_job_failures_not_found_uses_governed_code() -> None:
 
     with pytest.raises(IngestionOperationsNotFound) as exc_info:
         await _query_service(ingestion_job_service=ingestion_job_service).list_job_failures(
+            tenant_context=TENANT_CONTEXT,
             job_id="missing-job",
             limit=10,
         )
@@ -86,11 +93,14 @@ async def test_get_job_record_status_not_found_uses_governed_code() -> None:
 
     with pytest.raises(IngestionOperationsNotFound) as exc_info:
         await _query_service(ingestion_job_service=ingestion_job_service).get_job_record_status(
-            "missing-job"
+            "missing-job", tenant_context=TENANT_CONTEXT
         )
 
     assert exc_info.value.code == "INGESTION_JOB_NOT_FOUND"
     assert exc_info.value.message == "Ingestion job 'missing-job' was not found."
+    ingestion_job_service.get_job_record_status.assert_awaited_once_with(
+        "missing-job", tenant_id="tenant-a"
+    )
 
 
 @pytest.mark.asyncio

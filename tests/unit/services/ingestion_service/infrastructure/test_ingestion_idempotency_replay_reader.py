@@ -68,6 +68,7 @@ async def test_missing_idempotency_key_does_not_query_store() -> None:
     reader, db = _reader(None)
 
     result = await reader.find_matching_job(
+        tenant_id="tenant-test",
         endpoint="/reprocess/transactions",
         idempotency_key=None,
         request_payload={"transaction_ids": ["T1", "T2"]},
@@ -81,6 +82,7 @@ async def test_missing_job_returns_no_replay() -> None:
     reader, db = _reader(None)
 
     result = await reader.find_matching_job(
+        tenant_id="tenant-test",
         endpoint="/reprocess/transactions",
         idempotency_key="idem-reprocess",
         request_payload={"transaction_ids": ["T1", "T2"]},
@@ -88,6 +90,7 @@ async def test_missing_job_returns_no_replay() -> None:
 
     assert result is None
     db.scalar.assert_awaited_once()
+    assert "ingestion_jobs.tenant_id =" in str(db.scalar.await_args.args[0])
 
 
 async def test_matching_current_fingerprint_returns_established_job() -> None:
@@ -100,6 +103,7 @@ async def test_matching_current_fingerprint_returns_established_job() -> None:
     )
 
     result = await reader.find_matching_job(
+        tenant_id="tenant-test",
         endpoint="/reprocess/transactions",
         idempotency_key="idem-reprocess",
         request_payload={"transaction_ids": ["T1", "T2"]},
@@ -126,6 +130,7 @@ async def test_matching_retained_rotation_key_returns_established_job() -> None:
     )
 
     result = await reader.find_matching_job(
+        tenant_id="tenant-test",
         endpoint="/reprocess/transactions",
         idempotency_key="idem-reprocess",
         request_payload=payload,
@@ -145,6 +150,7 @@ async def test_different_current_fingerprint_does_not_replay() -> None:
     )
 
     result = await reader.find_matching_job(
+        tenant_id="tenant-test",
         endpoint="/reprocess/transactions",
         idempotency_key="idem-reprocess",
         request_payload={"transaction_ids": ["T3"]},
@@ -176,6 +182,7 @@ async def test_legacy_payload_without_full_fingerprint_fails_closed(
     )
 
     result = await reader.find_matching_job(
+        tenant_id="tenant-test",
         endpoint="/reprocess/transactions",
         idempotency_key="idem-reprocess",
         request_payload=requested_payload,
