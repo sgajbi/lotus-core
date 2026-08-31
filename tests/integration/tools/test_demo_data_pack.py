@@ -1592,7 +1592,14 @@ def test_request_json_carries_demo_tenant_authority(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(demo_data_pack.request, "urlopen", urlopen)
 
-    assert demo_data_pack._request_json("GET", "http://query.dev/portfolios/P1") == (200, {})
+    assert demo_data_pack._request_json(
+        "GET",
+        "http://query.dev/portfolios/P1",
+        headers={
+            "X-Tenant-Id": demo_data_pack.DEMO_TENANT_ID,
+            "x-tenant-id": f" {demo_data_pack.DEMO_TENANT_ID} ",
+        },
+    ) == (200, {})
     assert captured_headers["x-tenant-id"] == demo_data_pack.DEMO_TENANT_ID
 
 
@@ -1604,7 +1611,10 @@ def test_request_json_refuses_demo_tenant_override(monkeypatch: pytest.MonkeyPat
         demo_data_pack._request_json(
             "GET",
             "http://query.dev/portfolios/P1",
-            headers={"x-tenant-id": "other-tenant"},
+            headers={
+                "X-Tenant-Id": demo_data_pack.DEMO_TENANT_ID,
+                "x-tenant-id": "other-tenant",
+            },
         )
 
 
