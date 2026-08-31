@@ -54,6 +54,11 @@ def setup_avco_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until
             ]
         },
     )
+    e2e_api_client.poll_for_data(
+        f"/portfolios?portfolio_id={portfolio_id}",
+        lambda data: data.get("portfolios") and len(data["portfolios"]) == 1,
+        fail_message="Tenant-owned portfolio did not materialize before transaction ingestion.",
+    )
 
     # 2. Ingest transactions: two buys at different prices, then a sell
     transactions = [
