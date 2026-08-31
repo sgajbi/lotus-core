@@ -6,6 +6,9 @@ import pytest
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 
+from src.services.ingestion_service.app.ports.portfolio_tenant_reader import (
+    PortfolioTenantOwnership,
+)
 from src.services.ingestion_service.app.services.reference_data_ingestion_commands import (
     ReferenceDataBookkeepingFailed,
     ReferenceDataIngestionCommandError,
@@ -49,12 +52,14 @@ def _job_result(
     )
 
 
-def _registry_command(*, persist_side_effect=None):
+def _registry_command(*, persist_side_effect=None, portfolio_ids: set[str] | None = None):
     command = SimpleNamespace(
         endpoint="/ingest/reference",
         entity_type="reference_data",
         accepted_count=lambda request: len(request.records),
         request_payload=lambda request: {"records": request.records},
+        asserted_tenant_ids=lambda request: set(),
+        referenced_portfolio_ids=lambda request: portfolio_ids or set(),
         persist=AsyncMock(side_effect=persist_side_effect),
     )
     return command
@@ -73,6 +78,14 @@ def _handler() -> ReferenceDataIngestionCommandHandler:
         reference_data_service=reference_data_service,
         ingestion_job_service=job_service,
         idempotency_replay_reader=SimpleNamespace(find_matching_job=AsyncMock(return_value=None)),
+        portfolio_tenant_reader=SimpleNamespace(
+            resolve_ownership=AsyncMock(
+                side_effect=lambda *, tenant_id, portfolio_ids: PortfolioTenantOwnership(
+                    existing_ids=frozenset(portfolio_ids),
+                    owned_ids=frozenset(portfolio_ids),
+                )
+            )
+        ),
     )
 
 
@@ -102,6 +115,91 @@ async def test_reference_data_command_persists_and_marks_queued() -> None:
         handler.ingestion_job_service.create_or_get_job.await_args.kwargs["tenant_context"]
         is TEST_TENANT_CONTEXT
     )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_scoped_reference_data_validates_owned_batch_before_job_creation() -> None:
+    handler = _handler()
+    registry_command = _registry_command(portfolio_ids={"P-OWNED-1", "P-OWNED-2"})
+    request = SimpleNamespace(records=[{"id": "R1"}, {"id": "R2"}])
+
+    await handler.ingest_reference_data(
+        ReferenceDataIngestionCommand(
+            endpoint="/ingest/benchmark-assignments",
+            idempotency_key="owned-reference-batch",
+            registry_command=registry_command,
+            request=request,
+        )
+    )
+
+    handler.portfolio_tenant_reader.resolve_ownership.assert_awaited_once_with(
+        tenant_id="tenant-test",
+        portfolio_ids={"P-OWNED-1", "P-OWNED-2"},
+    )
+    handler.ingestion_job_service.create_or_get_job.assert_awaited_once()
+    registry_command.persist.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_tenant_scoped_reference_data_rejects_caller_tenant_before_job_creation() -> None:
+    handler = _handler()
+    registry_command = _registry_command()
+    registry_command.asserted_tenant_ids = lambda request: {"tenant-foreign"}
+
+    with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+        await handler.ingest_reference_data(
+            ReferenceDataIngestionCommand(
+                endpoint="/ingest/instrument-valuation-policy-assignments",
+                idempotency_key="foreign-tenant-reference-batch",
+                registry_command=registry_command,
+                request=SimpleNamespace(records=[{"id": "R1"}]),
+            )
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == {
+        "code": "REFERENCE_DATA_TENANT_MISMATCH",
+        "message": "Every tenant-scoped reference-data record must match the admitted tenant.",
+    }
+    handler.portfolio_tenant_reader.resolve_ownership.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    registry_command.persist.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_ids", [frozenset(), frozenset({"P-FOREIGN"})])
+async def test_portfolio_scoped_reference_data_rejects_unknown_or_foreign_portfolio_without_job(
+    existing_ids: frozenset[str],
+) -> None:
+    handler = _handler()
+    handler.portfolio_tenant_reader.resolve_ownership = AsyncMock(
+        return_value=PortfolioTenantOwnership(
+            existing_ids=existing_ids,
+            owned_ids=frozenset(),
+        )
+    )
+    registry_command = _registry_command(portfolio_ids={"P-FOREIGN"})
+
+    with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+        await handler.ingest_reference_data(
+            ReferenceDataIngestionCommand(
+                endpoint="/ingest/benchmark-assignments",
+                idempotency_key="foreign-reference-batch",
+                registry_command=registry_command,
+                request=SimpleNamespace(records=[{"id": "R1"}]),
+            )
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == {
+        "code": "REFERENCE_DATA_PORTFOLIO_TENANT_MISMATCH",
+        "message": (
+            "Every portfolio-scoped reference-data record must reference a portfolio owned by "
+            "the admitted tenant."
+        ),
+    }
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    registry_command.persist.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -2060,6 +2060,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
@@ -2380,6 +2385,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
@@ -2444,6 +2454,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
         {
           "status_code": "409",
           "schema": "none",
@@ -2510,6 +2525,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
@@ -2574,6 +2594,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
         {
           "status_code": "409",
           "schema": "none",
@@ -3070,6 +3095,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "The record tenant does not match the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with an earlier payload or authoritative reference-data state conflicts with the requested assignment."
@@ -3195,6 +3225,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
@@ -3259,6 +3294,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
         {
           "status_code": "409",
           "schema": "none",
@@ -3515,6 +3555,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
@@ -3650,6 +3695,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
@@ -3774,6 +3824,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
         {
           "status_code": "409",
           "schema": "none",
@@ -4034,6 +4089,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "At least one referenced portfolio is unknown or is not owned by the admitted tenant; the request is rejected before job creation or persistence."
+        },
         {
           "status_code": "409",
           "schema": "none",

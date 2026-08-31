@@ -166,8 +166,16 @@ EXPECTED_COMMANDS = {
 
 
 class _FakeRecord:
-    def __init__(self, record_id: str) -> None:
+    def __init__(
+        self,
+        record_id: str,
+        *,
+        portfolio_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> None:
         self.record_id = record_id
+        self.portfolio_id = portfolio_id
+        self.tenant_id = tenant_id
         self.dump_kwargs: list[dict[str, Any]] = []
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
@@ -213,6 +221,66 @@ def test_reference_data_registry_pins_all_family_mappings_without_fastapi() -> N
     assert commands == EXPECTED_COMMANDS
 
 
+def test_reference_data_registry_declares_every_portfolio_scoped_family() -> None:
+    portfolio_scoped_commands = {
+        command.command_key
+        for command in REFERENCE_DATA_INGESTION_REGISTRY.all_commands()
+        if command.ownership_scope == "portfolio"
+    }
+
+    assert portfolio_scoped_commands == {
+        "benchmark_assignment",
+        "cash_account_master",
+        "client_income_needs_schedule",
+        "client_restriction_profile",
+        "client_tax_profile",
+        "client_tax_rule_set",
+        "liquidity_reserve_requirement",
+        "mandate_binding",
+        "planned_withdrawal_schedule",
+        "portfolio_party_role_assignment",
+        "sustainability_preference_profile",
+    }
+
+
+def test_reference_data_registry_declares_tenant_assertion_families() -> None:
+    tenant_scoped_commands = {
+        command.command_key
+        for command in REFERENCE_DATA_INGESTION_REGISTRY.all_commands()
+        if command.ownership_scope == "tenant"
+    }
+
+    assert tenant_scoped_commands == {"instrument_valuation_policy_assignment"}
+
+
+def test_reference_data_registry_extracts_distinct_portfolio_ownership_batch() -> None:
+    command = REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_assignment")
+    payload = _FakePayload(
+        "benchmark_assignments",
+        [
+            _FakeRecord("R-1", portfolio_id="P-1"),
+            _FakeRecord("R-2", portfolio_id="P-2"),
+            _FakeRecord("R-3", portfolio_id="P-1"),
+        ],
+    )
+
+    assert command.referenced_portfolio_ids(payload) == {"P-1", "P-2"}
+
+
+def test_reference_data_registry_extracts_distinct_tenant_assertions() -> None:
+    command = REFERENCE_DATA_INGESTION_REGISTRY.require("instrument_valuation_policy_assignment")
+    payload = _FakePayload(
+        "valuation_policy_assignments",
+        [
+            _FakeRecord("R-1", tenant_id="tenant-a"),
+            _FakeRecord("R-2", tenant_id="tenant-b"),
+            _FakeRecord("R-3", tenant_id="tenant-a"),
+        ],
+    )
+
+    assert command.asserted_tenant_ids(payload) == {"tenant-a", "tenant-b"}
+
+
 @pytest.mark.asyncio
 async def test_reference_data_command_dispatches_to_service_with_preserved_record_dump() -> None:
     command = REFERENCE_DATA_INGESTION_REGISTRY.require("cash_account_master")
@@ -247,6 +315,7 @@ def test_reference_data_registry_rejects_ambiguous_command_keys() -> None:
         entity_type="portfolio_party_role_assignment",
         records_attribute="party_role_assignments",
         persist_method_name="upsert_portfolio_party_role_assignments",
+        ownership_scope="portfolio",
     )
 
     with pytest.raises(ValueError, match="command keys must be unique"):

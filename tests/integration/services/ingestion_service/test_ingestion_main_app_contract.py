@@ -360,6 +360,7 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
     business_dates = paths["/ingest/business-dates"]["post"]
     benchmark_assignments = paths["/ingest/benchmark-assignments"]["post"]
     instrument_eligibility = paths["/ingest/instrument-eligibility"]["post"]
+    valuation_policy_assignments = paths["/ingest/instrument-valuation-policy-assignments"]["post"]
 
     assert (
         portfolios["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
@@ -428,10 +429,22 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         == "REFERENCE_DATA_PERSIST_FAILED"
     )
     assert (
+        benchmark_assignments["responses"]["403"]["content"]["application/json"]["example"][
+            "detail"
+        ]["code"]
+        == "REFERENCE_DATA_PORTFOLIO_TENANT_MISMATCH"
+    )
+    assert (
         instrument_eligibility["responses"]["500"]["content"]["application/json"]["example"][
             "detail"
         ]["code"]
         == "REFERENCE_DATA_PERSIST_FAILED"
+    )
+    assert (
+        valuation_policy_assignments["responses"]["403"]["content"]["application/json"]["example"][
+            "detail"
+        ]["code"]
+        == "REFERENCE_DATA_TENANT_MISMATCH"
     )
 
 

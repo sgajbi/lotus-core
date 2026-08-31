@@ -2953,6 +2953,37 @@ def _benchmark_assignment_payload() -> dict[str, list[dict[str, object]]]:
     }
 
 
+@pytest.mark.parametrize("portfolio_exists", [False, True])
+async def test_ingest_benchmark_assignments_rejects_unknown_or_foreign_portfolio_before_job(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    portfolio_exists: bool,
+) -> None:
+    portfolio_id = "LIVE_REAL_005607"
+    tenant_reader = ingestion_test_harness["fake_portfolio_tenant_reader"]
+    tenant_reader.existing_ids = {portfolio_id} if portfolio_exists else set()
+    tenant_reader.allowed_ids = set()
+
+    response = await async_test_client.post(
+        "/ingest/benchmark-assignments",
+        json=_benchmark_assignment_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "REFERENCE_DATA_PORTFOLIO_TENANT_MISMATCH",
+        "message": (
+            "Every portfolio-scoped reference-data record must reference a portfolio owned "
+            "by the admitted tenant."
+        ),
+    }
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["benchmark_assignments"]
+        == []
+    )
+
+
 async def test_ingest_benchmark_assignments_returns_ack_and_persists_full_contract(
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
@@ -8688,7 +8719,7 @@ async def test_ingest_instrument_valuation_policy_assignment_preserves_authority
         json={
             "valuation_policy_assignments": [
                 {
-                    "tenant_id": " LOTUS_PB_SG ",
+                    "tenant_id": f" {TEST_TENANT_HEADERS['X-Tenant-Id']} ",
                     "legal_book_id": " SG_PRIVATE_BANK_BOOK ",
                     "security_id": " BOND_US_CORP_2031 ",
                     "policy_id": " CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL ",
@@ -8713,7 +8744,7 @@ async def test_ingest_instrument_valuation_policy_assignment_preserves_authority
         "valuation_policy_assignments"
     ]
     assert len(persisted) == 1
-    assert persisted[0]["tenant_id"] == "LOTUS_PB_SG"
+    assert persisted[0]["tenant_id"] == TEST_TENANT_HEADERS["X-Tenant-Id"]
     assert persisted[0]["legal_book_id"] == "SG_PRIVATE_BANK_BOOK"
     assert persisted[0]["policy_id"] == "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
     assert persisted[0]["source_revision"] == "rev-001"
@@ -8724,7 +8755,7 @@ async def test_ingest_instrument_valuation_policy_assignment_rejects_batch_overl
     ingestion_test_harness,
 ):
     base = {
-        "tenant_id": "LOTUS_PB_SG",
+        "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
         "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         "security_id": "BOND_US_CORP_2031",
         "policy_id": "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL",
@@ -8749,6 +8780,44 @@ async def test_ingest_instrument_valuation_policy_assignment_rejects_batch_overl
 
     assert response.status_code == 422
     assert "windows overlap" in response.text
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted[
+            "valuation_policy_assignments"
+        ]
+        == []
+    )
+
+
+async def test_ingest_instrument_valuation_policy_assignment_rejects_foreign_tenant_before_job(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+) -> None:
+    response = await async_test_client.post(
+        "/ingest/instrument-valuation-policy-assignments",
+        json={
+            "valuation_policy_assignments": [
+                {
+                    "tenant_id": "tenant-foreign",
+                    "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+                    "security_id": "BOND_US_CORP_2031",
+                    "policy_id": "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL",
+                    "policy_version": 1,
+                    "valid_from": "2026-01-01",
+                    "assignment_status": "ACTIVE",
+                    "assignment_version": 1,
+                    "source_system": "security_master",
+                    "source_record_id": "VALPOL-FOREIGN-TENANT",
+                    "source_revision": "rev-001",
+                    "observed_at": "2026-01-02T08:00:00+08:00",
+                    "assignment_reason": "Cross-tenant write must fail before persistence.",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "REFERENCE_DATA_TENANT_MISMATCH"
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
     assert (
         ingestion_test_harness["fake_reference_data_service"].persisted[
             "valuation_policy_assignments"

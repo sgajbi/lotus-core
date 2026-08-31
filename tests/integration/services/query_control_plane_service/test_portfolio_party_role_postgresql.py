@@ -1,9 +1,11 @@
-"""PostgreSQL tenant-isolation proof for DPM population and party-role reads."""
+"""PostgreSQL tenant-isolation proof for portfolio reference-data read/write boundaries."""
 
 from __future__ import annotations
 
 import os
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.database_models import (
@@ -22,6 +24,20 @@ from portfolio_common.domain.portfolio_party_roles import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.services.ingestion_service.app.application.reference_data_ingestion_registry import (
+    REFERENCE_DATA_INGESTION_REGISTRY,
+)
+from src.services.ingestion_service.app.DTOs import (
+    reference_data_portfolio_benchmark_assignment_dto as benchmark_assignment_dto,
+)
+from src.services.ingestion_service.app.repositories.portfolio_tenant_repository import (
+    SqlAlchemyPortfolioTenantReader,
+)
+from src.services.ingestion_service.app.services.reference_data_ingestion_commands import (
+    ReferenceDataIngestionCommand,
+    ReferenceDataIngestionCommandError,
+    ReferenceDataIngestionCommandHandler,
+)
 from src.services.ingestion_service.app.services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
 )
@@ -31,7 +47,7 @@ from src.services.query_control_plane_service.app.infrastructure import (
     benchmark_assignment_sources,
     dpm_portfolio_population_sources,
 )
-from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -238,6 +254,102 @@ async def test_qcp_reference_readers_exclude_foreign_tenant_portfolios() -> None
             await session.execute(
                 delete(PortfolioMandateBinding).where(
                     PortfolioMandateBinding.portfolio_id.in_(portfolio_ids)
+                )
+            )
+            await session.execute(
+                delete(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
+            )
+            await session.commit()
+        await engine.dispose()
+
+
+async def test_reference_ingestion_rejects_foreign_portfolio_before_job_or_persistence() -> None:
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    portfolio_ids = (DPM_OWNED_PORTFOLIO, DPM_FOREIGN_PORTFOLIO)
+
+    try:
+        async with sessions() as session:
+            await session.execute(
+                delete(PortfolioBenchmarkAssignment).where(
+                    PortfolioBenchmarkAssignment.portfolio_id.in_(portfolio_ids)
+                )
+            )
+            await session.execute(
+                delete(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
+            )
+            session.add_all(
+                [
+                    _portfolio(DPM_OWNED_PORTFOLIO),
+                    _portfolio(DPM_FOREIGN_PORTFOLIO, tenant_id=FOREIGN_TENANT_ID),
+                ]
+            )
+            await session.flush()
+            session.add(_benchmark_assignment(DPM_FOREIGN_PORTFOLIO, suffix="FOREIGN"))
+            await session.commit()
+
+            job_service = SimpleNamespace(
+                assert_ingestion_writable=AsyncMock(),
+                create_or_get_job=AsyncMock(),
+                mark_queued=AsyncMock(return_value=True),
+            )
+            handler = ReferenceDataIngestionCommandHandler(
+                reference_data_service=ReferenceDataIngestionService(session),
+                ingestion_job_service=job_service,
+                idempotency_replay_reader=SimpleNamespace(
+                    find_matching_job=AsyncMock(return_value=None)
+                ),
+                portfolio_tenant_reader=SqlAlchemyPortfolioTenantReader(session),
+            )
+            request_model = benchmark_assignment_dto.PortfolioBenchmarkAssignmentIngestionRequest
+            request = request_model.model_validate(
+                {
+                    "benchmark_assignments": [
+                        {
+                            "portfolio_id": DPM_FOREIGN_PORTFOLIO,
+                            "benchmark_id": "ISSUE798_UNAUTHORIZED_UPDATE",
+                            "effective_from": date(2026, 1, 1),
+                            "assignment_source": "issue798_test",
+                            "assignment_status": "active",
+                            "assignment_version": 1,
+                        }
+                    ]
+                }
+            )
+
+            with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+                await handler.ingest_reference_data(
+                    ReferenceDataIngestionCommand(
+                        tenant_context=TEST_TENANT_CONTEXT,
+                        endpoint="/ingest/benchmark-assignments",
+                        idempotency_key="issue798-foreign-benchmark",
+                        registry_command=REFERENCE_DATA_INGESTION_REGISTRY.require(
+                            "benchmark_assignment"
+                        ),
+                        request=request,
+                    )
+                )
+
+            assert exc_info.value.status_code == 403
+            assert exc_info.value.detail["code"] == ("REFERENCE_DATA_PORTFOLIO_TENANT_MISMATCH")
+            job_service.create_or_get_job.assert_not_awaited()
+            foreign_benchmarks = tuple(
+                await session.scalars(
+                    select(PortfolioBenchmarkAssignment.benchmark_id).where(
+                        PortfolioBenchmarkAssignment.portfolio_id == DPM_FOREIGN_PORTFOLIO
+                    )
+                )
+            )
+            assert foreign_benchmarks == ("ISSUE798_BENCHMARK_FOREIGN",)
+    finally:
+        async with sessions() as session:
+            await session.execute(
+                delete(PortfolioBenchmarkAssignment).where(
+                    PortfolioBenchmarkAssignment.portfolio_id.in_(portfolio_ids)
                 )
             )
             await session.execute(

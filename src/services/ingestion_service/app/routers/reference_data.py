@@ -76,6 +76,21 @@ REFERENCE_PERSIST_FAILED_EXAMPLE = {
         "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
     }
 }
+REFERENCE_PORTFOLIO_TENANT_MISMATCH_EXAMPLE = {
+    "detail": {
+        "code": "REFERENCE_DATA_PORTFOLIO_TENANT_MISMATCH",
+        "message": (
+            "Every portfolio-scoped reference-data record must reference a portfolio owned "
+            "by the admitted tenant."
+        ),
+    }
+}
+REFERENCE_DATA_TENANT_MISMATCH_EXAMPLE = {
+    "detail": {
+        "code": "REFERENCE_DATA_TENANT_MISMATCH",
+        "message": "Every tenant-scoped reference-data record must match the admitted tenant.",
+    }
+}
 VALUATION_POLICY_ASSIGNMENT_CONFLICT_EXAMPLE = {
     "detail": {
         "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
@@ -143,8 +158,26 @@ REFERENCE_INGESTION_RESPONSES = {
     },
 }
 
+PORTFOLIO_REFERENCE_INGESTION_RESPONSES = {
+    **REFERENCE_INGESTION_RESPONSES,
+    status.HTTP_403_FORBIDDEN: {
+        "description": (
+            "At least one referenced portfolio is unknown or is not owned by the admitted "
+            "tenant; the request is rejected before job creation or persistence."
+        ),
+        "content": {"application/json": {"example": REFERENCE_PORTFOLIO_TENANT_MISMATCH_EXAMPLE}},
+    },
+}
+
 VALUATION_POLICY_INGESTION_RESPONSES = {
     **REFERENCE_INGESTION_RESPONSES,
+    status.HTTP_403_FORBIDDEN: {
+        "description": (
+            "The record tenant does not match the admitted tenant; the request is rejected "
+            "before job creation or persistence."
+        ),
+        "content": {"application/json": {"example": REFERENCE_DATA_TENANT_MISMATCH_EXAMPLE}},
+    },
     status.HTTP_409_CONFLICT: ingestion_conflict_response_with_idempotency_example(
         description=(
             "The idempotency key conflicts with an earlier payload or authoritative "
@@ -159,7 +192,7 @@ VALUATION_POLICY_INGESTION_RESPONSES = {
     "/ingest/benchmark-assignments",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest portfolio benchmark assignments",
     description=(
@@ -281,7 +314,7 @@ async def ingest_instrument_eligibility_profiles(
     "/ingest/mandate-bindings",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest discretionary mandate bindings",
     description=(
@@ -347,7 +380,7 @@ async def ingest_instrument_valuation_policy_assignments(
     "/ingest/portfolio-party-role-assignments",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest portfolio party-role assignments",
     description=(
@@ -379,7 +412,7 @@ async def ingest_portfolio_party_role_assignments(
     "/ingest/client-restriction-profiles",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest client restriction profiles",
     description=(
@@ -410,7 +443,7 @@ async def ingest_client_restriction_profiles(
     "/ingest/sustainability-preferences",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest sustainability preference profiles",
     description=(
@@ -442,7 +475,7 @@ async def ingest_sustainability_preference_profiles(
     "/ingest/client-tax-profiles",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest client tax profiles",
     description=(
@@ -473,7 +506,7 @@ async def ingest_client_tax_profiles(
     "/ingest/client-tax-rule-sets",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest client tax rule sets",
     description=(
@@ -505,7 +538,7 @@ async def ingest_client_tax_rule_sets(
     "/ingest/client-income-needs-schedules",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest client income-needs schedules",
     description=(
@@ -536,7 +569,7 @@ async def ingest_client_income_needs_schedules(
     "/ingest/liquidity-reserve-requirements",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest liquidity reserve requirements",
     description=(
@@ -567,7 +600,7 @@ async def ingest_liquidity_reserve_requirements(
     "/ingest/planned-withdrawal-schedules",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest planned withdrawal schedules",
     description=(
@@ -822,7 +855,7 @@ async def ingest_classification_taxonomy(
     "/ingest/reference/cash-accounts",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
-    responses=REFERENCE_INGESTION_RESPONSES,
+    responses=PORTFOLIO_REFERENCE_INGESTION_RESPONSES,
     tags=["Reference Data"],
     summary="Ingest cash-account master records",
     description=(

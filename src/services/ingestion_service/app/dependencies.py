@@ -145,9 +145,11 @@ def get_reference_data_ingestion_command_handler(
     idempotency_replay_reader: IngestionIdempotencyReplayReader = Depends(
         get_ingestion_idempotency_replay_reader
     ),
+    portfolio_tenant_reader: SqlAlchemyPortfolioTenantReader = Depends(get_portfolio_tenant_reader),
 ) -> ReferenceDataIngestionCommandHandler:
     return ReferenceDataIngestionCommandHandler(
         reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
         idempotency_replay_reader=idempotency_replay_reader,
+        portfolio_tenant_reader=portfolio_tenant_reader,
     )

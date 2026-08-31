@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 
 class ReferenceDataPayload(Protocol):
@@ -15,6 +15,7 @@ class ReferenceDataIngestionCommand:
     entity_type: str
     records_attribute: str
     persist_method_name: str
+    ownership_scope: Literal["global", "portfolio", "tenant"]
 
     def accepted_count(self, payload: ReferenceDataPayload) -> int:
         return len(self._records(payload))
@@ -24,6 +25,16 @@ class ReferenceDataIngestionCommand:
 
     def records_for_persistence(self, payload: ReferenceDataPayload) -> list[dict[str, Any]]:
         return [record.model_dump() for record in self._records(payload)]
+
+    def referenced_portfolio_ids(self, payload: ReferenceDataPayload) -> set[str]:
+        if self.ownership_scope != "portfolio":
+            return set()
+        return {record.portfolio_id for record in self._records(payload)}
+
+    def asserted_tenant_ids(self, payload: ReferenceDataPayload) -> set[str]:
+        if self.ownership_scope != "tenant":
+            return set()
+        return {record.tenant_id for record in self._records(payload)}
 
     async def persist(self, service: Any, payload: ReferenceDataPayload) -> None:
         persist_method = getattr(service, self.persist_method_name)
@@ -57,6 +68,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="benchmark_assignment",
             records_attribute="benchmark_assignments",
             persist_method_name="upsert_portfolio_benchmark_assignments",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="model_portfolio",
@@ -64,6 +76,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="model_portfolio",
             records_attribute="model_portfolios",
             persist_method_name="upsert_model_portfolio_definitions",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="model_portfolio_target",
@@ -71,6 +84,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="model_portfolio_target",
             records_attribute="model_portfolio_targets",
             persist_method_name="upsert_model_portfolio_targets",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="instrument_eligibility_profile",
@@ -78,6 +92,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="instrument_eligibility_profile",
             records_attribute="eligibility_profiles",
             persist_method_name="upsert_instrument_eligibility_profiles",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="instrument_valuation_policy_assignment",
@@ -85,6 +100,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="instrument_valuation_policy_assignment",
             records_attribute="valuation_policy_assignments",
             persist_method_name="append_instrument_valuation_policy_assignments",
+            ownership_scope="tenant",
         ),
         ReferenceDataIngestionCommand(
             command_key="authoritative_market_price_source_fact",
@@ -92,6 +108,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="authoritative_market_price_source_fact",
             records_attribute="market_price_source_facts",
             persist_method_name="append_authoritative_market_price_source_facts",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="mandate_binding",
@@ -99,6 +116,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="mandate_binding",
             records_attribute="mandate_bindings",
             persist_method_name="upsert_discretionary_mandate_bindings",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="portfolio_party_role_assignment",
@@ -106,6 +124,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="portfolio_party_role_assignment",
             records_attribute="party_role_assignments",
             persist_method_name="upsert_portfolio_party_role_assignments",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="client_restriction_profile",
@@ -113,6 +132,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="client_restriction_profile",
             records_attribute="restriction_profiles",
             persist_method_name="upsert_client_restriction_profiles",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="sustainability_preference_profile",
@@ -120,6 +140,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="sustainability_preference_profile",
             records_attribute="sustainability_preferences",
             persist_method_name="upsert_sustainability_preference_profiles",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="client_tax_profile",
@@ -127,6 +148,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="client_tax_profile",
             records_attribute="tax_profiles",
             persist_method_name="upsert_client_tax_profiles",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="client_tax_rule_set",
@@ -134,6 +156,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="client_tax_rule_set",
             records_attribute="tax_rule_sets",
             persist_method_name="upsert_client_tax_rule_sets",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="client_income_needs_schedule",
@@ -141,6 +164,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="client_income_needs_schedule",
             records_attribute="income_needs_schedules",
             persist_method_name="upsert_client_income_needs_schedules",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="liquidity_reserve_requirement",
@@ -148,6 +172,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="liquidity_reserve_requirement",
             records_attribute="liquidity_reserve_requirements",
             persist_method_name="upsert_liquidity_reserve_requirements",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="planned_withdrawal_schedule",
@@ -155,6 +180,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="planned_withdrawal_schedule",
             records_attribute="planned_withdrawal_schedules",
             persist_method_name="upsert_planned_withdrawal_schedules",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="benchmark_definition",
@@ -162,6 +188,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="benchmark_definition",
             records_attribute="benchmark_definitions",
             persist_method_name="upsert_benchmark_definitions",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="benchmark_composition",
@@ -169,6 +196,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="benchmark_composition",
             records_attribute="benchmark_compositions",
             persist_method_name="upsert_benchmark_compositions",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="index_definition",
@@ -176,6 +204,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="index_definition",
             records_attribute="indices",
             persist_method_name="upsert_indices",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="index_price_series",
@@ -183,6 +212,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="index_price_series",
             records_attribute="index_price_series",
             persist_method_name="upsert_index_price_series",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="index_return_series",
@@ -190,6 +220,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="index_return_series",
             records_attribute="index_return_series",
             persist_method_name="upsert_index_return_series",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="benchmark_return_series",
@@ -197,6 +228,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="benchmark_return_series",
             records_attribute="benchmark_return_series",
             persist_method_name="upsert_benchmark_return_series",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="risk_free_series",
@@ -204,6 +236,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="risk_free_series",
             records_attribute="risk_free_series",
             persist_method_name="upsert_risk_free_series",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="classification_taxonomy",
@@ -211,6 +244,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="classification_taxonomy",
             records_attribute="classification_taxonomy",
             persist_method_name="upsert_classification_taxonomy",
+            ownership_scope="global",
         ),
         ReferenceDataIngestionCommand(
             command_key="cash_account_master",
@@ -218,6 +252,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="cash_account_master",
             records_attribute="cash_accounts",
             persist_method_name="upsert_cash_account_masters",
+            ownership_scope="portfolio",
         ),
         ReferenceDataIngestionCommand(
             command_key="instrument_lookthrough_component",
@@ -225,6 +260,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="instrument_lookthrough_component",
             records_attribute="lookthrough_components",
             persist_method_name="upsert_instrument_lookthrough_components",
+            ownership_scope="global",
         ),
     ]
 )

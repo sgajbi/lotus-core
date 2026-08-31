@@ -28,6 +28,7 @@ from ..ports.ingestion_idempotency_replay import (
     IngestionIdempotencyReplay,
     IngestionIdempotencyReplayReader,
 )
+from ..ports.portfolio_tenant_reader import PortfolioTenantReader
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_lifecycle import IngestionJobCreateResult
 from .ingestion_job_service import IngestionJobService
@@ -35,10 +36,11 @@ from .reference_data_ingestion_service import ReferenceDataIngestionService
 
 logger = logging.getLogger(__name__)
 
-HTTP_TOO_MANY_REQUESTS = 429
+HTTP_FORBIDDEN = 403
 HTTP_CONFLICT = 409
-HTTP_SERVICE_UNAVAILABLE = 503
+HTTP_TOO_MANY_REQUESTS = 429
 HTTP_INTERNAL_SERVER_ERROR = 500
+HTTP_SERVICE_UNAVAILABLE = 503
 
 
 class ReferenceDataIngestionCommandError(Exception):
@@ -90,6 +92,7 @@ class ReferenceDataIngestionCommandHandler:
     reference_data_service: ReferenceDataIngestionService
     ingestion_job_service: IngestionJobService
     idempotency_replay_reader: IngestionIdempotencyReplayReader
+    portfolio_tenant_reader: PortfolioTenantReader
 
     async def ingest_reference_data(
         self,
@@ -108,6 +111,7 @@ class ReferenceDataIngestionCommandHandler:
 
         await self._assert_ingestion_writable()
         self._enforce_rate_limit(command.registry_command.endpoint, accepted_count)
+        await self._assert_reference_data_authority(command)
         job_result = await self._create_job(command=command, accepted_count=accepted_count)
         entity_type = command.registry_command.entity_type
         if not job_result.created:
@@ -170,6 +174,41 @@ class ReferenceDataIngestionCommandHandler:
                 HTTP_TOO_MANY_REQUESTS,
                 {"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
             ) from exc
+
+    async def _assert_reference_data_authority(
+        self,
+        command: ReferenceDataIngestionCommand,
+    ) -> None:
+        admitted_tenant_id = command.tenant_context.tenant_id_text
+        asserted_tenant_ids = command.registry_command.asserted_tenant_ids(command.request)
+        if asserted_tenant_ids and asserted_tenant_ids != {admitted_tenant_id}:
+            raise ReferenceDataIngestionCommandError(
+                HTTP_FORBIDDEN,
+                {
+                    "code": "REFERENCE_DATA_TENANT_MISMATCH",
+                    "message": (
+                        "Every tenant-scoped reference-data record must match the admitted tenant."
+                    ),
+                },
+            )
+        portfolio_ids = command.registry_command.referenced_portfolio_ids(command.request)
+        if not portfolio_ids:
+            return
+        ownership = await self.portfolio_tenant_reader.resolve_ownership(
+            tenant_id=admitted_tenant_id,
+            portfolio_ids=portfolio_ids,
+        )
+        if ownership.owned_ids != portfolio_ids:
+            raise ReferenceDataIngestionCommandError(
+                HTTP_FORBIDDEN,
+                {
+                    "code": "REFERENCE_DATA_PORTFOLIO_TENANT_MISMATCH",
+                    "message": (
+                        "Every portfolio-scoped reference-data record must reference a portfolio "
+                        "owned by the admitted tenant."
+                    ),
+                },
+            )
 
     async def _create_job(
         self,
