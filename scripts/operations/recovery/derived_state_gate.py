@@ -31,6 +31,7 @@ from scripts.operations.recovery.runtime_support import (
 )
 from scripts.operations.transaction_processing_cutover_offsets import KafkaOffsetStore
 from scripts.operations.transaction_processing_load_support import (
+    LOAD_TENANT_ID,
     ingest_transactions,
     seed_load_context,
     wait_for_database_count,
@@ -39,6 +40,7 @@ from scripts.quality.ci_service_sets import DERIVED_STATE_RECOVERY_GATE_SERVICES
 
 POSITION_TIMESERIES_CONSUMER_GROUP = "timeseries_generator_group_positions"
 DEFAULT_DERIVED_STATE_SERVICE = "portfolio_derived_state_service"
+DERIVED_STATE_TENANT_HEADERS = {"X-Tenant-Id": LOAD_TENANT_ID}
 
 
 class RuntimeConnectionEndpoints(Protocol):
@@ -254,6 +256,7 @@ def seed_market_prices(
                 for index in range(instrument_count)
             ]
         },
+        headers=DERIVED_STATE_TENANT_HEADERS,
         timeout=30,
     )
     if response.status_code != 202:
@@ -303,7 +306,10 @@ def dlq_event_count(*, event_replay_base_url: str, ops_token: str) -> int:
 
     response = requests.get(
         f"{event_replay_base_url}/ingestion/health/error-budget?lookback_minutes=60",
-        headers={"X-Lotus-Ops-Token": ops_token},
+        headers={
+            **DERIVED_STATE_TENANT_HEADERS,
+            "X-Lotus-Ops-Token": ops_token,
+        },
         timeout=20,
     )
     response.raise_for_status()
@@ -325,6 +331,7 @@ def reconciliation_finding_count(
             "business_date": business_date,
             "epoch": 0,
         },
+        headers=DERIVED_STATE_TENANT_HEADERS,
         timeout=120,
     )
     response.raise_for_status()

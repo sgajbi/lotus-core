@@ -18,9 +18,16 @@ from scripts.operations.latency_profile import (
     _resolve_runtime_ids,
     _response_error_sample,
     _run_latency_profile,
+    _tenant_session,
     _wait_compose_service_completed_successfully,
     _wait_profile_cases_ready,
 )
+
+
+def test_latency_session_carries_demo_tenant_authority() -> None:
+    session = _tenant_session()
+
+    assert session.headers["X-Tenant-Id"] == latency_profile.DEMO_TENANT_ID
 
 
 @pytest.mark.parametrize(
