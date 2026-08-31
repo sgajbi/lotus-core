@@ -86,10 +86,10 @@ class _MetricsResponse:
 def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
     monkeypatch,
 ) -> None:
-    requested: list[tuple[str, int]] = []
+    requested: list[tuple[str, dict[str, str], int]] = []
 
-    def get(url: str, *, timeout: int) -> _MetricsResponse:
-        requested.append((url, timeout))
+    def get(url: str, *, headers: dict[str, str], timeout: int) -> _MetricsResponse:
+        requested.append((url, headers, timeout))
         return _MetricsResponse()
 
     monkeypatch.setattr(transaction_processing_load_support.requests, "get", get)
@@ -101,7 +101,13 @@ def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
     )
 
     assert count == 60
-    assert requested == [("http://localhost:8090/metrics", 10)]
+    assert requested == [
+        (
+            "http://localhost:8090/metrics",
+            transaction_processing_load_support.RUNTIME_GATE_TENANT_HEADERS,
+            10,
+        )
+    ]
 
 
 def test_transaction_processing_timeout_reports_final_domain_counts(
@@ -142,7 +148,7 @@ def test_transaction_processing_operation_evidence_retains_bounded_stage_timing(
     monkeypatch.setattr(
         transaction_processing_load_support.requests,
         "get",
-        lambda _url, *, timeout: _MetricsResponse(),
+        lambda _url, *, headers, timeout: _MetricsResponse(),
     )
 
     evidence = transaction_processing_load_support.transaction_processing_operation_evidence(
@@ -167,7 +173,7 @@ def test_cost_processing_runtime_evidence_retains_existing_bounded_metrics(
     monkeypatch.setattr(
         transaction_processing_load_support.requests,
         "get",
-        lambda _url, *, timeout: _MetricsResponse(),
+        lambda _url, *, headers, timeout: _MetricsResponse(),
     )
 
     evidence = transaction_processing_load_support.cost_processing_runtime_evidence(
@@ -193,7 +199,7 @@ def test_database_operation_evidence_retains_sorted_bounded_repository_timings(
     monkeypatch.setattr(
         transaction_processing_load_support.requests,
         "get",
-        lambda _url, *, timeout: _MetricsResponse(),
+        lambda _url, *, headers, timeout: _MetricsResponse(),
     )
 
     evidence = transaction_processing_load_support.database_operation_evidence(
@@ -336,8 +342,15 @@ def test_transaction_batches_preserve_monotonic_tie_break_order(
     posted_transaction_ids: list[str] = []
     posted_transaction_timestamps: list[str] = []
 
-    def post(_url: str, *, json: dict[str, object], timeout: int) -> SimpleNamespace:
+    def post(
+        _url: str,
+        *,
+        json: dict[str, object],
+        headers: dict[str, str],
+        timeout: int,
+    ) -> SimpleNamespace:
         assert timeout == 30
+        assert headers == transaction_processing_load_support.RUNTIME_GATE_TENANT_HEADERS
         transactions = json["transactions"]
         assert isinstance(transactions, list)
         posted_transaction_ids.extend(row["transaction_id"] for row in transactions)

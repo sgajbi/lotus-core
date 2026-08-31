@@ -24,6 +24,42 @@ from scripts.validation.docker_endpoint_smoke import (
 )
 
 
+def test_smoke_call_binds_tenant_and_rejects_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def request(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(status_code=200, headers={}, text="")
+
+    monkeypatch.setattr(docker_endpoint_smoke.requests, "request", request)
+    results = []
+
+    docker_endpoint_smoke._call(
+        results,
+        name="tenant-bound",
+        method="GET",
+        url="http://query/portfolios/P1",
+        expected={200},
+        headers={"X-Lotus-Ops-Token": "ops"},
+    )
+
+    assert captured["headers"] == {
+        "X-Tenant-Id": docker_endpoint_smoke.SMOKE_TENANT_ID,
+        "X-Lotus-Ops-Token": "ops",
+    }
+    with pytest.raises(ValueError, match="must match the governed tenant"):
+        docker_endpoint_smoke._call(
+            results,
+            name="tenant-mismatch",
+            method="GET",
+            url="http://query/portfolios/P1",
+            expected={200},
+            headers={"X-Tenant-Id": "tenant-other"},
+        )
+
+
 @pytest.mark.parametrize(
     ("response", "expected"),
     [
@@ -254,6 +290,7 @@ def test_wait_transaction_visible_retries_until_exact_transaction_is_queryable(
     assert get_mock.call_count == 3
     get_mock.assert_called_with(
         f"http://query/portfolios/{SMOKE_PORTFOLIO_ID}/transactions?limit=100",
+        headers={"X-Tenant-Id": docker_endpoint_smoke.SMOKE_TENANT_ID},
         timeout=8,
     )
 

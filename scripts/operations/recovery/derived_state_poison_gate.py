@@ -37,6 +37,7 @@ from scripts.operations.recovery.derived_state_gate import (
 from scripts.operations.recovery.runtime_support import consumer_lag
 from scripts.operations.transaction_processing_cutover_offsets import KafkaOffsetStore
 from scripts.operations.transaction_processing_load_support import (
+    RUNTIME_GATE_TENANT_HEADERS,
     ingest_transactions,
     seed_load_context,
 )
@@ -184,7 +185,10 @@ def _read_support_events(
             "original_topic": source_topic,
             "consumer_group": consumer_group,
         },
-        headers={"X-Lotus-Ops-Token": ops_token},
+        headers={
+            **RUNTIME_GATE_TENANT_HEADERS,
+            "X-Lotus-Ops-Token": ops_token,
+        },
         timeout=20,
     )
     response.raise_for_status()

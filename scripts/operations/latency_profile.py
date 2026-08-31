@@ -31,8 +31,15 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
     ManagedComposeRun,
     prepare_managed_compose_run,
 )
+from tools.demo_data_pack import DEMO_DATA_PACK_TENANT_ID  # noqa: E402
 
 _SERVICE_HEALTH_CASES = frozenset({"ing_ready", "qry_ready"})
+
+
+def _tenant_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update({"X-Tenant-Id": DEMO_DATA_PACK_TENANT_ID})
+    return session
 
 
 @dataclass(frozen=True)
@@ -83,7 +90,7 @@ def _wait_ready(
     timeout_seconds: int,
 ) -> None:
     deadline = time.time() + timeout_seconds
-    session = requests.Session()
+    session = _tenant_session()
     while time.time() < deadline:
         try:
             ing = session.get(f"{base_ingestion_url}/health/ready", timeout=5)
@@ -589,7 +596,7 @@ def run_profile(
     warmup_runs: int,
     measured_runs: int,
 ) -> list[dict[str, Any]]:
-    session = requests.Session()
+    session = _tenant_session()
     results: list[dict[str, Any]] = []
 
     for case in _cases(
@@ -825,7 +832,7 @@ def _run_latency_profile(
             managed_run=managed_run,
         )
 
-    session = requests.Session()
+    session = _tenant_session()
     progress_check = (
         None
         if managed_run is None

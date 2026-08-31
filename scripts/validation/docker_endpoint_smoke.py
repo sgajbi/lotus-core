@@ -51,6 +51,7 @@ SMOKE_TRANSACTION_ID = "TX_SMOKE_CANONICAL"
 SMOKE_TRANSACTION_ID_2 = "TX2_SMOKE_CANONICAL"
 SMOKE_CSV_TRANSACTION_ID = "TXUP_SMOKE_CANONICAL"
 SMOKE_ISIN = "US000SMOKE01"
+SMOKE_TENANT_ID = "LOTUS_SMOKE"
 DEFAULT_POSTGRES_SERVICE = "postgres"
 
 
@@ -217,8 +218,29 @@ def _call(
     expected: set[int],
     **kwargs: Any,
 ) -> requests.Response | None:
+    supplied_headers = kwargs.pop("headers", None)
+    headers = {"X-Tenant-Id": SMOKE_TENANT_ID}
+    if supplied_headers:
+        supplied_tenant_id = next(
+            (
+                value.strip()
+                for name, value in supplied_headers.items()
+                if name.lower() == "x-tenant-id"
+            ),
+            None,
+        )
+        if supplied_tenant_id is not None and supplied_tenant_id != SMOKE_TENANT_ID:
+            raise ValueError("smoke request tenant must match the governed tenant authority")
+        headers.update(supplied_headers)
+        headers["X-Tenant-Id"] = SMOKE_TENANT_ID
     try:
-        response = requests.request(method=method, url=url, timeout=40, **kwargs)
+        response = requests.request(
+            method=method,
+            url=url,
+            timeout=40,
+            headers=headers,
+            **kwargs,
+        )
         content_type = response.headers.get("content-type", "")
         body: Any
         if "application/json" in content_type:
@@ -355,7 +377,11 @@ def _wait_portfolio_visible(query_base_url: str, portfolio_id: str, timeout_seco
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
-            response = requests.get(url, timeout=8)
+            response = requests.get(
+                url,
+                headers={"X-Tenant-Id": SMOKE_TENANT_ID},
+                timeout=8,
+            )
             if response.status_code == 200:
                 return
         except Exception:
@@ -379,7 +405,11 @@ def _wait_transaction_visible(
     last_transaction_ids: list[str] = []
     while time.time() < deadline:
         try:
-            response = requests.get(url, timeout=8)
+            response = requests.get(
+                url,
+                headers={"X-Tenant-Id": SMOKE_TENANT_ID},
+                timeout=8,
+            )
             last_status = response.status_code
             if response.status_code == 200:
                 payload = response.json()
@@ -416,7 +446,11 @@ def _wait_expected_status(url: str, expected_statuses: set[int], timeout_seconds
     last_error: str | None = None
     while time.time() < deadline:
         try:
-            response = requests.get(url, timeout=8)
+            response = requests.get(
+                url,
+                headers={"X-Tenant-Id": SMOKE_TENANT_ID},
+                timeout=8,
+            )
             last_status = response.status_code
             if response.status_code in expected_statuses:
                 return
@@ -711,6 +745,7 @@ def main(
             "portfolios": [
                 {
                     "portfolio_id": portfolio_id,
+                    "tenant_id": SMOKE_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2024-01-01",
                     "risk_exposure": "Medium",
@@ -797,6 +832,7 @@ def main(
             "portfolios": [
                 {
                     "portfolio_id": portfolio_id,
+                    "tenant_id": SMOKE_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2024-01-01",
                     "risk_exposure": "Medium",

@@ -79,6 +79,7 @@ DEFAULT_HOST_DATABASE_URL = os.getenv(
     "postgresql://user:password@localhost:55432/portfolio_db",
 )
 DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY = "derived-state-resource-monitor"
+BANK_DAY_LOAD_TENANT_ID = "LOTUS_BANK_DAY_LOAD"
 
 SUPPORTED_CURRENCIES = ("USD", "EUR", "SGD", "GBP")
 USD_PER_CURRENCY: dict[str, Decimal] = {
@@ -271,6 +272,7 @@ class HealthMonitor:
 
     def _run(self) -> None:
         session = requests.Session()
+        session.headers.update({"X-Tenant-Id": BANK_DAY_LOAD_TENANT_ID})
         headers = {"X-Lotus-Ops-Token": self._ops_token}
         while not self._stop_event.is_set():
             try:
@@ -370,6 +372,7 @@ def _build_portfolios(
     return [
         {
             "portfolio_id": f"LOAD_{run_id}_PF_{index:04d}",
+            "tenant_id": BANK_DAY_LOAD_TENANT_ID,
             "portfolio_name": f"Load Test Portfolio {index:04d}",
             "base_currency": "USD",
             "open_date": open_date,
@@ -531,6 +534,7 @@ def expected_total_market_value(
 def _wait_ready(*, base_urls: list[str], timeout_seconds: int) -> None:
     deadline = time.time() + timeout_seconds
     session = requests.Session()
+    session.headers.update({"X-Tenant-Id": BANK_DAY_LOAD_TENANT_ID})
     while time.time() < deadline:
         try:
             statuses = [
@@ -2718,6 +2722,7 @@ def main() -> int:
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
     fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
     session = requests.Session()
+    session.headers.update({"X-Tenant-Id": BANK_DAY_LOAD_TENANT_ID})
     ingest_phases: list[IngestPhaseResult] = []
     health_monitor = HealthMonitor(
         event_replay_base_url=args.event_replay_base_url,

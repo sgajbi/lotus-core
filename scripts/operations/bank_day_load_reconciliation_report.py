@@ -15,6 +15,7 @@ from sqlalchemy import text
 
 try:
     from scripts.operations.bank_day_load_scenario import (
+        BANK_DAY_LOAD_TENANT_ID,
         DEFAULT_HOST_DATABASE_URL,
         DEFAULT_OUTPUT_DIR,
         DEFAULT_QUERY_BASE_URL,
@@ -29,6 +30,7 @@ try:
     )
 except ModuleNotFoundError:
     from bank_day_load_scenario import (
+        BANK_DAY_LOAD_TENANT_ID,
         DEFAULT_HOST_DATABASE_URL,
         DEFAULT_OUTPUT_DIR,
         DEFAULT_QUERY_BASE_URL,
@@ -284,6 +286,7 @@ def main() -> int:
         f"?business_date={args.business_date}"
     )
     session = requests.Session()
+    session.headers.update({"X-Tenant-Id": BANK_DAY_LOAD_TENANT_ID})
     run_progress_response = session.get(run_progress_url, timeout=60)
     run_progress_response.raise_for_status()
     run_progress = run_progress_response.json()

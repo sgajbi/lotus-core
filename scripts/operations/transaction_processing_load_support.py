@@ -20,6 +20,8 @@ _COST_RECALCULATION_DURATION_METRIC = "recalculation_duration_seconds"
 _COST_RECALCULATION_DEPTH_METRIC = "recalculation_depth"
 _COST_RESTORED_OPEN_LOTS_METRIC = "cost_processing_open_lots_restored"
 _DATABASE_OPERATION_LATENCY_METRIC = "db_operation_latency_seconds"
+RUNTIME_GATE_TENANT_ID = "LOTUS_RUNTIME_GATES"
+RUNTIME_GATE_TENANT_HEADERS = {"X-Tenant-Id": RUNTIME_GATE_TENANT_ID}
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +167,7 @@ def ingest_transactions(
         response = requests.post(
             f"{ingestion_base_url}/ingest/transactions",
             json={"transactions": transactions},
+            headers=RUNTIME_GATE_TENANT_HEADERS,
             timeout=30,
         )
         if response.status_code != 202:
@@ -210,6 +213,7 @@ def seed_load_context(
         rows=[
             {
                 "portfolio_id": portfolio_id,
+                "tenant_id": RUNTIME_GATE_TENANT_ID,
                 "portfolio_name": f"Performance Load {run_id}",
                 "base_currency": "USD",
                 "open_date": business_date,
@@ -398,6 +402,7 @@ def transaction_processing_operation_count(
 ) -> int:
     response = requests.get(
         f"{transaction_processing_base_url}/metrics",
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=10,
     )
     response.raise_for_status()
@@ -420,6 +425,7 @@ def transaction_processing_operation_evidence(
 
     response = requests.get(
         f"{transaction_processing_base_url}/metrics",
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=10,
     )
     response.raise_for_status()
@@ -467,6 +473,7 @@ def cost_processing_runtime_evidence(
 
     response = requests.get(
         f"{transaction_processing_base_url}/metrics",
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=10,
     )
     response.raise_for_status()
@@ -534,6 +541,7 @@ def database_operation_evidence(
 
     response = requests.get(
         f"{transaction_processing_base_url}/metrics",
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=10,
     )
     response.raise_for_status()
@@ -626,6 +634,7 @@ def _post_ingestion_records(
     response = requests.post(
         f"{ingestion_base_url}{endpoint}",
         json={root_key: rows},
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=30,
     )
     if response.status_code != 202:

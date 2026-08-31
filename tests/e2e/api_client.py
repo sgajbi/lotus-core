@@ -7,15 +7,28 @@ import pytest
 import requests
 from requests.exceptions import RequestException
 
+E2E_TENANT_ID = "LOTUS_E2E"
+
 
 class E2EApiClient:
     """A client for interacting with the system's APIs in E2E tests."""
 
-    def __init__(self, ingestion_url: str, query_url: str, query_control_plane_url: str):
+    def __init__(
+        self,
+        ingestion_url: str,
+        query_url: str,
+        query_control_plane_url: str,
+        tenant_id: str = E2E_TENANT_ID,
+    ):
+        normalized_tenant_id = tenant_id.strip()
+        if not normalized_tenant_id:
+            raise ValueError("E2E tenant authority must be nonblank")
         self.ingestion_url = ingestion_url
         self.query_url = query_url
         self.query_control_plane_url = query_control_plane_url
+        self.tenant_id = normalized_tenant_id
         self.session = requests.Session()
+        self.session.headers.update({"X-Tenant-Id": self.tenant_id})
 
     @staticmethod
     def _camel_to_snake(value: str) -> str:
@@ -50,6 +63,15 @@ class E2EApiClient:
         """Sends data to a specified ingestion endpoint."""
         url = f"{self.ingestion_url}{endpoint}"
         normalized_payload = self._normalize_payload_keys(payload)
+        portfolios = normalized_payload.get("portfolios")
+        if isinstance(portfolios, list):
+            for portfolio in portfolios:
+                if not isinstance(portfolio, dict):
+                    raise ValueError("E2E portfolio records must be objects")
+                supplied_tenant_id = portfolio.get("tenant_id")
+                if supplied_tenant_id is not None and supplied_tenant_id != self.tenant_id:
+                    raise ValueError("E2E portfolio tenant must match admitted tenant authority")
+                portfolio["tenant_id"] = self.tenant_id
         response = self.session.post(url, json=normalized_payload, timeout=10)
         response.raise_for_status()
         return response

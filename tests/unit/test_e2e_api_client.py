@@ -9,6 +9,47 @@ import pytest
 from tests.e2e.api_client import E2EApiClient
 
 
+def test_e2e_client_binds_http_and_portfolio_tenant_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = E2EApiClient(
+        ingestion_url="http://ingestion",
+        query_url="http://query",
+        query_control_plane_url="http://control",
+        tenant_id="tenant-e2e",
+    )
+    captured: dict[str, object] = {}
+
+    def post(url: str, *, json: object, timeout: int) -> SimpleNamespace:
+        captured.update(url=url, json=json, timeout=timeout)
+        return SimpleNamespace(raise_for_status=lambda: None)
+
+    monkeypatch.setattr(client.session, "post", post)
+
+    client.ingest(
+        "/ingest/portfolios",
+        {"portfolios": [{"portfolio_id": "P1"}]},
+    )
+
+    assert client.session.headers["X-Tenant-Id"] == "tenant-e2e"
+    assert captured["json"] == {"portfolios": [{"portfolio_id": "P1", "tenant_id": "tenant-e2e"}]}
+
+
+def test_e2e_client_rejects_portfolio_tenant_mismatch() -> None:
+    client = E2EApiClient(
+        ingestion_url="http://ingestion",
+        query_url="http://query",
+        query_control_plane_url="http://control",
+        tenant_id="tenant-e2e",
+    )
+
+    with pytest.raises(ValueError, match="must match admitted tenant"):
+        client.ingest(
+            "/ingest/portfolios",
+            {"portfolios": [{"portfolio_id": "P1", "tenant_id": "tenant-other"}]},
+        )
+
+
 def test_poll_for_data_routes_control_plane_readiness_to_control_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

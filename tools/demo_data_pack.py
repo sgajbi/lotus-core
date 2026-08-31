@@ -27,6 +27,7 @@ DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
 MIN_DEMO_HISTORY_DAYS = 240
 DEFAULT_DEMO_HISTORY_DAYS = 365 * 3
 IDEMPOTENCY_REPLAY_MESSAGE = "Duplicate ingestion request accepted via idempotency replay."
+DEMO_DATA_PACK_TENANT_ID = "LOTUS_DEMO"
 
 DEMO_SEED_CONTRACT = load_front_office_seed_contract()
 DEMO_CANONICAL_AS_OF_DATE = date.fromisoformat(DEMO_SEED_CONTRACT.canonical_as_of_date)
@@ -620,6 +621,7 @@ def build_demo_bundle(
     portfolios = [
         {
             "portfolio_id": "DEMO_ADV_USD_001",
+            "tenant_id": DEMO_DATA_PACK_TENANT_ID,
             "base_currency": "USD",
             "open_date": "2023-01-03",
             "risk_exposure": "Moderate",
@@ -632,6 +634,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_DPM_EUR_001",
+            "tenant_id": DEMO_DATA_PACK_TENANT_ID,
             "base_currency": "EUR",
             "open_date": "2024-01-02",
             "risk_exposure": "Balanced",
@@ -644,6 +647,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_INCOME_CHF_001",
+            "tenant_id": DEMO_DATA_PACK_TENANT_ID,
             "base_currency": "CHF",
             "open_date": "2024-01-02",
             "risk_exposure": "Low",
@@ -656,6 +660,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_BALANCED_SGD_001",
+            "tenant_id": DEMO_DATA_PACK_TENANT_ID,
             "base_currency": "SGD",
             "open_date": "2024-01-02",
             "risk_exposure": "Balanced",
@@ -668,6 +673,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_REBAL_USD_001",
+            "tenant_id": DEMO_DATA_PACK_TENANT_ID,
             "base_currency": "USD",
             "open_date": "2024-01-02",
             "risk_exposure": "Moderate",
@@ -2369,10 +2375,24 @@ def _request_json(
     url: str,
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    tenant_id: str = DEMO_DATA_PACK_TENANT_ID,
 ) -> tuple[int, Any]:
-    request_headers = {"Content-Type": "application/json"}
+    normalized_tenant_id = tenant_id.strip()
+    if not normalized_tenant_id:
+        raise ValueError("tenant_id must be nonblank")
+    request_headers = {
+        "Content-Type": "application/json",
+        "X-Tenant-Id": normalized_tenant_id,
+    }
     if headers:
+        supplied_tenant_id = next(
+            (value.strip() for name, value in headers.items() if name.lower() == "x-tenant-id"),
+            None,
+        )
+        if supplied_tenant_id is not None and supplied_tenant_id != normalized_tenant_id:
+            raise ValueError("request tenant header must match admitted tool tenant authority")
         request_headers.update(headers)
+        request_headers["X-Tenant-Id"] = normalized_tenant_id
     req = request.Request(
         url=url,
         method=method.upper(),

@@ -45,6 +45,7 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
     prepare_managed_compose_run,
 )
 from tools.front_office_portfolio_seed import (  # noqa: E402
+    FRONT_OFFICE_VALUATION_TENANT_ID,
     build_front_office_portfolio_bundle,
 )
 from tools.front_office_seed_contract import (  # noqa: E402
@@ -1011,7 +1012,13 @@ def _assert_canonical_config(
 
 
 def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    response = requests.request(method, url, json=payload, timeout=20)
+    response = requests.request(
+        method,
+        url,
+        json=payload,
+        headers={"X-Tenant-Id": FRONT_OFFICE_VALUATION_TENANT_ID},
+        timeout=20,
+    )
     if not 200 <= response.status_code < 300:
         raise ProofFailure(f"Core API {method} {url} returned HTTP {response.status_code}.")
     try:

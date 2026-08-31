@@ -21,9 +21,11 @@ from tools.demo_data_pack import (  # noqa: E402
     DEFAULT_DEMO_BENCHMARK_ID,
     _build_benchmark_reference_data,
     _canonical_payload_fingerprint,
-    _request_json,
     _wait_ready,
     build_risk_free_reference_data,
+)
+from tools.demo_data_pack import (  # noqa: E402
+    _request_json as _demo_request_json,
 )
 from tools.front_office_seed_contract import (  # noqa: E402
     FrontOfficeSeedContract,
@@ -47,6 +49,23 @@ FRONT_OFFICE_VALUATION_TENANT_ID = "LOTUS_PB_SG"
 FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID = "SG_PRIVATE_BANK_BOOK"
 FRONT_OFFICE_VALUATION_SOURCE_SYSTEM = "LOTUS_FRONT_OFFICE_SEED"
 FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR = Decimal("100")
+
+
+def _request_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, Any]:
+    """Call Core with the canonical front-office tenant authority."""
+
+    return _demo_request_json(
+        method,
+        url,
+        payload=payload,
+        headers=headers,
+        tenant_id=FRONT_OFFICE_VALUATION_TENANT_ID,
+    )
 
 
 @dataclass(frozen=True)
@@ -128,7 +147,7 @@ DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
 FRONT_OFFICE_GATEWAY_CALLER_HEADERS = {
     "X-Actor-Id": FRONT_OFFICE_SEED_CONTRACT.portfolio_manager_id,
     "X-Caller-Application": "lotus-workbench",
-    "X-Tenant-Id": "tenant-sg",
+    "X-Tenant-Id": FRONT_OFFICE_VALUATION_TENANT_ID,
     "X-Region": "APAC",
     "X-Booking-Center-Code": "Singapore",
     "X-Role": "ADVISOR",

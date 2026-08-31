@@ -31,6 +31,7 @@ from scripts.operations.recovery.runtime_support import (
 )
 from scripts.operations.transaction_processing_cutover_offsets import KafkaOffsetStore
 from scripts.operations.transaction_processing_load_support import (
+    RUNTIME_GATE_TENANT_HEADERS,
     ingest_transactions,
     seed_load_context,
     wait_for_database_count,
@@ -254,6 +255,7 @@ def seed_market_prices(
                 for index in range(instrument_count)
             ]
         },
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=30,
     )
     if response.status_code != 202:
@@ -303,7 +305,10 @@ def dlq_event_count(*, event_replay_base_url: str, ops_token: str) -> int:
 
     response = requests.get(
         f"{event_replay_base_url}/ingestion/health/error-budget?lookback_minutes=60",
-        headers={"X-Lotus-Ops-Token": ops_token},
+        headers={
+            **RUNTIME_GATE_TENANT_HEADERS,
+            "X-Lotus-Ops-Token": ops_token,
+        },
         timeout=20,
     )
     response.raise_for_status()
@@ -325,6 +330,7 @@ def reconciliation_finding_count(
             "business_date": business_date,
             "epoch": 0,
         },
+        headers=RUNTIME_GATE_TENANT_HEADERS,
         timeout=120,
     )
     response.raise_for_status()

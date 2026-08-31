@@ -23,6 +23,9 @@ def test_build_demo_bundle_contains_multi_product_coverage():
     bundle = demo_data_pack.build_demo_bundle()
 
     assert len(bundle["portfolios"]) == 5
+    assert {portfolio["tenant_id"] for portfolio in bundle["portfolios"]} == {
+        demo_data_pack.DEMO_DATA_PACK_TENANT_ID
+    }
     assert len(bundle["business_dates"]) >= 6
     assert len(bundle["transactions"]) >= 36
     assert len(bundle["market_prices"]) > len(bundle["instruments"])
@@ -1566,6 +1569,45 @@ def test_request_json_treats_remote_disconnect_as_retryable_connection_error(mon
 
     with pytest.raises(RuntimeError, match="GET http://query.dev/health connection error"):
         demo_data_pack._request_json("GET", "http://query.dev/health")
+
+
+def test_request_json_carries_demo_tenant_authority(monkeypatch):
+    captured_headers: dict[str, str | None] = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        @staticmethod
+        def read() -> bytes:
+            return b"{}"
+
+    def urlopen(req, *, timeout):
+        captured_headers["tenant_id"] = req.get_header("X-tenant-id")
+        captured_headers["timeout"] = str(timeout)
+        return Response()
+
+    monkeypatch.setattr(demo_data_pack.request, "urlopen", urlopen)
+
+    assert demo_data_pack._request_json("GET", "http://query.dev/portfolios/P1") == (200, {})
+    assert captured_headers == {
+        "tenant_id": demo_data_pack.DEMO_DATA_PACK_TENANT_ID,
+        "timeout": "15",
+    }
+
+
+def test_request_json_rejects_tenant_header_override() -> None:
+    with pytest.raises(ValueError, match="must match admitted tool tenant"):
+        demo_data_pack._request_json(
+            "GET",
+            "http://query.dev/portfolios/P1",
+            headers={"x-tenant-id": "tenant-other"},
+        )
 
 
 def test_source_probe_treats_only_not_found_as_missing(monkeypatch):
