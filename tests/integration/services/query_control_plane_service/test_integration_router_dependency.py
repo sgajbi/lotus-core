@@ -1390,6 +1390,9 @@ async def test_benchmark_assignment_success(async_test_client):
     assert mock_integration_service.resolve.await_args.kwargs["request"].as_of_date == date(
         2026, 1, 31
     )
+    call = mock_integration_service.resolve.await_args.kwargs
+    assert call["tenant_context"].tenant_id.value == "default"
+    assert call["request"].policy_context.tenant_id == "default"
 
 
 async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
@@ -1412,6 +1415,25 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
         "portfolio_id": "PORT-INT-001",
         "reason": "not_found",
     }
+
+
+async def test_benchmark_assignment_rejects_tenant_mismatch(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/benchmark-assignment",
+        json={"as_of_date": "2026-01-31", "policy_context": {"tenant_id": "tenant-b"}},
+        headers={"X-Tenant-Id": "tenant-a"},
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    assert body["metadata"] == {"source_product": "BenchmarkAssignment"}
+    mock_integration_service.resolve.assert_not_awaited()
 
 
 async def test_model_portfolio_targets_success(async_test_client):
@@ -1440,6 +1462,8 @@ async def test_model_portfolio_targets_success(async_test_client):
     assert call["model_portfolio_id"] == "MODEL_SG_BALANCED_DPM"
     assert call["request"].as_of_date == date(2026, 3, 31)
     assert call["request"].include_inactive_targets is False
+    assert call["request"].tenant_id == "default"
+    assert call["tenant_context"].tenant_id.value == "default"
 
 
 async def test_model_portfolio_targets_not_found_maps_to_404(async_test_client):
@@ -1462,6 +1486,25 @@ async def test_model_portfolio_targets_not_found_maps_to_404(async_test_client):
         "model_portfolio_id": "MODEL_MISSING",
         "reason": "not_found",
     }
+
+
+async def test_model_portfolio_targets_rejects_tenant_mismatch(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/model-portfolios/MODEL_SG_BALANCED_DPM/targets",
+        json={"as_of_date": "2026-03-31", "tenant_id": "tenant-b"},
+        headers={"X-Tenant-Id": "tenant-a"},
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    assert body["metadata"] == {"source_product": "DpmModelPortfolioTarget"}
+    mock_integration_service.resolve_model_portfolio_targets.assert_not_awaited()
 
 
 async def test_mandate_binding_success(async_test_client):

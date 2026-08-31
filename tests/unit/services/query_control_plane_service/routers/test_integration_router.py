@@ -858,6 +858,7 @@ async def test_resolve_portfolio_benchmark_assignment_maps_not_found_to_404() ->
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_portfolio_benchmark_assignment(
+            http_request=_tenant_request("tenant-sg"),
             portfolio_id="DEMO_DPM_EUR_001",
             request=BenchmarkAssignmentRequest(as_of_date="2026-01-31"),
             benchmark_assignment_service=mock_service,
@@ -890,6 +891,7 @@ async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
     )
 
     response = await resolve_portfolio_benchmark_assignment(
+        http_request=_tenant_request("tenant-sg"),
         portfolio_id="DEMO_DPM_EUR_001",
         request=BenchmarkAssignmentRequest(as_of_date="2026-01-31"),
         benchmark_assignment_service=mock_service,
@@ -897,6 +899,35 @@ async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
 
     assert response["portfolio_id"] == "DEMO_DPM_EUR_001"
     assert response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    call = mock_service.resolve.await_args.kwargs
+    assert call["tenant_context"] == _tenant_request("tenant-sg").state.tenant_context
+    assert call["request"].policy_context.tenant_id == "tenant-sg"
+
+
+@pytest.mark.asyncio
+async def test_resolve_portfolio_benchmark_assignment_rejects_mismatched_tenant() -> None:
+    mock_service = MagicMock(spec=BenchmarkAssignmentService)
+    mock_service.resolve = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_portfolio_benchmark_assignment(
+            http_request=_tenant_request("tenant-a"),
+            portfolio_id="DEMO_DPM_EUR_001",
+            request=BenchmarkAssignmentRequest(
+                as_of_date="2026-01-31",
+                policy_context={"tenant_id": "tenant-b"},
+            ),
+            benchmark_assignment_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "BenchmarkAssignment"},
+    )
+    mock_service.resolve.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -934,6 +965,7 @@ async def test_resolve_model_portfolio_targets_success_path() -> None:
     request = ModelPortfolioTargetRequest(as_of_date="2026-03-31")
 
     response = await resolve_model_portfolio_targets(
+        http_request=_tenant_request("tenant-sg"),
         model_portfolio_id="MODEL_SG_BALANCED_DPM",
         request=request,
         dpm_source_service=mock_service,
@@ -941,8 +973,9 @@ async def test_resolve_model_portfolio_targets_success_path() -> None:
 
     assert response["product_name"] == "DpmModelPortfolioTarget"
     mock_service.resolve_model_portfolio_targets.assert_awaited_once_with(
+        tenant_context=_tenant_request("tenant-sg").state.tenant_context,
         model_portfolio_id="MODEL_SG_BALANCED_DPM",
-        request=request,
+        request=request.model_copy(update={"tenant_id": "tenant-sg"}),
     )
 
 
@@ -953,6 +986,7 @@ async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_model_portfolio_targets(
+            http_request=_tenant_request("tenant-sg"),
             model_portfolio_id="MODEL_MISSING",
             request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
             dpm_source_service=mock_service,
@@ -969,6 +1003,29 @@ async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
             "reason": "not_found",
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_rejects_mismatched_tenant() -> None:
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
+    mock_service.resolve_model_portfolio_targets = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_model_portfolio_targets(
+            http_request=_tenant_request("tenant-a"),
+            model_portfolio_id="MODEL_SG_BALANCED_DPM",
+            request=ModelPortfolioTargetRequest(as_of_date="2026-03-31", tenant_id="tenant-b"),
+            dpm_source_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "DpmModelPortfolioTarget"},
+    )
+    mock_service.resolve_model_portfolio_targets.assert_not_awaited()
 
 
 @pytest.mark.asyncio

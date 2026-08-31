@@ -14,6 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from .common import SourceObservationEvidence
 
 MODEL_PORTFOLIO_TARGET_MAX_COUNT = 1_000
+MODEL_PORTFOLIO_TARGET_ROUTE_DESCRIPTION = (
+    "What: Return approved effective-dated model target weights and instrument bands for the "
+    "admitted tenant.\nHow: Binds any caller tenant assertion to admitted authority, resolves "
+    "the latest approved model version, filters inactive targets by default, and returns "
+    "deterministic ordering with source metadata, supportability, and lineage.\nWhen: Use when "
+    "lotus-manage needs governed target allocation input for DPM analysis, simulation, or "
+    "rebalance execution; it is not an advisory proposal simulator or portfolio-holdings source."
+)
 
 
 class ModelPortfolioTargetRequest(BaseModel):
@@ -32,7 +40,10 @@ class ModelPortfolioTargetRequest(BaseModel):
     )
     tenant_id: str | None = Field(
         None,
-        description="Optional tenant identifier carried for lineage and future policy resolution.",
+        description=(
+            "Optional caller tenant assertion. When omitted it is populated from admitted "
+            "authority; a conflicting value is rejected before source reads."
+        ),
         examples=["tenant_sg_pb"],
     )
 

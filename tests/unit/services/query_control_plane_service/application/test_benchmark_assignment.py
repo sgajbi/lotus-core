@@ -1,8 +1,14 @@
 """Application tests for effective benchmark assignment evidence."""
 
 from datetime import UTC, date, datetime
+from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import (
+    TenantAuthorityMismatchError,
+    TenantContext,
+    TenantId,
+)
 
 from src.services.query_control_plane_service.app.application.benchmark_assignment import (
     BenchmarkAssignmentService,
@@ -18,6 +24,7 @@ from src.services.query_control_plane_service.app.domain.benchmark_assignment im
 
 GENERATED_AT = datetime(2026, 4, 10, 12, tzinfo=UTC)
 EVIDENCE_AT = datetime(2026, 4, 10, 10, tzinfo=UTC)
+TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-sg"), actor_id="test-actor")
 
 
 def _evidence() -> BenchmarkAssignmentEvidence:
@@ -79,6 +86,21 @@ def test_content_hash_excludes_generated_at() -> None:
     assert first.content_hash == second.content_hash
 
 
+def test_content_hash_includes_tenant_authority() -> None:
+    first = build_benchmark_assignment_response(
+        evidence=_evidence(), request=_request(), generated_at=GENERATED_AT
+    )
+    second = build_benchmark_assignment_response(
+        evidence=_evidence(),
+        request=_request().model_copy(
+            update={"policy_context": BenchmarkAssignmentPolicyContext(tenant_id="tenant-other")}
+        ),
+        generated_at=GENERATED_AT,
+    )
+
+    assert first.content_hash != second.content_hash
+
+
 @pytest.mark.asyncio
 async def test_service_resolves_via_port_and_preserves_request_scope() -> None:
     class Reader:
@@ -90,11 +112,35 @@ async def test_service_resolves_via_port_and_preserves_request_scope() -> None:
     response = await BenchmarkAssignmentService(
         reader=reader,  # type: ignore[arg-type]
         clock=lambda: GENERATED_AT,
-    ).resolve(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+    ).resolve(
+        tenant_context=TENANT_CONTEXT,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=_request(),
+    )
 
     assert reader.kwargs == {
+        "tenant_id": "tenant-sg",
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
         "as_of_date": date(2026, 4, 10),
     }
     assert response is not None
     assert response.benchmark_id == "BMK_GLOBAL_BALANCED_60_40"
+    assert response.tenant_id == "tenant-sg"
+
+
+@pytest.mark.asyncio
+async def test_service_rejects_conflicting_tenant_before_assignment_read() -> None:
+    reader = AsyncMock()
+    service = BenchmarkAssignmentService(reader=reader, clock=lambda: GENERATED_AT)
+    request = _request().model_copy(
+        update={"policy_context": BenchmarkAssignmentPolicyContext(tenant_id="tenant-other")}
+    )
+
+    with pytest.raises(TenantAuthorityMismatchError):
+        await service.resolve(
+            tenant_context=TENANT_CONTEXT,
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+        )
+
+    reader.resolve.assert_not_awaited()

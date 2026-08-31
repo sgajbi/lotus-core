@@ -3,12 +3,14 @@
 from collections.abc import Callable
 from datetime import datetime
 
+from portfolio_common.domain.tenant import TenantContext, bind_tenant_authority
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
 )
 
 from ..contracts.benchmark_assignment import (
+    BenchmarkAssignmentPolicyContext,
     BenchmarkAssignmentRequest,
     BenchmarkAssignmentResponse,
 )
@@ -31,10 +33,20 @@ class BenchmarkAssignmentService:
     async def resolve(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         request: BenchmarkAssignmentRequest,
     ) -> BenchmarkAssignmentResponse | None:
+        tenant_id = bind_tenant_authority(
+            request.policy_context.tenant_id if request.policy_context else None,
+            tenant_context,
+        )
+        policy_context = request.policy_context or BenchmarkAssignmentPolicyContext()
+        request = request.model_copy(
+            update={"policy_context": policy_context.model_copy(update={"tenant_id": tenant_id})}
+        )
         evidence = await self._reader.resolve(
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
         )
@@ -68,6 +80,7 @@ def build_benchmark_assignment_response(
         {
             "product_name": "BenchmarkAssignment",
             "product_version": "v1",
+            "tenant_id": request.policy_context.tenant_id if request.policy_context else None,
             "portfolio_id": evidence.portfolio_id,
             "benchmark_id": evidence.benchmark_id,
             "as_of_date": request.as_of_date,

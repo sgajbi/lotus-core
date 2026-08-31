@@ -250,7 +250,38 @@ CRITICAL_TENANT_BOUNDARIES = (
             "dpm_source_readiness/readiness.py"
         ),
         "DpmSourceReadinessService",
-        frozenset({"get_portfolio_tax_lot_window", "get_source_readiness", "resolve"}),
+        frozenset(
+            {
+                "get_portfolio_tax_lot_window",
+                "get_source_readiness",
+                "resolve",
+                "resolve_model_portfolio_targets",
+            }
+        ),
+        "tenant_context",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/application/"
+            "dpm_source_readiness/model_portfolio_targets.py"
+        ),
+        "ModelPortfolioTargetService",
+        frozenset({"resolve"}),
+        "tenant_context",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "benchmark_assignment_sources.py"
+        ),
+        "SqlAlchemyBenchmarkAssignmentReader",
+        frozenset({"resolve"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/application/benchmark_assignment.py"),
+        "BenchmarkAssignmentService",
+        frozenset({"resolve"}),
         "tenant_context",
     ),
     (

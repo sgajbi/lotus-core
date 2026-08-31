@@ -10,13 +10,25 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+BENCHMARK_ASSIGNMENT_ROUTE_DESCRIPTION = (
+    "What: Resolve benchmark assignment for a tenant-owned portfolio as-of a point-in-time "
+    "date.\nHow: Binds caller context to admitted tenant authority, verifies portfolio ownership, "
+    "then applies effective-dating and assignment-version ordering for a deterministic match. "
+    "Reporting currency and policy pack are lineage context and do not change selection.\n"
+    "When: Used by benchmark-aware analytics, workspace composition, and reporting workflows "
+    "that require governed benchmark context before downstream calculations or evidence."
+)
+
 
 class BenchmarkAssignmentPolicyContext(BaseModel):
-    """Optional caller context retained for contract compatibility and lineage."""
+    """Caller policy context bound to admitted tenant authority and retained for lineage."""
 
     tenant_id: str | None = Field(
         None,
-        description="Tenant identifier for policy-scoped data resolution.",
+        description=(
+            "Optional caller tenant assertion. When omitted it is populated from admitted "
+            "authority; a conflicting value is rejected."
+        ),
         examples=["tenant_sg_pb"],
     )
     policy_pack_id: str | None = Field(
@@ -47,9 +59,9 @@ class BenchmarkAssignmentRequest(BaseModel):
     policy_context: BenchmarkAssignmentPolicyContext | None = Field(
         None,
         description=(
-            "Optional tenant/policy context reserved for governance metadata and future "
-            "policy-bound resolution. The current implementation still resolves the "
-            "effective assignment by portfolio_id and as_of_date."
+            "Optional tenant and policy-pack context. Tenant scope is bound to admitted "
+            "authority and governs portfolio ownership; policy_pack_id is lineage context and "
+            "does not change assignment selection."
         ),
     )
 

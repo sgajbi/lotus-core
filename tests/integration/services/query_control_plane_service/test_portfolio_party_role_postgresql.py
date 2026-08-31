@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 import pytest
 from portfolio_common.database_models import (
     Portfolio,
+    PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     PortfolioPartyRoleAssignment,
 )
@@ -27,6 +28,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
 from src.services.query_control_plane_service.app.infrastructure import (
     SqlAlchemyPortfolioManagerBookReader,
     SqlAlchemyPortfolioPartyRoleReader,
+    benchmark_assignment_sources,
     dpm_portfolio_population_sources,
 )
 from tests.test_support.tenant import TEST_TENANT_ID
@@ -42,6 +44,7 @@ SOURCE_RECORD = "ISSUE513_COVERAGE_RECORD"
 DPM_OWNED_PORTFOLIO = "ISSUE798_DPM_OWNED_PORTFOLIO"
 DPM_FOREIGN_PORTFOLIO = "ISSUE798_DPM_FOREIGN_PORTFOLIO"
 DPM_MODEL = "ISSUE798_DPM_MODEL"
+BENCHMARK_AS_OF = date(2026, 7, 18)
 
 
 def _async_database_url() -> str:
@@ -130,7 +133,22 @@ def _mandate_binding(portfolio_id: str, *, suffix: str) -> PortfolioMandateBindi
     )
 
 
-async def test_dpm_population_reader_excludes_foreign_tenant_bindings() -> None:
+def _benchmark_assignment(portfolio_id: str, *, suffix: str) -> PortfolioBenchmarkAssignment:
+    return PortfolioBenchmarkAssignment(
+        portfolio_id=portfolio_id,
+        benchmark_id=f"ISSUE798_BENCHMARK_{suffix}",
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        assignment_source="issue798_test",
+        assignment_status="active",
+        policy_pack_id="ISSUE798_POLICY",
+        source_system="issue798_test",
+        assignment_recorded_at=datetime(2026, 7, 18, 8, tzinfo=UTC),
+        assignment_version=1,
+    )
+
+
+async def test_qcp_reference_readers_exclude_foreign_tenant_portfolios() -> None:
     engine = create_async_database_engine(
         runtime_identity="lotus-core-test",
         database_url=_async_database_url(),
@@ -141,6 +159,11 @@ async def test_dpm_population_reader_excludes_foreign_tenant_bindings() -> None:
 
     try:
         async with sessions() as session:
+            await session.execute(
+                delete(PortfolioBenchmarkAssignment).where(
+                    PortfolioBenchmarkAssignment.portfolio_id.in_(portfolio_ids)
+                )
+            )
             await session.execute(
                 delete(PortfolioMandateBinding).where(
                     PortfolioMandateBinding.portfolio_id.in_(portfolio_ids)
@@ -160,6 +183,8 @@ async def test_dpm_population_reader_excludes_foreign_tenant_bindings() -> None:
                 [
                     _mandate_binding(DPM_OWNED_PORTFOLIO, suffix="OWNED"),
                     _mandate_binding(DPM_FOREIGN_PORTFOLIO, suffix="FOREIGN"),
+                    _benchmark_assignment(DPM_OWNED_PORTFOLIO, suffix="OWNED"),
+                    _benchmark_assignment(DPM_FOREIGN_PORTFOLIO, suffix="FOREIGN"),
                 ]
             )
             await session.commit()
@@ -186,8 +211,30 @@ async def test_dpm_population_reader_excludes_foreign_tenant_bindings() -> None:
 
             assert [row.portfolio_id for row in cohort] == [DPM_OWNED_PORTFOLIO]
             assert [row.portfolio_id for row in universe] == [DPM_OWNED_PORTFOLIO]
+
+            benchmark_reader = benchmark_assignment_sources.SqlAlchemyBenchmarkAssignmentReader(
+                session
+            )
+            owned_assignment = await benchmark_reader.resolve(
+                tenant_id=TEST_TENANT_ID,
+                portfolio_id=DPM_OWNED_PORTFOLIO,
+                as_of_date=BENCHMARK_AS_OF,
+            )
+            foreign_assignment = await benchmark_reader.resolve(
+                tenant_id=TEST_TENANT_ID,
+                portfolio_id=DPM_FOREIGN_PORTFOLIO,
+                as_of_date=BENCHMARK_AS_OF,
+            )
+            assert owned_assignment is not None
+            assert owned_assignment.benchmark_id == "ISSUE798_BENCHMARK_OWNED"
+            assert foreign_assignment is None
     finally:
         async with sessions() as session:
+            await session.execute(
+                delete(PortfolioBenchmarkAssignment).where(
+                    PortfolioBenchmarkAssignment.portfolio_id.in_(portfolio_ids)
+                )
+            )
             await session.execute(
                 delete(PortfolioMandateBinding).where(
                     PortfolioMandateBinding.portfolio_id.in_(portfolio_ids)

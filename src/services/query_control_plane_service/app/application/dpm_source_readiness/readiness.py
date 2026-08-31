@@ -68,12 +68,14 @@ class DpmSourceReadinessService:
     async def resolve_model_portfolio_targets(
         self,
         *,
+        tenant_context: TenantContext,
         model_portfolio_id: str,
         request: ModelPortfolioTargetRequest,
     ) -> ModelPortfolioTargetResponse | None:
         """Resolve the model-target constituent through the same capability boundary."""
 
         return await self.model_targets.resolve(
+            tenant_context=tenant_context,
             model_portfolio_id=model_portfolio_id,
             request=request,
         )

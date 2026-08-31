@@ -32,6 +32,8 @@ from ..application.risk_free_series import RiskFreeSeriesService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..application.transaction_economics.service import TransactionEconomicsService
 from ..contracts.benchmark_assignment import (
+    BENCHMARK_ASSIGNMENT_ROUTE_DESCRIPTION,
+    BenchmarkAssignmentPolicyContext,
     BenchmarkAssignmentRequest,
     BenchmarkAssignmentResponse,
 )
@@ -125,6 +127,7 @@ from ..contracts.market_data_coverage import (
     MarketDataCoverageWindowResponse,
 )
 from ..contracts.model_portfolio_targets import (
+    MODEL_PORTFOLIO_TARGET_ROUTE_DESCRIPTION,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
 )
@@ -1284,26 +1287,19 @@ async def get_dpm_source_readiness(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_forbidden_response("BenchmarkAssignment"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective benchmark assignment found.",
             BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE,
         ),
     },
     summary="Resolve effective portfolio benchmark assignment",
-    description=(
-        "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
-        "How: Applies effective-dating and assignment version ordering to return "
-        "deterministic match. Resolution is keyed by portfolio_id and as_of_date; "
-        "request reporting_currency and policy_context are caller-context fields and do "
-        "not change assignment selection in the current implementation.\n"
-        "When: Used by lotus-performance benchmark-aware analytics, lotus-gateway workspace "
-        "composition flows, and reporting workflows that need governed benchmark context "
-        "before downstream benchmark math or evidence generation."
-    ),
+    description=BENCHMARK_ASSIGNMENT_ROUTE_DESCRIPTION,
     openapi_extra=source_data_product_openapi_extra("BenchmarkAssignment"),
 )
 async def resolve_portfolio_benchmark_assignment(
     request: BenchmarkAssignmentRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose effective benchmark assignment is requested.",
@@ -1313,7 +1309,17 @@ async def resolve_portfolio_benchmark_assignment(
         get_benchmark_assignment_service
     ),
 ) -> BenchmarkAssignmentResponse:
+    tenant_id = bind_admitted_tenant_id(
+        requested_tenant_id=request.policy_context.tenant_id if request.policy_context else None,
+        tenant_context=http_request.state.tenant_context,
+        source_product="BenchmarkAssignment",
+    )
+    policy_context = request.policy_context or BenchmarkAssignmentPolicyContext()
+    request = request.model_copy(
+        update={"policy_context": policy_context.model_copy(update={"tenant_id": tenant_id})}
+    )
     response = await benchmark_assignment_service.resolve(
+        tenant_context=http_request.state.tenant_context,
         portfolio_id=portfolio_id,
         request=request,
     )
@@ -1321,10 +1327,7 @@ async def resolve_portfolio_benchmark_assignment(
         _raise_integration_source_not_found(
             source_product="BenchmarkAssignment",
             detail=BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL,
-            metadata={
-                "portfolio_id": portfolio_id,
-                "reason": "not_found",
-            },
+            metadata={"portfolio_id": portfolio_id, "reason": "not_found"},
         )
     return cast(BenchmarkAssignmentResponse, response)
 
@@ -1333,27 +1336,19 @@ async def resolve_portfolio_benchmark_assignment(
     "/model-portfolios/{model_portfolio_id}/targets",
     response_model=ModelPortfolioTargetResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_forbidden_response("DpmModelPortfolioTarget"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No approved model portfolio target found.",
             MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE,
         ),
     },
     summary="Resolve approved DPM model portfolio targets",
-    description=(
-        "What: Return the approved effective-dated model portfolio target weights and "
-        "instrument bands required by discretionary mandate portfolio management.\n"
-        "How: Resolves the latest approved model version for `model_portfolio_id` and "
-        "`as_of_date`, filters inactive targets by default, returns deterministic "
-        "instrument ordering, and includes source-data runtime metadata, supportability, "
-        "and lineage.\n"
-        "When: Use this endpoint when lotus-manage needs governed target allocation input "
-        "for stateful DPM analysis, simulation, or rebalance execution. Do not use it as "
-        "a general advisory proposal simulator or as a replacement for portfolio holdings."
-    ),
+    description=MODEL_PORTFOLIO_TARGET_ROUTE_DESCRIPTION,
     openapi_extra=source_data_product_openapi_extra("DpmModelPortfolioTarget"),
 )
 async def resolve_model_portfolio_targets(
     request: ModelPortfolioTargetRequest,
+    http_request: Request,
     model_portfolio_id: str = Path(
         ...,
         description="Canonical model portfolio identifier whose targets are requested.",
@@ -1361,9 +1356,13 @@ async def resolve_model_portfolio_targets(
     ),
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> ModelPortfolioTargetResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "DpmModelPortfolioTarget"
+    )
     response = cast(
         ModelPortfolioTargetResponse | None,
         await dpm_source_service.resolve_model_portfolio_targets(
+            tenant_context=http_request.state.tenant_context,
             model_portfolio_id=model_portfolio_id,
             request=request,
         ),

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from portfolio_common.domain.tenant import TenantContext, bind_tenant_authority
 from portfolio_common.market_reference_quality import (
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
@@ -37,9 +38,13 @@ class ModelPortfolioTargetService:
     async def resolve(
         self,
         *,
+        tenant_context: TenantContext,
         model_portfolio_id: str,
         request: ModelPortfolioTargetRequest,
     ) -> ModelPortfolioTargetResponse | None:
+        request = request.model_copy(
+            update={"tenant_id": bind_tenant_authority(request.tenant_id, tenant_context)}
+        )
         definition = await self.reader.resolve_model_portfolio_definition(
             model_portfolio_id=model_portfolio_id,
             as_of_date=request.as_of_date,
@@ -114,7 +119,7 @@ def build_model_portfolio_target_response(
             tenant_id=request.tenant_id,
             data_quality_status=data_quality_status,
             latest_evidence_timestamp=_latest_evidence_timestamp(definition, *evidence),
-            content_payload=content_payload,
+            content_payload={"tenant_id": request.tenant_id, **content_payload},
             lineage=lineage,
         ),
     )

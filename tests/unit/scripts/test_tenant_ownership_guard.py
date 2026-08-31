@@ -274,7 +274,32 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             "src/services/query_control_plane_service/app/application/"
             "dpm_source_readiness/readiness.py",
             "DpmSourceReadinessService",
-            ("get_portfolio_tax_lot_window", "get_source_readiness", "resolve"),
+            (
+                "get_portfolio_tax_lot_window",
+                "get_source_readiness",
+                "resolve",
+                "resolve_model_portfolio_targets",
+            ),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/"
+            "dpm_source_readiness/model_portfolio_targets.py",
+            "ModelPortfolioTargetService",
+            ("resolve",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "benchmark_assignment_sources.py",
+            "SqlAlchemyBenchmarkAssignmentReader",
+            ("resolve",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/benchmark_assignment.py",
+            "BenchmarkAssignmentService",
+            ("resolve",),
             "tenant_context",
         ),
         (
@@ -707,6 +732,14 @@ def test_critical_tenant_boundaries_cover_portfolio_financial_reads() -> None:
         ("IngestionJobService", "list_replay_audits", "tenant_id"),
         ("SqlAlchemyPortfolioManagerBookReader", "list_members", "tenant_id"),
         ("PortfolioManagerBookService", "resolve_membership", "tenant_context"),
+        ("SqlAlchemyBenchmarkAssignmentReader", "resolve", "tenant_id"),
+        ("BenchmarkAssignmentService", "resolve", "tenant_context"),
+        ("ModelPortfolioTargetService", "resolve", "tenant_context"),
+        (
+            "DpmSourceReadinessService",
+            "resolve_model_portfolio_targets",
+            "tenant_context",
+        ),
         ("CorporateActionReconciliationCoordinator", "reconcile", "tenant_id"),
         ("ReportingRepository", "get_portfolio_by_id", "tenant_id"),
         ("ReportingRepository", "list_portfolios", "tenant_id"),

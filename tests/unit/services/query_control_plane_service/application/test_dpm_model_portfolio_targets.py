@@ -6,6 +6,11 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import (
+    TenantAuthorityMismatchError,
+    TenantContext,
+    TenantId,
+)
 
 from src.services.query_control_plane_service.app.application.dpm_source_readiness import (
     model_portfolio_targets,
@@ -23,6 +28,7 @@ from src.services.query_control_plane_service.app.ports.dpm_source_readiness imp
 
 GENERATED_AT = datetime(2026, 4, 10, 12, tzinfo=UTC)
 EVIDENCE_AT = datetime(2026, 4, 10, 10, tzinfo=UTC)
+TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-1"), actor_id="test-actor")
 
 
 def _definition() -> ModelPortfolioDefinitionEvidence:
@@ -82,8 +88,12 @@ async def test_model_targets_are_ready_with_current_deterministic_source_proof()
     )
     request = ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10), tenant_id="tenant-1")
 
-    first = await service.resolve(model_portfolio_id="MODEL_1", request=request)
-    second = await service.resolve(model_portfolio_id="MODEL_1", request=request)
+    first = await service.resolve(
+        tenant_context=TENANT_CONTEXT, model_portfolio_id="MODEL_1", request=request
+    )
+    second = await service.resolve(
+        tenant_context=TENANT_CONTEXT, model_portfolio_id="MODEL_1", request=request
+    )
 
     assert first is not None and second is not None
     assert first.supportability.state == "READY"
@@ -91,6 +101,7 @@ async def test_model_targets_are_ready_with_current_deterministic_source_proof()
     assert first.source_evidence_current is True
     assert first.freshness_status == "CURRENT"
     assert first.content_hash.startswith("sha256:")
+    assert first.tenant_id == "tenant-1"
     assert first.source_batch_fingerprint is None
     assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
@@ -107,6 +118,7 @@ async def test_model_target_hash_excludes_response_generation_time() -> None:
         reader=reader,
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -114,6 +126,7 @@ async def test_model_target_hash_excludes_response_generation_time() -> None:
         reader=reader,
         clock=lambda: datetime(2026, 4, 10, 13, tzinfo=UTC),
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -124,11 +137,35 @@ async def test_model_target_hash_excludes_response_generation_time() -> None:
 
 
 @pytest.mark.asyncio
+async def test_model_target_hash_includes_admitted_tenant_authority() -> None:
+    reader = _reader(_target("EQ_1", "1.0000000000"))
+    service = model_portfolio_targets.ModelPortfolioTargetService(
+        reader=reader,
+        clock=lambda: GENERATED_AT,
+    )
+    first = await service.resolve(
+        tenant_context=TENANT_CONTEXT,
+        model_portfolio_id="MODEL_1",
+        request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
+    )
+    second = await service.resolve(
+        tenant_context=TenantContext(tenant_id=TenantId("tenant-other"), actor_id="test-actor"),
+        model_portfolio_id="MODEL_1",
+        request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
+    )
+
+    assert first is not None and second is not None
+    assert first.tenant_id != second.tenant_id
+    assert first.content_hash != second.content_hash
+
+
+@pytest.mark.asyncio
 async def test_model_target_weight_mismatch_is_degraded() -> None:
     response = await model_portfolio_targets.ModelPortfolioTargetService(
         reader=_reader(_target("EQ_1", "0.9000000000")),
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -148,6 +185,7 @@ async def test_unrecognized_model_target_quality_is_not_ready() -> None:
         reader=_reader(target),
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -173,6 +211,7 @@ async def test_non_complete_model_definition_quality_is_not_ready(
         reader=reader,
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -192,6 +231,7 @@ async def test_missing_model_definition_returns_not_found_without_target_query()
         reader=reader,
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -212,6 +252,7 @@ async def test_source_target_overflow_is_unavailable_without_truncated_authority
         reader=reader,
         clock=lambda: GENERATED_AT,
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         model_portfolio_id="MODEL_1",
         request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
     )
@@ -222,3 +263,23 @@ async def test_source_target_overflow_is_unavailable_without_truncated_authority
     assert response.supportability.reason == "MODEL_TARGET_LIMIT_EXCEEDED"
     assert response.supportability.target_count == 0
     assert response.source_evidence_current is False
+
+
+@pytest.mark.asyncio
+async def test_model_targets_reject_conflicting_tenant_before_source_reads() -> None:
+    reader = _reader(_target("EQ_1", "1.0000000000"))
+    service = model_portfolio_targets.ModelPortfolioTargetService(
+        reader=reader,
+        clock=lambda: GENERATED_AT,
+    )
+
+    with pytest.raises(TenantAuthorityMismatchError):
+        await service.resolve(
+            tenant_context=TENANT_CONTEXT,
+            model_portfolio_id="MODEL_1",
+            request=ModelPortfolioTargetRequest(
+                as_of_date=date(2026, 4, 10), tenant_id="tenant-other"
+            ),
+        )
+
+    reader.resolve_model_portfolio_definition.assert_not_awaited()

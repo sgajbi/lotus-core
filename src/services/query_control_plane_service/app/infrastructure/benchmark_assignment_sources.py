@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Any
 
-from portfolio_common.database_models import PortfolioBenchmarkAssignment
+from portfolio_common.database_models import Portfolio, PortfolioBenchmarkAssignment
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,11 +18,13 @@ class SqlAlchemyBenchmarkAssignmentReader:
         self._session = session
 
     async def resolve(
-        self, *, portfolio_id: str, as_of_date: date
+        self, *, tenant_id: str, portfolio_id: str, as_of_date: date
     ) -> BenchmarkAssignmentEvidence | None:
         statement = (
             select(PortfolioBenchmarkAssignment)
+            .join(Portfolio, Portfolio.portfolio_id == PortfolioBenchmarkAssignment.portfolio_id)
             .where(
+                Portfolio.tenant_id == tenant_id,
                 PortfolioBenchmarkAssignment.portfolio_id == portfolio_id,
                 effective_on(
                     PortfolioBenchmarkAssignment.effective_from,
