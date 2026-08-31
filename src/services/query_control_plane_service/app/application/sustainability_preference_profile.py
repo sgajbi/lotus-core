@@ -37,7 +37,10 @@ class SustainabilityPreferenceProfileService:
         self, *, portfolio_id: str, request: SustainabilityPreferenceProfileRequest
     ) -> SustainabilityPreferenceProfileResponse | None:
         binding = await self._mandate_reader.resolve(
-            portfolio_id=portfolio_id, as_of_date=request.as_of_date, mandate_id=request.mandate_id
+            tenant_id=request.tenant_id or "",
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
         )
         if binding is None:
             return None

@@ -47,6 +47,7 @@ class DpmReferenceDataReader(Protocol):
     async def resolve_discretionary_mandate_binding(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         as_of_date: date,
         mandate_id: str | None,

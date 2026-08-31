@@ -6608,6 +6608,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -6658,6 +6663,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
@@ -6710,6 +6720,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -6760,6 +6775,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
@@ -6934,6 +6954,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -6984,6 +7009,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
@@ -7036,6 +7066,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -7087,6 +7122,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -7137,6 +7177,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
@@ -7190,6 +7235,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -7240,6 +7290,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
@@ -7401,6 +7456,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No effective discretionary mandate binding found."
@@ -7451,6 +7511,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",

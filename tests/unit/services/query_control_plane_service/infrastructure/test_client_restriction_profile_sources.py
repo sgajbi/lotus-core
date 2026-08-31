@@ -73,6 +73,7 @@ async def test_effective_mandate_reader_resolves_and_maps_binding() -> None:
     reader = SqlAlchemyEffectiveMandateReader(session)
 
     binding = await reader.resolve(
+        tenant_id="tenant-test",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         as_of_date=date(2026, 5, 3),
         mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
@@ -81,6 +82,8 @@ async def test_effective_mandate_reader_resolves_and_maps_binding() -> None:
     assert binding is not None
     assert binding.client_id == "CIF_SG_000184"
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "JOIN portfolios" in sql
+    assert "portfolios.tenant_id = 'tenant-test'" in sql
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in sql
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in sql
     assert "portfolio_mandate_bindings.effective_to >= '2026-05-03'" in sql

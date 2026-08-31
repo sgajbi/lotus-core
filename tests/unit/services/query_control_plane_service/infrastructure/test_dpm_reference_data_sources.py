@@ -122,6 +122,7 @@ async def test_mandate_binding_applies_requested_disambiguators() -> None:
     evidence = await SqlAlchemyDpmReferenceDataReader(
         session
     ).resolve_discretionary_mandate_binding(
+        tenant_id="tenant-test",
         portfolio_id="PB_1",
         as_of_date=date(2026, 4, 10),
         mandate_id="MANDATE_1",
@@ -131,6 +132,8 @@ async def test_mandate_binding_applies_requested_disambiguators() -> None:
     assert evidence is not None
     assert evidence.rebalance_bands == {"default_band": "0.025"}
     sql = str(session.execute.await_args.args[0])
+    assert "JOIN portfolios" in sql
+    assert "portfolios.tenant_id" in sql
     assert "portfolio_mandate_bindings.mandate_id" in sql
     assert "portfolio_mandate_bindings.booking_center_code" in sql
 

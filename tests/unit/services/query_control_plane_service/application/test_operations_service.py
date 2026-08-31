@@ -79,7 +79,6 @@ def _portfolio_supportability_metric_lines() -> list[str]:
 @pytest.fixture
 def mock_ops_repo() -> AsyncMock:
     repo = AsyncMock()
-    repo.portfolio_exists.return_value = True
     repo.portfolio_exists_for_tenant.return_value = True
     repo.get_reconciliation_finding_summaries.return_value = {}
 
@@ -140,13 +139,13 @@ def mock_ops_repo() -> AsyncMock:
 
 @pytest.fixture
 def service(mock_ops_repo: AsyncMock) -> OperationsService:
-    return OperationsService(mock_ops_repo)
+    return OperationsService(mock_ops_repo, tenant_id="tenant-test")
 
 
 async def test_operations_service_accepts_repository_port(
     mock_ops_repo: AsyncMock,
 ) -> None:
-    service = OperationsService(mock_ops_repo)
+    service = OperationsService(mock_ops_repo, tenant_id="tenant-test")
 
     assert service.repo is mock_ops_repo
 
@@ -157,8 +156,9 @@ async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_
 ) -> None:
     call_order: list[str] = []
 
-    async def portfolio_exists(portfolio_id: str) -> bool:
+    async def portfolio_exists(*, tenant_id: str, portfolio_id: str) -> bool:
         call_order.append("portfolio")
+        assert tenant_id == "tenant-test"
         assert portfolio_id == "P1"
         return True
 
@@ -167,7 +167,7 @@ async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_
         assert as_of == FIXED_GENERATED_AT
         return date(2026, 4, 18)
 
-    mock_ops_repo.portfolio_exists.side_effect = portfolio_exists
+    mock_ops_repo.portfolio_exists_for_tenant.side_effect = portfolio_exists
     mock_ops_repo.get_latest_business_date.side_effect = get_latest_business_date
 
     latest_business_date = await service._resolve_portfolio_latest_business_date(
@@ -2942,7 +2942,7 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
 async def test_get_support_overview_raises_when_portfolio_missing(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
-    mock_ops_repo.portfolio_exists.return_value = False
+    mock_ops_repo.portfolio_exists_for_tenant.return_value = False
 
     with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
         await service.get_support_overview("P404")

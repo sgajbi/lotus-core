@@ -50,7 +50,9 @@ class ClientLiquidityEvidenceService:
     async def get_client_income_needs_schedule(
         self, *, portfolio_id: str, request: ClientIncomeNeedsScheduleRequest
     ) -> ClientIncomeNeedsScheduleResponse | None:
-        binding = await self._resolve_binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._resolve_binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         records = await self._reader.list_income_needs(
@@ -95,7 +97,9 @@ class ClientLiquidityEvidenceService:
     async def get_liquidity_reserve_requirement(
         self, *, portfolio_id: str, request: LiquidityReserveRequirementRequest
     ) -> LiquidityReserveRequirementResponse | None:
-        binding = await self._resolve_binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._resolve_binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         records = await self._reader.list_reserve_requirements(
@@ -140,7 +144,9 @@ class ClientLiquidityEvidenceService:
     async def get_planned_withdrawal_schedule(
         self, *, portfolio_id: str, request: PlannedWithdrawalScheduleRequest
     ) -> PlannedWithdrawalScheduleResponse | None:
-        binding = await self._resolve_binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._resolve_binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         records = await self._reader.list_planned_withdrawals(
@@ -186,9 +192,10 @@ class ClientLiquidityEvidenceService:
         )
 
     async def _resolve_binding(
-        self, portfolio_id: str, as_of_date: date, mandate_id: str | None
+        self, tenant_id: str, portfolio_id: str, as_of_date: date, mandate_id: str | None
     ) -> EffectiveMandateBinding | None:
         return await self._mandate_reader.resolve(
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             mandate_id=mandate_id,

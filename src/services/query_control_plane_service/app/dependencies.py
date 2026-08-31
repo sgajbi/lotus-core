@@ -441,9 +441,13 @@ def get_advisory_simulation_id_generator() -> UuidIdGenerator:
 
 
 def get_operations_service(
+    request: Request,
     db: AsyncSession = Depends(get_async_db_session),
 ) -> OperationsService:
-    return OperationsService(OperationsRepository(db))
+    return OperationsService(
+        OperationsRepository(db),
+        tenant_id=request.state.tenant_context.tenant_id_text,
+    )
 
 
 def get_corporate_action_support_service(

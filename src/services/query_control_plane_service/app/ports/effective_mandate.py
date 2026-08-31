@@ -12,6 +12,7 @@ class EffectiveMandateReader(Protocol):
     async def resolve(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         as_of_date: date,
         mandate_id: str | None,

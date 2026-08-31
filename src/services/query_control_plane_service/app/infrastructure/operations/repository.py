@@ -14,7 +14,6 @@ from portfolio_common.database_models import (
     OutboxEvent,
     OutboxRecoveryAudit,
     PipelineStageState,
-    Portfolio,
     PortfolioAggregationJob,
     PortfolioValuationJob,
     PositionHistory,
@@ -188,10 +187,6 @@ class OperationsRepository:
             )
         ).one()
         return analytics_export_job_health_summary_from_row(row)
-
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
     async def portfolio_exists_for_tenant(self, *, tenant_id: str, portfolio_id: str) -> bool:
         return await analytics_export_portfolio_exists(

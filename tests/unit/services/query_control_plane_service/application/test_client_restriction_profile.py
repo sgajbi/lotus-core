@@ -113,6 +113,7 @@ async def test_resolves_ready_profile_through_typed_source_port() -> None:
         (
             "binding",
             {
+                "tenant_id": "default",
                 "portfolio_id": "PB_SG_GLOBAL_BAL_001",
                 "as_of_date": date(2026, 5, 3),
                 "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",

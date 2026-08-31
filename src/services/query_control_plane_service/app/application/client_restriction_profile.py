@@ -42,6 +42,7 @@ class ClientRestrictionProfileService:
         request: ClientRestrictionProfileRequest,
     ) -> ClientRestrictionProfileResponse | None:
         binding = await self._mandate_reader.resolve(
+            tenant_id=request.tenant_id or "",
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             mandate_id=request.mandate_id,

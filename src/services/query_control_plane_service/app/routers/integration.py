@@ -1381,6 +1381,7 @@ async def resolve_model_portfolio_targets(
     "/portfolios/{portfolio_id}/mandate-binding",
     response_model=DiscretionaryMandateBindingResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("DiscretionaryMandateBinding"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             MANDATE_BINDING_NOT_FOUND_EXAMPLE,
@@ -1403,6 +1404,7 @@ async def resolve_model_portfolio_targets(
 )
 async def resolve_discretionary_mandate_binding(
     request: DiscretionaryMandateBindingRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose discretionary mandate binding is requested.",
@@ -1410,6 +1412,9 @@ async def resolve_discretionary_mandate_binding(
     ),
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> DiscretionaryMandateBindingResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "DiscretionaryMandateBinding"
+    )
     response = cast(
         DiscretionaryMandateBindingResponse | None,
         await dpm_source_service.resolve_discretionary_mandate_binding(
@@ -1433,6 +1438,7 @@ async def resolve_discretionary_mandate_binding(
     "/portfolios/{portfolio_id}/client-restriction-profile",
     response_model=ClientRestrictionProfileResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("ClientRestrictionProfile"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE,
@@ -1453,6 +1459,7 @@ async def resolve_discretionary_mandate_binding(
 )
 async def get_client_restriction_profile(
     request: ClientRestrictionProfileRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose client restriction profile is requested.",
@@ -1462,6 +1469,9 @@ async def get_client_restriction_profile(
         get_client_restriction_profile_service
     ),
 ) -> ClientRestrictionProfileResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ClientRestrictionProfile"
+    )
     response = await restriction_profile_service.get_client_restriction_profile(
         portfolio_id=portfolio_id,
         request=request,
@@ -1478,6 +1488,9 @@ async def get_client_restriction_profile(
     "/portfolios/{portfolio_id}/sustainability-preference-profile",
     response_model=SustainabilityPreferenceProfileResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response(
+            "SustainabilityPreferenceProfile"
+        ),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             SUSTAINABILITY_PREFERENCE_PROFILE_NOT_FOUND_EXAMPLE,
@@ -1498,6 +1511,7 @@ async def get_client_restriction_profile(
 )
 async def get_sustainability_preference_profile(
     request: SustainabilityPreferenceProfileRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose sustainability preference profile is requested.",
@@ -1507,6 +1521,9 @@ async def get_sustainability_preference_profile(
         get_sustainability_preference_profile_service
     ),
 ) -> SustainabilityPreferenceProfileResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "SustainabilityPreferenceProfile"
+    )
     response = await sustainability_service.get_sustainability_preference_profile(
         portfolio_id=portfolio_id,
         request=request,
@@ -1523,6 +1540,7 @@ async def get_sustainability_preference_profile(
     "/portfolios/{portfolio_id}/client-tax-profile",
     response_model=ClientTaxProfileResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("ClientTaxProfile"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             CLIENT_TAX_PROFILE_NOT_FOUND_EXAMPLE,
@@ -1543,6 +1561,7 @@ async def get_sustainability_preference_profile(
 )
 async def get_client_tax_profile(
     request: ClientTaxProfileRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose client tax profile is requested.",
@@ -1550,6 +1569,9 @@ async def get_client_tax_profile(
     ),
     tax_profile_service: ClientTaxProfileService = Depends(get_client_tax_profile_service),
 ) -> ClientTaxProfileResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ClientTaxProfile"
+    )
     response = await tax_profile_service.get_client_tax_profile(
         portfolio_id=portfolio_id,
         request=request,
@@ -1566,6 +1588,7 @@ async def get_client_tax_profile(
     "/portfolios/{portfolio_id}/client-tax-rule-set",
     response_model=ClientTaxRuleSetResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("ClientTaxRuleSet"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             CLIENT_TAX_RULE_SET_NOT_FOUND_EXAMPLE,
@@ -1585,6 +1608,7 @@ async def get_client_tax_profile(
 )
 async def get_client_tax_rule_set(
     request: ClientTaxRuleSetRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose client tax rule set is requested.",
@@ -1592,6 +1616,9 @@ async def get_client_tax_rule_set(
     ),
     tax_rule_service: ClientTaxRuleSetService = Depends(get_client_tax_rule_set_service),
 ) -> ClientTaxRuleSetResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ClientTaxRuleSet"
+    )
     response = await tax_rule_service.get_client_tax_rule_set(
         portfolio_id=portfolio_id,
         request=request,
@@ -1608,6 +1635,7 @@ async def get_client_tax_rule_set(
     "/portfolios/{portfolio_id}/client-income-needs-schedule",
     response_model=ClientIncomeNeedsScheduleResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("ClientIncomeNeedsSchedule"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             CLIENT_INCOME_NEEDS_SCHEDULE_NOT_FOUND_EXAMPLE,
@@ -1629,6 +1657,7 @@ async def get_client_tax_rule_set(
 )
 async def get_client_income_needs_schedule(
     request: ClientIncomeNeedsScheduleRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose client income-needs schedule is requested.",
@@ -1638,6 +1667,9 @@ async def get_client_income_needs_schedule(
         get_client_liquidity_evidence_service
     ),
 ) -> ClientIncomeNeedsScheduleResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ClientIncomeNeedsSchedule"
+    )
     response = await liquidity_evidence_service.get_client_income_needs_schedule(
         portfolio_id=portfolio_id,
         request=request,
@@ -1654,6 +1686,7 @@ async def get_client_income_needs_schedule(
     "/portfolios/{portfolio_id}/liquidity-reserve-requirement",
     response_model=LiquidityReserveRequirementResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("LiquidityReserveRequirement"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             LIQUIDITY_RESERVE_REQUIREMENT_NOT_FOUND_EXAMPLE,
@@ -1675,6 +1708,7 @@ async def get_client_income_needs_schedule(
 )
 async def get_liquidity_reserve_requirement(
     request: LiquidityReserveRequirementRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose liquidity reserve requirement is requested.",
@@ -1684,6 +1718,9 @@ async def get_liquidity_reserve_requirement(
         get_client_liquidity_evidence_service
     ),
 ) -> LiquidityReserveRequirementResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "LiquidityReserveRequirement"
+    )
     response = await liquidity_evidence_service.get_liquidity_reserve_requirement(
         portfolio_id=portfolio_id,
         request=request,
@@ -1700,6 +1737,7 @@ async def get_liquidity_reserve_requirement(
     "/portfolios/{portfolio_id}/planned-withdrawal-schedule",
     response_model=PlannedWithdrawalScheduleResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("PlannedWithdrawalSchedule"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE,
@@ -1720,6 +1758,7 @@ async def get_liquidity_reserve_requirement(
 )
 async def get_planned_withdrawal_schedule(
     request: PlannedWithdrawalScheduleRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose planned withdrawal schedule is requested.",
@@ -1729,6 +1768,9 @@ async def get_planned_withdrawal_schedule(
         get_client_liquidity_evidence_service
     ),
 ) -> PlannedWithdrawalScheduleResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "PlannedWithdrawalSchedule"
+    )
     response = await liquidity_evidence_service.get_planned_withdrawal_schedule(
         portfolio_id=portfolio_id,
         request=request,
@@ -1745,6 +1787,7 @@ async def get_planned_withdrawal_schedule(
     "/portfolios/{portfolio_id}/external-hedge-policy",
     response_model=ExternalHedgePolicyResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("ExternalHedgePolicy"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             EXTERNAL_HEDGE_POLICY_NOT_FOUND_EXAMPLE,
@@ -1767,6 +1810,7 @@ async def get_planned_withdrawal_schedule(
 )
 async def get_external_hedge_policy(
     request: ExternalHedgePolicyRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose external hedge policy is requested.",
@@ -1776,6 +1820,9 @@ async def get_external_hedge_policy(
         get_external_hedge_posture_service
     ),
 ) -> ExternalHedgePolicyResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ExternalHedgePolicy"
+    )
     response = await hedge_posture_service.get_external_hedge_policy(
         portfolio_id=portfolio_id,
         request=request,
@@ -1792,6 +1839,9 @@ async def get_external_hedge_policy(
     "/portfolios/{portfolio_id}/external-hedge-execution-readiness",
     response_model=ExternalHedgeExecutionReadinessResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response(
+            "ExternalHedgeExecutionReadiness"
+        ),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
@@ -1813,6 +1863,7 @@ async def get_external_hedge_policy(
 )
 async def get_external_hedge_execution_readiness(
     request: ExternalHedgeExecutionReadinessRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose external treasury readiness is requested.",
@@ -1822,6 +1873,9 @@ async def get_external_hedge_execution_readiness(
         get_external_hedge_posture_service
     ),
 ) -> ExternalHedgeExecutionReadinessResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ExternalHedgeExecutionReadiness"
+    )
     response = await hedge_posture_service.get_external_hedge_execution_readiness(
         portfolio_id=portfolio_id,
         request=request,
@@ -1838,6 +1892,9 @@ async def get_external_hedge_execution_readiness(
     "/portfolios/{portfolio_id}/external-order-execution-acknowledgement",
     response_model=ExternalOrderExecutionAcknowledgementResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response(
+            "ExternalOrderExecutionAcknowledgement"
+        ),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             EXTERNAL_ORDER_EXECUTION_ACKNOWLEDGEMENT_NOT_FOUND_EXAMPLE,
@@ -1859,6 +1916,7 @@ async def get_external_hedge_execution_readiness(
 )
 async def get_external_order_execution_acknowledgement(
     request: ExternalOrderExecutionAcknowledgementRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description=(
@@ -1870,6 +1928,11 @@ async def get_external_order_execution_acknowledgement(
         get_external_hedge_posture_service
     ),
 ) -> ExternalOrderExecutionAcknowledgementResponse:
+    request = bind_admitted_tenant_request(
+        request,
+        http_request.state.tenant_context,
+        "ExternalOrderExecutionAcknowledgement",
+    )
     response = await hedge_posture_service.get_external_order_execution_acknowledgement(
         portfolio_id=portfolio_id,
         request=request,
@@ -1886,6 +1949,7 @@ async def get_external_order_execution_acknowledgement(
     "/portfolios/{portfolio_id}/external-currency-exposure",
     response_model=ExternalCurrencyExposureResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response("ExternalCurrencyExposure"),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             EXTERNAL_CURRENCY_EXPOSURE_NOT_FOUND_EXAMPLE,
@@ -1908,6 +1972,7 @@ async def get_external_order_execution_acknowledgement(
 )
 async def get_external_currency_exposure(
     request: ExternalCurrencyExposureRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose external currency exposure is requested.",
@@ -1917,6 +1982,9 @@ async def get_external_currency_exposure(
         get_external_hedge_posture_service
     ),
 ) -> ExternalCurrencyExposureResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ExternalCurrencyExposure"
+    )
     response = await hedge_posture_service.get_external_currency_exposure(
         portfolio_id=portfolio_id,
         request=request,
@@ -1933,6 +2001,9 @@ async def get_external_currency_exposure(
     "/portfolios/{portfolio_id}/external-eligible-hedge-instruments",
     response_model=ExternalEligibleHedgeInstrumentResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: tenant_scope_forbidden_response(
+            "ExternalEligibleHedgeInstrument"
+        ),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
             EXTERNAL_ELIGIBLE_HEDGE_INSTRUMENT_NOT_FOUND_EXAMPLE,
@@ -1955,6 +2026,7 @@ async def get_external_currency_exposure(
 )
 async def get_external_eligible_hedge_instruments(
     request: ExternalEligibleHedgeInstrumentRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description=(
@@ -1966,6 +2038,9 @@ async def get_external_eligible_hedge_instruments(
         get_external_hedge_posture_service
     ),
 ) -> ExternalEligibleHedgeInstrumentResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "ExternalEligibleHedgeInstrument"
+    )
     response = await hedge_posture_service.get_external_eligible_hedge_instruments(
         portfolio_id=portfolio_id,
         request=request,

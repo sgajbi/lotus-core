@@ -50,6 +50,7 @@ class DiscretionaryMandateBindingService:
         request: DiscretionaryMandateBindingRequest,
     ) -> DiscretionaryMandateBindingResponse | None:
         evidence = await self.reader.resolve_discretionary_mandate_binding(
+            tenant_id=request.tenant_id or "",
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             mandate_id=request.mandate_id,

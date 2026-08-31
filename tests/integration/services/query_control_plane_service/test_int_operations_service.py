@@ -131,6 +131,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
         [
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="P1",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -242,7 +243,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     await async_db_session.commit()
     await async_db_session.refresh(older_control)
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_support_overview("P1")
@@ -278,6 +279,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
         [
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="P2",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -360,7 +362,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_calculator_slos("P2")
@@ -395,6 +397,7 @@ async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P2Q",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -437,7 +440,7 @@ async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_calculator_slos("P2Q")
@@ -454,6 +457,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P3",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -502,7 +506,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_reconciliation_runs("P3", skip=0, limit=10)
@@ -524,6 +528,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P6",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -582,7 +587,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
         ]
     )
     await async_db_session.commit()
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         closed_response = await service.get_reconciliation_runs("P6", skip=0, limit=10)
@@ -632,6 +637,7 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P7",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -711,7 +717,9 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
                 as_of=as_of,
             )
 
-    service = OperationsService(ResolvingOperationsRepository(async_db_session))
+    service = OperationsService(
+        ResolvingOperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID
+    )
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         snapshot_response = await service.get_reconciliation_runs("P7", skip=0, limit=10)
@@ -750,6 +758,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P4",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -818,7 +827,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_reconciliation_findings("P4", "recon-findings-old", limit=20)
@@ -850,6 +859,7 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P5",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -898,7 +908,7 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_portfolio_control_stages("P5", skip=0, limit=20)
@@ -919,6 +929,7 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P6",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -955,7 +966,7 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_reprocessing_keys("P6", skip=0, limit=20)
@@ -980,6 +991,7 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
         [
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="P7",
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -1177,7 +1189,7 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
         await renewal_session.commit()
     assert renewal_outcome is ReprocessingJobTransitionOutcome.APPLIED
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_reprocessing_jobs("P7", skip=0, limit=20)
@@ -1241,6 +1253,7 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P8",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1382,7 +1395,7 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_lineage_keys("P8", skip=0, limit=20)
@@ -1405,6 +1418,7 @@ async def test_lineage_returns_coherent_snapshot_under_state_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P8D",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1537,7 +1551,7 @@ async def test_lineage_returns_coherent_snapshot_under_state_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_lineage("P8D", "SEC-LINEAGE-DETAIL")
@@ -1564,6 +1578,7 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P9",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1610,7 +1625,7 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_valuation_jobs("P9", skip=0, limit=20)
@@ -1638,6 +1653,7 @@ async def test_valuation_jobs_expose_skipped_operational_state(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P9S",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1668,7 +1684,7 @@ async def test_valuation_jobs_expose_skipped_operational_state(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_valuation_jobs("P9S", skip=0, limit=20)
@@ -1689,6 +1705,7 @@ async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P9Q",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1729,7 +1746,7 @@ async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_valuation_jobs("P9Q", skip=0, limit=20)
@@ -1747,6 +1764,7 @@ async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P9R",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1775,7 +1793,7 @@ async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
     async_db_session.add(skipped_job)
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_valuation_jobs("P9R", skip=0, limit=20, job_id=skipped_job.id)
@@ -1793,6 +1811,7 @@ async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P10",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1835,7 +1854,7 @@ async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_aggregation_jobs("P10", skip=0, limit=20)
@@ -1861,6 +1880,7 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id="P11",
             base_currency="USD",
             open_date=date(2025, 1, 1),
@@ -1906,7 +1926,7 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_analytics_export_jobs(
@@ -1966,7 +1986,7 @@ async def test_failed_outbox_recovery_round_trip_from_dispatcher_to_service_to_d
         max_retries=3,
     )._process_batch_sync()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
     failed_rows = await service.get_failed_outbox_events(
         skip=0,
         limit=10,
@@ -2062,6 +2082,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
         [
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="LOAD_20260418T065154Z_PF_0001",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2075,6 +2096,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
             ),
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2207,7 +2229,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_load_run_progress(
@@ -2317,6 +2339,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
         [
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="LOAD_20260418T065154Z_PF_0001",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2330,6 +2353,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
             ),
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id="BOOK-TEST",
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 base_currency="USD",
                 open_date=date(2026, 4, 1),
@@ -2497,7 +2521,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     )
     await async_db_session.commit()
 
-    service = OperationsService(OperationsRepository(async_db_session))
+    service = OperationsService(OperationsRepository(async_db_session), tenant_id=TEST_TENANT_ID)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
         response = await service.get_load_run_progress(

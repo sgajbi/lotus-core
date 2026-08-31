@@ -23,8 +23,6 @@ from ..domain.operations import (
 class OperationsSupportRepository(Protocol):
     """Read and transition the operational evidence required by support use cases."""
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool: ...
-
     async def portfolio_exists_for_tenant(self, *, tenant_id: str, portfolio_id: str) -> bool: ...
 
     async def get_load_run_progress(

@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from portfolio_common.database_models import PortfolioMandateBinding
+from portfolio_common.database_models import Portfolio, PortfolioMandateBinding
 from portfolio_common.source_lifecycle_predicates import DISCRETIONARY_MANDATE_TYPE
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,12 +19,14 @@ class SqlAlchemyEffectiveMandateReader:
     async def resolve(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         as_of_date: date,
         mandate_id: str | None,
     ) -> EffectiveMandateBinding | None:
         return await resolve_effective_mandate_binding(
             self._session,
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             mandate_id=mandate_id,
@@ -34,6 +36,7 @@ class SqlAlchemyEffectiveMandateReader:
 async def resolve_effective_mandate_binding(
     session: AsyncSession,
     *,
+    tenant_id: str,
     portfolio_id: str,
     as_of_date: date,
     mandate_id: str | None,
@@ -42,7 +45,9 @@ async def resolve_effective_mandate_binding(
 
     statement = (
         select(PortfolioMandateBinding)
+        .join(Portfolio, Portfolio.portfolio_id == PortfolioMandateBinding.portfolio_id)
         .where(
+            Portfolio.tenant_id == tenant_id,
             PortfolioMandateBinding.portfolio_id == portfolio_id,
             PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
             and_(

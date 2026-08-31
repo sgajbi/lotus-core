@@ -199,6 +199,7 @@ async def test_missing_binding_returns_none_with_one_scoped_read() -> None:
     assert response is None
     assert reader.calls == [
         {
+            "tenant_id": "",
             "portfolio_id": "PB_MISSING",
             "as_of_date": date(2026, 5, 3),
             "mandate_id": None,

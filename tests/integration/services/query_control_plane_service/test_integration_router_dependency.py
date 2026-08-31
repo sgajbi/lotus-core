@@ -748,7 +748,11 @@ async def async_test_client():
         mock_integration_service
     )
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Tenant-Id": "default"},
+    ) as client:
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_benchmark_assignment_service, None)
@@ -880,6 +884,29 @@ async def test_mandate_scoped_source_routes_missing_binding_map_to_problem_detai
         "portfolio_id": "PB_MISSING",
         "reason": "not_found",
     }
+    assert service_call.await_args.kwargs["request"].tenant_id == "default"
+
+
+async def test_client_restriction_profile_rejects_body_tenant_mismatch(
+    async_test_client,
+) -> None:
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    service_call = AsyncMock()
+    mock_integration_service.get_client_restriction_profile = service_call
+
+    response = await client.post(
+        "/integration/portfolios/PB_MISSING/client-restriction-profile",
+        json={"as_of_date": "2026-05-03", "tenant_id": "tenant-other"},
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    assert body["metadata"] == {"source_product": "ClientRestrictionProfile"}
+    service_call.assert_not_awaited()
 
 
 async def test_core_snapshot_success(async_test_client):

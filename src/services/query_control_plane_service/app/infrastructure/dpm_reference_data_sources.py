@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     MarketPrice,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
+    Portfolio,
     PortfolioMandateBinding,
 )
 from portfolio_common.domain.currency import normalize_currency_code
@@ -120,6 +121,7 @@ class SqlAlchemyDpmReferenceDataReader:
     async def resolve_discretionary_mandate_binding(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         as_of_date: date,
         mandate_id: str | None,
@@ -127,7 +129,9 @@ class SqlAlchemyDpmReferenceDataReader:
     ) -> DiscretionaryMandateBindingEvidence | None:
         statement = (
             select(PortfolioMandateBinding)
+            .join(Portfolio, Portfolio.portfolio_id == PortfolioMandateBinding.portfolio_id)
             .where(
+                Portfolio.tenant_id == tenant_id,
                 PortfolioMandateBinding.portfolio_id == portfolio_id,
                 PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
                 effective_on(

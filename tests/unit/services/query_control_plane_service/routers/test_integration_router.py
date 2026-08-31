@@ -1313,6 +1313,7 @@ async def test_resolve_discretionary_mandate_binding_success_path() -> None:
     request = DiscretionaryMandateBindingRequest(as_of_date="2026-04-10")
 
     response = await resolve_discretionary_mandate_binding(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         dpm_source_service=mock_service,
@@ -1322,7 +1323,7 @@ async def test_resolve_discretionary_mandate_binding_success_path() -> None:
     assert response["model_portfolio_id"] == "MODEL_PB_SG_GLOBAL_BAL_DPM"
     mock_service.resolve_discretionary_mandate_binding.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
-        request=request,
+        request=request.model_copy(update={"tenant_id": "default"}),
     )
 
 
@@ -1333,6 +1334,7 @@ async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> 
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_discretionary_mandate_binding(
+            http_request=_tenant_request(),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=DiscretionaryMandateBindingRequest(as_of_date="2026-04-10"),
             dpm_source_service=mock_service,
@@ -2003,6 +2005,7 @@ async def test_get_client_restriction_profile_router_function() -> None:
     )
 
     response = await get_client_restriction_profile(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         restriction_profile_service=mock_service,
@@ -2022,6 +2025,7 @@ async def test_client_restriction_profile_maps_missing_binding_to_problem_detail
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_client_restriction_profile(
+            http_request=_tenant_request(),
             portfolio_id="PB_MISSING",
             request=ClientRestrictionProfileRequest(as_of_date="2026-05-03"),
             restriction_profile_service=mock_service,
@@ -2038,6 +2042,32 @@ async def test_client_restriction_profile_maps_missing_binding_to_problem_detail
             "reason": "not_found",
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_client_restriction_profile_rejects_requested_tenant_mismatch() -> None:
+    mock_service = MagicMock(spec=ClientRestrictionProfileService)
+    mock_service.get_client_restriction_profile = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_client_restriction_profile(
+            http_request=_tenant_request("tenant-a"),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=ClientRestrictionProfileRequest(
+                as_of_date="2026-05-03",
+                tenant_id="tenant-b",
+            ),
+            restriction_profile_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+        metadata={"source_product": "ClientRestrictionProfile"},
+    )
+    mock_service.get_client_restriction_profile.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -2084,6 +2114,7 @@ async def test_get_sustainability_preference_profile_router_function() -> None:
     )
 
     response = await get_sustainability_preference_profile(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         sustainability_service=mock_service,
@@ -2103,6 +2134,7 @@ async def test_sustainability_preference_maps_missing_binding_to_problem_details
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_sustainability_preference_profile(
+            http_request=_tenant_request(),
             portfolio_id="PB_MISSING",
             request=SustainabilityPreferenceProfileRequest(as_of_date="2026-05-03"),
             sustainability_service=mock_service,
@@ -2145,6 +2177,7 @@ async def test_get_client_tax_profile_router_function() -> None:
     request = ClientTaxProfileRequest(as_of_date="2026-05-03", tenant_id="default")
 
     response = await get_client_tax_profile(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         tax_profile_service=mock_service,
@@ -2164,6 +2197,7 @@ async def test_client_tax_profile_maps_missing_binding_to_problem_details() -> N
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_client_tax_profile(
+            http_request=_tenant_request(),
             portfolio_id="PB_MISSING",
             request=ClientTaxProfileRequest(as_of_date="2026-05-03"),
             tax_profile_service=mock_service,
@@ -2206,6 +2240,7 @@ async def test_get_client_tax_rule_set_router_function() -> None:
     request = ClientTaxRuleSetRequest(as_of_date="2026-05-03", tenant_id="default")
 
     response = await get_client_tax_rule_set(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         tax_rule_service=mock_service,
@@ -2224,6 +2259,7 @@ async def test_client_tax_rule_set_maps_missing_binding_to_problem_details() -> 
     mock_service.get_client_tax_rule_set = AsyncMock(return_value=None)
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_client_tax_rule_set(
+            http_request=_tenant_request(),
             portfolio_id="PB_MISSING",
             request=ClientTaxRuleSetRequest(as_of_date="2026-05-03"),
             tax_rule_service=mock_service,
@@ -2265,6 +2301,7 @@ async def test_get_client_income_needs_schedule_router_function() -> None:
     request = ClientIncomeNeedsScheduleRequest(as_of_date="2026-05-03", tenant_id="default")
 
     response = await get_client_income_needs_schedule(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         liquidity_evidence_service=mock_service,
@@ -2301,6 +2338,7 @@ async def test_get_liquidity_reserve_requirement_router_function() -> None:
     request = LiquidityReserveRequirementRequest(as_of_date="2026-05-03", tenant_id="default")
 
     response = await get_liquidity_reserve_requirement(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         liquidity_evidence_service=mock_service,
@@ -2338,6 +2376,7 @@ async def test_get_planned_withdrawal_schedule_router_function() -> None:
     request = PlannedWithdrawalScheduleRequest(as_of_date="2026-05-03", tenant_id="default")
 
     response = await get_planned_withdrawal_schedule(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         liquidity_evidence_service=mock_service,
@@ -2381,6 +2420,7 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
     )
 
     response = await get_external_hedge_execution_readiness(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         hedge_posture_service=mock_service,
@@ -2429,6 +2469,7 @@ async def test_liquidity_source_routes_map_missing_binding_to_problem_details(
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await route_handler(
+            http_request=_tenant_request(),
             portfolio_id="PB_MISSING",
             request=route_request,
             liquidity_evidence_service=mock_service,
@@ -2445,7 +2486,10 @@ async def test_liquidity_source_routes_map_missing_binding_to_problem_details(
             "reason": "not_found",
         },
     )
-    service_call.assert_awaited_once_with(portfolio_id="PB_MISSING", request=route_request)
+    service_call.assert_awaited_once_with(
+        portfolio_id="PB_MISSING",
+        request=route_request.model_copy(update={"tenant_id": "default"}),
+    )
 
 
 @pytest.mark.parametrize(
@@ -2496,6 +2540,7 @@ async def test_mandate_scoped_source_routes_map_missing_binding_to_problem_detai
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await route_handler(
+            http_request=_tenant_request(),
             portfolio_id="PB_MISSING",
             request=route_request,
             hedge_posture_service=mock_service,
@@ -2512,7 +2557,10 @@ async def test_mandate_scoped_source_routes_map_missing_binding_to_problem_detai
             "reason": "not_found",
         },
     )
-    service_call.assert_awaited_once_with(portfolio_id="PB_MISSING", request=route_request)
+    service_call.assert_awaited_once_with(
+        portfolio_id="PB_MISSING",
+        request=route_request.model_copy(update={"tenant_id": "default"}),
+    )
 
 
 @pytest.mark.asyncio
@@ -2547,6 +2595,7 @@ async def test_get_external_order_execution_acknowledgement_router_function() ->
     )
 
     response = await get_external_order_execution_acknowledgement(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         hedge_posture_service=mock_service,
@@ -2591,6 +2640,7 @@ async def test_get_external_hedge_policy_router_function() -> None:
     )
 
     response = await get_external_hedge_policy(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         hedge_posture_service=mock_service,
@@ -2635,6 +2685,7 @@ async def test_get_external_currency_exposure_router_function() -> None:
     )
 
     response = await get_external_currency_exposure(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         hedge_posture_service=mock_service,
@@ -2681,6 +2732,7 @@ async def test_get_external_eligible_hedge_instruments_router_function() -> None
     )
 
     response = await get_external_eligible_hedge_instruments(
+        http_request=_tenant_request(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         hedge_posture_service=mock_service,

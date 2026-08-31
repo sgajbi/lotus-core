@@ -133,7 +133,9 @@ class ExternalHedgePostureService:
     async def get_external_currency_exposure(
         self, *, portfolio_id: str, request: ExternalCurrencyExposureRequest
     ) -> ExternalCurrencyExposureResponse | None:
-        binding = await self._binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         return ExternalCurrencyExposureResponse(
@@ -165,7 +167,9 @@ class ExternalHedgePostureService:
     async def get_external_hedge_policy(
         self, *, portfolio_id: str, request: ExternalHedgePolicyRequest
     ) -> ExternalHedgePolicyResponse | None:
-        binding = await self._binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         return ExternalHedgePolicyResponse(
@@ -197,7 +201,9 @@ class ExternalHedgePostureService:
     async def get_external_eligible_hedge_instruments(
         self, *, portfolio_id: str, request: ExternalEligibleHedgeInstrumentRequest
     ) -> ExternalEligibleHedgeInstrumentResponse | None:
-        binding = await self._binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         return ExternalEligibleHedgeInstrumentResponse(
@@ -263,7 +269,9 @@ class ExternalHedgePostureService:
     async def get_external_hedge_execution_readiness(
         self, *, portfolio_id: str, request: ExternalHedgeExecutionReadinessRequest
     ) -> ExternalHedgeExecutionReadinessResponse | None:
-        binding = await self._binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         return ExternalHedgeExecutionReadinessResponse(
@@ -294,7 +302,9 @@ class ExternalHedgePostureService:
     async def get_external_order_execution_acknowledgement(
         self, *, portfolio_id: str, request: ExternalOrderExecutionAcknowledgementRequest
     ) -> ExternalOrderExecutionAcknowledgementResponse | None:
-        binding = await self._binding(portfolio_id, request.as_of_date, request.mandate_id)
+        binding = await self._binding(
+            request.tenant_id or "", portfolio_id, request.as_of_date, request.mandate_id
+        )
         if binding is None:
             return None
         identity = self._identity(portfolio_id, binding, request.as_of_date)
@@ -331,9 +341,10 @@ class ExternalHedgePostureService:
         )
 
     async def _binding(
-        self, portfolio_id: str, as_of_date: date, mandate_id: str | None
+        self, tenant_id: str, portfolio_id: str, as_of_date: date, mandate_id: str | None
     ) -> EffectiveMandateBinding | None:
         return await self._mandate_reader.resolve(
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             mandate_id=mandate_id,
