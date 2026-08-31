@@ -27,8 +27,13 @@ _LEGACY_PORTFOLIO_STATUS_INDEX = "ix_analytics_export_jobs_portfolio_status_crea
 _TENANT_PORTFOLIO_STATUS_INDEX = "ix_analytics_export_jobs_tenant_portfolio_status_created_at"
 _LEGACY_FINGERPRINT_INDEX = "ix_analytics_export_jobs_dataset_fingerprint_id"
 _TENANT_FINGERPRINT_INDEX = "ix_analytics_export_jobs_tenant_dataset_fingerprint_id"
+_TENANT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
+    r"\2029\202F\205F\3000'"
+)
 _TENANT_BACKFILL = sa.text(
-    """
+    f"""
     UPDATE analytics_export_jobs AS job
     SET tenant_id = portfolio.tenant_id
     FROM portfolios AS portfolio
@@ -44,7 +49,7 @@ _TENANT_BACKFILL = sa.text(
         INTO ambiguous_count
         FROM analytics_export_jobs
         WHERE tenant_id IS NULL
-           OR tenant_id <> btrim(tenant_id)
+           OR tenant_id <> btrim(tenant_id, {_TENANT_TRIM_CHARS})
            OR tenant_id = ''
            OR char_length(tenant_id) > 128;
 
@@ -54,7 +59,7 @@ _TENANT_BACKFILL = sa.text(
             SELECT job_id
             FROM analytics_export_jobs
             WHERE tenant_id IS NULL
-               OR tenant_id <> btrim(tenant_id)
+               OR tenant_id <> btrim(tenant_id, {_TENANT_TRIM_CHARS})
                OR tenant_id = ''
                OR char_length(tenant_id) > 128
             ORDER BY job_id
@@ -93,7 +98,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         _TENANT_CHECK,
         _TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> ''",
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) AND tenant_id <> ''",
     )
     op.create_foreign_key(
         _TENANT_PORTFOLIO_FK,

@@ -6,13 +6,15 @@ from typing import Any
 
 from sqlalchemy import CheckConstraint, Index
 
+from .database_text_contract import CANONICAL_TENANT_ID_CHECK_SQL
+
 
 def ingestion_job_table_args(*, submitted_at: Any, row_id: Any) -> tuple[Any, ...]:
     """Return the governed ingestion-job integrity and access-path contract."""
 
     return (
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND char_length(tenant_id) <= 128",
+            f"{CANONICAL_TENANT_ID_CHECK_SQL} AND char_length(tenant_id) <= 128",
             name="ck_ingestion_jobs_tenant_authority",
         ),
         CheckConstraint(

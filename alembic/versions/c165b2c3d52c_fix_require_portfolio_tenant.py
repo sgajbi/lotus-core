@@ -33,8 +33,13 @@ _INGESTION_JOB_TABLE = "ingestion_jobs"
 _INGESTION_JOB_TENANT_CHECK = "ck_ingestion_jobs_tenant_authority"
 _INGESTION_JOB_TENANT_INDEX = "ix_ingestion_jobs_tenant_submitted_at"
 _INGESTION_JOB_IDEMPOTENCY_INDEX = "ix_ingestion_jobs_tenant_endpoint_idempotency_submitted"
+_TENANT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
+    r"\2029\202F\205F\3000'"
+)
 _TENANT_PREFLIGHT = sa.text(
-    """
+    f"""
     DO $$
     DECLARE
         ambiguous_count bigint;
@@ -43,17 +48,12 @@ _TENANT_PREFLIGHT = sa.text(
         PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE portfolios IN ACCESS EXCLUSIVE MODE;
 
-        UPDATE portfolios
-        SET tenant_id = btrim(tenant_id)
-        WHERE tenant_id IS NOT NULL
-          AND tenant_id IS DISTINCT FROM btrim(tenant_id);
-
         SELECT count(*)
         INTO ambiguous_count
         FROM portfolios
         WHERE tenant_id IS NULL
-           OR tenant_id = ''
-           OR char_length(tenant_id) > 128;
+           OR btrim(tenant_id, {_TENANT_TRIM_CHARS}) = ''
+           OR char_length(btrim(tenant_id, {_TENANT_TRIM_CHARS})) > 128;
 
         SELECT string_agg(portfolio_id, ', ' ORDER BY portfolio_id)
         INTO portfolio_samples
@@ -61,8 +61,8 @@ _TENANT_PREFLIGHT = sa.text(
             SELECT portfolio_id
             FROM portfolios
             WHERE tenant_id IS NULL
-               OR tenant_id = ''
-               OR char_length(tenant_id) > 128
+               OR btrim(tenant_id, {_TENANT_TRIM_CHARS}) = ''
+               OR char_length(btrim(tenant_id, {_TENANT_TRIM_CHARS})) > 128
             ORDER BY portfolio_id
             LIMIT 20
         ) AS ambiguous_portfolios;
@@ -79,6 +79,10 @@ _TENANT_PREFLIGHT = sa.text(
                     'do not assign a synthetic or deployment-default tenant'
                 );
         END IF;
+
+        UPDATE portfolios
+        SET tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS})
+        WHERE tenant_id IS DISTINCT FROM btrim(tenant_id, {_TENANT_TRIM_CHARS});
     END
     $$
     """
@@ -125,7 +129,7 @@ _DOWNGRADE_PREFLIGHT = sa.text(
     """
 )
 _INGESTION_JOB_TENANT_PREFLIGHT = sa.text(
-    """
+    f"""
     DO $$
     DECLARE
         ambiguous_count bigint;
@@ -147,7 +151,7 @@ _INGESTION_JOB_TENANT_PREFLIGHT = sa.text(
              AND audit.occurred_at >= job.submitted_at - INTERVAL '5 minutes'
             WHERE job.tenant_id IS NULL
               AND audit.tenant_id IS NOT NULL
-              AND audit.tenant_id = btrim(audit.tenant_id)
+              AND audit.tenant_id = btrim(audit.tenant_id, {_TENANT_TRIM_CHARS})
               AND audit.tenant_id <> ''
               AND char_length(audit.tenant_id) <= 128
             GROUP BY job.id
@@ -207,7 +211,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         _SCOPE_CONSTRAINT,
         _TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND "
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) AND tenant_id <> '' AND "
         "(legal_book_id IS NULL OR "
         "(legal_book_id = btrim(legal_book_id) AND legal_book_id <> ''))",
     )
@@ -226,7 +230,8 @@ def upgrade() -> None:
     op.create_check_constraint(
         _INGESTION_JOB_TENANT_CHECK,
         _INGESTION_JOB_TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND char_length(tenant_id) <= 128",
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) "
+        "AND tenant_id <> '' AND char_length(tenant_id) <= 128",
     )
     op.create_index(
         _INGESTION_JOB_TENANT_INDEX,

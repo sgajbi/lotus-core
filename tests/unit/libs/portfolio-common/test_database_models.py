@@ -170,6 +170,33 @@ def test_ingestion_job_declares_complete_failure_outcome_contract() -> None:
     assert "^sha256:" not in fingerprint_constraint
 
 
+@pytest.mark.parametrize(
+    ("table_name", "constraint_name"),
+    [
+        ("portfolios", "ck_portfolios_valuation_book_scope_complete"),
+        ("ingestion_jobs", "ck_ingestion_jobs_tenant_authority"),
+        ("simulation_sessions", "ck_simulation_sessions_tenant_authority"),
+        ("analytics_export_jobs", "ck_analytics_export_jobs_tenant_authority"),
+        ("financial_reconciliation_runs", "ck_fin_recon_tenant"),
+    ],
+)
+def test_s1_tenant_owned_tables_reject_python_boundary_whitespace(
+    table_name: str,
+    constraint_name: str,
+) -> None:
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in Base.metadata.tables[table_name].constraints
+        if constraint.name is not None and hasattr(constraint, "sqltext")
+    }
+
+    tenant_check_sql = constraints[constraint_name]
+    assert "tenant_id = btrim(tenant_id, U&' " in tenant_check_sql
+    assert "\\0009\\000A\\000B\\000C\\000D" in tenant_check_sql
+    assert "\\2029\\202F\\205F\\3000'" in tenant_check_sql
+    assert "tenant_id <> ''" in tenant_check_sql
+
+
 def test_average_cost_pool_state_declares_integrity_constraints_and_support_index() -> None:
     table = AverageCostPoolState.__table__
     constraint_names = {constraint.name for constraint in table.constraints}
@@ -365,9 +392,10 @@ def test_analytics_export_job_enforces_tenant_portfolio_ownership():
         "portfolios.tenant_id",
         "portfolios.portfolio_id",
     ]
-    assert "tenant_id = btrim(tenant_id) AND tenant_id <> ''" in str(
-        constraints["ck_analytics_export_jobs_tenant_authority"].sqltext
-    )
+    tenant_check_sql = str(constraints["ck_analytics_export_jobs_tenant_authority"].sqltext)
+    assert "tenant_id = btrim(tenant_id, U&' " in tenant_check_sql
+    assert "\\0009\\000A\\000B\\000C\\000D" in tenant_check_sql
+    assert "tenant_id <> ''" in tenant_check_sql
 
 
 def test_portfolio_declares_portfolio_manager_book_index():
@@ -394,7 +422,8 @@ def test_portfolio_declares_complete_valuation_book_scope_contract():
 
     assert "ck_portfolios_valuation_book_scope_complete" in constraints
     scope_sql = str(constraints["ck_portfolios_valuation_book_scope_complete"].sqltext)
-    assert "tenant_id = btrim(tenant_id)" in scope_sql
+    assert "tenant_id = btrim(tenant_id, U&' " in scope_sql
+    assert "\\0009\\000A\\000B\\000C\\000D" in scope_sql
     assert "legal_book_id = btrim(legal_book_id)" in scope_sql
     assert "tenant_id <> ''" in scope_sql
     assert "legal_book_id <> ''" in scope_sql

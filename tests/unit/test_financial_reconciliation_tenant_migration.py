@@ -89,6 +89,8 @@ def test_reconciliation_tenant_migration_is_fail_closed_and_reversible(
     backfill = operations[1][1]
     assert "SET tenant_id = portfolio.tenant_id" in backfill
     assert "run.portfolio_id = portfolio.portfolio_id" in backfill
+    assert "tenant_id <> btrim(tenant_id, U&' " in backfill
+    assert "\\0009\\000A\\000B\\000C\\000D" in backfill
     assert "RAISE EXCEPTION" in backfill
     assert "do not assign a synthetic or deployment-default tenant" in backfill
     assert operations[2][0:3] == (
@@ -97,6 +99,17 @@ def test_reconciliation_tenant_migration_is_fail_closed_and_reversible(
         "tenant_id",
     )
     assert operations[2][3]["nullable"] is False
+    tenant_check = next(
+        operation
+        for operation in operations
+        if operation[0:3]
+        == (
+            "create_check",
+            "ck_fin_recon_tenant",
+            "financial_reconciliation_runs",
+        )
+    )
+    assert "tenant_id = btrim(tenant_id, U&' " in tenant_check[3]
     assert (
         "create_fk",
         "fk_fin_recon_runs_tenant_portfolio",

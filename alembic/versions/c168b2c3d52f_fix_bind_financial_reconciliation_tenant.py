@@ -26,8 +26,13 @@ _TENANT_CHECK = "ck_fin_recon_tenant"
 _TENANT_PORTFOLIO_FK = "fk_fin_recon_runs_tenant_portfolio"
 _TENANT_STARTED_INDEX = "ix_fin_recon_runs_tenant_started_id"
 _TENANT_PORTFOLIO_STARTED_INDEX = "ix_fin_recon_tenant_port"
+_TENANT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
+    r"\2029\202F\205F\3000'"
+)
 _TENANT_BACKFILL = sa.text(
-    """
+    f"""
     UPDATE financial_reconciliation_runs AS run
     SET tenant_id = portfolio.tenant_id
     FROM portfolios AS portfolio
@@ -43,7 +48,7 @@ _TENANT_BACKFILL = sa.text(
         INTO ambiguous_count
         FROM financial_reconciliation_runs
         WHERE tenant_id IS NULL
-           OR tenant_id <> btrim(tenant_id)
+           OR tenant_id <> btrim(tenant_id, {_TENANT_TRIM_CHARS})
            OR tenant_id = ''
            OR char_length(tenant_id) > 128;
 
@@ -53,7 +58,7 @@ _TENANT_BACKFILL = sa.text(
             SELECT run_id
             FROM financial_reconciliation_runs
             WHERE tenant_id IS NULL
-               OR tenant_id <> btrim(tenant_id)
+               OR tenant_id <> btrim(tenant_id, {_TENANT_TRIM_CHARS})
                OR tenant_id = ''
                OR char_length(tenant_id) > 128
             ORDER BY run_id
@@ -92,7 +97,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         _TENANT_CHECK,
         _TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> ''",
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) AND tenant_id <> ''",
     )
     op.create_foreign_key(
         _TENANT_PORTFOLIO_FK,

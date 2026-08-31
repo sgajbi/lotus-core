@@ -23,6 +23,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from .analytics_export_job_schema import analytics_export_job_table_args
+from .database_text_contract import (
+    CANONICAL_TENANT_ID_CHECK_SQL,
+    PYTHON_STRIP_WHITESPACE_SQL,
+)
 from .db_base import Base
 from .domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
@@ -51,11 +55,7 @@ from .source_lifecycle_predicates import (
     SUSTAINABILITY_PREFERENCE_ACTIVE,
 )
 
-_REPLAY_TEXT_TRIM_CHARS = (
-    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
-    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
-    r"\2029\202F\205F\3000'"
-)
+_REPLAY_TEXT_TRIM_CHARS = PYTHON_STRIP_WHITESPACE_SQL
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
 _FX_GENERATED_AT_TIMEZONE_PATTERN = (
     r"'^[0-9]{4}-?[0-9]{2}-?[0-9]{2}.+[0-9]{2}"
@@ -129,7 +129,7 @@ class Portfolio(Base):
             name="uq_portfolios_tenant_portfolio_id",
         ),
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND "
+            f"{CANONICAL_TENANT_ID_CHECK_SQL} AND "
             "(legal_book_id IS NULL OR "
             "(legal_book_id = btrim(legal_book_id) AND legal_book_id <> ''))",
             name="ck_portfolios_valuation_book_scope_complete",
@@ -5354,7 +5354,8 @@ class FinancialReconciliationRun(Base):
             name="fk_fin_recon_runs_tenant_portfolio",
         ),
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> ''", name="ck_fin_recon_tenant"
+            CANONICAL_TENANT_ID_CHECK_SQL,
+            name="ck_fin_recon_tenant",
         ),
         _finite_numeric_check_constraint("ck_fin_recon_tolerance_finite", "tolerance"),
         CheckConstraint("tolerance >= 0", name="ck_fin_recon_tolerance_nonnegative"),

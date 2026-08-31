@@ -91,6 +91,8 @@ def test_simulation_session_tenant_migration_is_fail_closed_and_reversible(
     backfill = operations[1][1]
     assert "SET tenant_id = portfolio.tenant_id" in backfill
     assert "session.portfolio_id = portfolio.portfolio_id" in backfill
+    assert "tenant_id <> btrim(tenant_id, U&' " in backfill
+    assert "\\0009\\000A\\000B\\000C\\000D" in backfill
     assert "RAISE EXCEPTION" in backfill
     assert "do not assign a synthetic or deployment-default tenant" in backfill
     assert operations[2][0:3] == (
@@ -104,6 +106,7 @@ def test_simulation_session_tenant_migration_is_fail_closed_and_reversible(
         "ck_simulation_sessions_tenant_authority",
         "simulation_sessions",
     )
+    assert "tenant_id = btrim(tenant_id, U&' " in operations[3][3]
     assert (
         "create_index",
         "ix_simulation_sessions_tenant_session_id",

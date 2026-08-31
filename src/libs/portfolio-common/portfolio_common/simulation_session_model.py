@@ -11,6 +11,7 @@ from sqlalchemy import (
     func,
 )
 
+from .database_text_contract import CANONICAL_TENANT_ID_CHECK_SQL
 from .db_base import Base
 
 
@@ -37,7 +38,7 @@ class SimulationSession(Base):
             name="fk_simulation_sessions_tenant_portfolio",
         ),
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> ''",
+            CANONICAL_TENANT_ID_CHECK_SQL,
             name="ck_simulation_sessions_tenant_authority",
         ),
         Index("ix_simulation_sessions_tenant_session_id", "tenant_id", "session_id"),

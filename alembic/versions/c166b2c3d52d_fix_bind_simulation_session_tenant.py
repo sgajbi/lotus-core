@@ -28,8 +28,13 @@ _PORTFOLIO_TENANT_INDEX = "ix_portfolios_tenant_portfolio_id"
 _PORTFOLIO_TENANT_UNIQUE = "uq_portfolios_tenant_portfolio_id"
 _LEGACY_SESSION_PORTFOLIO_FK = "simulation_sessions_portfolio_id_fkey"
 _SESSION_PORTFOLIO_FK = "fk_simulation_sessions_tenant_portfolio"
+_TENANT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
+    r"\2029\202F\205F\3000'"
+)
 _TENANT_BACKFILL = sa.text(
-    """
+    f"""
     UPDATE simulation_sessions AS session
     SET tenant_id = portfolio.tenant_id
     FROM portfolios AS portfolio
@@ -45,7 +50,7 @@ _TENANT_BACKFILL = sa.text(
         INTO ambiguous_count
         FROM simulation_sessions
         WHERE tenant_id IS NULL
-           OR tenant_id <> btrim(tenant_id)
+           OR tenant_id <> btrim(tenant_id, {_TENANT_TRIM_CHARS})
            OR tenant_id = ''
            OR char_length(tenant_id) > 128;
 
@@ -55,7 +60,7 @@ _TENANT_BACKFILL = sa.text(
             SELECT session_id
             FROM simulation_sessions
             WHERE tenant_id IS NULL
-               OR tenant_id <> btrim(tenant_id)
+               OR tenant_id <> btrim(tenant_id, {_TENANT_TRIM_CHARS})
                OR tenant_id = ''
                OR char_length(tenant_id) > 128
             ORDER BY session_id
@@ -94,7 +99,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         _TENANT_CHECK,
         _TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> ''",
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) AND tenant_id <> ''",
     )
     op.drop_index(
         _PORTFOLIO_TENANT_INDEX,

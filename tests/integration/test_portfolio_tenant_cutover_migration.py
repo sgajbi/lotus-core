@@ -289,6 +289,14 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
                 "legal_book_id": None,
             },
         )
+        connection.execute(
+            PORTFOLIO_INSERT,
+            {
+                "portfolio_id": "TENANT-CUTOVER-WHITESPACE",
+                "tenant_id": "\t\n",
+                "legal_book_id": "BOOK-WHITESPACE",
+            },
+        )
         connection.execute(LEGACY_INGESTION_JOB_INSERT)
         connection.execute(UNRELATED_REUSED_CORRELATION_AUDIT_INSERT)
 
@@ -297,15 +305,19 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
             migration["upgrade"]()
         savepoint.rollback()
         error_text = str(exc_info.value)
-        assert "portfolio tenant cutover found 1 ambiguous root row" in error_text
+        assert "portfolio tenant cutover found 2 ambiguous root row" in error_text
         assert "TENANT-CUTOVER-AMBIGUOUS" in error_text
+        assert "TENANT-CUTOVER-WHITESPACE" in error_text
 
         connection.execute(
             text(
                 """
                 UPDATE portfolios
                 SET tenant_id = 'tenant-test', legal_book_id = 'book-test'
-                WHERE portfolio_id = 'TENANT-CUTOVER-AMBIGUOUS'
+                WHERE portfolio_id IN (
+                    'TENANT-CUTOVER-AMBIGUOUS',
+                    'TENANT-CUTOVER-WHITESPACE'
+                )
                 """
             )
         )
@@ -386,6 +398,18 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
                 },
             )
         invalid_savepoint.rollback()
+
+        whitespace_savepoint = connection.begin_nested()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                PORTFOLIO_INSERT,
+                {
+                    "portfolio_id": "TENANT-CUTOVER-WHITESPACE-NEW",
+                    "tenant_id": "\t\n",
+                    "legal_book_id": "BOOK-WHITESPACE",
+                },
+            )
+        whitespace_savepoint.rollback()
 
         connection.execute(
             text(

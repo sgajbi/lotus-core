@@ -8,6 +8,8 @@ from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Index
 from sqlalchemy.schema import SchemaItem
 from sqlalchemy.sql.elements import ColumnElement
 
+from .database_text_contract import CANONICAL_TENANT_ID_CHECK_SQL
+
 
 def analytics_export_job_table_args(id_column: ColumnElement[Any]) -> tuple[SchemaItem, ...]:
     return (
@@ -17,7 +19,7 @@ def analytics_export_job_table_args(id_column: ColumnElement[Any]) -> tuple[Sche
             name="fk_analytics_export_jobs_tenant_portfolio",
         ),
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> ''",
+            CANONICAL_TENANT_ID_CHECK_SQL,
             name="ck_analytics_export_jobs_tenant_authority",
         ),
         Index(

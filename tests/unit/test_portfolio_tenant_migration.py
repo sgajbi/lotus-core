@@ -68,10 +68,12 @@ def test_portfolio_tenant_migration_fails_closed_and_is_reversible(monkeypatch) 
     preflights = [operation[1] for operation in operations if operation[0] == "execute"]
     preflight = preflights[0]
     assert "LOCK TABLE portfolios IN ACCESS EXCLUSIVE MODE" in preflight
-    assert "SET tenant_id = btrim(tenant_id)" in preflight
+    assert "SET tenant_id = btrim(tenant_id, U&' " in preflight
+    assert "\\0009\\000A\\000B\\000C\\000D" in preflight
     assert "tenant_id IS NULL" in preflight
-    assert "char_length(tenant_id) > 128" in preflight
+    assert "char_length(btrim(tenant_id, U&' " in preflight
     assert "RAISE EXCEPTION USING" in preflight
+    assert preflight.index("RAISE EXCEPTION USING") < preflight.index("UPDATE portfolios")
     assert "do not assign a synthetic or deployment-default tenant" in preflight
     assert "ingestion job tenant cutover found %s unattributable row(s)" in preflights[1]
     assert "enterprise_security_audit_events" in preflights[1]
@@ -105,7 +107,9 @@ def test_portfolio_tenant_migration_fails_closed_and_is_reversible(monkeypatch) 
 
     checks = [operation for operation in operations if operation[0] == "create_check"]
     assert "legal_book_id IS NULL OR" in checks[0][3]
+    assert "tenant_id = btrim(tenant_id, U&' " in checks[0][3]
     assert checks[1][1:3] == ("ck_ingestion_jobs_tenant_authority", "ingestion_jobs")
+    assert "tenant_id = btrim(tenant_id, U&' " in checks[1][3]
     assert "char_length(tenant_id) <= 128" in checks[1][3]
     assert "tenant_id IS NULL AND legal_book_id IS NULL" in checks[2][3]
     assert (
