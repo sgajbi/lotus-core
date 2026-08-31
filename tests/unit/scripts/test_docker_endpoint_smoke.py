@@ -46,7 +46,11 @@ def test_smoke_call_combines_tenant_authority_with_operator_credentials(
         method="GET",
         url="http://event-replay/ingestion/jobs",
         expected={200},
-        headers={"X-Lotus-Ops-Token": "ops-token"},
+        headers={
+            "X-Tenant-Id": SMOKE_TENANT_ID,
+            "x-tenant-id": f" {SMOKE_TENANT_ID} ",
+            "X-Lotus-Ops-Token": "ops-token",
+        },
     )
 
     assert results[0].ok is True
@@ -67,7 +71,10 @@ def test_smoke_call_refuses_tenant_header_override(monkeypatch: pytest.MonkeyPat
             method="GET",
             url="http://query/portfolios/P1",
             expected={200},
-            headers={"x-tenant-id": "other-tenant"},
+            headers={
+                "X-Tenant-Id": SMOKE_TENANT_ID,
+                "x-tenant-id": "other-tenant",
+            },
         )
 
     request_mock.assert_not_called()

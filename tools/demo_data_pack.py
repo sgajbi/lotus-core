@@ -2381,14 +2381,12 @@ def _request_json(
         "X-Tenant-Id": DEMO_TENANT_ID,
     }
     if headers:
-        supplied_tenant = next(
-            (value for key, value in headers.items() if key.lower() == "x-tenant-id"),
-            None,
-        )
-        if supplied_tenant is not None and supplied_tenant.strip() != DEMO_TENANT_ID:
+        supplied_tenants = [value for key, value in headers.items() if key.lower() == "x-tenant-id"]
+        if any(value.strip() != DEMO_TENANT_ID for value in supplied_tenants):
             raise ValueError("Demo pack tenant header must match the governed demo tenant")
-        request_headers.update(headers)
-        request_headers["X-Tenant-Id"] = DEMO_TENANT_ID
+        request_headers.update(
+            {key: value for key, value in headers.items() if key.lower() != "x-tenant-id"}
+        )
     req = request.Request(
         url=url,
         method=method.upper(),

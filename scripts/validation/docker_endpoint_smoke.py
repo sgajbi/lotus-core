@@ -58,14 +58,14 @@ DEFAULT_POSTGRES_SERVICE = "postgres"
 def _tenant_headers(additional: dict[str, str] | None = None) -> dict[str, str]:
     headers = {"X-Tenant-Id": SMOKE_TENANT_ID}
     if additional:
-        supplied_tenant = next(
-            (value for key, value in additional.items() if key.lower() == "x-tenant-id"),
-            None,
-        )
-        if supplied_tenant is not None and supplied_tenant.strip() != SMOKE_TENANT_ID:
+        supplied_tenants = [
+            value for key, value in additional.items() if key.lower() == "x-tenant-id"
+        ]
+        if any(value.strip() != SMOKE_TENANT_ID for value in supplied_tenants):
             raise ValueError("Smoke tenant header must match the governed smoke tenant")
-        headers.update(additional)
-        headers["X-Tenant-Id"] = SMOKE_TENANT_ID
+        headers.update(
+            {key: value for key, value in additional.items() if key.lower() != "x-tenant-id"}
+        )
     return headers
 
 
