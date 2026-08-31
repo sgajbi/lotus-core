@@ -107,7 +107,7 @@ VERIFIED_TENANT_AUDIT_INSERT = text(
         policy_version
     ) VALUES (
         '79800000-0000-0000-0000-000000000001',
-        now(),
+        now() - INTERVAL '1 second',
         'ingestion_service',
         '/ingest/transactions',
         'POST',
@@ -116,6 +116,32 @@ VERIFIED_TENANT_AUDIT_INSERT = text(
         'lotus-integration-test',
         'tenant-cutover-actor',
         'tenant-test',
+        'operator',
+        'verified',
+        'tenant-cutover-correlation',
+        'tenant-cutover-trace',
+        'enterprise-security.v1'
+    )
+    """
+)
+
+UNRELATED_REUSED_CORRELATION_AUDIT_INSERT = text(
+    """
+    INSERT INTO enterprise_security_audit_events (
+        event_id, occurred_at, component, route_template, method, decision, reason,
+        service_identity, actor_id, tenant_id, role, identity_posture,
+        correlation_id, trace_id, policy_version
+    ) VALUES (
+        '79800000-0000-0000-0000-000000000002',
+        now() - INTERVAL '1 second',
+        'query_service',
+        '/ingest/transactions',
+        'POST',
+        'ALLOW',
+        'authorized',
+        'lotus-unrelated-service',
+        'unrelated-actor',
+        'tenant-wrong',
         'operator',
         'verified',
         'tenant-cutover-correlation',
@@ -195,26 +221,52 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
                 "legal_book_id": None,
             },
         )
+        connection.execute(
+            PORTFOLIO_INSERT,
+            {
+                "portfolio_id": "TENANT-CUTOVER-WHITESPACE",
+                "tenant_id": "\t\n",
+                "legal_book_id": "BOOK-WHITESPACE",
+            },
+        )
         connection.execute(LEGACY_INGESTION_JOB_INSERT)
-        connection.execute(VERIFIED_TENANT_AUDIT_INSERT)
+        connection.execute(UNRELATED_REUSED_CORRELATION_AUDIT_INSERT)
 
         savepoint = connection.begin_nested()
         with pytest.raises(DBAPIError) as exc_info:
             migration["upgrade"]()
         savepoint.rollback()
         error_text = str(exc_info.value)
-        assert "portfolio tenant cutover found 1 ambiguous root row" in error_text
+        assert "portfolio tenant cutover found 2 ambiguous root row" in error_text
         assert "TENANT-CUTOVER-AMBIGUOUS" in error_text
+        assert "TENANT-CUTOVER-WHITESPACE" in error_text
 
         connection.execute(
             text(
                 """
                 UPDATE portfolios
                 SET tenant_id = 'tenant-test', legal_book_id = 'book-test'
-                WHERE portfolio_id = 'TENANT-CUTOVER-AMBIGUOUS'
+                WHERE portfolio_id IN (
+                    'TENANT-CUTOVER-AMBIGUOUS',
+                    'TENANT-CUTOVER-WHITESPACE'
+                )
                 """
             )
         )
+
+        ingestion_savepoint = connection.begin_nested()
+        with pytest.raises(DBAPIError) as ingestion_error:
+            migration["upgrade"]()
+        ingestion_savepoint.rollback()
+        assert "ingestion job tenant cutover found 1 unattributable row" in str(
+            ingestion_error.value
+        )
+        assert "TENANT-CUTOVER-JOB" in str(ingestion_error.value)
+        assert "tenant_id" not in {
+            column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
+        }
+
+        connection.execute(VERIFIED_TENANT_AUDIT_INSERT)
         migration["upgrade"]()
 
         columns = {
@@ -278,6 +330,18 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
                 },
             )
         invalid_savepoint.rollback()
+
+        whitespace_savepoint = connection.begin_nested()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                PORTFOLIO_INSERT,
+                {
+                    "portfolio_id": "TENANT-CUTOVER-WHITESPACE-NEW",
+                    "tenant_id": "\t\n",
+                    "legal_book_id": "BOOK-WHITESPACE",
+                },
+            )
+        whitespace_savepoint.rollback()
 
         connection.execute(
             text(

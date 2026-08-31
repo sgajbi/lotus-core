@@ -7,8 +7,9 @@ Create Date: 2026-08-30
 The upgrade normalizes already-attributable tenant values, then aborts before the
 schema cutover when any root portfolio remains null, blank, or outside the governed
 identifier bound. It never invents or infers a tenant for an ambiguous root record.
-Existing ingestion jobs are attributed only from an unambiguous verified security-audit
-correlation; the cutover aborts when that evidence is absent or conflicting.
+Existing ingestion jobs are attributed only from one exact, verified ingestion-write audit
+decision carrying the same endpoint, correlation, trace, and bounded request time; the cutover
+aborts when that evidence is absent, reused, or conflicting.
 
 The downgrade restores the nullable compatibility shape, but it cannot restore
 pre-upgrade whitespace because normalization is intentionally irreversible.
@@ -32,8 +33,13 @@ _INGESTION_JOB_TABLE = "ingestion_jobs"
 _INGESTION_JOB_TENANT_CHECK = "ck_ingestion_jobs_tenant_authority"
 _INGESTION_JOB_TENANT_INDEX = "ix_ingestion_jobs_tenant_submitted_at"
 _INGESTION_JOB_IDEMPOTENCY_INDEX = "ix_ingestion_jobs_tenant_endpoint_idempotency_submitted"
+_TENANT_TRIM_CHARS = (
+    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
+    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
+    r"\2029\202F\205F\3000'"
+)
 _TENANT_PREFLIGHT = sa.text(
-    """
+    f"""
     DO $$
     DECLARE
         ambiguous_count bigint;
@@ -42,17 +48,12 @@ _TENANT_PREFLIGHT = sa.text(
         PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE portfolios IN ACCESS EXCLUSIVE MODE;
 
-        UPDATE portfolios
-        SET tenant_id = btrim(tenant_id)
-        WHERE tenant_id IS NOT NULL
-          AND tenant_id IS DISTINCT FROM btrim(tenant_id);
-
         SELECT count(*)
         INTO ambiguous_count
         FROM portfolios
         WHERE tenant_id IS NULL
-           OR tenant_id = ''
-           OR char_length(tenant_id) > 128;
+           OR btrim(tenant_id, {_TENANT_TRIM_CHARS}) = ''
+           OR char_length(btrim(tenant_id, {_TENANT_TRIM_CHARS})) > 128;
 
         SELECT string_agg(portfolio_id, ', ' ORDER BY portfolio_id)
         INTO portfolio_samples
@@ -60,8 +61,8 @@ _TENANT_PREFLIGHT = sa.text(
             SELECT portfolio_id
             FROM portfolios
             WHERE tenant_id IS NULL
-               OR tenant_id = ''
-               OR char_length(tenant_id) > 128
+               OR btrim(tenant_id, {_TENANT_TRIM_CHARS}) = ''
+               OR char_length(btrim(tenant_id, {_TENANT_TRIM_CHARS})) > 128
             ORDER BY portfolio_id
             LIMIT 20
         ) AS ambiguous_portfolios;
@@ -78,6 +79,10 @@ _TENANT_PREFLIGHT = sa.text(
                     'do not assign a synthetic or deployment-default tenant'
                 );
         END IF;
+
+        UPDATE portfolios
+        SET tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS})
+        WHERE tenant_id IS DISTINCT FROM btrim(tenant_id, {_TENANT_TRIM_CHARS});
     END
     $$
     """
@@ -124,29 +129,39 @@ _DOWNGRADE_PREFLIGHT = sa.text(
     """
 )
 _INGESTION_JOB_TENANT_PREFLIGHT = sa.text(
-    """
+    f"""
     DO $$
     DECLARE
         ambiguous_count bigint;
         job_samples text;
     BEGIN
-        WITH attributable_tenants AS (
-            SELECT correlation_id, min(tenant_id) AS tenant_id
-            FROM enterprise_security_audit_events
-            WHERE correlation_id IS NOT NULL
-              AND identity_posture = 'verified'
-              AND tenant_id IS NOT NULL
-              AND tenant_id = btrim(tenant_id)
-              AND tenant_id <> ''
-              AND char_length(tenant_id) <= 128
-            GROUP BY correlation_id
-            HAVING count(DISTINCT tenant_id) = 1
+        WITH attributable_jobs AS (
+            SELECT job.id AS job_row_id, min(audit.tenant_id) AS tenant_id
+            FROM ingestion_jobs AS job
+            JOIN enterprise_security_audit_events AS audit
+              ON audit.component = 'ingestion_service'
+             AND audit.route_template = job.endpoint
+             AND audit.method = 'POST'
+             AND audit.decision = 'ALLOW'
+             AND audit.reason = 'authorized'
+             AND audit.identity_posture = 'verified'
+             AND audit.correlation_id = job.correlation_id
+             AND audit.trace_id = job.trace_id
+             AND audit.occurred_at <= job.submitted_at
+             AND audit.occurred_at >= job.submitted_at - INTERVAL '5 minutes'
+            WHERE job.tenant_id IS NULL
+              AND audit.tenant_id IS NOT NULL
+              AND audit.tenant_id = btrim(audit.tenant_id, {_TENANT_TRIM_CHARS})
+              AND audit.tenant_id <> ''
+              AND char_length(audit.tenant_id) <= 128
+            GROUP BY job.id
+            HAVING count(*) = 1
         )
         UPDATE ingestion_jobs AS job
         SET tenant_id = authority.tenant_id
-        FROM attributable_tenants AS authority
+        FROM attributable_jobs AS authority
         WHERE job.tenant_id IS NULL
-          AND job.correlation_id = authority.correlation_id;
+          AND job.id = authority.job_row_id;
 
         SELECT count(*)
         INTO ambiguous_count
@@ -196,7 +211,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         _SCOPE_CONSTRAINT,
         _TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND "
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) AND tenant_id <> '' AND "
         "(legal_book_id IS NULL OR "
         "(legal_book_id = btrim(legal_book_id) AND legal_book_id <> ''))",
     )
@@ -215,7 +230,8 @@ def upgrade() -> None:
     op.create_check_constraint(
         _INGESTION_JOB_TENANT_CHECK,
         _INGESTION_JOB_TABLE,
-        "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND char_length(tenant_id) <= 128",
+        f"tenant_id = btrim(tenant_id, {_TENANT_TRIM_CHARS}) "
+        "AND tenant_id <> '' AND char_length(tenant_id) <= 128",
     )
     op.create_index(
         _INGESTION_JOB_TENANT_INDEX,
