@@ -5353,10 +5353,7 @@ class FinancialReconciliationRun(Base):
             ["portfolios.tenant_id", "portfolios.portfolio_id"],
             name="fk_fin_recon_runs_tenant_portfolio",
         ),
-        CheckConstraint(
-            CANONICAL_TENANT_ID_CHECK_SQL,
-            name="ck_fin_recon_tenant",
-        ),
+        CheckConstraint(CANONICAL_TENANT_ID_CHECK_SQL, name="ck_fin_recon_tenant"),
         _finite_numeric_check_constraint("ck_fin_recon_tolerance_finite", "tolerance"),
         CheckConstraint("tolerance >= 0", name="ck_fin_recon_tolerance_nonnegative"),
         CheckConstraint(
