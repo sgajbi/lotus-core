@@ -15,8 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import TextClause
 
 from tests.integration.ingestion_job_sql_fixture import (
-    transaction_payload_evidence_insert_fragments,
+    transaction_ingestion_job_insert_fragments,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -29,7 +30,7 @@ MIGRATION = (
 
 
 def _job_insert(connection: Connection) -> TextClause:
-    evidence_columns, evidence_values = transaction_payload_evidence_insert_fragments(connection)
+    evidence_columns, evidence_values = transaction_ingestion_job_insert_fragments(connection)
     return text(
         f"""
     INSERT INTO ingestion_jobs (
@@ -137,6 +138,7 @@ def test_ingestion_failure_outcome_migration_round_trip_and_constraint(
         job_insert = _job_insert(connection)
 
         base = {
+            "tenant_id": TEST_TENANT_ID,
             "status": "queued",
             "failure_reason": None,
             "failure_status_code": None,
