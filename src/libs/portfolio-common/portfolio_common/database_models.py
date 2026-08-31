@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
+from .database_text_contract import PYTHON_STRIP_BOUNDARY_SQL
 from .db_base import Base
 from .domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
@@ -44,11 +45,6 @@ from .source_lifecycle_predicates import (
     SUSTAINABILITY_PREFERENCE_ACTIVE,
 )
 
-_REPLAY_TEXT_TRIM_CHARS = (
-    r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
-    r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
-    r"\2029\202F\205F\3000'"
-)
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
 _FX_GENERATED_AT_TIMEZONE_PATTERN = (
     r"'^[0-9]{4}-?[0-9]{2}-?[0-9]{2}.+[0-9]{2}"
@@ -59,7 +55,7 @@ _FX_GENERATED_AT_TIMEZONE_PATTERN = (
 def _normalized_replay_text_sql(expression: str) -> str:
     return (
         f"nullif({expression}, '') IS NOT NULL "
-        f"AND {expression} = btrim({expression}, {_REPLAY_TEXT_TRIM_CHARS}) "
+        f"AND {expression} = btrim({expression}, {PYTHON_STRIP_BOUNDARY_SQL}) "
         f"AND {expression} !~ {_REPLAY_CONTROL_PATTERN}"
     )
 
@@ -136,7 +132,8 @@ class Portfolio(Base):
             name="uq_portfolios_book_scope_identity",
         ),
         CheckConstraint(
-            "tenant_id = btrim(tenant_id) AND tenant_id <> '' AND "
+            f"tenant_id = btrim(tenant_id, {PYTHON_STRIP_BOUNDARY_SQL}) "
+            "AND tenant_id <> '' AND "
             "(legal_book_id IS NULL OR "
             "(legal_book_id = btrim(legal_book_id) AND legal_book_id <> ''))",
             name="ck_portfolios_valuation_book_scope_complete",

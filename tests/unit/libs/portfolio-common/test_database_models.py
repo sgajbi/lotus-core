@@ -372,7 +372,9 @@ def test_portfolio_declares_complete_valuation_book_scope_contract():
 
     assert "ck_portfolios_valuation_book_scope_complete" in constraints
     scope_sql = str(constraints["ck_portfolios_valuation_book_scope_complete"].sqltext)
-    assert "tenant_id = btrim(tenant_id)" in scope_sql
+    assert "tenant_id = btrim(tenant_id," in scope_sql
+    assert r"\0009\000A" in scope_sql
+    assert r"\202F\205F\3000" in scope_sql
     assert "legal_book_id = btrim(legal_book_id)" in scope_sql
     assert "tenant_id <> ''" in scope_sql
     assert "legal_book_id <> ''" in scope_sql
