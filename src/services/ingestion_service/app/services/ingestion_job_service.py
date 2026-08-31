@@ -330,8 +330,9 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def get_health_summary(self) -> IngestionHealthSummaryResponse:
+    async def get_health_summary(self, *, tenant_id: str) -> IngestionHealthSummaryResponse:
         return await load_health_summary_response(
+            tenant_id=tenant_id,
             session_factory=get_async_db_session,
         )
 
@@ -414,10 +415,12 @@ class IngestionJobService:
     async def list_stalled_jobs(
         self,
         *,
+        tenant_id: str,
         threshold_seconds: int = 300,
         limit: int = 100,
     ) -> IngestionStalledJobListResponse:
         return await load_stalled_job_list_response(
+            tenant_id=tenant_id,
             threshold_seconds=threshold_seconds,
             limit=limit,
             session_factory=get_async_db_session,
@@ -543,14 +546,16 @@ class IngestionJobService:
     async def get_consumer_lag(
         self,
         *,
+        tenant_id: str,
         lookback_minutes: int = 60,
         limit: int = 100,
     ) -> IngestionConsumerLagResponse:
         return await load_consumer_lag_response(
+            tenant_id=tenant_id,
             lookback_minutes=lookback_minutes,
             limit=limit,
             session_factory=get_async_db_session,
-            health_summary_loader=self.get_health_summary,
+            health_summary_loader=lambda: self.get_health_summary(tenant_id=tenant_id),
         )
 
     async def get_job_record_status(

@@ -66,9 +66,11 @@ async def test_stalled_job_suggested_action_distinguishes_queued_jobs() -> None:
 
 async def test_load_stalled_job_list_response_maps_ordered_rows() -> None:
     now = datetime(2026, 6, 17, 0, 10, tzinfo=UTC)
+    statements = []
 
     class _FakeSession:
-        async def scalars(self, _stmt):
+        async def scalars(self, stmt):
+            statements.append(stmt)
             return _FakeScalars(
                 [
                     _job(
@@ -79,6 +81,7 @@ async def test_load_stalled_job_list_response_maps_ordered_rows() -> None:
             )
 
     response = await load_stalled_job_list_response(
+        tenant_id="tenant-a",
         threshold_seconds=300,
         limit=50,
         now=now,
@@ -90,3 +93,4 @@ async def test_load_stalled_job_list_response_maps_ordered_rows() -> None:
     assert [job.job_id for job in response.jobs] == ["job-1", "job-2"]
     assert response.jobs[0].queue_age_seconds == 420.0
     assert response.jobs[1].suggested_action.startswith("Inspect downstream processing bottlenecks")
+    assert "ingestion_jobs.tenant_id =" in str(statements[0])

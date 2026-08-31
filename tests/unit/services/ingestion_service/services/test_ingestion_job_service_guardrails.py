@@ -435,16 +435,19 @@ async def test_get_consumer_lag_classifies_dlq_pressure(
     monkeypatch: pytest.MonkeyPatch,
 ):
     now = datetime.now(UTC)
+    statements = []
 
     class _FakeSession:
-        async def execute(self, _stmt):
+        async def execute(self, stmt):
+            statements.append(stmt)
             return [
                 ("consumer-a", "topic-a", 25, now),
                 ("consumer-b", "topic-b", 5, now - timedelta(seconds=10)),
                 ("consumer-c", "topic-c", 1, now - timedelta(seconds=20)),
             ]
 
-    async def _mock_get_health_summary():
+    async def _mock_get_health_summary(*, tenant_id: str):
+        assert tenant_id == "tenant-a"
         return SimpleNamespace(backlog_jobs=7)
 
     monkeypatch.setattr(
@@ -454,26 +457,33 @@ async def test_get_consumer_lag_classifies_dlq_pressure(
     )
     monkeypatch.setattr(service, "get_health_summary", _mock_get_health_summary)
 
-    response = await service.get_consumer_lag(lookback_minutes=30, limit=3)
+    response = await service.get_consumer_lag(tenant_id="tenant-a", lookback_minutes=30, limit=3)
 
     assert response.backlog_jobs == 7
     assert response.total_groups == 3
     assert [group.lag_severity for group in response.groups] == ["high", "medium", "low"]
+    compiled = str(statements[0])
+    assert "JOIN ingestion_jobs" in compiled
+    assert "ingestion_jobs.tenant_id =" in compiled
 
 
 async def test_get_health_summary_maps_counts_and_oldest_backlog(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    statements = []
+
     class _FakeResult:
         def one(self):
             return (10, 3, 2, 1)
 
     class _FakeSession:
-        async def execute(self, _stmt):
+        async def execute(self, stmt):
+            statements.append(stmt)
             return _FakeResult()
 
-        async def scalar(self, _stmt):
+        async def scalar(self, stmt):
+            statements.append(stmt)
             return "job_oldest"
 
     monkeypatch.setattr(
@@ -482,7 +492,7 @@ async def test_get_health_summary_maps_counts_and_oldest_backlog(
         lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 
-    response = await service.get_health_summary()
+    response = await service.get_health_summary(tenant_id="tenant-a")
 
     assert response.total_jobs == 10
     assert response.accepted_jobs == 3
@@ -490,6 +500,7 @@ async def test_get_health_summary_maps_counts_and_oldest_backlog(
     assert response.failed_jobs == 1
     assert response.backlog_jobs == 5
     assert response.oldest_backlog_job_id == "job_oldest"
+    assert all("ingestion_jobs.tenant_id =" in str(stmt) for stmt in statements)
 
 
 async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints(

@@ -476,7 +476,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_failures(self, job_id: str, limit: int = 100) -> list[dict]:
             return self.failures.get(job_id, [])[:limit]
 
-        async def get_health_summary(self):
+        async def get_health_summary(self, *, tenant_id: str):
+            assert tenant_id == TEST_TENANT_HEADERS["X-Tenant-Id"]
             total_jobs = len(self.jobs)
             accepted_jobs = sum(1 for j in self.jobs.values() if j.status == "accepted")
             queued_jobs = sum(1 for j in self.jobs.values() if j.status == "queued")
@@ -576,9 +577,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_stalled_jobs(
             self,
             *,
+            tenant_id: str,
             threshold_seconds: int = 300,
             limit: int = 100,
         ):
+            assert tenant_id == TEST_TENANT_HEADERS["X-Tenant-Id"]
             jobs = [
                 {
                     "job_id": "job_stalled_001",
@@ -697,9 +700,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def get_consumer_lag(
             self,
             *,
+            tenant_id: str,
             lookback_minutes: int = 60,
             limit: int = 100,
         ):
+            assert tenant_id == TEST_TENANT_HEADERS["X-Tenant-Id"]
             groups = [
                 {
                     "consumer_group": "persistence-service-group",

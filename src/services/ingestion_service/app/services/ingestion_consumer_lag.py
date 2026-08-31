@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from portfolio_common.database_models import ConsumerDlqEvent as DBConsumerDlqEvent
+from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from sqlalchemy import desc, func, select
 
 from ..DTOs.ingestion_job_dto import (
@@ -26,6 +27,7 @@ def classify_consumer_lag_severity(
 
 async def load_consumer_lag_response(
     *,
+    tenant_id: str,
     lookback_minutes: int,
     limit: int,
     session_factory,
@@ -41,7 +43,11 @@ async def load_consumer_lag_response(
                 func.count(DBConsumerDlqEvent.id).label("dlq_events"),
                 func.max(DBConsumerDlqEvent.observed_at).label("last_observed_at"),
             )
-            .where(DBConsumerDlqEvent.observed_at >= since)
+            .join(DBIngestionJob, DBIngestionJob.job_id == DBConsumerDlqEvent.ingestion_job_id)
+            .where(
+                DBIngestionJob.tenant_id == tenant_id,
+                DBConsumerDlqEvent.observed_at >= since,
+            )
             .group_by(DBConsumerDlqEvent.consumer_group, DBConsumerDlqEvent.original_topic)
             .order_by(desc("dlq_events"), desc("last_observed_at"))
             .limit(limit)

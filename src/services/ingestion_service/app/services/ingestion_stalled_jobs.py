@@ -39,6 +39,7 @@ def to_stalled_job_response(
 
 async def load_stalled_job_list_response(
     *,
+    tenant_id: str,
     threshold_seconds: int,
     limit: int,
     session_factory: SessionFactory,
@@ -52,6 +53,7 @@ async def load_stalled_job_list_response(
                 select(DBIngestionJob)
                 .where(
                     and_(
+                        DBIngestionJob.tenant_id == tenant_id,
                         DBIngestionJob.status.in_(["accepted", "queued"]),
                         DBIngestionJob.submitted_at <= cutoff,
                     )

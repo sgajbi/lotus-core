@@ -542,9 +542,12 @@ async def retry_ingestion_job(
     },
 )
 async def get_ingestion_health_summary(
+    request: Request,
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
-    return await ingestion_job_service.get_health_summary()
+    return await ingestion_job_service.get_health_summary(
+        tenant_id=request.state.tenant_context.tenant_id_text
+    )
 
 
 @router.get(
@@ -566,9 +569,12 @@ async def get_ingestion_health_summary(
     },
 )
 async def get_ingestion_health_lag(
+    request: Request,
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
-    return await ingestion_job_service.get_health_summary()
+    return await ingestion_job_service.get_health_summary(
+        tenant_id=request.state.tenant_context.tenant_id_text
+    )
 
 
 @router.get(
@@ -590,6 +596,7 @@ async def get_ingestion_health_lag(
     },
 )
 async def get_ingestion_consumer_lag(
+    request: Request,
     lookback_minutes: int = Query(
         default=60,
         ge=5,
@@ -607,6 +614,7 @@ async def get_ingestion_consumer_lag(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.get_consumer_lag(
+        tenant_id=request.state.tenant_context.tenant_id_text,
         lookback_minutes=lookback_minutes,
         limit=limit,
     )
@@ -952,6 +960,7 @@ async def get_ingestion_backlog_breakdown(
     },
 )
 async def list_ingestion_stalled_jobs(
+    request: Request,
     threshold_seconds: int = Query(
         default=300,
         ge=30,
@@ -969,6 +978,7 @@ async def list_ingestion_stalled_jobs(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
     return await ingestion_job_service.list_stalled_jobs(
+        tenant_id=request.state.tenant_context.tenant_id_text,
         threshold_seconds=threshold_seconds,
         limit=limit,
     )

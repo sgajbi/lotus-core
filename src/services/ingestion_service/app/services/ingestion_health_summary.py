@@ -6,7 +6,9 @@ from sqlalchemy import case, func, select
 from ..DTOs.ingestion_job_dto import IngestionHealthSummaryResponse
 
 
-async def load_health_summary_response(*, session_factory) -> IngestionHealthSummaryResponse:
+async def load_health_summary_response(
+    *, tenant_id: str, session_factory
+) -> IngestionHealthSummaryResponse:
     async for db in session_factory():
         row = (
             await db.execute(
@@ -15,7 +17,7 @@ async def load_health_summary_response(*, session_factory) -> IngestionHealthSum
                     func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)),
                     func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)),
                     func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)),
-                )
+                ).where(DBIngestionJob.tenant_id == tenant_id)
             )
         ).one()
         total_jobs = int(row[0] or 0)
@@ -24,7 +26,10 @@ async def load_health_summary_response(*, session_factory) -> IngestionHealthSum
         failed_jobs = int(row[3] or 0)
         oldest_backlog_job_id = await db.scalar(
             select(DBIngestionJob.job_id)
-            .where(DBIngestionJob.status.in_(("accepted", "queued")))
+            .where(
+                DBIngestionJob.tenant_id == tenant_id,
+                DBIngestionJob.status.in_(("accepted", "queued")),
+            )
             .order_by(DBIngestionJob.submitted_at.asc(), DBIngestionJob.id.asc())
             .limit(1)
         )
