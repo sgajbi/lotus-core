@@ -740,6 +740,11 @@ def main(
             ]
         },
     )
+    _wait_portfolio_visible(
+        query_base_url=query,
+        portfolio_id=portfolio_id,
+        timeout_seconds=args.query_visible_timeout_seconds,
+    )
     _call(
         results,
         name="ingest market prices",
