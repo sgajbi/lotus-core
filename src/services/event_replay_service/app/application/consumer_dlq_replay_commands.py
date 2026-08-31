@@ -71,7 +71,7 @@ class ConsumerDlqReplayCommandService:
         command: ConsumerDlqReplayCommand,
     ) -> ConsumerDlqReplayResult:
         tenant_id = command.tenant_context.tenant_id_text
-        event = await self._required_consumer_dlq_event(event_id)
+        event = await self._required_consumer_dlq_event(event_id, tenant_id=tenant_id)
         ingestion_job_id = getattr(event, "ingestion_job_id", None)
         if not event.correlation_id and not ingestion_job_id:
             correlation_missing_reason = self._consumer_dlq_correlation_missing_reason(event)
@@ -104,6 +104,7 @@ class ConsumerDlqReplayCommandService:
             return replay_candidate
 
         duplicate_result = await self._consumer_dlq_duplicate_replay_result(
+            tenant_id=tenant_id,
             event_id=event_id,
             correlation_id=event.correlation_id,
             job_id=replay_candidate.job_id,
@@ -162,8 +163,11 @@ class ConsumerDlqReplayCommandService:
             requested_by=command.requested_by,
         )
 
-    async def _required_consumer_dlq_event(self, event_id: str) -> Any:
-        event = await self.ingestion_job_service.get_consumer_dlq_event(event_id)
+    async def _required_consumer_dlq_event(self, event_id: str, *, tenant_id: str) -> Any:
+        event = await self.ingestion_job_service.get_consumer_dlq_event(
+            event_id,
+            tenant_id=tenant_id,
+        )
         if event is None:
             raise ReplayCommandError(
                 HTTP_NOT_FOUND,
@@ -403,6 +407,7 @@ class ConsumerDlqReplayCommandService:
     async def _consumer_dlq_duplicate_replay_result(
         self,
         *,
+        tenant_id: str,
         event_id: str,
         correlation_id: str | None,
         job_id: str,
@@ -414,6 +419,7 @@ class ConsumerDlqReplayCommandService:
         existing_success = (
             await self.ingestion_job_service.find_successful_replay_audit_by_fingerprint(
                 replay_fingerprint,
+                tenant_id=tenant_id,
                 recovery_path=CONSUMER_DLQ_REPLAY_RECOVERY_PATH,
             )
         )

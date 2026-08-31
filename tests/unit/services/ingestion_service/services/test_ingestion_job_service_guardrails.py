@@ -712,6 +712,7 @@ async def test_list_replay_audits_maps_ordered_rows(
     )
 
     audits = await service.list_replay_audits(
+        tenant_id="tenant-a",
         limit=2,
         recovery_path="consumer_dlq_replay",
         replay_status="failed",

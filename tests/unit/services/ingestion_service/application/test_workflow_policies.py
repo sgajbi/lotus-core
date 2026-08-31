@@ -100,6 +100,7 @@ class _FakeReplayAuditStore:
     async def find_successful_replay_audit_by_fingerprint(
         self,
         *,
+        tenant_id: str,
         replay_fingerprint: str,
         recovery_path: str | None,
     ) -> dict[str, str] | None:
@@ -114,12 +115,13 @@ class _FakeReplayAuditStore:
             )
         return "replay-001"
 
-    async def get_replay_audit(self, *, replay_id: str):
+    async def get_replay_audit(self, *, tenant_id: str, replay_id: str):
         return None
 
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         limit: int,
         recovery_path: str | None,
         replay_status: str | None,

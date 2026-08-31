@@ -32,6 +32,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_ingestion_failure_outcome_migration.py",
         "tests/integration/test_portfolio_tenant_cutover_migration.py",
         "tests/integration/test_simulation_session_tenant_migration.py",
+        "tests/integration/services/ingestion_service/test_consumer_dlq_tenant_scope_postgresql.py",
         "tests/integration/services/ingestion_service/"
         "test_transaction_reprocessing_target_reader_postgresql.py",
         "tests/integration/services/query_service/test_reporting_portfolio_scope_postgresql.py",

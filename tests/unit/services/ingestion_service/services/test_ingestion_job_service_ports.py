@@ -102,6 +102,7 @@ class _FailingReplayAuditStore:
     async def find_successful_replay_audit_by_fingerprint(
         self,
         *,
+        tenant_id: str,
         replay_fingerprint: str,
         recovery_path: str | None,
     ) -> dict[str, str] | None:
@@ -114,12 +115,13 @@ class _FailingReplayAuditStore:
             reason_code="audit_persistence_failed",
         )
 
-    async def get_replay_audit(self, *, replay_id: str):
+    async def get_replay_audit(self, *, tenant_id: str, replay_id: str):
         return None
 
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         limit: int,
         recovery_path: str | None,
         replay_status: str | None,
@@ -222,8 +224,12 @@ async def test_consumer_dlq_evidence_queries_delegate_with_bounded_filters(
     monkeypatch.setattr(ingestion_job_service, "list_consumer_dlq_event_responses", query)
     service = IngestionJobService()
 
-    assert await service.list_consumer_dlq_events_by_job_id("job-001", limit=41) == []
+    assert (
+        await service.list_consumer_dlq_events_by_job_id("job-001", tenant_id="tenant-a", limit=41)
+        == []
+    )
     query.assert_awaited_once_with(
+        tenant_id="tenant-a",
         limit=41,
         original_topic=None,
         consumer_group=None,
@@ -232,17 +238,22 @@ async def test_consumer_dlq_evidence_queries_delegate_with_bounded_filters(
     )
 
     query.reset_mock()
-    assert await service.list_consumer_dlq_events_by_event_ids((), limit=37) == []
+    assert (
+        await service.list_consumer_dlq_events_by_event_ids((), tenant_id="tenant-a", limit=37)
+        == []
+    )
     query.assert_not_awaited()
 
     assert (
         await service.list_consumer_dlq_events_by_event_ids(
             ("dlq-002", "dlq-001"),
+            tenant_id="tenant-a",
             limit=37,
         )
         == []
     )
     query.assert_awaited_once_with(
+        tenant_id="tenant-a",
         limit=37,
         original_topic=None,
         consumer_group=None,

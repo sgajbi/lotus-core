@@ -480,18 +480,14 @@ def test_critical_tenant_boundary_scan_requires_keyword_only_tenant_scope(
         / "ingestion_job_service.py"
     )
     source.parent.mkdir(parents=True)
+    required_methods = "\n".join(
+        f"    async def {name}(self, *, tenant_id): ..."
+        for name in TENANT_SCOPED_INGESTION_JOB_METHODS - {"get_job"}
+    )
     source.write_text(
         "class IngestionJobService:\n"
         "    async def get_job(self, job_id, *, tenant_id=None): ...\n"
-        "    async def get_job_record_status(self, job_id, *, tenant_id): ...\n"
-        "    async def get_job_replay_context(self, job_id, *, tenant_id): ...\n"
-        "    async def get_unique_replayable_job_by_correlation_id(\n"
-        "        self, correlation_id, *, tenant_id\n"
-        "    ): ...\n"
-        "    async def list_jobs(self, *, tenant_id): ...\n"
-        "    async def mark_failed(self, job_id, reason, *, tenant_id): ...\n"
-        "    async def mark_queued(self, job_id, *, tenant_id): ...\n"
-        "    async def mark_retried_and_queued(self, job_id, *, tenant_id): ...\n",
+        f"{required_methods}\n",
         encoding="utf-8",
     )
     _write_valid_additional_boundaries(tmp_path)
@@ -520,16 +516,7 @@ def test_critical_tenant_boundary_scan_rejects_unscoped_idempotency_replay(
     source.parent.mkdir(parents=True)
     methods = "\n".join(
         f"    async def {name}(self, *, tenant_id): ..."
-        for name in (
-            "get_job",
-            "get_job_record_status",
-            "get_job_replay_context",
-            "get_unique_replayable_job_by_correlation_id",
-            "list_jobs",
-            "mark_failed",
-            "mark_queued",
-            "mark_retried_and_queued",
-        )
+        for name in TENANT_SCOPED_INGESTION_JOB_METHODS
     )
     source.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
     _write_idempotency_replay_reader(tmp_path, tenant_parameter="tenant_id=None")
@@ -562,16 +549,7 @@ def test_critical_tenant_boundary_scan_rejects_unscoped_ownership_adapters(
     source.parent.mkdir(parents=True)
     methods = "\n".join(
         f"    async def {name}(self, *, tenant_id): ..."
-        for name in (
-            "get_job",
-            "get_job_record_status",
-            "get_job_replay_context",
-            "get_unique_replayable_job_by_correlation_id",
-            "list_jobs",
-            "mark_failed",
-            "mark_queued",
-            "mark_retried_and_queued",
-        )
+        for name in TENANT_SCOPED_INGESTION_JOB_METHODS
     )
     source.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
     _write_idempotency_replay_reader(tmp_path)
@@ -646,16 +624,7 @@ def test_critical_tenant_boundary_scan_accepts_required_scope(tmp_path: Path) ->
     source.parent.mkdir(parents=True)
     methods = "\n".join(
         f"    async def {name}(self, *, tenant_id): ..."
-        for name in (
-            "get_job",
-            "get_job_record_status",
-            "get_job_replay_context",
-            "get_unique_replayable_job_by_correlation_id",
-            "list_jobs",
-            "mark_failed",
-            "mark_queued",
-            "mark_retried_and_queued",
-        )
+        for name in TENANT_SCOPED_INGESTION_JOB_METHODS
     )
     source.write_text(f"class IngestionJobService:\n{methods}\n", encoding="utf-8")
     _write_valid_additional_boundaries(tmp_path)
@@ -671,6 +640,25 @@ def test_critical_tenant_boundaries_cover_portfolio_financial_reads() -> None:
     }
 
     assert {
+        ("IngestionJobService", "get_consumer_dlq_event", "tenant_id"),
+        (
+            "IngestionJobService",
+            "find_successful_replay_audit_by_fingerprint",
+            "tenant_id",
+        ),
+        ("IngestionJobService", "get_replay_audit", "tenant_id"),
+        ("IngestionJobService", "list_consumer_dlq_events", "tenant_id"),
+        (
+            "IngestionJobService",
+            "list_consumer_dlq_events_by_event_ids",
+            "tenant_id",
+        ),
+        (
+            "IngestionJobService",
+            "list_consumer_dlq_events_by_job_id",
+            "tenant_id",
+        ),
+        ("IngestionJobService", "list_replay_audits", "tenant_id"),
         ("ReportingRepository", "get_portfolio_by_id", "tenant_id"),
         ("ReportingRepository", "list_portfolios", "tenant_id"),
         ("CashBalanceService", "get_cash_balances", "tenant_context"),

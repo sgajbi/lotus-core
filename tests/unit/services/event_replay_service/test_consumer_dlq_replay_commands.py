@@ -76,10 +76,20 @@ async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> No
     assert response.replay_status == "dry_run"
     assert response.job_id == "job-001"
     assert response.replay_audit_id == "audit-001"
+    ingestion_job_service.get_consumer_dlq_event.assert_awaited_once_with(
+        "dlq-001",
+        tenant_id=TENANT_ID,
+    )
     ingestion_job_service.get_unique_replayable_job_by_correlation_id.assert_awaited_once_with(
         "corr-001", tenant_id=TENANT_ID
     )
     ingestion_job_service.list_jobs.assert_not_awaited()
+    assert (
+        ingestion_job_service.find_successful_replay_audit_by_fingerprint.await_args.kwargs[
+            "tenant_id"
+        ]
+        == TENANT_ID
+    )
     replay_payload_dispatcher.replay_payload.assert_not_awaited()
 
 

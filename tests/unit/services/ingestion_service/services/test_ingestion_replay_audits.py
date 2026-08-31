@@ -51,6 +51,7 @@ async def test_find_successful_replay_audit_by_fingerprint_returns_latest_identi
             )
 
     response = await module.find_successful_replay_audit_by_fingerprint_response(
+        tenant_id="tenant-a",
         replay_fingerprint="fp_123",
         recovery_path="consumer_dlq_replay",
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
@@ -68,6 +69,7 @@ async def test_find_successful_replay_audit_by_fingerprint_handles_missing_match
             return None
 
     response = await module.find_successful_replay_audit_by_fingerprint_response(
+        tenant_id="tenant-a",
         replay_fingerprint="fp_missing",
         recovery_path=None,
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),

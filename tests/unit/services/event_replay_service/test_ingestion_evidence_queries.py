@@ -82,6 +82,7 @@ def _dlq(
         error_reason_code=reason_code,
         error_reason="Source record failed governed validation.",
         correlation_id="corr-001",
+        ingestion_job_id="job-001",
         observed_at=NOW,
     )
 
@@ -366,9 +367,11 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
     )
     ingestion_job_service.list_consumer_dlq_events_by_job_id.assert_awaited_once_with(
         "job-001",
+        tenant_id="tenant-a",
         limit=501,
     )
     ingestion_job_service.list_replay_audits.assert_awaited_once_with(
+        tenant_id="tenant-a",
         job_id="job-001",
         limit=501,
         recovery_path=None,
@@ -377,6 +380,7 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
     )
     ingestion_job_service.list_consumer_dlq_events_by_event_ids.assert_awaited_once_with(
         ("dlq-001",),
+        tenant_id="tenant-a",
         limit=501,
     )
 

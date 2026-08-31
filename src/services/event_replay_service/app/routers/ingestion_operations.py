@@ -982,7 +982,8 @@ async def list_ingestion_stalled_jobs(
     summary="List consumer dead-letter events",
     description=(
         "What: Return dead-letter events produced by downstream consumers.\n"
-        "How: Query persisted consumer DLQ audit records with optional topic/group filters.\n"
+        "How: Derive ownership from the correlated ingestion job, require the admitted tenant, "
+        "and apply optional topic/group filters; unattributable rows remain hidden.\n"
         "When: Use to investigate consumer-side validation/processing failures without DB access."
     ),
     responses={
@@ -993,6 +994,7 @@ async def list_ingestion_stalled_jobs(
     },
 )
 async def list_consumer_dlq_events(
+    request: Request,
     limit: int = Query(
         default=100,
         ge=1,
@@ -1015,7 +1017,10 @@ async def list_consumer_dlq_events(
     ),
 ):
     page = await query_service.list_consumer_dlq_events(
-        limit=limit, original_topic=original_topic, consumer_group=consumer_group
+        tenant_context=request.state.tenant_context,
+        limit=limit,
+        original_topic=original_topic,
+        consumer_group=consumer_group,
     )
     return ConsumerDlqEventListResponse(events=page.events, total=page.total)
 
@@ -1094,8 +1099,9 @@ async def replay_consumer_dlq_event(
     summary="List ingestion replay audit records",
     description=(
         "What: Return replay audit records across ingestion recovery paths.\n"
-        "How: Query durable replay audit rows with filters for recovery path, "
-        "status, fingerprint, and job.\n"
+        "How: Derive ownership from the correlated ingestion job, require the admitted tenant, "
+        "and filter by recovery path, status, fingerprint, and job; unattributable rows remain "
+        "hidden.\n"
         "When: Use for incident forensics and replay governance review."
     ),
     responses={
@@ -1108,6 +1114,7 @@ async def replay_consumer_dlq_event(
     },
 )
 async def list_ingestion_replay_audits(
+    request: Request,
     limit: int = Query(
         default=100,
         ge=1,
@@ -1140,6 +1147,7 @@ async def list_ingestion_replay_audits(
     ),
 ):
     page = await query_service.list_replay_audits(
+        tenant_context=request.state.tenant_context,
         limit=limit,
         recovery_path=recovery_path,
         replay_status=replay_status,
@@ -1157,7 +1165,8 @@ async def list_ingestion_replay_audits(
     summary="Get one ingestion replay audit record",
     description=(
         "What: Return one replay audit row by replay_id.\n"
-        "How: Read durable replay audit event from canonical operations store.\n"
+        "How: Read the durable replay audit only when its correlated ingestion job belongs to "
+        "the admitted tenant.\n"
         "When: Use to inspect a specific replay action referenced in incident timelines."
     ),
     responses={
@@ -1172,6 +1181,7 @@ async def list_ingestion_replay_audits(
     },
 )
 async def get_ingestion_replay_audit(
+    request: Request,
     replay_id: str = Path(
         description="Replay audit identifier.",
         examples=["replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P"],
@@ -1181,7 +1191,10 @@ async def get_ingestion_replay_audit(
     ),
 ):
     try:
-        return await query_service.get_replay_audit(replay_id)
+        return await query_service.get_replay_audit(
+            replay_id,
+            tenant_context=request.state.tenant_context,
+        )
     except IngestionOperationsNotFound as exc:
         raise _not_found_response(exc) from exc
 

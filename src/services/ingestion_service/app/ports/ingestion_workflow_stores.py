@@ -60,17 +60,24 @@ class ReplayAuditStore(Protocol):
     async def find_successful_replay_audit_by_fingerprint(
         self,
         *,
+        tenant_id: str,
         replay_fingerprint: str,
         recovery_path: str | None,
     ) -> dict[str, str] | None: ...
 
     async def record_consumer_dlq_replay_audit(self, record: ReplayAuditRecord) -> str: ...
 
-    async def get_replay_audit(self, *, replay_id: str) -> IngestionReplayAuditResponse | None: ...
+    async def get_replay_audit(
+        self,
+        *,
+        tenant_id: str,
+        replay_id: str,
+    ) -> IngestionReplayAuditResponse | None: ...
 
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         limit: int,
         recovery_path: str | None,
         replay_status: str | None,
@@ -92,12 +99,18 @@ class ConsumerDlqEventStore(Protocol):
     async def list_consumer_dlq_events(
         self,
         *,
+        tenant_id: str,
         limit: int,
         original_topic: str | None,
         consumer_group: str | None,
     ) -> list[Any]: ...
 
-    async def get_consumer_dlq_event(self, *, event_id: str) -> Any | None: ...
+    async def get_consumer_dlq_event(
+        self,
+        *,
+        tenant_id: str,
+        event_id: str,
+    ) -> Any | None: ...
 
 
 class OperationalControlStore(Protocol):

@@ -21,6 +21,7 @@ class IngestionEvidenceReader(Protocol):
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         job_id: str,
         limit: int,
         recovery_path: str | None,
@@ -32,6 +33,7 @@ class IngestionEvidenceReader(Protocol):
         self,
         job_id: str,
         *,
+        tenant_id: str,
         limit: int,
     ) -> list[Any]: ...
 
@@ -39,6 +41,7 @@ class IngestionEvidenceReader(Protocol):
         self,
         event_ids: tuple[str, ...],
         *,
+        tenant_id: str,
         limit: int,
     ) -> list[Any]: ...
 
@@ -66,6 +69,7 @@ class IngestionEvidenceQueryService:
                 limit=_EVIDENCE_FETCH_LIMIT,
             ),
             self.ingestion_job_service.list_replay_audits(
+                tenant_id=tenant_id,
                 job_id=job_id,
                 limit=_EVIDENCE_FETCH_LIMIT,
                 recovery_path=None,
@@ -74,6 +78,7 @@ class IngestionEvidenceQueryService:
             ),
             self.ingestion_job_service.list_consumer_dlq_events_by_job_id(
                 job_id,
+                tenant_id=tenant_id,
                 limit=_EVIDENCE_FETCH_LIMIT,
             ),
             self.ingestion_job_service.get_job_replay_context(job_id, tenant_id=tenant_id),
@@ -82,6 +87,7 @@ class IngestionEvidenceQueryService:
         replay_correlated_dlq_events = (
             await self.ingestion_job_service.list_consumer_dlq_events_by_event_ids(
                 replay_event_ids,
+                tenant_id=tenant_id,
                 limit=_EVIDENCE_FETCH_LIMIT,
             )
             if replay_event_ids
@@ -90,7 +96,7 @@ class IngestionEvidenceQueryService:
         replay_correlated_dlq_events = [
             event
             for event in replay_correlated_dlq_events
-            if getattr(event, "ingestion_job_id", None) in {None, job_id}
+            if getattr(event, "ingestion_job_id", None) == job_id
         ]
         merged_dlq_events = _merge_consumer_dlq_events(
             consumer_dlq_events,
@@ -130,7 +136,7 @@ def _merge_consumer_dlq_events(
         event.event_id: event
         for event_group in event_groups
         for event in event_group
-        if getattr(event, "ingestion_job_id", None) in {None, job_id}
+        if getattr(event, "ingestion_job_id", None) == job_id
     }
     return sorted(
         by_event_id.values(),

@@ -89,11 +89,13 @@ class IngestionOperationsQueryService:
     async def list_consumer_dlq_events(
         self,
         *,
+        tenant_context: TenantContext,
         limit: int,
         original_topic: str | None,
         consumer_group: str | None,
     ) -> ConsumerDlqEventsPage:
         events = await self.ingestion_job_service.list_consumer_dlq_events(
+            tenant_id=tenant_context.tenant_id_text,
             limit=limit,
             original_topic=original_topic,
             consumer_group=consumer_group,
@@ -103,6 +105,7 @@ class IngestionOperationsQueryService:
     async def list_replay_audits(
         self,
         *,
+        tenant_context: TenantContext,
         limit: int,
         recovery_path: str | None,
         replay_status: str | None,
@@ -110,6 +113,7 @@ class IngestionOperationsQueryService:
         job_id: str | None,
     ) -> IngestionReplayAuditsPage:
         audits = await self.ingestion_job_service.list_replay_audits(
+            tenant_id=tenant_context.tenant_id_text,
             limit=limit,
             recovery_path=recovery_path,
             replay_status=replay_status,
@@ -118,8 +122,16 @@ class IngestionOperationsQueryService:
         )
         return IngestionReplayAuditsPage(audits=audits, total=len(audits))
 
-    async def get_replay_audit(self, replay_id: str) -> Any:
-        audit = await self.ingestion_job_service.get_replay_audit(replay_id)
+    async def get_replay_audit(
+        self,
+        replay_id: str,
+        *,
+        tenant_context: TenantContext,
+    ) -> Any:
+        audit = await self.ingestion_job_service.get_replay_audit(
+            replay_id,
+            tenant_id=tenant_context.tenant_id_text,
+        )
         if audit is None:
             raise IngestionOperationsNotFound(
                 code="INGESTION_REPLAY_AUDIT_NOT_FOUND",

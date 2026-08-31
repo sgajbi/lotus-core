@@ -107,6 +107,7 @@ async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
             return _FakeScalars([_event(event_id="dlq-1"), _event(event_id="dlq-2")])
 
     result = await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic="valuation.jobs",
         consumer_group="valuation-service-group",
@@ -125,6 +126,7 @@ async def test_list_consumer_dlq_event_responses_filters_by_durable_job_owner() 
             return _FakeScalars([])
 
     await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic=None,
         consumer_group=None,
@@ -133,6 +135,8 @@ async def test_list_consumer_dlq_event_responses_filters_by_durable_job_owner() 
     )
 
     compiled = str(statements[0])
+    assert "JOIN ingestion_jobs" in compiled
+    assert "ingestion_jobs.tenant_id =" in compiled
     assert "consumer_dlq_events.ingestion_job_id =" in compiled
     assert "consumer_dlq_events.observed_at DESC, consumer_dlq_events.id DESC" in compiled
 
@@ -146,6 +150,7 @@ async def test_list_consumer_dlq_event_responses_filters_replay_event_ids() -> N
             return _FakeScalars([])
 
     await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic=None,
         consumer_group=None,
@@ -162,6 +167,7 @@ async def test_get_consumer_dlq_event_response_returns_none_when_missing() -> No
             return None
 
     result = await get_consumer_dlq_event_response(
+        tenant_id="tenant-a",
         event_id="missing",
         session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
     )
@@ -174,6 +180,7 @@ async def test_dlq_queries_return_empty_when_session_factory_yields_no_session()
 
     assert (
         await list_consumer_dlq_event_responses(
+            tenant_id="tenant-a",
             limit=50,
             original_topic=None,
             consumer_group=None,
@@ -183,6 +190,7 @@ async def test_dlq_queries_return_empty_when_session_factory_yields_no_session()
     )
     assert (
         await get_consumer_dlq_event_response(
+            tenant_id="tenant-a",
             event_id="missing",
             session_factory=session_factory,
         )

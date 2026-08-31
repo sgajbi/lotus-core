@@ -115,6 +115,7 @@ class IngestionRetryCommandService:
             )
 
         await self._block_duplicate_ingestion_job_retry(
+            tenant_id=tenant_id,
             job_id=job_id,
             context=context,
             replay_fingerprint=replay_fingerprint,
@@ -300,6 +301,7 @@ class IngestionRetryCommandService:
     async def _block_duplicate_ingestion_job_retry(
         self,
         *,
+        tenant_id: str,
         job_id: str,
         context: Any,
         replay_fingerprint: str,
@@ -307,6 +309,7 @@ class IngestionRetryCommandService:
     ) -> None:
         existing_success = (
             await self.ingestion_job_service.find_successful_replay_audit_by_fingerprint(
+                tenant_id=tenant_id,
                 replay_fingerprint=replay_fingerprint,
                 recovery_path="ingestion_job_retry",
             )
