@@ -32,6 +32,12 @@ ANALYTICS_EXPORT_SUCCESSOR = (
     / "versions"
     / "c167b2c3d52e_fix_bind_analytics_export_job_tenant.py"
 )
+RECONCILIATION_SUCCESSOR = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c168b2c3d52f_fix_bind_financial_reconciliation_tenant.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -186,8 +192,16 @@ def _reset_development_cutover(
     migration: dict[str, Any],
     simulation_successor: dict[str, Any],
     analytics_export_successor: dict[str, Any],
+    reconciliation_successor: dict[str, Any],
     connection,
 ) -> None:
+    reconciliation_columns = {
+        column["name"]
+        for column in inspect(connection).get_columns("financial_reconciliation_runs")
+    }
+    if "tenant_id" in reconciliation_columns:
+        reconciliation_successor["downgrade"]()
+
     analytics_export_columns = {
         column["name"] for column in inspect(connection).get_columns("analytics_export_jobs")
     }
@@ -252,15 +266,18 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
     simulation_successor: dict[str, Any] = runpy.run_path(str(SIMULATION_SUCCESSOR))
     analytics_export_successor: dict[str, Any] = runpy.run_path(str(ANALYTICS_EXPORT_SUCCESSOR))
+    reconciliation_successor: dict[str, Any] = runpy.run_path(str(RECONCILIATION_SUCCESSOR))
 
     with db_engine.begin() as connection:
         _bind_operations(migration, connection)
         _bind_operations(simulation_successor, connection)
         _bind_operations(analytics_export_successor, connection)
+        _bind_operations(reconciliation_successor, connection)
         _reset_development_cutover(
             migration,
             simulation_successor,
             analytics_export_successor,
+            reconciliation_successor,
             connection,
         )
         connection.execute(
