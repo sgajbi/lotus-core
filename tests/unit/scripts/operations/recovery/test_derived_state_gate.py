@@ -163,8 +163,14 @@ def test_market_price_seed_uses_exact_instrument_scope(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_post(url: str, *, json: dict[str, object], timeout: int) -> object:
-        captured.update(url=url, json=json, timeout=timeout)
+    def fake_post(
+        url: str,
+        *,
+        json: dict[str, object],
+        headers: dict[str, str],
+        timeout: int,
+    ) -> object:
+        captured.update(url=url, json=json, headers=headers, timeout=timeout)
         return SimpleNamespace(status_code=202, text="")
 
     monkeypatch.setattr(derived_state_gate.requests, "post", fake_post)
@@ -193,6 +199,7 @@ def test_market_price_seed_uses_exact_instrument_scope(
         "DR_RUN_SEC_002",
     ]
     assert all(price["currency"] == "USD" for price in prices)
+    assert captured["headers"] == derived_state_gate.DERIVED_STATE_TENANT_HEADERS
     wait = captured["wait"]
     assert isinstance(wait, dict)
     assert wait["expected"] == 3

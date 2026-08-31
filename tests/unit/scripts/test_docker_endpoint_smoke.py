@@ -11,10 +11,12 @@ from scripts.validation.docker_endpoint_smoke import (
     SMOKE_ISIN,
     SMOKE_PORTFOLIO_ID,
     SMOKE_SECURITY_ID,
+    SMOKE_TENANT_ID,
     SMOKE_TRANSACTION_ID,
     SMOKE_TRANSACTION_ID_2,
     _accepted_job_id,
     _bounded_smoke_window_query,
+    _call,
     _cleanup_existing_smoke_state,
     _probe_source_safe_retry,
     _resolve_postgres_container,
@@ -22,6 +24,53 @@ from scripts.validation.docker_endpoint_smoke import (
     _wait_transaction_visible,
     build_smoke_cleanup_sql,
 )
+
+
+def test_smoke_call_combines_tenant_authority_with_operator_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request_mock = Mock(
+        return_value=SimpleNamespace(
+            status_code=200,
+            headers={"content-type": "application/json"},
+            json=lambda: {"ok": True},
+            text="",
+        )
+    )
+    monkeypatch.setattr(docker_endpoint_smoke.requests, "request", request_mock)
+    results = []
+
+    _call(
+        results,
+        name="tenant-bound operation",
+        method="GET",
+        url="http://event-replay/ingestion/jobs",
+        expected={200},
+        headers={"X-Lotus-Ops-Token": "ops-token"},
+    )
+
+    assert results[0].ok is True
+    assert request_mock.call_args.kwargs["headers"] == {
+        "X-Tenant-Id": SMOKE_TENANT_ID,
+        "X-Lotus-Ops-Token": "ops-token",
+    }
+
+
+def test_smoke_call_refuses_tenant_header_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    request_mock = Mock()
+    monkeypatch.setattr(docker_endpoint_smoke.requests, "request", request_mock)
+
+    with pytest.raises(ValueError, match="must match the governed smoke tenant"):
+        _call(
+            [],
+            name="cross-tenant operation",
+            method="GET",
+            url="http://query/portfolios/P1",
+            expected={200},
+            headers={"x-tenant-id": "other-tenant"},
+        )
+
+    request_mock.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -108,6 +157,7 @@ def test_docker_endpoint_smoke_uses_deterministic_identifiers():
     assert SMOKE_TRANSACTION_ID_2 == "TX2_SMOKE_CANONICAL"
     assert SMOKE_CSV_TRANSACTION_ID == "TXUP_SMOKE_CANONICAL"
     assert SMOKE_ISIN == "US000SMOKE01"
+    assert SMOKE_TENANT_ID == "tenant_smoke"
 
 
 def test_docker_endpoint_smoke_cleanup_sql_purges_legacy_smoke_rows():
@@ -254,6 +304,7 @@ def test_wait_transaction_visible_retries_until_exact_transaction_is_queryable(
     assert get_mock.call_count == 3
     get_mock.assert_called_with(
         f"http://query/portfolios/{SMOKE_PORTFOLIO_ID}/transactions?limit=100",
+        headers={"X-Tenant-Id": SMOKE_TENANT_ID},
         timeout=8,
     )
 

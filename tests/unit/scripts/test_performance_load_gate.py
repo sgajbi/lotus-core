@@ -83,6 +83,22 @@ class _MetricsResponse:
         return None
 
 
+def test_reference_seed_carries_governed_load_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    post = MagicMock(return_value=SimpleNamespace(status_code=202, text=""))
+    monkeypatch.setattr(transaction_processing_load_support.requests, "post", post)
+
+    transaction_processing_load_support._post_ingestion_records(
+        ingestion_base_url="http://ingestion",
+        endpoint="/ingest/business-dates",
+        root_key="business_dates",
+        rows=[{"business_date": "2026-08-08"}],
+    )
+
+    assert post.call_args.kwargs["headers"] == {
+        "X-Tenant-Id": transaction_processing_load_support.LOAD_TENANT_ID
+    }
+
+
 def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
     monkeypatch,
 ) -> None:
@@ -270,9 +286,8 @@ def test_replay_storm_counts_only_accepted_commands(monkeypatch: pytest.MonkeyPa
             ),
         ]
     )
-    monkeypatch.setattr(
-        performance_load_gate.requests, "post", lambda *_args, **_kwargs: next(responses)
-    )
+    post = MagicMock(side_effect=lambda *_args, **_kwargs: next(responses))
+    monkeypatch.setattr(performance_load_gate.requests, "post", post)
 
     accepted = performance_load_gate._trigger_replay_storm(
         ingestion_base_url="http://ingestion",
@@ -282,6 +297,38 @@ def test_replay_storm_counts_only_accepted_commands(monkeypatch: pytest.MonkeyPa
     )
 
     assert accepted == 2
+    assert all(
+        call.kwargs["headers"] == performance_load_gate.LOAD_TENANT_HEADERS
+        for call in post.call_args_list
+    )
+
+
+def test_health_snapshot_combines_tenant_and_operator_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get = MagicMock(
+        side_effect=[
+            SimpleNamespace(status_code=200, json=lambda: {"backlog": 0}),
+            SimpleNamespace(status_code=200, json=lambda: {"slo": "met"}),
+            SimpleNamespace(status_code=200, json=lambda: {"budget": "healthy"}),
+        ]
+    )
+    monkeypatch.setattr(performance_load_gate.requests, "get", get)
+
+    snapshot = performance_load_gate._get_health_snapshot(
+        event_replay_base_url="http://event-replay",
+        ops_token="ops-token",
+    )
+
+    assert snapshot["summary"] == {"backlog": 0}
+    assert all(
+        call.kwargs["headers"]
+        == {
+            "X-Tenant-Id": transaction_processing_load_support.LOAD_TENANT_ID,
+            "X-Lotus-Ops-Token": "ops-token",
+        }
+        for call in get.call_args_list
+    )
 
 
 def test_replay_storm_rejects_untruthful_accepted_count(
@@ -336,8 +383,15 @@ def test_transaction_batches_preserve_monotonic_tie_break_order(
     posted_transaction_ids: list[str] = []
     posted_transaction_timestamps: list[str] = []
 
-    def post(_url: str, *, json: dict[str, object], timeout: int) -> SimpleNamespace:
+    def post(
+        _url: str,
+        *,
+        json: dict[str, object],
+        headers: dict[str, str],
+        timeout: int,
+    ) -> SimpleNamespace:
         assert timeout == 30
+        assert headers == {"X-Tenant-Id": transaction_processing_load_support.LOAD_TENANT_ID}
         transactions = json["transactions"]
         assert isinstance(transactions, list)
         posted_transaction_ids.extend(row["transaction_id"] for row in transactions)

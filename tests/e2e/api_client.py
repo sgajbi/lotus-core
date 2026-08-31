@@ -7,15 +7,27 @@ import pytest
 import requests
 from requests.exceptions import RequestException
 
+E2E_TENANT_ID = "tenant_e2e"
+
 
 class E2EApiClient:
     """A client for interacting with the system's APIs in E2E tests."""
 
-    def __init__(self, ingestion_url: str, query_url: str, query_control_plane_url: str):
+    def __init__(
+        self,
+        ingestion_url: str,
+        query_url: str,
+        query_control_plane_url: str,
+        tenant_id: str = E2E_TENANT_ID,
+    ):
+        if not tenant_id.strip():
+            raise ValueError("E2E tenant_id must be nonblank")
         self.ingestion_url = ingestion_url
         self.query_url = query_url
         self.query_control_plane_url = query_control_plane_url
+        self.tenant_id = tenant_id.strip()
         self.session = requests.Session()
+        self.session.headers.update({"X-Tenant-Id": self.tenant_id})
 
     @staticmethod
     def _camel_to_snake(value: str) -> str:
@@ -46,10 +58,23 @@ class E2EApiClient:
             return [cls._normalize_payload_keys(item) for item in data]
         return data
 
+    def _bind_portfolio_ownership(self, payload: dict[str, Any]) -> None:
+        portfolios = payload.get("portfolios")
+        if not isinstance(portfolios, list):
+            return
+        for portfolio in portfolios:
+            if not isinstance(portfolio, dict):
+                continue
+            supplied_tenant_id = portfolio.get("tenant_id")
+            if supplied_tenant_id is not None and str(supplied_tenant_id).strip() != self.tenant_id:
+                raise ValueError("E2E portfolio tenant_id must match the admitted tenant")
+            portfolio["tenant_id"] = self.tenant_id
+
     def ingest(self, endpoint: str, payload: Dict[str, List[Dict[str, Any]]]) -> requests.Response:
         """Sends data to a specified ingestion endpoint."""
         url = f"{self.ingestion_url}{endpoint}"
         normalized_payload = self._normalize_payload_keys(payload)
+        self._bind_portfolio_ownership(normalized_payload)
         response = self.session.post(url, json=normalized_payload, timeout=10)
         response.raise_for_status()
         return response

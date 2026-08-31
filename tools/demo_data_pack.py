@@ -24,6 +24,7 @@ LOGGER = logging.getLogger("demo_data_pack")
 DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
 SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
+DEMO_TENANT_ID = "tenant_sg_pb"
 MIN_DEMO_HISTORY_DAYS = 240
 DEFAULT_DEMO_HISTORY_DAYS = 365 * 3
 IDEMPOTENCY_REPLAY_MESSAGE = "Duplicate ingestion request accepted via idempotency replay."
@@ -620,6 +621,7 @@ def build_demo_bundle(
     portfolios = [
         {
             "portfolio_id": "DEMO_ADV_USD_001",
+            "tenant_id": DEMO_TENANT_ID,
             "base_currency": "USD",
             "open_date": "2023-01-03",
             "risk_exposure": "Moderate",
@@ -632,6 +634,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_DPM_EUR_001",
+            "tenant_id": DEMO_TENANT_ID,
             "base_currency": "EUR",
             "open_date": "2024-01-02",
             "risk_exposure": "Balanced",
@@ -644,6 +647,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_INCOME_CHF_001",
+            "tenant_id": DEMO_TENANT_ID,
             "base_currency": "CHF",
             "open_date": "2024-01-02",
             "risk_exposure": "Low",
@@ -656,6 +660,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_BALANCED_SGD_001",
+            "tenant_id": DEMO_TENANT_ID,
             "base_currency": "SGD",
             "open_date": "2024-01-02",
             "risk_exposure": "Balanced",
@@ -668,6 +673,7 @@ def build_demo_bundle(
         },
         {
             "portfolio_id": "DEMO_REBAL_USD_001",
+            "tenant_id": DEMO_TENANT_ID,
             "base_currency": "USD",
             "open_date": "2024-01-02",
             "risk_exposure": "Moderate",
@@ -2370,9 +2376,19 @@ def _request_json(
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
 ) -> tuple[int, Any]:
-    request_headers = {"Content-Type": "application/json"}
+    request_headers = {
+        "Content-Type": "application/json",
+        "X-Tenant-Id": DEMO_TENANT_ID,
+    }
     if headers:
+        supplied_tenant = next(
+            (value for key, value in headers.items() if key.lower() == "x-tenant-id"),
+            None,
+        )
+        if supplied_tenant is not None and supplied_tenant.strip() != DEMO_TENANT_ID:
+            raise ValueError("Demo pack tenant header must match the governed demo tenant")
         request_headers.update(headers)
+        request_headers["X-Tenant-Id"] = DEMO_TENANT_ID
     req = request.Request(
         url=url,
         method=method.upper(),

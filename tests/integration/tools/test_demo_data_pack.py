@@ -27,6 +27,7 @@ def test_build_demo_bundle_contains_multi_product_coverage():
     assert len(bundle["transactions"]) >= 36
     assert len(bundle["market_prices"]) > len(bundle["instruments"])
     assert len(bundle["fx_rates"]) >= 40
+    assert {item["tenant_id"] for item in bundle["portfolios"]} == {demo_data_pack.DEMO_TENANT_ID}
 
     product_types = {item["product_type"] for item in bundle["instruments"]}
     assert {"Cash", "Equity", "Bond", "ETF", "Fund", "ETC"}.issubset(product_types)
@@ -1566,6 +1567,45 @@ def test_request_json_treats_remote_disconnect_as_retryable_connection_error(mon
 
     with pytest.raises(RuntimeError, match="GET http://query.dev/health connection error"):
         demo_data_pack._request_json("GET", "http://query.dev/health")
+
+
+def test_request_json_carries_demo_tenant_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_headers: dict[str, str] = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        @staticmethod
+        def read() -> bytes:
+            return b"{}"
+
+    def urlopen(req, *, timeout: int):
+        assert timeout == 15
+        captured_headers.update({key.lower(): value for key, value in req.header_items()})
+        return Response()
+
+    monkeypatch.setattr(demo_data_pack.request, "urlopen", urlopen)
+
+    assert demo_data_pack._request_json("GET", "http://query.dev/portfolios/P1") == (200, {})
+    assert captured_headers["x-tenant-id"] == demo_data_pack.DEMO_TENANT_ID
+
+
+def test_request_json_refuses_demo_tenant_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    urlopen = pytest.fail
+    monkeypatch.setattr(demo_data_pack.request, "urlopen", urlopen)
+
+    with pytest.raises(ValueError, match="must match the governed demo tenant"):
+        demo_data_pack._request_json(
+            "GET",
+            "http://query.dev/portfolios/P1",
+            headers={"x-tenant-id": "other-tenant"},
+        )
 
 
 def test_source_probe_treats_only_not_found_as_missing(monkeypatch):
