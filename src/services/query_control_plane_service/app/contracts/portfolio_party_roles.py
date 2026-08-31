@@ -15,6 +15,15 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+PORTFOLIO_PARTY_ROLE_ROUTE_DESCRIPTION = (
+    "What: Return tenant-owned effective relationship, advisory, portfolio-management, and "
+    "client-service assignments for one portfolio.\n"
+    "How: Selects the latest source version within the admitted tenant before applying business "
+    "date, role, scope, party, and quality filters.\n"
+    "When: Use to distinguish governed banking capacities; the legacy portfolio advisor "
+    "identifier is never interpreted by this endpoint."
+)
+
 
 class PortfolioPartyRoleAssignmentRequest(BaseModel):
     as_of_date: date = Field(

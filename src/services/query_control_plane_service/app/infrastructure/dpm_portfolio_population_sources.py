@@ -3,12 +3,16 @@
 from datetime import date
 from typing import Any
 
-from portfolio_common.database_models import ModelPortfolioDefinition, PortfolioMandateBinding
+from portfolio_common.database_models import (
+    ModelPortfolioDefinition,
+    Portfolio,
+    PortfolioMandateBinding,
+)
 from portfolio_common.source_lifecycle_predicates import (
     DISCRETIONARY_MANDATE_TYPE,
     DPM_DISCRETIONARY_MANDATE_ACTIVE,
 )
-from sqlalchemy import select, tuple_
+from sqlalchemy import exists, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.dpm_portfolio_population import (
@@ -52,12 +56,14 @@ class SqlAlchemyDpmPortfolioPopulationReader:
     async def list_affected_mandates(
         self,
         *,
+        tenant_id: str,
         model_portfolio_id: str,
         as_of_date: date,
         booking_center_code: str | None,
         include_inactive_mandates: bool,
     ) -> list[DiscretionaryMandatePopulationMember]:
         predicates = _mandate_predicates(
+            tenant_id=tenant_id,
             as_of_date=as_of_date,
             booking_center_code=booking_center_code,
             model_portfolio_ids=(model_portfolio_id,),
@@ -69,6 +75,7 @@ class SqlAlchemyDpmPortfolioPopulationReader:
     async def list_universe_candidates(
         self,
         *,
+        tenant_id: str,
         as_of_date: date,
         booking_center_code: str | None,
         model_portfolio_ids: tuple[str, ...],
@@ -77,6 +84,7 @@ class SqlAlchemyDpmPortfolioPopulationReader:
         limit: int,
     ) -> list[DiscretionaryMandatePopulationMember]:
         predicates = _mandate_predicates(
+            tenant_id=tenant_id,
             as_of_date=as_of_date,
             booking_center_code=booking_center_code,
             model_portfolio_ids=model_portfolio_ids,
@@ -135,12 +143,17 @@ class SqlAlchemyDpmPortfolioPopulationReader:
 
 def _mandate_predicates(
     *,
+    tenant_id: str,
     as_of_date: date,
     booking_center_code: str | None,
     model_portfolio_ids: tuple[str, ...],
     include_inactive_mandates: bool,
 ) -> list[Any]:
     predicates = [
+        exists().where(
+            Portfolio.portfolio_id == PortfolioMandateBinding.portfolio_id,
+            Portfolio.tenant_id == tenant_id,
+        ),
         PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
         effective_on(
             PortfolioMandateBinding.effective_from,

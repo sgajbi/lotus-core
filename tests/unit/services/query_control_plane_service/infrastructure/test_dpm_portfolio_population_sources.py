@@ -78,6 +78,7 @@ async def test_affected_mandates_use_effective_discretionary_population_predicat
     reader = dpm_portfolio_population_sources.SqlAlchemyDpmPortfolioPopulationReader(session)
 
     records = await reader.list_affected_mandates(
+        tenant_id="TENANT_SG",
         model_portfolio_id="MODEL_A",
         as_of_date=date(2026, 5, 3),
         booking_center_code="Singapore",
@@ -87,6 +88,9 @@ async def test_affected_mandates_use_effective_discretionary_population_predicat
     assert records[0].binding_version == 7
     sql = str(session.execute.await_args.args[0])
     assert "portfolio_mandate_bindings.mandate_type" in sql
+    assert "EXISTS (SELECT *" in sql
+    assert "portfolios.tenant_id" in sql
+    assert "portfolios.portfolio_id = portfolio_mandate_bindings.portfolio_id" in sql
     assert "portfolio_mandate_bindings.model_portfolio_id IN" in sql
     assert "portfolio_mandate_bindings.booking_center_code" in sql
     assert "portfolio_mandate_bindings.discretionary_authority_status" in sql
@@ -99,6 +103,7 @@ async def test_universe_applies_cursor_and_fetch_limit() -> None:
     reader = dpm_portfolio_population_sources.SqlAlchemyDpmPortfolioPopulationReader(session)
 
     await reader.list_universe_candidates(
+        tenant_id="TENANT_SG",
         as_of_date=date(2026, 5, 3),
         booking_center_code=None,
         model_portfolio_ids=("MODEL_A", "MODEL_B"),
@@ -110,6 +115,7 @@ async def test_universe_applies_cursor_and_fetch_limit() -> None:
     statement = session.execute.await_args.args[0]
     sql = str(statement)
     assert "portfolio_mandate_bindings.model_portfolio_id IN" in sql
+    assert "portfolios.tenant_id" in sql
     assert (
         "(portfolio_mandate_bindings.portfolio_id, portfolio_mandate_bindings.mandate_id) >" in sql
     )

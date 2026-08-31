@@ -9,6 +9,7 @@ from portfolio_common.domain.portfolio_party_roles import (
     PortfolioPartyRoleScope,
     PortfolioPartyRoleType,
 )
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.query_control_plane_service.app.application.portfolio_party_roles import (
     PortfolioPartyRoleAssignmentService,
@@ -19,6 +20,8 @@ from src.services.query_control_plane_service.app.contracts.portfolio_party_role
 from src.services.query_control_plane_service.app.domain.portfolio_party_roles import (
     PortfolioPartyRoleRecord,
 )
+
+TENANT_CONTEXT = TenantContext(TenantId("TENANT_SG"), identity_verified=True)
 
 
 class _Clock:
@@ -69,10 +72,13 @@ async def test_party_role_service_preserves_governed_filters_and_lineage() -> No
     )
 
     response = await PortfolioPartyRoleAssignmentService(reader=reader, clock=_Clock()).resolve(
-        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+        tenant_context=TENANT_CONTEXT,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
     )
 
     assert reader.call == {
+        "tenant_id": "TENANT_SG",
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
         "as_of_date": date(2026, 7, 18),
         "party_id": "PARTY_PM_SG_001",
@@ -88,6 +94,7 @@ async def test_party_role_service_preserves_governed_filters_and_lineage() -> No
     assert response.latest_evidence_timestamp == datetime(2026, 7, 17, 9, 2, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.source_digest == response.content_hash
+    assert response.tenant_id == "TENANT_SG"
 
 
 @pytest.mark.asyncio
@@ -105,6 +112,7 @@ async def test_party_role_identity_changes_with_returned_row_and_trust_correctio
 
     responses = [
         await PortfolioPartyRoleAssignmentService(reader=_Reader([record]), clock=_Clock()).resolve(
+            tenant_context=TENANT_CONTEXT,
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=request,
         )
@@ -123,6 +131,7 @@ async def test_party_role_service_returns_explicit_incomplete_empty_result() -> 
     response = await PortfolioPartyRoleAssignmentService(
         reader=_Reader([]), clock=_Clock()
     ).resolve(
+        tenant_context=TENANT_CONTEXT,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=PortfolioPartyRoleAssignmentRequest(as_of_date=date(2026, 7, 18)),
     )
@@ -156,6 +165,7 @@ async def test_party_role_service_does_not_overstate_nonaccepted_assignments(
     )
 
     response = await PortfolioPartyRoleAssignmentService(reader=reader, clock=_Clock()).resolve(
+        tenant_context=TENANT_CONTEXT,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=PortfolioPartyRoleAssignmentRequest(
             as_of_date=date(2026, 7, 18),

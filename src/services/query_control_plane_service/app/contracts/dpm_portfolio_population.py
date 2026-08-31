@@ -11,6 +11,24 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+CIO_MODEL_CHANGE_COHORT_ROUTE_DESCRIPTION = (
+    "What: Return source-owned affected discretionary mandates for an approved CIO model "
+    "portfolio version, restricted to the admitted tenant.\n"
+    "How: Resolves the approved model for the as-of date, then selects tenant-owned effective "
+    "mandate bindings with booking-center, authority, supportability, identity, and lineage "
+    "controls.\n"
+    "When: Use for lotus-manage CIO_MODEL_CHANGE wave discovery; consumers must not infer "
+    "affected cohorts from a model id alone."
+)
+
+DPM_PORTFOLIO_UNIVERSE_ROUTE_DESCRIPTION = (
+    "What: Return tenant-owned DPM candidates from effective discretionary mandate bindings.\n"
+    "How: Applies admitted-tenant, as-of, booking-center, model, authority, and deterministic "
+    "paging controls, returning supportability and lineage.\n"
+    "When: Use for lotus-manage DPM universe discovery before campaign or wave composition; "
+    "this is not a householding, suitability, ranking, execution, or workflow API."
+)
+
 
 class CioModelChangeAffectedCohortRequest(BaseModel):
     as_of_date: date = Field(
@@ -20,8 +38,11 @@ class CioModelChangeAffectedCohortRequest(BaseModel):
     )
     tenant_id: str | None = Field(
         None,
-        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
-        examples=["default"],
+        description=(
+            "Optional caller assertion. It must match, and is replaced by, the admitted tenant "
+            "authority used to scope portfolio ownership."
+        ),
+        examples=["TENANT_SG"],
     )
     booking_center_code: str | None = Field(
         None,
@@ -146,8 +167,11 @@ class DpmPortfolioUniverseCandidateRequest(BaseModel):
     )
     tenant_id: str | None = Field(
         None,
-        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
-        examples=["default"],
+        description=(
+            "Optional caller assertion. It must match, and is replaced by, the admitted tenant "
+            "authority used to scope portfolio ownership."
+        ),
+        examples=["TENANT_SG"],
     )
     booking_center_code: str | None = Field(
         None,

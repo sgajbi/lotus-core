@@ -27,6 +27,7 @@ async def test_party_role_reader_ranks_source_versions_before_effective_quality_
     records = await portfolio_party_role_sources.SqlAlchemyPortfolioPartyRoleReader(
         session
     ).list_effective_assignments(
+        tenant_id="TENANT_SG",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         as_of_date=date(2026, 7, 18),
         party_id="PARTY_PM_SG_001",
@@ -41,6 +42,8 @@ async def test_party_role_reader_ranks_source_versions_before_effective_quality_
     assert "row_number() over (partition by" in sql
     assert "source_system" in sql and "source_record_id" in sql
     assert "assignment_version desc" in sql
+    assert "join portfolios on portfolios.portfolio_id" in sql
+    assert "portfolios.tenant_id =" in sql
     assert "ranked_portfolio_party_roles.source_rank =" in sql
     assert "effective_from <=" in sql and "effective_to >=" in sql
     assert "quality_status =" in sql
@@ -59,6 +62,7 @@ async def test_party_role_reader_can_include_latest_nonaccepted_observations() -
     await portfolio_party_role_sources.SqlAlchemyPortfolioPartyRoleReader(
         session
     ).list_effective_assignments(
+        tenant_id="TENANT_SG",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         as_of_date=date(2026, 7, 18),
         party_id=None,

@@ -80,6 +80,8 @@ from ..contracts.discretionary_mandate_binding import (
     DiscretionaryMandateBindingResponse,
 )
 from ..contracts.dpm_portfolio_population import (
+    CIO_MODEL_CHANGE_COHORT_ROUTE_DESCRIPTION,
+    DPM_PORTFOLIO_UNIVERSE_ROUTE_DESCRIPTION,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     DpmPortfolioUniverseCandidateRequest,
@@ -136,6 +138,7 @@ from ..contracts.portfolio_manager_book import (
     PortfolioManagerBookMembershipResponse,
 )
 from ..contracts.portfolio_party_roles import (
+    PORTFOLIO_PARTY_ROLE_ROUTE_DESCRIPTION,
     PortfolioPartyRoleAssignmentRequest,
     PortfolioPartyRoleAssignmentResponse,
 )
@@ -1102,19 +1105,12 @@ async def resolve_portfolio_manager_book_membership(
     "/portfolios/{portfolio_id}/party-role-assignments",
     response_model=PortfolioPartyRoleAssignmentResponse,
     summary="Resolve effective portfolio party-role assignments",
-    description=(
-        "What: Return effective relationship coverage, investment-advisory, portfolio-management, "
-        "and client-service assignments for one portfolio.\n"
-        "How: Selects the latest version of each source record before applying the requested "
-        "business date, role, scope, party, and quality filters.\n"
-        "When: Use this source product when a consumer must distinguish a relationship manager, "
-        "investment adviser, portfolio manager, delegate, or service officer. The legacy "
-        "portfolio advisor identifier is never interpreted by this endpoint."
-    ),
+    description=PORTFOLIO_PARTY_ROLE_ROUTE_DESCRIPTION,
     openapi_extra=source_data_product_openapi_extra("PortfolioPartyRoleAssignment"),
 )
 async def resolve_portfolio_party_role_assignments(
     request: PortfolioPartyRoleAssignmentRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Canonical portfolio whose effective party roles are requested.",
@@ -1124,23 +1120,20 @@ async def resolve_portfolio_party_role_assignments(
         get_portfolio_party_role_assignment_service
     ),
 ) -> PortfolioPartyRoleAssignmentResponse:
-    return await service.resolve(portfolio_id=portfolio_id, request=request)
+    return await service.resolve(
+        tenant_context=http_request.state.tenant_context,
+        portfolio_id=portfolio_id,
+        request=request,
+    )
 
 
 @router.post(
     "/model-portfolios/{model_portfolio_id}/affected-mandates",
     response_model=CioModelChangeAffectedCohortResponse,
     summary="Resolve CIO model-change affected mandate cohort",
-    description=(
-        "What: Return source-owned affected discretionary mandates for an approved CIO model "
-        "portfolio version.\n"
-        "How: Resolves the approved model definition for the as-of date, then selects effective "
-        "portfolio mandate bindings for the model, preserving booking-center filters, active "
-        "discretionary authority, supportability, event identity, and source lineage.\n"
-        "When: Use this endpoint when lotus-manage needs automatic CIO_MODEL_CHANGE wave "
-        "discovery. Do not infer affected cohorts inside consumers from a model id alone."
-    ),
+    description=CIO_MODEL_CHANGE_COHORT_ROUTE_DESCRIPTION,
     responses={
+        403: tenant_forbidden_response("CioModelChangeAffectedCohort"),
         404: problem_response(
             "No affected mandates found.",
             CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_EXAMPLE,
@@ -1150,6 +1143,7 @@ async def resolve_portfolio_party_role_assignments(
 )
 async def resolve_cio_model_change_affected_cohort(
     request: CioModelChangeAffectedCohortRequest,
+    http_request: Request,
     model_portfolio_id: str = Path(
         ...,
         description="Approved model portfolio identifier whose affected mandate cohort is needed.",
@@ -1159,7 +1153,11 @@ async def resolve_cio_model_change_affected_cohort(
         get_dpm_portfolio_population_service
     ),
 ) -> CioModelChangeAffectedCohortResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "CioModelChangeAffectedCohort"
+    )
     response = await dpm_portfolio_population_service.resolve_cio_model_change_cohort(
+        tenant_context=http_request.state.tenant_context,
         model_portfolio_id=model_portfolio_id,
         request=request,
     )
@@ -1191,17 +1189,9 @@ async def resolve_cio_model_change_affected_cohort(
     "/dpm/portfolio-universe/candidates",
     response_model=DpmPortfolioUniverseCandidateResponse,
     summary="Resolve DPM portfolio-universe candidates",
-    description=(
-        "What: Return source-owned DPM portfolio-universe candidates from effective "
-        "discretionary mandate bindings.\n"
-        "How: Applies as-of, booking-center, model-portfolio, active-authority, and deterministic "
-        "paging controls against Core-owned mandate binding records, then returns candidate rows "
-        "with supportability, continuation metadata, and lineage.\n"
-        "When: Use this endpoint when lotus-manage needs source-owned DPM universe discovery "
-        "before campaign or wave composition. Do not use it as a client householding, suitability, "
-        "portfolio-manager ranking, execution, or external workflow API."
-    ),
+    description=DPM_PORTFOLIO_UNIVERSE_ROUTE_DESCRIPTION,
     responses={
+        403: tenant_forbidden_response("DpmPortfolioUniverseCandidate"),
         404: problem_response(
             "No DPM portfolio-universe candidates found.",
             DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE,
@@ -1215,12 +1205,17 @@ async def resolve_cio_model_change_affected_cohort(
 )
 async def resolve_dpm_portfolio_universe_candidates(
     request: DpmPortfolioUniverseCandidateRequest,
+    http_request: Request,
     dpm_portfolio_population_service: DpmPortfolioPopulationService = Depends(
         get_dpm_portfolio_population_service
     ),
 ) -> DpmPortfolioUniverseCandidateResponse:
+    request = bind_admitted_tenant_request(
+        request, http_request.state.tenant_context, "DpmPortfolioUniverseCandidate"
+    )
     try:
         response = await dpm_portfolio_population_service.resolve_universe_candidates(
+            tenant_context=http_request.state.tenant_context,
             request=request,
         )
     except ValueError as exc:

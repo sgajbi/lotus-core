@@ -15,6 +15,7 @@ class PortfolioPartyRoleReader(Protocol):
     async def list_effective_assignments(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         as_of_date: date,
         party_id: str | None,

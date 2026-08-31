@@ -1,4 +1,4 @@
-"""PostgreSQL proof for effective party roles and the legacy PM-book fence."""
+"""PostgreSQL tenant-isolation proof for DPM population and party-role reads."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ import os
 from datetime import UTC, date, datetime
 
 import pytest
-from portfolio_common.database_models import Portfolio, PortfolioPartyRoleAssignment
+from portfolio_common.database_models import (
+    Portfolio,
+    PortfolioMandateBinding,
+    PortfolioPartyRoleAssignment,
+)
 from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_async_database_engine
 from portfolio_common.domain.portfolio_party_roles import (
@@ -23,6 +27,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
 from src.services.query_control_plane_service.app.infrastructure import (
     SqlAlchemyPortfolioManagerBookReader,
     SqlAlchemyPortfolioPartyRoleReader,
+    dpm_portfolio_population_sources,
 )
 from tests.test_support.tenant import TEST_TENANT_ID
 
@@ -30,8 +35,13 @@ pytestmark = pytest.mark.asyncio
 
 MIGRATED_PORTFOLIO = "ISSUE513_ROLE_PORTFOLIO"
 LEGACY_PORTFOLIO = "ISSUE513_LEGACY_PORTFOLIO"
+FOREIGN_PORTFOLIO = "ISSUE798_FOREIGN_ROLE_PORTFOLIO"
+FOREIGN_TENANT_ID = "ISSUE798_FOREIGN_TENANT"
 PORTFOLIO_MANAGER = "ISSUE513_PARTY_PM"
 SOURCE_RECORD = "ISSUE513_COVERAGE_RECORD"
+DPM_OWNED_PORTFOLIO = "ISSUE798_DPM_OWNED_PORTFOLIO"
+DPM_FOREIGN_PORTFOLIO = "ISSUE798_DPM_FOREIGN_PORTFOLIO"
+DPM_MODEL = "ISSUE798_DPM_MODEL"
 
 
 def _async_database_url() -> str:
@@ -47,10 +57,14 @@ def _async_database_url() -> str:
 
 
 def _portfolio(
-    portfolio_id: str, *, portfolio_type: str = "discretionary", status: str = "active"
+    portfolio_id: str,
+    *,
+    tenant_id: str = TEST_TENANT_ID,
+    portfolio_type: str = "discretionary",
+    status: str = "active",
 ) -> Portfolio:
     return Portfolio(
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=tenant_id,
         legal_book_id="ISSUE513_BOOK",
         portfolio_id=portfolio_id,
         base_currency="SGD",
@@ -68,9 +82,15 @@ def _portfolio(
     )
 
 
-def _assignment(*, version: int, quality_status: str) -> dict[str, object]:
+def _assignment(
+    *,
+    version: int,
+    quality_status: str,
+    portfolio_id: str = MIGRATED_PORTFOLIO,
+    source_record_id: str = SOURCE_RECORD,
+) -> dict[str, object]:
     return {
-        "portfolio_id": MIGRATED_PORTFOLIO,
+        "portfolio_id": portfolio_id,
         "party_id": PORTFOLIO_MANAGER,
         "role_type": PortfolioPartyRoleType.DISCRETIONARY_PORTFOLIO_MANAGER,
         "role_scope": PortfolioPartyRoleScope.PORTFOLIO_MANAGEMENT,
@@ -78,10 +98,106 @@ def _assignment(*, version: int, quality_status: str) -> dict[str, object]:
         "effective_to": None,
         "assignment_version": version,
         "source_system": "relationship_master",
-        "source_record_id": SOURCE_RECORD,
+        "source_record_id": source_record_id,
         "observed_at": datetime(2026, 7, 17 + version, 9, tzinfo=UTC),
         "quality_status": quality_status,
     }
+
+
+def _mandate_binding(portfolio_id: str, *, suffix: str) -> PortfolioMandateBinding:
+    return PortfolioMandateBinding(
+        portfolio_id=portfolio_id,
+        mandate_id=f"ISSUE798_MANDATE_{suffix}",
+        client_id=f"ISSUE798_CLIENT_{suffix}",
+        mandate_type="discretionary",
+        discretionary_authority_status="active",
+        booking_center_code="Singapore",
+        jurisdiction_code="SG",
+        model_portfolio_id=DPM_MODEL,
+        policy_pack_id="ISSUE798_POLICY",
+        mandate_objective="balanced_growth",
+        risk_profile="balanced",
+        investment_horizon="long_term",
+        rebalance_frequency="monthly",
+        rebalance_bands={"default_band": "0.025"},
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        binding_version=1,
+        source_system="issue798_test",
+        source_record_id=f"ISSUE798_BINDING_{suffix}",
+        observed_at=datetime(2026, 7, 18, 8, tzinfo=UTC),
+        quality_status="accepted",
+    )
+
+
+async def test_dpm_population_reader_excludes_foreign_tenant_bindings() -> None:
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=_async_database_url(),
+        pool_mode=DatabasePoolMode.NULL,
+    )
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    portfolio_ids = (DPM_OWNED_PORTFOLIO, DPM_FOREIGN_PORTFOLIO)
+
+    try:
+        async with sessions() as session:
+            await session.execute(
+                delete(PortfolioMandateBinding).where(
+                    PortfolioMandateBinding.portfolio_id.in_(portfolio_ids)
+                )
+            )
+            await session.execute(
+                delete(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
+            )
+            session.add_all(
+                [
+                    _portfolio(DPM_OWNED_PORTFOLIO),
+                    _portfolio(DPM_FOREIGN_PORTFOLIO, tenant_id=FOREIGN_TENANT_ID),
+                ]
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    _mandate_binding(DPM_OWNED_PORTFOLIO, suffix="OWNED"),
+                    _mandate_binding(DPM_FOREIGN_PORTFOLIO, suffix="FOREIGN"),
+                ]
+            )
+            await session.commit()
+
+            reader = dpm_portfolio_population_sources.SqlAlchemyDpmPortfolioPopulationReader(
+                session
+            )
+            cohort = await reader.list_affected_mandates(
+                tenant_id=TEST_TENANT_ID,
+                model_portfolio_id=DPM_MODEL,
+                as_of_date=date(2026, 7, 18),
+                booking_center_code=None,
+                include_inactive_mandates=False,
+            )
+            universe = await reader.list_universe_candidates(
+                tenant_id=TEST_TENANT_ID,
+                as_of_date=date(2026, 7, 18),
+                booking_center_code=None,
+                model_portfolio_ids=(DPM_MODEL,),
+                include_inactive_mandates=False,
+                after_sort_key=None,
+                limit=10,
+            )
+
+            assert [row.portfolio_id for row in cohort] == [DPM_OWNED_PORTFOLIO]
+            assert [row.portfolio_id for row in universe] == [DPM_OWNED_PORTFOLIO]
+    finally:
+        async with sessions() as session:
+            await session.execute(
+                delete(PortfolioMandateBinding).where(
+                    PortfolioMandateBinding.portfolio_id.in_(portfolio_ids)
+                )
+            )
+            await session.execute(
+                delete(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
+            )
+            await session.commit()
+        await engine.dispose()
 
 
 async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection() -> None:
@@ -91,7 +207,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
         pool_mode=DatabasePoolMode.NULL,
     )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
-    portfolio_ids = (MIGRATED_PORTFOLIO, LEGACY_PORTFOLIO)
+    portfolio_ids = (MIGRATED_PORTFOLIO, LEGACY_PORTFOLIO, FOREIGN_PORTFOLIO)
 
     try:
         async with sessions() as session:
@@ -111,6 +227,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                         portfolio_type="Discretionary",
                         status="Active",
                     ),
+                    _portfolio(FOREIGN_PORTFOLIO, tenant_id=FOREIGN_TENANT_ID),
                 ]
             )
             await session.commit()
@@ -120,11 +237,18 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                 [
                     _assignment(version=1, quality_status="accepted"),
                     _assignment(version=2, quality_status="quarantined"),
+                    _assignment(
+                        version=1,
+                        quality_status="accepted",
+                        portfolio_id=FOREIGN_PORTFOLIO,
+                        source_record_id="ISSUE798_FOREIGN_COVERAGE_RECORD",
+                    ),
                 ]
             )
 
             role_reader = SqlAlchemyPortfolioPartyRoleReader(session)
             accepted = await role_reader.list_effective_assignments(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=MIGRATED_PORTFOLIO,
                 as_of_date=date(2026, 7, 18),
                 party_id=PORTFOLIO_MANAGER,
@@ -133,6 +257,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                 include_non_accepted=False,
             )
             latest = await role_reader.list_effective_assignments(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=MIGRATED_PORTFOLIO,
                 as_of_date=date(2026, 7, 18),
                 party_id=PORTFOLIO_MANAGER,
@@ -144,6 +269,16 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
             assert len(latest) == 1
             assert latest[0].assignment_version == 2
             assert latest[0].quality_status is PortfolioPartyRoleQualityStatus.QUARANTINED
+            foreign = await role_reader.list_effective_assignments(
+                tenant_id=TEST_TENANT_ID,
+                portfolio_id=FOREIGN_PORTFOLIO,
+                as_of_date=date(2026, 7, 18),
+                party_id=PORTFOLIO_MANAGER,
+                role_types=(),
+                role_scopes=(),
+                include_non_accepted=True,
+            )
+            assert foreign == []
 
             book_reader = SqlAlchemyPortfolioManagerBookReader(session)
             quarantined_book = await book_reader.list_members(

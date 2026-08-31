@@ -270,6 +270,38 @@ CRITICAL_TENANT_BOUNDARIES = (
     ),
     (
         Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "dpm_portfolio_population_sources.py"
+        ),
+        "SqlAlchemyDpmPortfolioPopulationReader",
+        frozenset({"list_affected_mandates", "list_universe_candidates"}),
+        "tenant_id",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/application/dpm_portfolio_population.py"
+        ),
+        "DpmPortfolioPopulationService",
+        frozenset({"resolve_cio_model_change_cohort", "resolve_universe_candidates"}),
+        "tenant_context",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "portfolio_party_role_sources.py"
+        ),
+        "SqlAlchemyPortfolioPartyRoleReader",
+        frozenset({"list_effective_assignments"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/application/portfolio_party_roles.py"),
+        "PortfolioPartyRoleAssignmentService",
+        frozenset({"resolve"}),
+        "tenant_context",
+    ),
+    (
+        Path(
             "src/services/portfolio_transaction_processing_service/app/application/"
             "corporate_action_reconciliation.py"
         ),

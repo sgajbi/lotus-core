@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Any
 
-from portfolio_common.database_models import PortfolioPartyRoleAssignment
+from portfolio_common.database_models import Portfolio, PortfolioPartyRoleAssignment
 from portfolio_common.domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
     PortfolioPartyRoleScope,
@@ -24,6 +24,7 @@ class SqlAlchemyPortfolioPartyRoleReader:
     async def list_effective_assignments(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         as_of_date: date,
         party_id: str | None,
@@ -31,23 +32,28 @@ class SqlAlchemyPortfolioPartyRoleReader:
         role_scopes: tuple[PortfolioPartyRoleScope, ...],
         include_non_accepted: bool,
     ) -> list[PortfolioPartyRoleRecord]:
-        ranked = select(
-            PortfolioPartyRoleAssignment.id.label("assignment_id"),
-            func.row_number()
-            .over(
-                partition_by=(
-                    PortfolioPartyRoleAssignment.source_system,
-                    PortfolioPartyRoleAssignment.source_record_id,
-                ),
-                order_by=(
-                    PortfolioPartyRoleAssignment.assignment_version.desc(),
-                    PortfolioPartyRoleAssignment.observed_at.desc(),
-                    PortfolioPartyRoleAssignment.updated_at.desc(),
-                    PortfolioPartyRoleAssignment.id.desc(),
-                ),
+        ranked = (
+            select(
+                PortfolioPartyRoleAssignment.id.label("assignment_id"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        PortfolioPartyRoleAssignment.source_system,
+                        PortfolioPartyRoleAssignment.source_record_id,
+                    ),
+                    order_by=(
+                        PortfolioPartyRoleAssignment.assignment_version.desc(),
+                        PortfolioPartyRoleAssignment.observed_at.desc(),
+                        PortfolioPartyRoleAssignment.updated_at.desc(),
+                        PortfolioPartyRoleAssignment.id.desc(),
+                    ),
+                )
+                .label("source_rank"),
             )
-            .label("source_rank"),
-        ).cte("ranked_portfolio_party_roles")
+            .join(Portfolio, Portfolio.portfolio_id == PortfolioPartyRoleAssignment.portfolio_id)
+            .where(Portfolio.tenant_id == tenant_id)
+            .cte("ranked_portfolio_party_roles")
+        )
         statement = (
             select(PortfolioPartyRoleAssignment)
             .join(

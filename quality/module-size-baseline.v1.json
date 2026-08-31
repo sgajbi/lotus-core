@@ -25,7 +25,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/routers/integration.py",
-      "lines": 2376,
+      "lines": 2371,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy QCP integration router pending route-family decomposition.",
       "issue": "#462",

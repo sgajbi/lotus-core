@@ -19,6 +19,7 @@ class DpmPortfolioPopulationReader(Protocol):
     async def list_affected_mandates(
         self,
         *,
+        tenant_id: str,
         model_portfolio_id: str,
         as_of_date: date,
         booking_center_code: str | None,
@@ -28,6 +29,7 @@ class DpmPortfolioPopulationReader(Protocol):
     async def list_universe_candidates(
         self,
         *,
+        tenant_id: str,
         as_of_date: date,
         booking_center_code: str | None,
         model_portfolio_ids: tuple[str, ...],

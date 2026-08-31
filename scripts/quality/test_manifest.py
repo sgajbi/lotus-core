@@ -36,6 +36,8 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/ingestion_service/"
         "test_transaction_reprocessing_target_reader_postgresql.py",
         "tests/integration/services/query_service/test_reporting_portfolio_scope_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_portfolio_party_role_postgresql.py",
     ],
     "critical-db-coverage": [
         "tests/integration/libs/portfolio-common/test_database_runtime_identity.py",

@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, Literal, cast
 
+from portfolio_common.domain.tenant import TenantContext, bind_tenant_authority
 from portfolio_common.logging_utils import normalize_lineage_value
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint
@@ -61,9 +62,12 @@ class DpmPortfolioPopulationService:
     async def resolve_cio_model_change_cohort(
         self,
         *,
+        tenant_context: TenantContext,
         model_portfolio_id: str,
         request: CioModelChangeAffectedCohortRequest,
     ) -> CioModelChangeAffectedCohortResponse | None:
+        tenant_id = bind_tenant_authority(request.tenant_id, tenant_context)
+        request = request.model_copy(update={"tenant_id": tenant_id})
         model = await self._reader.resolve_approved_model(
             model_portfolio_id=model_portfolio_id,
             as_of_date=request.as_of_date,
@@ -71,6 +75,7 @@ class DpmPortfolioPopulationService:
         if model is None:
             return None
         mandates = await self._reader.list_affected_mandates(
+            tenant_id=tenant_id,
             model_portfolio_id=model_portfolio_id,
             as_of_date=request.as_of_date,
             booking_center_code=request.booking_center_code,
@@ -84,14 +89,20 @@ class DpmPortfolioPopulationService:
         )
 
     async def resolve_universe_candidates(
-        self, *, request: DpmPortfolioUniverseCandidateRequest
+        self,
+        *,
+        tenant_context: TenantContext,
+        request: DpmPortfolioUniverseCandidateRequest,
     ) -> DpmPortfolioUniverseCandidateResponse:
+        tenant_id = bind_tenant_authority(request.tenant_id, tenant_context)
+        request = request.model_copy(update={"tenant_id": tenant_id})
         scope = _universe_scope(request)
         after_sort_key = _after_sort_key(
             cursor=self._page_tokens.decode(request.page.page_token),
             scope_fingerprint=scope.fingerprint,
         )
         rows = await self._reader.list_universe_candidates(
+            tenant_id=tenant_id,
             as_of_date=request.as_of_date,
             booking_center_code=scope.booking_center_code,
             model_portfolio_ids=scope.model_portfolio_ids,
@@ -180,7 +191,7 @@ def _cio_cohort_response(
     affected = [_affected_mandate(row) for row in mandates]
     state: Literal["READY", "INCOMPLETE"] = "READY" if affected else "INCOMPLETE"
     reason = "CIO_MODEL_CHANGE_COHORT_READY" if affected else "CIO_MODEL_CHANGE_COHORT_EMPTY"
-    filters = ["model_portfolio_id", "as_of_date"]
+    filters = ["admitted_tenant_ownership", "model_portfolio_id", "as_of_date"]
     if request.booking_center_code:
         filters.append("booking_center_code")
     if not request.include_inactive_mandates:
@@ -190,6 +201,7 @@ def _cio_cohort_response(
             "product_name": "CioModelChangeAffectedCohort",
             "model_portfolio_id": model.model_portfolio_id,
             "model_portfolio_version": model.model_portfolio_version,
+            "tenant_id": request.tenant_id,
             "as_of_date": request.as_of_date.isoformat(),
             "booking_center_code": request.booking_center_code,
             "include_inactive_mandates": request.include_inactive_mandates,
@@ -243,7 +255,7 @@ def _universe_response(
     generated_at: datetime,
 ) -> DpmPortfolioUniverseCandidateResponse:
     candidates = [_universe_candidate(row) for row in rows]
-    filters = ["as_of_date"]
+    filters = ["admitted_tenant_ownership", "as_of_date"]
     if scope.booking_center_code:
         filters.append("booking_center_code")
     if scope.model_portfolio_ids:

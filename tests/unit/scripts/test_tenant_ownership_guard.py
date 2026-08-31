@@ -291,6 +291,32 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
             "tenant_context",
         ),
         (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "dpm_portfolio_population_sources.py",
+            "SqlAlchemyDpmPortfolioPopulationReader",
+            ("list_affected_mandates", "list_universe_candidates"),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/dpm_portfolio_population.py",
+            "DpmPortfolioPopulationService",
+            ("resolve_cio_model_change_cohort", "resolve_universe_candidates"),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/"
+            "portfolio_party_role_sources.py",
+            "SqlAlchemyPortfolioPartyRoleReader",
+            ("list_effective_assignments",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/portfolio_party_roles.py",
+            "PortfolioPartyRoleAssignmentService",
+            ("resolve",),
+            "tenant_context",
+        ),
+        (
             "src/services/portfolio_transaction_processing_service/app/application/"
             "corporate_action_reconciliation.py",
             "CorporateActionReconciliationCoordinator",

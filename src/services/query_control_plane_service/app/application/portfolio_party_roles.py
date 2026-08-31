@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Literal, cast
 
 from portfolio_common.domain.portfolio_party_roles import PortfolioPartyRoleQualityStatus
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -28,10 +29,12 @@ class PortfolioPartyRoleAssignmentService:
     async def resolve(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_id: str,
         request: PortfolioPartyRoleAssignmentRequest,
     ) -> PortfolioPartyRoleAssignmentResponse:
         records = await self._reader.list_effective_assignments(
+            tenant_id=tenant_context.tenant_id_text,
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             party_id=request.party_id,
@@ -40,6 +43,7 @@ class PortfolioPartyRoleAssignmentService:
             include_non_accepted=request.include_non_accepted,
         )
         return _response(
+            tenant_id=tenant_context.tenant_id_text,
             portfolio_id=portfolio_id,
             request=request,
             records=records,
@@ -49,13 +53,19 @@ class PortfolioPartyRoleAssignmentService:
 
 def _response(
     *,
+    tenant_id: str,
     portfolio_id: str,
     request: PortfolioPartyRoleAssignmentRequest,
     records: list[PortfolioPartyRoleRecord],
     generated_at: datetime,
 ) -> PortfolioPartyRoleAssignmentResponse:
     assignments = [_item(record) for record in records]
-    filters = ["portfolio_id", "as_of_date", "latest_source_version"]
+    filters = [
+        "admitted_tenant_ownership",
+        "portfolio_id",
+        "as_of_date",
+        "latest_source_version",
+    ]
     if request.party_id:
         filters.append("party_id")
     if request.role_types:
@@ -94,6 +104,7 @@ def _response(
         {
             "product_name": "PortfolioPartyRoleAssignment",
             "product_version": "v1",
+            "tenant_id": tenant_id,
             "portfolio_id": portfolio_id,
             "request": request.model_dump(mode="json"),
             "assignments": [assignment.model_dump(mode="json") for assignment in assignments],
@@ -113,6 +124,7 @@ def _response(
             source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
+                tenant_id=tenant_id,
                 data_quality_status=data_quality_status,
                 latest_evidence_timestamp=latest_evidence_timestamp,
                 snapshot_id=(f"portfolio_party_roles:{content_hash.removeprefix('sha256:')[:24]}"),
