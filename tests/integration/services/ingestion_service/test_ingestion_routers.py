@@ -8826,32 +8826,45 @@ async def test_ingest_instrument_valuation_policy_assignment_rejects_foreign_ten
     )
 
 
+def _authoritative_market_price_source_fact_payload(
+    **overrides: object,
+) -> dict[str, list[dict[str, object]]]:
+    record: dict[str, object] = {
+        "tenant_id": TEST_TENANT_HEADERS["X-Tenant-Id"],
+        "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+        "security_id": "BOND_US_CORP_2031",
+        "price_date": "2026-07-28",
+        "price": "99.25",
+        "currency": "USD",
+        "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+        "fact_status": "ACTIVE",
+        "fact_version": 1,
+        "source_system": "approved_market_data",
+        "source_record_id": "PX-BOND_US_CORP_2031-20260728",
+        "source_revision": "rev-1",
+        "source_content_hash": "a" * 64,
+        "observed_at": "2026-07-28T09:30:00+08:00",
+    }
+    record.update(overrides)
+    return {"market_price_source_facts": [record]}
+
+
 async def test_ingest_authoritative_market_price_source_fact_preserves_representation_and_lineage(
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
     response = await async_test_client.post(
         "/ingest/authoritative-market-price-source-facts",
-        json={
-            "market_price_source_facts": [
-                {
-                    "tenant_id": " LOTUS_PB_SG ",
-                    "legal_book_id": " SG_PRIVATE_BANK_BOOK ",
-                    "security_id": " BOND_US_CORP_2031 ",
-                    "price_date": "2026-07-28",
-                    "price": "99.250000000000000000",
-                    "currency": " usd ",
-                    "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
-                    "fact_status": "ACTIVE",
-                    "fact_version": 1,
-                    "source_system": " approved_market_data ",
-                    "source_record_id": " PX-BOND_US_CORP_2031-20260728 ",
-                    "source_revision": " rev-1 ",
-                    "source_content_hash": "a" * 64,
-                    "observed_at": "2026-07-28T09:30:00+08:00",
-                }
-            ]
-        },
+        json=_authoritative_market_price_source_fact_payload(
+            tenant_id=f" {TEST_TENANT_HEADERS['X-Tenant-Id']} ",
+            legal_book_id=" SG_PRIVATE_BANK_BOOK ",
+            security_id=" BOND_US_CORP_2031 ",
+            price="99.250000000000000000",
+            currency=" usd ",
+            source_system=" approved_market_data ",
+            source_record_id=" PX-BOND_US_CORP_2031-20260728 ",
+            source_revision=" rev-1 ",
+        ),
         headers={"X-Idempotency-Key": "market-price-authority-idem-001"},
     )
 
@@ -8861,7 +8874,7 @@ async def test_ingest_authoritative_market_price_source_fact_preserves_represent
         "market_price_source_facts"
     ]
     assert len(persisted) == 1
-    assert persisted[0]["tenant_id"] == "LOTUS_PB_SG"
+    assert persisted[0]["tenant_id"] == TEST_TENANT_HEADERS["X-Tenant-Id"]
     assert persisted[0]["legal_book_id"] == "SG_PRIVATE_BANK_BOOK"
     assert persisted[0]["currency"] == "USD"
     assert persisted[0]["quote_basis"] == "PERCENT_OF_PRINCIPAL_CLEAN"
@@ -8872,26 +8885,7 @@ async def test_ingest_authoritative_market_price_source_fact_replays_idempotentl
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    payload = {
-        "market_price_source_facts": [
-            {
-                "tenant_id": "LOTUS_PB_SG",
-                "legal_book_id": "SG_PRIVATE_BANK_BOOK",
-                "security_id": "BOND_US_CORP_2031",
-                "price_date": "2026-07-28",
-                "price": "99.25",
-                "currency": "USD",
-                "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
-                "fact_status": "ACTIVE",
-                "fact_version": 1,
-                "source_system": "approved_market_data",
-                "source_record_id": "PX-BOND_US_CORP_2031-20260728",
-                "source_revision": "rev-1",
-                "source_content_hash": "a" * 64,
-                "observed_at": "2026-07-28T09:30:00+08:00",
-            }
-        ]
-    }
+    payload = _authoritative_market_price_source_fact_payload()
     headers = {"X-Idempotency-Key": "market-price-authority-replay-001"}
 
     first = await async_test_client.post(
@@ -8923,22 +8917,8 @@ async def test_ingest_authoritative_market_price_source_fact_rejects_duplicate_s
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
 ):
-    record = {
-        "tenant_id": "LOTUS_PB_SG",
-        "legal_book_id": "SG_PRIVATE_BANK_BOOK",
-        "security_id": "BOND_US_CORP_2031",
-        "price_date": "2026-07-28",
-        "price": "99.25",
-        "currency": "USD",
-        "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
-        "fact_status": "ACTIVE",
-        "fact_version": 1,
-        "source_system": "approved_market_data",
-        "source_record_id": "PX-BOND_US_CORP_2031-20260728",
-        "source_revision": "rev-1",
-        "source_content_hash": "a" * 64,
-        "observed_at": "2026-07-28T09:30:00+08:00",
-    }
+    payload = _authoritative_market_price_source_fact_payload()
+    record = payload["market_price_source_facts"][0]
 
     response = await async_test_client.post(
         "/ingest/authoritative-market-price-source-facts",
@@ -8947,6 +8927,24 @@ async def test_ingest_authoritative_market_price_source_fact_rejects_duplicate_s
 
     assert response.status_code == 422
     assert "duplicate source-version identities" in response.text
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["market_price_source_facts"]
+        == []
+    )
+
+
+async def test_ingest_authoritative_market_price_source_fact_rejects_foreign_tenant_before_job(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+) -> None:
+    response = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json=_authoritative_market_price_source_fact_payload(tenant_id="tenant-foreign"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "REFERENCE_DATA_TENANT_MISMATCH"
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
     assert (
         ingestion_test_harness["fake_reference_data_service"].persisted["market_price_source_facts"]
         == []
@@ -8964,26 +8962,12 @@ async def test_authoritative_market_price_failure_replay_preserves_original_conf
         "append_authoritative_market_price_source_facts",
         persist,
     )
-    payload = {
-        "market_price_source_facts": [
-            {
-                "tenant_id": "LOTUS_PB_SG",
-                "legal_book_id": "SG_PRIVATE_BANK_BOOK",
-                "security_id": "BOND_US_CORP_2031",
-                "price_date": "2026-07-28",
-                "price": "99.25",
-                "currency": "USD",
-                "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
-                "fact_status": "ACTIVE",
-                "fact_version": 1,
-                "source_system": "approved_market_data",
-                "source_record_id": "PX-CONFLICT-20260728",
-                "source_revision": "rev-conflict",
-                "source_content_hash": "b" * 64,
-                "observed_at": "2026-07-28T09:31:00+08:00",
-            }
-        ]
-    }
+    payload = _authoritative_market_price_source_fact_payload(
+        source_record_id="PX-CONFLICT-20260728",
+        source_revision="rev-conflict",
+        source_content_hash="b" * 64,
+        observed_at="2026-07-28T09:31:00+08:00",
+    )
     headers = {"X-Idempotency-Key": "market-price-authority-failed-replay-001"}
 
     first = await async_test_client.post(

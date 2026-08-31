@@ -1,5 +1,6 @@
 import re
 from time import time
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -16,6 +17,9 @@ from portfolio_common.enterprise_readiness import (
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 
 from src.services.ingestion_service.app import main as ingestion_main
+from src.services.ingestion_service.app.application.reference_data_ingestion_registry import (
+    REFERENCE_DATA_INGESTION_REGISTRY,
+)
 from src.services.ingestion_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -44,6 +48,11 @@ def _enterprise_headers(capabilities: str) -> dict[str, str]:
         "auth-context-secret",
     )
     return headers
+
+
+def _openapi_component(schema: dict[str, Any], reference: str) -> dict[str, Any]:
+    component_name = reference.rsplit("/", 1)[-1]
+    return schema["components"]["schemas"][component_name]
 
 
 def _configure_auth_context_env(monkeypatch) -> None:
@@ -446,6 +455,39 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         ]["code"]
         == "REFERENCE_DATA_TENANT_MISMATCH"
     )
+
+
+async def test_reference_data_registry_ownership_matches_every_record_contract(
+    async_test_client,
+) -> None:
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    for command in REFERENCE_DATA_INGESTION_REGISTRY.all_commands():
+        operation = schema["paths"][command.endpoint]["post"]
+        request_reference = operation["requestBody"]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        request_schema = _openapi_component(schema, request_reference)
+        records_schema = request_schema["properties"][command.records_attribute]
+        record_schema = _openapi_component(schema, records_schema["items"]["$ref"])
+        record_fields = set(record_schema["properties"])
+
+        assert not {"tenant_id", "portfolio_id"}.issubset(record_fields), (
+            f"{command.command_key} requires a combined tenant-and-portfolio ownership policy"
+        )
+        expected_scope = (
+            "tenant"
+            if "tenant_id" in record_fields
+            else "portfolio"
+            if "portfolio_id" in record_fields
+            else "global"
+        )
+        assert command.ownership_scope == expected_scope, (
+            f"{command.command_key} declares {command.ownership_scope!r}, but its record contract "
+            f"requires {expected_scope!r} authority"
+        )
 
 
 async def test_openapi_describes_benchmark_assignment_shared_schema(async_test_client):
@@ -1193,6 +1235,12 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
             "example"
         ]["detail"]["code"]
         == "REFERENCE_DATA_PERSIST_FAILED"
+    )
+    assert (
+        market_price_source_fact_operation["responses"]["403"]["content"]["application/json"][
+            "example"
+        ]["detail"]["code"]
+        == "REFERENCE_DATA_TENANT_MISMATCH"
     )
     assert index_definition_request["properties"]["indices"]["examples"] == [
         [

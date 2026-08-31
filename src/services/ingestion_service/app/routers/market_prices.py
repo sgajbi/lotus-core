@@ -72,6 +72,12 @@ MARKET_PRICE_SOURCE_FACT_PERSIST_FAILED_EXAMPLE = {
         "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
     }
 }
+MARKET_PRICE_TENANT_MISMATCH_EXAMPLE = {
+    "detail": {
+        "code": "REFERENCE_DATA_TENANT_MISMATCH",
+        "message": "Every tenant-scoped reference-data record must match the admitted tenant.",
+    }
+}
 
 
 @router.post(
@@ -151,6 +157,13 @@ async def ingest_market_prices(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": (
+                "The fact tenant does not match the admitted tenant; the request is rejected "
+                "before job creation or persistence."
+            ),
+            "content": {"application/json": {"example": MARKET_PRICE_TENANT_MISMATCH_EXAMPLE}},
+        },
         status.HTTP_409_CONFLICT: ingestion_conflict_response_with_idempotency_example(
             description=(
                 "A source correction, authority overlap, or idempotency conflict blocked the write."

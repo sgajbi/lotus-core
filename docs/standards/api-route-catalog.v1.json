@@ -1995,6 +1995,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "The fact tenant does not match the admitted tenant; the request is rejected before job creation or persistence."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "A source correction, authority overlap, or idempotency conflict blocked the write."

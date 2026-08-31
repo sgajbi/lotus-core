@@ -108,7 +108,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             entity_type="authoritative_market_price_source_fact",
             records_attribute="market_price_source_facts",
             persist_method_name="append_authoritative_market_price_source_facts",
-            ownership_scope="global",
+            ownership_scope="tenant",
         ),
         ReferenceDataIngestionCommand(
             command_key="mandate_binding",

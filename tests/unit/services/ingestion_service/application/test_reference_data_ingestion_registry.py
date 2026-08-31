@@ -250,7 +250,10 @@ def test_reference_data_registry_declares_tenant_assertion_families() -> None:
         if command.ownership_scope == "tenant"
     }
 
-    assert tenant_scoped_commands == {"instrument_valuation_policy_assignment"}
+    assert tenant_scoped_commands == {
+        "authoritative_market_price_source_fact",
+        "instrument_valuation_policy_assignment",
+    }
 
 
 def test_reference_data_registry_extracts_distinct_portfolio_ownership_batch() -> None:
