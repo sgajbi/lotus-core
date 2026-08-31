@@ -27,6 +27,7 @@ from src.services.persistence_service.app.consumers.transaction_consumer import 
 from tests.integration.services.persistence_service.consumers import (
     test_transaction_consumer_boundary as transaction_boundary,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.lifecycle]
 
@@ -84,6 +85,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
 
     created = await create_or_get_job_result(
         job_id=JOB_ID,
+        tenant_id=TEST_TENANT_ID,
         endpoint="/ingest/transactions",
         entity_type="transaction",
         accepted_count=1,
@@ -103,6 +105,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
         select(IngestionJob).where(IngestionJob.job_id == JOB_ID)
     )
     assert persisted_job is not None
+    assert persisted_job.tenant_id == TEST_TENANT_ID
     assert persisted_job.request_payload is None
     assert persisted_job.request_payload_fingerprint == ingestion_payload_fingerprint(
         payload,
@@ -164,6 +167,7 @@ async def test_transaction_ingestion_dispatches_once_and_retains_support_lineage
         reference_hmac_secret="integration-test-idempotency-reference-secret",
     )
     assert durable_job is not None
+    assert durable_job.tenant_id == TEST_TENANT_ID
     assert durable_job.status == "queued"
     assert durable_job.correlation_id == CORRELATION_ID
     assert durable_job.request_id == REQUEST_ID
