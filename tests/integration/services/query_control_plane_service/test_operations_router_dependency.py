@@ -5,6 +5,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from src.services.query_control_plane_service.app.application.operations.errors import (
     OutboxRecoveryRejected,
@@ -18,7 +19,11 @@ from src.services.query_control_plane_service.app.routers.operations import (
     get_load_run_progress,
     parse_required_iso_date,
 )
-from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
+from tests.test_support.tenant import (
+    TEST_TENANT_CONTEXT,
+    TEST_TENANT_HEADERS,
+    TEST_TENANT_ID,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -640,10 +645,13 @@ async def test_lineage_unexpected_maps_to_500(async_test_client):
 
 async def test_get_operations_service_dependency_factory():
     db = AsyncMock(spec=AsyncSession)
-    service = get_operations_service(db)
+    request = Request({"type": "http", "headers": []})
+    request.state.tenant_context = TEST_TENANT_CONTEXT
+    service = get_operations_service(request=request, db=db)
 
     assert isinstance(service, OperationsService)
     assert service.repo is not None
+    assert service._tenant_id == TEST_TENANT_ID
 
 
 async def test_lineage_keys_success(async_test_client):
