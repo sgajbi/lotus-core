@@ -26,6 +26,7 @@ from ..settlement_processing import link_settlement_cash_leg
 
 async def coordinate_cost_processing_effects(
     *,
+    tenant_id: str,
     processed_transactions: Sequence[BookedTransaction],
     instrument_updates: Sequence[FxContractInstrument],
     source_epoch: int | None,
@@ -54,6 +55,7 @@ async def coordinate_cost_processing_effects(
         )
         await reconciliation.reconcile(
             linking.product_leg,
+            tenant_id=tenant_id,
             correlation_id=correlation_id,
         )
         emitted_transactions.append(

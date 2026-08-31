@@ -8,6 +8,7 @@ import pytest
 from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    Portfolio,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCorporateActionReconciliationRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -62,6 +64,24 @@ async def test_multi_defect_evidence_replay_preserves_one_run_and_exact_findings
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-CA-MULTI-DEFECT",
+            portfolio_id="PORT-CA-MULTI-DEFECT-01",
+            base_currency="USD",
+            open_date=datetime(2026, 1, 1, tzinfo=UTC).date(),
+            risk_exposure="balanced",
+            investment_time_horizon="long_term",
+            portfolio_type="discretionary",
+            booking_center_code="SG",
+            client_id="CLIENT-CA-MULTI-DEFECT",
+            is_leverage_allowed=False,
+            status="active",
+        )
+    )
+    await async_db_session.flush()
+
     source = _transaction(
         transaction_id="CA-OUT-MULTI-DEFECT-01",
         transaction_type="SPIN_OFF",
@@ -89,6 +109,7 @@ async def test_multi_defect_evidence_replay_preserves_one_run_and_exact_findings
     transactions = (source, target, cash, adjustment)
     reconciliation = reconcile_corporate_action_basis(transactions)
     evidence = build_corporate_action_reconciliation_evidence(
+        tenant_id=TEST_TENANT_ID,
         processed_transaction=adjustment,
         input_transactions=transactions,
         linked_transaction_group_id="GROUP-CA-MULTI-DEFECT-01",
@@ -128,6 +149,7 @@ async def test_multi_defect_evidence_replay_preserves_one_run_and_exact_findings
     )
 
     assert len(runs) == 1
+    assert runs[0].tenant_id == TEST_TENANT_ID
     assert runs[0].summary["finding_count"] == len(findings) == 2
     assert runs[0].summary["error_count"] == len(findings)
     assert runs[0].summary["unsupported_adjustment_count"] == 1

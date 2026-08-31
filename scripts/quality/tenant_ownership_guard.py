@@ -270,6 +270,15 @@ CRITICAL_TENANT_BOUNDARIES = (
     ),
     (
         Path(
+            "src/services/portfolio_transaction_processing_service/app/application/"
+            "corporate_action_reconciliation.py"
+        ),
+        "CorporateActionReconciliationCoordinator",
+        frozenset({"reconcile"}),
+        "tenant_id",
+    ),
+    (
+        Path(
             "src/services/query_control_plane_service/app/infrastructure/"
             "transaction_economics_sources.py"
         ),

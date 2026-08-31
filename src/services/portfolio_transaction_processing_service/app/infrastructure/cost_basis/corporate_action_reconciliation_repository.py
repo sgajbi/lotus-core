@@ -5,6 +5,7 @@ from dataclasses import asdict
 from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    Portfolio,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
@@ -34,6 +35,8 @@ class SqlAlchemyCorporateActionReconciliationRepository:
     ) -> tuple[BookedTransaction, ...]:
         stmt = (
             select(DBTransaction)
+            .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
+            .where(Portfolio.tenant_id == key.tenant_id)
             .where(DBTransaction.portfolio_id == key.portfolio_id)
             .where(DBTransaction.linked_transaction_group_id == key.linked_transaction_group_id)
             .where(DBTransaction.parent_event_reference == key.parent_event_reference)
@@ -47,7 +50,7 @@ class SqlAlchemyCorporateActionReconciliationRepository:
         return tuple(to_booked_transaction(TransactionEvent.model_validate(row)) for row in rows)
 
     async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
-        run = asdict(evidence.run)
+        run = {"tenant_id": evidence.tenant_id, **asdict(evidence.run)}
         run_stmt = pg_insert(FinancialReconciliationRun).values(**run)
         await self._session.execute(
             run_stmt.on_conflict_do_update(
@@ -104,6 +107,11 @@ class SqlAlchemyCorporateActionReconciliationRepository:
             .where(
                 FinancialReconciliationFinding.reconciliation_type
                 == evidence.run.reconciliation_type,
+                FinancialReconciliationFinding.run_id.in_(
+                    select(FinancialReconciliationRun.run_id).where(
+                        FinancialReconciliationRun.tenant_id == evidence.tenant_id
+                    )
+                ),
                 FinancialReconciliationFinding.portfolio_id == evidence.run.portfolio_id,
                 FinancialReconciliationFinding.run_id != evidence.run.run_id,
                 FinancialReconciliationFinding.resolution_state.in_(("OPEN", "IN_PROGRESS")),

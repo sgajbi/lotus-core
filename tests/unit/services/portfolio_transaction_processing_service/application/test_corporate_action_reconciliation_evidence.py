@@ -51,11 +51,13 @@ def _transaction(
 
 def _evidence(
     *transactions: BookedTransaction,
+    tenant_id: str = "tenant-a",
     missing_dependencies: tuple[str, ...] = (),
     completed_at: datetime = datetime(2025, 1, 16, tzinfo=UTC),
 ):
     processed_transaction = transactions[-1]
     return build_corporate_action_reconciliation_evidence(
+        tenant_id=tenant_id,
         processed_transaction=processed_transaction,
         input_transactions=transactions,
         linked_transaction_group_id="LTG-CA-DEM-01",
@@ -65,6 +67,27 @@ def _evidence(
         correlation_id="corr-ca-01",
         completed_at=completed_at,
     )
+
+
+def test_tenant_authority_is_part_of_deterministic_evidence_identity() -> None:
+    source = _transaction(
+        transaction_id="CA-OUT-TENANT",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    target = _transaction(
+        transaction_id="CA-IN-TENANT",
+        transaction_type="DEMERGER_IN",
+        net_cost_local="100",
+    )
+
+    tenant_a = _evidence(source, target, tenant_id="tenant-a")
+    tenant_b = _evidence(source, target, tenant_id="tenant-b")
+
+    assert tenant_a.tenant_id == "tenant-a"
+    assert tenant_b.tenant_id == "tenant-b"
+    assert tenant_a.run.run_id != tenant_b.run.run_id
+    assert tenant_a.run.dedupe_key != tenant_b.run.dedupe_key
 
 
 def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:

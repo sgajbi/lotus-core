@@ -114,6 +114,7 @@ class PreparedCostProcessingUseCase:
             instrument_updates = ()
 
         return await coordinate_cost_processing_effects(
+            tenant_id=portfolio.tenant_id,
             processed_transactions=processed_transactions,
             instrument_updates=instrument_updates,
             source_epoch=prepared.transaction.epoch,

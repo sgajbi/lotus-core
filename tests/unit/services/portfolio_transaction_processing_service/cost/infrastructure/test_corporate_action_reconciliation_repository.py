@@ -44,6 +44,7 @@ async def test_load_group_maps_rows_to_domain_transactions() -> None:
     result.scalars.return_value.all.return_value = [row]
     db_session.execute.return_value = result
     key = CorporateActionReconciliationKey(
+        tenant_id="tenant-a",
         portfolio_id="PORT_CA_01",
         linked_transaction_group_id="LTG-CA-01",
         parent_event_reference="CA-PARENT-01",
@@ -57,6 +58,10 @@ async def test_load_group_maps_rows_to_domain_transactions() -> None:
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
+    assert (
+        "JOIN portfolios ON portfolios.portfolio_id = transactions.portfolio_id" in compiled_query
+    )
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
     assert "transactions.portfolio_id = 'PORT_CA_01'" in compiled_query
     assert "transactions.linked_transaction_group_id = 'LTG-CA-01'" in compiled_query
     assert "transactions.parent_event_reference = 'CA-PARENT-01'" in compiled_query
@@ -71,6 +76,7 @@ async def test_save_evidence_maps_typed_records() -> None:
     repository = SqlAlchemyCorporateActionReconciliationRepository(db_session)
     completed_at = datetime(2026, 4, 10, 12, 0, tzinfo=UTC)
     evidence = CorporateActionReconciliationEvidence(
+        tenant_id="tenant-a",
         run=CorporateActionReconciliationRunEvidence(
             run_id="recon-ca-01",
             reconciliation_type="corporate_action_bundle_a",
@@ -121,6 +127,7 @@ async def test_save_evidence_maps_typed_records() -> None:
     resolution_statement = db_session.execute.await_args_list[1].args[0]
     finding_statement = db_session.execute.await_args_list[2].args[0]
     assert run_statement.compile().params["run_id"] == "recon-ca-01"
+    assert run_statement.compile().params["tenant_id"] == "tenant-a"
     assert run_statement.compile().params["completed_at"] == completed_at
     compiled_resolution = str(resolution_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "resolution_state='RESOLVED'" in compiled_resolution.replace(" ", "")
@@ -139,6 +146,7 @@ async def test_save_evidence_rejects_missing_group_identity() -> None:
     repository = SqlAlchemyCorporateActionReconciliationRepository(db_session)
     completed_at = datetime(2026, 4, 10, 12, 0, tzinfo=UTC)
     evidence = CorporateActionReconciliationEvidence(
+        tenant_id="tenant-a",
         run=CorporateActionReconciliationRunEvidence(
             run_id="recon-ca-invalid",
             reconciliation_type="corporate_action_bundle_a",

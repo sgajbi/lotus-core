@@ -36,6 +36,7 @@ def _observation(
     )
     return CorporateActionReconciliationObservation(
         key=CorporateActionReconciliationKey(
+            tenant_id="tenant-a",
             portfolio_id="PORT_CA_01",
             linked_transaction_group_id="LTG-CA-01",
             parent_event_reference="CA-PARENT-01",

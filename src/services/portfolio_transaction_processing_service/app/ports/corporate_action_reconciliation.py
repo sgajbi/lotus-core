@@ -5,6 +5,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.transaction import BookedTransaction
 
 
@@ -12,9 +14,13 @@ from ..domain.transaction import BookedTransaction
 class CorporateActionReconciliationKey:
     """Identify one portfolio-owned linked corporate-action group."""
 
+    tenant_id: str
     portfolio_id: str
     linked_transaction_group_id: str
     parent_event_reference: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "tenant_id", TenantId(self.tenant_id).value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +70,12 @@ class CorporateActionReconciliationFindingEvidence:
 class CorporateActionReconciliationEvidence:
     """Group the run and findings produced by one reconciliation assessment."""
 
+    tenant_id: str
     run: CorporateActionReconciliationRunEvidence
     findings: tuple[CorporateActionReconciliationFindingEvidence, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "tenant_id", TenantId(self.tenant_id).value)
 
 
 @dataclass(frozen=True, slots=True)

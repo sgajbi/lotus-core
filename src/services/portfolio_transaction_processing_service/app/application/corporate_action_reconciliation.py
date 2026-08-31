@@ -9,6 +9,8 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Sequence
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.cost_basis import (
     DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     CorporateActionBasisReconciliation,
@@ -117,11 +119,12 @@ class CorporateActionReconciliationCoordinator:
         self,
         processed_transaction: BookedTransaction,
         *,
+        tenant_id: str,
         correlation_id: str | None,
     ) -> CorporateActionReconciliationEvidence | None:
         """Persist and observe evidence when the transaction identifies a new complete group."""
 
-        key = _reconciliation_key(processed_transaction)
+        key = _reconciliation_key(processed_transaction, tenant_id=tenant_id)
         if key is None or key in self._reconciled_groups:
             return None
 
@@ -147,6 +150,7 @@ class CorporateActionReconciliationCoordinator:
         )
         linkage_findings = reconcile_corporate_action_leg_linkage(group_transactions)
         evidence = build_corporate_action_reconciliation_evidence(
+            tenant_id=key.tenant_id,
             processed_transaction=processed_transaction,
             input_transactions=group_transactions,
             linked_transaction_group_id=key.linked_transaction_group_id,
@@ -176,6 +180,8 @@ class CorporateActionReconciliationCoordinator:
 
 def _reconciliation_key(
     transaction: BookedTransaction,
+    *,
+    tenant_id: str,
 ) -> CorporateActionReconciliationKey | None:
     if not is_reconcilable_corporate_action(transaction.transaction_type):
         return None
@@ -184,6 +190,7 @@ def _reconciliation_key(
     if not linked_group or not parent_reference:
         return None
     return CorporateActionReconciliationKey(
+        tenant_id=tenant_id,
         portfolio_id=transaction.portfolio_id,
         linked_transaction_group_id=linked_group,
         parent_event_reference=parent_reference,
@@ -241,6 +248,7 @@ def _observation(
 
 def build_corporate_action_reconciliation_evidence(
     *,
+    tenant_id: str,
     processed_transaction: BookedTransaction,
     input_transactions: Sequence[BookedTransaction],
     linked_transaction_group_id: str,
@@ -254,6 +262,7 @@ def build_corporate_action_reconciliation_evidence(
 ) -> CorporateActionReconciliationEvidence:
     """Build stable run and finding evidence without persistence or telemetry concerns."""
 
+    tenant_id = TenantId(tenant_id).value
     missing_dependencies = tuple(sorted(set(missing_dependency_reference_ids)))
     input_lineage = _canonical_input_lineage(input_transactions)
     evidence_transaction = _canonical_evidence_transaction(input_transactions)
@@ -272,6 +281,7 @@ def build_corporate_action_reconciliation_evidence(
     )
     evidence_signature = _stable_digest(
         {
+            "tenant_id": tenant_id,
             "portfolio_id": evidence_transaction.portfolio_id,
             "linked_transaction_group_id": linked_transaction_group_id,
             "parent_event_reference": parent_event_reference,
@@ -330,6 +340,7 @@ def build_corporate_action_reconciliation_evidence(
         completed_at=completed_at,
     )
     return CorporateActionReconciliationEvidence(
+        tenant_id=tenant_id,
         run=run,
         findings=findings,
     )
