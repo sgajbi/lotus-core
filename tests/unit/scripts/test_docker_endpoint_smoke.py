@@ -21,6 +21,7 @@ from scripts.validation.docker_endpoint_smoke import (
     _probe_source_safe_retry,
     _resolve_postgres_container,
     _wait_expected_status,
+    _wait_portfolio_visible,
     _wait_transaction_visible,
     build_smoke_cleanup_sql,
 )
@@ -274,6 +275,34 @@ def test_wait_expected_status_raises_with_last_status_context(
 
     with pytest.raises(TimeoutError, match="last_status=404"):
         _wait_expected_status("http://query/missing-endpoint", {200}, timeout_seconds=2)
+
+
+def test_wait_portfolio_visible_retries_with_governed_tenant_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        [
+            SimpleNamespace(status_code=404),
+            SimpleNamespace(status_code=200),
+        ]
+    )
+    get_mock = Mock(side_effect=lambda *args, **kwargs: next(responses))
+    now = iter([0, 1, 2])
+
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.requests.get", get_mock)
+    monkeypatch.setattr(
+        "scripts.validation.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.time.time", lambda: next(now))
+
+    _wait_portfolio_visible("http://query", SMOKE_PORTFOLIO_ID, timeout_seconds=5)
+
+    assert get_mock.call_count == 2
+    get_mock.assert_called_with(
+        f"http://query/portfolios/{SMOKE_PORTFOLIO_ID}",
+        headers={"X-Tenant-Id": SMOKE_TENANT_ID},
+        timeout=8,
+    )
 
 
 def test_wait_transaction_visible_retries_until_exact_transaction_is_queryable(
