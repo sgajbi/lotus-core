@@ -1,8 +1,9 @@
 from typing import NoReturn, cast
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from portfolio_common.domain.tenant import TenantAuthorityMismatchError, bind_tenant_authority
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.benchmark_assignment import BenchmarkAssignmentService
@@ -739,7 +740,7 @@ async def get_effective_integration_policy(
             CORE_SNAPSHOT_INVALID_REQUEST_EXAMPLE,
         ),
         status.HTTP_403_FORBIDDEN: problem_response(
-            "Requested sections are blocked by strict integration policy.",
+            "Tenant authority or requested sections are blocked by integration policy.",
             INTEGRATION_POLICY_BLOCKED_EXAMPLE,
         ),
         status.HTTP_404_NOT_FOUND: problem_response(
@@ -761,6 +762,7 @@ async def get_effective_integration_policy(
 )
 async def create_core_snapshot(
     request: CoreSnapshotRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier for the snapshot request.",
@@ -769,6 +771,20 @@ async def create_core_snapshot(
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> CoreSnapshotResponse | JSONResponse:
+    try:
+        tenant_id = bind_tenant_authority(
+            request.tenant_id,
+            http_request.state.tenant_context,
+        )
+    except (TenantAuthorityMismatchError, TypeError, ValueError):
+        raise_problem(
+            status_code=status.HTTP_403_FORBIDDEN,
+            title="Core snapshot tenant scope forbidden",
+            detail="Requested tenant does not match admitted tenant authority.",
+            error_code="QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN",
+            metadata={"source_product": "PortfolioStateSnapshot"},
+        )
+    request = request.model_copy(update={"tenant_id": tenant_id})
     effective_request, governance = _governed_core_snapshot_request(
         request=request,
         integration_service=integration_service,

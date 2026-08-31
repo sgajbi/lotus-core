@@ -748,7 +748,11 @@ async def async_test_client():
         mock_integration_service
     )
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Tenant-Id": "default"},
+    ) as client:
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_benchmark_assignment_service, None)
@@ -931,6 +935,26 @@ async def test_core_snapshot_success(async_test_client):
     assert [section.value for section in core_snapshot_call["governance"].applied_sections] == [
         "positions_baseline"
     ]
+
+
+async def test_core_snapshot_rejects_tenant_mismatch_before_source_read(async_test_client):
+    client, mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/core-snapshot",
+        json={
+            "as_of_date": "2026-02-27",
+            "snapshot_mode": "BASELINE",
+            "sections": ["positions_baseline"],
+            "consumer_system": "lotus-gateway",
+            "tenant_id": "tenant-b",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN"
+    mock_integration_service.get_effective_policy.assert_not_called()
+    mock_core_snapshot_service.get_core_snapshot.assert_not_awaited()
 
 
 async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_test_client):

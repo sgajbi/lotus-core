@@ -151,7 +151,10 @@ class CoreSnapshotService:
         request: CoreSnapshotRequest,
         governance: SnapshotGovernanceContext | None = None,
     ) -> CoreSnapshotResponse:
-        portfolio = await self._source_reader.get_portfolio(portfolio_id)
+        portfolio = await self._source_reader.get_portfolio(
+            tenant_id=request.tenant_id,
+            portfolio_id=portfolio_id,
+        )
         if portfolio is None:
             raise CoreSnapshotNotFoundError(f"Portfolio {portfolio_id} not found")
 
