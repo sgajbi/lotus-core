@@ -7,6 +7,7 @@ import pytest_asyncio
 
 from src.services.query_service.app.application.reporting_currency_support import (
     FxSupportEvidence,
+    ReportingCurrencySupportQuery,
     ReportingCurrencySupportResult,
 )
 from src.services.query_service.app.dependencies import (
@@ -175,7 +176,7 @@ async def test_reporting_currency_support_contract_distinguishes_selector_observ
     service.evaluate = AsyncMock(
         return_value=ReportingCurrencySupportResult(
             portfolio_id="PF-1",
-            tenant_id="tenant-1",
+            tenant_id=TEST_TENANT_ID,
             reporting_currency="EUR",
             as_of_date=date(2026, 8, 28),
             status="UNSUPPORTED",
@@ -197,7 +198,7 @@ async def test_reporting_currency_support_contract_distinguishes_selector_observ
         headers=TEST_TENANT_HEADERS,
     ) as client:
         response = await client.get(
-            "/reporting-currencies/support?portfolio_id=PF-1&tenant_id=tenant-1"
+            "/reporting-currencies/support?portfolio_id=PF-1"
             "&reporting_currency=EUR&as_of_date=2026-08-28"
         )
 
@@ -209,10 +210,17 @@ async def test_reporting_currency_support_contract_distinguishes_selector_observ
     assert payload["supported"] is False
     assert payload["observed_selector_currency"] is True
     assert payload["missing_source_currencies"] == ["USD"]
-    service.evaluate.assert_awaited_once()
+    service.evaluate.assert_awaited_once_with(
+        ReportingCurrencySupportQuery(
+            portfolio_id="PF-1",
+            reporting_currency="EUR",
+            as_of_date=date(2026, 8, 28),
+            tenant_id=TEST_TENANT_ID,
+        )
+    )
 
 
-async def test_reporting_currency_support_contract_rejects_unscoped_internal_read():
+async def test_reporting_currency_support_contract_rejects_query_tenant_override():
     service = MagicMock()
     service.evaluate = AsyncMock()
     app.dependency_overrides[get_reporting_currency_support_service] = lambda: service
@@ -223,13 +231,11 @@ async def test_reporting_currency_support_contract_rejects_unscoped_internal_rea
         headers=TEST_TENANT_HEADERS,
     ) as client:
         response = await client.get(
-            "/reporting-currencies/support?portfolio_id=PF-1"
+            "/reporting-currencies/support?portfolio_id=PF-1&tenant_id=tenant-other"
             "&reporting_currency=EUR&as_of_date=2026-08-28"
         )
 
     app.dependency_overrides.pop(get_reporting_currency_support_service, None)
-    assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "tenant_id is required when authenticated tenant scope is unavailable"
-    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "requested tenant does not match admitted tenant scope"
     service.evaluate.assert_not_awaited()
