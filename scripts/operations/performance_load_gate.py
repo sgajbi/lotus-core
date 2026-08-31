@@ -33,6 +33,9 @@ if str(REPO_ROOT) not in sys.path:
 from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS  # noqa: E402
 
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    LOAD_TENANT_ID,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     build_transaction_batch as _build_transaction_batch,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
@@ -62,6 +65,7 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
 GOVERNED_LOAD_PORTFOLIO_ID = "PERF_BALANCED_V1"
 GOVERNED_LOAD_SECURITY_PREFIX = "PERF_CANONICAL_V1_SEC"
 GOVERNED_LOAD_SECURITY_COUNT = 20
+LOAD_TENANT_HEADERS = {"X-Tenant-Id": LOAD_TENANT_ID}
 MAX_GOVERNED_KEYS_PER_PARTITION = 2
 TRANSACTION_TOPIC_PARTITIONS = KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"]
 DRAIN_OBSERVATION_TIMEOUT_SECONDS = 240
@@ -214,6 +218,7 @@ def _trigger_replay_storm(
         response = requests.post(
             f"{ingestion_base_url}/reprocess/transactions",
             json={"transaction_ids": selected},
+            headers=LOAD_TENANT_HEADERS,
             timeout=30,
         )
         if response.status_code not in {202, 409}:
@@ -258,7 +263,10 @@ def _wait_for_repair_replay_completion(
 
 
 def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[str, Any]:
-    headers = {"X-Lotus-Ops-Token": ops_token}
+    headers = {
+        **LOAD_TENANT_HEADERS,
+        "X-Lotus-Ops-Token": ops_token,
+    }
     summary = requests.get(
         f"{event_replay_base_url}/ingestion/health/summary",
         headers=headers,
@@ -728,6 +736,7 @@ def main(
     response = requests.post(
         f"{args.ingestion_base_url}/ingest/transactions",
         json={"transactions": replay_source_transactions},
+        headers=LOAD_TENANT_HEADERS,
         timeout=30,
     )
     if response.status_code != 202:

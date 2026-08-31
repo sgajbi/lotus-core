@@ -51,7 +51,22 @@ SMOKE_TRANSACTION_ID = "TX_SMOKE_CANONICAL"
 SMOKE_TRANSACTION_ID_2 = "TX2_SMOKE_CANONICAL"
 SMOKE_CSV_TRANSACTION_ID = "TXUP_SMOKE_CANONICAL"
 SMOKE_ISIN = "US000SMOKE01"
+SMOKE_TENANT_ID = "tenant_smoke"
 DEFAULT_POSTGRES_SERVICE = "postgres"
+
+
+def _tenant_headers(additional: dict[str, str] | None = None) -> dict[str, str]:
+    headers = {"X-Tenant-Id": SMOKE_TENANT_ID}
+    if additional:
+        supplied_tenant = next(
+            (value for key, value in additional.items() if key.lower() == "x-tenant-id"),
+            None,
+        )
+        if supplied_tenant is not None and supplied_tenant.strip() != SMOKE_TENANT_ID:
+            raise ValueError("Smoke tenant header must match the governed smoke tenant")
+        headers.update(additional)
+        headers["X-Tenant-Id"] = SMOKE_TENANT_ID
+    return headers
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -217,6 +232,7 @@ def _call(
     expected: set[int],
     **kwargs: Any,
 ) -> requests.Response | None:
+    kwargs["headers"] = _tenant_headers(kwargs.pop("headers", None))
     try:
         response = requests.request(method=method, url=url, timeout=40, **kwargs)
         content_type = response.headers.get("content-type", "")
@@ -355,7 +371,7 @@ def _wait_portfolio_visible(query_base_url: str, portfolio_id: str, timeout_seco
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
-            response = requests.get(url, timeout=8)
+            response = requests.get(url, headers=_tenant_headers(), timeout=8)
             if response.status_code == 200:
                 return
         except Exception:
@@ -379,7 +395,7 @@ def _wait_transaction_visible(
     last_transaction_ids: list[str] = []
     while time.time() < deadline:
         try:
-            response = requests.get(url, timeout=8)
+            response = requests.get(url, headers=_tenant_headers(), timeout=8)
             last_status = response.status_code
             if response.status_code == 200:
                 payload = response.json()
@@ -416,7 +432,7 @@ def _wait_expected_status(url: str, expected_statuses: set[int], timeout_seconds
     last_error: str | None = None
     while time.time() < deadline:
         try:
-            response = requests.get(url, timeout=8)
+            response = requests.get(url, headers=_tenant_headers(), timeout=8)
             last_status = response.status_code
             if response.status_code in expected_statuses:
                 return
@@ -711,6 +727,7 @@ def main(
             "portfolios": [
                 {
                     "portfolio_id": portfolio_id,
+                    "tenant_id": SMOKE_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2024-01-01",
                     "risk_exposure": "Medium",
@@ -797,6 +814,7 @@ def main(
             "portfolios": [
                 {
                     "portfolio_id": portfolio_id,
+                    "tenant_id": SMOKE_TENANT_ID,
                     "base_currency": "USD",
                     "open_date": "2024-01-01",
                     "risk_exposure": "Medium",
@@ -1317,14 +1335,14 @@ def main(
         results,
         name="integration capabilities",
         method="GET",
-        url=f"{query_control}/integration/capabilities",
+        url=f"{query_control}/integration/capabilities?tenant_id={SMOKE_TENANT_ID}",
         expected={200},
     )
     _call(
         results,
         name="integration policy",
         method="GET",
-        url=f"{query_control}/integration/policy/effective",
+        url=f"{query_control}/integration/policy/effective?tenant_id={SMOKE_TENANT_ID}",
         expected={200},
     )
     _call(
@@ -1342,6 +1360,7 @@ def main(
         url=f"{query_control}/integration/portfolios/{portfolio_id}/core-snapshot",
         expected={200},
         json={
+            "tenant_id": SMOKE_TENANT_ID,
             "as_of_date": trade_date,
             "snapshot_mode": "BASELINE",
             "sections": ["positions_baseline", "portfolio_totals"],
