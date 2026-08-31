@@ -197,6 +197,10 @@ Use this grouping when deciding where a new consumer should bind:
 Portfolio and position analytics inputs plus analytics reference metadata resolve the portfolio
 through the admitted request tenant before reading valuations, quantities, cashflows, fees, or
 portfolio metadata. A foreign portfolio identifier is indistinguishable from a missing portfolio.
+Every tenant-bearing integration request is rebound to the admitted HTTP tenant before service
+execution. This includes instrument eligibility and external FX forward-curve posture: a body/header
+mismatch returns `403 QCP_TENANT_SCOPE_FORBIDDEN` before governed evidence is read or response
+lineage is constructed.
 
 `PortfolioAnalyticsReference.performance_end_date` is the latest complete performance horizon
 where required portfolio and position analytics source families overlap. It is bounded by the

@@ -6083,6 +6083,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -6222,6 +6227,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",

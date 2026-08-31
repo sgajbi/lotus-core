@@ -1555,12 +1555,35 @@ async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
     )
 
     response = await resolve_instrument_eligibility_bulk(
+        http_request=_tenant_request("tenant-sg"),
         request=request,
         dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "InstrumentEligibilityProfile"
-    mock_service.resolve_instrument_eligibility_bulk.assert_awaited_once_with(request)
+    called_request = mock_service.resolve_instrument_eligibility_bulk.await_args.args[0]
+    assert called_request.tenant_id == "tenant-sg"
+
+
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_rejects_tenant_mismatch_before_read() -> None:
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
+    mock_service.resolve_instrument_eligibility_bulk = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_instrument_eligibility_bulk(
+            http_request=_tenant_request("tenant-sg"),
+            request=InstrumentEligibilityBulkRequest(
+                as_of_date="2026-04-10",
+                security_ids=["AAPL"],
+                tenant_id="tenant-other",
+            ),
+            dpm_source_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.error_code == "QCP_TENANT_SCOPE_FORBIDDEN"
+    mock_service.resolve_instrument_eligibility_bulk.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -2919,12 +2942,32 @@ async def test_get_external_fx_forward_curve_router_function() -> None:
     )
 
     response = await get_external_fx_forward_curve(
+        http_request=_tenant_request("default"),
         request=request,
         hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalFXForwardCurve"
     mock_service.get_external_fx_forward_curve.assert_called_once_with(request=request)
+
+
+@pytest.mark.asyncio
+async def test_get_external_fx_forward_curve_rejects_tenant_mismatch_before_service() -> None:
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_external_fx_forward_curve(
+            http_request=_tenant_request("tenant-sg"),
+            request=ExternalFXForwardCurveRequest(
+                as_of_date="2026-05-03",
+                tenant_id="tenant-other",
+            ),
+            hedge_posture_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.error_code == "QCP_TENANT_SCOPE_FORBIDDEN"
+    mock_service.get_external_fx_forward_curve.assert_not_called()
 
 
 @pytest.mark.asyncio

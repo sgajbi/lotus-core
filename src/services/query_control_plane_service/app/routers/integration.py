@@ -807,6 +807,7 @@ async def get_instrument_enrichment_bulk(
 @router.post(
     "/instruments/eligibility-bulk",
     response_model=InstrumentEligibilityBulkResponse,
+    responses={403: tenant_forbidden_response("InstrumentEligibilityProfile")},
     summary="Resolve DPM instrument eligibility profiles",
     description=(
         "What: Return effective DPM instrument eligibility, product shelf, restriction code, "
@@ -821,9 +822,15 @@ async def get_instrument_enrichment_bulk(
     openapi_extra=source_data_product_openapi_extra("InstrumentEligibilityProfile"),
 )
 async def resolve_instrument_eligibility_bulk(
+    http_request: Request,
     request: InstrumentEligibilityBulkRequest,
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> InstrumentEligibilityBulkResponse:
+    request = bind_admitted_tenant_request(
+        request,
+        http_request.state.tenant_context,
+        "InstrumentEligibilityProfile",
+    )
     return await dpm_source_service.resolve_instrument_eligibility_bulk(request)
 
 
@@ -1968,6 +1975,7 @@ async def get_external_eligible_hedge_instruments(
 @router.post(
     "/market-data/external-fx-forward-curve",
     response_model=ExternalFXForwardCurveResponse,
+    responses={403: tenant_forbidden_response("ExternalFXForwardCurve")},
     summary="Resolve external treasury FX forward curve posture",
     description=(
         "What: Return the source-owner posture for external treasury FX forward curve "
@@ -1984,11 +1992,17 @@ async def get_external_eligible_hedge_instruments(
     openapi_extra=source_data_product_openapi_extra("ExternalFXForwardCurve"),
 )
 async def get_external_fx_forward_curve(
+    http_request: Request,
     request: ExternalFXForwardCurveRequest,
     hedge_posture_service: ExternalHedgePostureService = Depends(
         get_external_hedge_posture_service
     ),
 ) -> ExternalFXForwardCurveResponse:
+    request = bind_admitted_tenant_request(
+        request,
+        http_request.state.tenant_context,
+        "ExternalFXForwardCurve",
+    )
     return hedge_posture_service.get_external_fx_forward_curve(request=request)
 
 
