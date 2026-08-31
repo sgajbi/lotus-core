@@ -29,7 +29,12 @@ from .domain.portfolio_party_roles import (
     PortfolioPartyRoleScope,
     PortfolioPartyRoleType,
 )
-from .financial_numeric import ExactNumeric
+from .financial_numeric import (
+    ExactNumeric,
+)
+from .financial_numeric import (
+    finite_numeric_check_constraint as _finite_numeric_check_constraint,
+)
 from .ingestion_job_schema import ingestion_job_table_args
 from .simulation_session_model import SimulationSession as SimulationSession
 from .source_lifecycle_predicates import (
@@ -72,25 +77,6 @@ _FX_CONTENT_HASH_TEXT_VALID = _normalized_replay_text_sql("payload->>'content_ha
 _FX_EARLIEST_DATE_TEXT_VALID = _normalized_replay_text_sql("payload->>'earliest_impacted_date'")
 _FX_GENERATED_AT_TEXT_VALID = _normalized_replay_text_sql("payload->>'generated_at'")
 _RESET_SECURITY_ID_TEXT_VALID = _normalized_replay_text_sql("payload->>'security_id'")
-
-_POSTGRESQL_SPECIAL_NUMERIC_VALUES = ("NaN", "Infinity", "-Infinity")
-
-
-def _finite_numeric_check_constraint(
-    name: str,
-    *column_names: str,
-) -> CheckConstraint:
-    """Build one explicit PostgreSQL finite-value check for numeric columns."""
-
-    if not column_names:
-        raise ValueError("at least one numeric column is required")
-    if any(not column_name.isidentifier() for column_name in column_names):
-        raise ValueError("numeric column names must be identifiers")
-    special_values = ", ".join(f"'{value}'" for value in _POSTGRESQL_SPECIAL_NUMERIC_VALUES)
-    condition = " AND ".join(
-        f"CAST({column_name} AS TEXT) NOT IN ({special_values})" for column_name in column_names
-    )
-    return CheckConstraint(condition, name=name)
 
 
 class BusinessDate(Base):
@@ -5335,14 +5321,13 @@ class PipelineStageState(Base):
 
 
 class FinancialReconciliationRun(Base):
-    """
-    Durable execution record for independent financial controls.
-    """
+    """Durable execution record for independent financial controls."""
 
     __tablename__ = "financial_reconciliation_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     run_id = Column(String, unique=True, index=True, nullable=False)
+    tenant_id = Column(String(128), nullable=False)
     reconciliation_type = Column(String, nullable=False, index=True)
     portfolio_id = Column(String, nullable=True, index=True)
     business_date = Column(Date, nullable=True, index=True)
@@ -5363,17 +5348,23 @@ class FinancialReconciliationRun(Base):
     )
 
     __table_args__ = (
-        _finite_numeric_check_constraint(
-            "ck_fin_recon_tolerance_finite",
-            "tolerance",
+        ForeignKeyConstraint(
+            ["tenant_id", "portfolio_id"],
+            ["portfolios.tenant_id", "portfolios.portfolio_id"],
+            name="fk_fin_recon_runs_tenant_portfolio",
         ),
         CheckConstraint(
-            "tolerance >= 0",
-            name="ck_fin_recon_tolerance_nonnegative",
+            "tenant_id = btrim(tenant_id) AND tenant_id <> ''", name="ck_fin_recon_tenant"
         ),
+        _finite_numeric_check_constraint("ck_fin_recon_tolerance_finite", "tolerance"),
+        CheckConstraint("tolerance >= 0", name="ck_fin_recon_tolerance_nonnegative"),
         CheckConstraint(
             "aggregation_revision IS NULL OR aggregation_revision >= 0",
             name="ck_fin_recon_aggregation_revision_nonnegative",
+        ),
+        Index("ix_fin_recon_runs_tenant_started_id", "tenant_id", started_at.desc(), id.desc()),
+        Index(
+            "ix_fin_recon_tenant_port", "tenant_id", "portfolio_id", started_at.desc(), id.desc()
         ),
         Index(
             "ix_fin_recon_scope_revision_type",
@@ -5429,9 +5420,7 @@ class FinancialReconciliationRun(Base):
 
 
 class FinancialReconciliationFinding(Base):
-    """
-    Durable finding rows emitted by financial reconciliation runs.
-    """
+    """Durable finding rows emitted by financial reconciliation runs."""
 
     __tablename__ = "financial_reconciliation_findings"
 

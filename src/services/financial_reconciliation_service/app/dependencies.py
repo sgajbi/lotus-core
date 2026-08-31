@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,12 @@ class AsyncSessionUnitOfWork:
         await self._session.commit()
 
 
-def build_reconciliation_use_cases(db_session: AsyncSession) -> ReconciliationUseCases:
-    repository = ReconciliationRepository(db_session)
+def build_reconciliation_use_cases(
+    db_session: AsyncSession,
+    *,
+    tenant_id: str,
+) -> ReconciliationUseCases:
+    repository = ReconciliationRepository(db_session, tenant_id=tenant_id)
     return ReconciliationUseCases(
         service=ReconciliationService(repository),
         repository=repository,
@@ -27,6 +31,10 @@ def build_reconciliation_use_cases(db_session: AsyncSession) -> ReconciliationUs
 
 
 def get_reconciliation_use_cases(
+    request: Request,
     db_session: AsyncSession = Depends(get_async_db_session),
 ) -> ReconciliationUseCases:
-    return build_reconciliation_use_cases(db_session)
+    return build_reconciliation_use_cases(
+        db_session,
+        tenant_id=request.state.tenant_context.tenant_id_text,
+    )

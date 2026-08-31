@@ -9,7 +9,7 @@
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5548,
+      "lines": 5537,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Ingestion-job constraints and indexes now live in the owning schema module, and this lower ceiling prevents the extracted surface returning to the monolith.",
       "issue": "#462",
@@ -25,7 +25,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/routers/integration.py",
-      "lines": 2383,
+      "lines": 2376,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy QCP integration router pending route-family decomposition.",
       "issue": "#462",
@@ -33,7 +33,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/application/operations/service.py",
-      "lines": 2006,
+      "lines": 2005,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy QCP operations application service pending route-family decomposition.",
       "issue": "#462",
@@ -41,7 +41,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
-      "lines": 1850,
+      "lines": 1845,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy QCP operations repository pending route-family decomposition.",
       "issue": "#462",

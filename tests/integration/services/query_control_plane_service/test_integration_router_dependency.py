@@ -1045,7 +1045,8 @@ async def test_effective_integration_policy_success(async_test_client):
     response = await client.get(
         "/integration/policy/effective"
         "?consumer_system=lotus-manage&tenant_id=tenant-a"
-        "&include_sections=positions_baseline&include_sections=portfolio_totals"
+        "&include_sections=positions_baseline&include_sections=portfolio_totals",
+        headers={"X-Tenant-Id": "tenant-a"},
     )
 
     assert response.status_code == 200
@@ -1065,7 +1066,7 @@ async def test_effective_integration_policy_success(async_test_client):
 async def test_effective_integration_policy_defaults_apply(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
 
-    response = await client.get("/integration/policy/effective")
+    response = await client.get("/integration/policy/effective?tenant_id=default")
 
     assert response.status_code == 200
     body = response.json()

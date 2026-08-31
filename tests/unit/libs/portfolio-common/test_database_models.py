@@ -1047,6 +1047,21 @@ def test_reconciliation_tolerance_is_finite_and_nonnegative() -> None:
     assert constraints["ck_fin_recon_tolerance_nonnegative"] == "tolerance >= 0"
 
 
+def test_reconciliation_run_enforces_tenant_portfolio_ownership() -> None:
+    table = FinancialReconciliationRun.__table__
+    foreign_key = next(
+        constraint
+        for constraint in table.constraints
+        if constraint.name == "fk_fin_recon_runs_tenant_portfolio"
+    )
+
+    assert tuple(foreign_key.column_keys) == ("tenant_id", "portfolio_id")
+    assert tuple(element.target_fullname for element in foreign_key.elements) == (
+        "portfolios.tenant_id",
+        "portfolios.portfolio_id",
+    )
+
+
 def test_model_portfolio_tables_declare_dpm_source_indexes():
     definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
     target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}

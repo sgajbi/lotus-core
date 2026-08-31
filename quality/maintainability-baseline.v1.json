@@ -67,7 +67,7 @@
       "path": "src/services/query_control_plane_service/app/application/operations/service.py",
       "rank": "C",
       "mi": 0.0,
-      "raw_mi": -6.74295894767787,
+      "raw_mi": -6.582501968408759,
       "owner": "lotus-core maintainers",
       "rationale": "Existing operations application hotspot scheduled for route-family decomposition.",
       "issue": "#462"
@@ -75,7 +75,7 @@
     {
       "path": "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
       "rank": "C",
-      "mi": 2.22686529828842,
+      "mi": 2.4883348897514486,
       "owner": "lotus-core maintainers",
       "rationale": "Existing operations repository hotspot scheduled for route-family decomposition.",
       "issue": "#462"

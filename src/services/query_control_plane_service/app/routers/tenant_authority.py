@@ -1,8 +1,8 @@
 """HTTP-boundary tenant authority binding for query control-plane routes."""
 
-from typing import TypeVar
+from typing import TypeVar, cast
 
-from fastapi import status
+from fastapi import Request, status
 from portfolio_common.domain.tenant import (
     TenantAuthorityMismatchError,
     TenantContext,
@@ -27,7 +27,7 @@ def tenant_scope_forbidden_example(source_product: str) -> dict[str, object]:
     )
 
 
-def tenant_scope_forbidden_response(source_product: str) -> dict[str, object]:
+def tenant_forbidden_response(source_product: str) -> dict[str, object]:
     """Return the standard tenant-mismatch OpenAPI response contract."""
 
     return problem_response(
@@ -76,4 +76,21 @@ def bind_admitted_tenant_request(
                 source_product=source_product,
             )
         }
+    )
+
+
+def bind_tenant_request(
+    request: TenantRequestT,
+    http_request: Request,
+    source_product: str,
+) -> TenantRequestT:
+    """Bind a request body to tenant authority admitted at the HTTP boundary."""
+
+    return cast(
+        TenantRequestT,
+        bind_admitted_tenant_request(
+            request,
+            http_request.state.tenant_context,
+            source_product,
+        ),
     )

@@ -82,6 +82,29 @@ async def _assert_database_generated_timestamp(
     assert (database_now - generated_at) < timedelta(seconds=5)
 
 
+async def _persist_portfolio_authority(
+    async_db_session: AsyncSession,
+    portfolio_id: str,
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id=f"CLIENT-{portfolio_id}",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+
+
 async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     clean_db, async_db_session: AsyncSession
 ):
@@ -127,22 +150,9 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
         updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
     )
 
+    await _persist_portfolio_authority(async_db_session, "P1")
     async_db_session.add_all(
         [
-            Portfolio(
-                tenant_id=TEST_TENANT_ID,
-                legal_book_id="BOOK-TEST",
-                portfolio_id="P1",
-                base_currency="USD",
-                open_date=date(2025, 1, 1),
-                risk_exposure="MODERATE",
-                investment_time_horizon="MEDIUM_TERM",
-                portfolio_type="DISCRETIONARY",
-                booking_center_code="SG",
-                client_id="CLIENT-P1",
-                is_leverage_allowed=False,
-                status="ACTIVE",
-            ),
             BusinessDate(
                 date=date(2025, 8, 30),
                 created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
@@ -172,6 +182,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
             older_control,
             late_control,
             FinancialReconciliationRun(
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-old",
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P1",
@@ -187,6 +198,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
                 updated_at=datetime(2025, 8, 30, 10, 45, tzinfo=timezone.utc),
             ),
             FinancialReconciliationRun(
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-late",
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P1",
@@ -454,25 +466,11 @@ async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
 async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     clean_db, async_db_session: AsyncSession
 ):
-    async_db_session.add(
-        Portfolio(
-            tenant_id=TEST_TENANT_ID,
-            legal_book_id="BOOK-TEST",
-            portfolio_id="P3",
-            base_currency="USD",
-            open_date=date(2025, 1, 1),
-            risk_exposure="MODERATE",
-            investment_time_horizon="MEDIUM_TERM",
-            portfolio_type="DISCRETIONARY",
-            booking_center_code="SG",
-            client_id="CLIENT-P3",
-            is_leverage_allowed=False,
-            status="ACTIVE",
-        )
-    )
+    await _persist_portfolio_authority(async_db_session, "P3")
     async_db_session.add_all(
         [
             FinancialReconciliationRun(
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-run-old",
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P3",
@@ -488,6 +486,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
                 updated_at=datetime(2025, 8, 30, 10, 45, tzinfo=timezone.utc),
             ),
             FinancialReconciliationRun(
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-run-late",
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P3",
@@ -525,24 +524,10 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
-    async_db_session.add(
-        Portfolio(
-            tenant_id=TEST_TENANT_ID,
-            legal_book_id="BOOK-TEST",
-            portfolio_id="P6",
-            base_currency="USD",
-            open_date=date(2025, 1, 1),
-            risk_exposure="MODERATE",
-            investment_time_horizon="MEDIUM_TERM",
-            portfolio_type="DISCRETIONARY",
-            booking_center_code="SG",
-            client_id="CLIENT-P6",
-            is_leverage_allowed=False,
-            status="ACTIVE",
-        )
-    )
+    await _persist_portfolio_authority(async_db_session, "P6")
     async_db_session.add(
         FinancialReconciliationRun(
+            tenant_id=TEST_TENANT_ID,
             run_id="recon-lifecycle-current",
             reconciliation_type="transaction_cashflow",
             portfolio_id="P6",
@@ -634,24 +619,10 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
-    async_db_session.add(
-        Portfolio(
-            tenant_id=TEST_TENANT_ID,
-            legal_book_id="BOOK-TEST",
-            portfolio_id="P7",
-            base_currency="USD",
-            open_date=date(2025, 1, 1),
-            risk_exposure="MODERATE",
-            investment_time_horizon="MEDIUM_TERM",
-            portfolio_type="DISCRETIONARY",
-            booking_center_code="SG",
-            client_id="CLIENT-P7",
-            is_leverage_allowed=False,
-            status="ACTIVE",
-        )
-    )
+    await _persist_portfolio_authority(async_db_session, "P7")
     async_db_session.add(
         FinancialReconciliationRun(
+            tenant_id=TEST_TENANT_ID,
             run_id="recon-concurrent-resolution",
             reconciliation_type="transaction_cashflow",
             portfolio_id="P7",
@@ -755,24 +726,10 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
 async def test_reconciliation_findings_return_coherent_snapshot_under_finding_churn(
     clean_db, async_db_session: AsyncSession
 ):
-    async_db_session.add(
-        Portfolio(
-            tenant_id=TEST_TENANT_ID,
-            legal_book_id="BOOK-TEST",
-            portfolio_id="P4",
-            base_currency="USD",
-            open_date=date(2025, 1, 1),
-            risk_exposure="MODERATE",
-            investment_time_horizon="MEDIUM_TERM",
-            portfolio_type="DISCRETIONARY",
-            booking_center_code="SG",
-            client_id="CLIENT-P4",
-            is_leverage_allowed=False,
-            status="ACTIVE",
-        )
-    )
+    await _persist_portfolio_authority(async_db_session, "P4")
     async_db_session.add(
         FinancialReconciliationRun(
+            tenant_id=TEST_TENANT_ID,
             run_id="recon-findings-old",
             reconciliation_type="transaction_cashflow",
             portfolio_id="P4",

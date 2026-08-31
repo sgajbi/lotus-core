@@ -4,7 +4,6 @@ from collections.abc import Awaitable
 from datetime import date, datetime, timezone
 from typing import Any, TypeVar, cast
 
-from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.logging_utils import redact_sensitive_text
 from portfolio_common.monitoring import observe_outbox_recovery_attempt
@@ -103,7 +102,7 @@ MAX_OUTBOX_RECOVERY_REASON_LENGTH = 512
 class OperationsService:
     def __init__(self, repository: OperationsSupportRepository, *, tenant_id: str):
         self.repo = repository
-        self._tenant_id = TenantId(tenant_id).value
+        self._tenant_id = tenant_id
 
     @staticmethod
     def _evidence_product_runtime_metadata(
@@ -461,16 +460,12 @@ class OperationsService:
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists_for_tenant(
-            tenant_id=self._tenant_id,
-            portfolio_id=portfolio_id,
+            tenant_id=self._tenant_id, portfolio_id=portfolio_id
         ):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
     async def _resolve_portfolio_latest_business_date(
-        self,
-        portfolio_id: str,
-        *,
-        generated_at_utc: datetime,
+        self, portfolio_id: str, *, generated_at_utc: datetime
     ) -> date | None:
         await self._ensure_portfolio_exists(portfolio_id)
         return await self.repo.get_latest_business_date(as_of=generated_at_utc)

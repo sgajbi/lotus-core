@@ -76,6 +76,9 @@ def mock_dependencies():
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
     mock_service = AsyncMock()
     mock_db_session = AsyncMock(spec=AsyncSession)
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none.return_value = "tenant-event"
+    mock_db_session.execute.return_value = tenant_result
     mock_outbox_repo = AsyncMock()
     mock_control_evidence_repo = AsyncMock()
 
@@ -103,7 +106,7 @@ def mock_dependencies():
         ),
         patch(
             "src.services.financial_reconciliation_service.app.consumers.reconciliation_requested_consumer.ReconciliationRepository",
-        ),
+        ) as repository_factory,
         patch(
             "src.services.financial_reconciliation_service.app.consumers.reconciliation_requested_consumer.OutboxRepository",
             return_value=mock_outbox_repo,
@@ -117,6 +120,7 @@ def mock_dependencies():
             "idempotency_repo": mock_idempotency_repo,
             "service": mock_service,
             "db_session": mock_db_session,
+            "repository_factory": repository_factory,
             "outbox_repo": mock_outbox_repo,
             "control_evidence_repo": mock_control_evidence_repo,
         }
@@ -166,6 +170,9 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert request.business_date == mock_event.business_date
     assert request.epoch == mock_event.epoch
     assert request.requested_by == mock_event.requested_by
+    mock_dependencies["repository_factory"].assert_called_once_with(
+        mock_dependencies["db_session"], tenant_id="tenant-event"
+    )
     assert call.kwargs["reconciliation_types"] == mock_event.reconciliation_types
     assert call.kwargs["aggregation_revision"] == 7
     mock_service.determine_automatic_bundle_outcome.assert_called_once()

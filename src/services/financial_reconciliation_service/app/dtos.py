@@ -213,6 +213,7 @@ class ReconciliationRunResponse(BaseModel):
         json_schema_extra={
             "example": {
                 "run_id": "FRR-20260306-0001",
+                "tenant_id": "tenant_sg_pb",
                 "reconciliation_type": "transaction_cashflow",
                 "portfolio_id": "PORT-OPS-001",
                 "business_date": "2026-03-06",
@@ -238,6 +239,10 @@ class ReconciliationRunResponse(BaseModel):
     run_id: str = Field(
         description="Unique reconciliation run identifier.",
         examples=["FRR-20260306-0001"],
+    )
+    tenant_id: str = Field(
+        description="Admitted tenant authority that owns this reconciliation evidence.",
+        examples=["tenant_sg_pb"],
     )
     reconciliation_type: ReconciliationType = Field(
         description="Control family executed by this run.",
@@ -322,6 +327,7 @@ class ReconciliationRunListResponse(BaseModel):
                 "runs": [
                     {
                         "run_id": "FRR-20260306-0001",
+                        "tenant_id": "tenant_sg_pb",
                         "reconciliation_type": "transaction_cashflow",
                         "portfolio_id": "PORT-OPS-001",
                         "business_date": "2026-03-06",

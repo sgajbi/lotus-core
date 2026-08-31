@@ -2,14 +2,18 @@ import json
 import logging
 
 from confluent_kafka import Message
+from portfolio_common.database_models import Portfolio
 from portfolio_common.db import get_async_db_session
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import FinancialReconciliationRequestedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.retry_policy import CONSUMER_DB_SHORT_RETRY, tenacity_retry_kwargs
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry
 
 from ..application.record_reconciliation_completion import (
@@ -60,7 +64,10 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                         ):
                             return
 
-                        service = ReconciliationService(ReconciliationRepository(db))
+                        tenant_id = await _portfolio_tenant_id(db, event.portfolio_id)
+                        service = ReconciliationService(
+                            ReconciliationRepository(db, tenant_id=tenant_id)
+                        )
                         request = ReconciliationRunRequest(
                             portfolio_id=event.portfolio_id,
                             business_date=event.business_date,
@@ -111,3 +118,14 @@ class ReconciliationRequestedConsumer(BaseConsumer):
         except Exception:  # pragma: no cover - defensive
             logger.error("Unexpected reconciliation consumer error.", exc_info=True)
             raise
+
+
+async def _portfolio_tenant_id(db: AsyncSession, portfolio_id: str) -> str:
+    tenant_id = (
+        await db.execute(
+            select(Portfolio.tenant_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+        )
+    ).scalar_one_or_none()
+    if tenant_id is None:
+        raise ValueError(f"Portfolio with id {portfolio_id} not found")
+    return TenantId(tenant_id).value

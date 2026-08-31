@@ -79,10 +79,16 @@ async def ensure_reconciliation_tables(async_db_session: AsyncSession):
     yield
 
 
-async def _seed_portfolio(async_db_session: AsyncSession, portfolio_id: str) -> None:
+async def _seed_portfolio(
+    async_db_session: AsyncSession,
+    portfolio_id: str,
+    *,
+    tenant_id: str = TEST_TENANT_ID,
+) -> None:
     async_db_session.add(
         Portfolio(
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=tenant_id,
+            legal_book_id=f"BOOK-{tenant_id}",
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2020, 1, 1),
@@ -229,6 +235,13 @@ async def test_openapi_includes_reconciliation_examples(async_test_client: httpx
     assert "portfolio_day_scope" in request_examples
     assert request_examples["portfolio_day_scope"]["value"]["portfolio_id"] == "PORT-OPS-001"
     assert response_example["run_id"] == "FRR-20260306-0001"
+    assert response_example["tenant_id"] == "tenant_sg_pb"
+    assert transaction_cashflow["responses"]["404"]["content"]["application/json"]["example"][
+        "detail"
+    ] == {
+        "code": "RECONCILIATION_PORTFOLIO_NOT_FOUND",
+        "message": "Portfolio 'PORT-OPS-001' was not found in the admitted tenant scope.",
+    }
     assert transaction_cashflow["summary"] == "Run transaction-to-cashflow completeness controls"
     assert "silent ledger-to-cashflow drift" in transaction_cashflow["description"]
     assert position_valuation["summary"] == "Run position-to-valuation consistency controls"
@@ -262,6 +275,9 @@ async def test_openapi_describes_reconciliation_schema_fields(async_test_client:
     request_schema = components["ReconciliationRunRequest"]["properties"]
 
     assert run_response["run_id"]["description"] == "Unique reconciliation run identifier."
+    assert run_response["tenant_id"]["description"] == (
+        "Admitted tenant authority that owns this reconciliation evidence."
+    )
     assert run_response["status"]["description"] == "Lifecycle status of the run."
     assert run_response["aggregation_revision"]["description"].startswith(
         "Durable portfolio-aggregation revision reconciled"
@@ -332,6 +348,7 @@ async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
     assert response.status_code == 200
     payload = response.json()
     assert payload["reconciliation_type"] == "transaction_cashflow"
+    assert payload["tenant_id"] == TEST_TENANT_ID
     assert payload["portfolio_id"] == "PORT-R1"
     assert payload["business_date"] == "2026-03-08"
     assert payload["requested_by"] == "qa"
@@ -345,6 +362,87 @@ async def test_transaction_cashflow_run_persists_missing_cashflow_finding(
     assert findings_response.status_code == 200
     findings = findings_response.json()["findings"]
     assert findings[0]["finding_type"] == "missing_cashflow"
+
+
+async def test_reconciliation_control_evidence_is_tenant_isolated(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-TENANT-A")
+    await _seed_portfolio(
+        async_db_session,
+        "PORT-TENANT-B",
+        tenant_id="tenant-other",
+    )
+    async_db_session.add(
+        CashflowRule(
+            transaction_type="RECON_TENANT_BUY",
+            classification="EXTERNAL",
+            timing="SETTLEMENT",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    )
+    for portfolio_id in ("PORT-TENANT-A", "PORT-TENANT-B"):
+        async_db_session.add(
+            Transaction(
+                transaction_id=f"TXN-{portfolio_id}",
+                portfolio_id=portfolio_id,
+                instrument_id="INST-1",
+                security_id="SEC-TENANT",
+                transaction_type="RECON_TENANT_BUY",
+                quantity=Decimal("1"),
+                price=Decimal("1"),
+                gross_transaction_amount=Decimal("1"),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 3, 8, tzinfo=timezone.utc),
+                settlement_date=datetime(2026, 3, 10, tzinfo=timezone.utc),
+            )
+        )
+    await async_db_session.commit()
+
+    run_response = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"business_date": "2026-03-08", "requested_by": "qa"},
+        headers=TEST_TENANT_HEADERS,
+    )
+
+    assert run_response.status_code == 200
+    run = run_response.json()
+    assert run["tenant_id"] == TEST_TENANT_ID
+    assert run["summary"]["examined_count"] == 1
+    assert run["summary"]["finding_count"] == 1
+
+    foreign_headers = {"X-Tenant-Id": "tenant-other"}
+    assert (
+        await async_test_client.get(
+            f"/reconciliation/runs/{run['run_id']}",
+            headers=foreign_headers,
+        )
+    ).status_code == 404
+    assert (
+        await async_test_client.get(
+            f"/reconciliation/runs/{run['run_id']}/findings",
+            headers=foreign_headers,
+        )
+    ).status_code == 404
+    foreign_list = await async_test_client.get(
+        "/reconciliation/runs",
+        headers=foreign_headers,
+    )
+    assert foreign_list.status_code == 200
+    assert foreign_list.json() == {"runs": [], "total": 0}
+
+    cross_tenant_command = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"portfolio_id": "PORT-TENANT-A", "business_date": "2026-03-08"},
+        headers=foreign_headers,
+    )
+    assert cross_tenant_command.status_code == 404
+    assert cross_tenant_command.json()["detail"]["code"] == ("RECONCILIATION_PORTFOLIO_NOT_FOUND")
 
 
 async def test_position_valuation_run_detects_inconsistent_snapshot_math(

@@ -20,6 +20,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.infrastructure.persistence.statement_batching import (
     StatementBatchOperation,
     iter_statement_chunks,
@@ -73,9 +74,11 @@ class ReconciliationRepository:
         self,
         db_session: AsyncSession,
         *,
+        tenant_id: str,
         run_id_suffix_provider: Callable[[], str] | None = None,
     ):
         self.db = db_session
+        self._tenant_id = TenantId(tenant_id).value
         self._run_id_suffix_provider = run_id_suffix_provider or (lambda: uuid4().hex)
 
     async def create_run(
@@ -92,6 +95,8 @@ class ReconciliationRepository:
         tolerance: Decimal | None,
     ) -> tuple[FinancialReconciliationRun, bool]:
         correlation_id = normalize_lineage_value(correlation_id)
+        if portfolio_id is not None:
+            await self._ensure_portfolio_owned(portfolio_id)
         if dedupe_key is not None:
             existing = await self.get_run_by_dedupe_key(dedupe_key)
             if existing is not None:
@@ -99,6 +104,7 @@ class ReconciliationRepository:
 
         run = FinancialReconciliationRun(
             run_id=f"recon-{self._run_id_suffix_provider()}",
+            tenant_id=self._tenant_id,
             reconciliation_type=reconciliation_type,
             portfolio_id=portfolio_id,
             business_date=business_date,
@@ -130,7 +136,8 @@ class ReconciliationRepository:
     ) -> FinancialReconciliationRun | None:
         result = await self.db.execute(
             select(FinancialReconciliationRun).where(
-                FinancialReconciliationRun.dedupe_key == dedupe_key
+                FinancialReconciliationRun.tenant_id == self._tenant_id,
+                FinancialReconciliationRun.dedupe_key == dedupe_key,
             )
         )
         return result.scalar_one_or_none()
@@ -156,7 +163,10 @@ class ReconciliationRepository:
 
     async def get_run(self, run_id: str) -> FinancialReconciliationRun | None:
         result = await self.db.execute(
-            select(FinancialReconciliationRun).where(FinancialReconciliationRun.run_id == run_id)
+            select(FinancialReconciliationRun).where(
+                FinancialReconciliationRun.tenant_id == self._tenant_id,
+                FinancialReconciliationRun.run_id == run_id,
+            )
         )
         return result.scalar_one_or_none()
 
@@ -167,7 +177,9 @@ class ReconciliationRepository:
         portfolio_id: str | None = None,
         limit: int = 50,
     ) -> list[FinancialReconciliationRun]:
-        stmt = select(FinancialReconciliationRun)
+        stmt = select(FinancialReconciliationRun).where(
+            FinancialReconciliationRun.tenant_id == self._tenant_id
+        )
         if reconciliation_type is not None:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if portfolio_id is not None:
@@ -182,7 +194,12 @@ class ReconciliationRepository:
     async def list_findings(self, run_id: str) -> list[FinancialReconciliationFinding]:
         result = await self.db.execute(
             select(FinancialReconciliationFinding)
+            .join(
+                FinancialReconciliationRun,
+                FinancialReconciliationRun.run_id == FinancialReconciliationFinding.run_id,
+            )
             .where(FinancialReconciliationFinding.run_id == run_id)
+            .where(FinancialReconciliationRun.tenant_id == self._tenant_id)
             .order_by(
                 FinancialReconciliationFinding.severity.asc(),
                 FinancialReconciliationFinding.finding_type.asc(),
@@ -199,8 +216,10 @@ class ReconciliationRepository:
     ):
         stmt = (
             select(Transaction, CashflowRule, Cashflow)
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .join(CashflowRule, CashflowRule.transaction_type == Transaction.transaction_type)
             .outerjoin(Cashflow, Cashflow.transaction_id == Transaction.transaction_id)
+            .where(Portfolio.tenant_id == self._tenant_id)
         )
         if portfolio_id is not None:
             stmt = stmt.where(Transaction.portfolio_id == portfolio_id)
@@ -258,6 +277,7 @@ class ReconciliationRepository:
                 DailyPositionValuationReceiptRecord.snapshot_id == DailyPositionSnapshot.id,
             )
             .where(
+                Portfolio.tenant_id == self._tenant_id,
                 DailyPositionSnapshot.market_price.is_not(None),
                 DailyPositionSnapshot.market_value_local.is_not(None),
                 DailyPositionSnapshot.cost_basis_local.is_not(None),
@@ -292,7 +312,11 @@ class ReconciliationRepository:
         business_date: date | None,
         epoch: int | None,
     ) -> list[PortfolioTimeseries]:
-        stmt = select(PortfolioTimeseries)
+        stmt = (
+            select(PortfolioTimeseries)
+            .join(Portfolio, Portfolio.portfolio_id == PortfolioTimeseries.portfolio_id)
+            .where(Portfolio.tenant_id == self._tenant_id)
+        )
         if portfolio_id is not None:
             stmt = stmt.where(PortfolioTimeseries.portfolio_id == portfolio_id)
         if business_date is not None:
@@ -309,24 +333,31 @@ class ReconciliationRepository:
         business_date: date | None,
         epoch: int | None,
     ):
-        stmt = select(
-            PositionTimeseries.portfolio_id,
-            PositionTimeseries.date,
-            PositionTimeseries.epoch,
-            func.count().label("position_row_count"),
-            func.sum(PositionTimeseries.bod_market_value).label("bod_market_value"),
-            func.sum(
-                PositionTimeseries.bod_cashflow_position + PositionTimeseries.bod_cashflow_portfolio
-            ).label("bod_cashflow"),
-            func.sum(
-                PositionTimeseries.eod_cashflow_position + PositionTimeseries.eod_cashflow_portfolio
-            ).label("eod_cashflow"),
-            func.sum(PositionTimeseries.eod_market_value).label("eod_market_value"),
-            func.sum(PositionTimeseries.fees).label("fees"),
-        ).group_by(
-            PositionTimeseries.portfolio_id,
-            PositionTimeseries.date,
-            PositionTimeseries.epoch,
+        stmt = (
+            select(
+                PositionTimeseries.portfolio_id,
+                PositionTimeseries.date,
+                PositionTimeseries.epoch,
+                func.count().label("position_row_count"),
+                func.sum(PositionTimeseries.bod_market_value).label("bod_market_value"),
+                func.sum(
+                    PositionTimeseries.bod_cashflow_position
+                    + PositionTimeseries.bod_cashflow_portfolio
+                ).label("bod_cashflow"),
+                func.sum(
+                    PositionTimeseries.eod_cashflow_position
+                    + PositionTimeseries.eod_cashflow_portfolio
+                ).label("eod_cashflow"),
+                func.sum(PositionTimeseries.eod_market_value).label("eod_market_value"),
+                func.sum(PositionTimeseries.fees).label("fees"),
+            )
+            .join(Portfolio, Portfolio.portfolio_id == PositionTimeseries.portfolio_id)
+            .where(Portfolio.tenant_id == self._tenant_id)
+            .group_by(
+                PositionTimeseries.portfolio_id,
+                PositionTimeseries.date,
+                PositionTimeseries.epoch,
+            )
         )
         if portfolio_id is not None:
             stmt = stmt.where(PositionTimeseries.portfolio_id == portfolio_id)
@@ -344,15 +375,20 @@ class ReconciliationRepository:
         business_date: date | None,
         epoch: int | None,
     ):
-        stmt = select(
-            DailyPositionSnapshot.portfolio_id,
-            DailyPositionSnapshot.date,
-            DailyPositionSnapshot.epoch,
-            func.count().label("snapshot_count"),
-        ).group_by(
-            DailyPositionSnapshot.portfolio_id,
-            DailyPositionSnapshot.date,
-            DailyPositionSnapshot.epoch,
+        stmt = (
+            select(
+                DailyPositionSnapshot.portfolio_id,
+                DailyPositionSnapshot.date,
+                DailyPositionSnapshot.epoch,
+                func.count().label("snapshot_count"),
+            )
+            .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
+            .where(Portfolio.tenant_id == self._tenant_id)
+            .group_by(
+                DailyPositionSnapshot.portfolio_id,
+                DailyPositionSnapshot.date,
+                DailyPositionSnapshot.epoch,
+            )
         )
         if portfolio_id is not None:
             stmt = stmt.where(DailyPositionSnapshot.portfolio_id == portfolio_id)
@@ -406,7 +442,10 @@ class ReconciliationRepository:
             )
             .join(Instrument, instrument_security_id == position_timeseries_security_id)
             .join(Portfolio, Portfolio.portfolio_id == PositionTimeseries.portfolio_id)
-            .where(ranked_position_rows.c.rn == 1)
+            .where(
+                Portfolio.tenant_id == self._tenant_id,
+                ranked_position_rows.c.rn == 1,
+            )
             .order_by(PositionTimeseries.security_id.asc())
         )
         result = await self.db.execute(stmt)
@@ -434,7 +473,9 @@ class ReconciliationRepository:
                 )
                 .label("rn"),
             )
+            .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
             .where(
+                Portfolio.tenant_id == self._tenant_id,
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
                 DailyPositionSnapshot.date <= business_date,
                 DailyPositionSnapshot.epoch <= epoch,
@@ -448,6 +489,18 @@ class ReconciliationRepository:
         )
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
+
+    async def _ensure_portfolio_owned(self, portfolio_id: str) -> None:
+        result = await self.db.execute(
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.tenant_id == self._tenant_id,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
+        )
+        if result.scalar_one_or_none() is None:
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
     async def fetch_latest_fx_rates(
         self,

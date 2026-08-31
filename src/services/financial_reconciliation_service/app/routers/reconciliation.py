@@ -16,6 +16,7 @@ from ..dtos import (
     ReconciliationRunResponse,
 )
 from .reconciliation_mappers import (
+    reconciliation_portfolio_not_found,
     reconciliation_run_command_from_request,
     reconciliation_run_not_found,
 )
@@ -26,6 +27,13 @@ NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": {
         "code": "RECONCILIATION_RUN_NOT_FOUND",
         "message": "Reconciliation run 'FRR-20260306-0001' was not found.",
+    }
+}
+
+PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": {
+        "code": "RECONCILIATION_PORTFOLIO_NOT_FOUND",
+        "message": "Portfolio 'PORT-OPS-001' was not found in the admitted tenant scope.",
     }
 }
 
@@ -56,6 +64,7 @@ RECONCILIATION_RUN_REQUEST_EXAMPLES = {
 
 RECONCILIATION_RUN_RESPONSE_EXAMPLE = {
     "run_id": "FRR-20260306-0001",
+    "tenant_id": "tenant_sg_pb",
     "reconciliation_type": "transaction_cashflow",
     "portfolio_id": "PORT-OPS-001",
     "business_date": "2026-03-06",
@@ -114,7 +123,11 @@ RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE = {
         200: {
             "description": "Completed reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "The portfolio is not owned by the admitted tenant.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def run_transaction_cashflow_reconciliation(
@@ -128,12 +141,17 @@ async def run_transaction_cashflow_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    return await use_cases.run_transaction_cashflow(
-        reconciliation_run_command_from_request(
-            request,
-            correlation_id=x_correlation_id,
+    try:
+        return await use_cases.run_transaction_cashflow(
+            reconciliation_run_command_from_request(
+                request,
+                correlation_id=x_correlation_id,
+            )
         )
-    )
+    except LookupError:
+        if request.portfolio_id is None:
+            raise
+        raise reconciliation_portfolio_not_found(request.portfolio_id) from None
 
 
 @router.post(
@@ -150,7 +168,11 @@ async def run_transaction_cashflow_reconciliation(
         200: {
             "description": "Completed reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "The portfolio is not owned by the admitted tenant.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def run_position_valuation_reconciliation(
@@ -164,12 +186,17 @@ async def run_position_valuation_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    return await use_cases.run_position_valuation(
-        reconciliation_run_command_from_request(
-            request,
-            correlation_id=x_correlation_id,
+    try:
+        return await use_cases.run_position_valuation(
+            reconciliation_run_command_from_request(
+                request,
+                correlation_id=x_correlation_id,
+            )
         )
-    )
+    except LookupError:
+        if request.portfolio_id is None:
+            raise
+        raise reconciliation_portfolio_not_found(request.portfolio_id) from None
 
 
 @router.post(
@@ -188,7 +215,11 @@ async def run_position_valuation_reconciliation(
         200: {
             "description": "Completed reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "The portfolio is not owned by the admitted tenant.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def run_timeseries_integrity_reconciliation(
@@ -202,12 +233,17 @@ async def run_timeseries_integrity_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    return await use_cases.run_timeseries_integrity(
-        reconciliation_run_command_from_request(
-            request,
-            correlation_id=x_correlation_id,
+    try:
+        return await use_cases.run_timeseries_integrity(
+            reconciliation_run_command_from_request(
+                request,
+                correlation_id=x_correlation_id,
+            )
         )
-    )
+    except LookupError:
+        if request.portfolio_id is None:
+            raise
+        raise reconciliation_portfolio_not_found(request.portfolio_id) from None
 
 
 @router.get(

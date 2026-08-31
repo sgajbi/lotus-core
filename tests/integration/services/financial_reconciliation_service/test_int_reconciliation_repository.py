@@ -69,7 +69,7 @@ async def test_latest_fx_rates_resolve_all_point_in_time_keys_in_one_statement(
     sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", capture_statement)
     try:
         rates = await reconciliation_repo.ReconciliationRepository(
-            async_db_session
+            async_db_session, tenant_id=TEST_TENANT_ID
         ).fetch_latest_fx_rates(keys=list(reversed(keys)) + [keys[0]])
     finally:
         sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", capture_statement)
@@ -90,6 +90,7 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2020, 1, 1),
@@ -145,7 +146,7 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
     await async_db_session.commit()
 
     rows = await reconciliation_repo.ReconciliationRepository(
-        async_db_session
+        async_db_session, tenant_id=TEST_TENANT_ID
     ).fetch_position_valuation_rows(
         portfolio_id=portfolio_id,
         business_date=business_date,
@@ -163,6 +164,22 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
 async def test_create_run_deduplicates_concurrent_requests(
     clean_db, async_db_session: AsyncSession
 ):
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK-TEST",
+            portfolio_id="P-CONC",
+            base_currency="USD",
+            open_date=date(2020, 1, 1),
+            risk_exposure="MEDIUM",
+            investment_time_horizon="LONG",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P-CONC",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     dedupe_key = "auto:transaction_cashflow:P-CONC:2026-03-14:7"
     barrier_lock = asyncio.Lock()
@@ -172,7 +189,7 @@ async def test_create_run_deduplicates_concurrent_requests(
     async def create_one() -> tuple[str, bool]:
         nonlocal barrier_count
         async with session_factory() as session:
-            repo = reconciliation_repo.ReconciliationRepository(session)
+            repo = reconciliation_repo.ReconciliationRepository(session, tenant_id=TEST_TENANT_ID)
             original_get = repo.get_run_by_dedupe_key
 
             async def synchronized_get_run_by_dedupe_key(key: str):

@@ -5,7 +5,7 @@ from portfolio_common.domain.financial.precision import (
     DecimalPrecisionError,
     DecimalPrecisionViolation,
 )
-from portfolio_common.financial_numeric import ExactNumeric
+from portfolio_common.financial_numeric import ExactNumeric, finite_numeric_check_constraint
 from sqlalchemy import literal, select
 from sqlalchemy.dialects import postgresql, sqlite
 
@@ -14,6 +14,20 @@ def _process(numeric_type: ExactNumeric, value: object) -> object:
     processor = numeric_type.bind_processor(postgresql.dialect())
     assert processor is not None
     return processor(value)
+
+
+def test_finite_numeric_check_constraint_is_bounded_and_injection_safe() -> None:
+    constraint = finite_numeric_check_constraint("ck_amount_finite", "amount", "cost_basis")
+
+    assert constraint.name == "ck_amount_finite"
+    assert str(constraint.sqltext) == (
+        "CAST(amount AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') AND "
+        "CAST(cost_basis AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')"
+    )
+    with pytest.raises(ValueError, match="at least one"):
+        finite_numeric_check_constraint("ck_empty")
+    with pytest.raises(ValueError, match="identifiers"):
+        finite_numeric_check_constraint("ck_unsafe", "amount); DROP TABLE portfolios; --")
 
 
 @pytest.mark.parametrize(

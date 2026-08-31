@@ -30,11 +30,16 @@ def mock_db_session() -> AsyncMock:
     session.add_all = MagicMock()
     session.begin_nested = MagicMock(return_value=_AsyncContextManager())
     session.refresh.return_value = None
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = "P1"
+    session.execute.return_value = result
     return session
 
 
 async def test_create_run_normalizes_sentinel_correlation(mock_db_session: AsyncMock):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     repository.get_run_by_dedupe_key = AsyncMock(return_value=None)
 
     run, created = await repository.create_run(
@@ -50,15 +55,43 @@ async def test_create_run_normalizes_sentinel_correlation(mock_db_session: Async
     )
 
     assert created is True
+    assert run.tenant_id == "tenant-test"
     assert run.correlation_id is None
     assert run.aggregation_revision == 4
     mock_db_session.add.assert_called_once_with(run)
     mock_db_session.refresh.assert_awaited_once_with(run)
 
 
+async def test_create_run_rejects_portfolio_outside_tenant_scope(
+    mock_db_session: AsyncMock,
+) -> None:
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
+    ownership_result = MagicMock()
+    ownership_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = ownership_result
+
+    with pytest.raises(LookupError, match="Portfolio with id P-FOREIGN not found"):
+        await repository.create_run(
+            reconciliation_type="transaction_cashflow",
+            portfolio_id="P-FOREIGN",
+            business_date=date(2025, 8, 10),
+            epoch=1,
+            aggregation_revision=None,
+            requested_by="system",
+            dedupe_key=None,
+            correlation_id="corr-1",
+            tolerance=Decimal("0.01"),
+        )
+
+    mock_db_session.add.assert_not_called()
+
+
 async def test_create_run_uses_injected_run_id_suffix_provider(mock_db_session: AsyncMock):
     repository = reconciliation_repo.ReconciliationRepository(
         mock_db_session,
+        tenant_id="tenant-test",
         run_id_suffix_provider=lambda: "deterministic-run-id",
     )
     repository.get_run_by_dedupe_key = AsyncMock(return_value=None)
@@ -82,7 +115,9 @@ async def test_create_run_uses_injected_run_id_suffix_provider(mock_db_session: 
 async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     existing_run = MagicMock(run_id="recon-existing")
     repository.get_run_by_dedupe_key = AsyncMock(side_effect=[None, existing_run])
     mock_db_session.flush.side_effect = IntegrityError("stmt", "params", Exception("duplicate"))
@@ -107,7 +142,9 @@ async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
 async def test_create_run_returns_preexisting_deduplicated_run_without_writing(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     existing_run = MagicMock(run_id="recon-existing")
     repository.get_run_by_dedupe_key = AsyncMock(return_value=existing_run)
 
@@ -134,7 +171,9 @@ async def test_create_run_reraises_unresolved_integrity_error(
     mock_db_session: AsyncMock,
     dedupe_key: str | None,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     repository.get_run_by_dedupe_key = AsyncMock(return_value=None)
     error = IntegrityError("stmt", "params", Exception("constraint violation"))
     mock_db_session.flush.side_effect = error
@@ -157,7 +196,9 @@ async def test_create_run_reraises_unresolved_integrity_error(
 
 
 async def test_run_lookup_and_mutations_delegate_to_the_session(mock_db_session: AsyncMock):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     stored_run = MagicMock()
     result = MagicMock()
     result.scalar_one_or_none.return_value = stored_run
@@ -168,12 +209,14 @@ async def test_run_lookup_and_mutations_delegate_to_the_session(mock_db_session:
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "financial_reconciliation_runs.dedupe_key = 'dedupe-1'" in dedupe_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in dedupe_query
 
     assert await repository.get_run("recon-1") is stored_run
     run_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "financial_reconciliation_runs.run_id = 'recon-1'" in run_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in run_query
 
     findings = [MagicMock(), MagicMock()]
     await repository.add_findings(findings)
@@ -196,7 +239,9 @@ async def test_run_lookup_and_mutations_delegate_to_the_session(mock_db_session:
 async def test_fetch_latest_fx_rates_normalizes_keys_and_uses_lateral_latest_rate_lookup(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
 
     result = MagicMock()
     result.all.return_value = [("EUR", "USD", date(2026, 5, 28), Decimal("1.08"))]
@@ -232,7 +277,9 @@ async def test_fetch_latest_fx_rates_normalizes_keys_and_uses_lateral_latest_rat
 async def test_fetch_latest_fx_rates_deduplicates_and_bounds_oversized_requests(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -256,7 +303,9 @@ async def test_fetch_latest_fx_rates_deduplicates_and_bounds_oversized_requests(
 async def test_fetch_latest_fx_rates_empty_input_avoids_database_io(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
 
     assert await repository.fetch_latest_fx_rates(keys=[]) == {}
 
@@ -264,7 +313,9 @@ async def test_fetch_latest_fx_rates_empty_input_avoids_database_io(
 
 
 async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
 
     result = MagicMock()
     result.scalars.return_value.all.return_value = []
@@ -277,6 +328,7 @@ async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "financial_reconciliation_findings.run_id = 'recon-123'" in compiled_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in compiled_query
     assert (
         "ORDER BY financial_reconciliation_findings.severity ASC, "
         "financial_reconciliation_findings.finding_type ASC, "
@@ -285,7 +337,9 @@ async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock
 
 
 async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session: AsyncMock):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
 
     result = MagicMock()
     result.scalars.return_value.all.return_value = []
@@ -305,6 +359,7 @@ async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session:
         "financial_reconciliation_runs.reconciliation_type = 'position_valuation'" in compiled_query
     )
     assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in compiled_query
     assert (
         "ORDER BY financial_reconciliation_runs.started_at DESC, "
         "financial_reconciliation_runs.id DESC"
@@ -313,7 +368,9 @@ async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session:
 
 
 async def test_list_runs_without_optional_filters(mock_db_session: AsyncMock):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.scalars.return_value.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -322,14 +379,16 @@ async def test_list_runs_without_optional_filters(mock_db_session: AsyncMock):
     compiled_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "WHERE" not in compiled_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in compiled_query
     assert "LIMIT 50" in compiled_query
 
 
 async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date_range(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -352,7 +411,9 @@ async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date
 async def test_fetch_transaction_cashflow_rows_without_optional_filters(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -367,13 +428,15 @@ async def test_fetch_transaction_cashflow_rows_without_optional_filters(
     compiled_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "WHERE" not in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
 
 
 async def test_fetch_position_valuation_rows_selects_authoritative_rows_through_target_epoch(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -420,7 +483,9 @@ async def test_fetch_position_valuation_rows_supports_non_authoritative_filter_c
     epoch: int | None,
     expected_predicates: tuple[str, ...],
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -444,7 +509,9 @@ async def test_fetch_position_valuation_rows_supports_non_authoritative_filter_c
 async def test_fetch_position_valuation_rows_ranks_all_portfolios_when_unscoped(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -479,7 +546,9 @@ async def test_repository_aggregate_queries_cover_optional_filter_paths(
     method_name: str,
     with_filters: bool,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     result.scalars.return_value.all.return_value = []
@@ -499,13 +568,15 @@ async def test_repository_aggregate_queries_cover_optional_filter_paths(
         assert "date = '2026-05-28'" in compiled_query
         assert "epoch = 4" in compiled_query
     else:
-        assert "where" not in compiled_query
+        assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
 
 
 async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_instrument_join(
     mock_db_session: AsyncMock,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.all.return_value = []
     mock_db_session.execute.return_value = result
@@ -536,7 +607,9 @@ async def test_fetch_authoritative_snapshot_count_returns_normalized_count(
     stored_count: int | None,
     expected_count: int,
 ):
-    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session, tenant_id="tenant-test"
+    )
     result = MagicMock()
     result.scalar_one.return_value = stored_count
     mock_db_session.execute.return_value = result

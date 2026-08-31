@@ -29,3 +29,13 @@ def reconciliation_run_not_found(run_id: str) -> HTTPException:
             "message": f"Reconciliation run '{run_id}' was not found.",
         },
     )
+
+
+def reconciliation_portfolio_not_found(portfolio_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={
+            "code": "RECONCILIATION_PORTFOLIO_NOT_FOUND",
+            "message": f"Portfolio '{portfolio_id}' was not found in the admitted tenant scope.",
+        },
+    )
