@@ -1042,7 +1042,8 @@ async def test_effective_integration_policy_success(async_test_client):
     response = await client.get(
         "/integration/policy/effective"
         "?consumer_system=lotus-manage&tenant_id=tenant-a"
-        "&include_sections=positions_baseline&include_sections=portfolio_totals"
+        "&include_sections=positions_baseline&include_sections=portfolio_totals",
+        headers={"X-Tenant-Id": "tenant-a"},
     )
 
     assert response.status_code == 200
@@ -1059,20 +1060,25 @@ async def test_effective_integration_policy_success(async_test_client):
     )
 
 
-async def test_effective_integration_policy_defaults_apply(async_test_client):
+async def test_effective_integration_policy_rejects_missing_tenant(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
 
     response = await client.get("/integration/policy/effective")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["consumer_system"] == "lotus-gateway"
-    assert body["tenant_id"] == "default"
-    mock_integration_service.get_effective_policy.assert_called_with(
-        consumer_system="lotus-gateway",
-        tenant_id="default",
-        include_sections=None,
+    assert response.status_code == 422
+    mock_integration_service.get_effective_policy.assert_not_called()
+
+
+async def test_effective_integration_policy_rejects_tenant_mismatch(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.get(
+        "/integration/policy/effective?consumer_system=lotus-manage&tenant_id=tenant-b"
     )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QCP_TENANT_SCOPE_FORBIDDEN"
+    mock_integration_service.get_effective_policy.assert_not_called()
 
 
 async def test_core_snapshot_policy_block_maps_to_403(async_test_client):

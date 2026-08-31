@@ -196,6 +196,7 @@ from .response_helpers import (
     problem_response,
     raise_problem,
 )
+from .tenant_authority import require_admitted_tenant_query, tenant_scope_forbidden_response
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -692,6 +693,7 @@ def _raise_source_evidence_invalid_request(
 @router.get(
     "/policy/effective",
     response_model=EffectiveIntegrationPolicyResponse,
+    responses={403: tenant_scope_forbidden_response()},
     summary="Get effective lotus-core integration policy",
     description=(
         "What: Return effective integration policy diagnostics for a consumer and tenant "
@@ -713,11 +715,7 @@ async def get_effective_integration_policy(
         description="Downstream consumer system requesting policy resolution.",
         examples=["lotus-performance"],
     ),
-    tenant_id: str = Query(
-        ...,
-        description="Source-owned tenant identifier required for policy resolution.",
-        examples=["tenant_sg_pb"],
-    ),
+    tenant_id: str = Depends(require_admitted_tenant_query),
     include_sections: list[str] | None = Query(
         None,
         description="Optional requested snapshot sections to evaluate against policy.",

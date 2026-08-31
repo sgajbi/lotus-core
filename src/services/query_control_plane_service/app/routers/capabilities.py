@@ -8,6 +8,7 @@ from ..contracts.capabilities import (
     IntegrationCapabilitiesResponse,
 )
 from ..infrastructure import SqlAlchemyBusinessDateProvider
+from .tenant_authority import require_admitted_tenant_query, tenant_scope_forbidden_response
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -19,6 +20,7 @@ def get_capabilities_service() -> CapabilitiesService:
 @router.get(
     "/capabilities",
     response_model=IntegrationCapabilitiesResponse,
+    responses={403: tenant_scope_forbidden_response()},
     summary="Get lotus-core Integration Capabilities",
     description=(
         "What: Return policy-resolved integration capabilities for a consumer and tenant context.\n"
@@ -38,11 +40,7 @@ async def get_integration_capabilities(
         description="Consumer requesting capability metadata.",
         examples=["lotus-performance"],
     ),
-    tenant_id: str = Query(
-        ...,
-        description="Source-owned tenant identifier required for policy resolution.",
-        examples=["tenant_sg_pb"],
-    ),
+    tenant_id: str = Depends(require_admitted_tenant_query),
     service: CapabilitiesService = Depends(get_capabilities_service),
 ) -> IntegrationCapabilitiesResponse:
     capabilities_service: CapabilitiesService = service

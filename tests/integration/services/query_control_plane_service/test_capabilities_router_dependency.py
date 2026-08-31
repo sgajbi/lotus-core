@@ -33,7 +33,11 @@ async def async_test_client():
     }
     app.dependency_overrides[get_capabilities_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Tenant-Id": "tenant-1"},
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_capabilities_service, None)
 
@@ -69,7 +73,8 @@ async def test_capabilities_accepts_idea_consumer(async_test_client):
     }
 
     response = await client.get(
-        "/integration/capabilities?consumer_system=lotus-idea&tenant_id=tenant-idea"
+        "/integration/capabilities?consumer_system=lotus-idea&tenant_id=tenant-idea",
+        headers={"X-Tenant-Id": "tenant-idea"},
     )
 
     assert response.status_code == 200
@@ -82,7 +87,7 @@ async def test_capabilities_accepts_idea_consumer(async_test_client):
     )
 
 
-async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_client):
+async def test_capabilities_rejects_missing_tenant_query(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_integration_capabilities.return_value = {
         "contract_version": "v1",
@@ -99,15 +104,20 @@ async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_cl
 
     response = await client.get("/integration/capabilities")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["consumer_system"] == "lotus-gateway"
-    assert body["tenant_id"] == "default"
-    assert body["policy_version"] == "default-v1"
-    mock_service.get_integration_capabilities.assert_called_with(
-        consumer_system="lotus-gateway",
-        tenant_id="default",
+    assert response.status_code == 422
+    mock_service.get_integration_capabilities.assert_not_called()
+
+
+async def test_capabilities_rejects_tenant_mismatch_before_service_call(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/integration/capabilities?consumer_system=lotus-manage&tenant_id=tenant-2"
     )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QCP_TENANT_SCOPE_FORBIDDEN"
+    mock_service.get_integration_capabilities.assert_not_called()
 
 
 async def test_get_capabilities_service_returns_service_instance():
