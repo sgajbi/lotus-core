@@ -18,6 +18,7 @@ from src.services.calculators.position_valuation_calculator.app.repositories imp
     valuation_repository,
 )
 from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
@@ -39,17 +40,21 @@ async def _seed_representative_latest_row_history(
         text(
             """
             INSERT INTO portfolios (
-                portfolio_id, base_currency, open_date, risk_exposure,
+                portfolio_id, tenant_id, base_currency, open_date, risk_exposure,
                 investment_time_horizon, portfolio_type, booking_center_code,
                 client_id, status, is_leverage_allowed
             ) VALUES
-                (:target, 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                (:target, :tenant_id, 'USD', DATE '2024-01-01', 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LATEST-PLAN-CLIENT', 'ACTIVE', false),
-                (:noise, 'USD', DATE '2024-01-01', 'balanced', 'medium',
+                (:noise, :tenant_id, 'USD', DATE '2024-01-01', 'balanced', 'medium',
                  'discretionary', 'SGPB', 'LATEST-PLAN-NOISE', 'ACTIVE', false)
             """
         ),
-        {"target": _TARGET_PORTFOLIO, "noise": _NOISE_PORTFOLIO},
+        {
+            "target": _TARGET_PORTFOLIO,
+            "noise": _NOISE_PORTFOLIO,
+            "tenant_id": TEST_TENANT_ID,
+        },
     )
     await session.execute(
         text(
