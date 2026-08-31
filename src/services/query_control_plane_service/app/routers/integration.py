@@ -204,7 +204,6 @@ from .source_evidence_errors import (
 )
 from .tenant_authority import (
     bind_admitted_tenant_id,
-    bind_admitted_tenant_request,
     bind_tenant_request,
     tenant_forbidden_response,
 )
@@ -826,11 +825,7 @@ async def resolve_instrument_eligibility_bulk(
     request: InstrumentEligibilityBulkRequest,
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> InstrumentEligibilityBulkResponse:
-    request = bind_admitted_tenant_request(
-        request,
-        http_request.state.tenant_context,
-        "InstrumentEligibilityProfile",
-    )
+    request = bind_tenant_request(request, http_request, "InstrumentEligibilityProfile")
     return await dpm_source_service.resolve_instrument_eligibility_bulk(request)
 
 
@@ -881,9 +876,7 @@ async def get_portfolio_tax_lot_window(
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> PortfolioTaxLotWindowResponse:
     try:
-        request = bind_admitted_tenant_request(
-            request, http_request.state.tenant_context, "PortfolioTaxLotWindow"
-        )
+        request = bind_tenant_request(request, http_request, "PortfolioTaxLotWindow")
         return await dpm_source_service.get_portfolio_tax_lot_window(
             tenant_context=http_request.state.tenant_context,
             portfolio_id=portfolio_id,
@@ -951,9 +944,7 @@ async def get_transaction_cost_curve(
     ),
 ) -> TransactionCostCurveResponse:
     try:
-        request = bind_admitted_tenant_request(
-            request, http_request.state.tenant_context, "TransactionCostCurve"
-        )
+        request = bind_tenant_request(request, http_request, "TransactionCostCurve")
         return await transaction_economics_service.get_transaction_cost_curve(
             tenant_context=http_request.state.tenant_context,
             portfolio_id=portfolio_id,
@@ -1004,9 +995,7 @@ async def get_performance_component_economics(
     ),
 ) -> PerformanceComponentEconomicsResponse:
     try:
-        request = bind_admitted_tenant_request(
-            request, http_request.state.tenant_context, "PerformanceComponentEconomics"
-        )
+        request = bind_tenant_request(request, http_request, "PerformanceComponentEconomics")
         return await transaction_economics_service.get_performance_component_economics(
             tenant_context=http_request.state.tenant_context,
             portfolio_id=portfolio_id,
@@ -1163,9 +1152,7 @@ async def resolve_cio_model_change_affected_cohort(
         get_dpm_portfolio_population_service
     ),
 ) -> CioModelChangeAffectedCohortResponse:
-    request = bind_admitted_tenant_request(
-        request, http_request.state.tenant_context, "CioModelChangeAffectedCohort"
-    )
+    request = bind_tenant_request(request, http_request, "CioModelChangeAffectedCohort")
     response = await dpm_portfolio_population_service.resolve_cio_model_change_cohort(
         tenant_context=http_request.state.tenant_context,
         model_portfolio_id=model_portfolio_id,
@@ -1220,9 +1207,7 @@ async def resolve_dpm_portfolio_universe_candidates(
         get_dpm_portfolio_population_service
     ),
 ) -> DpmPortfolioUniverseCandidateResponse:
-    request = bind_admitted_tenant_request(
-        request, http_request.state.tenant_context, "DpmPortfolioUniverseCandidate"
-    )
+    request = bind_tenant_request(request, http_request, "DpmPortfolioUniverseCandidate")
     try:
         response = await dpm_portfolio_population_service.resolve_universe_candidates(
             tenant_context=http_request.state.tenant_context,
@@ -1280,9 +1265,7 @@ async def get_dpm_source_readiness(
     ),
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> DpmSourceReadinessResponse:
-    request = bind_admitted_tenant_request(
-        request, http_request.state.tenant_context, "DpmSourceReadiness"
-    )
+    request = bind_tenant_request(request, http_request, "DpmSourceReadiness")
     return await dpm_source_service.get_source_readiness(
         tenant_context=http_request.state.tenant_context,
         portfolio_id=portfolio_id,
@@ -1363,9 +1346,7 @@ async def resolve_model_portfolio_targets(
     ),
     dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> ModelPortfolioTargetResponse:
-    request = bind_admitted_tenant_request(
-        request, http_request.state.tenant_context, "DpmModelPortfolioTarget"
-    )
+    request = bind_tenant_request(request, http_request, "DpmModelPortfolioTarget")
     response = cast(
         ModelPortfolioTargetResponse | None,
         await dpm_source_service.resolve_model_portfolio_targets(
@@ -1998,11 +1979,7 @@ async def get_external_fx_forward_curve(
         get_external_hedge_posture_service
     ),
 ) -> ExternalFXForwardCurveResponse:
-    request = bind_admitted_tenant_request(
-        request,
-        http_request.state.tenant_context,
-        "ExternalFXForwardCurve",
-    )
+    request = bind_tenant_request(request, http_request, "ExternalFXForwardCurve")
     return hedge_posture_service.get_external_fx_forward_curve(request=request)
 
 
