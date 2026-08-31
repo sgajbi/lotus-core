@@ -307,7 +307,7 @@ def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
         "transactions.persisted",
         "valuation.job.requested",
     } <= set(topics)
-    assert topics["transactions.raw.received"].payload_contract == "TransactionEvent"
+    assert topics["transactions.raw.received"].payload_contract == "RawTransactionEvent"
     assert topics["instruments.received"].semantic_type == "mixed_source_and_derived_fact"
     assert topics["valuation.job.requested"].payload_contract == "valuation_job_command"
     for definition in topics.values():
