@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.event_replay_service.app.application.consumer_dlq_replay_commands import (
     ConsumerDlqReplayCommand,
@@ -12,6 +13,9 @@ from src.services.event_replay_service.app.application.consumer_dlq_replay_comma
 from src.services.event_replay_service.app.application.replay_command_errors import (
     ReplayCommandError,
 )
+
+TENANT_ID = "tenant-a"
+TENANT_CONTEXT = TenantContext(TenantId(TENANT_ID))
 
 
 def _consumer_service(
@@ -27,6 +31,7 @@ def _consumer_service(
 
 def _replay_context(**overrides: object) -> SimpleNamespace:
     values = {
+        "tenant_id": TENANT_ID,
         "endpoint": "/ingest/instruments",
         "request_payload": {"instruments": [{"instrument_id": "BOND_1"}]},
         "request_payload_policy_version": "ingestion-evidence-policy.v1",
@@ -63,14 +68,16 @@ async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> No
         replay_payload_dispatcher=replay_payload_dispatcher,
     ).replay_consumer_dlq_event(
         event_id="dlq-001",
-        command=ConsumerDlqReplayCommand(dry_run=True, requested_by="ops"),
+        command=ConsumerDlqReplayCommand(
+            tenant_context=TENANT_CONTEXT, dry_run=True, requested_by="ops"
+        ),
     )
 
     assert response.replay_status == "dry_run"
     assert response.job_id == "job-001"
     assert response.replay_audit_id == "audit-001"
     ingestion_job_service.get_unique_replayable_job_by_correlation_id.assert_awaited_once_with(
-        "corr-001"
+        "corr-001", tenant_id=TENANT_ID
     )
     ingestion_job_service.list_jobs.assert_not_awaited()
     replay_payload_dispatcher.replay_payload.assert_not_awaited()
@@ -115,7 +122,9 @@ async def test_consumer_dlq_replay_rechecks_expiry_after_awaited_controls(
         replay_payload_dispatcher=replay_payload_dispatcher,
     ).replay_consumer_dlq_event(
         event_id="dlq-001",
-        command=ConsumerDlqReplayCommand(dry_run=dry_run, requested_by="ops"),
+        command=ConsumerDlqReplayCommand(
+            tenant_context=TENANT_CONTEXT, dry_run=dry_run, requested_by="ops"
+        ),
     )
 
     assert response.replay_status == "not_replayable"
@@ -147,12 +156,14 @@ async def test_consumer_dlq_replay_uses_durable_owner_without_correlation_lookup
         ingestion_job_service=ingestion_job_service
     ).replay_consumer_dlq_event(
         event_id="dlq-001",
-        command=ConsumerDlqReplayCommand(dry_run=True, requested_by="ops"),
+        command=ConsumerDlqReplayCommand(
+            tenant_context=TENANT_CONTEXT, dry_run=True, requested_by="ops"
+        ),
     )
 
     assert response.job_id == "job-001"
     assert response.replay_status == "dry_run"
-    ingestion_job_service.get_job.assert_awaited_once_with("job-001")
+    ingestion_job_service.get_job.assert_awaited_once_with("job-001", tenant_id=TENANT_ID)
     ingestion_job_service.get_unique_replayable_job_by_correlation_id.assert_not_awaited()
 
 
@@ -233,6 +244,7 @@ async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response(
     )._consumer_dlq_replay_candidate_or_result(
         event_id="dlq-001",
         correlation_id="corr-001",
+        tenant_id=TENANT_ID,
         dry_run=True,
         requested_by="ops",
     )
@@ -241,7 +253,7 @@ async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response(
     assert response.job_id is None
     assert response.message == "No correlated ingestion job found for consumer DLQ event."
     ingestion_job_service.get_unique_replayable_job_by_correlation_id.assert_awaited_once_with(
-        "corr-001"
+        "corr-001", tenant_id=TENANT_ID
     )
     ingestion_job_service.list_jobs.assert_not_awaited()
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
@@ -296,6 +308,7 @@ async def test_consumer_dlq_replay_candidate_records_missing_payload_response() 
     )._consumer_dlq_replay_candidate_or_result(
         event_id="dlq-001",
         correlation_id="corr-001",
+        tenant_id=TENANT_ID,
         dry_run=False,
         requested_by="ops",
     )
@@ -321,6 +334,7 @@ async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> Non
     )._consumer_dlq_replay_candidate_or_result(
         event_id="dlq-001",
         correlation_id="corr-001",
+        tenant_id=TENANT_ID,
         dry_run=False,
         requested_by="ops",
     )
@@ -346,12 +360,14 @@ async def test_consumer_dlq_replay_fingerprint_is_scoped_to_event() -> None:
     first = await service._consumer_dlq_replay_candidate_or_result(
         event_id="dlq-001",
         correlation_id="corr-001",
+        tenant_id=TENANT_ID,
         dry_run=False,
         requested_by="ops",
     )
     second = await service._consumer_dlq_replay_candidate_or_result(
         event_id="dlq-002",
         correlation_id="corr-001",
+        tenant_id=TENANT_ID,
         dry_run=False,
         requested_by="ops",
     )
@@ -363,7 +379,7 @@ async def test_consumer_dlq_replay_fingerprint_is_scoped_to_event() -> None:
 
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_success_audit_failure_is_not_bookkeeping_success() -> None:
-    context = SimpleNamespace(endpoint="/ingest/transactions")
+    context = SimpleNamespace(endpoint="/ingest/transactions", tenant_id=TENANT_ID)
     ingestion_job_service = MagicMock()
     ingestion_job_service.mark_retried_and_queued = AsyncMock(return_value=True)
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
@@ -423,7 +439,7 @@ async def test_consumer_dlq_replay_publish_failure_records_only_source_safe_reas
 
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_bookkeeping_conflict_uses_governed_detail() -> None:
-    context = SimpleNamespace(endpoint="/ingest/transactions")
+    context = SimpleNamespace(endpoint="/ingest/transactions", tenant_id=TENANT_ID)
     ingestion_job_service = MagicMock()
     ingestion_job_service.mark_retried_and_queued = AsyncMock(return_value=False)
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
@@ -451,12 +467,14 @@ async def test_consumer_dlq_replay_bookkeeping_conflict_uses_governed_detail() -
         "replay_audit_id": "audit-conflict",
         "replay_fingerprint": "fp-001",
     }
-    ingestion_job_service.mark_retried_and_queued.assert_awaited_once_with("job-001")
+    ingestion_job_service.mark_retried_and_queued.assert_awaited_once_with(
+        "job-001", tenant_id=TENANT_ID
+    )
 
 
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_bookkeeping_failure_records_only_source_safe_reason() -> None:
-    context = SimpleNamespace(endpoint="/ingest/transactions")
+    context = SimpleNamespace(endpoint="/ingest/transactions", tenant_id=TENANT_ID)
     ingestion_job_service = MagicMock()
     ingestion_job_service.mark_retried_and_queued = AsyncMock(
         side_effect=RuntimeError("postgresql://operator:credential@db/private-request-value")

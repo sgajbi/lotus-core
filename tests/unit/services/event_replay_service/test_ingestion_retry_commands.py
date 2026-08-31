@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.event_replay_service.app.application.ingestion_retry_commands import (
     IngestionRetryCommandService,
@@ -11,6 +12,9 @@ from src.services.event_replay_service.app.application.replay_command_errors imp
     ReplayCommandError,
 )
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionRetryRequest
+
+TENANT_ID = "tenant-a"
+TENANT_CONTEXT = TenantContext(TenantId(TENANT_ID))
 
 
 def _retry_service(
@@ -50,12 +54,17 @@ async def test_ingestion_job_retry_dry_run_records_audit_and_returns_job() -> No
         ingestion_job_service=ingestion_job_service,
         replay_payload_dispatcher=replay_payload_dispatcher,
     ).retry_ingestion_job(
+        tenant_context=TENANT_CONTEXT,
         job_id="job-001",
         retry_request=IngestionRetryRequest(dry_run=True, record_keys=["T1"]),
         requested_by="ops",
     )
 
     assert response is job
+    ingestion_job_service.get_job_replay_context.assert_awaited_once_with(
+        "job-001", tenant_id=TENANT_ID
+    )
+    ingestion_job_service.get_job.assert_awaited_once_with("job-001", tenant_id=TENANT_ID)
     replay_payload_dispatcher.replay_payload.assert_not_awaited()
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
     _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
@@ -106,6 +115,7 @@ async def test_ingestion_job_retry_rechecks_expiry_after_awaited_controls(
             ingestion_job_service=ingestion_job_service,
             replay_payload_dispatcher=replay_payload_dispatcher,
         ).retry_ingestion_job(
+            tenant_context=TENANT_CONTEXT,
             job_id="job-expired-during-controls",
             retry_request=IngestionRetryRequest(dry_run=dry_run, record_keys=[]),
             requested_by="ops",
@@ -129,6 +139,7 @@ async def test_ingestion_job_retry_success_audit_failure_is_not_bookkeeping_succ
         await _retry_service(
             ingestion_job_service=ingestion_job_service
         )._mark_ingestion_job_retry_replayed(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             replay_fingerprint="fp-001",
@@ -148,7 +159,7 @@ async def test_ingestion_job_retry_not_found_uses_governed_recovery_detail() -> 
     with pytest.raises(ReplayCommandError) as exc_info:
         await _retry_service(
             ingestion_job_service=ingestion_job_service
-        )._required_job_replay_context("job-missing")
+        )._required_job_replay_context("job-missing", tenant_id=TENANT_ID)
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == {
@@ -170,7 +181,7 @@ async def test_ingestion_job_retry_unsupported_payload_uses_recovery_detail() ->
     with pytest.raises(ReplayCommandError) as exc_info:
         await _retry_service(
             ingestion_job_service=ingestion_job_service
-        )._required_job_replay_context("job-no-payload")
+        )._required_job_replay_context("job-no-payload", tenant_id=TENANT_ID)
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail["code"] == "INGESTION_JOB_RETRY_UNSUPPORTED"
@@ -209,6 +220,7 @@ async def test_ingestion_job_retry_rejects_unavailable_authority(
             ingestion_job_service=ingestion_job_service
         )._required_job_replay_context(
             "job-unavailable",
+            tenant_id=TENANT_ID,
             observed_at=datetime(2026, 8, 15, tzinfo=UTC),
         )
 
@@ -234,6 +246,7 @@ async def test_ingestion_job_retry_rejects_expired_authority() -> None:
             ingestion_job_service=ingestion_job_service
         )._required_job_replay_context(
             "job-expired",
+            tenant_id=TENANT_ID,
             observed_at=datetime(2026, 8, 15, tzinfo=UTC),
         )
 
@@ -376,6 +389,7 @@ async def test_ingestion_job_retry_publish_failure_uses_recovery_detail() -> Non
             ingestion_job_service=ingestion_job_service,
             replay_payload_dispatcher=replay_payload_dispatcher,
         )._publish_ingestion_job_retry(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             retry_request=IngestionRetryRequest(record_keys=["T1"]),
@@ -424,6 +438,7 @@ async def test_ingestion_job_retry_publish_failure_surfaces_rejected_failure_boo
             ingestion_job_service=ingestion_job_service,
             replay_payload_dispatcher=replay_payload_dispatcher,
         )._publish_ingestion_job_retry(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             retry_request=IngestionRetryRequest(record_keys=["T1"]),
@@ -452,6 +467,7 @@ async def test_ingestion_job_retry_bookkeeping_failure_uses_recovery_detail() ->
         await _retry_service(
             ingestion_job_service=ingestion_job_service
         )._mark_ingestion_job_retry_replayed(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             replay_fingerprint="fp-001",
@@ -489,6 +505,7 @@ async def test_ingestion_job_retry_bookkeeping_conflict_uses_governed_detail() -
         await _retry_service(
             ingestion_job_service=ingestion_job_service
         )._mark_ingestion_job_retry_replayed(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             replay_fingerprint="fp-001",
@@ -510,4 +527,6 @@ async def test_ingestion_job_retry_bookkeeping_conflict_uses_governed_detail() -
         "replay_audit_id": "audit-conflict",
         "replay_fingerprint": "fp-001",
     }
-    ingestion_job_service.mark_retried_and_queued.assert_awaited_once_with("job-001")
+    ingestion_job_service.mark_retried_and_queued.assert_awaited_once_with(
+        "job-001", tenant_id=TENANT_ID
+    )

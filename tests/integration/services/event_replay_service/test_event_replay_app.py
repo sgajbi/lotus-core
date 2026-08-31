@@ -726,6 +726,7 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
 
     assert set(job_detail["required"]) == {
         "job_id",
+        "tenant_id",
         "endpoint",
         "entity_type",
         "status",

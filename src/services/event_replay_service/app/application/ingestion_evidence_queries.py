@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from portfolio_common.domain.tenant import TenantContext
+
 from ..proof_builders.ingestion_evidence_bundle import IngestionEvidenceBundleBuilder
 from .ingestion_operations_queries import IngestionOperationsNotFound
 
@@ -12,7 +14,7 @@ _EVIDENCE_FETCH_LIMIT = _EVIDENCE_LIMIT + 1
 
 
 class IngestionEvidenceReader(Protocol):
-    async def get_job(self, job_id: str) -> Any: ...
+    async def get_job(self, job_id: str, *, tenant_id: str) -> Any: ...
 
     async def list_failures(self, *, job_id: str, limit: int) -> list[Any]: ...
 
@@ -40,7 +42,7 @@ class IngestionEvidenceReader(Protocol):
         limit: int,
     ) -> list[Any]: ...
 
-    async def get_job_replay_context(self, job_id: str) -> Any: ...
+    async def get_job_replay_context(self, job_id: str, *, tenant_id: str) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -50,8 +52,9 @@ class IngestionEvidenceQueryService:
         default_factory=IngestionEvidenceBundleBuilder
     )
 
-    async def get_evidence_bundle(self, job_id: str) -> Any:
-        job = await self.ingestion_job_service.get_job(job_id)
+    async def get_evidence_bundle(self, job_id: str, *, tenant_context: TenantContext) -> Any:
+        tenant_id = tenant_context.tenant_id_text
+        job = await self.ingestion_job_service.get_job(job_id, tenant_id=tenant_id)
         if job is None:
             raise IngestionOperationsNotFound(
                 code="INGESTION_JOB_NOT_FOUND",
@@ -73,7 +76,7 @@ class IngestionEvidenceQueryService:
                 job_id,
                 limit=_EVIDENCE_FETCH_LIMIT,
             ),
-            self.ingestion_job_service.get_job_replay_context(job_id),
+            self.ingestion_job_service.get_job_replay_context(job_id, tenant_id=tenant_id),
         )
         replay_event_ids = tuple(sorted({audit.event_id for audit in replay_audits}))
         replay_correlated_dlq_events = (

@@ -64,12 +64,13 @@ async def test_mark_queued_uses_single_atomic_update(
         make_single_session_getter(session),
     )
 
-    updated = await service.mark_queued("job_mark_queued")
+    updated = await service.mark_queued("job_mark_queued", tenant_id="tenant-test")
 
     assert updated is True
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
+    assert "ingestion_jobs.tenant_id =" in compiled_sql
     assert "ingestion_jobs.status IN" in compiled_sql
     assert "status=:status" in compiled_sql
     assert "completed_at=:completed_at" in compiled_sql
@@ -90,7 +91,7 @@ async def test_mark_queued_returns_false_when_expected_status_is_stale(
         make_single_session_getter(session),
     )
 
-    updated = await service.mark_queued("job_mark_queued")
+    updated = await service.mark_queued("job_mark_queued", tenant_id="tenant-test")
 
     assert updated is False
     assert len(session.executed_statements) == 1
@@ -111,6 +112,7 @@ async def test_mark_failed_returns_false_without_recording_when_expected_status_
         "job_already_terminal",
         failure_reason="late failure observation",
         failure_phase="publish",
+        tenant_id="tenant-test",
     )
 
     assert updated is False
@@ -145,12 +147,14 @@ async def test_mark_failed_uses_atomic_update_and_records_failure(
             "request_payload": {"client_email": "client@example.com"},
         },
         failure_headers={"Retry-After": "30", "Authorization": "Bearer secret"},
+        tenant_id="tenant-test",
     )
 
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
     assert "ingestion_jobs.status IN" in compiled_sql
+    assert "ingestion_jobs.tenant_id = :tenant_id_1" in compiled_sql
     assert "failure_status_code=:failure_status_code" in compiled_sql
     assert "failure_code=:failure_code" in compiled_sql
     assert "failure_detail=:failure_detail" in compiled_sql
@@ -195,7 +199,7 @@ async def test_mark_retried_uses_atomic_increment_update(
         make_single_session_getter(session),
     )
 
-    await service.mark_retried("job_mark_retried")
+    await service.mark_retried("job_mark_retried", tenant_id="tenant-test")
 
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
@@ -220,7 +224,10 @@ async def test_mark_retried_returns_false_when_job_is_not_retryable(
         make_single_session_getter(session),
     )
 
-    updated = await service.mark_retried("job_not_retryable")
+    updated = await service.mark_retried(
+        "job_not_retryable",
+        tenant_id="tenant-test",
+    )
 
     assert updated is False
     assert len(session.executed_statements) == 1
@@ -239,13 +246,15 @@ async def test_mark_retried_and_queued_is_single_expected_status_update(
         make_single_session_getter(session),
     )
 
-    updated = await service.mark_retried_and_queued("job_mark_retried")
+    updated = await service.mark_retried_and_queued("job_mark_retried", tenant_id="tenant-test")
 
     assert updated is True
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
     assert "ingestion_jobs.status IN" in compiled_sql
+    assert "ingestion_jobs.tenant_id =" in compiled_sql
+    assert "ingestion_jobs.tenant_id = :tenant_id_1" in compiled_sql
     assert "status=:status" in compiled_sql
     assert (
         "retry_count=(coalesce(ingestion_jobs.retry_count, :coalesce_1) + :coalesce_2)"
@@ -268,7 +277,7 @@ async def test_mark_retried_and_queued_returns_false_when_job_is_not_retryable(
         make_single_session_getter(session),
     )
 
-    updated = await service.mark_retried_and_queued("job_not_retryable")
+    updated = await service.mark_retried_and_queued("job_not_retryable", tenant_id="tenant-test")
 
     assert updated is False
     assert len(session.executed_statements) == 1
@@ -400,12 +409,13 @@ async def test_get_job_maps_persisted_row_or_returns_none(
         make_single_session_getter(session),
     )
 
-    response = await service.get_job("job_replayable")
+    response = await service.get_job("job_replayable", tenant_id="tenant-test")
 
     assert (response.job_id if response else None) == expected_job_id
     if response is not None:
         assert response.tenant_id == "tenant-test"
     assert len(session.executed_statements) == 1
+    assert "ingestion_jobs.tenant_id = :tenant_id_1" in str(session.executed_statements[0])
 
 
 @pytest.mark.parametrize(
@@ -432,7 +442,7 @@ async def test_get_job_replay_context_maps_only_object_payloads(
         make_single_session_getter(session),
     )
 
-    response = await service.get_job_replay_context("job_replayable")
+    response = await service.get_job_replay_context("job_replayable", tenant_id="tenant-test")
 
     if persisted_row is None:
         assert response is None
@@ -444,6 +454,7 @@ async def test_get_job_replay_context_maps_only_object_payloads(
         assert response.request_payload_replay_eligible is True
         assert response.request_payload_replay_expires_at == datetime(2026, 7, 29, tzinfo=UTC)
     assert len(session.executed_statements) == 1
+    assert "ingestion_jobs.tenant_id = :tenant_id_1" in str(session.executed_statements[0])
 
 
 @pytest.mark.parametrize(
@@ -477,6 +488,7 @@ async def test_mark_failed_rejects_incomplete_or_invalid_failure_outcome(
         await service.mark_failed(
             "job_mark_failed",
             failure_reason="publish failed",
+            tenant_id="tenant-test",
             failure_status_code=failure_status_code,
             failure_code=failure_code,
             failure_detail=failure_detail,

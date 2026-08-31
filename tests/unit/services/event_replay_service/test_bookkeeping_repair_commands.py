@@ -2,11 +2,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 
 from src.services.event_replay_service.app.application.bookkeeping_repair_commands import (
     BookkeepingRepairCommandError,
     BookkeepingRepairCommandService,
 )
+
+TENANT_ID = "tenant-a"
+TENANT_CONTEXT = TenantContext(TenantId(TENANT_ID))
 
 
 def _repair_service(
@@ -34,7 +38,7 @@ async def test_bookkeeping_repair_marks_accepted_job_queued_and_returns_result()
 
     response = await _repair_service(
         ingestion_job_service=ingestion_job_service
-    ).repair_ingestion_job_bookkeeping("job-123")
+    ).repair_ingestion_job_bookkeeping("job-123", tenant_context=TENANT_CONTEXT)
 
     assert response.job_id == "job-123"
     assert response.previous_status == "accepted"
@@ -43,7 +47,11 @@ async def test_bookkeeping_repair_marks_accepted_job_queued_and_returns_result()
     assert response.supportability_reason_code == "POST_PUBLISH_BOOKKEEPING_FAILED"
     assert response.retry_safe is False
     assert response.message == "Ingestion job bookkeeping repaired from accepted to queued."
-    ingestion_job_service.mark_queued.assert_awaited_once_with("job-123")
+    ingestion_job_service.mark_queued.assert_awaited_once_with(
+        "job-123",
+        tenant_id="tenant-a",
+    )
+    ingestion_job_service.get_job.assert_any_await("job-123", tenant_id=TENANT_ID)
 
 
 @pytest.mark.asyncio
@@ -59,7 +67,7 @@ async def test_bookkeeping_repair_leaves_already_queued_job_unchanged() -> None:
 
     response = await _repair_service(
         ingestion_job_service=ingestion_job_service
-    ).repair_ingestion_job_bookkeeping("job-123")
+    ).repair_ingestion_job_bookkeeping("job-123", tenant_context=TENANT_CONTEXT)
 
     assert response.previous_status == "queued"
     assert response.repaired_status == "queued"
@@ -75,7 +83,7 @@ async def test_bookkeeping_repair_requires_existing_job() -> None:
     with pytest.raises(BookkeepingRepairCommandError) as exc_info:
         await _repair_service(
             ingestion_job_service=ingestion_job_service
-        )._required_ingestion_job_for_bookkeeping_repair("job-missing")
+        )._required_ingestion_job_for_bookkeeping_repair("job-missing", tenant_id=TENANT_ID)
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == {
@@ -133,6 +141,7 @@ async def test_bookkeeping_repair_mark_queued_failure_uses_governed_error() -> N
             ingestion_job_service=ingestion_job_service
         )._mark_ingestion_job_queued_for_bookkeeping_repair(
             job_id="job-123",
+            tenant_id="tenant-a",
             previous_status="accepted",
         )
 
@@ -155,6 +164,7 @@ async def test_bookkeeping_repair_mark_queued_conflict_uses_governed_error() -> 
             ingestion_job_service=ingestion_job_service
         )._mark_ingestion_job_queued_for_bookkeeping_repair(
             job_id="job-123",
+            tenant_id="tenant-a",
             previous_status="accepted",
         )
 

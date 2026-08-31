@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantContext
+
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
 
@@ -45,6 +47,7 @@ class IngestionOperationsQueryService:
     async def list_jobs(
         self,
         *,
+        tenant_context: TenantContext,
         status: Any | None,
         entity_type: str | None,
         submitted_from: datetime | None,
@@ -53,6 +56,7 @@ class IngestionOperationsQueryService:
         limit: int,
     ) -> IngestionJobsPage:
         jobs, next_cursor = await self.ingestion_job_service.list_jobs(
+            tenant_id=tenant_context.tenant_id_text,
             status=status,
             entity_type=entity_type,
             submitted_from=submitted_from,
@@ -65,15 +69,19 @@ class IngestionOperationsQueryService:
     async def list_job_failures(
         self,
         *,
+        tenant_context: TenantContext,
         job_id: str,
         limit: int,
     ) -> IngestionJobFailuresPage:
-        await self._require_job(job_id)
+        await self._require_job(job_id, tenant_context=tenant_context)
         failures = await self.ingestion_job_service.list_failures(job_id=job_id, limit=limit)
         return IngestionJobFailuresPage(failures=failures, total=len(failures))
 
-    async def get_job_record_status(self, job_id: str) -> Any:
-        record_status = await self.ingestion_job_service.get_job_record_status(job_id)
+    async def get_job_record_status(self, job_id: str, *, tenant_context: TenantContext) -> Any:
+        record_status = await self.ingestion_job_service.get_job_record_status(
+            job_id,
+            tenant_id=tenant_context.tenant_id_text,
+        )
         if record_status is None:
             raise self._job_not_found(job_id)
         return record_status
@@ -119,8 +127,11 @@ class IngestionOperationsQueryService:
             )
         return audit
 
-    async def _require_job(self, job_id: str) -> Any:
-        job = await self.ingestion_job_service.get_job(job_id)
+    async def _require_job(self, job_id: str, *, tenant_context: TenantContext) -> Any:
+        job = await self.ingestion_job_service.get_job(
+            job_id,
+            tenant_id=tenant_context.tenant_id_text,
+        )
         if job is None:
             raise self._job_not_found(job_id)
         return job

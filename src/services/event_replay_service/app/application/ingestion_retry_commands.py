@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 
 from src.services.ingestion_service.app.application.ingestion_failure_evidence import (
@@ -78,11 +79,13 @@ class IngestionRetryCommandService:
     async def retry_ingestion_job(
         self,
         *,
+        tenant_context: TenantContext,
         job_id: str,
         retry_request: IngestionRetryRequest,
         requested_by: str | None,
     ) -> Any:
-        context = await self._required_job_replay_context(job_id)
+        tenant_id = tenant_context.tenant_id_text
+        context = await self._required_job_replay_context(job_id, tenant_id=tenant_id)
         replay_payload = self._retry_payload_or_error(
             context=context,
             retry_request=retry_request,
@@ -108,6 +111,7 @@ class IngestionRetryCommandService:
                 context=context,
                 replay_fingerprint=replay_fingerprint,
                 requested_by=requested_by,
+                tenant_id=tenant_id,
             )
 
         await self._block_duplicate_ingestion_job_retry(
@@ -124,22 +128,28 @@ class IngestionRetryCommandService:
             replay_payload=replay_payload,
             replay_fingerprint=replay_fingerprint,
             requested_by=requested_by,
+            tenant_id=tenant_id,
         )
         await self._mark_ingestion_job_retry_replayed(
             job_id=job_id,
             context=context,
             replay_fingerprint=replay_fingerprint,
             requested_by=requested_by,
+            tenant_id=tenant_id,
         )
-        return await self._required_job_after_retry(job_id)
+        return await self._required_job_after_retry(job_id, tenant_id=tenant_id)
 
     async def _required_job_replay_context(
         self,
         job_id: str,
         *,
+        tenant_id: str,
         observed_at: datetime | None = None,
     ) -> Any:
-        context = await self.ingestion_job_service.get_job_replay_context(job_id)
+        context = await self.ingestion_job_service.get_job_replay_context(
+            job_id,
+            tenant_id=tenant_id,
+        )
         if context is None:
             raise ReplayCommandError(
                 HTTP_NOT_FOUND,
@@ -265,6 +275,7 @@ class IngestionRetryCommandService:
         context: Any,
         replay_fingerprint: str,
         requested_by: str | None,
+        tenant_id: str,
     ) -> Any:
         await self._record_ingestion_job_retry_audit(
             job_id=job_id,
@@ -275,7 +286,7 @@ class IngestionRetryCommandService:
             replay_reason="Dry-run successful. Ingestion job retry is replayable.",
             requested_by=requested_by,
         )
-        job = await self.ingestion_job_service.get_job(job_id)
+        job = await self.ingestion_job_service.get_job(job_id, tenant_id=tenant_id)
         if job is None:
             raise ReplayCommandError(
                 HTTP_NOT_FOUND,
@@ -336,6 +347,7 @@ class IngestionRetryCommandService:
         replay_payload: dict[str, Any],
         replay_fingerprint: str,
         requested_by: str | None,
+        tenant_id: str,
     ) -> None:
         try:
             await _replay_job_payload(
@@ -365,6 +377,7 @@ class IngestionRetryCommandService:
                 failure_reason,
                 failure_phase="retry_publish",
                 failed_record_keys=retry_request.record_keys,
+                tenant_id=tenant_id,
             )
             if not failure_recorded:
                 raise ReplayCommandError(
@@ -400,9 +413,13 @@ class IngestionRetryCommandService:
         context: Any,
         replay_fingerprint: str,
         requested_by: str | None,
+        tenant_id: str,
     ) -> None:
         try:
-            transitioned = await self.ingestion_job_service.mark_retried_and_queued(job_id)
+            transitioned = await self.ingestion_job_service.mark_retried_and_queued(
+                job_id,
+                tenant_id=tenant_id,
+            )
             if not transitioned:
                 replay_audit_id = await self._record_mandatory_replay_audit(
                     recovery_path="ingestion_job_retry",
@@ -479,8 +496,8 @@ class IngestionRetryCommandService:
                 ),
             ) from exc
 
-    async def _required_job_after_retry(self, job_id: str) -> Any:
-        job = await self.ingestion_job_service.get_job(job_id)
+    async def _required_job_after_retry(self, job_id: str, *, tenant_id: str) -> Any:
+        job = await self.ingestion_job_service.get_job(job_id, tenant_id=tenant_id)
         if job is None:
             raise ReplayCommandError(
                 HTTP_NOT_FOUND,

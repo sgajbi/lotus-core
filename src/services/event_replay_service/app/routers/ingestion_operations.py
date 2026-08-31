@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
@@ -140,13 +140,17 @@ def _not_found_response(exc: IngestionOperationsNotFound) -> HTTPException:
     },
 )
 async def get_ingestion_job(
+    request: Request,
     job_id: str = Path(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
-    job = await ingestion_job_service.get_job(job_id)
+    job = await ingestion_job_service.get_job(
+        job_id,
+        tenant_id=request.state.tenant_context.tenant_id_text,
+    )
     if job is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -186,6 +190,7 @@ async def get_ingestion_job(
     },
 )
 async def get_ingestion_evidence_bundle(
+    request: Request,
     job_id: str = Path(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
@@ -193,7 +198,10 @@ async def get_ingestion_evidence_bundle(
     query_service: IngestionEvidenceQueryService = Depends(get_ingestion_evidence_query_service),
 ):
     try:
-        return await query_service.get_evidence_bundle(job_id)
+        return await query_service.get_evidence_bundle(
+            job_id,
+            tenant_context=request.state.tenant_context,
+        )
     except IngestionOperationsNotFound as exc:
         raise _not_found_response(exc) from exc
 
@@ -238,6 +246,7 @@ async def get_ingestion_evidence_bundle(
     },
 )
 async def repair_ingestion_job_bookkeeping(
+    request: Request,
     job_id: str = Path(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
@@ -247,7 +256,10 @@ async def repair_ingestion_job_bookkeeping(
     ),
 ):
     try:
-        result = await command_service.repair_ingestion_job_bookkeeping(job_id=job_id)
+        result = await command_service.repair_ingestion_job_bookkeeping(
+            job_id=job_id,
+            tenant_context=request.state.tenant_context,
+        )
     except BookkeepingRepairCommandError as exc:
         raise command_error_to_http(exc) from exc
     return IngestionJobBookkeepingRepairResponse(**result.to_response_payload())
@@ -280,6 +292,7 @@ async def repair_ingestion_job_bookkeeping(
     },
 )
 async def list_ingestion_jobs(
+    request: Request,
     status: IngestionJobStatus | None = Query(
         default=None,
         description="Optional job status filter.",
@@ -317,6 +330,7 @@ async def list_ingestion_jobs(
     ),
 ):
     page = await query_service.list_jobs(
+        tenant_context=request.state.tenant_context,
         status=status,
         entity_type=entity_type,
         submitted_from=submitted_from,
@@ -356,6 +370,7 @@ async def list_ingestion_jobs(
     },
 )
 async def list_ingestion_job_failures(
+    request: Request,
     job_id: str = Path(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
@@ -372,7 +387,11 @@ async def list_ingestion_job_failures(
     ),
 ):
     try:
-        page = await query_service.list_job_failures(job_id=job_id, limit=limit)
+        page = await query_service.list_job_failures(
+            tenant_context=request.state.tenant_context,
+            job_id=job_id,
+            limit=limit,
+        )
     except IngestionOperationsNotFound as exc:
         raise _not_found_response(exc) from exc
     return IngestionJobFailureListResponse(failures=page.failures, total=page.total)
@@ -403,6 +422,7 @@ async def list_ingestion_job_failures(
     },
 )
 async def get_ingestion_job_records(
+    request: Request,
     job_id: str = Path(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
@@ -412,7 +432,10 @@ async def get_ingestion_job_records(
     ),
 ):
     try:
-        return await query_service.get_job_record_status(job_id)
+        return await query_service.get_job_record_status(
+            job_id,
+            tenant_context=request.state.tenant_context,
+        )
     except IngestionOperationsNotFound as exc:
         raise _not_found_response(exc) from exc
 
@@ -477,6 +500,7 @@ async def get_ingestion_job_records(
     },
 )
 async def retry_ingestion_job(
+    request: Request,
     job_id: str = Path(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
@@ -490,6 +514,7 @@ async def retry_ingestion_job(
 ):
     try:
         return await command_service.retry_ingestion_job(
+            tenant_context=request.state.tenant_context,
             job_id=job_id,
             retry_request=retry_request,
             requested_by=ops_actor,
@@ -1033,6 +1058,7 @@ async def list_consumer_dlq_events(
     },
 )
 async def replay_consumer_dlq_event(
+    request: Request,
     event_id: str = Path(
         description="Consumer dead-letter event identifier.",
         examples=["cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6"],
@@ -1050,6 +1076,7 @@ async def replay_consumer_dlq_event(
         result = await command_service.replay_consumer_dlq_event(
             event_id=event_id,
             command=ConsumerDlqReplayCommand(
+                tenant_context=request.state.tenant_context,
                 dry_run=replay_request.dry_run,
                 requested_by=ops_actor,
             ),

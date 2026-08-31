@@ -95,7 +95,8 @@ class _JobService:
             job.failure_headers = self.failure_headers
         return IngestionJobCreateResult(job=job, created=self.created)
 
-    async def _mark_queued(self, _job_id: str) -> bool:
+    async def _mark_queued(self, _job_id: str, *, tenant_id: str) -> bool:
+        assert tenant_id == "tenant-test"
         return self.mark_queued_result
 
 
@@ -156,7 +157,10 @@ async def test_business_date_command_publishes_and_marks_job_queued() -> None:
     ingestion_service.publish_business_dates.assert_awaited_once()
     assert observed_job_ids == ["job-business-date"]
     assert ingestion_job_id_var.get() is None
-    job_service.mark_queued.assert_awaited_once_with("job-business-date")
+    job_service.mark_queued.assert_awaited_once_with(
+        "job-business-date",
+        tenant_id="tenant-test",
+    )
 
 
 async def test_business_date_command_replays_duplicate_without_publish_or_queue() -> None:
@@ -204,6 +208,10 @@ async def test_business_date_replay_bypasses_write_controls() -> None:
     )
 
     assert result.replayed is True
+    assert (
+        handler.idempotency_replay_reader.find_matching_job.await_args.kwargs["tenant_id"]
+        == "tenant-test"
+    )
     handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
     handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
 
@@ -285,6 +293,7 @@ async def test_business_date_command_marks_failed_for_publish_error() -> None:
     job_service.mark_failed.assert_awaited_once_with(
         "job-business-date",
         "Ingestion publishing failed before durable queue confirmation.",
+        tenant_id="tenant-test",
         failed_record_keys=["GLOBAL|2026-03-10"],
         failure_status_code=503,
         failure_code="INGESTION_PUBLISH_FAILED",
