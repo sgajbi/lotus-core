@@ -25,19 +25,36 @@ def _inspect_with(columns: tuple[str, ...]) -> Callable[[object], _Inspector]:
 def test_legacy_ingestion_job_fixture_omits_absent_evidence_schema(monkeypatch) -> None:
     monkeypatch.setattr(fixture_sql, "inspect", _inspect_with(("job_id", "endpoint")))
 
-    assert fixture_sql.transaction_payload_evidence_insert_fragments(object()) == ("", "")
+    assert fixture_sql.transaction_ingestion_job_insert_fragments(object()) == ("", "")
+
+
+def test_tenant_owned_legacy_fixture_includes_tenant_without_payload_evidence(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        fixture_sql,
+        "inspect",
+        _inspect_with(("job_id", "tenant_id", "endpoint")),
+    )
+
+    columns, values = fixture_sql.transaction_ingestion_job_insert_fragments(object())
+
+    assert columns == ",\ntenant_id"
+    assert values == ",\n:tenant_id"
 
 
 def test_current_ingestion_job_fixture_declares_complete_fail_closed_policy(monkeypatch) -> None:
     monkeypatch.setattr(
         fixture_sql,
         "inspect",
-        _inspect_with(("job_id", *fixture_sql._PAYLOAD_EVIDENCE_COLUMNS)),
+        _inspect_with(("job_id", "tenant_id", *fixture_sql._PAYLOAD_EVIDENCE_COLUMNS)),
     )
 
-    columns, values = fixture_sql.transaction_payload_evidence_insert_fragments(object())
+    columns, values = fixture_sql.transaction_ingestion_job_insert_fragments(object())
 
+    assert "tenant_id" in columns
     assert all(column in columns for column in fixture_sql._PAYLOAD_EVIDENCE_COLUMNS)
+    assert ":tenant_id" in values
     assert "ingestion-evidence-policy.v1" in values
     assert "restricted" in values
     assert "fingerprint_only" in values
@@ -49,8 +66,8 @@ def test_ingestion_job_fixture_rejects_partial_evidence_schema(monkeypatch) -> N
     monkeypatch.setattr(
         fixture_sql,
         "inspect",
-        _inspect_with(("job_id", fixture_sql._PAYLOAD_EVIDENCE_COLUMNS[0])),
+        _inspect_with(("job_id", "tenant_id", fixture_sql._PAYLOAD_EVIDENCE_COLUMNS[0])),
     )
 
     with pytest.raises(AssertionError, match="ingestion payload evidence schema is incomplete"):
-        fixture_sql.transaction_payload_evidence_insert_fragments(object())
+        fixture_sql.transaction_ingestion_job_insert_fragments(object())
