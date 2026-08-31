@@ -12,4 +12,6 @@ class UploadRecordPublisher(Protocol):
         self,
         entity_type: UploadEntity,
         valid_models: list[BaseModel],
+        *,
+        tenant_id: str,
     ) -> None: ...

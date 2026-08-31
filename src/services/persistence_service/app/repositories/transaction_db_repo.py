@@ -48,6 +48,7 @@ class TransactionDBRepository:
     async def resolve_transaction_reference_availability(
         self,
         *,
+        tenant_id: str,
         portfolio_id: str,
         security_id: str,
         cash_account_id: str | None,
@@ -86,7 +87,10 @@ class TransactionDBRepository:
             cash_account_exists = exists().where(*cash_account_conditions)
 
         statement = select(
-            exists().where(Portfolio.portfolio_id == portfolio_id),
+            exists().where(
+                Portfolio.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id,
+            ),
             instrument_exists,
             cash_account_exists,
         )

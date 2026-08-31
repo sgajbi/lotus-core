@@ -5,6 +5,7 @@ from typing import Any, cast
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .database_models import Portfolio
 from .database_models import Transaction as DBTransaction
 from .ingestion_lineage import ingestion_job_id_var, normalize_ingestion_job_id
 from .kafka_utils import KafkaProducer
@@ -12,6 +13,7 @@ from .logging_utils import correlation_id_var, normalize_lineage_value
 from .reprocessing_replay import (
     ReplayCorrelationMetadata,
     ReprocessingReplayError,
+    TenantOwnedTransactionReplay,
     TransactionReplayMessage,
     TransactionReplayPublisher,
     TransactionReplayReader,
@@ -99,9 +101,15 @@ class SqlAlchemyTransactionReplayReader(TransactionReplayReader):
     async def list_transactions_to_replay(
         self,
         ordered_transaction_ids: list[str],
-    ) -> list[DBTransaction]:
+    ) -> list[TenantOwnedTransactionReplay]:
         result = await self._db.execute(_transactions_to_replay_stmt(ordered_transaction_ids))
-        return cast(list[DBTransaction], result.scalars().all())
+        return [
+            TenantOwnedTransactionReplay(
+                transaction=transaction,
+                tenant_id=str(tenant_id),
+            )
+            for transaction, tenant_id in result.all()
+        ]
 
 
 class KafkaTransactionReplayPublisher(TransactionReplayPublisher):
@@ -133,7 +141,8 @@ def _transactions_to_replay_stmt(ordered_transaction_ids: list[str]) -> Any:
         value=DBTransaction.transaction_id,
     )
     return (
-        select(DBTransaction)
+        select(DBTransaction, Portfolio.tenant_id)
+        .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
         .where(DBTransaction.transaction_id.in_(ordered_transaction_ids))
         .order_by(ordering)
     )

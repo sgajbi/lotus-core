@@ -93,7 +93,7 @@ async def test_publish_transactions(
     ]
 
     # ACT
-    await ingestion_service.publish_transactions(transactions)
+    await ingestion_service.publish_transactions(transactions, tenant_id=TEST_TENANT_ID)
 
     # ASSERT
     mock_kafka_producer.publish_message.assert_called_once()
@@ -101,6 +101,7 @@ async def test_publish_transactions(
     assert call_args["topic"] == "transactions.raw.received"
     assert call_args["key"] == "P1|S1"
     assert call_args["value"]["transaction_id"] == "T1"
+    assert call_args["value"]["tenant_id"] == TEST_TENANT_ID
 
 
 async def test_publish_transactions_normalizes_partition_key(
@@ -122,7 +123,7 @@ async def test_publish_transactions_normalizes_partition_key(
         )
     ]
 
-    await ingestion_service.publish_transactions(transactions)
+    await ingestion_service.publish_transactions(transactions, tenant_id=TEST_TENANT_ID)
 
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     assert call_args["key"] == "P1|S1"
@@ -162,7 +163,10 @@ async def test_publish_transactions_keeps_linked_multi_security_legs_together(
         **common,
     )
 
-    await ingestion_service.publish_transactions([source, target])
+    await ingestion_service.publish_transactions(
+        [source, target],
+        tenant_id=TEST_TENANT_ID,
+    )
 
     assert [call.kwargs["key"] for call in mock_kafka_producer.publish_message.call_args_list] == [
         "P1|transaction-group|CA-GROUP-1",
@@ -189,7 +193,7 @@ async def test_publish_single_linked_transaction_uses_group_partition(
         linked_transaction_group_id="CA-GROUP-1",
     )
 
-    await ingestion_service.publish_transaction(transaction)
+    await ingestion_service.publish_transaction(transaction, tenant_id=TEST_TENANT_ID)
 
     assert mock_kafka_producer.publish_message.call_args.kwargs["key"] == (
         "P1|transaction-group|CA-GROUP-1"
@@ -216,7 +220,7 @@ async def test_publish_transactions_rejects_empty_partition_key(
     ]
 
     with pytest.raises(ValueError, match="portfolio_id"):
-        await ingestion_service.publish_transactions(transactions)
+        await ingestion_service.publish_transactions(transactions, tenant_id=TEST_TENANT_ID)
 
     mock_kafka_producer.publish_message.assert_not_called()
 
@@ -241,7 +245,7 @@ async def test_publish_transactions_rejects_empty_security_partition_component(
     ]
 
     with pytest.raises(ValueError, match="security_id"):
-        await ingestion_service.publish_transactions(transactions)
+        await ingestion_service.publish_transactions(transactions, tenant_id=TEST_TENANT_ID)
 
     mock_kafka_producer.publish_message.assert_not_called()
 
@@ -337,7 +341,7 @@ async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
 
     with pytest.raises(IngestionPublishError) as exc_info:
-        await ingestion_service.publish_transactions(transactions)
+        await ingestion_service.publish_transactions(transactions, tenant_id=TEST_TENANT_ID)
 
     assert exc_info.value.failed_record_keys == ["T2", "T3"]
     assert exc_info.value.published_record_count == 1
@@ -606,7 +610,10 @@ async def test_publish_portfolio_bundle(ingestion_service: IngestionService):
         }
     )
 
-    counts = await ingestion_service.publish_portfolio_bundle(bundle)
+    counts = await ingestion_service.publish_portfolio_bundle(
+        bundle,
+        tenant_id=TEST_TENANT_ID,
+    )
 
     assert counts == {
         "business_dates": 1,
@@ -658,7 +665,10 @@ async def test_publish_portfolio_bundle_reports_completed_group_counts_before_fa
     ingestion_service.publish_portfolios = _fail_portfolios  # type: ignore[method-assign]
 
     with pytest.raises(IngestionPublishError) as exc_info:
-        await ingestion_service.publish_portfolio_bundle(bundle)
+        await ingestion_service.publish_portfolio_bundle(
+            bundle,
+            tenant_id=TEST_TENANT_ID,
+        )
 
     assert exc_info.value.failed_record_keys == ["P1"]
     assert exc_info.value.published_record_count == 1

@@ -18,8 +18,12 @@ def portfolio_event_payload(portfolio: Portfolio) -> RawIngestionEventPayload:
     return portfolio.model_dump()
 
 
-def transaction_event_payload(transaction: Transaction) -> RawIngestionEventPayload:
-    return transaction.model_dump()
+def transaction_event_payload(
+    transaction: Transaction,
+    *,
+    tenant_id: str,
+) -> RawIngestionEventPayload:
+    return {**transaction.model_dump(), "tenant_id": tenant_id}
 
 
 def instrument_event_payload(instrument: Instrument) -> RawIngestionEventPayload:

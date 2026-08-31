@@ -70,6 +70,7 @@ async def test_transaction_reference_availability_resolves_governed_state(
 
     repository = TransactionDBRepository(async_db_session)
     availability = await repository.resolve_transaction_reference_availability(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT_REFERENCE_01",
         security_id=" SEC_REFERENCE_01 ",
         cash_account_id=" CASH_REFERENCE_01 ",
@@ -77,8 +78,17 @@ async def test_transaction_reference_availability_resolves_governed_state(
         as_of_date=date(2026, 7, 16),
     )
     missing_availability = await repository.resolve_transaction_reference_availability(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT_REFERENCE_404",
         security_id="SEC_REFERENCE_404",
+        cash_account_id=None,
+        cash_security_id=None,
+        as_of_date=date(2026, 7, 16),
+    )
+    foreign_tenant_availability = await repository.resolve_transaction_reference_availability(
+        tenant_id="tenant-other",
+        portfolio_id="PORT_REFERENCE_01",
+        security_id="SEC_REFERENCE_01",
         cash_account_id=None,
         cash_security_id=None,
         as_of_date=date(2026, 7, 16),
@@ -90,6 +100,8 @@ async def test_transaction_reference_availability_resolves_governed_state(
     assert missing_availability.portfolio_exists is False
     assert missing_availability.instrument_exists is False
     assert missing_availability.cash_account_exists is None
+    assert foreign_tenant_availability.portfolio_exists is False
+    assert foreign_tenant_availability.instrument_exists is True
 
 
 async def _transactions_table_has_column(async_db_session: AsyncSession, column_name: str) -> bool:

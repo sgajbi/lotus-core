@@ -100,7 +100,11 @@ class UploadIngestionService:
         )
         self._validate_commit(validation, command.allow_partial)
         await self._validate_portfolio_tenant_authority(command, validation)
-        await self._publisher.publish_records(command.entity_type, validation.valid_models)
+        await self._publisher.publish_records(
+            command.entity_type,
+            validation.valid_models,
+            tenant_id=command.tenant_context.tenant_id_text,
+        )
         return self._commit_response(command.entity_type, validation)
 
     async def _validate_portfolio_tenant_authority(

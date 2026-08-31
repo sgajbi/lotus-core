@@ -123,6 +123,7 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
         await service.publish_transaction(
             transaction,
             idempotency_key="idem-boundary-001",
+            tenant_id="tenant-sg",
         )
     finally:
         correlation_id_var.reset(correlation_token)
@@ -134,7 +135,10 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
         "correlation_id": "corr-boundary-001",
         "idempotency_key": "idem-boundary-001",
     }
-    assert published["value"] == transaction_event_payload(transaction)
+    assert published["value"] == transaction_event_payload(
+        transaction,
+        tenant_id="tenant-sg",
+    )
 
     event_payload = _kafka_json_round_trip(
         {

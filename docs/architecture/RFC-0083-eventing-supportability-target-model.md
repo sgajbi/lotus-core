@@ -144,7 +144,7 @@ Current governed direct topics are:
 | Topic | Producer | Consumer | Payload contract | Purpose |
 | --- | --- | --- | --- | --- |
 | `portfolios.raw.received` | `ingestion_service` | `persistence_service` | `PortfolioEvent` | Raw portfolio ingress fact |
-| `transactions.raw.received` | `ingestion_service` | `persistence_service` | `TransactionEvent` | Raw transaction ingress fact |
+| `transactions.raw.received` | `ingestion_service` | `persistence_service` | `RawTransactionEvent` | Tenant-owned raw transaction ingress fact; persistence verifies the admitted tenant still owns the referenced portfolio |
 | `instruments.received` | `ingestion_service`, `portfolio_transaction_processing_service` | `persistence_service` | `InstrumentEvent` | Mixed direct and derived instrument fact |
 | `market_prices.raw.received` | `ingestion_service` | `persistence_service` | `MarketPriceEvent` | Raw market-price ingress fact |
 | `fx_rates.raw.received` | `ingestion_service` | `persistence_service` | `FxRateEvent` | Raw FX-rate ingress fact |

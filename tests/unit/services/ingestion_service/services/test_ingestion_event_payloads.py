@@ -37,10 +37,11 @@ def test_transaction_event_payload_preserves_boundary_types_and_lineage() -> Non
         source_system="OMS_PRIMARY",
     )
 
-    payload = transaction_event_payload(transaction)
+    payload = transaction_event_payload(transaction, tenant_id="tenant-sg")
 
     assert payload["transaction_id"] == "TXN-PAYLOAD-001"
     assert payload["portfolio_id"] == "PORT-PAYLOAD-001"
+    assert payload["tenant_id"] == "tenant-sg"
     assert payload["transaction_type"] == "BUY"
     assert payload["transaction_date"] == datetime(2026, 3, 25, 9, 30, tzinfo=UTC)
     assert payload["settlement_date"] == datetime(2026, 3, 27, 0, 0, tzinfo=UTC)

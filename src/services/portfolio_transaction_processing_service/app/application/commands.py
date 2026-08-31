@@ -16,6 +16,7 @@ class TransactionProcessingIntent(StrEnum):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TransactionEventMetadata:
     event_id: str
+    tenant_id: str | None = None
     event_type: str | None = None
     schema_version: str | None = None
     correlation_id: str | None = None

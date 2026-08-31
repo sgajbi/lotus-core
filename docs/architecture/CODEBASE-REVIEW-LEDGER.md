@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1718 tenant-owned raw transaction authority (2026-08-31, hardened locally; protected PR and
+exact-main evidence pending): review of issue #798 S1 found a same-portfolio-ID onboarding race.
+Admission allowed a transaction that accompanied a new portfolio in one bundle, but the tenantless
+raw transaction event let persistence accept whichever tenant later owned that portfolio ID. Core
+now carries admitted tenant authority through every transaction producer, requires it on the raw
+event contract, verifies tenant and portfolio together before raw-ledger persistence, and restores
+tenant authority from the portfolio during canonical replay. The same-pattern review also bound the
+remaining instrument-eligibility and external-FX-forward-curve request bodies to admitted QCP tenant
+authority before service execution. Evidence:
+[CR-1718-TENANT-OWNED-RAW-TRANSACTION-AUTHORITY.md](./codebase-reviews/CR-1718-TENANT-OWNED-RAW-TRANSACTION-AUTHORITY.md).
+
 CR-1717 tenant-owned analytics export lifecycle (2026-08-31, hardened locally; protected PR and
 exact-main evidence pending): review of issue #798 S1 found that durable analytics export jobs were
 looked up, reused, and mutated by globally unique-looking job IDs and request fingerprints without

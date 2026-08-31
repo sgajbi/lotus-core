@@ -166,6 +166,12 @@ one tenant-ownership reader before idempotency replay, job creation, or event pu
 may introduce a new portfolio and its transactions together only when that identifier does not
 already belong to another tenant. Missing and cross-tenant references return the same source-safe
 `403 INGESTION_PORTFOLIO_TENANT_MISMATCH` outcome without creating a job or publishing a record.
+Every accepted transaction producer, including bulk upload and portfolio bundle ingestion, carries
+the admitted tenant into the required `RawTransactionEvent.tenant_id`. Raw-ledger persistence then
+rechecks the portfolio identifier and tenant together in one database read. Concurrent same-ID
+onboarding therefore fails closed if another tenant wins portfolio ownership after admission; the
+transaction cannot be booked into that tenant's portfolio. Canonical replay restores tenant authority
+from the portfolio row before republishing the transaction.
 
 ### Portfolio-bundle ingestion
 

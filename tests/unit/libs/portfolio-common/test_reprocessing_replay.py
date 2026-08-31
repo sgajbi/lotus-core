@@ -26,6 +26,7 @@ def _transaction(
     return SimpleNamespace(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id=security_id,
         transaction_date=datetime(2026, 1, 2, 10, 0, 0, tzinfo=UTC),
@@ -79,6 +80,7 @@ def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
     assert message.topic == KAFKA_TRANSACTIONS_PERSISTED_TOPIC
     assert message.key == "P-1|S1"
     assert message.payload["transaction_id"] == "TXN1"
+    assert message.payload["tenant_id"] == "tenant-test"
     assert message.headers == [
         ("correlation_id", b"corr-001"),
         ("ingestion_job_id", b"job-001"),

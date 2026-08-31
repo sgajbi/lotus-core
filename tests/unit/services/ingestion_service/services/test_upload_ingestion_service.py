@@ -199,7 +199,10 @@ async def test_commit_upload_allows_partial(upload_service: UploadIngestionServi
 
     assert response.published_rows == 1
     assert response.skipped_rows == 1
-    upload_service._publisher.publish_records.assert_awaited_once()
+    publish_call = upload_service._publisher.publish_records.await_args
+    assert publish_call.args[0] == "transactions"
+    assert len(publish_call.args[1]) == 1
+    assert publish_call.kwargs == {"tenant_id": TEST_TENANT_CONTEXT.tenant_id_text}
 
 
 @pytest.mark.asyncio

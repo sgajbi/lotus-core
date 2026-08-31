@@ -127,7 +127,7 @@
   ],
   "direct_kafka_topics": [
     {"name": "RawPortfolioReceived", "topic": "portfolios.raw.received", "payload_contract": "PortfolioEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id"},
-    {"name": "RawTransactionReceived", "topic": "transactions.raw.received", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|transaction-group|linked_transaction_group_id when linked; otherwise portfolio_id|security_id"},
+    {"name": "RawTransactionReceived", "topic": "transactions.raw.received", "payload_contract": "RawTransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|transaction-group|linked_transaction_group_id when linked; otherwise portfolio_id|security_id"},
     {"name": "InstrumentReceived", "topic": "instruments.received", "payload_contract": "InstrumentEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "security_id"},
     {"name": "RawMarketPriceReceived", "topic": "market_prices.raw.received", "payload_contract": "MarketPriceEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "security_id"},
     {"name": "RawFxRateReceived", "topic": "fx_rates.raw.received", "payload_contract": "FxRateEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "from_currency|to_currency"},

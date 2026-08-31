@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.domain.eventing import transaction_partition_key
 from portfolio_common.event_mapping import outbox_event_payload
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import RawTransactionEvent, TransactionEvent
 from portfolio_common.logging_utils import log_operation_event
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
@@ -35,7 +35,7 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
 
     @property
     def event_model(self):
-        return TransactionEvent
+        return RawTransactionEvent
 
     @property
     def service_name(self) -> str:
@@ -47,13 +47,14 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
         retry=retry_if_exception_type(PortfolioNotFoundError),
         reraise=True,
     )
-    async def handle_persistence(self, db_session: AsyncSession, event: TransactionEvent) -> Any:
+    async def handle_persistence(self, db_session: AsyncSession, event: RawTransactionEvent) -> Any:
         """
         Checks for portfolio existence and persists the transaction.
         Returns the event for outbox creation.
         """
         repo = TransactionDBRepository(db_session)
         reference_availability = await repo.resolve_transaction_reference_availability(
+            tenant_id=event.tenant_id,
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
             cash_account_id=event.settlement_cash_account_id,

@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.events import CoreEventModel, TransactionEvent
+from portfolio_common.events import CoreEventModel, RawTransactionEvent, TransactionEvent
 from pydantic import ValidationError
 
 
@@ -54,6 +54,20 @@ def test_transaction_event_normalizes_persisted_and_published_identity() -> None
     assert event.economic_event_id == "EVENT-001"
     assert event.linked_transaction_group_id == "GROUP-001"
     assert event.originating_transaction_id == "SOURCE-001"
+
+
+def test_raw_transaction_event_requires_normalized_tenant_authority() -> None:
+    payload = _txn(
+        "TXN_TENANT",
+        datetime(2026, 1, 10, tzinfo=UTC),
+        datetime(2026, 1, 10, tzinfo=UTC),
+    ).model_dump(mode="python")
+
+    with pytest.raises(ValidationError, match="tenant_id"):
+        RawTransactionEvent.model_validate(payload)
+
+    event = RawTransactionEvent.model_validate({**payload, "tenant_id": " tenant-sg "})
+    assert event.tenant_id == "tenant-sg"
 
 
 def test_transaction_event_standardizes_temporal_fields_to_utc_aware() -> None:

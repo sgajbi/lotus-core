@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import Any, Awaitable, Callable, Sequence, cast
 
 from portfolio_common.domain.tenant import TenantContext
@@ -163,7 +164,13 @@ class IngestionPublishCommandHandler:
     async def ingest_transactions(
         self, command: BatchPublishIngestionCommand
     ) -> IngestionCommandResult:
-        return await self.ingest_batch(command, self.publish_transactions)
+        return await self.ingest_batch(
+            command,
+            partial(
+                self.publish_transactions,
+                tenant_id=command.tenant_context.tenant_id_text,
+            ),
+        )
 
     async def ingest_fixed_income_book_cost_authorities(
         self, command: BatchPublishIngestionCommand
@@ -291,7 +298,13 @@ class IngestionPublishCommandHandler:
     async def ingest_transaction(
         self, command: SinglePublishIngestionCommand
     ) -> IngestionCommandResult:
-        return await self.ingest_single(command, self.publish_transaction)
+        return await self.ingest_single(
+            command,
+            partial(
+                self.publish_transaction,
+                tenant_id=command.tenant_context.tenant_id_text,
+            ),
+        )
 
     async def ingest_batch(
         self,
@@ -419,9 +432,17 @@ class IngestionPublishCommandHandler:
         await self.ingestion_service.publish_fx_rates(records, idempotency_key=idempotency_key)
 
     async def publish_transactions(
-        self, records: Sequence[Any], idempotency_key: str | None
+        self,
+        records: Sequence[Any],
+        idempotency_key: str | None,
+        *,
+        tenant_id: str,
     ) -> None:
-        await self.ingestion_service.publish_transactions(records, idempotency_key=idempotency_key)
+        await self.ingestion_service.publish_transactions(
+            records,
+            idempotency_key=idempotency_key,
+            tenant_id=tenant_id,
+        )
 
     async def publish_fixed_income_book_cost_authorities(
         self,
@@ -455,8 +476,18 @@ class IngestionPublishCommandHandler:
             idempotency_key=idempotency_key,
         )
 
-    async def publish_transaction(self, record: Any, idempotency_key: str | None) -> None:
-        await self.ingestion_service.publish_transaction(record, idempotency_key=idempotency_key)
+    async def publish_transaction(
+        self,
+        record: Any,
+        idempotency_key: str | None,
+        *,
+        tenant_id: str,
+    ) -> None:
+        await self.ingestion_service.publish_transaction(
+            record,
+            idempotency_key=idempotency_key,
+            tenant_id=tenant_id,
+        )
 
     async def _assert_ingestion_writable(self) -> None:
         try:
@@ -624,6 +655,7 @@ class IngestionPublishCommandHandler:
                     await self.ingestion_service.publish_portfolio_bundle(
                         command.request,
                         idempotency_key=command.idempotency_key,
+                        tenant_id=command.tenant_context.tenant_id_text,
                     ),
                 )
         except IngestionPublishError as exc:

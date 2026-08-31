@@ -273,6 +273,7 @@ class InstrumentEvent(CoreEventModel):
 class TransactionEvent(CoreEventModel):
     transaction_id: str
     portfolio_id: str
+    tenant_id: Optional[str] = None
     instrument_id: str
     security_id: str
     transaction_date: datetime
@@ -396,6 +397,13 @@ class TransactionEvent(CoreEventModel):
             raise ValueError("Identifier must not be blank.")
         return normalized
 
+    @field_validator("tenant_id", mode="before")
+    @classmethod
+    def _normalize_tenant_id(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        return TenantId(value).value
+
     @field_validator(
         "economic_event_id",
         "linked_transaction_group_id",
@@ -514,6 +522,12 @@ class TransactionEvent(CoreEventModel):
         if self.transaction_type in _REDEMPTION_TRANSACTION_TYPES and self.settlement_date is None:
             raise ValueError(f"settlement_date is required for {self.transaction_type}")
         return self
+
+
+class RawTransactionEvent(TransactionEvent):
+    """Tenant-owned transaction admitted to the authoritative raw ledger."""
+
+    tenant_id: str
 
 
 class DailyPositionSnapshotPersistedEvent(CoreEventModel):

@@ -14,6 +14,7 @@ from ...domain import BookedTransaction
 from ...domain.transaction import BOOKED_TRANSACTION_DERIVED_FIELDS
 
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
+_TRANSACTION_AUTHORITY_FIELDS = frozenset({"tenant_id"})
 _DOMAIN_FIELD_NAMES = tuple(
     field.name
     for field in fields(BookedTransaction)
@@ -32,7 +33,9 @@ def validate_transaction_event_mapping_contract(
     external_fields = set(
         TransactionEvent.model_fields if external_field_names is None else external_field_names
     )
-    business_fields = external_fields - GOVERNED_EVENT_ENVELOPE_FIELDS
+    business_fields = (
+        external_fields - GOVERNED_EVENT_ENVELOPE_FIELDS - _TRANSACTION_AUTHORITY_FIELDS
+    )
     missing_domain_fields = sorted(business_fields - _DOMAIN_FIELD_SET)
     extra_domain_fields = sorted(_DOMAIN_FIELD_SET - business_fields)
     if missing_domain_fields or extra_domain_fields:
@@ -61,6 +64,7 @@ def map_transaction_event(
         transaction=BookedTransaction(**domain_values),
         metadata=TransactionEventMetadata(
             event_id=event_id,
+            tenant_id=event.tenant_id,
             event_type=event.event_type,
             schema_version=event.schema_version,
             correlation_id=correlation_id or event.correlation_id,
@@ -76,6 +80,7 @@ def to_transaction_event(command: ProcessTransactionCommand) -> TransactionEvent
         name: getattr(command.transaction, name) for name in _DOMAIN_FIELD_NAMES
     }
     payload.update(
+        tenant_id=command.metadata.tenant_id,
         event_type=command.metadata.event_type,
         schema_version=command.metadata.schema_version,
         correlation_id=command.metadata.correlation_id,

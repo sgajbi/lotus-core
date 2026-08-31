@@ -74,6 +74,17 @@ class TransactionReplayMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class TenantOwnedTransactionReplay:
+    """Canonical transaction row paired with its authoritative portfolio tenant."""
+
+    transaction: Any
+    tenant_id: str
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.transaction, name)
+
+
+@dataclass(frozen=True, slots=True)
 class TransactionReplayPlan:
     messages: list[TransactionReplayMessage]
 

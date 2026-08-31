@@ -23,6 +23,10 @@ async def test_ingestion_service_upload_publisher_dispatches_by_entity() -> None
         product_type="bond",
     )
 
-    await publisher.publish_records("instruments", [instrument])
+    await publisher.publish_records(
+        "instruments",
+        [instrument],
+        tenant_id="tenant-sg",
+    )
 
     ingestion_service.publish_instruments.assert_awaited_once_with([instrument])

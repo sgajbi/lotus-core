@@ -3,7 +3,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import RawTransactionEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
@@ -36,9 +36,10 @@ def transaction_consumer():
 @pytest.fixture
 def valid_transaction_event():
     """Provides a valid TransactionEvent object."""
-    return TransactionEvent(
+    return RawTransactionEvent(
         transaction_id="UNIT_TEST_01",
         portfolio_id="PORT_UT_01",
+        tenant_id="tenant-test",
         instrument_id="INST_UT_01",
         security_id="SEC_UT_01",
         transaction_date="2025-07-31T12:00:00Z",
@@ -52,7 +53,7 @@ def valid_transaction_event():
 
 
 @pytest.fixture
-def mock_kafka_message(valid_transaction_event: TransactionEvent):
+def mock_kafka_message(valid_transaction_event: RawTransactionEvent):
     """Creates a mock Kafka message containing a valid transaction."""
     mock_message = MagicMock()
     mock_message.value.return_value = valid_transaction_event.model_dump_json().encode("utf-8")
@@ -141,6 +142,7 @@ async def test_process_message_success(
         # ASSERT
         mock_repo.create_or_update_transaction.assert_called_once()
         mock_repo.resolve_transaction_reference_availability.assert_awaited_once_with(
+            tenant_id="tenant-test",
             portfolio_id="PORT_UT_01",
             security_id="SEC_UT_01",
             cash_account_id=None,
@@ -330,6 +332,7 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_cas
     await transaction_consumer.handle_persistence(AsyncMock(), event)
 
     mock_repo.resolve_transaction_reference_availability.assert_awaited_once_with(
+        tenant_id="tenant-test",
         portfolio_id="PORT_UT_01",
         security_id="SEC_UT_01",
         cash_account_id=" CASH-ACC-404 ",

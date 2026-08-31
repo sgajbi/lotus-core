@@ -24,6 +24,7 @@ def _transaction_event() -> TransactionEvent:
         traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
         transaction_id="TX-001",
         portfolio_id="PB-001",
+        tenant_id="tenant-sg",
         instrument_id="INST-001",
         security_id="SEC-001",
         transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
@@ -54,7 +55,9 @@ def test_domain_model_covers_every_transaction_business_field() -> None:
         for field in fields(BookedTransaction)
         if field.name not in BOOKED_TRANSACTION_DERIVED_FIELDS
     }
-    event_business_fields = set(TransactionEvent.model_fields) - GOVERNED_EVENT_ENVELOPE_FIELDS
+    event_business_fields = (
+        set(TransactionEvent.model_fields) - GOVERNED_EVENT_ENVELOPE_FIELDS - {"tenant_id"}
+    )
 
     assert domain_fields == event_business_fields
     assert BOOKED_TRANSACTION_DERIVED_FIELDS == {
@@ -72,6 +75,7 @@ def test_mapper_creates_immutable_domain_command_and_round_trips_event() -> None
     command = mapper.map_transaction_event(event, event_id="transactions.persisted-0-42")
 
     assert command.transaction.transaction_id == "TX-001"
+    assert command.metadata.tenant_id == "tenant-sg"
     assert command.transaction.trade_currency == "SGD"
     assert command.transaction.linked_component_ids == ("COMP-1", "COMP-2")
     assert command.transaction.new_factor == Decimal("0.75")
