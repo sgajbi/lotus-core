@@ -68,6 +68,7 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        head_schema = connection.begin_nested()
         operations = _bind_operations(migration, connection)
         _normalize_to_previous_revision(operations, connection)
         evidence_columns, evidence_values = transaction_ingestion_job_insert_fragments(connection)
@@ -200,3 +201,4 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
             row["name"] for row in inspect(connection).get_columns("consumer_dlq_events")
         }
         migration["upgrade"]()
+        head_schema.rollback()
