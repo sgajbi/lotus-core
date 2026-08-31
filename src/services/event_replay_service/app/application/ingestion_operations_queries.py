@@ -89,11 +89,13 @@ class IngestionOperationsQueryService:
     async def list_consumer_dlq_events(
         self,
         *,
+        tenant_context: TenantContext,
         limit: int,
         original_topic: str | None,
         consumer_group: str | None,
     ) -> ConsumerDlqEventsPage:
         events = await self.ingestion_job_service.list_consumer_dlq_events(
+            tenant_id=tenant_context.tenant_id_text,
             limit=limit,
             original_topic=original_topic,
             consumer_group=consumer_group,

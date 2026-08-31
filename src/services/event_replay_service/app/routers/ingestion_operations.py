@@ -993,6 +993,7 @@ async def list_ingestion_stalled_jobs(
     },
 )
 async def list_consumer_dlq_events(
+    request: Request,
     limit: int = Query(
         default=100,
         ge=1,
@@ -1015,7 +1016,10 @@ async def list_consumer_dlq_events(
     ),
 ):
     page = await query_service.list_consumer_dlq_events(
-        limit=limit, original_topic=original_topic, consumer_group=consumer_group
+        tenant_context=request.state.tenant_context,
+        limit=limit,
+        original_topic=original_topic,
+        consumer_group=consumer_group,
     )
     return ConsumerDlqEventListResponse(events=page.events, total=page.total)
 

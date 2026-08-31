@@ -614,10 +614,12 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_consumer_dlq_events(
             self,
             *,
+            tenant_id: str,
             limit: int = 100,
             original_topic: str | None = None,
             consumer_group: str | None = None,
         ) -> list[dict]:
+            assert tenant_id == TEST_TENANT_HEADERS["X-Tenant-Id"]
             events = [
                 {
                     "event_id": "cdlq_test_001",

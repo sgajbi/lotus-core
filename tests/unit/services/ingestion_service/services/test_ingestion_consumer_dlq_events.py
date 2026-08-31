@@ -107,6 +107,7 @@ async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
             return _FakeScalars([_event(event_id="dlq-1"), _event(event_id="dlq-2")])
 
     result = await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic="valuation.jobs",
         consumer_group="valuation-service-group",
@@ -114,6 +115,27 @@ async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
     )
 
     assert [item.event_id for item in result] == ["dlq-1", "dlq-2"]
+
+
+async def test_list_consumer_dlq_event_responses_requires_durable_tenant_owner() -> None:
+    statements = []
+
+    class _FakeSession:
+        async def scalars(self, stmt):
+            statements.append(stmt)
+            return _FakeScalars([])
+
+    await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
+        limit=50,
+        original_topic=None,
+        consumer_group=None,
+        session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
+    )
+
+    compiled = str(statements[0])
+    assert "JOIN ingestion_jobs" in compiled
+    assert "ingestion_jobs.tenant_id =" in compiled
 
 
 async def test_list_consumer_dlq_event_responses_filters_by_durable_job_owner() -> None:

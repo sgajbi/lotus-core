@@ -426,11 +426,13 @@ class IngestionJobService:
     async def list_consumer_dlq_events(
         self,
         *,
+        tenant_id: str,
         limit: int = 100,
         original_topic: str | None = None,
         consumer_group: str | None = None,
     ) -> list[ConsumerDlqEventResponse]:
         return await list_consumer_dlq_event_responses(
+            tenant_id=tenant_id,
             limit=limit,
             original_topic=original_topic,
             consumer_group=consumer_group,

@@ -112,6 +112,7 @@ async def test_list_consumer_dlq_events_returns_page_with_filters() -> None:
     page = await _query_service(
         ingestion_job_service=ingestion_job_service
     ).list_consumer_dlq_events(
+        tenant_context=TENANT_CONTEXT,
         limit=25,
         original_topic="transactions.raw.received",
         consumer_group="persistence-service-group",
@@ -120,6 +121,7 @@ async def test_list_consumer_dlq_events_returns_page_with_filters() -> None:
     assert page.events == events
     assert page.total == 1
     ingestion_job_service.list_consumer_dlq_events.assert_awaited_once_with(
+        tenant_id="tenant-a",
         limit=25,
         original_topic="transactions.raw.received",
         consumer_group="persistence-service-group",

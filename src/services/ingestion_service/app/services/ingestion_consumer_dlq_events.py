@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from portfolio_common.database_models import ConsumerDlqEvent as DBConsumerDlqEvent
+from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from sqlalchemy import desc, select
 
 from ..DTOs.ingestion_job_dto import ConsumerDlqEventResponse
@@ -48,6 +49,7 @@ def to_consumer_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEven
 
 async def list_consumer_dlq_event_responses(
     *,
+    tenant_id: str | None = None,
     limit: int,
     original_topic: str | None,
     consumer_group: str | None,
@@ -57,6 +59,11 @@ async def list_consumer_dlq_event_responses(
 ) -> list[ConsumerDlqEventResponse]:
     async for db in session_factory():
         stmt = select(DBConsumerDlqEvent)
+        if tenant_id is not None:
+            stmt = stmt.join(
+                DBIngestionJob,
+                DBIngestionJob.job_id == DBConsumerDlqEvent.ingestion_job_id,
+            ).where(DBIngestionJob.tenant_id == tenant_id)
         if original_topic:
             stmt = stmt.where(DBConsumerDlqEvent.original_topic == original_topic)
         if consumer_group:
