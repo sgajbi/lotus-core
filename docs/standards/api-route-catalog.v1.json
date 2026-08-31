@@ -6789,7 +6789,7 @@
         {
           "status_code": "403",
           "schema": "QueryControlPlaneProblemDetails",
-          "description": "Requested sections are blocked by strict integration policy."
+          "description": "Tenant authority or requested sections are blocked by integration policy."
         },
         {
           "status_code": "404",

@@ -1,9 +1,7 @@
 from typing import NoReturn, cast
 
 from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from portfolio_common.domain.tenant import TenantAuthorityMismatchError, bind_tenant_authority
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.benchmark_assignment import BenchmarkAssignmentService
@@ -187,6 +185,10 @@ from ..dependencies import (
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
+)
+from .core_snapshot_http import (
+    bind_core_snapshot_tenant_authority,
+    lotus_idea_core_snapshot_payload,
 )
 from .response_helpers import (
     problem_example,
@@ -771,20 +773,7 @@ async def create_core_snapshot(
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> CoreSnapshotResponse | JSONResponse:
-    try:
-        tenant_id = bind_tenant_authority(
-            request.tenant_id,
-            http_request.state.tenant_context,
-        )
-    except (TenantAuthorityMismatchError, TypeError, ValueError):
-        raise_problem(
-            status_code=status.HTTP_403_FORBIDDEN,
-            title="Core snapshot tenant scope forbidden",
-            detail="Requested tenant does not match admitted tenant authority.",
-            error_code="QCP_CORE_SNAPSHOT_TENANT_FORBIDDEN",
-            metadata={"source_product": "PortfolioStateSnapshot"},
-        )
-    request = request.model_copy(update={"tenant_id": tenant_id})
+    request = bind_core_snapshot_tenant_authority(request, http_request.state.tenant_context)
     effective_request, governance = _governed_core_snapshot_request(
         request=request,
         integration_service=integration_service,
@@ -796,22 +785,8 @@ async def create_core_snapshot(
         governance=governance,
     )
     if request.consumer_system == "lotus-idea":
-        return JSONResponse(content=_lotus_idea_core_snapshot_payload(response))
+        return JSONResponse(content=lotus_idea_core_snapshot_payload(response))
     return response
-
-
-def _lotus_idea_core_snapshot_payload(response: CoreSnapshotResponse | dict) -> dict:
-    payload = cast(
-        dict,
-        jsonable_encoder(
-            response.model_dump(mode="json")
-            if isinstance(response, CoreSnapshotResponse)
-            else response
-        ),
-    )
-    payload["freshness_metadata"] = payload.get("freshness")
-    payload["freshness"] = payload.get("freshness_status", "UNAVAILABLE")
-    return payload
 
 
 def _governed_core_snapshot_request(
