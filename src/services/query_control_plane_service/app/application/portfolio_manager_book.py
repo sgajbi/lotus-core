@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Literal, cast
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -29,11 +30,13 @@ class PortfolioManagerBookService:
     async def resolve_membership(
         self,
         *,
+        tenant_context: TenantContext,
         portfolio_manager_id: str,
         request: PortfolioManagerBookMembershipRequest,
     ) -> PortfolioManagerBookMembershipResponse:
         portfolio_types = _normalized_portfolio_types(request.portfolio_types)
         records = await self._reader.list_members(
+            tenant_id=tenant_context.tenant_id_text,
             portfolio_manager_id=portfolio_manager_id,
             as_of_date=request.as_of_date,
             booking_center_code=request.booking_center_code,

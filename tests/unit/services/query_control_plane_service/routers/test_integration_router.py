@@ -1001,12 +1001,14 @@ async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
     response = await resolve_portfolio_manager_book_membership(
         portfolio_manager_id="PM_SG_DPM_001",
         request=request,
+        http_request=_tenant_request("tenant-a"),
         portfolio_manager_book_service=mock_service,
     )
 
     assert response["product_name"] == "PortfolioManagerBookMembership"
     assert response["members"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
     mock_service.resolve_membership.assert_awaited_once_with(
+        tenant_context=_tenant_request("tenant-a").state.tenant_context,
         portfolio_manager_id="PM_SG_DPM_001",
         request=request,
     )
@@ -1021,6 +1023,7 @@ async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404(
         await resolve_portfolio_manager_book_membership(
             portfolio_manager_id="PM_EMPTY",
             request=PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03"),
+            http_request=_tenant_request("tenant-a"),
             portfolio_manager_book_service=mock_service,
         )
 

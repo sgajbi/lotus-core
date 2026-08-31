@@ -25,6 +25,7 @@ class SqlAlchemyPortfolioManagerBookReader:
     async def list_members(
         self,
         *,
+        tenant_id: str,
         portfolio_manager_id: str,
         as_of_date: date,
         booking_center_code: str | None,
@@ -56,6 +57,7 @@ class SqlAlchemyPortfolioManagerBookReader:
             )
             .join(ranked, PortfolioPartyRoleAssignment.id == ranked.c.assignment_id)
             .where(
+                Portfolio.tenant_id == tenant_id,
                 ranked.c.source_rank == 1,
                 PortfolioPartyRoleAssignment.party_id == portfolio_manager_id,
                 PortfolioPartyRoleAssignment.role_type.in_(PORTFOLIO_MANAGER_ROLE_TYPES),
@@ -94,6 +96,7 @@ class SqlAlchemyPortfolioManagerBookReader:
         legacy = (
             select(Portfolio)
             .where(
+                Portfolio.tenant_id == tenant_id,
                 Portfolio.advisor_id == portfolio_manager_id,
                 ~any_role_history,
                 *_portfolio_filters(

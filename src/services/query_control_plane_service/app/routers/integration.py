@@ -1047,14 +1047,12 @@ async def get_market_data_coverage(
     response_model=PortfolioManagerBookMembershipResponse,
     summary="Resolve portfolio-manager book membership",
     description=(
-        "What: Return source-owned portfolio memberships for a portfolio-manager book.\n"
-        "How: Resolves effective accepted portfolio-manager role assignments first, then uses "
-        "`advisor_id` only for portfolios with no party-role history. It applies as-of lifecycle, "
-        "active-status, booking-center, and portfolio-type filters and returns deterministic "
-        "membership rows with supportability and lineage.\n"
-        "When: Use this endpoint when lotus-manage needs automatic PM-book cohort discovery for "
-        "DPM rebalance waves. Do not use it as a general staff hierarchy, entitlement, or "
-        "relationship-householding API; richer relationship-book ownership remains a separate "
+        "What: Return admitted-tenant, source-owned portfolio-manager book memberships.\n"
+        "How: Resolve accepted portfolio-manager roles first; use `advisor_id` only when no "
+        "party-role history exists. Apply as-of lifecycle, status, booking-center, and type "
+        "filters to both sources, returning deterministic supportability and lineage.\n"
+        "When: Use for lotus-manage DPM rebalance cohort discovery, not staff hierarchy, "
+        "entitlement, or relationship householding. Richer relationship ownership is a separate "
         "source product."
     ),
     responses={
@@ -1067,6 +1065,7 @@ async def get_market_data_coverage(
 )
 async def resolve_portfolio_manager_book_membership(
     request: PortfolioManagerBookMembershipRequest,
+    http_request: Request,
     portfolio_manager_id: str = Path(
         ...,
         description=(
@@ -1080,6 +1079,7 @@ async def resolve_portfolio_manager_book_membership(
     ),
 ) -> PortfolioManagerBookMembershipResponse:
     response = await portfolio_manager_book_service.resolve_membership(
+        tenant_context=http_request.state.tenant_context,
         portfolio_manager_id=portfolio_manager_id,
         request=request,
     )

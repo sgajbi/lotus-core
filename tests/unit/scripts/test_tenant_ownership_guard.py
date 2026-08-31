@@ -279,6 +279,19 @@ def _write_transaction_and_tax_lot_boundaries(root: Path) -> None:
         ),
         (
             "src/services/query_control_plane_service/app/infrastructure/"
+            "portfolio_manager_book_sources.py",
+            "SqlAlchemyPortfolioManagerBookReader",
+            ("list_members",),
+            "tenant_id",
+        ),
+        (
+            "src/services/query_control_plane_service/app/application/portfolio_manager_book.py",
+            "PortfolioManagerBookService",
+            ("resolve_membership",),
+            "tenant_context",
+        ),
+        (
+            "src/services/query_control_plane_service/app/infrastructure/"
             "transaction_economics_sources.py",
             "SqlAlchemyTransactionEconomicsReader",
             ("portfolio_exists", "get_portfolio_base_currency"),
@@ -659,6 +672,8 @@ def test_critical_tenant_boundaries_cover_portfolio_financial_reads() -> None:
             "tenant_id",
         ),
         ("IngestionJobService", "list_replay_audits", "tenant_id"),
+        ("SqlAlchemyPortfolioManagerBookReader", "list_members", "tenant_id"),
+        ("PortfolioManagerBookService", "resolve_membership", "tenant_context"),
         ("ReportingRepository", "get_portfolio_by_id", "tenant_id"),
         ("ReportingRepository", "list_portfolios", "tenant_id"),
         ("CashBalanceService", "get_cash_balances", "tenant_context"),

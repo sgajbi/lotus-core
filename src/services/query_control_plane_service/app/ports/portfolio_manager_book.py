@@ -12,6 +12,7 @@ class PortfolioManagerBookReader(Protocol):
     async def list_members(
         self,
         *,
+        tenant_id: str,
         portfolio_manager_id: str,
         as_of_date: date,
         booking_center_code: str | None,

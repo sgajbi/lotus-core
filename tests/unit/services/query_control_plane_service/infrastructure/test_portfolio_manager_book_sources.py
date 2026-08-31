@@ -42,6 +42,7 @@ async def test_reader_prefers_effective_portfolio_manager_role_assignments() -> 
     records = await portfolio_manager_book_sources.SqlAlchemyPortfolioManagerBookReader(
         session
     ).list_members(
+        tenant_id="tenant-a",
         portfolio_manager_id="PM_SG_DPM_001",
         as_of_date=date(2026, 5, 3),
         booking_center_code="Singapore",
@@ -54,6 +55,7 @@ async def test_reader_prefers_effective_portfolio_manager_role_assignments() -> 
     assert records[0].role_type is PortfolioPartyRoleType.DISCRETIONARY_PORTFOLIO_MANAGER
     assert records[0].source_record_id == "coverage-PB_SG_GLOBAL_BAL_001-PM-001"
     authoritative_sql = str(session.execute.await_args_list[0].args[0])
+    assert "portfolios.tenant_id" in authoritative_sql
     assert "row_number() OVER" in authoritative_sql
     assert "portfolio_party_role_assignments.party_id" in authoritative_sql
     assert "portfolio_party_role_assignments.role_type IN" in authoritative_sql
@@ -62,6 +64,7 @@ async def test_reader_prefers_effective_portfolio_manager_role_assignments() -> 
     assert "portfolios.portfolio_type IN" in authoritative_sql
     assert "portfolios.status IN" in authoritative_sql
     legacy_sql = str(session.execute.await_args_list[1].args[0])
+    assert "portfolios.tenant_id" in legacy_sql
     assert "portfolios.advisor_id" in legacy_sql
     assert "NOT (EXISTS" in legacy_sql
 
@@ -90,6 +93,7 @@ async def test_reader_retains_advisor_projection_only_for_unmigrated_portfolios(
     records = await portfolio_manager_book_sources.SqlAlchemyPortfolioManagerBookReader(
         session
     ).list_members(
+        tenant_id="tenant-a",
         portfolio_manager_id="LEGACY_ADVISOR_001",
         as_of_date=date(2026, 5, 3),
         booking_center_code=None,

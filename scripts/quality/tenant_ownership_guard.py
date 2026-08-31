@@ -256,6 +256,21 @@ CRITICAL_TENANT_BOUNDARIES = (
     (
         Path(
             "src/services/query_control_plane_service/app/infrastructure/"
+            "portfolio_manager_book_sources.py"
+        ),
+        "SqlAlchemyPortfolioManagerBookReader",
+        frozenset({"list_members"}),
+        "tenant_id",
+    ),
+    (
+        Path("src/services/query_control_plane_service/app/application/portfolio_manager_book.py"),
+        "PortfolioManagerBookService",
+        frozenset({"resolve_membership"}),
+        "tenant_context",
+    ),
+    (
+        Path(
+            "src/services/query_control_plane_service/app/infrastructure/"
             "transaction_economics_sources.py"
         ),
         "SqlAlchemyTransactionEconomicsReader",

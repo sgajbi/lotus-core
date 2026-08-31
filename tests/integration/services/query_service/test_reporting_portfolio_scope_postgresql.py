@@ -1,12 +1,18 @@
 """PostgreSQL proof for tenant-fenced reporting portfolio resolution."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
-from portfolio_common.database_models import Portfolio
+from portfolio_common.database_models import Portfolio, PortfolioPartyRoleAssignment
+from portfolio_common.domain.portfolio_party_roles import (
+    PortfolioPartyRoleQualityStatus,
+    PortfolioPartyRoleScope,
+    PortfolioPartyRoleType,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.infrastructure import (
+    portfolio_manager_book_sources,
     transaction_economics_sources,
 )
 from src.services.query_control_plane_service.app.infrastructure.analytics_timeseries_repository import (  # noqa: E501
@@ -69,6 +75,75 @@ async def test_reporting_portfolio_resolution_excludes_foreign_tenant(
 
     assert foreign_portfolio is None
     assert [portfolio.portfolio_id for portfolio in visible_portfolios] == ["PORT-A"]
+
+
+async def test_portfolio_manager_book_excludes_foreign_tenant_memberships(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    owner = _portfolio(tenant_id="tenant-a", portfolio_id="PORT-A")
+    foreign = _portfolio(tenant_id="tenant-b", portfolio_id="PORT-B")
+    owner.advisor_id = "MANAGER-SHARED"
+    foreign.advisor_id = "MANAGER-SHARED"
+    async_db_session.add_all([owner, foreign])
+    await async_db_session.flush()
+
+    members = await portfolio_manager_book_sources.SqlAlchemyPortfolioManagerBookReader(
+        async_db_session
+    ).list_members(
+        tenant_id="tenant-a",
+        portfolio_manager_id="MANAGER-SHARED",
+        as_of_date=date(2026, 1, 1),
+        booking_center_code=None,
+        portfolio_types=(),
+        include_inactive=False,
+    )
+
+    assert [member.portfolio_id for member in members] == ["PORT-A"]
+
+
+async def test_portfolio_manager_book_excludes_foreign_tenant_authoritative_roles(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add_all(
+        [
+            _portfolio(tenant_id="tenant-a", portfolio_id="PORT-A"),
+            _portfolio(tenant_id="tenant-b", portfolio_id="PORT-B"),
+        ]
+    )
+    await async_db_session.flush()
+    async_db_session.add_all(
+        [
+            PortfolioPartyRoleAssignment(
+                portfolio_id=portfolio_id,
+                party_id="MANAGER-SHARED",
+                role_type=PortfolioPartyRoleType.DISCRETIONARY_PORTFOLIO_MANAGER.value,
+                role_scope=PortfolioPartyRoleScope.PORTFOLIO_MANAGEMENT.value,
+                effective_from=date(2025, 1, 1),
+                assignment_version=1,
+                source_system="relationship-master",
+                source_record_id=f"ROLE-{portfolio_id}",
+                observed_at=datetime(2025, 1, 1, tzinfo=UTC),
+                quality_status=PortfolioPartyRoleQualityStatus.ACCEPTED.value,
+            )
+            for portfolio_id in ("PORT-A", "PORT-B")
+        ]
+    )
+    await async_db_session.flush()
+
+    members = await portfolio_manager_book_sources.SqlAlchemyPortfolioManagerBookReader(
+        async_db_session
+    ).list_members(
+        tenant_id="tenant-a",
+        portfolio_manager_id="MANAGER-SHARED",
+        as_of_date=date(2026, 1, 1),
+        booking_center_code=None,
+        portfolio_types=(),
+        include_inactive=False,
+    )
+
+    assert [member.portfolio_id for member in members] == ["PORT-A"]
 
 
 async def test_portfolio_financial_evidence_boundaries_exclude_foreign_tenant(
