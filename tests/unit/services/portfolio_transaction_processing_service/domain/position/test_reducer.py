@@ -1,15 +1,21 @@
 """Test deterministic position state transitions and replay decisions."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal, getcontext
 from pathlib import Path
 
 import pytest
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.position import (
+    reducer as position_reducer,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     CashPositionEconomicsError,
     PositionBalanceState,
+    PositionHandlerMissingError,
     calculate_next_position_state,
     cash_position_deltas,
     plan_backdated_recalculation,
@@ -159,6 +165,52 @@ def test_calculate_next_position_state_normalizes_transaction_type() -> None:
         cost_basis=Decimal("155"),
         cost_basis_local=Decimal("155"),
     )
+
+
+def test_position_affecting_registered_type_without_handler_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    definition = TRANSACTION_TYPE_REGISTRY["DIVIDEND"]
+    monkeypatch.setattr(
+        position_reducer,
+        "get_transaction_type_definition",
+        lambda _transaction_type: replace(definition, position_effect="increase"),
+    )
+
+    with pytest.raises(PositionHandlerMissingError) as raised:
+        calculate_next_position_state(
+            PositionBalanceState(
+                quantity=Decimal("10"),
+                cost_basis=Decimal("100"),
+                cost_basis_local=Decimal("100"),
+            ),
+            _txn("DIVIDEND"),
+        )
+
+    assert raised.value.transaction_type == "DIVIDEND"
+    assert raised.value.position_effect == "increase"
+
+
+def test_registered_type_with_no_position_effect_passes_through_unchanged() -> None:
+    current_state = PositionBalanceState(
+        quantity=Decimal("10"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+
+    assert calculate_next_position_state(current_state, _txn("DIVIDEND")) == current_state
+
+
+def test_production_position_effect_registry_has_complete_reducer_dispatch() -> None:
+    missing_handlers = {
+        code: definition.position_effect
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.position_effect != "none"
+        and position_reducer._position_update_handler(code) is None
+    }
+
+    assert missing_handlers == {}
 
 
 def test_cash_reducer_uses_movement_direction_and_booked_costs() -> None:
