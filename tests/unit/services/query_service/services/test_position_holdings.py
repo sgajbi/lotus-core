@@ -687,6 +687,11 @@ async def test_valuation_fx_rate_dates_use_persisted_snapshot_and_fallback_evide
         valuation_fx_rate_date=date(2025, 1, 2),
     )
     snapshot_without_fx = DailyPositionSnapshot(security_id="BASE_CURRENCY")
+    snapshot_missing_fx = DailyPositionSnapshot(
+        security_id="FX_MISSING",
+        valuation_source_currency="USD",
+        valuation_reporting_currency="CHF",
+    )
     history_with_fx = PositionHistory(security_id=" FX_FALLBACK ")
     history_without_valuation = PositionHistory(security_id="NO_FALLBACK")
 
@@ -694,10 +699,11 @@ async def test_valuation_fx_rate_dates_use_persisted_snapshot_and_fallback_evide
         db_results=[
             (snapshot_with_fx, None, None),
             (snapshot_without_fx, None, None),
+            (snapshot_missing_fx, None, None),
             (history_with_fx, None, None),
             (history_without_valuation, None, None),
         ],
-        snapshot_security_ids={"FX_CURRENT", "BASE_CURRENCY"},
+        snapshot_security_ids={"FX_CURRENT", "BASE_CURRENCY", "FX_MISSING"},
         fallback_valuation_map={
             "FX_FALLBACK": {
                 "valuation_fx_rate": Decimal("1.24"),
@@ -706,6 +712,7 @@ async def test_valuation_fx_rate_dates_use_persisted_snapshot_and_fallback_evide
         },
     ) == {
         "FX_CURRENT": date(2025, 1, 2),
+        "FX_MISSING": None,
         "FX_FALLBACK": date(2025, 1, 1),
     }
 
