@@ -305,6 +305,32 @@ def portfolio_position_rows_data(
     return positions
 
 
+def valuation_fx_rate_dates_by_security(
+    *,
+    db_results: list[PositionRowResult],
+    snapshot_security_ids: set[str],
+    fallback_valuation_map: dict[str, dict[str, Any] | None],
+) -> dict[str, date | None]:
+    """Return persisted FX authority dates only for valuations that used FX."""
+    fx_rate_dates: dict[str, date | None] = {}
+    for position_row, _instrument, _pos_state in db_results:
+        security_id = normalize_security_id(position_row.security_id)
+        if not security_id:
+            continue
+        if security_id in snapshot_security_ids:
+            fx_rate = getattr(position_row, "valuation_fx_rate", None)
+            fx_rate_date = getattr(position_row, "valuation_fx_rate_date", None)
+        else:
+            fallback_valuation = fallback_valuation_map.get(security_id)
+            if fallback_valuation is None:
+                continue
+            fx_rate = fallback_valuation.get("valuation_fx_rate")
+            fx_rate_date = fallback_valuation.get("valuation_fx_rate_date")
+        if fx_rate is not None:
+            fx_rate_dates[security_id] = fx_rate_date
+    return fx_rate_dates
+
+
 def position_weight_base_value(position: Position) -> Decimal:
     if position.valuation is not None and position.valuation.market_value is not None:
         return decimal_or_zero(position.valuation.market_value)
@@ -413,6 +439,16 @@ def _has_stale_market_price_evidence(
     return False
 
 
+def _has_stale_valuation_fx_evidence(
+    *,
+    response_as_of_date: date,
+    valuation_fx_rate_dates: dict[str, date | None],
+) -> bool:
+    return any(
+        fx_rate_date != response_as_of_date for fx_rate_date in valuation_fx_rate_dates.values()
+    )
+
+
 def _reprocessing_data_quality_status(positions: list[Position]) -> str | None:
     if not positions:
         return UNKNOWN
@@ -431,6 +467,7 @@ def holdings_data_quality_status(
     history_supplements: list[PositionRowResult],
     response_as_of_date: date,
     latest_market_price_dates: dict[str, date],
+    valuation_fx_rate_dates: dict[str, date | None],
 ) -> str:
     if (reprocessing_status := _reprocessing_data_quality_status(positions)) is not None:
         return reprocessing_status
@@ -438,6 +475,11 @@ def holdings_data_quality_status(
         positions=positions,
         response_as_of_date=response_as_of_date,
         latest_market_price_dates=latest_market_price_dates,
+    ):
+        return STALE
+    if _has_stale_valuation_fx_evidence(
+        response_as_of_date=response_as_of_date,
+        valuation_fx_rate_dates=valuation_fx_rate_dates,
     ):
         return STALE
     if history_supplements:
