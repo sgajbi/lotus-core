@@ -1603,11 +1603,11 @@ def test_request_json_carries_demo_tenant_authority(monkeypatch: pytest.MonkeyPa
     assert captured_headers["x-tenant-id"] == demo_data_pack.DEMO_TENANT_ID
 
 
-def test_request_json_refuses_demo_tenant_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_request_json_refuses_governed_tenant_override(monkeypatch: pytest.MonkeyPatch) -> None:
     urlopen = pytest.fail
     monkeypatch.setattr(demo_data_pack.request, "urlopen", urlopen)
 
-    with pytest.raises(ValueError, match="must match the governed demo tenant"):
+    with pytest.raises(ValueError, match="must match the governed seed tenant"):
         demo_data_pack._request_json(
             "GET",
             "http://query.dev/portfolios/P1",

@@ -21,9 +21,11 @@ from tools.demo_data_pack import (  # noqa: E402
     DEFAULT_DEMO_BENCHMARK_ID,
     _build_benchmark_reference_data,
     _canonical_payload_fingerprint,
-    _request_json,
     _wait_ready,
     build_risk_free_reference_data,
+)
+from tools.demo_data_pack import (  # noqa: E402
+    _request_json as _request_json_for_tenant,
 )
 from tools.front_office_seed_contract import (  # noqa: E402
     FrontOfficeSeedContract,
@@ -47,6 +49,32 @@ FRONT_OFFICE_VALUATION_TENANT_ID = "LOTUS_PB_SG"
 FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID = "SG_PRIVATE_BANK_BOOK"
 FRONT_OFFICE_VALUATION_SOURCE_SYSTEM = "LOTUS_FRONT_OFFICE_SEED"
 FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR = Decimal("100")
+
+
+def _request_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, Any]:
+    """Call Core under the canonical portfolio tenant authority."""
+    return _request_json_for_tenant(
+        method,
+        url,
+        payload,
+        headers,
+        tenant_id=FRONT_OFFICE_VALUATION_TENANT_ID,
+    )
+
+
+def _request_gateway_json(method: str, url: str) -> tuple[int, Any]:
+    """Call Gateway under its governed front-office caller context."""
+    return _request_json_for_tenant(
+        method,
+        url,
+        headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
+        tenant_id=FRONT_OFFICE_GATEWAY_CALLER_HEADERS["X-Tenant-Id"],
+    )
 
 
 @dataclass(frozen=True)
@@ -878,6 +906,8 @@ def build_front_office_portfolio_bundle(
     portfolios.extend(
         {
             "portfolio_id": row["portfolio_id"],
+            "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+            "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
             "base_currency": "USD",
             "open_date": "2025-01-06",
             "risk_exposure": row["risk_profile"],
@@ -3366,19 +3396,17 @@ def _verify_front_office_portfolio(
                 f"{query_base_url}/portfolios/{expected.portfolio_id}/cashflow-projection"
                 f"?as_of_date={as_of_date}&horizon_days=30&include_projected=true",
             )
-            _, performance_summary = _request_json(
+            _, performance_summary = _request_gateway_json(
                 "GET",
                 f"{gateway_base_url}/api/v1/workbench/{expected.portfolio_id}/performance/summary"
                 f"?period=EXPLICIT&chart_frequency=monthly&contribution_dimension=asset_class"
                 f"&attribution_dimension=asset_class&detail_basis=NET"
                 f"&report_start_date={start_date}&report_end_date={end_date}",
-                headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
             )
-            _, advisor_book = _request_json(
+            _, advisor_book = _request_gateway_json(
                 "GET",
                 f"{gateway_base_url}/api/v1/advisor-book/portfolios"
                 f"?asOfDate={as_of_date}&sortBy=portfolio_id&sortOrder=asc&offset=0&limit=100",
-                headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
             )
         except RuntimeError as exc:
             LOGGER.info("Verification still waiting on downstream services: %s", exc)
