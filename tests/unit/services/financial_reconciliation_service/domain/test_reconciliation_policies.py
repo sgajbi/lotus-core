@@ -57,6 +57,84 @@ def test_requires_authoritative_fx_rate_only_when_currency_pair_is_complete_and_
     assert requires_authoritative_fx_rate("EUR", "") is False
 
 
+def test_position_valuation_policy_flags_fx_authority_from_prior_date() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-FX",
+            security_id="SEC-FX",
+            business_date=date(2026, 3, 8),
+            epoch=2,
+            quantity=Decimal("10"),
+            market_price=Decimal("11"),
+            market_value_local=Decimal("110"),
+            cost_basis_reporting=Decimal("90"),
+            cost_basis_local=Decimal("90"),
+            unrealized_gain_loss_local=Decimal("20"),
+            product_type="EQUITY",
+            valuation_fx_rate_date=date(2026, 3, 7),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert [finding.finding_type for finding in findings] == ["fx_rate_not_on_valuation_date"]
+    assert findings[0].expected_value == {"valuation_fx_rate_date": "2026-03-08"}
+    assert findings[0].observed_value == {"valuation_fx_rate_date": "2026-03-07"}
+    assert findings[0].detail == {
+        "reason": "recorded FX authority is not owned by the valuation date"
+    }
+
+
+def test_fx_authority_finding_does_not_hide_independent_arithmetic_breaks() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-FX",
+            security_id="SEC-FX",
+            business_date=date(2026, 3, 8),
+            epoch=2,
+            quantity=Decimal("10"),
+            market_price=Decimal("11"),
+            market_value_local=Decimal("100"),
+            cost_basis_reporting=Decimal("90"),
+            cost_basis_local=Decimal("90"),
+            unrealized_gain_loss_local=Decimal("5"),
+            product_type="EQUITY",
+            valuation_fx_rate_date=date(2026, 3, 7),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert [finding.finding_type for finding in findings] == [
+        "fx_rate_not_on_valuation_date",
+        "market_value_local_mismatch",
+        "unrealized_gain_loss_local_mismatch",
+    ]
+
+
+@pytest.mark.parametrize("fx_rate_date", [date(2026, 3, 8), None])
+def test_position_valuation_policy_accepts_current_or_not_applicable_fx_authority(
+    fx_rate_date: date | None,
+) -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-FX",
+            security_id="SEC-FX",
+            business_date=date(2026, 3, 8),
+            epoch=2,
+            quantity=Decimal("10"),
+            market_price=Decimal("11"),
+            market_value_local=Decimal("110"),
+            cost_basis_reporting=Decimal("90"),
+            cost_basis_local=Decimal("90"),
+            unrealized_gain_loss_local=Decimal("20"),
+            product_type="EQUITY",
+            valuation_fx_rate_date=fx_rate_date,
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert findings == []
+
+
 def test_unscoped_bond_reconciliation_fails_without_quote_authority() -> None:
     findings = position_valuation_reconciliation_findings(
         evidence=PositionValuationEvidence(
