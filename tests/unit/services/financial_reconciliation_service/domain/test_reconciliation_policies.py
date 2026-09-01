@@ -149,6 +149,7 @@ def test_unscoped_bond_reconciliation_fails_without_quote_authority() -> None:
             cost_basis_local=Decimal("178704"),
             unrealized_gain_loss_local=Decimal("3726"),
             product_type="BOND",
+            valuation_fx_rate_date=date(2026, 3, 7),
         ),
         tolerance=Decimal("0.0001"),
     )
