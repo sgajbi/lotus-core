@@ -391,6 +391,7 @@ def _wait_portfolio_tenant_authority(
                     isinstance(payload, dict)
                     and payload.get("portfolio_id") == portfolio_id
                     and payload.get("tenant_id") == tenant_id
+                    and payload.get("status") in {"SUPPORTED", "UNSUPPORTED"}
                 ):
                     return
         except Exception:
