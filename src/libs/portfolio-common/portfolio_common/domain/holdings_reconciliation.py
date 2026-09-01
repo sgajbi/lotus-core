@@ -72,7 +72,8 @@ def collective_holdings_reconciliation_scopes(
     agree remain unscoped so reconciliation quality continues to fail closed.
     """
 
-    grouped: dict[date, tuple[int, datetime | None, int]] = {}
+    grouped: dict[date, tuple[datetime | None, int]] = {}
+    target_epoch: int | None = None
     unscoped_count = 0
     for source in sources:
         if (
@@ -83,25 +84,26 @@ def collective_holdings_reconciliation_scopes(
         ):
             unscoped_count += 1
             continue
-        prior_epoch, prior_timestamp, prior_count = grouped.get(
+        prior_timestamp, prior_count = grouped.get(
             source.business_date,
-            (source.row_epoch, None, 0),
+            (None, 0),
         )
         grouped[source.business_date] = (
-            max(prior_epoch, source.row_epoch),
             _latest_timestamp(prior_timestamp, source.latest_evidence_timestamp),
             prior_count + 1,
         )
+        target_epoch = max(target_epoch or 0, source.row_epoch)
 
     return HoldingsReconciliationScopes(
         items=tuple(
             HoldingsReconciliationScope(
                 business_date=business_date,
-                epoch=epoch,
+                epoch=target_epoch,
                 latest_evidence_timestamp=latest_timestamp,
                 source_row_count=row_count,
             )
-            for business_date, (epoch, latest_timestamp, row_count) in sorted(grouped.items())
+            for business_date, (latest_timestamp, row_count) in sorted(grouped.items())
+            if target_epoch is not None
         ),
         unscoped_source_row_count=unscoped_count,
     )
