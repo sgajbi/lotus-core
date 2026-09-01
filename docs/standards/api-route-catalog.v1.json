@@ -5590,6 +5590,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -6264,6 +6269,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -6794,7 +6804,7 @@
         {
           "status_code": "403",
           "schema": "QueryControlPlaneProblemDetails",
-          "description": "Requested sections are blocked by strict integration policy."
+          "description": "Tenant scope mismatch or requested sections blocked by strict integration policy."
         },
         {
           "status_code": "404",
