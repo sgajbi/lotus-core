@@ -86,6 +86,21 @@ def test_scopes_use_collective_maximum_epoch_for_mixed_security_rows() -> None:
     )
 
 
+def test_scopes_use_collective_portfolio_epoch_across_security_mutation_dates() -> None:
+    earlier_date = date(2026, 3, 9)
+    scopes = holdings_reconciliation_scopes(
+        [
+            _source_row(business_date=earlier_date, epoch=0),
+            _source_row(epoch=3),
+        ]
+    )
+
+    assert [(scope.business_date, scope.epoch) for scope in scopes.items] == [
+        (earlier_date, 3),
+        (date(2026, 3, 10), 3),
+    ]
+
+
 def test_collective_scope_is_stale_when_any_lower_epoch_row_has_newer_evidence() -> None:
     latest_evidence = EVIDENCE_AT + timedelta(minutes=3)
     scopes = holdings_reconciliation_scopes(

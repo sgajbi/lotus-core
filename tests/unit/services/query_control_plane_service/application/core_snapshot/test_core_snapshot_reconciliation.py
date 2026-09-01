@@ -96,6 +96,28 @@ def test_core_snapshot_scopes_coalesce_mixed_epochs_at_collective_target() -> No
     assert scopes.content_hash() == reordered.content_hash()
 
 
+def test_core_snapshot_scopes_use_collective_epoch_across_position_history_dates() -> None:
+    rows = [
+        _row(
+            portfolio_business_date=date(2026, 1, 13),
+            epoch=0,
+            security_id="SEC_OLD",
+        ),
+        _row(
+            portfolio_business_date=date(2026, 4, 1),
+            epoch=2,
+            security_id="SEC_CURRENT",
+        ),
+    ]
+
+    scopes = core_snapshot_reconciliation_scopes(rows)
+
+    assert [(scope.business_date, scope.epoch) for scope in scopes.items] == [
+        (date(2026, 1, 13), 2),
+        (date(2026, 4, 1), 2),
+    ]
+
+
 def test_core_snapshot_scopes_fail_closed_for_unscoped_rows() -> None:
     scopes = core_snapshot_reconciliation_scopes([_row(portfolio_business_date=None)])
 
