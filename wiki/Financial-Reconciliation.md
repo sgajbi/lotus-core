@@ -57,7 +57,8 @@ The current control families cover:
 - `transaction_cashflow`
   every transaction that should have a cashflow row has one aligned persisted cashflow
 - `position_valuation`
-  valued snapshots remain arithmetically consistent with quantity, price, and cost basis
+  valued snapshots remain arithmetically consistent with quantity, price, and cost basis; any
+  recorded cross-currency FX authority date must equal the snapshot business date
 - `timeseries_integrity`
   portfolio timeseries remain consistent with the underlying position-timeseries inputs
 - `corporate_action_bundle_a`
@@ -120,6 +121,10 @@ calculators it evaluates.
 - bond valuation controls require a `SUPPORTED` valuation receipt; a missing or
   `LEGACY_UNSCOPED` receipt creates `missing_bond_quote_authority` and never invokes magnitude-based
   quote scaling
+- position valuation controls consume the persisted `valuation_fx_rate_date`; a prior-date value
+  creates the error finding `fx_rate_not_on_valuation_date` with repair recommendation
+  `REVALUE_POSITION_WITH_EXACT_DATE_FX`. The control does not query current FX tables or reinterpret
+  same-currency/null historical evidence.
 - downstream analytics and reporting may consume the evidence, but core owns the control execution
 
 ## Operational hints
@@ -131,6 +136,8 @@ Check this service when:
 - valuation arithmetic looks implausible despite completed upstream jobs
 - `missing_bond_quote_authority` is open; route it to `VALUATION_OPERATIONS` and apply the
   `ASSIGN_VALUATION_QUOTE_POLICY` repair for the exact book/security/effective date
+- `fx_rate_not_on_valuation_date` is open; route it to `VALUATION_OPERATIONS`, inspect the recorded
+  expected and observed FX dates, and revalue the position with exact-date FX authority
 - portfolio timeseries appears partially aggregated or inconsistent with underlying positions
 - a Bundle A corporate action has a basis mismatch, insufficient source/target legs, or missing
   child-leg dependency references
