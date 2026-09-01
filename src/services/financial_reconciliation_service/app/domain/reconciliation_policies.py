@@ -323,7 +323,7 @@ def position_valuation_reconciliation_findings(
             cost_basis_reporting=cost_basis_reporting,
             cost_basis_local=cost_basis_local,
         ):
-            return findings + [_missing_bond_quote_authority_finding(evidence)]
+            return [_missing_bond_quote_authority_finding(evidence)]
         expected_market_value = quantity * market_price
     elif receipt.supportability == "SUPPORTED":
         authoritative_market_value = _authoritative_market_value_local(

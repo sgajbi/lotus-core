@@ -20,7 +20,9 @@ fact, not query mutable FX tables for a replacement.
   `fx_rate_not_on_valuation_date`, preserving expected and observed dates.
 - The finding routes to `VALUATION_OPERATIONS` with the bounded repair
   `REVALUE_POSITION_WITH_EXACT_DATE_FX`.
-- The new finding composes with existing arithmetic and receipt findings instead of hiding them.
+- The new finding composes with arithmetic and supported-receipt validation. The pre-existing
+  missing bond quote-authority failure remains terminal because arithmetic and FX classification
+  cannot authorize an unscoped bond quote.
 
 Exact-date FX evidence passes. Null evidence preserves the existing same-currency and historical
 legacy posture; classifying missing historical cross-currency lineage remains a separate #997
