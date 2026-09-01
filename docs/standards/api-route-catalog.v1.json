@@ -4200,6 +4200,11 @@
           "description": "Invalid upload file format or content."
         },
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "A transaction row references a portfolio outside the admitted tenant."
+        },
+        {
           "status_code": "410",
           "schema": "none",
           "description": "Bulk upload adapter mode disabled for this environment."
@@ -4222,7 +4227,7 @@
         {
           "status_code": "503",
           "schema": "none",
-          "description": "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
+          "description": "Ingestion is unavailable because operating mode blocks writes, portfolio tenant authority cannot be verified, or Kafka publish failed."
         }
       ],
       "pagination": [],

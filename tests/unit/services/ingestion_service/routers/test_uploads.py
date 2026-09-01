@@ -90,6 +90,25 @@ def test_upload_application_error_to_http_preserves_validation_detail() -> None:
     assert http_error.detail == detail
 
 
+@pytest.mark.parametrize(
+    ("reason_code", "expected_status"),
+    [
+        ("upload_transaction_portfolio_tenant_mismatch", 403),
+        ("upload_transaction_portfolio_tenant_authority_unavailable", 503),
+    ],
+)
+def test_upload_application_error_to_http_maps_portfolio_authority_failures(
+    reason_code: str,
+    expected_status: int,
+) -> None:
+    http_error = upload_application_error_to_http(
+        ValidationRejected(reason_code=reason_code, detail={"code": "FAIL_CLOSED"})
+    )
+
+    assert http_error.status_code == expected_status
+    assert http_error.detail == {"code": "FAIL_CLOSED"}
+
+
 def test_upload_preview_command_from_api_uses_application_command() -> None:
     command = upload_preview_command_from_api(
         tenant_context=TEST_TENANT_CONTEXT,

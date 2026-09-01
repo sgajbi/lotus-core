@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from openpyxl import Workbook
 
-from src.services.ingestion_service.app.application.errors import ValidationRejected
+from src.services.ingestion_service.app.application import (
+    validate_transaction_portfolio_ownership as transaction_portfolio_ownership,
+)
+from src.services.ingestion_service.app.application.errors import (
+    ApplicationError,
+    ValidationRejected,
+)
 from src.services.ingestion_service.app.application.upload_commands import (
     UploadCommitCommand,
     UploadPreviewCommand,
+)
+from src.services.ingestion_service.app.ports.portfolio_tenant_ownership import (
+    PortfolioTenantOwnershipReadError,
 )
 from src.services.ingestion_service.app.services.upload_ingestion_service import (
     UploadIngestionService,
@@ -37,9 +47,11 @@ def _xlsx_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
 def upload_service() -> UploadIngestionService:
     publisher = AsyncMock()
     publisher.publish_records = AsyncMock()
+    ownership_validator = SimpleNamespace(validate=AsyncMock())
     return UploadIngestionService(
         validator=BulkUploadValidator(),
         publisher=publisher,
+        transaction_portfolio_ownership_validator=ownership_validator,
     )
 
 
@@ -210,3 +222,104 @@ async def test_commit_upload_empty_data_rows(upload_service: UploadIngestionServ
 
     assert exc.value.reason_code == "empty_upload"
     assert exc.value.detail == "Upload file contains no data rows."
+
+
+@pytest.mark.asyncio
+async def test_commit_upload_validates_all_transaction_portfolios_before_publish(
+    upload_service: UploadIngestionService,
+) -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+                "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+                "T2,P2,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            ]
+        )
+    )
+
+    await upload_service.commit_upload(
+        UploadCommitCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
+            entity_type="transactions",
+            filename="transactions.csv",
+            content=content,
+            allow_partial=False,
+        )
+    )
+
+    upload_service._transaction_portfolio_ownership_validator.validate.assert_awaited_once_with(
+        tenant_context=TEST_TENANT_CONTEXT,
+        portfolio_ids=["P1", "P2"],
+    )
+    upload_service._publisher.publish_records.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_commit_upload_rejects_cross_tenant_portfolio_before_partial_publish(
+    upload_service: UploadIngestionService,
+) -> None:
+    upload_service._transaction_portfolio_ownership_validator.validate.side_effect = (
+        transaction_portfolio_ownership.TransactionPortfolioOwnershipRejected(["P-OTHER-TENANT"])
+    )
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+                "T1,P-OTHER-TENANT,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            ]
+        )
+    )
+
+    with pytest.raises(ValidationRejected) as exc_info:
+        await upload_service.commit_upload(
+            UploadCommitCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
+                entity_type="transactions",
+                filename="transactions.csv",
+                content=content,
+                allow_partial=True,
+            )
+        )
+
+    assert exc_info.value.reason_code == "upload_transaction_portfolio_tenant_mismatch"
+    assert exc_info.value.detail == {
+        "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+        "message": "One or more transaction portfolios are outside admitted tenant authority.",
+        "portfolio_ids": ["P-OTHER-TENANT"],
+    }
+    upload_service._publisher.publish_records.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_commit_upload_fails_closed_when_portfolio_authority_is_unavailable(
+    upload_service: UploadIngestionService,
+) -> None:
+    upload_service._transaction_portfolio_ownership_validator.validate.side_effect = (
+        PortfolioTenantOwnershipReadError("database unavailable")
+    )
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+                "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            ]
+        )
+    )
+
+    with pytest.raises(ApplicationError) as exc_info:
+        await upload_service.commit_upload(
+            UploadCommitCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
+                entity_type="transactions",
+                filename="transactions.csv",
+                content=content,
+                allow_partial=False,
+            )
+        )
+
+    assert exc_info.value.reason_code == (
+        "upload_transaction_portfolio_tenant_authority_unavailable"
+    )
+    assert exc_info.value.retryable is True
+    upload_service._publisher.publish_records.assert_not_awaited()

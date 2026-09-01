@@ -10,7 +10,14 @@ from ..application.upload_commands import (
     UploadPreviewCommand,
     UploadPreviewResult,
 )
-from ..dependencies import get_ingestion_service, require_upload_adapter_enabled
+from ..application.validate_transaction_portfolio_ownership import (
+    ValidateTransactionPortfolioOwnership,
+)
+from ..dependencies import (
+    get_ingestion_service,
+    get_transaction_portfolio_ownership_validator,
+    require_upload_adapter_enabled,
+)
 from ..DTOs.upload_dto import (
     UploadCommitResponse,
     UploadEntityType,
@@ -63,6 +70,10 @@ UPLOAD_APPLICATION_ERROR_STATUS = {
     "empty_upload": status.HTTP_400_BAD_REQUEST,
     "upload_invalid_rows": HTTP_422_UNPROCESSABLE_CONTENT,
     "upload_no_valid_rows": HTTP_422_UNPROCESSABLE_CONTENT,
+    "upload_transaction_portfolio_tenant_mismatch": status.HTTP_403_FORBIDDEN,
+    "upload_transaction_portfolio_tenant_authority_unavailable": (
+        status.HTTP_503_SERVICE_UNAVAILABLE
+    ),
 }
 
 UPLOAD_INVALID_EXAMPLE = {"detail": "Unsupported upload file format. Expected CSV or XLSX."}
@@ -102,10 +113,26 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     failed_record_keys=["T2"],
     published_record_count=1,
 )
+UPLOAD_TRANSACTION_PORTFOLIO_MISMATCH_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+        "message": "One or more transaction portfolios are outside admitted tenant authority.",
+        "portfolio_ids": ["PB_OTHER_TENANT_001"],
+    }
+}
+UPLOAD_TRANSACTION_PORTFOLIO_AUTHORITY_UNAVAILABLE_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_PORTFOLIO_TENANT_AUTHORITY_UNAVAILABLE",
+        "message": "Portfolio tenant authority could not be verified.",
+    }
+}
 
 
 def get_upload_ingestion_service(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
+    transaction_portfolio_ownership_validator: ValidateTransactionPortfolioOwnership = Depends(
+        get_transaction_portfolio_ownership_validator
+    ),
 ) -> UploadIngestionService:
     adapter_settings = get_ingestion_service_settings().adapter_mode
     return UploadIngestionService(
@@ -117,6 +144,7 @@ def get_upload_ingestion_service(
             )
         ),
         publisher=IngestionServiceUploadPublisher(ingestion_service),
+        transaction_portfolio_ownership_validator=(transaction_portfolio_ownership_validator),
     )
 
 
@@ -439,9 +467,27 @@ async def preview_upload(
             "description": "Write-rate protection blocked the commit request.",
             "content": {"application/json": {"example": INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
+        status.HTTP_403_FORBIDDEN: {
+            "description": (
+                "A transaction row references a portfolio outside the admitted tenant."
+            ),
+            "content": {
+                "application/json": {"example": UPLOAD_TRANSACTION_PORTFOLIO_MISMATCH_EXAMPLE}
+            },
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
             mode_blocked_example=INGESTION_MODE_BLOCKS_WRITES_EXAMPLE,
             publish_failed_example=UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE,
+            additional_examples={
+                "portfolio_authority_unavailable": {
+                    "summary": "Portfolio tenant authority could not be verified.",
+                    "value": UPLOAD_TRANSACTION_PORTFOLIO_AUTHORITY_UNAVAILABLE_EXAMPLE,
+                }
+            },
+            description=(
+                "Ingestion is unavailable because operating mode blocks writes, "
+                "portfolio tenant authority cannot be verified, or Kafka publish failed."
+            ),
         ),
         status.HTTP_410_GONE: {
             "description": "Bulk upload adapter mode disabled for this environment.",
@@ -457,7 +503,9 @@ async def preview_upload(
     description=(
         "What: Commit CSV/XLSX data into canonical ingestion topics.\n"
         "How: Validate rows, enforce mode controls, and publish valid records "
-        "(optionally partial when allow_partial=true).\n"
+        "(optionally partial when allow_partial=true). Transaction commits also "
+        "fail closed unless every valid row references a portfolio owned by the "
+        "admitted tenant.\n"
         "When: Use after preview passes for adapter-mode bulk ingestion."
     ),
 )
