@@ -21,7 +21,7 @@ from scripts.validation.docker_endpoint_smoke import (
     _probe_source_safe_retry,
     _resolve_postgres_container,
     _wait_expected_status,
-    _wait_portfolio_visible,
+    _wait_portfolio_tenant_authority,
     _wait_transaction_visible,
     build_smoke_cleanup_sql,
 )
@@ -277,13 +277,25 @@ def test_wait_expected_status_raises_with_last_status_context(
         _wait_expected_status("http://query/missing-endpoint", {200}, timeout_seconds=2)
 
 
-def test_wait_portfolio_visible_retries_with_governed_tenant_authority(
+def test_wait_portfolio_tenant_authority_requires_matching_tenant_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     responses = iter(
         [
-            SimpleNamespace(status_code=404),
-            SimpleNamespace(status_code=200),
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "portfolio_id": SMOKE_PORTFOLIO_ID,
+                    "tenant_id": "other-tenant",
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "portfolio_id": SMOKE_PORTFOLIO_ID,
+                    "tenant_id": SMOKE_TENANT_ID,
+                },
+            ),
         ]
     )
     get_mock = Mock(side_effect=lambda *args, **kwargs: next(responses))
@@ -295,12 +307,24 @@ def test_wait_portfolio_visible_retries_with_governed_tenant_authority(
     )
     monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.time.time", lambda: next(now))
 
-    _wait_portfolio_visible("http://query", SMOKE_PORTFOLIO_ID, timeout_seconds=5)
+    _wait_portfolio_tenant_authority(
+        "http://query",
+        portfolio_id=SMOKE_PORTFOLIO_ID,
+        tenant_id=SMOKE_TENANT_ID,
+        as_of_date="2026-09-01",
+        timeout_seconds=5,
+    )
 
     assert get_mock.call_count == 2
     get_mock.assert_called_with(
-        f"http://query/portfolios/{SMOKE_PORTFOLIO_ID}",
+        "http://query/reporting-currencies/support",
         headers={"X-Tenant-Id": SMOKE_TENANT_ID},
+        params={
+            "portfolio_id": SMOKE_PORTFOLIO_ID,
+            "tenant_id": SMOKE_TENANT_ID,
+            "reporting_currency": "USD",
+            "as_of_date": "2026-09-01",
+        },
         timeout=8,
     )
 
