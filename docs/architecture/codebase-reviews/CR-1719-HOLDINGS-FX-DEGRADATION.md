@@ -25,8 +25,9 @@ snapshot without carrying that snapshot's FX authority fields into the quality d
 
 ## Implementation
 
-1. Both snapshot-fallback repository queries now select and return `valuation_fx_rate` and
-   `valuation_fx_rate_date` with the valuation amounts they support.
+1. Both snapshot-fallback repository queries now select and return the persisted valuation-time
+   source/reporting currencies, `valuation_fx_rate`, and `valuation_fx_rate_date` with the
+   valuation amounts they support.
 2. Holdings assembly builds one normalized security-to-FX-date map only for valuations that
    actually used FX. Direct snapshot rows and snapshot-backed history supplements follow the same
    policy.
