@@ -8,6 +8,7 @@ import pytest_asyncio
 from portfolio_common.database_models import (
     BusinessDate,
     DailyPositionSnapshot,
+    FxRate,
     Instrument,
     MarketPrice,
     Portfolio,
@@ -30,6 +31,41 @@ from src.services.calculators.position_valuation_calculator.app.repositories.val
 from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_exact_fx_rate_does_not_carry_forward_prior_date(
+    clean_db,
+    session_factory: async_sessionmaker,
+) -> None:
+    valuation_date = date(2026, 8, 21)
+    async with session_factory() as session:
+        session.add(
+            FxRate(
+                from_currency="eur",
+                to_currency="usd",
+                rate_date=date(2026, 8, 20),
+                rate=Decimal("1.10"),
+            )
+        )
+        await session.commit()
+
+        repository = ValuationRepository(session)
+        assert await repository.get_exact_fx_rate(" EUR ", " USD ", valuation_date) is None
+
+        exact_rate = FxRate(
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date=valuation_date,
+            rate=Decimal("1.11"),
+        )
+        session.add(exact_rate)
+        await session.commit()
+
+        selected = await repository.get_exact_fx_rate("eur", "usd", valuation_date)
+        assert selected is not None
+        assert selected.id == exact_rate.id
+        assert selected.rate_date == valuation_date
+        assert selected.rate == Decimal("1.1100000000")
 
 
 def _valuation_lease(
