@@ -49,6 +49,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_transaction_economics_service,
 )
 from src.services.query_control_plane_service.app.main import app
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -748,7 +749,11 @@ async def async_test_client():
         mock_integration_service
     )
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_benchmark_assignment_service, None)
@@ -1035,20 +1040,14 @@ async def test_effective_integration_policy_success(async_test_client):
     )
 
 
-async def test_effective_integration_policy_defaults_apply(async_test_client):
+async def test_effective_integration_policy_requires_tenant_query(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
 
     response = await client.get("/integration/policy/effective")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["consumer_system"] == "lotus-gateway"
-    assert body["tenant_id"] == "default"
-    mock_integration_service.get_effective_policy.assert_called_with(
-        consumer_system="lotus-gateway",
-        tenant_id="default",
-        include_sections=None,
-    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["query", "tenant_id"]
+    mock_integration_service.get_effective_policy.assert_not_called()
 
 
 async def test_core_snapshot_policy_block_maps_to_403(async_test_client):

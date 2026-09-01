@@ -12,6 +12,7 @@ from src.services.query_control_plane_service.app.main import app
 from src.services.query_control_plane_service.app.routers.capabilities import (
     get_capabilities_service,
 )
+from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -33,7 +34,11 @@ async def async_test_client():
     }
     app.dependency_overrides[get_capabilities_service] = lambda: mock_service
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=TEST_TENANT_HEADERS,
+    ) as client:
         yield client, mock_service
     app.dependency_overrides.pop(get_capabilities_service, None)
 
@@ -82,32 +87,14 @@ async def test_capabilities_accepts_idea_consumer(async_test_client):
     )
 
 
-async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_client):
+async def test_capabilities_requires_tenant_query(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_integration_capabilities.return_value = {
-        "contract_version": "v1",
-        "source_service": "lotus-core",
-        "consumer_system": "lotus-gateway",
-        "tenant_id": "default",
-        "generated_at": datetime(2026, 2, 23, tzinfo=UTC),
-        "as_of_date": date(2026, 2, 23),
-        "policy_version": "default-v1",
-        "supported_input_modes": ["lotus_core_ref"],
-        "features": [],
-        "workflows": [],
-    }
 
     response = await client.get("/integration/capabilities")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["consumer_system"] == "lotus-gateway"
-    assert body["tenant_id"] == "default"
-    assert body["policy_version"] == "default-v1"
-    mock_service.get_integration_capabilities.assert_called_with(
-        consumer_system="lotus-gateway",
-        tenant_id="default",
-    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["query", "tenant_id"]
+    mock_service.get_integration_capabilities.assert_not_called()
 
 
 async def test_get_capabilities_service_returns_service_instance():

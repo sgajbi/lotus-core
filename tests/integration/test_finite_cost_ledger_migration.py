@@ -201,11 +201,11 @@ def _seed_valid_cost_ledger(connection) -> None:
         text(
             """
             INSERT INTO portfolios (
-                portfolio_id, base_currency, open_date, risk_exposure,
+                portfolio_id, tenant_id, base_currency, open_date, risk_exposure,
                 investment_time_horizon, portfolio_type, booking_center_code,
                 client_id, is_leverage_allowed, status
             ) VALUES (
-                'FINITE-PORT-001', 'USD', DATE '2026-07-23', 'balanced',
+                'FINITE-PORT-001', 'tenant-test', 'USD', DATE '2026-07-23', 'balanced',
                 'long_term', 'discretionary', 'SG_BOOKING', 'CLIENT-001',
                 FALSE, 'active'
             )

@@ -163,6 +163,7 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
         session.add_all(
             [
                 Portfolio(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
