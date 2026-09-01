@@ -49,7 +49,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_transaction_economics_service,
 )
 from src.services.query_control_plane_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,7 +72,7 @@ async def async_test_client():
             },
             "governance": {
                 "consumer_system": "lotus-gateway",
-                "tenant_id": "default",
+                "tenant_id": TEST_TENANT_ID,
                 "requested_sections": ["positions_baseline"],
                 "applied_sections": ["positions_baseline"],
                 "dropped_sections": [],
@@ -159,7 +159,7 @@ async def async_test_client():
     mock_integration_service.risk_free_series_service = mock_risk_free_series_service
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-gateway",
-        tenant_id="default",
+        tenant_id=TEST_TENANT_ID,
         generated_at="2026-02-27T00:00:00Z",
         policy_provenance=PolicyProvenanceMetadata(
             policy_version="tenant-default-v1",
@@ -897,7 +897,7 @@ async def test_core_snapshot_success(async_test_client):
             "snapshot_mode": "BASELINE",
             "sections": ["positions_baseline"],
             "consumer_system": "lotus-gateway",
-            "tenant_id": "default",
+            "tenant_id": TEST_TENANT_ID,
         },
     )
 
@@ -919,7 +919,7 @@ async def test_core_snapshot_success(async_test_client):
     assert body["governance"]["consumer_system"] == "lotus-gateway"
     mock_integration_service.get_effective_policy.assert_called_once_with(
         consumer_system="lotus-gateway",
-        tenant_id="default",
+        tenant_id=TEST_TENANT_ID,
         include_sections=["POSITIONS_BASELINE"],
     )
     mock_core_snapshot_service.get_core_snapshot.assert_awaited_once()
@@ -930,9 +930,9 @@ async def test_core_snapshot_success(async_test_client):
     assert len(core_snapshot_call["request"].sections) == 1
     assert core_snapshot_call["request"].sections[0].value == "positions_baseline"
     assert core_snapshot_call["request"].consumer_system == "lotus-gateway"
-    assert core_snapshot_call["request"].tenant_id == "default"
+    assert core_snapshot_call["request"].tenant_id == TEST_TENANT_ID
     assert core_snapshot_call["governance"].consumer_system == "lotus-gateway"
-    assert core_snapshot_call["governance"].tenant_id == "default"
+    assert core_snapshot_call["governance"].tenant_id == TEST_TENANT_ID
     assert [section.value for section in core_snapshot_call["governance"].applied_sections] == [
         "positions_baseline"
     ]
@@ -949,7 +949,7 @@ async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_t
     snapshot["source_provenance"]["market_data"]["as_of"] = "2026-04-10"
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-idea",
-        tenant_id="default",
+        tenant_id=TEST_TENANT_ID,
         generated_at="2026-04-10T00:00:00Z",
         policy_provenance=PolicyProvenanceMetadata(
             policy_version="tenant-default-v1",
@@ -969,7 +969,7 @@ async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_t
             "reporting_currency": "SGD",
             "sections": ["portfolio_state", "portfolio_totals"],
             "consumer_system": "lotus-idea",
-            "tenant_id": "default",
+            "tenant_id": TEST_TENANT_ID,
         },
     )
 
@@ -993,7 +993,7 @@ async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_t
     assert payload["source_provenance"]["market_data"]["source_id"]
     mock_integration_service.get_effective_policy.assert_called_once_with(
         consumer_system="lotus-idea",
-        tenant_id="default",
+        tenant_id=TEST_TENANT_ID,
         include_sections=["PORTFOLIO_STATE", "PORTFOLIO_TOTALS"],
     )
     core_snapshot_call = mock_core_snapshot_service.get_core_snapshot.await_args.kwargs
@@ -1023,7 +1023,8 @@ async def test_effective_integration_policy_success(async_test_client):
     response = await client.get(
         "/integration/policy/effective"
         "?consumer_system=lotus-manage&tenant_id=tenant-a"
-        "&include_sections=positions_baseline&include_sections=portfolio_totals"
+        "&include_sections=positions_baseline&include_sections=portfolio_totals",
+        headers={"X-Tenant-Id": "tenant-a"},
     )
 
     assert response.status_code == 200
@@ -1054,7 +1055,7 @@ async def test_core_snapshot_policy_block_maps_to_403(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-gateway",
-        tenant_id="default",
+        tenant_id=TEST_TENANT_ID,
         generated_at="2026-02-27T00:00:00Z",
         policy_provenance=PolicyProvenanceMetadata(
             policy_version="tenant-default-v1",
@@ -1073,7 +1074,7 @@ async def test_core_snapshot_policy_block_maps_to_403(async_test_client):
             "snapshot_mode": "BASELINE",
             "sections": ["positions_projected"],
             "consumer_system": "lotus-gateway",
-            "tenant_id": "default",
+            "tenant_id": TEST_TENANT_ID,
         },
     )
 
@@ -1099,7 +1100,7 @@ async def test_core_snapshot_not_found_maps_to_404(async_test_client):
             "snapshot_mode": "BASELINE",
             "sections": ["positions_baseline"],
             "consumer_system": "lotus-gateway",
-            "tenant_id": "default",
+            "tenant_id": TEST_TENANT_ID,
         },
     )
 
@@ -1126,7 +1127,7 @@ async def test_core_snapshot_conflict_maps_to_409(async_test_client):
             "snapshot_mode": "SIMULATION",
             "sections": ["positions_baseline"],
             "consumer_system": "lotus-gateway",
-            "tenant_id": "default",
+            "tenant_id": TEST_TENANT_ID,
             "simulation": {"session_id": "SIM-20260310-0001", "expected_version": 3},
         },
     )
@@ -1154,7 +1155,7 @@ async def test_core_snapshot_unavailable_section_maps_to_422(async_test_client):
             "snapshot_mode": "BASELINE",
             "sections": ["positions_baseline"],
             "consumer_system": "lotus-gateway",
-            "tenant_id": "default",
+            "tenant_id": TEST_TENANT_ID,
         },
     )
 
