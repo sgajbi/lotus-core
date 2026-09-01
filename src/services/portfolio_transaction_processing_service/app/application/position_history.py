@@ -11,7 +11,7 @@ from ..domain.position.history import (
     PositionRecalculationState,
     build_position_history,
 )
-from ..domain.position.reducer import plan_backdated_recalculation
+from ..domain.position.reducer import PositionHandlerMissingError, plan_backdated_recalculation
 from ..domain.transaction.booked import BookedTransaction
 from ..ports.position_history import (
     PositionHistoryObserver,
@@ -20,6 +20,7 @@ from ..ports.position_history import (
     PositionRecalculationStateStore,
     PositionReplayMode,
 )
+from .errors import TransactionProcessingError
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,11 +252,23 @@ class PositionHistoryProcessor:
         state: PositionRecalculationState,
         transaction_date: date,
     ) -> _StagedPositionHistory:
-        records = build_position_history(
-            anchor=anchor,
-            transactions=transactions,
-            epoch=state.epoch,
-        )
+        try:
+            records = build_position_history(
+                anchor=anchor,
+                transactions=transactions,
+                epoch=state.epoch,
+            )
+        except PositionHandlerMissingError as exc:
+            raise TransactionProcessingError(
+                reason_code="position_handler_missing",
+                detail={
+                    "portfolio_id": exc.portfolio_id,
+                    "transaction_id": exc.transaction_id,
+                    "transaction_type": exc.transaction_type,
+                    "position_effect": exc.position_effect,
+                },
+                retryable=False,
+            ) from exc
         locked_state_epoch = None
         if records:
             await self._repository.save_records(records)

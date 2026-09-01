@@ -7,7 +7,11 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
+from src.services.portfolio_transaction_processing_service.app.application.errors import (
+    TransactionProcessingError,
+)
 from src.services.portfolio_transaction_processing_service.app.application.position_history import (
     PositionHistoryProcessor,
 )
@@ -15,6 +19,9 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     BookedTransaction,
     PositionHistoryRecord,
     PositionRecalculationState,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.position import (
+    reducer as position_reducer,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionHistoryObserver,
@@ -44,6 +51,7 @@ def _transaction(
     epoch: int | None = None,
     quantity: Decimal = Decimal("10"),
     net_cost: Decimal = Decimal("100"),
+    transaction_type: str = "BUY",
 ) -> BookedTransaction:
     return BookedTransaction(
         transaction_id=transaction_id,
@@ -53,7 +61,7 @@ def _transaction(
         transaction_date=datetime.combine(
             transaction_date, datetime.min.time(), tzinfo=timezone.utc
         ),
-        transaction_type="BUY",
+        transaction_type=transaction_type,
         quantity=quantity,
         price=Decimal("10"),
         gross_transaction_amount=quantity * Decimal("10"),
@@ -176,6 +184,37 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
     )
     observer.records_staged.assert_called_once_with(epoch=3, record_count=1)
     observer.generation_rearmed.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_processor_maps_missing_position_handler_to_terminal_processing_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository, _, _, processor = _ports()
+    transaction = _transaction(transaction_type="DIVIDEND")
+    repository.load_replay_window.return_value = PositionReplayWindow(
+        anchor=None,
+        transactions=(transaction,),
+    )
+    definition = TRANSACTION_TYPE_REGISTRY["DIVIDEND"]
+    monkeypatch.setattr(
+        position_reducer,
+        "get_transaction_type_definition",
+        lambda _transaction_type: replace(definition, position_effect="increase"),
+    )
+
+    with pytest.raises(TransactionProcessingError) as raised:
+        await processor.process(transaction)
+
+    assert raised.value.reason_code == "position_handler_missing"
+    assert raised.value.retryable is False
+    assert raised.value.detail == {
+        "portfolio_id": "PB-001",
+        "transaction_id": "TX-001",
+        "transaction_type": "DIVIDEND",
+        "position_effect": "increase",
+    }
+    repository.save_records.assert_not_awaited()
 
 
 @pytest.mark.asyncio

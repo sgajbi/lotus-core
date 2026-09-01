@@ -7,6 +7,10 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Callable
 
+from portfolio_common.domain.transaction.type_registry import (
+    get_transaction_type_definition,
+)
+
 from ..transaction.booked import BookedTransaction
 from ..transaction.corporate_action.classification import (
     SAME_INSTRUMENT_CORPORATE_ACTION_TYPES,
@@ -78,6 +82,26 @@ class CashPositionEconomicsError(ValueError):
     """Reject booked cash economics whose signs contradict their movement type."""
 
 
+class PositionHandlerMissingError(ValueError):
+    """Reject a position-affecting transaction without an explicit reducer handler."""
+
+    def __init__(
+        self,
+        transaction: BookedTransaction,
+        *,
+        transaction_type: str,
+        position_effect: str,
+    ) -> None:
+        self.portfolio_id = transaction.portfolio_id
+        self.transaction_id = transaction.transaction_id
+        self.transaction_type = transaction_type
+        self.position_effect = position_effect
+        super().__init__(
+            f"{self.transaction_type} declares position effect {position_effect!r} "
+            "but has no position reducer handler"
+        )
+
+
 _PositionUpdateHandler = Callable[
     [PositionBalanceState, BookedTransaction, str], PositionBalanceState
 ]
@@ -115,6 +139,18 @@ def calculate_next_position_state(
 ) -> PositionBalanceState:
     txn_type = resolve_effective_processing_transaction_type(transaction)
     handler = _position_update_handler(txn_type)
+    if handler is None:
+        definition = get_transaction_type_definition(txn_type)
+        if (
+            definition is not None
+            and definition.production_booking_allowed
+            and definition.position_effect != "none"
+        ):
+            raise PositionHandlerMissingError(
+                transaction,
+                transaction_type=txn_type,
+                position_effect=definition.position_effect,
+            )
     with POSITION_HISTORY_LEDGER_OUTPUT_V1.arithmetic_context():
         next_state = (
             handler(current_state, transaction, txn_type) if handler is not None else current_state
