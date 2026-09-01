@@ -4368,6 +4368,17 @@ Most relevant current governance:
      existing arithmetic and quote-authority controls; missing historical lineage is a separate
      remediation boundary under #997.
 
+259. `HoldingsAsOf:v1` must independently classify the persisted valuation-time FX evidence used
+     by every returned cross-currency valuation, including snapshot-backed values supplementing a
+     position-history row. It reads `valuation_fx_rate` and `valuation_fx_rate_date` from the
+     selected durable snapshot evidence and never reconstructs historical authority from the
+     mutable current FX table. A recorded FX date different from the response as-of date produces
+     `data_quality_status=STALE` plus row/field-scoped `FX_RATE_STALE` degradation with the source
+     date preserved. A used FX rate without a source date fails closed as
+     `FX_RATE_EVIDENCE_MISSING`. Exact-date evidence and valuations that require no FX retain their
+     existing posture. Historical remediation and runtime restatement proof remain separately
+     bounded under #997.
+
 ## Context Maintenance Rule
 
 Update this document when:
