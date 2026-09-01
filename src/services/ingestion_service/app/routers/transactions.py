@@ -1,14 +1,21 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from portfolio_common.domain.tenant import TenantContext
 
 from ..ack_response import build_batch_ack, build_single_ack
+from ..application.validate_transaction_portfolio_ownership import (
+    TransactionPortfolioOwnershipRejected,
+    ValidateTransactionPortfolioOwnership,
+)
 from ..dependencies import (
     get_ingestion_job_service,  # noqa: F401
     get_ingestion_publish_command_handler,
+    get_transaction_portfolio_ownership_validator,
 )
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse, IngestionAcceptedResponse
 from ..DTOs.transaction_dto import Transaction, TransactionIngestionRequest
+from ..ports.portfolio_tenant_ownership import PortfolioTenantOwnershipReadError
 from ..request_metadata import resolve_idempotency_key
 from ..services.ingestion_publish_commands import (
     BatchPublishIngestionCommand,
@@ -70,7 +77,8 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     summary="Ingest a single transaction",
     description=(
         "What: Accept one canonical transaction record for ledger ingestion.\n"
-        "How: Validate contract, enforce mode and rate controls, propagate any "
+        "How: Validate the portfolio against admitted tenant authority, enforce contract, "
+        "mode, and rate controls, propagate any "
         "idempotency key as publish lineage, then publish asynchronously to Kafka.\n"
         "When: Use for low-volume operational corrections or single-record onboarding."
     ),
@@ -81,8 +89,16 @@ async def ingest_transaction(
     command_handler: IngestionPublishCommandHandler = Depends(
         get_ingestion_publish_command_handler
     ),
+    portfolio_ownership_validator: ValidateTransactionPortfolioOwnership = Depends(
+        get_transaction_portfolio_ownership_validator
+    ),
 ):
     idempotency_key = resolve_idempotency_key(request)
+    await _validate_transaction_portfolio_ownership(
+        validator=portfolio_ownership_validator,
+        tenant_context=request.state.tenant_context,
+        portfolio_ids=[transaction.portfolio_id],
+    )
     try:
         result = await command_handler.ingest_transaction(
             SinglePublishIngestionCommand(
@@ -133,7 +149,8 @@ async def ingest_transaction(
     summary="Ingest a transaction batch",
     description=(
         "What: Accept a batch of canonical transaction records.\n"
-        "How: Persist ingestion job metadata, validate payload, and publish "
+        "How: Validate every portfolio against admitted tenant authority, persist tenant-owned "
+        "ingestion job metadata, validate payload, and publish "
         "all valid records asynchronously.\n"
         "When: Use for standard API-driven batch ingestion workflows."
     ),
@@ -144,8 +161,16 @@ async def ingest_transactions(
     command_handler: IngestionPublishCommandHandler = Depends(
         get_ingestion_publish_command_handler
     ),
+    portfolio_ownership_validator: ValidateTransactionPortfolioOwnership = Depends(
+        get_transaction_portfolio_ownership_validator
+    ),
 ):
     idempotency_key = resolve_idempotency_key(http_request)
+    await _validate_transaction_portfolio_ownership(
+        validator=portfolio_ownership_validator,
+        tenant_context=http_request.state.tenant_context,
+        portfolio_ids=[transaction.portfolio_id for transaction in request.transactions],
+    )
     try:
         result = await command_handler.ingest_transactions(
             BatchPublishIngestionCommand(
@@ -184,3 +209,35 @@ async def ingest_transactions(
         accepted_count=result.accepted_count,
         idempotency_key=idempotency_key,
     )
+
+
+async def _validate_transaction_portfolio_ownership(
+    *,
+    validator: ValidateTransactionPortfolioOwnership,
+    tenant_context: TenantContext,
+    portfolio_ids: list[str],
+) -> None:
+    try:
+        await validator.execute(
+            tenant_context=tenant_context,
+            portfolio_ids=portfolio_ids,
+        )
+    except TransactionPortfolioOwnershipRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+                "message": (
+                    "One or more transaction portfolios are outside admitted tenant authority."
+                ),
+                "portfolio_ids": list(exc.portfolio_ids),
+            },
+        ) from exc
+    except PortfolioTenantOwnershipReadError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "INGESTION_PORTFOLIO_TENANT_AUTHORITY_UNAVAILABLE",
+                "message": "Portfolio tenant authority could not be verified.",
+            },
+        ) from exc
