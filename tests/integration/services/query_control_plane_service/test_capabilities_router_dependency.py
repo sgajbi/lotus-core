@@ -89,6 +89,19 @@ async def test_capabilities_accepts_idea_consumer(async_test_client):
     )
 
 
+async def test_capabilities_rejects_tenant_scope_mismatch(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/integration/capabilities?consumer_system=lotus-manage&tenant_id=tenant-b",
+        headers={"X-Tenant-Id": "tenant-a"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QCP_TENANT_SCOPE_FORBIDDEN"
+    mock_service.get_integration_capabilities.assert_not_called()
+
+
 async def test_capabilities_requires_tenant_query(async_test_client):
     client, mock_service = async_test_client
 

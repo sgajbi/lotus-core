@@ -1,6 +1,6 @@
 from typing import NoReturn, cast
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
@@ -192,6 +192,10 @@ from .response_helpers import (
     problem_or_validation_response,
     problem_response,
     raise_problem,
+)
+from .tenant_authority import (
+    TENANT_SCOPE_FORBIDDEN_EXAMPLE,
+    require_matching_tenant_authority,
 )
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
@@ -689,6 +693,12 @@ def _raise_source_evidence_invalid_request(
 @router.get(
     "/policy/effective",
     response_model=EffectiveIntegrationPolicyResponse,
+    responses={
+        status.HTTP_403_FORBIDDEN: problem_response(
+            "Requested tenant does not match admitted tenant authority.",
+            TENANT_SCOPE_FORBIDDEN_EXAMPLE,
+        )
+    },
     summary="Get effective lotus-core integration policy",
     description=(
         "What: Return effective integration policy diagnostics for a consumer and tenant "
@@ -705,6 +715,7 @@ def _raise_source_evidence_invalid_request(
     ),
 )
 async def get_effective_integration_policy(
+    request: Request,
     consumer_system: str = Query(
         "lotus-gateway",
         description="Downstream consumer system requesting policy resolution.",
@@ -722,9 +733,13 @@ async def get_effective_integration_policy(
     ),
     integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> EffectiveIntegrationPolicyResponse:
+    admitted_tenant_id = require_matching_tenant_authority(
+        supplied_tenant_id=tenant_id,
+        tenant_context=request.state.tenant_context,
+    )
     response = integration_service.get_effective_policy(
         consumer_system=consumer_system,
-        tenant_id=tenant_id,
+        tenant_id=admitted_tenant_id,
         include_sections=include_sections,
     )
     return cast(EffectiveIntegrationPolicyResponse, response)
@@ -739,7 +754,7 @@ async def get_effective_integration_policy(
             CORE_SNAPSHOT_INVALID_REQUEST_EXAMPLE,
         ),
         status.HTTP_403_FORBIDDEN: problem_response(
-            "Requested sections are blocked by strict integration policy.",
+            "Tenant scope mismatch or requested sections blocked by strict integration policy.",
             INTEGRATION_POLICY_BLOCKED_EXAMPLE,
         ),
         status.HTTP_404_NOT_FOUND: problem_response(
@@ -761,6 +776,7 @@ async def get_effective_integration_policy(
 )
 async def create_core_snapshot(
     request: CoreSnapshotRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier for the snapshot request.",
@@ -769,8 +785,13 @@ async def create_core_snapshot(
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> CoreSnapshotResponse | JSONResponse:
+    admitted_tenant_id = require_matching_tenant_authority(
+        supplied_tenant_id=request.tenant_id,
+        tenant_context=http_request.state.tenant_context,
+    )
     effective_request, governance = _governed_core_snapshot_request(
         request=request,
+        tenant_id=admitted_tenant_id,
         integration_service=integration_service,
     )
     response = await _core_snapshot_response_or_http_error(
@@ -801,12 +822,13 @@ def _lotus_idea_core_snapshot_payload(response: CoreSnapshotResponse | dict) -> 
 def _governed_core_snapshot_request(
     *,
     request: CoreSnapshotRequest,
+    tenant_id: str,
     integration_service: IntegrationPolicyService,
 ) -> tuple[CoreSnapshotRequest, SnapshotGovernanceContext]:
     requested_sections = list(request.sections)
     policy = integration_service.get_effective_policy(
         consumer_system=request.consumer_system,
-        tenant_id=request.tenant_id,
+        tenant_id=tenant_id,
         include_sections=_policy_section_codes(requested_sections),
     )
     applied_sections, dropped_sections, warnings = _policy_applied_snapshot_sections(
@@ -819,7 +841,7 @@ def _governed_core_snapshot_request(
         strict_mode=policy.policy_provenance.strict_mode,
     )
     return (
-        request.model_copy(update={"sections": applied_sections}),
+        request.model_copy(update={"tenant_id": tenant_id, "sections": applied_sections}),
         _core_snapshot_governance(
             policy=policy,
             requested_sections=requested_sections,
