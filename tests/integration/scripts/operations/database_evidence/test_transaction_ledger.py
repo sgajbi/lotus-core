@@ -13,6 +13,7 @@ from scripts.operations.database_evidence.runtime_fragments import publish_reque
 from scripts.operations.database_evidence.transaction_ledger import (
     measure_transaction_ledger_reads,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
 
@@ -27,6 +28,7 @@ async def _seed_transaction_ledger(session: AsyncSession, *, count: int) -> None
         [
             {
                 "portfolio_id": portfolio_id,
+                "tenant_id": TEST_TENANT_ID,
                 "base_currency": "USD",
                 "open_date": date(2024, 1, 1),
                 "risk_exposure": "BALANCED",

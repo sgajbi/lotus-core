@@ -250,6 +250,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     security_audit = paths["/support/security-audit/events"]["get"]
     parameter_names = {parameter["name"] for parameter in security_audit["parameters"]}
     assert parameter_names == {
+        "X-Tenant-Id",
         "occurred_from",
         "occurred_to",
         "page_size",

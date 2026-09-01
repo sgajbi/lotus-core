@@ -109,10 +109,10 @@ async def test_enterprise_middleware_denies_ingestion_write_without_headers(
 
     response = await async_test_client.post("/ingest/portfolios", json={"portfolios": []})
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     detail = response.json()
-    assert detail["detail"] == "authorization_policy_denied"
-    assert detail["reason"].startswith("missing_headers:")
+    assert detail["detail"] == "A nonblank X-Tenant-Id header is required for this route."
+    assert detail["error_code"] == "TENANT_CONTEXT_REQUIRED"
 
 
 async def test_enterprise_middleware_denies_ingestion_write_missing_capability(
