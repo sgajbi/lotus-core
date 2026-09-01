@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-09-01 |
 | Owners | `ingestion-service` |
 | Depends On | RFC 035 phase-1 onboarding patterns, RFC 057 adapter-mode governance |
 | Scope | File-based onboarding via preview/commit APIs reusing canonical DTO validation |
@@ -36,6 +36,9 @@ Implemented:
 5. `allow_partial=false` path rejects mixed-validity files (`422`), while `allow_partial=true` publishes valid rows and reports skipped rows.
 6. Adapter-mode feature flags can disable upload APIs with explicit `410` response contracts.
 7. Rate-limit and write-mode checks are applied on commit path.
+8. Transaction commits validate every referenced portfolio against the admitted tenant before
+   publication. Cross-tenant or missing portfolios reject the whole commit, including in partial
+   mode; ownership-read failure returns unavailable without publishing.
 
 Evidence:
 - `src/services/ingestion_service/app/routers/uploads.py`
@@ -54,6 +57,7 @@ Evidence:
 | DTO validation reuse | Implemented through model-driven validation map by entity type | upload service model mapping |
 | Supported entities coverage | Implemented for all listed entity types | upload DTO/service + tests |
 | Deterministic error reporting | Implemented with row number and validation issue details | upload service + integration tests |
+| Transaction tenant authority | Implemented as a fail-closed pre-publish application policy | ownership validator + upload service/router tests |
 
 ## Design Reasoning and Trade-offs
 
@@ -72,6 +76,7 @@ No high-value implementation gap identified for RFC 037 scope.
 
 1. Adapter-mode controls were strengthened and explicitly documented in runtime error contracts.
 2. Runtime ingestion write/rate controls are integrated on commit path.
+3. Transaction upload commits reuse the canonical portfolio tenant-ownership policy before publish.
 
 ## Proposed Changes
 

@@ -724,7 +724,11 @@ Tenant authority boundary:
 5. persisted portfolios require a normalized tenant; the cutover migration stops and reports
    unattributable rows instead of assigning a synthetic tenant,
 6. the tenant-ownership architecture guard blocks synthetic production defaults now and reports the
-   banked tenantless-table census for the remaining staged slices of issue `#798`.
+   banked tenantless-table census for the remaining staged slices of issue `#798`,
+7. every transaction ingress, including adapter-mode bulk upload commit, must validate all
+   referenced portfolios against the admitted `TenantContext` before creating durable work or
+   publishing; partial-row mode never weakens this authority check, and an unavailable ownership
+   read fails closed.
 
 ## Repo-Native Commands
 

@@ -13,7 +13,11 @@ def _write(path: Path, text: str) -> None:
 def _write_required_upload_boundary(root: Path) -> None:
     _write(
         root / "src/services/ingestion_service/app/services/upload_ingestion_service.py",
-        "BulkUploadValidator\nUploadRecordPublisher\npublish_records(\n",
+        "BulkUploadValidator\nUploadRecordPublisher\n"
+        "ValidateTransactionPortfolioOwnership\nPortfolioTenantOwnershipReadError\n"
+        'if command.entity_type != "transactions":\n'
+        "await self._validate_transaction_portfolio_ownership(command, validation)\n"
+        "publish_records(\n",
     )
     _write(
         root / "src/services/ingestion_service/app/services/upload_validation.py",
@@ -35,13 +39,39 @@ def test_upload_component_boundary_guard_allows_split_components(tmp_path: Path)
     assert find_upload_component_boundary_findings(tmp_path) == []
 
 
+def test_upload_component_boundary_guard_requires_transaction_tenant_authority(
+    tmp_path: Path,
+) -> None:
+    _write_required_upload_boundary(tmp_path)
+    service_path = (
+        tmp_path / "src/services/ingestion_service/app/services/upload_ingestion_service.py"
+    )
+    service_path.write_text(
+        service_path.read_text(encoding="utf-8").replace(
+            "await self._validate_transaction_portfolio_ownership(command, validation)\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_upload_component_boundary_findings(tmp_path)
+
+    assert [finding.snippet for finding in findings] == [
+        "await self._validate_transaction_portfolio_ownership(command, validation)"
+    ]
+
+
 def test_upload_component_boundary_guard_rejects_monolithic_upload_service(
     tmp_path: Path,
 ) -> None:
     _write_required_upload_boundary(tmp_path)
     _write(
         tmp_path / "src/services/ingestion_service/app/services/upload_ingestion_service.py",
-        "BulkUploadValidator\nUploadRecordPublisher\npublish_records(\n"
+        "BulkUploadValidator\nUploadRecordPublisher\n"
+        "ValidateTransactionPortfolioOwnership\nPortfolioTenantOwnershipReadError\n"
+        'if command.entity_type != "transactions":\n'
+        "await self._validate_transaction_portfolio_ownership(command, validation)\n"
+        "publish_records(\n"
         "from .ingestion_service import IngestionService\n"
         "csv.DictReader\nload_workbook\ndef _publish_transactions(): pass\n",
     )

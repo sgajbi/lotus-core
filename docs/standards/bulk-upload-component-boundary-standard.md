@@ -21,7 +21,9 @@ responsibilities.
 1. preview result assembly,
 2. commit policy for empty uploads, invalid rows, partial commit allowance, and no-valid-row
    rejection,
-3. application result construction.
+3. fail-closed transaction portfolio ownership validation against the admitted `TenantContext`
+   before any record is published,
+4. application result construction.
 
 `upload_record_publisher.py` owns the publisher port, and `upload_publishers.py` owns the
 `IngestionService` adapter that dispatches validated records to existing canonical ingestion
@@ -36,8 +38,11 @@ CSV and XLSX inputs. HTTP byte limits and rate limits are necessary outer contro
 replace parser-level budgets.
 
 The upload orchestration service must not parse CSV/XLSX files inline, import `IngestionService`,
-or own entity-specific publish methods. It depends on `BulkUploadValidator` and
-`UploadRecordPublisher`.
+or own entity-specific publish methods. It depends on `BulkUploadValidator`,
+`UploadRecordPublisher`, and the shared `ValidateTransactionPortfolioOwnership` application
+policy. `allow_partial=true` applies only to row-schema failures; it must never bypass tenant
+authority. An ownership mismatch rejects the whole transaction commit, and an unavailable
+authority read fails closed before publication.
 
 ## Enforcement
 

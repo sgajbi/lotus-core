@@ -172,7 +172,9 @@ Use upload flows for adapter-mode bulk onboarding:
   validate and normalize before publishing; preview is rate-protected and returns source-safe
   summaries by default
 - `POST /ingest/uploads/commit`
-  commit validated bulk content for processing
+  commit validated bulk content for processing; transaction commits reject the entire request
+  before publication when any valid row references a portfolio outside the admitted tenant, even
+  when partial-row mode is enabled, and return unavailable when ownership cannot be verified
 
 This is the right contract family for CSV/XLSX-style onboarding, not the replay family. Upload
 files are bounded by byte, row, column, and cell-length budgets; content-type and extension must
