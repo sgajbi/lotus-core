@@ -1014,8 +1014,6 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self,
             replay_fingerprint: str,
             recovery_path: str | None = None,
-            *,
-            tenant_id: str,
         ) -> dict[str, str] | None:
             row = self.replay_audit.get(replay_fingerprint)
             if (
@@ -1070,7 +1068,6 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_replay_audits(
             self,
             *,
-            tenant_id: str,
             limit: int = 100,
             recovery_path: str | None = None,
             replay_status: str | None = None,
@@ -1091,7 +1088,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             ]
             return filtered[:limit]
 
-        async def get_replay_audit(self, replay_id: str, *, tenant_id: str):
+        async def get_replay_audit(self, replay_id: str):
             for row in self.replay_audit.values():
                 if row.get("replay_id") == replay_id:
                     return row
