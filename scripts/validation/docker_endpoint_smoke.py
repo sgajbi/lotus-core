@@ -366,19 +366,39 @@ def _wait_ready(base_url: str, timeout_seconds: int) -> None:
     raise TimeoutError(f"Timed out waiting for ready endpoint: {ready_url}")
 
 
-def _wait_portfolio_visible(query_base_url: str, portfolio_id: str, timeout_seconds: int) -> None:
-    url = f"{query_base_url}/portfolios/{portfolio_id}"
+def _wait_portfolio_tenant_authority(
+    query_base_url: str,
+    *,
+    portfolio_id: str,
+    tenant_id: str,
+    as_of_date: str,
+    timeout_seconds: int,
+) -> None:
+    url = f"{query_base_url}/reporting-currencies/support"
+    params = {
+        "portfolio_id": portfolio_id,
+        "tenant_id": tenant_id,
+        "reporting_currency": "USD",
+        "as_of_date": as_of_date,
+    }
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
-            response = requests.get(url, headers=_tenant_headers(), timeout=8)
+            response = requests.get(url, headers=_tenant_headers(), params=params, timeout=8)
             if response.status_code == 200:
-                return
+                payload = response.json()
+                if (
+                    isinstance(payload, dict)
+                    and payload.get("portfolio_id") == portfolio_id
+                    and payload.get("tenant_id") == tenant_id
+                ):
+                    return
         except Exception:
             pass
         time.sleep(2)
     raise TimeoutError(
-        f"Timed out waiting for portfolio to appear in query service: {portfolio_id}"
+        "Timed out waiting for durable tenant-owned portfolio authority: "
+        f"tenant_id={tenant_id}, portfolio_id={portfolio_id}"
     )
 
 
@@ -740,9 +760,11 @@ def main(
             ]
         },
     )
-    _wait_portfolio_visible(
+    _wait_portfolio_tenant_authority(
         query_base_url=query,
         portfolio_id=portfolio_id,
+        tenant_id=SMOKE_TENANT_ID,
+        as_of_date=trade_date,
         timeout_seconds=args.query_visible_timeout_seconds,
     )
     _call(
@@ -1181,9 +1203,11 @@ def main(
         json={"transaction_ids": [transaction_id]},
     )
 
-    _wait_portfolio_visible(
+    _wait_portfolio_tenant_authority(
         query_base_url=query,
         portfolio_id=portfolio_id,
+        tenant_id=SMOKE_TENANT_ID,
+        as_of_date=trade_date,
         timeout_seconds=args.query_visible_timeout_seconds,
     )
     _wait_expected_status(
