@@ -286,7 +286,16 @@ def test_wait_portfolio_tenant_authority_requires_matching_tenant_evidence(
                 status_code=200,
                 json=lambda: {
                     "portfolio_id": SMOKE_PORTFOLIO_ID,
+                    "tenant_id": SMOKE_TENANT_ID,
+                    "status": "UNAVAILABLE",
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "portfolio_id": SMOKE_PORTFOLIO_ID,
                     "tenant_id": "other-tenant",
+                    "status": "SUPPORTED",
                 },
             ),
             SimpleNamespace(
@@ -294,12 +303,13 @@ def test_wait_portfolio_tenant_authority_requires_matching_tenant_evidence(
                 json=lambda: {
                     "portfolio_id": SMOKE_PORTFOLIO_ID,
                     "tenant_id": SMOKE_TENANT_ID,
+                    "status": "SUPPORTED",
                 },
             ),
         ]
     )
     get_mock = Mock(side_effect=lambda *args, **kwargs: next(responses))
-    now = iter([0, 1, 2])
+    now = iter([0, 1, 2, 3])
 
     monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.requests.get", get_mock)
     monkeypatch.setattr(
@@ -315,7 +325,7 @@ def test_wait_portfolio_tenant_authority_requires_matching_tenant_evidence(
         timeout_seconds=5,
     )
 
-    assert get_mock.call_count == 2
+    assert get_mock.call_count == 3
     get_mock.assert_called_with(
         "http://query/reporting-currencies/support",
         headers={"X-Tenant-Id": SMOKE_TENANT_ID},
