@@ -40,10 +40,11 @@ snapshot without carrying that snapshot's FX authority fields into the quality d
 ## Contract And Failure Semantics
 
 The response schema is unchanged: the existing `SourceDataDegradationSummary` carries the new
-stable reasons. `FX_RATE_STALE` affects local market value, local unrealized P&L, and unrealized FX
-P&L fields. The deterministic HoldingsAsOf content hash already includes data quality and complete
-degradation details, so a corrected/restated FX authority date changes response identity without a
-new competing receipt.
+stable reasons. `FX_RATE_STALE` and `FX_RATE_EVIDENCE_MISSING` identify the translated portfolio-base
+market value, total unrealized P&L, price P&L, and FX P&L fields as affected. The local instrument-
+currency values are not FX-derived. The deterministic HoldingsAsOf content hash already includes
+data quality and complete degradation details, so a corrected/restated FX authority date changes
+response identity without a new competing receipt.
 
 ## Same-Pattern Review
 

@@ -19,8 +19,9 @@ VALUATION_FIELDS = [
 ]
 
 FX_VALUATION_FIELDS = [
-    "valuation.market_value_local",
-    "valuation.unrealized_gain_loss_local",
+    "valuation.market_value",
+    "valuation.unrealized_gain_loss",
+    "valuation.unrealized_price_gain_loss",
     "valuation.unrealized_fx_gain_loss",
 ]
 
