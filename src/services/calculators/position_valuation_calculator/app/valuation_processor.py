@@ -492,7 +492,7 @@ class ValuationJobProcessor:
             )
 
         price_currency = _normalize_currency_code(price.currency)
-        fx_rate = await self._instrument_to_portfolio_fx_rate(
+        fx_rate = await self._exact_instrument_to_portfolio_fx_rate(
             repo=repo,
             event=event,
             instrument_currency=instrument_currency,
@@ -615,7 +615,7 @@ class ValuationJobProcessor:
                 "authoritative market-price currency must match instrument currency"
             )
         portfolio_currency = _normalize_currency_code(portfolio.base_currency)
-        fx_rate = await self._instrument_to_portfolio_fx_rate(
+        fx_rate = await self._exact_instrument_to_portfolio_fx_rate(
             repo=dependencies.repo,
             event=event,
             instrument_currency=instrument_currency,
@@ -698,7 +698,7 @@ class ValuationJobProcessor:
         )
 
     @staticmethod
-    async def _instrument_to_portfolio_fx_rate(
+    async def _exact_instrument_to_portfolio_fx_rate(
         *,
         repo: ValuationRepository,
         event: PortfolioValuationRequiredEvent,
@@ -707,11 +707,14 @@ class ValuationJobProcessor:
     ) -> FxRate | None:
         if instrument_currency == portfolio_currency:
             return None
-        return await repo.get_fx_rate(
+        fx_rate = await repo.get_exact_fx_rate(
             instrument_currency,
             portfolio_currency,
             event.valuation_date,
         )
+        if fx_rate is None or fx_rate.rate_date != event.valuation_date:
+            return None
+        return fx_rate
 
     def _failed_missing_fx_snapshot(
         self,
@@ -723,8 +726,8 @@ class ValuationJobProcessor:
     ) -> ValuationSnapshotResult:
         snapshot.valuation_status = VALUATION_FAILED
         failure_reason = (
-            "Missing FX rate for "
-            f"{instrument_currency}->{portfolio_currency} on or before {event.valuation_date}"
+            "Missing exact-date FX rate for "
+            f"{instrument_currency}->{portfolio_currency} on {event.valuation_date}"
         )
         VALUATION_JOBS_FAILED_TOTAL.labels(
             reason="missing_fx_rate",

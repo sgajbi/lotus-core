@@ -741,10 +741,12 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    @async_timed(repository="ValuationRepository", method="get_fx_rate")
-    async def get_fx_rate(
-        self, from_currency: str, to_currency: str, a_date: date
+    @async_timed(repository="ValuationRepository", method="get_exact_fx_rate")
+    async def get_exact_fx_rate(
+        self, from_currency: str, to_currency: str, rate_date: date
     ) -> Optional[FxRate]:
+        """Return direct FX authority for the exact valuation date."""
+
         normalized_from_currency = self._normalize_currency_code(from_currency)
         normalized_to_currency = self._normalize_currency_code(to_currency)
         from_currency_expr = func.upper(func.trim(FxRate.from_currency))
@@ -754,9 +756,9 @@ class ValuationRepositoryBase:
             .filter(
                 from_currency_expr == normalized_from_currency,
                 to_currency_expr == normalized_to_currency,
-                FxRate.rate_date <= a_date,
+                FxRate.rate_date == rate_date,
             )
-            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
+            .order_by(FxRate.id.desc())
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()

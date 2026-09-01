@@ -623,7 +623,7 @@ async def test_find_contiguous_snapshot_dates_snapshots_first_open_authority_bef
     assert build_statement.call_args_list[1].args[1] == {final_key: date(2026, 1, 2)}
 
 
-async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
+async def test_get_exact_fx_rate_normalizes_currency_codes_and_requires_valuation_date(
     mock_db_session: AsyncMock,
 ) -> None:
     repo = ValuationRepository(mock_db_session)
@@ -632,10 +632,10 @@ async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_p
     result.scalars.return_value.first.return_value = None
     mock_db_session.execute.return_value = result
 
-    fx_rate = await repo.get_fx_rate(
+    fx_rate = await repo.get_exact_fx_rate(
         from_currency=" eur ",
         to_currency=" usd ",
-        a_date=date(2026, 3, 27),
+        rate_date=date(2026, 3, 27),
     )
 
     assert fx_rate is None
@@ -643,8 +643,8 @@ async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_p
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in compiled_query
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in compiled_query
-    assert "fx_rates.rate_date <= '2026-03-27'" in compiled_query
-    assert "ORDER BY fx_rates.rate_date DESC, fx_rates.id DESC" in compiled_query
+    assert "fx_rates.rate_date = '2026-03-27'" in compiled_query
+    assert "ORDER BY fx_rates.id DESC" in compiled_query
 
 
 async def test_get_instrument_trims_security_id_before_query(

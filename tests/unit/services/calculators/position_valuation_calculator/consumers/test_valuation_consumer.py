@@ -654,7 +654,7 @@ async def test_authoritative_valuation_persists_selected_fx_fact(
         unrealized_price_reporting=Decimal("110"),
         unrealized_fx_reporting=Decimal("90"),
     )
-    selected_fx = FxRate(rate=Decimal("1.1"), rate_date=date(2025, 7, 31))
+    selected_fx = FxRate(rate=Decimal("1.1"), rate_date=mock_event.valuation_date)
 
     ValuationJobProcessor._apply_authoritative_valuation_result(
         snapshot=snapshot,
@@ -666,7 +666,7 @@ async def test_authoritative_valuation_persists_selected_fx_fact(
     )
 
     assert snapshot.valuation_status == "VALUED_CURRENT"
-    assert snapshot.valuation_fx_rate_date == date(2025, 7, 31)
+    assert snapshot.valuation_fx_rate_date == mock_event.valuation_date
     assert snapshot.valuation_fx_rate == Decimal("1.1")
     assert snapshot.valuation_source_currency == "EUR"
     assert snapshot.valuation_reporting_currency == "USD"
@@ -836,7 +836,7 @@ async def test_valuation_processor_values_flat_position_without_quote_dependenci
     receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
     assert receipt.snapshot_identity.security_id == mock_event.security_id
     assert receipt.supportability.value == "LEGACY_UNSCOPED"
-    mock_valuation_repo.get_fx_rate.assert_not_awaited()
+    mock_valuation_repo.get_exact_fx_rate.assert_not_awaited()
     mock_dependencies["valuation_receipt_repo"].delete.assert_not_awaited()
     mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
@@ -967,9 +967,9 @@ async def test_valuation_consumer_success(
     mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
         price=Decimal("90"), currency="EUR", price_date=mock_event.valuation_date
     )
-    mock_valuation_repo.get_fx_rate.return_value = FxRate(
+    mock_valuation_repo.get_exact_fx_rate.return_value = FxRate(
         rate=Decimal("1.1"),
-        rate_date=date(2025, 7, 31),
+        rate_date=mock_event.valuation_date,
     )
 
     persisted_snapshot = DailyPositionSnapshot(
@@ -995,7 +995,7 @@ async def test_valuation_consumer_success(
         mock_event.portfolio_id, mock_event.security_id, mock_event.valuation_date, mock_event.epoch
     )
     valuation_candidate = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
-    assert valuation_candidate.valuation_fx_rate_date == date(2025, 7, 31)
+    assert valuation_candidate.valuation_fx_rate_date == mock_event.valuation_date
     assert valuation_candidate.valuation_fx_rate == Decimal("1.1")
     assert valuation_candidate.valuation_source_currency == "EUR"
     assert valuation_candidate.valuation_reporting_currency == "USD"
@@ -1090,7 +1090,7 @@ async def test_valuation_consumer_normalizes_same_currency_without_fx_lookup(
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_valuation_repo.get_fx_rate.assert_not_awaited()
+    mock_valuation_repo.get_exact_fx_rate.assert_not_awaited()
     persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert persisted_snapshot.market_value == Decimal("9000")
     assert persisted_snapshot.market_value_local == Decimal("9000")
@@ -1196,14 +1196,25 @@ async def test_process_message_handles_unexpected_error(
     mock_idempotency_repo.mark_event_processed.assert_not_called()
 
 
-async def test_process_message_marks_job_failed_when_fx_rate_missing(
+@pytest.mark.parametrize(
+    "selected_fx_rate",
+    [
+        pytest.param(None, id="missing"),
+        pytest.param(
+            FxRate(rate=Decimal("1.1"), rate_date=date(2025, 7, 31)),
+            id="prior-date",
+        ),
+    ],
+)
+async def test_process_message_marks_job_failed_when_exact_date_fx_unavailable(
     consumer: ValuationConsumer,
     mock_kafka_message: MagicMock,
     mock_event: PortfolioValuationRequiredEvent,
     mock_dependencies: dict,
+    selected_fx_rate: FxRate | None,
 ):
     """
-    GIVEN valuation requires cross-currency conversion and FX is missing
+    GIVEN valuation requires cross-currency conversion and exact-date FX is unavailable
     WHEN the consumer processes the message
     THEN it should persist a FAILED valuation snapshot and mark the job FAILED.
     """
@@ -1231,7 +1242,7 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
         currency="EUR",
         price_date=mock_event.valuation_date,
     )
-    mock_valuation_repo.get_fx_rate.return_value = None
+    mock_valuation_repo.get_exact_fx_rate.return_value = selected_fx_rate
     mock_valuation_repo.upsert_daily_snapshot.return_value = DailyPositionSnapshot(
         id=1,
         portfolio_id=mock_event.portfolio_id,
@@ -1247,7 +1258,12 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
     update_args = mock_valuation_repo.update_job_status.call_args.args
     update_kwargs = mock_valuation_repo.update_job_status.call_args.kwargs
     assert update_args[4] == "FAILED"
-    assert "Missing FX rate" in update_kwargs["failure_reason"]
+    assert "Missing exact-date FX rate" in update_kwargs["failure_reason"]
+    failed_candidate = mock_valuation_repo.upsert_daily_snapshot.await_args.args[0]
+    assert failed_candidate.valuation_status == "FAILED"
+    assert failed_candidate.market_value is None
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
+    mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_called_once()
     consumer._send_to_dlq_async.assert_not_called()
     assert mock_idempotency_repo.claim_event_processing.await_count == 1
@@ -1295,7 +1311,10 @@ async def test_valuation_consumer_skips_success_side_effects_without_terminal_ow
         currency="EUR",
         price_date=mock_event.valuation_date,
     )
-    mock_valuation_repo.get_fx_rate.return_value = FxRate(rate=Decimal("1.1"))
+    mock_valuation_repo.get_exact_fx_rate.return_value = FxRate(
+        rate=Decimal("1.1"),
+        rate_date=mock_event.valuation_date,
+    )
     mock_valuation_repo.update_job_status.return_value = transition_outcome
 
     with patch(
