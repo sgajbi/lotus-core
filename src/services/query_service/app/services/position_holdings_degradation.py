@@ -18,6 +18,12 @@ VALUATION_FIELDS = [
     "valuation.unrealized_gain_loss_local",
 ]
 
+FX_VALUATION_FIELDS = [
+    "valuation.market_value_local",
+    "valuation.unrealized_gain_loss_local",
+    "valuation.unrealized_fx_gain_loss",
+]
+
 
 def holdings_degradation_summary(
     *,
@@ -26,6 +32,7 @@ def holdings_degradation_summary(
     fallback_valuation_map: dict[str, dict[str, Any] | None],
     response_as_of_date: date,
     latest_market_price_dates: dict[str, date],
+    valuation_fx_rate_dates: dict[str, date | None],
     latest_evidence_timestamp: datetime | None,
 ) -> SourceDataDegradationSummary:
     details: list[SourceDataDegradationDetail] = []
@@ -65,6 +72,14 @@ def holdings_degradation_summary(
                 position=position,
                 response_as_of_date=response_as_of_date,
                 latest_market_price_dates=latest_market_price_dates,
+                latest_evidence_timestamp=latest_evidence_timestamp,
+            )
+        )
+        details.extend(
+            _valuation_fx_degradation_details(
+                security_id=security_id,
+                response_as_of_date=response_as_of_date,
+                valuation_fx_rate_dates=valuation_fx_rate_dates,
                 latest_evidence_timestamp=latest_evidence_timestamp,
             )
         )
@@ -162,6 +177,32 @@ def _history_supplement_degradation_detail(
         freshness_status="PARTIAL",
         reason_code="HOLDINGS_VALUATION_FALLBACK",
     )
+
+
+def _valuation_fx_degradation_details(
+    *,
+    security_id: str,
+    response_as_of_date: date,
+    valuation_fx_rate_dates: dict[str, date | None],
+    latest_evidence_timestamp: datetime | None,
+) -> list[SourceDataDegradationDetail]:
+    if security_id not in valuation_fx_rate_dates:
+        return []
+    fx_rate_date = valuation_fx_rate_dates[security_id]
+    if fx_rate_date == response_as_of_date:
+        return []
+    return [
+        _holdings_degradation_detail(
+            section="positions",
+            record_key=_position_record_key(security_id),
+            affected_fields=FX_VALUATION_FIELDS,
+            source_kind="AUTHORITATIVE" if fx_rate_date else "UNAVAILABLE",
+            source_as_of_date=fx_rate_date,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+            freshness_status="STALE" if fx_rate_date else "UNAVAILABLE",
+            reason_code=("FX_RATE_STALE" if fx_rate_date else "FX_RATE_EVIDENCE_MISSING"),
+        )
+    ]
 
 
 def _holdings_degradation_detail(

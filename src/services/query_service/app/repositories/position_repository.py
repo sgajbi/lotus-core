@@ -579,7 +579,7 @@ class PositionRepository:
 
     async def get_latest_snapshot_valuation_map(
         self, portfolio_id: str, security_ids: list[str] | None = None
-    ) -> dict[str, dict[str, float | None]]:
+    ) -> dict[str, dict[str, Any]]:
         """
         Returns latest available valuation fields by security from daily snapshots,
         regardless of epoch. Used to enrich fallback position-history rows.
@@ -606,6 +606,8 @@ class PositionRepository:
                 DailyPositionSnapshot.unrealized_gain_loss_local.label(
                     "unrealized_gain_loss_local"
                 ),
+                DailyPositionSnapshot.valuation_fx_rate.label("valuation_fx_rate"),
+                DailyPositionSnapshot.valuation_fx_rate_date.label("valuation_fx_rate_date"),
             )
             .where(*predicates)
             .distinct(snapshot_security_id)
@@ -620,7 +622,7 @@ class PositionRepository:
         stmt = select(latest_snapshot_subq)
         results = await self.db.execute(stmt)
         rows = results.mappings().all()
-        valuation_map: dict[str, dict[str, float | None]] = {}
+        valuation_map: dict[str, dict[str, Any]] = {}
         for row in rows:
             security_id = normalize_security_id(row.get("security_id"))
             if not security_id:
@@ -633,6 +635,8 @@ class PositionRepository:
                 "unrealized_fx_gain_loss": row.get("unrealized_fx_gain_loss"),
                 "market_value_local": row.get("market_value_local"),
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
+                "valuation_fx_rate": row.get("valuation_fx_rate"),
+                "valuation_fx_rate_date": row.get("valuation_fx_rate_date"),
             }
         return valuation_map
 
@@ -641,7 +645,7 @@ class PositionRepository:
         portfolio_id: str,
         as_of_date: date,
         security_ids: list[str] | None = None,
-    ) -> dict[str, dict[str, float | None]]:
+    ) -> dict[str, dict[str, Any]]:
         """
         Returns latest available valuation fields by security from daily snapshots
         on or before the requested date, regardless of epoch. Used to enrich
@@ -672,6 +676,8 @@ class PositionRepository:
                 DailyPositionSnapshot.unrealized_gain_loss_local.label(
                     "unrealized_gain_loss_local"
                 ),
+                DailyPositionSnapshot.valuation_fx_rate.label("valuation_fx_rate"),
+                DailyPositionSnapshot.valuation_fx_rate_date.label("valuation_fx_rate_date"),
             )
             .where(*predicates)
             .distinct(snapshot_security_id)
@@ -686,7 +692,7 @@ class PositionRepository:
         stmt = select(latest_snapshot_subq)
         results = await self.db.execute(stmt)
         rows = results.mappings().all()
-        valuation_map: dict[str, dict[str, float | None]] = {}
+        valuation_map: dict[str, dict[str, Any]] = {}
         for row in rows:
             security_id = normalize_security_id(row.get("security_id"))
             if not security_id:
@@ -699,6 +705,8 @@ class PositionRepository:
                 "unrealized_fx_gain_loss": row.get("unrealized_fx_gain_loss"),
                 "market_value_local": row.get("market_value_local"),
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
+                "valuation_fx_rate": row.get("valuation_fx_rate"),
+                "valuation_fx_rate_date": row.get("valuation_fx_rate_date"),
             }
         return valuation_map
 

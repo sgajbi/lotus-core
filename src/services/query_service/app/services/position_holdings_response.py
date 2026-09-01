@@ -15,6 +15,7 @@ from .position_holdings import (
     portfolio_position_rows_data,
     portfolio_positions_response_data,
     position_held_since_requests,
+    valuation_fx_rate_dates_by_security,
 )
 from .position_holdings_degradation import holdings_degradation_summary
 from .position_holdings_reads import (
@@ -56,6 +57,11 @@ async def portfolio_holdings_response(
         snapshot_security_ids=snapshot_security_ids,
         fallback_valuation_map=fallback_valuation_map,
     )
+    valuation_fx_rate_dates = valuation_fx_rate_dates_by_security(
+        db_results=db_results,
+        snapshot_security_ids=snapshot_security_ids,
+        fallback_valuation_map=fallback_valuation_map,
+    )
     assign_position_weights(positions)
 
     held_since_requests = position_held_since_requests(
@@ -79,6 +85,7 @@ async def portfolio_holdings_response(
         history_supplements=history_supplements,
         response_as_of_date=response_as_of_date,
         latest_market_price_dates=latest_market_price_dates,
+        valuation_fx_rate_dates=valuation_fx_rate_dates,
     )
     latest_evidence_timestamp = latest_holdings_evidence_timestamp(db_results)
     reconciliation_scopes = holdings_reconciliation_scopes(db_results)
@@ -103,6 +110,7 @@ async def portfolio_holdings_response(
             fallback_valuation_map=fallback_valuation_map,
             response_as_of_date=response_as_of_date,
             latest_market_price_dates=latest_market_price_dates,
+            valuation_fx_rate_dates=valuation_fx_rate_dates,
             latest_evidence_timestamp=latest_evidence_timestamp,
         ),
     )
