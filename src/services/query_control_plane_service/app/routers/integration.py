@@ -21,10 +21,7 @@ from ..application.core_snapshot.governance import (
 )
 from ..application.core_snapshot.service import (
     CoreSnapshotBadRequestError,
-    CoreSnapshotConflictError,
-    CoreSnapshotNotFoundError,
     CoreSnapshotService,
-    CoreSnapshotUnavailableSectionError,
 )
 from ..application.dpm_portfolio_population import DpmPortfolioPopulationService
 from ..application.dpm_source_readiness.readiness import DpmSourceReadinessService
@@ -187,6 +184,7 @@ from ..dependencies import (
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
 )
+from .core_snapshot_http import core_snapshot_response_or_http_error
 from .response_helpers import (
     problem_example,
     problem_or_validation_response,
@@ -794,7 +792,7 @@ async def create_core_snapshot(
         tenant_id=admitted_tenant_id,
         integration_service=integration_service,
     )
-    response = await _core_snapshot_response_or_http_error(
+    response = await core_snapshot_response_or_http_error(
         service=service,
         portfolio_id=portfolio_id,
         request=effective_request,
@@ -940,59 +938,6 @@ def _core_snapshot_governance(
         strict_mode=policy.policy_provenance.strict_mode,
         warnings=warnings,
     )
-
-
-async def _core_snapshot_response_or_http_error(
-    *,
-    service: CoreSnapshotService,
-    portfolio_id: str,
-    request: CoreSnapshotRequest,
-    governance: SnapshotGovernanceContext,
-) -> CoreSnapshotResponse:
-    try:
-        response = await service.get_core_snapshot(
-            portfolio_id=portfolio_id,
-            request=request,
-            governance=governance,
-        )
-        return cast(CoreSnapshotResponse, response)
-    except CoreSnapshotBadRequestError as exc:
-        raise_problem(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            title="Core snapshot request is invalid",
-            detail="Core snapshot request is invalid.",
-            error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    except CoreSnapshotNotFoundError as exc:
-        raise_problem(
-            status_code=status.HTTP_404_NOT_FOUND,
-            title="Core snapshot not found",
-            detail="Portfolio or simulation session was not found.",
-            error_code="QCP_CORE_SNAPSHOT_NOT_FOUND",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    except CoreSnapshotConflictError as exc:
-        raise_problem(
-            status_code=status.HTTP_409_CONFLICT,
-            title="Core snapshot conflict",
-            detail=(
-                "Core snapshot request conflicts with the current portfolio or simulation state."
-            ),
-            error_code="QCP_CORE_SNAPSHOT_CONFLICT",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    except CoreSnapshotUnavailableSectionError as exc:
-        raise_problem(
-            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-            title="Core snapshot section unavailable",
-            detail=(
-                "Requested core snapshot section cannot be fulfilled from available source data."
-            ),
-            error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
-            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
-        )
-    raise AssertionError("problem response helper returned unexpectedly")
 
 
 @router.post(
