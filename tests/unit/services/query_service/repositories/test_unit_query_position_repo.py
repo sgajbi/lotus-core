@@ -225,6 +225,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
             "unrealized_fx_gain_loss": 32.0,
             "market_value_local": 1212.0,
             "unrealized_gain_loss_local": 112.0,
+            "valuation_fx_rate": 1.1,
+            "valuation_fx_rate_date": date(2025, 1, 30),
         },
         {
             "security_id": None,
@@ -235,6 +237,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
             "unrealized_fx_gain_loss": 0.4,
             "market_value_local": 1.0,
             "unrealized_gain_loss_local": 1.0,
+            "valuation_fx_rate": None,
+            "valuation_fx_rate_date": None,
         },
     ]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
@@ -252,6 +256,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
             "unrealized_fx_gain_loss": 32.0,
             "market_value_local": 1212.0,
             "unrealized_gain_loss_local": 112.0,
+            "valuation_fx_rate": 1.1,
+            "valuation_fx_rate_date": date(2025, 1, 30),
         }
     }
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -264,6 +270,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
     assert "row_number()" not in compiled_query
     assert "daily_position_snapshots.unrealized_price_gain_loss" in compiled_query
     assert "daily_position_snapshots.unrealized_fx_gain_loss" in compiled_query
+    assert "daily_position_snapshots.valuation_fx_rate" in compiled_query
+    assert "daily_position_snapshots.valuation_fx_rate_date" in compiled_query
 
 
 async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_latest_rows(
@@ -280,6 +288,8 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
             "unrealized_fx_gain_loss": 32.0,
             "market_value_local": 1212.0,
             "unrealized_gain_loss_local": 112.0,
+            "valuation_fx_rate": 1.1,
+            "valuation_fx_rate_date": date(2025, 1, 30),
         },
         {
             "security_id": None,
@@ -290,6 +300,8 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
             "unrealized_fx_gain_loss": 0.4,
             "market_value_local": 1.0,
             "unrealized_gain_loss_local": 1.0,
+            "valuation_fx_rate": None,
+            "valuation_fx_rate_date": None,
         },
     ]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
@@ -309,6 +321,8 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
             "unrealized_fx_gain_loss": 32.0,
             "market_value_local": 1212.0,
             "unrealized_gain_loss_local": 112.0,
+            "valuation_fx_rate": 1.1,
+            "valuation_fx_rate_date": date(2025, 1, 30),
         }
     }
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -318,6 +332,8 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
     assert "('SEC_A', 'SEC_A'" not in compiled_query
     assert "daily_position_snapshots.unrealized_price_gain_loss" in compiled_query
     assert "daily_position_snapshots.unrealized_fx_gain_loss" in compiled_query
+    assert "daily_position_snapshots.valuation_fx_rate" in compiled_query
+    assert "daily_position_snapshots.valuation_fx_rate_date" in compiled_query
     assert "SELECT DISTINCT ON (trim(daily_position_snapshots.security_id))" in compiled_query
     assert "row_number()" not in compiled_query
     assert (
