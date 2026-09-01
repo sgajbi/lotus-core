@@ -397,6 +397,73 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
     }
 
 
+async def test_position_valuation_run_detects_prior_date_fx_authority(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-R2-FX")
+    async_db_session.add(
+        Instrument(
+            security_id="SEC-R2-FX",
+            name="Instrument SEC-R2-FX",
+            isin="ISINSEC-R2FX",
+            currency="EUR",
+            product_type="EQUITY",
+        )
+    )
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id="PORT-R2-FX",
+            security_id="SEC-R2-FX",
+            date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("10"),
+            cost_basis=Decimal("90"),
+            cost_basis_local=Decimal("90"),
+            market_price=Decimal("11"),
+            market_value=Decimal("110"),
+            market_value_local=Decimal("110"),
+            unrealized_gain_loss=Decimal("20"),
+            unrealized_gain_loss_local=Decimal("20"),
+            valuation_status="VALUED_CURRENT",
+            valuation_source_currency="EUR",
+            valuation_reporting_currency="USD",
+            valuation_fx_rate_date=date(2026, 3, 7),
+            valuation_fx_rate=Decimal("1.1"),
+        )
+    )
+    await async_db_session.commit()
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/position-valuation",
+        json={"portfolio_id": "PORT-R2-FX", "business_date": "2026-03-08"},
+        headers=TEST_TENANT_HEADERS,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {
+        "examined_count": 1,
+        "finding_count": 1,
+        "error_count": 1,
+        "warning_count": 0,
+        "passed": False,
+    }
+
+    findings_response = await async_test_client.get(
+        f"/reconciliation/runs/{payload['run_id']}/findings",
+        headers=TEST_TENANT_HEADERS,
+    )
+    assert findings_response.status_code == 200
+    finding = findings_response.json()["findings"][0]
+    assert finding["finding_type"] == "fx_rate_not_on_valuation_date"
+    assert finding["expected_value"] == {"valuation_fx_rate_date": "2026-03-08"}
+    assert finding["observed_value"] == {"valuation_fx_rate_date": "2026-03-07"}
+    assert finding["repair_recommendation"] == "REVALUE_POSITION_WITH_EXACT_DATE_FX"
+
+
 async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift(
     async_test_client: httpx.AsyncClient,
     async_db_session: AsyncSession,
