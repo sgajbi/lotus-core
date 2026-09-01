@@ -745,8 +745,6 @@ class ValuationRepositoryBase:
     async def get_exact_fx_rate(
         self, from_currency: str, to_currency: str, rate_date: date
     ) -> Optional[FxRate]:
-        """Return direct FX authority for the exact valuation date."""
-
         normalized_from_currency = self._normalize_currency_code(from_currency)
         normalized_to_currency = self._normalize_currency_code(to_currency)
         from_currency_expr = func.upper(func.trim(FxRate.from_currency))
