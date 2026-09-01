@@ -167,6 +167,55 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
 
 
 @pytest.mark.asyncio
+async def test_run_position_valuation_maps_persisted_fx_date_into_control_evidence():
+    run = SimpleNamespace(run_id="recon-fx-date")
+    snapshot = SimpleNamespace(
+        portfolio_id="PORT-FX",
+        security_id="SEC-FX",
+        date=date(2026, 3, 8),
+        epoch=2,
+        quantity=Decimal("10"),
+        market_price=Decimal("11"),
+        market_value_local=Decimal("110"),
+        cost_basis=Decimal("90"),
+        cost_basis_local=Decimal("90"),
+        unrealized_gain_loss_local=Decimal("20"),
+        valuation_fx_rate_date=date(2026, 3, 7),
+    )
+    instrument = SimpleNamespace(currency="EUR", product_type="EQUITY")
+    portfolio = SimpleNamespace(base_currency="USD")
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_position_valuation_rows.return_value = [
+        (snapshot, instrument, portfolio, None)
+    ]
+
+    service = ReconciliationService(repository)
+    await service.run_position_valuation(
+        request=ReconciliationRunRequest(
+            portfolio_id="PORT-FX",
+            business_date=date(2026, 3, 8),
+            epoch=2,
+        ),
+        correlation_id="corr-fx-date",
+    )
+
+    findings = repository.add_findings.await_args.args[0]
+    assert [finding.finding_type for finding in findings] == ["fx_rate_not_on_valuation_date"]
+    assert findings[0].expected_value == {"valuation_fx_rate_date": "2026-03-08"}
+    assert findings[0].observed_value == {"valuation_fx_rate_date": "2026-03-07"}
+    assert findings[0].repair_recommendation == "REVALUE_POSITION_WITH_EXACT_DATE_FX"
+    summary = repository.mark_run_completed.await_args.kwargs["summary"]
+    assert summary == {
+        "examined_count": 1,
+        "finding_count": 1,
+        "error_count": 1,
+        "warning_count": 0,
+        "passed": False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_run_position_valuation_flags_unscoped_bond_quote_authority():
     run = SimpleNamespace(run_id="recon-bond")
     snapshot = SimpleNamespace(

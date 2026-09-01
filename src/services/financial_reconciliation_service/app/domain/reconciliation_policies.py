@@ -40,6 +40,7 @@ _FINDING_OWNER_BY_RECONCILIATION_TYPE = {
 }
 _REPAIR_RECOMMENDATION_BY_FINDING_TYPE = {
     "cashflow_rule_mismatch": "REBUILD_CASHFLOW_FROM_GOVERNED_RULE",
+    "fx_rate_not_on_valuation_date": "REVALUE_POSITION_WITH_EXACT_DATE_FX",
     "invalid_market_price": "CORRECT_MARKET_PRICE_SOURCE",
     "market_value_local_mismatch": "REVALUE_POSITION",
     "missing_bond_quote_authority": "ASSIGN_VALUATION_QUOTE_POLICY",
@@ -130,6 +131,7 @@ class PositionValuationEvidence:
     cost_basis_local: object
     unrealized_gain_loss_local: object
     product_type: str | None
+    valuation_fx_rate_date: date | None = None
     valuation_receipt: PositionValuationReceiptEvidence | None = None
 
 
@@ -254,11 +256,35 @@ def requires_authoritative_fx_rate(from_currency: str, to_currency: str) -> bool
     return bool(from_currency and to_currency and from_currency != to_currency)
 
 
+def _fx_rate_date_finding(
+    evidence: PositionValuationEvidence,
+) -> ReconciliationFinding | None:
+    fx_rate_date = evidence.valuation_fx_rate_date
+    if fx_rate_date is None or fx_rate_date == evidence.business_date:
+        return None
+    return ReconciliationFinding(
+        reconciliation_type="position_valuation",
+        finding_type="fx_rate_not_on_valuation_date",
+        severity="ERROR",
+        portfolio_id=evidence.portfolio_id,
+        security_id=evidence.security_id,
+        transaction_id=None,
+        business_date=evidence.business_date,
+        epoch=evidence.epoch,
+        expected_value={"valuation_fx_rate_date": evidence.business_date.isoformat()},
+        observed_value={"valuation_fx_rate_date": fx_rate_date.isoformat()},
+        detail={"reason": "recorded FX authority is not owned by the valuation date"},
+    )
+
+
 def position_valuation_reconciliation_findings(
     *,
     evidence: PositionValuationEvidence,
     tolerance: Decimal,
 ) -> list[ReconciliationFinding]:
+    findings: list[ReconciliationFinding] = []
+    if fx_rate_date_finding := _fx_rate_date_finding(evidence):
+        findings.append(fx_rate_date_finding)
     quantity = required_decimal(evidence.quantity, field_name="snapshot.quantity")
     cost_basis_local = required_decimal(
         evidence.cost_basis_local,
@@ -270,7 +296,7 @@ def position_valuation_reconciliation_findings(
     )
     market_price = coerce_positive_market_price_or_none(evidence.market_price)
     if market_price is None:
-        return [
+        return findings + [
             ReconciliationFinding(
                 reconciliation_type="position_valuation",
                 finding_type="invalid_market_price",
@@ -297,7 +323,7 @@ def position_valuation_reconciliation_findings(
             cost_basis_reporting=cost_basis_reporting,
             cost_basis_local=cost_basis_local,
         ):
-            return [_missing_bond_quote_authority_finding(evidence)]
+            return findings + [_missing_bond_quote_authority_finding(evidence)]
         expected_market_value = quantity * market_price
     elif receipt.supportability == "SUPPORTED":
         authoritative_market_value = _authoritative_market_value_local(
@@ -306,10 +332,10 @@ def position_valuation_reconciliation_findings(
             receipt=receipt,
         )
         if authoritative_market_value is None:
-            return [_unsupported_authoritative_receipt_finding(evidence, receipt)]
+            return findings + [_unsupported_authoritative_receipt_finding(evidence, receipt)]
         expected_market_value = authoritative_market_value
     else:
-        return [_unsupported_authoritative_receipt_finding(evidence, receipt)]
+        return findings + [_unsupported_authoritative_receipt_finding(evidence, receipt)]
     expected_unrealized = expected_market_value - cost_basis_local
     observed_market_value = required_decimal(
         evidence.market_value_local,
@@ -320,7 +346,6 @@ def position_valuation_reconciliation_findings(
         field_name="snapshot.unrealized_gain_loss_local",
     )
 
-    findings: list[ReconciliationFinding] = []
     market_delta = observed_market_value - expected_market_value
     if abs(market_delta) > tolerance:
         findings.append(

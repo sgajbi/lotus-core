@@ -536,6 +536,7 @@ class ReconciliationService:
                         cost_basis_local=snapshot.cost_basis_local,
                         unrealized_gain_loss_local=snapshot.unrealized_gain_loss_local,
                         product_type=instrument.product_type,
+                        valuation_fx_rate_date=getattr(snapshot, "valuation_fx_rate_date", None),
                         valuation_receipt=(
                             PositionValuationReceiptEvidence(
                                 supportability=receipt.supportability,
