@@ -26,6 +26,10 @@ REQUIRED_SNIPPETS = {
     SERVICE_PATH: (
         "BulkUploadValidator",
         "UploadRecordPublisher",
+        "ValidateTransactionPortfolioOwnership",
+        "PortfolioTenantOwnershipReadError",
+        'if command.entity_type != "transactions":',
+        "await self._validate_transaction_portfolio_ownership(command, validation)",
         "publish_records(",
     ),
     VALIDATOR_PATH: (
