@@ -24,6 +24,8 @@ from tools.front_office_portfolio_seed import (
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
     FRONT_OFFICE_SEED_CONTRACT,
+    FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
+    FRONT_OFFICE_VALUATION_TENANT_ID,
     _cleanup_existing_front_office_seed,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
@@ -539,12 +541,63 @@ def test_front_office_bundle_includes_source_only_dpm_candidate_portfolios():
     assert {"PB_SG_GLOBAL_BAL_001", "PB_SG_GLOBAL_INC_002", "PB_SG_GLOBAL_GROWTH_003"} <= set(
         portfolios
     )
+    assert {portfolio["tenant_id"] for portfolio in portfolios.values()} == {
+        FRONT_OFFICE_VALUATION_TENANT_ID
+    }
+    assert {portfolio["legal_book_id"] for portfolio in portfolios.values()} == {
+        FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID
+    }
     for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS:
         portfolio = portfolios[row["portfolio_id"]]
+        assert portfolio["tenant_id"] == FRONT_OFFICE_VALUATION_TENANT_ID
+        assert portfolio["legal_book_id"] == FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID
         assert portfolio["portfolio_type"] == "discretionary"
         assert portfolio["booking_center_code"] == "Singapore"
         assert portfolio["advisor_id"] == FRONT_OFFICE_SEED_CONTRACT.advisor_id
         assert portfolio["status"] == "active"
+
+
+def test_front_office_http_requests_use_canonical_portfolio_tenant(monkeypatch):
+    observed = {}
+
+    def capture_request(method, url, payload, headers, *, tenant_id):
+        observed.update(
+            method=method,
+            url=url,
+            payload=payload,
+            headers=headers,
+            tenant_id=tenant_id,
+        )
+        return 202, {"accepted": True}
+
+    monkeypatch.setattr(front_office_seed_module, "_request_json_for_tenant", capture_request)
+
+    response = front_office_seed_module._request_json(
+        "POST",
+        "http://core.test/ingest/portfolios",
+        {"portfolios": []},
+    )
+
+    assert response == (202, {"accepted": True})
+    assert observed["tenant_id"] == FRONT_OFFICE_VALUATION_TENANT_ID
+
+
+def test_front_office_gateway_requests_use_governed_caller_tenant(monkeypatch):
+    observed = {}
+
+    def capture_request(method, url, payload=None, headers=None, *, tenant_id):
+        observed.update(method=method, url=url, headers=headers, tenant_id=tenant_id)
+        return 200, {"status": "ready"}
+
+    monkeypatch.setattr(front_office_seed_module, "_request_json_for_tenant", capture_request)
+
+    response = front_office_seed_module._request_gateway_json(
+        "GET", "http://gateway.test/api/v1/workbench/PB_SG_GLOBAL_BAL_001/overview"
+    )
+
+    assert response == (200, {"status": "ready"})
+    assert observed["headers"] == FRONT_OFFICE_GATEWAY_CALLER_HEADERS
+    assert observed["tenant_id"] == FRONT_OFFICE_GATEWAY_CALLER_HEADERS["X-Tenant-Id"]
 
 
 def test_front_office_bundle_carries_meaningful_classification_metadata():
@@ -3162,7 +3215,16 @@ def test_front_office_seed_verification_rejects_scheduler_amplification_until_st
             )
         return responses[url]
 
+    def fake_gateway_request(method, url):
+        requested_urls.append(url)
+        gateway_header_calls.append(FRONT_OFFICE_GATEWAY_CALLER_HEADERS)
+        return responses[url]
+
     monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._request_gateway_json",
+        fake_gateway_request,
+    )
     monkeypatch.setattr(
         "tools.front_office_portfolio_seed.time.sleep",
         lambda seconds: sleep_calls.append(seconds),

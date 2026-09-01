@@ -2375,15 +2375,17 @@ def _request_json(
     url: str,
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    *,
+    tenant_id: str = DEMO_TENANT_ID,
 ) -> tuple[int, Any]:
     request_headers = {
         "Content-Type": "application/json",
-        "X-Tenant-Id": DEMO_TENANT_ID,
+        "X-Tenant-Id": tenant_id,
     }
     if headers:
         supplied_tenants = [value for key, value in headers.items() if key.lower() == "x-tenant-id"]
-        if any(value.strip() != DEMO_TENANT_ID for value in supplied_tenants):
-            raise ValueError("Demo pack tenant header must match the governed demo tenant")
+        if any(value.strip() != tenant_id for value in supplied_tenants):
+            raise ValueError("Request tenant header must match the governed seed tenant")
         request_headers.update(
             {key: value for key, value in headers.items() if key.lower() != "x-tenant-id"}
         )
