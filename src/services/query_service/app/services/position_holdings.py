@@ -311,7 +311,7 @@ def valuation_fx_rate_dates_by_security(
     snapshot_security_ids: set[str],
     fallback_valuation_map: dict[str, dict[str, Any] | None],
 ) -> dict[str, date | None]:
-    """Return persisted FX authority dates only for valuations that used FX."""
+    """Return FX authority dates for valuations that used or require FX."""
     fx_rate_dates: dict[str, date | None] = {}
     for position_row, _instrument, _pos_state in db_results:
         security_id = normalize_security_id(position_row.security_id)
@@ -320,13 +320,24 @@ def valuation_fx_rate_dates_by_security(
         if security_id in snapshot_security_ids:
             fx_rate = getattr(position_row, "valuation_fx_rate", None)
             fx_rate_date = getattr(position_row, "valuation_fx_rate_date", None)
+            source_currency = getattr(position_row, "valuation_source_currency", None)
+            reporting_currency = getattr(position_row, "valuation_reporting_currency", None)
         else:
             fallback_valuation = fallback_valuation_map.get(security_id)
             if fallback_valuation is None:
                 continue
             fx_rate = fallback_valuation.get("valuation_fx_rate")
             fx_rate_date = fallback_valuation.get("valuation_fx_rate_date")
-        if fx_rate is not None:
+            source_currency = fallback_valuation.get("valuation_source_currency")
+            reporting_currency = fallback_valuation.get("valuation_reporting_currency")
+        normalized_source_currency = str(source_currency or "").strip().upper()
+        normalized_reporting_currency = str(reporting_currency or "").strip().upper()
+        requires_fx = bool(
+            normalized_source_currency
+            and normalized_reporting_currency
+            and normalized_source_currency != normalized_reporting_currency
+        )
+        if fx_rate is not None or requires_fx:
             fx_rate_dates[security_id] = fx_rate_date
     return fx_rate_dates
 

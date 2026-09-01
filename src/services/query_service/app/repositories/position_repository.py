@@ -608,6 +608,10 @@ class PositionRepository:
                 ),
                 DailyPositionSnapshot.valuation_fx_rate.label("valuation_fx_rate"),
                 DailyPositionSnapshot.valuation_fx_rate_date.label("valuation_fx_rate_date"),
+                DailyPositionSnapshot.valuation_source_currency.label("valuation_source_currency"),
+                DailyPositionSnapshot.valuation_reporting_currency.label(
+                    "valuation_reporting_currency"
+                ),
             )
             .where(*predicates)
             .distinct(snapshot_security_id)
@@ -637,6 +641,8 @@ class PositionRepository:
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
                 "valuation_fx_rate": row.get("valuation_fx_rate"),
                 "valuation_fx_rate_date": row.get("valuation_fx_rate_date"),
+                "valuation_source_currency": row.get("valuation_source_currency"),
+                "valuation_reporting_currency": row.get("valuation_reporting_currency"),
             }
         return valuation_map
 
@@ -678,6 +684,10 @@ class PositionRepository:
                 ),
                 DailyPositionSnapshot.valuation_fx_rate.label("valuation_fx_rate"),
                 DailyPositionSnapshot.valuation_fx_rate_date.label("valuation_fx_rate_date"),
+                DailyPositionSnapshot.valuation_source_currency.label("valuation_source_currency"),
+                DailyPositionSnapshot.valuation_reporting_currency.label(
+                    "valuation_reporting_currency"
+                ),
             )
             .where(*predicates)
             .distinct(snapshot_security_id)
@@ -707,6 +717,8 @@ class PositionRepository:
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
                 "valuation_fx_rate": row.get("valuation_fx_rate"),
                 "valuation_fx_rate_date": row.get("valuation_fx_rate_date"),
+                "valuation_source_currency": row.get("valuation_source_currency"),
+                "valuation_reporting_currency": row.get("valuation_reporting_currency"),
             }
         return valuation_map
 
