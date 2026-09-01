@@ -938,6 +938,31 @@ async def test_core_snapshot_success(async_test_client):
     ]
 
 
+async def test_core_snapshot_rejects_tenant_scope_mismatch(async_test_client):
+    client, mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/core-snapshot",
+        headers={"X-Tenant-Id": "tenant-a"},
+        json={
+            "as_of_date": "2026-02-27",
+            "snapshot_mode": "BASELINE",
+            "sections": ["positions_baseline"],
+            "consumer_system": "lotus-gateway",
+            "tenant_id": "tenant-b",
+        },
+    )
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_integration_service.get_effective_policy.assert_not_called()
+    mock_core_snapshot_service.get_core_snapshot.assert_not_awaited()
+
+
 async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_test_client):
     client, mock_core_snapshot_service, mock_integration_service = async_test_client
     mock_core_snapshot_service.get_core_snapshot.return_value["freshness_status"] = "CURRENT"
@@ -1039,6 +1064,23 @@ async def test_effective_integration_policy_success(async_test_client):
         tenant_id="tenant-a",
         include_sections=["positions_baseline", "portfolio_totals"],
     )
+
+
+async def test_effective_integration_policy_rejects_tenant_scope_mismatch(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.get(
+        "/integration/policy/effective?consumer_system=lotus-manage&tenant_id=tenant-b",
+        headers={"X-Tenant-Id": "tenant-a"},
+    )
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_integration_service.get_effective_policy.assert_not_called()
 
 
 async def test_effective_integration_policy_requires_tenant_query(async_test_client):
