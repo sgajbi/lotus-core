@@ -367,6 +367,7 @@ TABLES_TO_TRUNCATE = [
     "instruments",
     "fx_rates",
     "portfolios",
+    "ingestion_jobs",
     "processed_events",
     "outbox_recovery_audit",
     "outbox_events",
