@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-30T12:54:04.208260+00:00",
+  "generatedAt": "2026-09-01T01:26:06.777948+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -27641,7 +27641,7 @@
         "Transactions"
       ],
       "summary": "Ingest a single transaction",
-      "description": "What: Accept one canonical transaction record for ledger ingestion.\nHow: Validate contract, enforce mode and rate controls, propagate any idempotency key as publish lineage, then publish asynchronously to Kafka.\nWhen: Use for low-volume operational corrections or single-record onboarding.",
+      "description": "What: Accept one canonical transaction record for ledger ingestion.\nHow: Validate the portfolio against admitted tenant authority, enforce contract, mode, and rate controls, propagate any idempotency key as publish lineage, then publish asynchronously to Kafka.\nWhen: Use for low-volume operational corrections or single-record onboarding.",
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
@@ -28658,7 +28658,7 @@
         "Transactions"
       ],
       "summary": "Ingest a transaction batch",
-      "description": "What: Accept a batch of canonical transaction records.\nHow: Persist ingestion job metadata, validate payload, and publish all valid records asynchronously.\nWhen: Use for standard API-driven batch ingestion workflows.",
+      "description": "What: Accept a batch of canonical transaction records.\nHow: Validate every portfolio against admitted tenant authority, persist tenant-owned ingestion job metadata, validate payload, and publish all valid records asynchronously.\nWhen: Use for standard API-driven batch ingestion workflows.",
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
