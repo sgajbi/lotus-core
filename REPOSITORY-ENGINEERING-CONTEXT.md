@@ -4375,9 +4375,10 @@ Most relevant current governance:
      mutable current FX table. A recorded FX date different from the response as-of date produces
      `data_quality_status=STALE` plus row/field-scoped `FX_RATE_STALE` degradation with the source
      date preserved. A used FX rate without a source date fails closed as
-     `FX_RATE_EVIDENCE_MISSING`. Exact-date evidence and valuations that require no FX retain their
-     existing posture. Historical remediation and runtime restatement proof remain separately
-     bounded under #997.
+     `FX_RATE_EVIDENCE_MISSING`. Both reasons identify the translated portfolio-base valuation
+     fields as affected, while local instrument-currency values remain outside FX degradation.
+     Exact-date evidence and valuations that require no FX retain their existing posture.
+     Historical remediation and runtime restatement proof remain separately bounded under #997.
 
 ## Context Maintenance Rule
 

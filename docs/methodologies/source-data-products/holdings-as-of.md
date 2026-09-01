@@ -234,7 +234,7 @@ supportability posture is one of:
 | Any returned position lacks reprocessing status | Returns `data_quality_status=UNKNOWN`. |
 | Any returned position has non-`CURRENT` reprocessing status | Returns `data_quality_status=STALE`. |
 | Any non-cash priced position lacks market-price freshness through `A` | Returns `data_quality_status=STALE`. |
-| A returned valuation used FX whose persisted `valuation_fx_rate_date` differs from `A` | Returns `data_quality_status=STALE` and degradation reason `FX_RATE_STALE`, preserving the FX source date and affected local-valuation fields. |
+| A returned valuation used FX whose persisted `valuation_fx_rate_date` differs from `A` | Returns `data_quality_status=STALE` and degradation reason `FX_RATE_STALE`, preserving the FX source date and identifying the affected portfolio-base valuation fields. Local instrument-currency values are not marked FX-affected. |
 | A persisted source/reporting currency pair requires FX but its rate/date authority is incomplete | Fails closed with degradation reason `FX_RATE_EVIDENCE_MISSING`; it is not presented as current evidence. |
 | Positions include history-backed supplement rows | Source-row quality is `PARTIAL`; the emitted status may become `UNKNOWN`, `STALE`, or `BLOCKED` when reconciliation has a stronger fail-closed posture. |
 | All positions are current, priced through `A` where required, snapshot-backed, and exactly reconciled | Returns `data_quality_status=COMPLETE`. |

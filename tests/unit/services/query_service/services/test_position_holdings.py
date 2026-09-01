@@ -1171,8 +1171,9 @@ async def test_holdings_degradation_summary_reports_stale_fx_authority_date() ->
     assert detail.source_as_of_date == date(2025, 1, 1)
     assert detail.freshness_status == "STALE"
     assert detail.affected_fields == [
-        "valuation.market_value_local",
-        "valuation.unrealized_gain_loss_local",
+        "valuation.market_value",
+        "valuation.unrealized_gain_loss",
+        "valuation.unrealized_price_gain_loss",
         "valuation.unrealized_fx_gain_loss",
     ]
 
@@ -1202,6 +1203,12 @@ async def test_holdings_degradation_summary_fails_closed_without_fx_authority_da
     assert summary.details[0].source_kind == "UNAVAILABLE"
     assert summary.details[0].source_as_of_date is None
     assert summary.details[0].freshness_status == "UNAVAILABLE"
+    assert summary.details[0].affected_fields == [
+        "valuation.market_value",
+        "valuation.unrealized_gain_loss",
+        "valuation.unrealized_price_gain_loss",
+        "valuation.unrealized_fx_gain_loss",
+    ]
 
 
 async def test_holdings_degradation_summary_reports_unavailable_fallback_detail() -> None:
