@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..application.errors import ValidationRejected
+from ..application.errors import ApplicationError, ValidationRejected
 from ..application.upload_commands import (
     UploadCommitCommand,
     UploadCommitResult,
@@ -11,6 +11,11 @@ from ..application.upload_commands import (
     UploadPreviewResult,
     UploadRowIssue,
 )
+from ..application.validate_transaction_portfolio_ownership import (
+    TransactionPortfolioOwnershipRejected,
+    ValidateTransactionPortfolioOwnership,
+)
+from ..ports.portfolio_tenant_ownership import PortfolioTenantOwnershipReadError
 from ..ports.upload_record_publisher import UploadRecordPublisher
 from .upload_validation import BulkUploadValidator, UploadValidationReport
 
@@ -57,9 +62,11 @@ class UploadIngestionService:
         self,
         validator: BulkUploadValidator,
         publisher: UploadRecordPublisher,
+        transaction_portfolio_ownership_validator: ValidateTransactionPortfolioOwnership,
     ) -> None:
         self._validator = validator
         self._publisher = publisher
+        self._transaction_portfolio_ownership_validator = transaction_portfolio_ownership_validator
 
     def preview_upload(
         self,
@@ -96,8 +103,42 @@ class UploadIngestionService:
             content=command.content,
         )
         self._validate_commit(validation, command.allow_partial)
+        await self._validate_transaction_portfolio_ownership(command, validation)
         await self._publisher.publish_records(command.entity_type, validation.valid_models)
         return self._commit_response(command.entity_type, validation)
+
+    async def _validate_transaction_portfolio_ownership(
+        self,
+        command: UploadCommitCommand,
+        validation: UploadValidationReport,
+    ) -> None:
+        if command.entity_type != "transactions":
+            return
+        try:
+            await self._transaction_portfolio_ownership_validator.validate(
+                tenant_context=command.tenant_context,
+                portfolio_ids=[str(row["portfolio_id"]) for row in validation.valid_rows],
+            )
+        except TransactionPortfolioOwnershipRejected as exc:
+            raise ValidationRejected(
+                reason_code="upload_transaction_portfolio_tenant_mismatch",
+                detail={
+                    "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+                    "message": (
+                        "One or more transaction portfolios are outside admitted tenant authority."
+                    ),
+                    "portfolio_ids": list(exc.portfolio_ids),
+                },
+            ) from exc
+        except PortfolioTenantOwnershipReadError as exc:
+            raise ApplicationError(
+                reason_code="upload_transaction_portfolio_tenant_authority_unavailable",
+                detail={
+                    "code": "INGESTION_PORTFOLIO_TENANT_AUTHORITY_UNAVAILABLE",
+                    "message": "Portfolio tenant authority could not be verified.",
+                },
+                retryable=True,
+            ) from exc
 
     def _validate_commit(self, validation: UploadValidationReport, allow_partial: bool) -> None:
         if validation.total_rows == 0:

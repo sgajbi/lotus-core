@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-01T01:26:06.777948+00:00",
+  "generatedAt": "2026-09-01T03:17:39.817995+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -33052,7 +33052,7 @@
         "Bulk Uploads"
       ],
       "summary": "Commit validated bulk upload data",
-      "description": "What: Commit CSV/XLSX data into canonical ingestion topics.\nHow: Validate rows, enforce mode controls, and publish valid records (optionally partial when allow_partial=true).\nWhen: Use after preview passes for adapter-mode bulk ingestion.",
+      "description": "What: Commit CSV/XLSX data into canonical ingestion topics.\nHow: Validate rows, enforce mode controls, and publish valid records (optionally partial when allow_partial=true). Transaction commits also fail closed unless every valid row references a portfolio owned by the admitted tenant.\nWhen: Use after preview passes for adapter-mode bulk ingestion.",
       "naming": {
         "boundedContext": "bulk_uploads",
         "canonicalTerms": [

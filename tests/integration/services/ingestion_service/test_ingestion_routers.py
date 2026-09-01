@@ -38,6 +38,9 @@ from src.services.ingestion_service.app.main import app
 from src.services.ingestion_service.app.ports.ingestion_idempotency_replay import (
     IngestionIdempotencyReplay,
 )
+from src.services.ingestion_service.app.ports.portfolio_tenant_ownership import (
+    PortfolioTenantOwnershipReadError,
+)
 from src.services.ingestion_service.app.ports.transaction_reprocessing import (
     TransactionReprocessingTargetReadError,
 )
@@ -1286,8 +1289,13 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     class FakeTransactionPortfolioOwnershipValidator:
         def __init__(self) -> None:
             self.rejected_portfolio_ids: set[str] = set()
+            self.unavailable = False
 
         async def validate(self, *, tenant_context, portfolio_ids) -> None:
+            if self.unavailable:
+                raise PortfolioTenantOwnershipReadError(
+                    "Portfolio tenant ownership lookup is unavailable."
+                )
             rejected = tuple(
                 portfolio_id
                 for portfolio_id in dict.fromkeys(portfolio_ids)
@@ -7067,6 +7075,9 @@ UPLOAD_ENTITY_CASES = [
         ),
     ]
 ]
+TRANSACTION_UPLOAD_CASE = next(
+    case for case in UPLOAD_ENTITY_CASES if case["entity_type"] == "transactions"
+)
 
 
 def _upload_csv_content(headers: list[str], row: list[str]) -> bytes:
@@ -7135,6 +7146,59 @@ async def test_upload_commit_accepts_all_supported_entity_families(
     publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
     assert publish_kwargs["topic"] == case["expected_topic"]
     assert publish_kwargs["key"] == case["expected_partition_key"]
+
+
+async def test_upload_commit_rejects_cross_tenant_transaction_before_publish(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    validator = ingestion_test_harness["fake_transaction_portfolio_ownership_validator"]
+    validator.rejected_portfolio_ids.add("P1")
+    csv_content = _upload_csv_content(
+        headers=TRANSACTION_UPLOAD_CASE["headers"],
+        row=TRANSACTION_UPLOAD_CASE["row"],
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "true"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "INGESTION_PORTFOLIO_TENANT_MISMATCH",
+        "message": "One or more transaction portfolios are outside admitted tenant authority.",
+        "portfolio_ids": ["P1"],
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_commit_returns_unavailable_before_publish_when_authority_read_fails(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    validator = ingestion_test_harness["fake_transaction_portfolio_ownership_validator"]
+    validator.unavailable = True
+    csv_content = _upload_csv_content(
+        headers=TRANSACTION_UPLOAD_CASE["headers"],
+        row=TRANSACTION_UPLOAD_CASE["row"],
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/commit",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "allow_partial": "false"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "code": "INGESTION_PORTFOLIO_TENANT_AUTHORITY_UNAVAILABLE",
+        "message": "Portfolio tenant authority could not be verified.",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_upload_preview_transactions_csv(async_test_client: httpx.AsyncClient):
