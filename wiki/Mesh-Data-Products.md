@@ -165,7 +165,11 @@ Its current implementation-backed methodology is conservative: the product resol
 projected-inclusive holdings modes, reconciles snapshot-backed positions to latest current-epoch
 history quantity, supplements missing snapshot securities from position history, preserves valuation
 continuity for supplement rows, checks non-cash market-price freshness against the response as-of
-date, classifies unknown, partial, stale, and complete posture, and builds cash balances from cash
+date, and independently checks persisted valuation-time FX authority dates without querying the
+mutable current FX table. A returned cross-currency valuation whose FX date differs from the
+response date is marked `STALE` with `FX_RATE_STALE`; a used FX rate without a recorded authority
+date fails closed as `FX_RATE_EVIDENCE_MISSING`. The product classifies unknown, partial, stale,
+and complete posture, and builds cash balances from cash
 snapshot rows plus active/effective cash-account master data. Cash-balance rows publish
 `cash_account_id_source` so consumers can distinguish `cash_account_master`,
 `validated_transaction_mapping`, and degraded `cash_security_fallback` identity; unknown

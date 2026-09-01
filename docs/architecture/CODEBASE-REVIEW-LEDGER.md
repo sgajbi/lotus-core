@@ -1,13 +1,23 @@
 # Codebase Review Ledger
 
-CR-1718 Exact-date FX reconciliation evidence (2026-09-02, fixed-local candidate): issue #997
+CR-1719 HoldingsAsOf FX degradation (2026-09-02, fixed-local candidate): issue #997 showed
+that the query-service holdings response classified price and position-state freshness but did not
+consume the valuation-time FX authority already persisted on daily snapshots. Holdings assembly
+now carries that immutable evidence through both direct snapshot and snapshot-backed history
+fallback paths. A different FX date emits `FX_RATE_STALE` and makes source quality `STALE`; a used
+FX rate without its authority date fails closed as `FX_RATE_EVIDENCE_MISSING`. Exact-date and
+no-FX-required valuations retain their existing posture, and no mutable FX lookup was added.
+Historical remediation and runtime restatement proof remain separate #997 work. Evidence:
+[CR-1719-HOLDINGS-FX-DEGRADATION.md](./codebase-reviews/CR-1719-HOLDINGS-FX-DEGRADATION.md).
+
+CR-1718 Exact-date FX reconciliation evidence (2026-09-02, verified merged main): issue #997
 showed that `position_valuation` reconciliation ignored the FX authority date already persisted on
 daily snapshots. The control now consumes that immutable evidence and emits
 `fx_rate_not_on_valuation_date` when it differs from the snapshot business date, preserving both
 dates and the bounded exact-date revaluation repair. It does not query mutable FX tables or change
 same-currency/null evidence. Holdings degradation, historical missing-lineage remediation, and
 runtime restatement proof remain separate #997 work. Evidence:
-[CR-1718-EXACT-DATE-FX-RECONCILIATION-EVIDENCE.md](./codebase-reviews/CR-1718-EXACT-DATE-FX-RECONCILIATION-EVIDENCE.md).
+[CR-1718-EXACT-DATE-FX-RECONCILIATION-EVIDENCE.md](./codebase-reviews/CR-1718-EXACT-DATE-FX-RECONCILIATION-EVIDENCE.md). PR #1083 and exact-main Main Releasability run `33545657794` completed successfully at `981530731beb9a83f32ae061def115dfc8649ec8`.
 
 CR-1717 Exact-date position-valuation FX authority (2026-09-01, verified merged main): issue
 #997 showed that the position-valuation repository selected the latest direct FX observation on or

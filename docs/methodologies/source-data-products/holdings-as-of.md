@@ -55,7 +55,7 @@ contract described by this methodology.
 | `business_dates` | `date`, `calendar_code` | Supplies default effective `as_of_date` for booked holdings and cash reads. |
 | `position_state` | `portfolio_id`, `security_id`, `epoch`, `status`, `created_at`, `updated_at` | Constrains holdings to the active epoch for each portfolio-security key and supplies reprocessing supportability. |
 | `position_history` | `security_id`, `position_date`, `quantity`, `cost_basis`, `cost_basis_local`, `epoch` | Authoritative booked quantity and cost-basis stream. Also supplements missing snapshot rows when snapshot materialization lags. |
-| `daily_position_snapshots` | `security_id`, `date`, `quantity`, valuation fields, `market_value`, local valuation fields, `epoch`, timestamps | Supplies current or as-of snapshot-backed holdings, valuation fields, cash rows, and evidence timestamps. Snapshot rows must reconcile to latest current-epoch history quantity for positions. |
+| `daily_position_snapshots` | `security_id`, `date`, `quantity`, valuation fields, `market_value`, local valuation fields, `valuation_fx_rate`, `valuation_fx_rate_date`, `epoch`, timestamps | Supplies current or as-of snapshot-backed holdings, valuation fields, persisted valuation-time FX authority, cash rows, and evidence timestamps. Snapshot rows must reconcile to latest current-epoch history quantity for positions. |
 | `instruments` | name, asset class, currency, ISIN, sector, country of risk, product type, rating, liquidity tier, maturity date | Adds instrument descriptors, source-owned maturity lifecycle dates for maturity-bearing holdings, and cash classification. |
 | `cash_account_masters` | cash account identity, display name, currency, lifecycle status, effective dates | Supplies stable account identity for cash-balance rows where active and effective as of the response date. |
 | `transactions` | `settlement_cash_account_id`, `settlement_cash_instrument_id`, `transaction_date` | Supplies a last-known fallback cash-account mapping only when the settlement account id validates against active/effective `cash_account_masters` for the same portfolio and cash instrument. |
@@ -127,6 +127,7 @@ adjustment, execution-quality assessment, or OMS status inference is performed b
 | `C_r` | `balance_reporting_currency` | Cash account reporting-currency balance. |
 | `C_src` | `cash_account_id_source` | Provenance for `cash_account_id`: master, validated transaction mapping, or cash-security fallback. |
 | `X_c` | reporting FX rate | Latest FX rate from portfolio currency to reporting currency on or before `A`. |
+| `X_v` | `daily_position_snapshots.valuation_fx_rate` | Persisted FX rate used by a cross-currency position valuation. Its `valuation_fx_rate_date` is the source-effective authority date; same-currency valuations keep both fields null. |
 | `D_mv` | `source_reported_cash_weight_denominator_portfolio_currency` | Sum of same-date Core snapshot market values used as the cash-weight denominator. |
 | `W_c` | `source_reported_cash_weight` | Core-owned cash weight, `sum(C_p) / D_mv`, or null when blocked. |
 | `Q` | `data_quality_status` | Source quality reduced with exact reconciliation trust: `COMPLETE`, `PARTIAL`, `STALE`, `UNKNOWN`, or `BLOCKED`. |
@@ -195,11 +196,11 @@ supportability posture is one of:
    - for cash balances, use the latest business date when no `as_of_date` is supplied.
 3. For positions, fetch snapshot-backed current-epoch holdings. Snapshot rows must match latest current-epoch history quantity and have non-zero quantity.
 4. Fetch current-epoch history-backed holdings for the same effective scope and add only securities missing from the snapshot-backed set.
-5. For history-backed supplement rows, fetch latest available snapshot valuation fields and use them when present; otherwise use cost basis as valuation continuity fallback.
+5. For history-backed supplement rows, fetch latest available snapshot valuation fields, including persisted valuation-time FX rate and date evidence, and use them when present; otherwise use cost basis as valuation continuity fallback.
 6. Attach instrument descriptors and position-state status to each position.
 7. Compute position weights from returned position values.
 8. Resolve `held_since_date` as the earliest position-history date in the current continuous non-zero holding period after the last zero-quantity break in the active epoch. If no epoch exists, use the row position date.
-9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A` to derive stale posture.
+9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A`. Independently compare every persisted valuation-time FX authority date with `A`; do not query the mutable current FX table to reconstruct historical valuation truth.
 10. Group returned rows by business date, set each collective target epoch to the maximum selected
     row epoch, and retain the latest evidence timestamp across every row. Read and aggregate every
     exact financial-reconciliation control for those collective portfolio-day target scopes, then
@@ -233,6 +234,8 @@ supportability posture is one of:
 | Any returned position lacks reprocessing status | Returns `data_quality_status=UNKNOWN`. |
 | Any returned position has non-`CURRENT` reprocessing status | Returns `data_quality_status=STALE`. |
 | Any non-cash priced position lacks market-price freshness through `A` | Returns `data_quality_status=STALE`. |
+| A returned valuation used FX whose persisted `valuation_fx_rate_date` differs from `A` | Returns `data_quality_status=STALE` and degradation reason `FX_RATE_STALE`, preserving the FX source date and affected local-valuation fields. |
+| A returned valuation records `valuation_fx_rate` but no authority date | Fails closed with degradation reason `FX_RATE_EVIDENCE_MISSING`; it is not presented as current evidence. |
 | Positions include history-backed supplement rows | Source-row quality is `PARTIAL`; the emitted status may become `UNKNOWN`, `STALE`, or `BLOCKED` when reconciliation has a stronger fail-closed posture. |
 | All positions are current, priced through `A` where required, snapshot-backed, and exactly reconciled | Returns `data_quality_status=COMPLETE`. |
 | Multiple financial-reconciliation controls exist for one business-date/epoch scope | Aggregates every control using fail-closed precedence `BLOCKED`, `STALE`, `UNRECONCILED`, `UNKNOWN`, `PARTIAL`, `COMPLETE`; row order cannot hide an adverse control. |
@@ -276,6 +279,7 @@ supportability posture is one of:
 | `totals.source_reported_cash_weight_supportability` | Cash-weight supportability posture. |
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
+| `degradation` | Row- and field-scoped source posture. Position responses include persisted valuation-time FX staleness or missing-date evidence without re-deriving historical FX from the current rate table. |
 | `latest_evidence_timestamp` | Latest durable position, position-state, instrument, or cash snapshot timestamp used by the response. |
 | `reconciliation_status` | Fail-closed collective portfolio-day reconciliation posture for position responses. |
 | `source_lineage.reconciliation_scope_hash` | Collective target-epoch scope/control identity used to classify a position response. |
@@ -304,6 +308,11 @@ Final output mapping:
 | `positions[1].security_id` | `BND.US` |
 | `positions[1].weight` | 0.2144 |
 | `data_quality_status` | `PARTIAL` |
+
+If a returned cross-currency snapshot for `AAPL.OQ` instead records
+`valuation_fx_rate_date=2026-03-09`, the response becomes `data_quality_status=STALE` and includes
+`FX_RATE_STALE` with `source_as_of_date=2026-03-09`. An exact-date rate preserves the otherwise
+derived posture; a same-currency valuation has no FX evidence requirement.
 
 Cash request:
 
