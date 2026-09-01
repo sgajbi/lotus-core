@@ -4359,6 +4359,15 @@ Most relevant current governance:
      reconstruct historical valuation inputs from mutable instrument master data or the current FX
      table.
 
+258. Financial reconciliation must independently consume persisted valuation-time FX lineage.
+     `position_valuation` emits the error finding `fx_rate_not_on_valuation_date` whenever a
+     non-null `DailyPositionSnapshot.valuation_fx_rate_date` differs from the snapshot business
+     date, with expected and observed dates preserved and
+     `REVALUE_POSITION_WITH_EXACT_DATE_FX` as the bounded repair. It must not query mutable FX
+     tables to replace recorded evidence. Exact-date and null same-currency/legacy evidence retain
+     existing arithmetic and quote-authority controls; missing historical lineage is a separate
+     remediation boundary under #997.
+
 ## Context Maintenance Rule
 
 Update this document when:

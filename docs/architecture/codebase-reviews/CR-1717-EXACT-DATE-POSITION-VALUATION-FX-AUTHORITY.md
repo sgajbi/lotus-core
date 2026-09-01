@@ -50,4 +50,7 @@ persisted stale valuation rows remain follow-on acceptance work under #997.
   valuation date and that adding the exact-date row makes only that row authoritative.
 - The same-pattern scan found both production position-valuation paths use the shared exact-date
   resolver; no remaining caller uses the former ambiguous repository method.
-- Protected PR and exact-main evidence remain pending.
+- PR #1082 merged by rebase with four signed commits after all protected checks and exact-head
+  review passed. Main Releasability run `33532530148` passed on exact main
+  `c4fa01ca542d7aacff76e8c7ab4bec558e546ab2` with 25 successful jobs, zero failures, and two
+  policy skips.
