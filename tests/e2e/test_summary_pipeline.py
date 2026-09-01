@@ -40,6 +40,11 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             ]
         },
     )
+    e2e_api_client.poll_for_data(
+        f"/portfolios?portfolio_id={portfolio_id}",
+        lambda data: data.get("portfolios") and len(data["portfolios"]) == 1,
+        fail_message="Tenant-owned summary portfolio did not become durable.",
+    )
     e2e_api_client.ingest(
         "/ingest/instruments",
         {
