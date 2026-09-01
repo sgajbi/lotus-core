@@ -47,6 +47,17 @@ def test_e2e_client_refuses_portfolio_outside_admitted_tenant() -> None:
     client.session.post.assert_not_called()
 
 
+def test_e2e_client_preserves_malformed_payload_for_server_validation() -> None:
+    client = _client()
+    response = SimpleNamespace(raise_for_status=lambda: None)
+    client.session.post = Mock(return_value=response)
+    malformed_payload = [{"transaction_id": "bad-payload"}]
+
+    client.ingest("/ingest/transactions", malformed_payload)
+
+    assert client.session.post.call_args.kwargs["json"] == malformed_payload
+
+
 def test_poll_for_data_routes_control_plane_readiness_to_control_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

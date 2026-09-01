@@ -58,7 +58,9 @@ class E2EApiClient:
             return [cls._normalize_payload_keys(item) for item in data]
         return data
 
-    def _bind_portfolio_ownership(self, payload: dict[str, Any]) -> None:
+    def _bind_portfolio_ownership(self, payload: Any) -> None:
+        if not isinstance(payload, dict):
+            return
         portfolios = payload.get("portfolios")
         if not isinstance(portfolios, list):
             return
@@ -70,7 +72,7 @@ class E2EApiClient:
                 raise ValueError("E2E portfolio tenant_id must match the admitted tenant")
             portfolio["tenant_id"] = self.tenant_id
 
-    def ingest(self, endpoint: str, payload: Dict[str, List[Dict[str, Any]]]) -> requests.Response:
+    def ingest(self, endpoint: str, payload: Any) -> requests.Response:
         """Sends data to a specified ingestion endpoint."""
         url = f"{self.ingestion_url}{endpoint}"
         normalized_payload = self._normalize_payload_keys(payload)
