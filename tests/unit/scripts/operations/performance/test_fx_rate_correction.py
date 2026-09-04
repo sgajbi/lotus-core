@@ -104,8 +104,10 @@ def test_wait_for_fx_correction_requires_exact_runtime_evidence() -> None:
         portfolio_count=2,
     )
     observed_params: list[dict[str, object]] = []
+    observed_sql: list[str] = []
 
-    def row_reader(_sql, params):
+    def row_reader(sql, params):
+        observed_sql.append(sql)
         observed_params.append(dict(params))
         return {
             "observed_rate": Decimal("1.155000"),
@@ -158,6 +160,7 @@ def test_wait_for_fx_correction_requires_exact_runtime_evidence() -> None:
     assert evidence.expected_unrealized_total == "39.9300000000"
     assert observed_params[0]["from_currency"] == "EUR"
     assert observed_params[0]["to_currency"] == "USD"
+    assert "snapshot.date BETWEEN :effective_date AND :window_end_date" in observed_sql[0]
 
 
 def test_wait_for_fx_correction_fails_fast_on_durable_failure() -> None:
@@ -200,8 +203,10 @@ def test_wait_for_fx_correction_fails_fast_on_durable_failure() -> None:
 
 def test_wait_for_missing_exact_date_fx_proves_fail_closed_and_unaffected_controls() -> None:
     observed_params: list[dict[str, object]] = []
+    observed_sql: list[str] = []
 
-    def row_reader(_sql, params):
+    def row_reader(sql, params):
+        observed_sql.append(sql)
         observed_params.append(dict(params))
         return {
             "durable_affected_position_histories": 4,
@@ -241,6 +246,8 @@ def test_wait_for_missing_exact_date_fx_proves_fail_closed_and_unaffected_contro
             "effective_date": datetime(2026, 7, 15).date(),
         }
     ]
+    assert ":window_end_date" not in observed_sql[0]
+    assert "snapshot.date = :effective_date" in observed_sql[0]
 
 
 def test_wait_for_missing_exact_date_fx_rejects_failed_outbox() -> None:

@@ -104,7 +104,7 @@ affected_snapshots AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(snapshot.portfolio_id)
     WHERE snapshot.portfolio_id LIKE :portfolio_pattern
-      AND snapshot.date BETWEEN :effective_date AND :window_end_date
+      AND snapshot.date = :effective_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 ),
@@ -116,7 +116,7 @@ affected_jobs AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(job.portfolio_id)
     WHERE job.portfolio_id LIKE :portfolio_pattern
-      AND job.valuation_date BETWEEN :effective_date AND :window_end_date
+      AND job.valuation_date = :effective_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 )
@@ -194,7 +194,7 @@ WITH affected_snapshots AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(snapshot.portfolio_id)
     WHERE snapshot.portfolio_id LIKE :portfolio_pattern
-      AND snapshot.date = :effective_date
+      AND snapshot.date BETWEEN :effective_date AND :window_end_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 ),
@@ -206,7 +206,7 @@ affected_valuation_jobs AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(job.portfolio_id)
     WHERE job.portfolio_id LIKE :portfolio_pattern
-      AND job.valuation_date = :effective_date
+      AND job.valuation_date BETWEEN :effective_date AND :window_end_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 ),
