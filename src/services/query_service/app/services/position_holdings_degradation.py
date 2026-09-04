@@ -284,8 +284,8 @@ def _degradation_status(details: list[SourceDataDegradationDetail]) -> str:
         return "UNAVAILABLE"
     if "STALE" in statuses:
         return "STALE"
-    if "PARTIAL" in statuses:
-        return "PARTIAL"
     if "UNKNOWN" in statuses:
         return "UNKNOWN"
+    if "PARTIAL" in statuses:
+        return "PARTIAL"
     return "NONE"
