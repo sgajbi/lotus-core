@@ -1280,6 +1280,32 @@ async def test_holdings_degradation_summary_reports_stale_fx_authority_date() ->
     ]
 
 
+async def test_holdings_degradation_summary_accepts_exact_date_fx_evidence() -> None:
+    position = Position(
+        security_id="FX_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 2),
+        instrument_name="Cross-currency holding",
+        reprocessing_status="CURRENT",
+    )
+
+    summary = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 2),
+        latest_market_price_dates={},
+        valuation_fx_rate_dates={"FX_A": date(2025, 1, 2)},
+        missing_currency_lineage_security_ids=set(),
+        latest_evidence_timestamp=datetime(2025, 1, 2, 10, 0, tzinfo=UTC),
+    )
+
+    assert summary.status == "NONE"
+    assert summary.reason_codes == []
+    assert summary.details == []
+
+
 async def test_holdings_degradation_summary_fails_closed_without_fx_authority_date() -> None:
     position = Position(
         security_id="FX_A",
