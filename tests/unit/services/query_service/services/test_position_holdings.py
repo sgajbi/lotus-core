@@ -35,7 +35,7 @@ from src.services.query_service.app.services.position_holdings import (
     position_weight_base_value,
     should_fetch_fallback_valuation_map,
     should_use_default_holdings_as_of_date,
-    valuation_fx_rate_dates_by_security,
+    valuation_fx_evidence_by_security,
 )
 from src.services.query_service.app.services.position_holdings_degradation import (
     holdings_degradation_summary,
@@ -384,6 +384,7 @@ async def test_holdings_content_hash_is_deterministic_for_same_holdings_evidence
         response_as_of_date=date(2025, 1, 1),
         latest_market_price_dates={},
         valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=evidence_timestamp,
     )
 
@@ -428,6 +429,7 @@ async def test_holdings_content_hash_changes_with_reconciliation_trust() -> None
         response_as_of_date=date(2025, 1, 1),
         latest_market_price_dates={},
         valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
     )
 
@@ -680,41 +682,68 @@ async def test_portfolio_position_rows_data_applies_snapshot_and_fallback_valuat
     assert positions[1].reprocessing_status == "REPROCESSING"
 
 
-async def test_valuation_fx_rate_dates_use_persisted_snapshot_and_fallback_evidence() -> None:
+async def test_valuation_fx_evidence_uses_persisted_snapshot_and_fallback_evidence() -> None:
     snapshot_with_fx = DailyPositionSnapshot(
         security_id=" FX_CURRENT ",
         valuation_fx_rate=Decimal("1.25"),
         valuation_fx_rate_date=date(2025, 1, 2),
+        valuation_source_currency="USD",
+        valuation_reporting_currency="CHF",
     )
-    snapshot_without_fx = DailyPositionSnapshot(security_id="BASE_CURRENCY")
+    snapshot_without_fx = DailyPositionSnapshot(
+        security_id="BASE_CURRENCY",
+        valuation_source_currency="CHF",
+        valuation_reporting_currency="CHF",
+    )
     snapshot_missing_fx = DailyPositionSnapshot(
         security_id="FX_MISSING",
         valuation_source_currency="USD",
         valuation_reporting_currency="CHF",
     )
+    snapshot_without_currency_lineage = DailyPositionSnapshot(security_id="LEGACY_SNAPSHOT")
+    snapshot_with_partial_currency_lineage = DailyPositionSnapshot(
+        security_id="PARTIAL_SNAPSHOT",
+        valuation_source_currency="USD",
+    )
     history_with_fx = PositionHistory(security_id=" FX_FALLBACK ")
+    history_without_currency_lineage = PositionHistory(security_id="LEGACY_FALLBACK")
     history_without_valuation = PositionHistory(security_id="NO_FALLBACK")
 
-    assert valuation_fx_rate_dates_by_security(
+    assert valuation_fx_evidence_by_security(
         db_results=[
             (snapshot_with_fx, None, None),
             (snapshot_without_fx, None, None),
             (snapshot_missing_fx, None, None),
+            (snapshot_without_currency_lineage, None, None),
+            (snapshot_with_partial_currency_lineage, None, None),
             (history_with_fx, None, None),
+            (history_without_currency_lineage, None, None),
             (history_without_valuation, None, None),
         ],
-        snapshot_security_ids={"FX_CURRENT", "BASE_CURRENCY", "FX_MISSING"},
+        snapshot_security_ids={
+            "FX_CURRENT",
+            "BASE_CURRENCY",
+            "FX_MISSING",
+            "LEGACY_SNAPSHOT",
+            "PARTIAL_SNAPSHOT",
+        },
         fallback_valuation_map={
             "FX_FALLBACK": {
                 "valuation_fx_rate": Decimal("1.24"),
                 "valuation_fx_rate_date": date(2025, 1, 1),
-            }
+                "valuation_source_currency": "EUR",
+                "valuation_reporting_currency": "CHF",
+            },
+            "LEGACY_FALLBACK": {"market_value": Decimal("10")},
         },
-    ) == {
-        "FX_CURRENT": date(2025, 1, 2),
-        "FX_MISSING": None,
-        "FX_FALLBACK": date(2025, 1, 1),
-    }
+    ) == (
+        {
+            "FX_CURRENT": date(2025, 1, 2),
+            "FX_MISSING": None,
+            "FX_FALLBACK": date(2025, 1, 1),
+        },
+        {"LEGACY_FALLBACK", "LEGACY_SNAPSHOT", "PARTIAL_SNAPSHOT"},
+    )
 
 
 async def test_assign_position_weights_uses_market_value_share() -> None:
@@ -954,6 +983,7 @@ async def test_holdings_data_quality_status_does_not_infer_missing_state() -> No
             response_as_of_date=date(2025, 1, 1),
             latest_market_price_dates={},
             valuation_fx_rate_dates={},
+            missing_currency_lineage_security_ids=set(),
         )
         == "UNKNOWN"
     )
@@ -976,6 +1006,7 @@ async def test_holdings_data_quality_status_marks_non_current_state_stale() -> N
             response_as_of_date=date(2025, 1, 1),
             latest_market_price_dates={},
             valuation_fx_rate_dates={},
+            missing_currency_lineage_security_ids=set(),
         )
         == "STALE"
     )
@@ -1000,6 +1031,7 @@ async def test_holdings_data_quality_status_marks_stale_market_price_evidence() 
             response_as_of_date=date(2025, 1, 2),
             latest_market_price_dates={"EQ_A": date(2025, 1, 1)},
             valuation_fx_rate_dates={},
+            missing_currency_lineage_security_ids=set(),
         )
         == "STALE"
     )
@@ -1024,6 +1056,7 @@ async def test_holdings_data_quality_status_returns_complete_for_current_fresh_h
             response_as_of_date=date(2025, 1, 2),
             latest_market_price_dates={"EQ_A": date(2025, 1, 2)},
             valuation_fx_rate_dates={"EQ_A": date(2025, 1, 2)},
+            missing_currency_lineage_security_ids=set(),
         )
         == "COMPLETE"
     )
@@ -1046,8 +1079,32 @@ async def test_holdings_data_quality_status_marks_stale_fx_evidence() -> None:
             response_as_of_date=date(2025, 1, 2),
             latest_market_price_dates={},
             valuation_fx_rate_dates={"FX_A": date(2025, 1, 1)},
+            missing_currency_lineage_security_ids=set(),
         )
         == "STALE"
+    )
+
+
+async def test_holdings_data_quality_status_fails_closed_for_missing_currency_lineage() -> None:
+    assert (
+        holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id="LEGACY_A",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 2),
+                    instrument_name="Legacy holding",
+                    reprocessing_status="CURRENT",
+                )
+            ],
+            history_supplements=[],
+            response_as_of_date=date(2025, 1, 2),
+            latest_market_price_dates={},
+            valuation_fx_rate_dates={},
+            missing_currency_lineage_security_ids={"LEGACY_A"},
+        )
+        == "UNKNOWN"
     )
 
 
@@ -1068,6 +1125,7 @@ async def test_holdings_data_quality_status_marks_history_supplement_partial() -
             response_as_of_date=date(2025, 1, 1),
             latest_market_price_dates={},
             valuation_fx_rate_dates={},
+            missing_currency_lineage_security_ids=set(),
         )
         == "PARTIAL"
     )
@@ -1092,6 +1150,7 @@ async def test_holdings_degradation_summary_reports_fallback_valuation_detail() 
         response_as_of_date=date(2025, 1, 1),
         latest_market_price_dates={"HIST_A": date(2025, 1, 1)},
         valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=evidence_timestamp,
     )
 
@@ -1132,6 +1191,7 @@ async def test_holdings_degradation_summary_reports_stale_market_price_detail() 
         response_as_of_date=date(2025, 1, 2),
         latest_market_price_dates={"EQ_A": date(2025, 1, 1)},
         valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=datetime(2025, 1, 2, 10, 0, tzinfo=UTC),
     )
 
@@ -1160,6 +1220,7 @@ async def test_holdings_degradation_summary_reports_stale_fx_authority_date() ->
         response_as_of_date=date(2025, 1, 2),
         latest_market_price_dates={},
         valuation_fx_rate_dates={"FX_A": date(2025, 1, 1)},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=datetime(2025, 1, 2, 10, 0, tzinfo=UTC),
     )
 
@@ -1195,6 +1256,7 @@ async def test_holdings_degradation_summary_fails_closed_without_fx_authority_da
         response_as_of_date=date(2025, 1, 2),
         latest_market_price_dates={},
         valuation_fx_rate_dates={"FX_A": None},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=None,
     )
 
@@ -1203,6 +1265,41 @@ async def test_holdings_degradation_summary_fails_closed_without_fx_authority_da
     assert summary.details[0].source_kind == "UNAVAILABLE"
     assert summary.details[0].source_as_of_date is None
     assert summary.details[0].freshness_status == "UNAVAILABLE"
+    assert summary.details[0].affected_fields == [
+        "valuation.market_value",
+        "valuation.unrealized_gain_loss",
+        "valuation.unrealized_price_gain_loss",
+        "valuation.unrealized_fx_gain_loss",
+    ]
+
+
+async def test_holdings_degradation_summary_fails_closed_for_missing_currency_lineage() -> None:
+    position = Position(
+        security_id=" LEGACY_A ",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 2),
+        instrument_name="Legacy holding",
+        reprocessing_status="CURRENT",
+    )
+
+    summary = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 2),
+        latest_market_price_dates={},
+        valuation_fx_rate_dates={},
+        latest_evidence_timestamp=None,
+        missing_currency_lineage_security_ids={"LEGACY_A"},
+    )
+
+    assert summary.status == "UNKNOWN"
+    assert summary.reason_codes == ["VALUATION_CURRENCY_LINEAGE_MISSING"]
+    assert summary.details[0].record_key == "security_id:LEGACY_A"
+    assert summary.details[0].source_kind == "UNAVAILABLE"
+    assert summary.details[0].source_as_of_date is None
+    assert summary.details[0].freshness_status == "UNKNOWN"
     assert summary.details[0].affected_fields == [
         "valuation.market_value",
         "valuation.unrealized_gain_loss",
@@ -1229,6 +1326,7 @@ async def test_holdings_degradation_summary_reports_unavailable_fallback_detail(
         response_as_of_date=date(2025, 1, 1),
         latest_market_price_dates={},
         valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=None,
     )
 
@@ -1246,6 +1344,7 @@ async def test_holdings_degradation_summary_reports_empty_holdings_unavailable()
         response_as_of_date=date(2025, 1, 1),
         latest_market_price_dates={},
         valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
         latest_evidence_timestamp=None,
     )
 

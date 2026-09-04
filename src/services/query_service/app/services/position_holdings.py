@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -305,14 +306,15 @@ def portfolio_position_rows_data(
     return positions
 
 
-def valuation_fx_rate_dates_by_security(
+def valuation_fx_evidence_by_security(
     *,
     db_results: list[PositionRowResult],
     snapshot_security_ids: set[str],
     fallback_valuation_map: dict[str, dict[str, Any] | None],
-) -> dict[str, date | None]:
-    """Return FX authority dates for valuations that used or require FX."""
+) -> tuple[dict[str, date | None], set[str]]:
+    """Return persisted FX dates and rows with missing valuation currency lineage."""
     fx_rate_dates: dict[str, date | None] = {}
+    missing_currency_lineage_security_ids: set[str] = set()
     for position_row, _instrument, _pos_state in db_results:
         security_id = normalize_security_id(position_row.security_id)
         if not security_id:
@@ -332,14 +334,13 @@ def valuation_fx_rate_dates_by_security(
             reporting_currency = fallback_valuation.get("valuation_reporting_currency")
         normalized_source_currency = str(source_currency or "").strip().upper()
         normalized_reporting_currency = str(reporting_currency or "").strip().upper()
-        requires_fx = bool(
-            normalized_source_currency
-            and normalized_reporting_currency
-            and normalized_source_currency != normalized_reporting_currency
-        )
+        if not normalized_source_currency or not normalized_reporting_currency:
+            missing_currency_lineage_security_ids.add(security_id)
+            continue
+        requires_fx = normalized_source_currency != normalized_reporting_currency
         if fx_rate is not None or requires_fx:
             fx_rate_dates[security_id] = fx_rate_date
-    return fx_rate_dates
+    return fx_rate_dates, missing_currency_lineage_security_ids
 
 
 def position_weight_base_value(position: Position) -> Decimal:
@@ -479,9 +480,12 @@ def holdings_data_quality_status(
     response_as_of_date: date,
     latest_market_price_dates: dict[str, date],
     valuation_fx_rate_dates: dict[str, date | None],
+    missing_currency_lineage_security_ids: Collection[str],
 ) -> str:
     if (reprocessing_status := _reprocessing_data_quality_status(positions)) is not None:
         return reprocessing_status
+    if missing_currency_lineage_security_ids:
+        return UNKNOWN
     if _has_stale_market_price_evidence(
         positions=positions,
         response_as_of_date=response_as_of_date,
