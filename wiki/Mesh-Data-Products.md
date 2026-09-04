@@ -166,7 +166,9 @@ projected-inclusive holdings modes, reconciles snapshot-backed positions to late
 history quantity, supplements missing snapshot securities from position history, preserves valuation
 continuity for supplement rows, checks non-cash market-price freshness against the response as-of
 date, and independently checks persisted valuation-time FX authority dates without querying the
-mutable current FX table. A returned cross-currency valuation whose FX date differs from the
+mutable current FX table. Missing or partial persisted valuation-time currency lineage produces
+`UNKNOWN` / `VALUATION_CURRENCY_LINEAGE_MISSING`; current instrument or portfolio master data is
+not used to relabel the historical valuation. A returned cross-currency valuation whose FX date differs from the
 response date is marked `STALE` with `FX_RATE_STALE`; a used FX rate without a recorded authority
 date fails closed as `FX_RATE_EVIDENCE_MISSING`. These reasons identify translated portfolio-base
 valuation fields as affected without misclassifying local instrument-currency values. The product

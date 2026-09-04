@@ -4380,6 +4380,14 @@ Most relevant current governance:
      Exact-date evidence and valuations that require no FX retain their existing posture.
      Historical remediation and runtime restatement proof remain separately bounded under #997.
 
+260. `HoldingsAsOf:v1` must not certify a persisted valuation when either valuation-time currency
+     is absent. Direct snapshot and snapshot-backed history-fallback paths classify that row as
+     `UNKNOWN` with `VALUATION_CURRENCY_LINEAGE_MISSING`, identifying only the translated
+     portfolio-base valuation fields as affected. Query Service must not use mutable current
+     instrument or portfolio currency to relabel historical valuation evidence. Complete
+     same-currency and cross-currency pairs retain their existing behavior; replay/backfill remains
+     a separate #997 operational boundary.
+
 ## Context Maintenance Rule
 
 Update this document when:

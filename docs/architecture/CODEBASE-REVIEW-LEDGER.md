@@ -1,6 +1,16 @@
 # Codebase Review Ledger
 
-CR-1719 HoldingsAsOf FX degradation (2026-09-02, fixed-local candidate): issue #997 showed
+CR-1720 HoldingsAsOf valuation-currency lineage (2026-09-04, fixed-local candidate): issue #997
+showed that a selected snapshot with absent or partial persisted valuation currencies could still
+be eligible for `COMPLETE`, because missing pair evidence was treated like proof that FX was not
+required. Holdings assembly now distinguishes missing currency lineage from valid same-currency
+identity, reduces source quality to `UNKNOWN`, and emits row-scoped
+`VALUATION_CURRENCY_LINEAGE_MISSING` without consulting mutable master data. Direct snapshots and
+snapshot-backed history fallbacks share the policy; replay/backfill and runtime restatement remain
+separate #997 work. Evidence:
+[CR-1720-HOLDINGS-VALUATION-CURRENCY-LINEAGE.md](./codebase-reviews/CR-1720-HOLDINGS-VALUATION-CURRENCY-LINEAGE.md).
+
+CR-1719 HoldingsAsOf FX degradation (2026-09-02, verified merged main): issue #997 showed
 that the query-service holdings response classified price and position-state freshness but did not
 consume the valuation-time FX authority already persisted on daily snapshots. Holdings assembly
 now carries that immutable evidence through both direct snapshot and snapshot-backed history
@@ -8,7 +18,9 @@ fallback paths. A different FX date emits `FX_RATE_STALE` and makes source quali
 FX rate without its authority date fails closed as `FX_RATE_EVIDENCE_MISSING`. Exact-date and
 no-FX-required valuations retain their existing posture, and no mutable FX lookup was added.
 Historical remediation and runtime restatement proof remain separate #997 work. Evidence:
-[CR-1719-HOLDINGS-FX-DEGRADATION.md](./codebase-reviews/CR-1719-HOLDINGS-FX-DEGRADATION.md).
+[CR-1719-HOLDINGS-FX-DEGRADATION.md](./codebase-reviews/CR-1719-HOLDINGS-FX-DEGRADATION.md). PR #1084
+and exact-main Main Releasability run `33693659628` completed successfully at
+`4758cf8b082e9368b9fd940e224853f6290affd8`.
 
 CR-1718 Exact-date FX reconciliation evidence (2026-09-02, verified merged main): issue #997
 showed that `position_valuation` reconciliation ignored the FX authority date already persisted on

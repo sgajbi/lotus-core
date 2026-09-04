@@ -234,6 +234,7 @@ supportability posture is one of:
 | Any returned position lacks reprocessing status | Returns `data_quality_status=UNKNOWN`. |
 | Any returned position has non-`CURRENT` reprocessing status | Returns `data_quality_status=STALE`. |
 | Any non-cash priced position lacks market-price freshness through `A` | Returns `data_quality_status=STALE`. |
+| A returned snapshot valuation lacks either persisted `valuation_source_currency` or `valuation_reporting_currency` | Returns `data_quality_status=UNKNOWN` with degradation reason `VALUATION_CURRENCY_LINEAGE_MISSING`. Core does not infer the historical pair from mutable instrument or portfolio master data. |
 | A returned valuation used FX whose persisted `valuation_fx_rate_date` differs from `A` | Returns `data_quality_status=STALE` and degradation reason `FX_RATE_STALE`, preserving the FX source date and identifying the affected portfolio-base valuation fields. Local instrument-currency values are not marked FX-affected. |
 | A persisted source/reporting currency pair requires FX but its rate/date authority is incomplete | Fails closed with degradation reason `FX_RATE_EVIDENCE_MISSING`; it is not presented as current evidence. |
 | Positions include history-backed supplement rows | Source-row quality is `PARTIAL`; the emitted status may become `UNKNOWN`, `STALE`, or `BLOCKED` when reconciliation has a stronger fail-closed posture. |
@@ -279,7 +280,7 @@ supportability posture is one of:
 | `totals.source_reported_cash_weight_supportability` | Cash-weight supportability posture. |
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
-| `degradation` | Row- and field-scoped source posture. Position responses include persisted valuation-time FX staleness or missing-date evidence without re-deriving historical FX from the current rate table. |
+| `degradation` | Row- and field-scoped source posture. Position responses expose missing persisted valuation-currency lineage, FX staleness, or missing-date evidence without re-deriving historical facts from current master or rate data. |
 | `latest_evidence_timestamp` | Latest durable position, position-state, instrument, or cash snapshot timestamp used by the response. |
 | `reconciliation_status` | Fail-closed collective portfolio-day reconciliation posture for position responses. |
 | `source_lineage.reconciliation_scope_hash` | Collective target-epoch scope/control identity used to classify a position response. |
@@ -313,6 +314,9 @@ If a returned cross-currency snapshot for `AAPL.OQ` instead records
 `valuation_fx_rate_date=2026-03-09`, the response becomes `data_quality_status=STALE` and includes
 `FX_RATE_STALE` with `source_as_of_date=2026-03-09`. An exact-date rate preserves the otherwise
 derived posture; a same-currency valuation has no FX evidence requirement.
+If either persisted valuation currency is absent, the response instead becomes
+`data_quality_status=UNKNOWN` with `VALUATION_CURRENCY_LINEAGE_MISSING`; the current instrument or
+portfolio currency is not used to relabel that historical valuation.
 
 Cash request:
 
