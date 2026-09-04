@@ -283,3 +283,65 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
     assert response.degradation.reason_codes == ["HOLDINGS_VALUATION_FALLBACK"]
     assert response.degradation.details[0].record_key == "security_id:HIST_A"
     assert response.degradation.details[0].source_kind == "FALLBACK"
+
+
+async def test_portfolio_holdings_response_preserves_unknown_for_fallback_missing_lineage() -> None:
+    repository = AsyncMock()
+    history = PositionHistory(
+        security_id="HIST_LEGACY",
+        quantity=Decimal("20"),
+        cost_basis=Decimal("200"),
+        cost_basis_local=Decimal("198"),
+        position_date=date(2025, 1, 1),
+        epoch=3,
+        updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
+    )
+    instrument = Instrument(name="Legacy history", asset_class="Equity", currency="USD")
+    state = PositionState(
+        status="CURRENT",
+        epoch=3,
+        updated_at=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+    )
+    repository.get_latest_positions_by_portfolio_as_of_date.return_value = []
+    repository.get_latest_position_history_by_portfolio_as_of_date.return_value = [
+        (history, instrument, state)
+    ]
+    repository.get_latest_snapshot_valuation_map_as_of_date.return_value = {
+        "HIST_LEGACY": {
+            "market_price": Decimal("11"),
+            "market_value": Decimal("220"),
+            "unrealized_gain_loss": Decimal("20"),
+            "market_value_local": Decimal("218"),
+            "unrealized_gain_loss_local": Decimal("20"),
+        }
+    }
+    repository.get_held_since_dates.return_value = {("HIST_LEGACY", 3): date(2024, 12, 1)}
+    repository.get_latest_market_price_dates.return_value = {"HIST_LEGACY": date(2025, 1, 1)}
+    repository.get_holdings_reconciliation_controls.return_value = [
+        FinancialReconciliationControl(
+            business_date=date(2025, 1, 1),
+            epoch=3,
+            status="COMPLETED",
+            updated_at=datetime(2025, 1, 1, 10, 6, tzinfo=UTC),
+        )
+    ]
+
+    response = await portfolio_holdings_response(
+        repository=repository,
+        portfolio_id="P1",
+        effective_as_of_date=date(2025, 1, 1),
+    )
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.degradation.status == "UNKNOWN"
+    assert response.degradation.reason_codes == [
+        "HOLDINGS_VALUATION_FALLBACK",
+        "VALUATION_CURRENCY_LINEAGE_MISSING",
+    ]
+    lineage_detail = next(
+        detail
+        for detail in response.degradation.details
+        if detail.reason_code == "VALUATION_CURRENCY_LINEAGE_MISSING"
+    )
+    assert lineage_detail.record_key == "security_id:HIST_LEGACY"
+    assert lineage_detail.freshness_status == "UNKNOWN"
