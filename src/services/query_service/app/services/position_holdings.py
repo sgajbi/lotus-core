@@ -482,10 +482,9 @@ def holdings_data_quality_status(
     valuation_fx_rate_dates: dict[str, date | None],
     missing_currency_lineage_security_ids: Collection[str],
 ) -> str:
-    if (reprocessing_status := _reprocessing_data_quality_status(positions)) is not None:
-        return reprocessing_status
-    if missing_currency_lineage_security_ids:
-        return UNKNOWN
+    reprocessing_status = _reprocessing_data_quality_status(positions)
+    if reprocessing_status == STALE:
+        return STALE
     if _has_stale_market_price_evidence(
         positions=positions,
         response_as_of_date=response_as_of_date,
@@ -497,6 +496,8 @@ def holdings_data_quality_status(
         valuation_fx_rate_dates=valuation_fx_rate_dates,
     ):
         return STALE
+    if reprocessing_status == UNKNOWN or missing_currency_lineage_security_ids:
+        return UNKNOWN
     if history_supplements:
         return PARTIAL
     return COMPLETE
