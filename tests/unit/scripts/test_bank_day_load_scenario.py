@@ -433,6 +433,18 @@ def test_build_instrument_specs_cycles_currencies_and_prices() -> None:
     assert specs[4].market_price == Decimal("55.55")
 
 
+def test_build_portfolios_persists_the_request_tenant_authority() -> None:
+    portfolios = bank_day_load_scenario._build_portfolios(
+        run_id="RUN1",
+        portfolio_count=2,
+        trade_date="2026-04-17",
+    )
+
+    assert {portfolio["tenant_id"] for portfolio in portfolios} == {
+        bank_day_load_scenario.LOAD_TENANT_ID
+    }
+
+
 def test_build_instruments_payload_generates_run_unique_isins() -> None:
     run_one_payload = _build_instruments_payload(
         _build_instrument_specs(run_id="20260418T044202Z", instrument_count=2)
@@ -443,6 +455,12 @@ def test_build_instruments_payload_generates_run_unique_isins() -> None:
 
     assert run_one_payload[0]["isin"] != run_two_payload[0]["isin"]
     assert len(run_one_payload[0]["isin"]) == 12
+
+
+def test_workload_session_binds_source_owned_tenant() -> None:
+    session = bank_day_load_scenario._build_tenant_session()
+
+    assert session.headers["X-Tenant-Id"] == bank_day_load_scenario.LOAD_TENANT_ID
 
 
 def test_build_fx_rates_payload_returns_full_cross_currency_matrix() -> None:
