@@ -930,11 +930,14 @@ def _seed_source_facts_before_business_horizon(
         sql="""
         SELECT count(*) AS count
         FROM fx_rates
-        WHERE rate_date = ANY(CAST(:rate_dates AS date[]))
+        WHERE rate_date BETWEEN :window_start_date AND :window_end_date
           AND from_currency IN ('USD', 'EUR', 'SGD', 'GBP')
           AND to_currency IN ('USD', 'EUR', 'SGD', 'GBP')
         """,
-        params={"rate_dates": fx_rate_dates},
+        params={
+            "window_start_date": fx_rate_dates[0],
+            "window_end_date": fx_rate_dates[-1],
+        },
         expected_count=fx_rate_count,
         label="fx seed",
         timeout_seconds=timeout_seconds,

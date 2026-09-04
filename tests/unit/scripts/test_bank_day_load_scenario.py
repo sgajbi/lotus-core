@@ -129,7 +129,17 @@ def test_initial_source_facts_drain_before_business_horizon_activation(monkeypat
             ),
         ),
         ("ingest", "/ingest/fx-rates"),
-        ("wait", ("fx seed", 12, {"rate_dates": ["2026-08-07"]})),
+        (
+            "wait",
+            (
+                "fx seed",
+                12,
+                {
+                    "window_start_date": "2026-08-07",
+                    "window_end_date": "2026-08-07",
+                },
+            ),
+        ),
         ("ingest", "/ingest/market-prices"),
         (
             "wait",
