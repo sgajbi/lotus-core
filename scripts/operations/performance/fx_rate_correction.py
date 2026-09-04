@@ -29,6 +29,24 @@ class FxValuationExpectations:
 
 
 @dataclass(frozen=True, slots=True)
+class FxMissingRateFailureEvidence:
+    """Record fail-closed authority before an exact-date FX fact arrives."""
+
+    observed_at: str
+    from_currency: str
+    to_currency: str
+    valuation_date: str
+    expected_affected_positions: int
+    durable_affected_position_histories: int
+    failed_valuation_jobs: int
+    failed_snapshots_without_market_values: int
+    affected_position_timeseries: int
+    affected_portfolio_timeseries: int
+    expected_unaffected_snapshots: int
+    unaffected_current_snapshots: int
+
+
+@dataclass(frozen=True, slots=True)
 class FxDerivedStateCorrectionEvidence:
     """Record exact observed materialization facts for one FX correction."""
 
@@ -62,6 +80,109 @@ class FxDerivedStateCorrectionEvidence:
     corrected_unrealized_fx: str
     expected_unrealized_total: str
     corrected_unrealized_total: str
+    unexpected_prior_affected_snapshot_updates: int
+
+
+_FX_MISSING_RATE_FAILURE_SQL = """
+WITH affected_histories AS (
+    SELECT DISTINCT history.portfolio_id, history.security_id, history.epoch
+    FROM position_history history
+    JOIN instruments instrument
+      ON trim(instrument.security_id) = trim(history.security_id)
+    JOIN portfolios portfolio
+      ON trim(portfolio.portfolio_id) = trim(history.portfolio_id)
+    WHERE history.portfolio_id LIKE :portfolio_pattern
+      AND history.position_date <= :effective_date
+      AND upper(trim(instrument.currency)) = :from_currency
+      AND upper(trim(portfolio.base_currency)) = :to_currency
+),
+affected_snapshots AS (
+    SELECT snapshot.*
+    FROM daily_position_snapshots snapshot
+    JOIN instruments instrument
+      ON trim(instrument.security_id) = trim(snapshot.security_id)
+    JOIN portfolios portfolio
+      ON trim(portfolio.portfolio_id) = trim(snapshot.portfolio_id)
+    WHERE snapshot.portfolio_id LIKE :portfolio_pattern
+      AND snapshot.date BETWEEN :effective_date AND :window_end_date
+      AND upper(trim(instrument.currency)) = :from_currency
+      AND upper(trim(portfolio.base_currency)) = :to_currency
+),
+affected_jobs AS (
+    SELECT job.*
+    FROM portfolio_valuation_jobs job
+    JOIN instruments instrument
+      ON trim(instrument.security_id) = trim(job.security_id)
+    JOIN portfolios portfolio
+      ON trim(portfolio.portfolio_id) = trim(job.portfolio_id)
+    WHERE job.portfolio_id LIKE :portfolio_pattern
+      AND job.valuation_date BETWEEN :effective_date AND :window_end_date
+      AND upper(trim(instrument.currency)) = :from_currency
+      AND upper(trim(portfolio.base_currency)) = :to_currency
+)
+SELECT
+    (SELECT count(*) FROM affected_histories) AS durable_affected_position_histories,
+    (
+        SELECT count(*) FROM affected_jobs
+        WHERE status = 'FAILED'
+          AND failure_reason LIKE 'Missing exact-date FX rate%'
+    ) AS failed_valuation_jobs,
+    (
+        SELECT count(*) FROM affected_snapshots
+        WHERE valuation_status = 'FAILED'
+          AND market_price IS NULL
+          AND market_value IS NULL
+          AND market_value_local IS NULL
+          AND unrealized_gain_loss IS NULL
+          AND unrealized_gain_loss_local IS NULL
+          AND unrealized_price_gain_loss IS NULL
+          AND unrealized_fx_gain_loss IS NULL
+    ) AS failed_snapshots_without_market_values,
+    (
+        SELECT count(*) FROM position_timeseries series
+        JOIN instruments instrument
+          ON trim(instrument.security_id) = trim(series.security_id)
+        JOIN portfolios portfolio
+          ON trim(portfolio.portfolio_id) = trim(series.portfolio_id)
+        WHERE series.portfolio_id LIKE :portfolio_pattern
+          AND series.date = :effective_date
+          AND upper(trim(instrument.currency)) = :from_currency
+          AND upper(trim(portfolio.base_currency)) = :to_currency
+    ) AS affected_position_timeseries,
+    (
+        SELECT count(*) FROM portfolio_timeseries
+        WHERE portfolio_id LIKE :portfolio_pattern
+          AND date = :effective_date
+    ) AS affected_portfolio_timeseries,
+    (
+        SELECT count(*)
+        FROM daily_position_snapshots snapshot
+        JOIN instruments instrument
+          ON trim(instrument.security_id) = trim(snapshot.security_id)
+        JOIN portfolios portfolio
+          ON trim(portfolio.portfolio_id) = trim(snapshot.portfolio_id)
+        WHERE snapshot.portfolio_id LIKE :portfolio_pattern
+          AND snapshot.date = :effective_date
+          AND snapshot.valuation_status = 'VALUED_CURRENT'
+          AND NOT (
+              upper(trim(instrument.currency)) = :from_currency
+              AND upper(trim(portfolio.base_currency)) = :to_currency
+          )
+    ) AS unaffected_current_snapshots,
+    (
+        SELECT count(*) FROM portfolio_valuation_jobs
+        WHERE portfolio_id LIKE :portfolio_pattern
+          AND status IN ('PENDING', 'PROCESSING')
+    ) AS open_valuation_jobs,
+    (
+        SELECT count(*) FROM outbox_events
+        WHERE status = 'PENDING'
+    ) AS pending_outbox_events,
+    (
+        SELECT count(*) FROM outbox_events
+        WHERE status = 'FAILED'
+    ) AS failed_outbox_events
+"""
 
 
 _FX_CORRECTED_DERIVED_STATE_SQL = """
@@ -73,7 +194,7 @@ WITH affected_snapshots AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(snapshot.portfolio_id)
     WHERE snapshot.portfolio_id LIKE :portfolio_pattern
-      AND snapshot.date BETWEEN :window_start_date AND :window_end_date
+      AND snapshot.date = :effective_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 ),
@@ -85,7 +206,7 @@ affected_valuation_jobs AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(job.portfolio_id)
     WHERE job.portfolio_id LIKE :portfolio_pattern
-      AND job.valuation_date BETWEEN :window_start_date AND :window_end_date
+      AND job.valuation_date = :effective_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 ),
@@ -97,7 +218,7 @@ affected_position_timeseries AS (
     JOIN portfolios portfolio
       ON trim(portfolio.portfolio_id) = trim(series.portfolio_id)
     WHERE series.portfolio_id LIKE :portfolio_pattern
-      AND series.date BETWEEN :window_start_date AND :window_end_date
+      AND series.date BETWEEN :effective_date AND :window_end_date
       AND upper(trim(instrument.currency)) = :from_currency
       AND upper(trim(portfolio.base_currency)) = :to_currency
 )
@@ -136,7 +257,7 @@ SELECT
         SELECT coalesce(sum(market_value), 0)
         FROM daily_position_snapshots
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND date BETWEEN :window_start_date AND :window_end_date
+          AND date BETWEEN :effective_date AND :window_end_date
     ) AS corrected_total_market_value,
     (
         SELECT count(*)
@@ -153,9 +274,22 @@ SELECT
         SELECT count(*)
         FROM portfolio_timeseries
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND date BETWEEN :window_start_date AND :window_end_date
+          AND date BETWEEN :effective_date AND :window_end_date
           AND updated_at >= :correction_started_at
     ) AS corrected_portfolio_timeseries,
+    (
+        SELECT count(*)
+        FROM daily_position_snapshots snapshot
+        JOIN instruments instrument
+          ON trim(instrument.security_id) = trim(snapshot.security_id)
+        JOIN portfolios portfolio
+          ON trim(portfolio.portfolio_id) = trim(snapshot.portfolio_id)
+        WHERE snapshot.portfolio_id LIKE :portfolio_pattern
+          AND snapshot.date < :effective_date
+          AND snapshot.updated_at >= :correction_started_at
+          AND upper(trim(instrument.currency)) = :from_currency
+          AND upper(trim(portfolio.base_currency)) = :to_currency
+    ) AS unexpected_prior_affected_snapshot_updates,
     (
         SELECT count(*)
         FROM processed_events
@@ -318,6 +452,71 @@ def build_fx_valuation_expectations(
     )
 
 
+def wait_for_missing_exact_date_fx_failure(
+    *,
+    row_reader: RowReader,
+    run_id: str,
+    from_currency: str,
+    to_currency: str,
+    valuation_date: str,
+    portfolio_count: int,
+    affected_instrument_count: int,
+    total_instrument_count: int,
+    timeout_seconds: int,
+    poll_interval_seconds: float = 5,
+) -> FxMissingRateFailureEvidence:
+    """Wait until missing exact-date FX is proven fail-closed without losing holdings."""
+
+    if portfolio_count <= 0 or affected_instrument_count <= 0:
+        raise ValueError("portfolio and affected instrument counts must be positive")
+    if total_instrument_count <= affected_instrument_count:
+        raise ValueError("the recovery workload must include unaffected control instruments")
+    normalized_from_currency = from_currency.strip().upper()
+    normalized_to_currency = to_currency.strip().upper()
+    effective_date = date.fromisoformat(valuation_date)
+    params = {
+        "portfolio_pattern": f"LOAD_{run_id}_PF_%",
+        "from_currency": normalized_from_currency,
+        "to_currency": normalized_to_currency,
+        "effective_date": effective_date,
+    }
+    expected_affected = portfolio_count * affected_instrument_count
+    expected_unaffected = portfolio_count * (total_instrument_count - affected_instrument_count)
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        row = row_reader(_FX_MISSING_RATE_FAILURE_SQL, params)
+        if int(row["failed_outbox_events"]):
+            raise RuntimeError("Missing-rate workload produced failed outbox events")
+        if (
+            int(row["durable_affected_position_histories"]) == expected_affected
+            and int(row["failed_valuation_jobs"]) == expected_affected
+            and int(row["failed_snapshots_without_market_values"]) == expected_affected
+            and int(row["affected_position_timeseries"]) == 0
+            and int(row["affected_portfolio_timeseries"]) == 0
+            and int(row["unaffected_current_snapshots"]) == expected_unaffected
+            and int(row["open_valuation_jobs"]) == 0
+            and int(row["pending_outbox_events"]) == 0
+        ):
+            return FxMissingRateFailureEvidence(
+                observed_at=datetime.now().astimezone().isoformat(),
+                from_currency=normalized_from_currency,
+                to_currency=normalized_to_currency,
+                valuation_date=valuation_date,
+                expected_affected_positions=expected_affected,
+                durable_affected_position_histories=int(row["durable_affected_position_histories"]),
+                failed_valuation_jobs=int(row["failed_valuation_jobs"]),
+                failed_snapshots_without_market_values=int(
+                    row["failed_snapshots_without_market_values"]
+                ),
+                affected_position_timeseries=int(row["affected_position_timeseries"]),
+                affected_portfolio_timeseries=int(row["affected_portfolio_timeseries"]),
+                expected_unaffected_snapshots=expected_unaffected,
+                unaffected_current_snapshots=int(row["unaffected_current_snapshots"]),
+            )
+        time.sleep(poll_interval_seconds)
+    raise TimeoutError("Missing exact-date FX did not reach the required fail-closed state")
+
+
 def wait_for_fx_corrected_derived_state(
     *,
     row_reader: RowReader,
@@ -328,31 +527,35 @@ def wait_for_fx_corrected_derived_state(
     window_start_date: str,
     window_end_date: str,
     business_date_count: int,
+    affected_business_date_count: int,
     portfolio_count: int,
     expectations: FxValuationExpectations,
     initial_rate: Decimal,
     corrected_rate: Decimal,
     correction_started_at: datetime,
     timeout_seconds: int,
+    expected_pair_replay_jobs: int,
     poll_interval_seconds: float = 5,
 ) -> FxDerivedStateCorrectionEvidence:
     """Wait for exact pair-scoped rematerialization and idempotency evidence."""
 
     if business_date_count <= 0:
         raise ValueError("business_date_count must be positive")
+    if affected_business_date_count <= 0 or affected_business_date_count > business_date_count:
+        raise ValueError("affected_business_date_count must be within the business-date window")
     if date.fromisoformat(window_start_date) > date.fromisoformat(window_end_date):
         raise ValueError("window_start_date must not be after window_end_date")
     expected_affected_rows = (
-        portfolio_count * expectations.affected_instrument_count * business_date_count
+        portfolio_count * expectations.affected_instrument_count * affected_business_date_count
     )
-    expected_portfolio_rows = portfolio_count * business_date_count
-    window_scale = Decimal(business_date_count)
+    expected_portfolio_rows = portfolio_count * affected_business_date_count
+    affected_window_scale = Decimal(affected_business_date_count)
     expected_values = {
-        "affected_market_value": expectations.daily_affected_market_value * window_scale,
-        "total_market_value": expectations.daily_total_market_value * window_scale,
-        "unrealized_price": expectations.daily_affected_unrealized_price * window_scale,
-        "unrealized_fx": expectations.daily_affected_unrealized_fx * window_scale,
-        "unrealized_total": expectations.daily_affected_unrealized_total * window_scale,
+        "affected_market_value": expectations.daily_affected_market_value * affected_window_scale,
+        "total_market_value": expectations.daily_total_market_value * affected_window_scale,
+        "unrealized_price": expectations.daily_affected_unrealized_price * affected_window_scale,
+        "unrealized_fx": expectations.daily_affected_unrealized_fx * affected_window_scale,
+        "unrealized_total": expectations.daily_affected_unrealized_total * affected_window_scale,
     }
     normalized_from_currency = from_currency.strip().upper()
     normalized_to_currency = to_currency.strip().upper()
@@ -396,7 +599,8 @@ def wait_for_fx_corrected_derived_state(
             and int(row["corrected_position_timeseries"]) == expected_affected_rows
             and int(row["corrected_portfolio_timeseries"]) == expected_portfolio_rows
             and int(row["processed_observations"]) == 1
-            and int(row["completed_pair_replay_jobs"]) == 1
+            and int(row["completed_pair_replay_jobs"]) == expected_pair_replay_jobs
+            and int(row["unexpected_prior_affected_snapshot_updates"]) == 0
             and int(row["open_valuation_jobs"]) == 0
             and int(row["open_aggregation_jobs"]) == 0
             and int(row["open_pair_replay_jobs"]) == 0
@@ -434,6 +638,9 @@ def wait_for_fx_corrected_derived_state(
                 corrected_unrealized_fx=f"{observed_values['unrealized_fx']:.10f}",
                 expected_unrealized_total=f"{expected_values['unrealized_total']:.10f}",
                 corrected_unrealized_total=f"{observed_values['unrealized_total']:.10f}",
+                unexpected_prior_affected_snapshot_updates=int(
+                    row["unexpected_prior_affected_snapshot_updates"]
+                ),
             )
         time.sleep(poll_interval_seconds)
     raise TimeoutError("FX correction did not fully rematerialize before timeout.")

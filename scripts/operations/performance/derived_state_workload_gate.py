@@ -50,6 +50,7 @@ class DerivedStateWorkloadProfile:
     fx_rate_correction_from_currency: str | None = None
     fx_rate_correction_to_currency: str | None = None
     fx_rate_correction_multiplier: Decimal | None = None
+    prove_missing_exact_date_fx_recovery: bool = False
     restart_valuation_orchestrator_during_fx_correction: bool = False
 
     @property
@@ -100,17 +101,18 @@ _CERTIFYING_PROFILES = {
         market_price_correction_multiplier=Decimal("1.05"),
     ),
     "fx-restatement": DerivedStateWorkloadProfile(
-        name="derived-state-fx-rate-restatement",
+        name="derived-state-missing-exact-date-fx-recovery",
         portfolio_count=100,
         positions_per_portfolio=100,
         transaction_batch_size=2000,
         sample_size=5,
         drain_timeout_seconds=3600,
         certifying=True,
-        business_date_count=5,
+        business_date_count=2,
         fx_rate_correction_from_currency="EUR",
         fx_rate_correction_to_currency="USD",
         fx_rate_correction_multiplier=Decimal("1.05"),
+        prove_missing_exact_date_fx_recovery=True,
         restart_valuation_orchestrator_during_fx_correction=True,
     ),
 }
@@ -273,6 +275,8 @@ def build_bank_day_command(
         )
         if profile.restart_valuation_orchestrator_during_fx_correction:
             command.append("--restart-valuation-orchestrator-during-fx-correction")
+        if profile.prove_missing_exact_date_fx_recovery:
+            command.append("--prove-missing-exact-date-fx-recovery")
     return command
 
 
