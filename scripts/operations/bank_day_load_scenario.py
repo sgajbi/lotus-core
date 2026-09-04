@@ -856,6 +856,15 @@ def _seed_source_facts_before_business_horizon(
     security_pattern = {"security_pattern": f"LOAD_{run_id}_SEC_%"}
     phases: list[IngestPhaseResult] = []
 
+    market_price_dates = business_dates if withheld_fx_fact is not None else [opening_trade_date]
+    market_price_rows = [
+        row
+        for price_date in market_price_dates
+        for row in _build_market_prices_payload(
+            specs=specs,
+            price_date=price_date,
+        )
+    ]
     phases.append(
         _ingest_static_payload(
             session=session,
@@ -949,10 +958,7 @@ def _seed_source_facts_before_business_horizon(
             base_url=ingestion_base_url,
             endpoint="/ingest/market-prices",
             root_key="market_prices",
-            rows=_build_market_prices_payload(
-                specs=specs,
-                price_date=opening_trade_date,
-            ),
+            rows=market_price_rows,
         )
     )
     _wait_for_seed_materialization(
@@ -961,20 +967,25 @@ def _seed_source_facts_before_business_horizon(
         SELECT count(*) AS count
         FROM market_prices
         WHERE security_id LIKE :security_pattern
-          AND price_date = :trade_date
+          AND price_date BETWEEN :window_start_date AND :window_end_date
         """,
         params={
             "security_pattern": security_pattern["security_pattern"],
-            "trade_date": opening_trade_date,
+            "window_start_date": market_price_dates[0],
+            "window_end_date": market_price_dates[-1],
         },
-        expected_count=len(specs),
+        expected_count=len(market_price_rows),
         label="market price seed",
         timeout_seconds=timeout_seconds,
     )
 
     for service_name, expected_count, label in (
         ("fx-rate-revaluation-trigger", fx_rate_count, "FX source-event fence"),
-        ("price-event-reprocessing-trigger", len(specs), "market-price source-event fence"),
+        (
+            "price-event-reprocessing-trigger",
+            len(market_price_rows),
+            "market-price source-event fence",
+        ),
     ):
         _wait_for_seed_materialization(
             engine=engine,
