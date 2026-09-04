@@ -49,6 +49,8 @@ def mock_position_repo() -> AsyncMock:
         market_value_local=Decimal("1000"),
         unrealized_gain_loss=Decimal("0"),
         unrealized_gain_loss_local=Decimal("0"),
+        valuation_source_currency="USD",
+        valuation_reporting_currency="USD",
         date=date(2025, 1, 1),
         created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
@@ -466,6 +468,8 @@ async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
             market_value_local=Decimal("1000"),
             unrealized_gain_loss=Decimal("0"),
             unrealized_gain_loss_local=Decimal("0"),
+            valuation_source_currency="USD",
+            valuation_reporting_currency="USD",
             date=date(2026, 3, 10),
             epoch=1,
         )
@@ -599,6 +603,8 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
             market_value_local=Decimal("1000"),
             unrealized_gain_loss=Decimal("0"),
             unrealized_gain_loss_local=Decimal("0"),
+            valuation_source_currency="USD",
+            valuation_reporting_currency="USD",
             date=date(2025, 1, 1),
         )
         history_row = PositionHistory(
@@ -636,6 +642,8 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
                 "unrealized_gain_loss": Decimal("7645.437"),
                 "market_value_local": Decimal("64840.437"),
                 "unrealized_gain_loss_local": Decimal("7645.437"),
+                "valuation_source_currency": "USD",
+                "valuation_reporting_currency": "USD",
             }
         }
         mock_position_repo.get_held_since_dates.return_value = {
@@ -681,6 +689,8 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
             market_value_local=Decimal("1000"),
             unrealized_gain_loss=Decimal("0"),
             unrealized_gain_loss_local=Decimal("0"),
+            valuation_source_currency="USD",
+            valuation_reporting_currency="USD",
             date=date(2025, 1, 1),
             epoch=2,
         )
@@ -727,6 +737,8 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
                 "unrealized_gain_loss": Decimal("7645.437"),
                 "market_value_local": Decimal("64840.437"),
                 "unrealized_gain_loss_local": Decimal("7645.437"),
+                "valuation_source_currency": "USD",
+                "valuation_reporting_currency": "USD",
             }
         }
         mock_position_repo.get_held_since_dates.return_value = {

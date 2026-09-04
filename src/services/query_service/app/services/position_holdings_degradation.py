@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import date, datetime
 from typing import Any
 
@@ -34,6 +35,7 @@ def holdings_degradation_summary(
     response_as_of_date: date,
     latest_market_price_dates: dict[str, date],
     valuation_fx_rate_dates: dict[str, date | None],
+    missing_currency_lineage_security_ids: Collection[str],
     latest_evidence_timestamp: datetime | None,
 ) -> SourceDataDegradationSummary:
     details: list[SourceDataDegradationDetail] = []
@@ -73,6 +75,13 @@ def holdings_degradation_summary(
                 position=position,
                 response_as_of_date=response_as_of_date,
                 latest_market_price_dates=latest_market_price_dates,
+                latest_evidence_timestamp=latest_evidence_timestamp,
+            )
+        )
+        details.extend(
+            _valuation_currency_lineage_degradation_details(
+                security_id=security_id,
+                missing_currency_lineage_security_ids=(missing_currency_lineage_security_ids),
                 latest_evidence_timestamp=latest_evidence_timestamp,
             )
         )
@@ -178,6 +187,28 @@ def _history_supplement_degradation_detail(
         freshness_status="PARTIAL",
         reason_code="HOLDINGS_VALUATION_FALLBACK",
     )
+
+
+def _valuation_currency_lineage_degradation_details(
+    *,
+    security_id: str,
+    missing_currency_lineage_security_ids: Collection[str],
+    latest_evidence_timestamp: datetime | None,
+) -> list[SourceDataDegradationDetail]:
+    if security_id not in missing_currency_lineage_security_ids:
+        return []
+    return [
+        _holdings_degradation_detail(
+            section="positions",
+            record_key=_position_record_key(security_id),
+            affected_fields=FX_VALUATION_FIELDS,
+            source_kind="UNAVAILABLE",
+            source_as_of_date=None,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+            freshness_status="UNKNOWN",
+            reason_code="VALUATION_CURRENCY_LINEAGE_MISSING",
+        )
+    ]
 
 
 def _valuation_fx_degradation_details(

@@ -32,8 +32,8 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
         market_value_local=Decimal("1000"),
         unrealized_gain_loss=Decimal("0"),
         unrealized_gain_loss_local=Decimal("0"),
-        valuation_fx_rate=Decimal("1.0"),
-        valuation_fx_rate_date=date(2025, 1, 1),
+        valuation_source_currency="USD",
+        valuation_reporting_currency="USD",
         date=date(2025, 1, 1),
         epoch=7,
         created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
@@ -122,6 +122,8 @@ async def test_portfolio_holdings_response_marks_prior_date_fx_evidence_stale() 
         market_value_local=Decimal("800"),
         valuation_fx_rate=Decimal("1.25"),
         valuation_fx_rate_date=date(2025, 1, 1),
+        valuation_source_currency="USD",
+        valuation_reporting_currency="CHF",
         date=date(2025, 1, 2),
         epoch=7,
         updated_at=datetime(2025, 1, 2, 10, 0, tzinfo=UTC),
@@ -168,6 +170,68 @@ async def test_portfolio_holdings_response_marks_prior_date_fx_evidence_stale() 
     assert detail.freshness_status == "STALE"
 
 
+async def test_portfolio_holdings_response_fails_closed_for_legacy_currency_lineage() -> None:
+    repository = AsyncMock()
+    snapshot = DailyPositionSnapshot(
+        security_id="LEGACY_A",
+        quantity=Decimal("100"),
+        cost_basis=Decimal("1000"),
+        cost_basis_local=Decimal("800"),
+        market_price=Decimal("10"),
+        market_value=Decimal("1000"),
+        market_value_local=Decimal("800"),
+        date=date(2025, 1, 2),
+        epoch=7,
+        updated_at=datetime(2025, 1, 2, 10, 0, tzinfo=UTC),
+    )
+    instrument = Instrument(
+        name="Legacy security",
+        asset_class="Equity",
+        currency="USD",
+    )
+    state = PositionState(
+        status="CURRENT",
+        epoch=7,
+        updated_at=datetime(2025, 1, 2, 10, 5, tzinfo=UTC),
+    )
+    repository.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        (snapshot, instrument, state)
+    ]
+    repository.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+    repository.get_held_since_dates.return_value = {("LEGACY_A", 7): date(2024, 12, 31)}
+    repository.get_latest_market_price_dates.return_value = {"LEGACY_A": date(2025, 1, 2)}
+    repository.get_holdings_reconciliation_controls.return_value = [
+        FinancialReconciliationControl(
+            business_date=date(2025, 1, 2),
+            epoch=7,
+            status="COMPLETED",
+            updated_at=datetime(2025, 1, 2, 10, 6, tzinfo=UTC),
+        )
+    ]
+
+    response = await portfolio_holdings_response(
+        repository=repository,
+        portfolio_id="P1",
+        effective_as_of_date=date(2025, 1, 2),
+    )
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.freshness_status == "UNAVAILABLE"
+    assert response.source_evidence_current is False
+    assert response.degradation.status == "UNKNOWN"
+    assert response.degradation.reason_codes == ["VALUATION_CURRENCY_LINEAGE_MISSING"]
+    detail = response.degradation.details[0]
+    assert detail.record_key == "security_id:LEGACY_A"
+    assert detail.source_kind == "UNAVAILABLE"
+    assert detail.source_as_of_date is None
+    assert detail.affected_fields == [
+        "valuation.market_value",
+        "valuation.unrealized_gain_loss",
+        "valuation.unrealized_price_gain_loss",
+        "valuation.unrealized_fx_gain_loss",
+    ]
+
+
 async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata() -> None:
     repository = AsyncMock()
     history = PositionHistory(
@@ -196,6 +260,8 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
             "unrealized_gain_loss": Decimal("20"),
             "market_value_local": Decimal("218"),
             "unrealized_gain_loss_local": Decimal("20"),
+            "valuation_source_currency": "USD",
+            "valuation_reporting_currency": "USD",
         }
     }
     repository.get_held_since_dates.return_value = {("HIST_A", 3): date(2024, 12, 1)}
