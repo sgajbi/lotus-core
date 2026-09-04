@@ -148,7 +148,8 @@ def test_initial_source_facts_drain_before_business_horizon_activation(monkeypat
                 3,
                 {
                     "security_pattern": "LOAD_20260809T000000Z_SEC_%",
-                    "trade_date": "2026-08-07",
+                    "window_start_date": "2026-08-07",
+                    "window_end_date": "2026-08-07",
                 },
             ),
         ),
@@ -233,6 +234,66 @@ def test_business_date_horizon_binds_multiple_dates_as_json(monkeypatch) -> None
     assert observed_wait["params"] == {"business_dates_json": '["2026-08-07", "2026-08-10"]'}
     assert "jsonb_array_elements_text" in str(observed_wait["sql"])
     assert observed_wait["expected_count"] == 2
+
+
+def test_missing_fx_recovery_seed_isolates_one_exact_date_fact(monkeypatch) -> None:
+    ingested_rows: dict[str, list[dict[str, object]]] = {}
+    expected_counts: dict[str, int] = {}
+
+    def ingest_static_payload(**kwargs):
+        ingested_rows[kwargs["endpoint"]] = kwargs["rows"]
+        return bank_day_load_scenario.IngestPhaseResult(
+            endpoint=kwargs["endpoint"],
+            record_count=len(kwargs["rows"]),
+            batch_count=1,
+            duration_seconds=0.0,
+        )
+
+    monkeypatch.setattr(bank_day_load_scenario, "_ingest_static_payload", ingest_static_payload)
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_wait_for_seed_materialization",
+        lambda **kwargs: expected_counts.update({kwargs["label"]: kwargs["expected_count"]}),
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_db_row",
+        lambda *_args, **_kwargs: {"source_seed_started_at": "2026-08-09T00:00:00Z"},
+    )
+    run_id = "20260809T000000Z"
+
+    bank_day_load_scenario._seed_source_facts_before_business_horizon(
+        engine=object(),
+        session=object(),
+        ingestion_base_url="http://ingestion",
+        run_id=run_id,
+        portfolios=bank_day_load_scenario._build_portfolios(
+            run_id=run_id,
+            portfolio_count=1,
+            trade_date="2026-08-07",
+        ),
+        specs=bank_day_load_scenario._build_instrument_specs(
+            run_id=run_id,
+            instrument_count=4,
+        ),
+        business_dates=["2026-08-07", "2026-08-10"],
+        timeout_seconds=30,
+        withheld_fx_fact=("EUR", "USD", "2026-08-10"),
+    )
+
+    fx_rows = ingested_rows["/ingest/fx-rates"]
+    assert len(fx_rows) == 23
+    assert not any(
+        row["from_currency"] == "EUR"
+        and row["to_currency"] == "USD"
+        and row["rate_date"] == "2026-08-10"
+        for row in fx_rows
+    )
+    assert len(ingested_rows["/ingest/market-prices"]) == 8
+    assert expected_counts["fx seed"] == 23
+    assert expected_counts["market price seed"] == 8
+    assert expected_counts["FX source-event fence"] == 23
+    assert expected_counts["market-price source-event fence"] == 8
 
 
 def test_operation_evidence_collection_preserves_bounded_stage_totals(monkeypatch) -> None:
