@@ -89,10 +89,13 @@ requires a current-source FX restatement rerun with the rest of its certificatio
 Run `make profile-derived-state-daily`, `make profile-derived-state-fan-in`,
 `make profile-derived-state-price-burst`, `make profile-derived-state-price-restatement`, and
 `make profile-derived-state-fx-restatement` for the managed certifying shapes. Correction profiles
-require exact post-correction timestamps and values across all affected derived stages; the FX
-profile additionally proves exact unrealized price, FX, and total P&L decomposition plus one
-source observation and one direct-pair replay. It pauses valuation orchestration during correction
-ingestion and requires complete recovery after restart.
+require exact post-correction timestamps and values across all affected derived stages. The current
+FX profile first proves the missing final-date direct rate fails closed without losing holdings or
+publishing plausible values, while unaffected controls still materialize. It then proves one source
+observation, exact pair/date-bounded recovery, unchanged prior-date snapshots, exact unrealized
+price/FX/total P&L, and complete restart recovery after pausing valuation orchestration during rate
+arrival. Because the arriving fact is for the current governed date, no historical replay job is
+expected; backdated correction replay remains covered by the retained `20260715T233241Z` baseline.
 `make test-derived-state-workload-smoke` is explicitly diagnostic and must not be
 used as daily-volume, fan-in, lease-duration, or production-capacity evidence. Treat only a report
 with `evidence_classification=certifying`, exact expected row counts, complete resource samples,
