@@ -3237,10 +3237,11 @@ Most relevant current governance:
      that lost ownership or whose lease expired may finish calculation locally but must not persist
      or publish financial state for a later claim. `updated_at` remains diagnostic metadata, never
      claim authority.
-192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
+192. Correlation ids are diagnostic lineage, not authorization to replay terminal work. Valuation
      scheduler, recovery, duplicate delivery, and headerless readiness paths must leave an existing
-     `COMPLETE` same-scope job unchanged even when their correlation differs. A source correction
-     may explicitly rearm completed valuation after source-owned freshness proves that the
+     `COMPLETE` or `FAILED` same-scope job unchanged even when their correlation differs. In
+     particular, a scheduler poll must not repeatedly execute a missing-source failure. A source
+     correction may explicitly rearm terminal valuation after source-owned freshness proves that the
      authoritative price or FX observation is newer than the materialized snapshot. A distinct
      outbox-backed transaction-readiness mutation may do the same because position/cash state has
      changed for that valuation scope. Preserve both identities in PostgreSQL conflict-lifecycle,

@@ -63,6 +63,11 @@ claim watermark. This prevents an already-covered position mutation from creatin
 snapshots while preserving genuinely later source authority; event timestamps are not ordering
 authority. Headerless legacy deliveries remain consumable but cannot rearm work.
 
+Ordinary scheduler polls also preserve both `COMPLETE` and `FAILED` same-scope valuation jobs.
+A missing-source failure becomes eligible again only when a freshness-proven price/FX observation
+or newer position-readiness sequence explicitly rearms it. This keeps fail-closed valuation from
+becoming an unbounded retry loop while preserving deterministic recovery when authority arrives.
+
 `target_epoch` remains the maximum staged epoch for the portfolio day, but every materially changed
 per-security stage advances `source_revision`, including a delayed lower-epoch row. If such a stage
 supersedes an active claim and that worker later expires, recovery requeues `REPROCESS_REQUESTED`

@@ -45,6 +45,10 @@ The health of this service is critical for the availability of all performance a
   position-timeseries row and rearms portfolio aggregation even when instrument-local values are
   unchanged by a portfolio-base FX correction. Replaying an already materialized snapshot is a
   no-op.
+* **Missing-source retry posture:** A valuation job that fails for missing exact-date price or FX
+  remains terminal across ordinary scheduler polls. Only a freshness-proven source observation or
+  newer position-readiness authority may rearm it. Repeated identical failures indicate a broken
+  rearm fence; do not treat them as normal retries or extend the drain timeout.
 
 ## 2. Structured Logging & Tracing
 
