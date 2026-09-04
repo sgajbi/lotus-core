@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.reprocessing_job_repository import (
+    _REPLAY_TEXT_TRIM_CHARS,
     ReprocessingJobRepository,
     ReprocessingJobTransitionOutcome,
     ResetWatermarksStageOutcome,
@@ -177,7 +178,10 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     assert deleted_count == 2
     stmt = mock_db_session.execute.await_args.args[0]
     stmt_text = str(stmt)
-    assert "WITH ranked AS" in stmt_text
+    assert "WITH valid_candidates AS MATERIALIZED" in stmt_text
+    assert "pg_input_is_valid" in stmt_text
+    assert "btrim(payload->>'security_id', :trim_chars)" in stmt_text
+    assert mock_db_session.execute.await_args.args[1] == {"trim_chars": _REPLAY_TEXT_TRIM_CHARS}
     assert "DELETE FROM reprocessing_jobs" in stmt_text
     assert "jsonb_set" in stmt_text
 
@@ -214,7 +218,7 @@ async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before
     assert mock_db_session.execute.await_count == 2
     normalize_stmt = mock_db_session.execute.await_args_list[0].args[0]
     claim_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    assert "WITH ranked AS" in str(normalize_stmt)
+    assert "WITH valid_candidates AS MATERIALIZED" in str(normalize_stmt)
     assert "UPDATE reprocessing_jobs" in str(claim_stmt)
 
 
@@ -783,6 +787,8 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
                 "content_hash": "sha256:" + ("b" * 64),
                 "generated_at": "not-a-timestamp",
             },
+            "earliest_date_representable": True,
+            "generated_at_representable": False,
         }
     ]
     mock_db_session.execute.side_effect = [
@@ -809,6 +815,62 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
     assert "status=:status" in str(quarantine_update)
     _, upsert_parameters = mock_db_session.execute.await_args_list[3].args
     assert upsert_parameters["effective_date"] == date(2026, 4, 6)
+
+
+async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    quarantine_result = MagicMock()
+    quarantine_result.mappings.return_value.all.return_value = [
+        {
+            "id": 7,
+            "payload": {
+                "security_id": "BOND-1",
+                "earliest_impacted_date": "2025-W01-2",
+            },
+            "earliest_date_representable": False,
+        }
+    ]
+    upsert_result = MagicMock()
+    upsert_result.mappings.return_value.one.return_value = {
+        "id": 8,
+        "job_type": "RESET_WATERMARKS",
+        "payload": {"security_id": "BOND-1", "earliest_impacted_date": "2024-12-31"},
+        "status": "PENDING",
+        "attempt_count": 0,
+        "last_attempted_at": None,
+        "failure_reason": None,
+        "created_at": None,
+        "updated_at": None,
+        "was_inserted": True,
+    }
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        quarantine_result,
+        MagicMock(),
+        upsert_result,
+    ]
+
+    await repository.stage_reset_watermarks_job(
+        security_id="BOND-1",
+        earliest_impacted_date=date(2025, 1, 6),
+        correlation_id="corr-authoritative",
+    )
+
+    quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert "pg_input_is_valid" in str(quarantine_statement)
+    assert "FOR UPDATE" in str(quarantine_statement)
+    quarantine_update = mock_db_session.execute.await_args_list[2].args[0]
+    assert "status=:status" in str(quarantine_update)
+    _, upsert_parameters = mock_db_session.execute.await_args_list[3].args
+    assert upsert_parameters["earliest_impacted_date"] == date(2024, 12, 31)
+
+
+async def test_replay_trim_contract_matches_python_strip_whitespace() -> None:
+    assert set(_REPLAY_TEXT_TRIM_CHARS) == {
+        chr(codepoint) for codepoint in range(0x110000) if chr(codepoint).isspace()
+    }
 
 
 async def test_create_job_coalesces_pending_reset_watermarks_job(
@@ -841,7 +903,7 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 3
 
 
 async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
@@ -873,7 +935,7 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 3
 
 
 async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
@@ -1042,6 +1104,36 @@ async def test_owned_requeue_uses_repository_policy_for_direct_requeue(
         "PENDING",
         lease_token=LEASE_TOKEN,
     )
+
+
+async def test_reset_pending_sibling_lookup_uses_normalized_identity(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    sibling_result = MagicMock()
+    sibling_result.scalar_one_or_none.return_value = 12
+    mock_db_session.execute.return_value = sibling_result
+    identity = SimpleNamespace(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "BOND-1"},
+    )
+
+    exists = await repository._pending_replay_sibling_exists(
+        job_id=11,
+        identity=identity,
+    )
+
+    assert exists is True
+    statement, parameters = mock_db_session.execute.await_args.args
+    sql = str(statement)
+    assert "btrim(payload->>'security_id', :trim_chars)" in sql
+    assert "jsonb_typeof" in sql
+    assert "FOR UPDATE" in sql
+    assert parameters == {
+        "job_id": 11,
+        "security_id": "BOND-1",
+        "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
+    }
 
 
 async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(

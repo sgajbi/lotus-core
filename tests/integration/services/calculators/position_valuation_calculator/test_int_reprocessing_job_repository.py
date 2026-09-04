@@ -10,6 +10,7 @@ from portfolio_common.infrastructure.persistence.statement_batching import (
 from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobRepository,
     ReprocessingJobTransitionOutcome,
+    ResetWatermarksStageOutcome,
 )
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -350,6 +351,113 @@ async def test_staging_quarantines_timezone_less_pending_fx_lineage(
     assert rows[1].correlation_id == "corr-authoritative"
 
 
+async def test_staging_quarantines_postgres_unrepresentable_pending_fx_date(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    legacy = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "EUR",
+            "earliest_impacted_date": "2025-W01-2",
+            "content_hash": "sha256:" + ("f" * 64),
+            "generated_at": "2026-08-26T10:00:00+00:00",
+        },
+        status="PENDING",
+        correlation_id="corr-legacy-week-date",
+    )
+    async_db_session.add(legacy)
+    await async_db_session.flush()
+    legacy_id = legacy.id
+    await async_db_session.commit()
+
+    await ReprocessingJobRepository(async_db_session).stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="EUR",
+        earliest_impacted_date=date(2025, 1, 6),
+        content_hash="sha256:" + ("a" * 64),
+        generated_at=datetime(2026, 8, 27, 10, 0, tzinfo=timezone.utc),
+        correlation_id="corr-authoritative",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 2
+    assert rows[0].id == legacy_id
+    assert rows[0].status == "FAILED"
+    assert rows[1].status == "PENDING"
+    assert rows[1].payload["earliest_impacted_date"] == "2024-12-31"
+    assert rows[1].payload["generated_at"] == "2026-08-27T10:00:00+00:00"
+
+
+async def test_staging_quarantines_postgres_unrepresentable_pending_reset_date(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    legacy = ReprocessingJob(
+        job_type="RESET_WATERMARKS",
+        payload={
+            "security_id": "BOND-WEEK-DATE",
+            "earliest_impacted_date": "2025-W01-2",
+        },
+        status="PENDING",
+        correlation_id="corr-legacy-week-date",
+    )
+    async_db_session.add(legacy)
+    await async_db_session.flush()
+    legacy_id = legacy.id
+    await async_db_session.commit()
+
+    result = await ReprocessingJobRepository(async_db_session).stage_reset_watermarks_job(
+        security_id="BOND-WEEK-DATE",
+        earliest_impacted_date=date(2025, 1, 6),
+        correlation_id="corr-authoritative",
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert result.outcome is ResetWatermarksStageOutcome.CREATED
+    assert len(rows) == 2
+    assert rows[0].id == legacy_id
+    assert rows[0].status == "FAILED"
+    assert rows[0].failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
+    assert rows[1].status == "PENDING"
+    assert rows[1].payload == {
+        "security_id": "BOND-WEEK-DATE",
+        "earliest_impacted_date": "2024-12-31",
+    }
+    assert rows[1].correlation_id == "corr-authoritative"
+
+
 async def test_staging_preserves_valid_compact_offset_pending_fx_lineage(
     clean_db,
     async_db_session: AsyncSession,
@@ -600,6 +708,46 @@ async def test_find_and_claim_jobs_keeps_malformed_payload_from_blocking_valid_s
         isinstance(job.payload, dict) and job.payload.get("security_id") == "S-VALID"
         for job in claimed
     )
+
+
+async def test_find_and_claim_jobs_does_not_cast_unrepresentable_reset_date(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status)
+            VALUES
+              (
+                'RESET_WATERMARKS',
+                CAST(
+                  '{"security_id":"S-WEEK","earliest_impacted_date":"2025-W01-2"}'
+                  AS JSON
+                ),
+                'PENDING'
+              ),
+              (
+                'RESET_WATERMARKS',
+                CAST(
+                  '{"security_id":"S-VALID","earliest_impacted_date":"2025-01-05"}'
+                  AS JSON
+                ),
+                'PENDING'
+              )
+            """
+        )
+    )
+    await async_db_session.commit()
+
+    claimed = await ReprocessingJobRepository(async_db_session).find_and_claim_jobs(
+        "RESET_WATERMARKS",
+        batch_size=2,
+    )
+    await async_db_session.commit()
+
+    assert {job.payload["security_id"] for job in claimed} == {"S-WEEK", "S-VALID"}
 
 
 async def test_find_and_claim_jobs_keeps_other_job_types_untouched(
@@ -899,6 +1047,57 @@ async def test_owned_reset_requeue_coalesces_pending_sibling_without_narrowing_b
     assert rows[1].correlation_id == expected_correlation
     assert rows[0].lease_token is None
     assert rows[0].lease_expires_at is None
+
+
+async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "BOND-PADDED", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    async_db_session.add(
+        ReprocessingJob(
+            job_type="RESET_WATERMARKS",
+            payload={
+                "security_id": "\tBOND-PADDED",
+                "earliest_impacted_date": "2025-01-05",
+            },
+            status="PENDING",
+            correlation_id="corr-legacy-padded",
+        )
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING"]
+    assert rows[1].failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
+    assert rows[2].payload == {
+        "security_id": "BOND-PADDED",
+        "earliest_impacted_date": "2025-01-05",
+    }
+    assert rows[2].correlation_id == "corr-claimed"
 
 
 async def test_owned_reset_requeue_without_sibling_reuses_claimed_row(
