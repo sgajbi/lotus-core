@@ -1108,6 +1108,47 @@ async def test_holdings_data_quality_status_fails_closed_for_missing_currency_li
     )
 
 
+async def test_holdings_quality_and_degradation_prioritize_stale_over_unknown() -> None:
+    position = Position(
+        security_id="LEGACY_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("10"),
+        position_date=date(2025, 1, 2),
+        instrument_name="Legacy priced holding",
+        asset_class="Equity",
+        reprocessing_status="CURRENT",
+        valuation=ValuationData(market_price=Decimal("10")),
+    )
+    latest_market_price_dates = {"LEGACY_A": date(2025, 1, 1)}
+    missing_lineage = {"LEGACY_A"}
+
+    quality_status = holdings_data_quality_status(
+        positions=[position],
+        history_supplements=[],
+        response_as_of_date=date(2025, 1, 2),
+        latest_market_price_dates=latest_market_price_dates,
+        valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=missing_lineage,
+    )
+    degradation = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 2),
+        latest_market_price_dates=latest_market_price_dates,
+        valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=missing_lineage,
+        latest_evidence_timestamp=None,
+    )
+
+    assert quality_status == "STALE"
+    assert degradation.status == quality_status
+    assert degradation.reason_codes == [
+        "MARKET_PRICE_STALE",
+        "VALUATION_CURRENCY_LINEAGE_MISSING",
+    ]
+
+
 async def test_holdings_data_quality_status_marks_history_supplement_partial() -> None:
     position = Position(
         security_id="SEC_A",
