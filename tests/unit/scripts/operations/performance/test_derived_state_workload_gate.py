@@ -153,15 +153,16 @@ def test_price_restatement_profile_rebuilds_a_bounded_business_date_window() -> 
     assert profile.certifying is True
 
 
-def test_fx_restatement_profile_rebuilds_only_the_affected_direct_pair() -> None:
+def test_fx_restatement_profile_proves_missing_exact_date_recovery() -> None:
     profile = resolve_workload_profile(profile_name="fx-restatement", diagnostic_smoke=False)
 
-    assert profile.name == "derived-state-fx-rate-restatement"
+    assert profile.name == "derived-state-missing-exact-date-fx-recovery"
     assert profile.transaction_count == 10_000
-    assert profile.business_date_count == 5
+    assert profile.business_date_count == 2
     assert profile.fx_rate_correction_from_currency == "EUR"
     assert profile.fx_rate_correction_to_currency == "USD"
     assert profile.fx_rate_correction_multiplier == Decimal("1.05")
+    assert profile.prove_missing_exact_date_fx_recovery is True
     assert profile.restart_valuation_orchestrator_during_fx_correction is True
     assert profile.certifying is True
 
@@ -306,7 +307,7 @@ def test_price_restatement_command_requests_a_five_day_correction_window(
     assert command[command.index("--market-price-correction-multiplier") + 1] == "1.05"
 
 
-def test_fx_restatement_command_requests_a_five_day_direct_pair_correction(
+def test_fx_restatement_command_requests_exact_date_failure_and_recovery(
     tmp_path: Path,
 ) -> None:
     profile = resolve_workload_profile(profile_name="fx-restatement", diagnostic_smoke=False)
@@ -332,11 +333,12 @@ def test_fx_restatement_command_requests_a_five_day_direct_pair_correction(
         trade_date="2026-07-15",
     )
 
-    assert command[command.index("--business-date-count") + 1] == "5"
+    assert command[command.index("--business-date-count") + 1] == "2"
     assert command[command.index("--fx-rate-correction-from-currency") + 1] == "EUR"
     assert command[command.index("--fx-rate-correction-to-currency") + 1] == "USD"
     assert command[command.index("--fx-rate-correction-multiplier") + 1] == "1.05"
     assert "--restart-valuation-orchestrator-during-fx-correction" in command
+    assert "--prove-missing-exact-date-fx-recovery" in command
 
 
 def test_certifying_profile_requires_exact_source_build() -> None:

@@ -129,7 +129,7 @@ def test_initial_source_facts_drain_before_business_horizon_activation(monkeypat
             ),
         ),
         ("ingest", "/ingest/fx-rates"),
-        ("wait", ("fx seed", 12, {"trade_date": "2026-08-07"})),
+        ("wait", ("fx seed", 12, {"rate_dates": ["2026-08-07"]})),
         ("ingest", "/ingest/market-prices"),
         (
             "wait",
@@ -448,7 +448,7 @@ def test_build_instruments_payload_generates_run_unique_isins() -> None:
 def test_build_fx_rates_payload_returns_full_cross_currency_matrix() -> None:
     payload = _build_fx_rates_payload(
         currencies=("USD", "EUR", "SGD"),
-        rate_date="2026-04-17",
+        rate_dates=["2026-04-17"],
     )
 
     assert len(payload) == 6
@@ -466,6 +466,20 @@ def test_build_fx_rates_payload_returns_full_cross_currency_matrix() -> None:
         if row["from_currency"] == "EUR" and row["to_currency"] == "USD"
     )
     assert eur_to_usd == "1.100000"
+
+
+def test_build_fx_rates_payload_withholds_only_the_selected_exact_date_fact() -> None:
+    payload = _build_fx_rates_payload(
+        currencies=("USD", "EUR"),
+        rate_dates=["2026-04-16", "2026-04-17"],
+        excluded_facts=frozenset({("EUR", "USD", "2026-04-17")}),
+    )
+
+    assert [(row["from_currency"], row["to_currency"], row["rate_date"]) for row in payload] == [
+        ("USD", "EUR", "2026-04-16"),
+        ("EUR", "USD", "2026-04-16"),
+        ("USD", "EUR", "2026-04-17"),
+    ]
 
 
 def test_iter_transaction_batches_yields_expected_records_and_batches() -> None:
@@ -717,6 +731,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             LogEvidence(
                 container_name="svc",
                 error_line_count=2,
+                expected_missing_fx_error_line_count=0,
                 sample_error_lines=["error one"],
             )
         ],
@@ -745,7 +760,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     assert any("positions_count" in failure for failure in failures)
     assert any("reconciliation findings=1" in failure for failure in failures)
     assert any("API probe failed /broken status=500" in failure for failure in failures)
-    assert any("svc logged 2 error/traceback lines" in failure for failure in failures)
+    assert any("svc logged 2 unexpected error/traceback lines" in failure for failure in failures)
     assert "transaction-processing operation evidence has no samples" in failures
     assert "cost-processing runtime evidence is incomplete" in failures
     assert any("derived-state resource evidence has no samples" in failure for failure in failures)

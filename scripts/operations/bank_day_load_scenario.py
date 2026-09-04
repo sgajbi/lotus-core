@@ -39,10 +39,12 @@ from scripts.operations.performance.derived_state_resource_monitor import (
 )
 from scripts.operations.performance.fx_rate_correction import (
     FxDerivedStateCorrectionEvidence,
+    FxMissingRateFailureEvidence,
     build_fx_rate_correction_payload,
     build_fx_valuation_expectations,
     corrected_direct_fx_rate,
     wait_for_fx_corrected_derived_state,
+    wait_for_missing_exact_date_fx_failure,
 )
 from scripts.operations.performance.market_price_correction import (
     DerivedStateCorrectionEvidence,
@@ -211,6 +213,7 @@ class HealthSample:
 class LogEvidence:
     container_name: str
     error_line_count: int
+    expected_missing_fx_error_line_count: int
     sample_error_lines: list[str]
 
 
@@ -244,6 +247,7 @@ class ScenarioReport:
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
     correction_evidence: DerivedStateCorrectionEvidence | None = None
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
+    fx_missing_rate_failure_evidence: FxMissingRateFailureEvidence | None = None
     fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
 
 
@@ -452,21 +456,25 @@ def _build_market_prices_payload(
 def _build_fx_rates_payload(
     *,
     currencies: Iterable[str],
-    rate_date: str,
+    rate_dates: Iterable[str],
+    excluded_facts: frozenset[tuple[str, str, str]] = frozenset(),
 ) -> list[dict[str, Any]]:
     rates: list[dict[str, Any]] = []
-    for from_currency in currencies:
-        for to_currency in currencies:
-            if from_currency == to_currency:
-                continue
-            rates.append(
-                {
-                    "from_currency": from_currency,
-                    "to_currency": to_currency,
-                    "rate_date": rate_date,
-                    "rate": f"{_fx_rate(from_currency, to_currency):.6f}",
-                }
-            )
+    for rate_date in rate_dates:
+        for from_currency in currencies:
+            for to_currency in currencies:
+                if from_currency == to_currency:
+                    continue
+                if (from_currency, to_currency, rate_date) in excluded_facts:
+                    continue
+                rates.append(
+                    {
+                        "from_currency": from_currency,
+                        "to_currency": to_currency,
+                        "rate_date": rate_date,
+                        "rate": f"{_fx_rate(from_currency, to_currency):.6f}",
+                    }
+                )
     return rates
 
 
@@ -822,6 +830,7 @@ def _seed_source_facts_before_business_horizon(
     specs: list[InstrumentSpec],
     business_dates: list[str],
     timeout_seconds: int,
+    withheld_fx_fact: tuple[str, str, str] | None = None,
 ) -> list[IngestPhaseResult]:
     """Seed source facts before activating the derived-state business horizon.
 
@@ -885,7 +894,13 @@ def _seed_source_facts_before_business_horizon(
         "SELECT clock_timestamp() AS source_seed_started_at",
         {},
     )["source_seed_started_at"]
-    fx_rate_count = len(SUPPORTED_CURRENCIES) * (len(SUPPORTED_CURRENCIES) - 1)
+    fx_rate_dates = business_dates if withheld_fx_fact is not None else [opening_trade_date]
+    excluded_fx_facts = (
+        frozenset({withheld_fx_fact}) if withheld_fx_fact is not None else frozenset()
+    )
+    fx_rate_count = len(SUPPORTED_CURRENCIES) * (len(SUPPORTED_CURRENCIES) - 1) * len(
+        fx_rate_dates
+    ) - len(excluded_fx_facts)
     phases.append(
         _ingest_static_payload(
             session=session,
@@ -894,7 +909,8 @@ def _seed_source_facts_before_business_horizon(
             root_key="fx_rates",
             rows=_build_fx_rates_payload(
                 currencies=SUPPORTED_CURRENCIES,
-                rate_date=opening_trade_date,
+                rate_dates=fx_rate_dates,
+                excluded_facts=excluded_fx_facts,
             ),
         )
     )
@@ -903,11 +919,11 @@ def _seed_source_facts_before_business_horizon(
         sql="""
         SELECT count(*) AS count
         FROM fx_rates
-        WHERE rate_date = :trade_date
+        WHERE rate_date = ANY(CAST(:rate_dates AS date[]))
           AND from_currency IN ('USD', 'EUR', 'SGD', 'GBP')
           AND to_currency IN ('USD', 'EUR', 'SGD', 'GBP')
         """,
-        params={"trade_date": opening_trade_date},
+        params={"rate_dates": fx_rate_dates},
         expected_count=fx_rate_count,
         label="fx seed",
         timeout_seconds=timeout_seconds,
@@ -1663,10 +1679,15 @@ def _collect_log_evidence(
                 continue
             if lower_line.startswith("error:") or lower_line.startswith("[error]"):
                 error_lines.append(line)
+        expected_missing_fx_errors = sum(
+            "Missing required FX rate for valuation. Job will be marked FAILED." in line
+            for line in error_lines
+        )
         evidence.append(
             LogEvidence(
                 container_name=service_name,
                 error_line_count=len(error_lines),
+                expected_missing_fx_error_line_count=expected_missing_fx_errors,
                 sample_error_lines=error_lines[:5],
             )
         )
@@ -1884,10 +1905,25 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                 f"API probe failed {probe.endpoint} status={probe.status_code}: "
                 f"{probe.failure_detail}"
             )
+    expected_missing_fx_errors = (
+        report.fx_missing_rate_failure_evidence.expected_affected_positions
+        if report.fx_missing_rate_failure_evidence is not None
+        else 0
+    )
+    observed_missing_fx_errors = sum(
+        log.expected_missing_fx_error_line_count for log in report.log_evidence
+    )
+    if observed_missing_fx_errors != expected_missing_fx_errors:
+        failures.append(
+            "expected missing-FX error lines "
+            f"{observed_missing_fx_errors} != fail-closed valuations {expected_missing_fx_errors}"
+        )
     for log in report.log_evidence:
-        if log.error_line_count > 0:
+        unexpected_error_lines = log.error_line_count - log.expected_missing_fx_error_line_count
+        if unexpected_error_lines > 0:
             failures.append(
-                f"{log.container_name} logged {log.error_line_count} error/traceback lines"
+                f"{log.container_name} logged {unexpected_error_lines} unexpected "
+                "error/traceback lines"
             )
     if bool(report.config.get("derived_state_resource_evidence_required")) and (
         report.derived_state_resource_evidence is None
@@ -2032,6 +2068,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
     ):
         failures.append("FX rate correction has no completed drain evidence")
     if (
+        report.config.get("prove_missing_exact_date_fx_recovery")
+        and report.fx_missing_rate_failure_evidence is None
+    ):
+        failures.append("FX recovery has no fail-closed missing-rate evidence")
+    if (
         bool(report.config.get("restart_valuation_orchestrator_during_fx_correction"))
         and report.fx_correction_restart_evidence is None
     ):
@@ -2114,6 +2155,17 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             json.dumps(
                 asdict(report.correction_evidence)
                 if report.correction_evidence is not None
+                else None,
+                indent=2,
+            ),
+            "```",
+            "",
+            "## Missing Exact-Date FX Failure Evidence",
+            "",
+            "```json",
+            json.dumps(
+                asdict(report.fx_missing_rate_failure_evidence)
+                if report.fx_missing_rate_failure_evidence is not None
                 else None,
                 indent=2,
             ),
@@ -2472,6 +2524,11 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
             "restart_valuation_orchestrator_during_fx_correction",
             False,
         ),
+        "prove_missing_exact_date_fx_recovery": getattr(
+            args,
+            "prove_missing_exact_date_fx_recovery",
+            False,
+        ),
     }
 
 
@@ -2511,6 +2568,7 @@ def _finalize_report(
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
     correction_evidence: DerivedStateCorrectionEvidence | None = None,
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None,
+    fx_missing_rate_failure_evidence: FxMissingRateFailureEvidence | None = None,
     fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None,
 ) -> ScenarioReport:
     report_base = ScenarioReport(
@@ -2549,6 +2607,7 @@ def _finalize_report(
         derived_state_resource_evidence=derived_state_resource_evidence,
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
+        fx_missing_rate_failure_evidence=fx_missing_rate_failure_evidence,
         fx_correction_restart_evidence=fx_correction_restart_evidence,
     )
     failures = initial_failures + _evaluate_report(report_base)
@@ -2581,6 +2640,7 @@ def _finalize_report(
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
         correction_evidence=report_base.correction_evidence,
         fx_correction_evidence=report_base.fx_correction_evidence,
+        fx_missing_rate_failure_evidence=report_base.fx_missing_rate_failure_evidence,
         fx_correction_restart_evidence=report_base.fx_correction_restart_evidence,
     )
 
@@ -2611,6 +2671,14 @@ def main() -> int:
     parser.add_argument(
         "--restart-valuation-orchestrator-during-fx-correction",
         action="store_true",
+    )
+    parser.add_argument(
+        "--prove-missing-exact-date-fx-recovery",
+        action="store_true",
+        help=(
+            "Withhold the configured pair on the final business date, prove fail-closed "
+            "valuation, then ingest that exact-date fact and prove bounded recovery."
+        ),
     )
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-base-url", default=DEFAULT_QUERY_BASE_URL)
@@ -2676,6 +2744,8 @@ def main() -> int:
         and args.fx_rate_correction_multiplier is not None
     ):
         raise ValueError("Run market-price and FX corrections as separate evidence profiles.")
+    if args.prove_missing_exact_date_fx_recovery and args.fx_rate_correction_multiplier is None:
+        raise ValueError("Missing exact-date FX recovery requires a configured FX pair and rate.")
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at = _utc_now()
@@ -2693,6 +2763,15 @@ def main() -> int:
         business_date_count=args.business_date_count,
     )
     opening_trade_date = business_dates[0]
+    withheld_fx_fact = (
+        (
+            str(args.fx_rate_correction_from_currency).strip().upper(),
+            str(args.fx_rate_correction_to_currency).strip().upper(),
+            business_dates[-1],
+        )
+        if args.prove_missing_exact_date_fx_recovery
+        else None
+    )
     _wait_ready(
         base_urls=[
             args.ingestion_base_url,
@@ -2716,6 +2795,7 @@ def main() -> int:
     effective_specs = specs
     effective_fx_rate_overrides: dict[tuple[str, str], Decimal] = {}
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
+    fx_missing_rate_failure_evidence: FxMissingRateFailureEvidence | None = None
     fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
     session = requests.Session()
     ingest_phases: list[IngestPhaseResult] = []
@@ -2761,6 +2841,7 @@ def main() -> int:
                 specs=specs,
                 business_dates=business_dates,
                 timeout_seconds=args.seed_materialization_timeout_seconds,
+                withheld_fx_fact=withheld_fx_fact,
             )
         )
         ingest_phases.append(
@@ -2779,14 +2860,33 @@ def main() -> int:
                 rate_limit_sleep_seconds=args.rate_limit_sleep_seconds,
             )
         )
-        drain_seconds = _wait_for_cycle_completion(
-            engine=engine,
-            run_id=run_id,
-            trade_date=resolved_trade_date,
-            portfolio_count=args.portfolio_count,
-            transaction_count=args.portfolio_count * args.transactions_per_portfolio,
-            timeout_seconds=args.drain_timeout_seconds,
-        )
+        if args.prove_missing_exact_date_fx_recovery:
+            from_currency = str(args.fx_rate_correction_from_currency).strip().upper()
+            to_currency = str(args.fx_rate_correction_to_currency).strip().upper()
+            affected_instrument_count = sum(
+                spec.currency.strip().upper() == from_currency for spec in specs
+            )
+            fx_missing_rate_failure_evidence = wait_for_missing_exact_date_fx_failure(
+                row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
+                run_id=run_id,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                valuation_date=resolved_trade_date,
+                portfolio_count=args.portfolio_count,
+                affected_instrument_count=affected_instrument_count,
+                total_instrument_count=len(specs),
+                timeout_seconds=args.drain_timeout_seconds,
+            )
+            drain_seconds = 0.0
+        else:
+            drain_seconds = _wait_for_cycle_completion(
+                engine=engine,
+                run_id=run_id,
+                trade_date=resolved_trade_date,
+                portfolio_count=args.portfolio_count,
+                transaction_count=args.portfolio_count * args.transactions_per_portfolio,
+                timeout_seconds=args.drain_timeout_seconds,
+            )
         if args.market_price_correction_multiplier is not None:
             effective_specs = apply_market_price_correction(
                 specs=specs,
@@ -2874,7 +2974,11 @@ def main() -> int:
                     rows=build_fx_rate_correction_payload(
                         from_currency=from_currency,
                         to_currency=to_currency,
-                        effective_date=opening_trade_date,
+                        effective_date=(
+                            resolved_trade_date
+                            if args.prove_missing_exact_date_fx_recovery
+                            else opening_trade_date
+                        ),
                         corrected_rate=corrected_rate,
                     ),
                     phase="fx-rate-correction",
@@ -2887,19 +2991,36 @@ def main() -> int:
                 run_id=run_id,
                 from_currency=from_currency,
                 to_currency=to_currency,
-                effective_date=opening_trade_date,
+                effective_date=(
+                    resolved_trade_date
+                    if args.prove_missing_exact_date_fx_recovery
+                    else opening_trade_date
+                ),
                 window_start_date=business_dates[0],
                 window_end_date=business_dates[-1],
                 business_date_count=len(business_dates),
+                affected_business_date_count=(
+                    1 if args.prove_missing_exact_date_fx_recovery else len(business_dates)
+                ),
                 portfolio_count=args.portfolio_count,
                 expectations=expectations,
                 initial_rate=initial_rate,
                 corrected_rate=corrected_rate,
                 correction_started_at=correction_started_at,
                 timeout_seconds=args.drain_timeout_seconds,
+                expected_pair_replay_jobs=(0 if args.prove_missing_exact_date_fx_recovery else 1),
             )
             effective_fx_rate_overrides[(from_currency, to_currency)] = corrected_rate
             drain_seconds += fx_correction_evidence.drain_seconds
+            if args.prove_missing_exact_date_fx_recovery:
+                drain_seconds += _wait_for_cycle_completion(
+                    engine=engine,
+                    run_id=run_id,
+                    trade_date=resolved_trade_date,
+                    portfolio_count=args.portfolio_count,
+                    transaction_count=(args.portfolio_count * args.transactions_per_portfolio),
+                    timeout_seconds=args.drain_timeout_seconds,
+                )
         terminal_status = "complete"
     except (ScenarioInterrupted, KeyboardInterrupt) as exc:
         partial_failures.append(str(exc))
@@ -2978,6 +3099,7 @@ def main() -> int:
         derived_state_resource_evidence=resource_monitor.evidence(),
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
+        fx_missing_rate_failure_evidence=fx_missing_rate_failure_evidence,
         fx_correction_restart_evidence=fx_correction_restart_evidence,
     )
     json_path, md_path = _write_report(report=report, output_dir=Path(args.output_dir))
