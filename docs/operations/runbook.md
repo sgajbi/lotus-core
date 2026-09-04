@@ -868,11 +868,21 @@ also quarantined rather than normalized or rewritten.
 After quarantine, `ck_reprocessing_jobs_active_payload_valid` is authoritative for post-cutover
 database representability and scalar types. It rejects unsafe extraction, non-string or incomplete
 or unnormalized identity fields, database-invalid effective dates, and database-invalid or
-timezone-less FX source timestamps. Application `fromisoformat` validation remains the
-temporal-grammar authority; runtime staging validates matching predecessor rows before SQL
-coalescing so an invalid historical boundary cannot be silently replaced. Runtime quarantine
-therefore remains required for grammar-invalid predecessor-schema or restored rows. Do not tighten
-SQL with a second hand-written ISO parser.
+timezone-less FX source timestamps. Application `fromisoformat` is the grammar pre-filter and
+PostgreSQL `pg_input_is_valid` is the storage representability authority; active work must pass
+both. Runtime staging validates matching predecessor rows before any date-bearing SQL coalescing,
+so an invalid historical boundary cannot be silently replaced or abort unrelated work. Runtime
+quarantine therefore remains required for grammar-invalid or storage-unrepresentable
+predecessor-schema and restored rows. Do not tighten SQL with a second hand-written ISO parser.
+
+Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
+accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
+migration. Under an exclusive lock it examines only FX rows that c162 quarantined, re-stages a row
+only when its identity, date, timestamp, and content lineage pass both authorities, and leaves the
+original failed evidence intact. Duplicate recoverable work is coalesced using the normal replay
+identity and earliest-date rules. Its downgrade fails closed while active work uses a timestamp
+form that the predecessor constraint cannot represent; terminalize or drain that work before a
+deliberate rollback.
 Investigate quarantined rows through the support API, correlation evidence, and source lineage;
 never repair payloads or reactivate rows directly. Recreate required work through its governed
 source command after correcting authoritative input. Downgrade removes the new-write constraint

@@ -342,12 +342,21 @@ so PostgreSQL-only spellings such as `infinity` are quarantined without copying 
 SQL. Padded replay identities and hashes are quarantined rather than normalized or rewritten.
 It then installs `ck_reprocessing_jobs_active_payload_valid`, which authoritatively rejects unsafe,
 non-string, incomplete, unnormalized, or database-unrepresentable `PENDING`/`PROCESSING` Reset/FX
-work at the post-cutover database boundary. Application `fromisoformat` validation remains
-authoritative for temporal grammar; runtime staging applies it before SQL coalescing, and runtime
-quarantine remains required for grammar-invalid predecessor-schema or restored rows.
+work at the post-cutover database boundary. Application `fromisoformat` is the grammar pre-filter
+and PostgreSQL `pg_input_is_valid` is the storage representability authority; work must pass both.
+Runtime staging applies both checks before date-bearing SQL coalescing, and runtime quarantine
+remains required for grammar-invalid or storage-unrepresentable predecessor-schema or restored
+rows.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
 restore it to active status by hand. Valid terminal historical evidence is not rewritten.
+
+Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept bare-hour offsets such
+as `-07` when both Python and PostgreSQL accept them. It does not alter c162. Under an exclusive
+lock it examines only rows quarantined by the c162 cutover, re-stages only work provably valid at
+both boundaries, coalesces duplicate pair work by the governed earliest-date rule, and preserves
+the original failed evidence. Downgrade fails closed while active work uses a timestamp form that
+the predecessor constraint cannot represent.
 
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply

@@ -4060,8 +4060,10 @@ Most relevant current governance:
      Active `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` rows must satisfy the database-owned
      payload contract introduced by migration `c162b2c3d529`: safely extractable, string-typed,
      complete normalized identity and temporal fields, and, for FX, complete string content hash
-     plus a database-representable, explicitly zoned source timestamp. Python `fromisoformat`
-     remains the temporal-grammar authority; do not copy that grammar into SQL predicates. Schema
+     plus a database-representable, explicitly zoned source timestamp. Python `fromisoformat` is
+     the application grammar pre-filter and PostgreSQL `pg_input_is_valid` is the storage
+     representability authority; active work is accepted only at their intersection. Do not assume
+     that one parser accepting a value proves the other boundary can persist it. Schema
      cutover must drain `PROCESSING` work, classify temporal strings with Python while the exclusive
      lock is held, quarantine invalid or unnormalized pending rows with bounded family counts,
      preserve terminal payload evidence, and reject future malformed active writes through the
@@ -4073,7 +4075,10 @@ Most relevant current governance:
      extraction so a legacy literal-SQL row produces a bounded actionable migration error instead
      of an unexplained driver failure without falsely rejecting harmless literal escape text. The
      CHECK is authoritative for post-cutover representability and scalar types; retain tested
-     runtime quarantine for grammar-invalid predecessor-schema and restored rows. Do not generalize
+     runtime quarantine before every date-bearing coalescing cast for grammar-invalid or
+     storage-unrepresentable predecessor-schema and restored rows. Migration `c166b2c3d52d`
+     corrects the zoned-timestamp CHECK without amending `c162b2c3d529` and re-stages only FX work
+     that is provably valid at both boundaries. Do not generalize
      bound-parameter behavior to direct
      SQL, restore, or migration paths.
      Aggregation-owned expired

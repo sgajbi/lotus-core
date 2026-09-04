@@ -1491,10 +1491,13 @@ section shape and derive the usage line from a fresh scan rather than copying a 
   constraint. A JSONB-compatibility preflight identifies legacy active JSON values that cannot be
   safely extracted while accepting harmless literal escape text. Terminal historical evidence is
   retained without payload rewriting. The database constraint is authoritative for post-cutover
-  representability, normalized identities, and scalar types; application `fromisoformat`
-  validation is authoritative for temporal grammar. The locked cutover applies that Python grammar
-  before its auditable quarantine update, and runtime staging applies the same validator before SQL
-  coalescing. Runtime quarantine remains required for predecessor-schema and restored rows.
+  representability, normalized identities, and scalar types. Application `fromisoformat` is the
+  grammar pre-filter and PostgreSQL `pg_input_is_valid` is the storage representability authority;
+  accepted active work must pass both. The locked cutover applies that intersection before its
+  auditable quarantine update, and runtime staging does the same before date-bearing SQL
+  coalescing. Migration `c166b2c3d52d` corrects the FX timestamp-offset constraint and recovers only
+  c162-quarantined work that is provably valid at both boundaries. Runtime quarantine remains
+  required for predecessor-schema and restored rows.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `job_type` (String): Domain type discriminator used to branch processing behavior.
