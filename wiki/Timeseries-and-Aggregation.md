@@ -150,9 +150,11 @@ Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shap
 `make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then
 prove a 5% same-date price correction across every affected snapshot, position series, and
 portfolio series row. Use `make profile-derived-state-price-restatement` for the five-business-date
-price window and `make profile-derived-state-fx-restatement` for a five-business-date direct
-`EUR/USD` correction with exact market-value and unrealized price/FX/total P&L tie-out. All run
-through an isolated dynamic-port Compose project. The FX profile commits its correction while
+price window. `make profile-derived-state-fx-restatement` uses two dates: a complete opening date
+and a final date missing only direct `EUR/USD`. It proves failed affected valuations publish no
+market-value authority while unaffected currencies continue, then ingests the exact-date fact and
+certifies pair/date-bounded recovery without changing prior-date snapshots. All profiles run
+through an isolated dynamic-port Compose project. The FX profile commits the arriving rate while
 valuation orchestration is stopped, restores the service, and certifies the recovered result.
 `make test-derived-state-workload-smoke` is machine-labelled
 `diagnostic`; a successful smoke proves orchestration only, not capacity. Certifying profile

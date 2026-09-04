@@ -133,13 +133,17 @@ correlation lineage. Use them to identify the trigger family; the bound is diagn
 be widened into an unbounded business-identifier export.
 
 `price-restatement` applies the same price correction across five business dates.
-`fx-restatement` materializes the same 100 x 100 shape across five business dates, corrects the
-direct `EUR/USD` rate by 5%, and requires exact affected snapshot, valuation-job,
-position-timeseries, portfolio-timeseries, market-value, and unrealized price/FX/total P&L
-evidence. It also requires one processed source observation, one completed pair replay, closed
-valuation/aggregation/reprocessing/outbox queues, clean reconciliation, and complete resource
-samples. Price and FX corrections intentionally remain separate profiles so one cannot mask the
-other's scope or timing.
+`fx-restatement` uses two governed business dates over the same 100 x 100 shape. The opening date
+establishes transaction cost and position history with complete FX. The final date deliberately
+withholds only `EUR/USD` and proves that affected jobs fail with the exact-date reason, affected
+snapshots publish no market value or P&L, unaffected currencies still value, and no affected or
+portfolio timeseries is published. The profile then ingests that exact-date rate while valuation
+orchestration is stopped and proves restart recovery, one source observation, pair/date-bounded
+revaluation, unchanged prior-date snapshots, exact market-value and unrealized price/FX/total P&L,
+closed queues, clean reconciliation, and complete resource samples. This is a missing-source
+recovery proof; it does not claim carry-forward FX authority or an open-ended historical sweep.
+Price and FX corrections intentionally remain separate profiles so one cannot mask the other's
+scope or timing.
 
 ## Scenario Design
 
