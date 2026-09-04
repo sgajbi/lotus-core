@@ -212,7 +212,7 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
     assert "portfolio_valuation_jobs.status != 'PROCESSING'" in compiled_where
     assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled_where
     assert "IS NOT DISTINCT FROM" in compiled_where
-    assert "portfolio_valuation_jobs.status != 'COMPLETE'" in compiled_where
+    assert "portfolio_valuation_jobs.status NOT IN ('COMPLETE', 'FAILED')" in compiled_where
 
 
 @patch("portfolio_common.valuation_job_repository.pg_insert")
@@ -249,7 +249,7 @@ async def test_explicit_source_correction_can_rearm_completed_job(
     )
     compiled_where = str(where_clause.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_valuation_jobs.status != 'PROCESSING'" in compiled_where
-    assert "portfolio_valuation_jobs.status != 'COMPLETE'" not in compiled_where
+    assert "portfolio_valuation_jobs.status NOT IN ('COMPLETE', 'FAILED')" not in compiled_where
 
 
 async def test_source_requeue_requires_transport_neutral_correction_identity(

@@ -1685,6 +1685,55 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     assert job.source_correction_id == "sha256:" + ("c" * 64)
 
 
+async def test_scheduler_poll_preserves_failed_job_until_source_correction_rearms_it(
+    async_db_session: AsyncSession, clean_db
+) -> None:
+    repository = ValuationJobRepository(async_db_session)
+    failed_job = PortfolioValuationJob(
+        portfolio_id="P-MISSING-SOURCE",
+        security_id="S-MISSING-SOURCE",
+        valuation_date=date(2025, 8, 12),
+        epoch=2,
+        status="FAILED",
+        correlation_id="corr-missing-source",
+        failure_reason="Missing exact-date FX rate for EUR->USD on 2025-08-12",
+        attempt_count=1,
+    )
+    async_db_session.add(failed_job)
+    await async_db_session.commit()
+
+    scheduler_count = await repository.upsert_job(
+        portfolio_id=failed_job.portfolio_id,
+        security_id=failed_job.security_id,
+        valuation_date=failed_job.valuation_date,
+        epoch=failed_job.epoch,
+        correlation_id="scheduler-poll",
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(failed_job)
+
+    assert scheduler_count == 0
+    assert failed_job.status == "FAILED"
+    assert failed_job.failure_reason == ("Missing exact-date FX rate for EUR->USD on 2025-08-12")
+
+    correction_count = await repository.upsert_job(
+        portfolio_id=failed_job.portfolio_id,
+        security_id=failed_job.security_id,
+        valuation_date=failed_job.valuation_date,
+        epoch=failed_job.epoch,
+        correlation_id="fx-rate-arrival",
+        source_correction_id="sha256:" + ("f" * 64),
+        rearm_completed=True,
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(failed_job)
+
+    assert correction_count == 1
+    assert failed_job.status == "PENDING"
+    assert failed_job.failure_reason is None
+    assert failed_job.source_correction_id == "sha256:" + ("f" * 64)
+
+
 async def test_job_status_transition_distinguishes_terminal_owner_from_stale_delivery(
     async_db_session: AsyncSession,
     clean_db,

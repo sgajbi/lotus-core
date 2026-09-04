@@ -109,7 +109,7 @@ def test_wait_for_fx_correction_requires_exact_runtime_evidence() -> None:
     def row_reader(sql, params):
         observed_sql.append(sql)
         observed_params.append(dict(params))
-        return {
+        row = {
             "observed_rate": Decimal("1.155000"),
             "corrected_affected_snapshots": 6,
             "corrected_affected_market_value": Decimal("699.9300000000"),
@@ -132,6 +132,10 @@ def test_wait_for_fx_correction_requires_exact_runtime_evidence() -> None:
             "pending_outbox_events": 0,
             "failed_outbox_events": 0,
         }
+        if len(observed_params) == 1:
+            row["corrected_affected_snapshots"] = 0
+            row["failed_valuation_jobs"] = 6
+        return row
 
     evidence = wait_for_fx_corrected_derived_state(
         row_reader=row_reader,
@@ -161,6 +165,7 @@ def test_wait_for_fx_correction_requires_exact_runtime_evidence() -> None:
     assert observed_params[0]["from_currency"] == "EUR"
     assert observed_params[0]["to_currency"] == "USD"
     assert "snapshot.date BETWEEN :effective_date AND :window_end_date" in observed_sql[0]
+    assert len(observed_params) == 2
 
 
 def test_wait_for_fx_correction_fails_fast_on_durable_failure() -> None:
