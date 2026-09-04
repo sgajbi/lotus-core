@@ -56,6 +56,7 @@ from scripts.operations.performance.market_price_correction import (
     SyntheticInstrumentSpec as InstrumentSpec,
 )
 from scripts.operations.transaction_processing_load_support import (
+    LOAD_TENANT_ID,
     CostProcessingRuntimeEvidence,
     DatabaseOperationEvidence,
     TransactionProcessingOperationEvidence,
@@ -81,6 +82,7 @@ DEFAULT_HOST_DATABASE_URL = os.getenv(
     "postgresql://user:password@localhost:55432/portfolio_db",
 )
 DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY = "derived-state-resource-monitor"
+LOAD_TENANT_HEADERS = {"X-Tenant-Id": LOAD_TENANT_ID}
 
 SUPPORTED_CURRENCIES = ("USD", "EUR", "SGD", "GBP")
 USD_PER_CURRENCY: dict[str, Decimal] = {
@@ -374,6 +376,7 @@ def _build_portfolios(
     return [
         {
             "portfolio_id": f"LOAD_{run_id}_PF_{index:04d}",
+            "tenant_id": LOAD_TENANT_ID,
             "portfolio_name": f"Load Test Portfolio {index:04d}",
             "base_currency": "USD",
             "open_date": open_date,
@@ -551,6 +554,14 @@ def _wait_ready(*, base_urls: list[str], timeout_seconds: int) -> None:
             pass
         time.sleep(2)
     raise TimeoutError("Services did not become ready before timeout.")
+
+
+def _build_tenant_session() -> requests.Session:
+    """Bind the workload's source-owned tenant to every governed request."""
+
+    session = requests.Session()
+    session.headers.update(LOAD_TENANT_HEADERS)
+    return session
 
 
 def _post_payload(
@@ -2797,7 +2808,7 @@ def main() -> int:
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
     fx_missing_rate_failure_evidence: FxMissingRateFailureEvidence | None = None
     fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
-    session = requests.Session()
+    session = _build_tenant_session()
     ingest_phases: list[IngestPhaseResult] = []
     health_monitor = HealthMonitor(
         event_replay_base_url=args.event_replay_base_url,
