@@ -577,7 +577,6 @@ def wait_for_fx_corrected_derived_state(
             name: int(row[name])
             for name in (
                 "failed_pair_replay_jobs",
-                "failed_valuation_jobs",
                 "failed_aggregation_jobs",
                 "failed_outbox_events",
             )

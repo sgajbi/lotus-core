@@ -44,8 +44,9 @@ class ValuationJobRepository:
         Idempotently creates or updates a valuation job.
 
         Duplicate scheduler polls for the same logical run must not re-arm an already completed
-        valuation job. Correlation is diagnostic lineage, not rearm authority. Source-correction
-        callers must request completed-job rearming explicitly after proving source freshness.
+        or failed valuation job. Correlation is diagnostic lineage, not rearm authority.
+        Source-correction callers must request terminal-job rearming explicitly after proving
+        source freshness.
         They can also preserve a different source observation that arrives during PROCESSING;
         ordinary readiness callers remain non-disruptive. Transport correlation remains
         diagnostic and is never used as source-correction identity.
@@ -431,6 +432,7 @@ def _valuation_job_update_values(
 ) -> dict[str, object]:
     values: dict[str, object] = {
         "status": "PENDING",
+        "failure_reason": None,
         "requeue_requested": False,
         "source_correction_id": stmt.excluded.source_correction_id,
         "correlation_id": stmt.excluded.correlation_id,
@@ -482,7 +484,7 @@ def _valuation_job_conflict_update_predicate(
         )
         predicate = not_(PortfolioValuationJob.status == "PROCESSING") & not_(same_pending_lineage)
     if not rearm_completed:
-        predicate &= PortfolioValuationJob.status != "COMPLETE"
+        predicate &= PortfolioValuationJob.status.not_in(("COMPLETE", "FAILED"))
     if fence_by_readiness_sequence:
         if readiness_outbox_id is None:
             raise ValueError("readiness_outbox_id is required for sequence fencing")
