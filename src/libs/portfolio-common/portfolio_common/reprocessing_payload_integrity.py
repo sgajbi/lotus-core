@@ -166,6 +166,26 @@ LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY = text(
     "SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"
 )
 
+QUARANTINE_PENDING_RESET_RECOVERY_BLOCKER = text(
+    """
+    UPDATE reprocessing_jobs
+    SET status = 'FAILED',
+        failure_reason = 'invalid_reset_watermarks_job_payload: identity collision',
+        updated_at = now()
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND id <> :source_id
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN payload->>'security_id' IS DISTINCT FROM :security_id THEN FALSE
+          WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+          THEN TRUE
+          WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN TRUE
+          ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS NOT TRUE
+      END
+    """
+).bindparams(bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN))
+
 
 def effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
     """Encode one replay-family identity without delimiter ambiguity."""
@@ -337,16 +357,24 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
         recovery_plans = [
             plan for row in locked_rows if (plan := _reset_boundary_recovery_plan(row)) is not None
         ]
-        if recovery_plans:
-            await _mark_reprocessing_jobs_failed(
-                db,
-                job_ids=[int(plan["id"]) for plan in recovery_plans],
-                failure_reason=(
-                    "invalid_reset_watermarks_job_payload: unsafe storage "
-                    "representation; replay boundary recovered"
-                ),
-            )
+    if recovery_plans:
+        await _mark_reprocessing_jobs_failed(
+            db,
+            job_ids=[int(plan["id"]) for plan in recovery_plans],
+            failure_reason=(
+                "invalid_reset_watermarks_job_payload: unsafe storage "
+                "representation; replay boundary recovered"
+            ),
+        )
     await db.execute(QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES)
+    for plan in recovery_plans:
+        await db.execute(
+            QUARANTINE_PENDING_RESET_RECOVERY_BLOCKER,
+            {
+                "source_id": plan["id"],
+                "security_id": plan["security_id"],
+            },
+        )
     for plan in recovery_plans:
         await db.execute(UPSERT_PENDING_RESET_WATERMARKS, plan)
     await db.execute(QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS, parameters)

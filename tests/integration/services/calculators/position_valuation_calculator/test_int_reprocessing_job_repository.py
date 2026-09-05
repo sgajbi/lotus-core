@@ -164,6 +164,15 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
             ),
             ReprocessingJob(
                 job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "RECOVERY-BOND",
+                    "earliest_impacted_date": "not-a-date",
+                },
+                status="PENDING",
+                correlation_id="corr-malformed-recovery-blocker",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
                 payload={"security_id": " A\x01A ", "earliest_impacted_date": "2025-01-01"},
                 status="PENDING",
                 correlation_id="corr-padded-control-string",
@@ -220,7 +229,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 10
+    assert len(rows) == 11
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
@@ -240,6 +249,9 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     padded_string = next(row for row in rows if row.correlation_id == "corr-padded-string")
     malformed_string = next(
         row for row in rows if row.correlation_id == "corr-malformed-canonical-string"
+    )
+    malformed_recovery_blocker = next(
+        row for row in rows if row.correlation_id == "corr-malformed-recovery-blocker"
     )
     control_rows = [
         row
@@ -289,6 +301,14 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     assert malformed_string.status == "FAILED"
     assert malformed_string.payload["security_id"] == "STRING"
     assert malformed_string.failure_reason == (
+        "invalid_reset_watermarks_job_payload: identity collision"
+    )
+    assert malformed_recovery_blocker.status == "FAILED"
+    assert malformed_recovery_blocker.payload == {
+        "security_id": "RECOVERY-BOND",
+        "earliest_impacted_date": "not-a-date",
+    }
+    assert malformed_recovery_blocker.failure_reason == (
         "invalid_reset_watermarks_job_payload: identity collision"
     )
     assert len(control_rows) == 2
