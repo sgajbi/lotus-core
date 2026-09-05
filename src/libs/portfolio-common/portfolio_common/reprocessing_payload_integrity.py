@@ -967,8 +967,8 @@ async def quarantine_pending_reset_security(
     security_id: str,
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
-) -> date | None:
-    """Quarantine malformed retained security work and return its usable earliest boundary."""
+) -> PendingReplaySiblingEvidence:
+    """Quarantine malformed retained security work and return attributable replay evidence."""
 
     result = await db.execute(
         PENDING_RESET_REPLAY_CANDIDATES,
@@ -995,7 +995,7 @@ async def quarantine_pending_reset_security(
         expected_identity=expected_identity,
         preserve_after_claim=True,
     )
-    evidence = await _quarantine_candidates(
+    return await _quarantine_candidates(
         db,
         rows=rows,
         required_validity_fields=required_validity_fields,
@@ -1006,8 +1006,6 @@ async def quarantine_pending_reset_security(
         ),
         job_type="RESET_WATERMARKS",
     )
-    earliest_sibling = evidence.earliest_sibling
-    return earliest_sibling.earliest_impacted_date if earliest_sibling is not None else None
 
 
 def _replay_row_requires_quarantine(

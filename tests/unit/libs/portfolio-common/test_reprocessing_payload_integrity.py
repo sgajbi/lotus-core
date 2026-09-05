@@ -496,7 +496,7 @@ async def test_quarantine_does_not_row_lock_valid_processing_work() -> None:
     ]
     db.execute.return_value = scan_result
 
-    earliest = await quarantine_pending_reset_security(
+    evidence = await quarantine_pending_reset_security(
         db,
         security_id="BOND-1",
         validate=lambda payload: payload,
@@ -507,7 +507,7 @@ async def test_quarantine_does_not_row_lock_valid_processing_work() -> None:
         ),
     )
 
-    assert earliest is None
+    assert evidence == PendingReplaySiblingEvidence(())
     db.execute.assert_awaited_once_with(
         PENDING_RESET_REPLAY_CANDIDATES,
         {"security_id": "BOND-1", "trim_chars": REPLAY_TEXT_TRIM_CHARS},
