@@ -4084,8 +4084,8 @@ Most relevant current governance:
      oversized extension number to abort unrelated work. Owned requeue must also carry a locked
      sibling's usable earlier boundary through coalescing when the sibling is already processing or
      becomes terminal after the unlocked scan. Siblings already processing or claimed during lock
-     revalidation contribute a committed snapshot without a row lock, so requeue cannot block their
-     lease renewal. Coalescing retains the
+     revalidation—including normalization recovery—contribute a committed snapshot without a row
+     lock, so requeue cannot block their lease renewal. Coalescing retains the
      maximum retry count and selects FX source authority by the established
      generated-at/content-hash ordering. If that source lacks correlation, retain the latest valid
      available correlation without changing source authority. Reset coalescing uses valid sibling correlation at the
