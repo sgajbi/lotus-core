@@ -861,6 +861,9 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
                 "content_hash": "sha256:" + ("b" * 64),
                 "generated_at": "not-a-timestamp",
             },
+            "payload_json": (
+                '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"2026-04-06"}'
+            ),
             "payload_representable": True,
             "earliest_date_representable": True,
             "generated_at_representable": False,
@@ -904,6 +907,7 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
                 "security_id": "BOND-1",
                 "earliest_impacted_date": "2025-W01-2",
             },
+            "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-W01-2"}'),
             "payload_representable": True,
             "earliest_date_representable": False,
         }
@@ -1188,7 +1192,11 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
 ) -> None:
     sibling_result = MagicMock()
     sibling_result.mappings.return_value.all.return_value = [
-        {"id": 12, "payload": {"security_id": " BOND-1 "}}
+        {
+            "id": 12,
+            "payload": {"security_id": " BOND-1 "},
+            "payload_json": '{"security_id":" BOND-1 "}',
+        }
     ]
     mock_db_session.execute.return_value = sibling_result
     identity = SimpleNamespace(

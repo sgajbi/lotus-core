@@ -1597,7 +1597,7 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
 
 @pytest.mark.parametrize(
     ("security_id", "poisoned_security_id_json"),
-    (("123", "123"), ("[123]", "[123]")),
+    (("123", "123"), ("[123]", "[123]"), ("1e2", "1e2")),
 )
 async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
     clean_db,

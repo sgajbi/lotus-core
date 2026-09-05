@@ -217,6 +217,7 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload,
+        payload::text AS payload_json,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -253,6 +254,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload,
+        payload::text AS payload_json,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -276,7 +278,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
 
 PENDING_RESET_REPLAY_SIBLING = text(
     """
-    SELECT id, payload
+    SELECT id, payload, payload::text AS payload_json
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
@@ -292,7 +294,10 @@ PENDING_RESET_REPLAY_SIBLING = text(
 
 PENDING_FX_REPLAY_SIBLING = text(
     """
-    SELECT id, payload
+    SELECT
+        id,
+        payload,
+        payload::text AS payload_json
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
@@ -308,37 +313,78 @@ PENDING_FX_REPLAY_SIBLING = text(
 )
 
 
-def replay_payload_matches_identity(
-    payload: object,
+def replay_row_matches_identity(
+    row: Mapping[str, Any],
     expected_identity: Mapping[str, str],
 ) -> bool:
-    """Match the scalar text identity used by PostgreSQL's JSON ``->>`` operator."""
+    """Match the exact JSON identity text retained by PostgreSQL."""
 
-    if not isinstance(payload, Mapping):
-        return False
     return all(
-        (identity_text := _postgres_json_identity_text(payload.get(field))) is not None
+        (identity_text := _json_object_field_identity_text(row.get("payload_json"), field))
+        is not None
         and identity_text.strip(REPLAY_TEXT_TRIM_CHARS) == expected
         for field, expected in expected_identity.items()
     )
 
 
-def _postgres_json_identity_text(value: object) -> str | None:
-    """Render a JSON value as PostgreSQL does for an expression-index identity."""
+def _json_object_field_identity_text(payload_json: object, field: str) -> str | None:
+    """Extract a top-level JSON value without losing its stored lexical representation."""
 
-    if isinstance(value, str):
-        return value
-    if value is None:
+    if not isinstance(payload_json, str):
+        return None
+    decoder = json.JSONDecoder()
+    index = _skip_json_whitespace(payload_json, 0)
+    if index >= len(payload_json) or payload_json[index] != "{":
+        return None
+    index += 1
+    matched_value: str | None = None
+    try:
+        while True:
+            index = _skip_json_whitespace(payload_json, index)
+            if index >= len(payload_json) or payload_json[index] == "}":
+                return matched_value
+            key, index = decoder.raw_decode(payload_json, index)
+            if not isinstance(key, str):
+                return None
+            index = _skip_json_whitespace(payload_json, index)
+            if index >= len(payload_json) or payload_json[index] != ":":
+                return None
+            value_start = _skip_json_whitespace(payload_json, index + 1)
+            _, value_end = decoder.raw_decode(payload_json, value_start)
+            if key == field:
+                matched_value = _postgres_json_identity_text(payload_json[value_start:value_end])
+            index = _skip_json_whitespace(payload_json, value_end)
+            if index >= len(payload_json):
+                return None
+            if payload_json[index] == "}":
+                return matched_value
+            if payload_json[index] != ",":
+                return None
+            index += 1
+    except ValueError:
+        return None
+
+
+def _skip_json_whitespace(value: str, index: int) -> int:
+    while index < len(value) and value[index] in " \t\r\n":
+        index += 1
+    return index
+
+
+def _postgres_json_identity_text(encoded_value: object) -> str | None:
+    """Convert raw JSON field text to the corresponding ``json ->>`` identity."""
+
+    if not isinstance(encoded_value, str):
         return None
     try:
-        return json.dumps(
-            value,
-            allow_nan=False,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-    except (TypeError, ValueError):
+        decoded_value = json.loads(encoded_value)
+    except ValueError:
         return None
+    if isinstance(decoded_value, str):
+        return decoded_value
+    if decoded_value is None:
+        return None
+    return encoded_value
 
 
 async def pending_replay_sibling_exists(
@@ -369,7 +415,7 @@ async def pending_replay_sibling_exists(
         .mappings()
         .all()
     )
-    return any(replay_payload_matches_identity(row["payload"], expected_identity) for row in rows)
+    return any(replay_row_matches_identity(row, expected_identity) for row in rows)
 
 
 async def quarantine_pending_fx_pair(
@@ -401,9 +447,7 @@ async def quarantine_pending_fx_pair(
         ),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
-        preserve_earliest_if=lambda payload: replay_payload_matches_identity(
-            payload, expected_identity
-        ),
+        preserve_earliest_if=lambda row: replay_row_matches_identity(row, expected_identity),
         failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
     )
 
@@ -431,9 +475,7 @@ async def quarantine_pending_reset_security(
         required_validity_fields=("payload_representable", "earliest_date_representable"),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
-        preserve_earliest_if=lambda payload: replay_payload_matches_identity(
-            payload, expected_identity
-        ),
+        preserve_earliest_if=lambda row: replay_row_matches_identity(row, expected_identity),
         failure_reason=(
             "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
         ),
@@ -448,7 +490,7 @@ async def _quarantine_candidates(
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
     failure_reason: str,
-    preserve_earliest_if: Callable[[object], bool] | None = None,
+    preserve_earliest_if: Callable[[Mapping[str, Any]], bool] | None = None,
 ) -> date | None:
     malformed_ids: list[int] = []
     known_earliest_dates: list[date] = []
@@ -460,7 +502,7 @@ async def _quarantine_candidates(
             validate(payload)
         except (TypeError, ValueError):
             malformed_ids.append(int(row["id"]))
-            if (preserve_earliest_if is None or preserve_earliest_if(payload)) and (
+            if (preserve_earliest_if is None or preserve_earliest_if(row)) and (
                 earliest_date := parse_earliest_date(payload)
             ) is not None:
                 known_earliest_dates.append(earliest_date)
