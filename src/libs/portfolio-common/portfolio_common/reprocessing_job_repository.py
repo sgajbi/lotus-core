@@ -23,7 +23,6 @@ from .monitoring import observe_reprocessing_duplicates_normalized
 from .reprocessing_payload_integrity import (
     NORMALIZE_PENDING_RESET_WATERMARKS,
     PENDING_RESET_REPLAY_SIBLING,
-    PYTHON_ISO_DATE_PATTERN,
     REPLAY_TEXT_TRIM_CHARS,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
@@ -175,10 +174,7 @@ class ReprocessingJobRepository:
         """
         result = await self.db.execute(
             NORMALIZE_PENDING_RESET_WATERMARKS,
-            {
-                "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
-                "python_iso_date_pattern": PYTHON_ISO_DATE_PATTERN,
-            },
+            {"trim_chars": _REPLAY_TEXT_TRIM_CHARS},
         )
         deleted_count = int(result.scalar_one())
         if deleted_count:
