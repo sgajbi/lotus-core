@@ -57,7 +57,7 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
             generated_at_representable=False,
         ),
     ]
-    bind.execute.side_effect = [candidate_result, MagicMock()]
+    bind.execute.side_effect = [candidate_result, MagicMock(), MagicMock()]
     monkeypatch.setattr(op, "execute", lambda statement: operations.append(("execute", statement)))
     monkeypatch.setattr(op, "get_bind", lambda: bind)
     monkeypatch.setattr(
@@ -126,6 +126,20 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
         8,
         tzinfo=timezone(-timedelta(hours=7)),
     )
+    provenance_statement, provenance_parameters = bind.execute.call_args_list[2].args
+    assert "status = 'FAILED'" in str(provenance_statement)
+    assert "failure_reason = :cutover_failure_reason" in str(provenance_statement)
+    assert provenance_parameters == [
+        {
+            "source_job_id": 17,
+            "cutover_failure_reason": (
+                "invalid_reprocessing_job_payload: quarantined during contract cutover"
+            ),
+            "recovered_failure_reason": (
+                "invalid_reprocessing_job_payload: recovered by c166 temporal-contract correction"
+            ),
+        }
+    ]
 
 
 def test_downgrade_fails_closed_before_restoring_predecessor_constraint(monkeypatch) -> None:

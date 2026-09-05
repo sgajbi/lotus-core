@@ -22,6 +22,9 @@ depends_on: str | Sequence[str] | None = None
 _TABLE_NAME = "reprocessing_jobs"
 _ACTIVE_PAYLOAD_CONSTRAINT = "ck_reprocessing_jobs_active_payload_valid"
 _CUTOVER_FAILURE_REASON = "invalid_reprocessing_job_payload: quarantined during contract cutover"
+_RECOVERED_FAILURE_REASON = (
+    "invalid_reprocessing_job_payload: recovered by c166 temporal-contract correction"
+)
 _REPLAY_TEXT_TRIM_CHARS = (
     r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
     r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029"
@@ -230,6 +233,16 @@ _RESTAGE_RECOVERABLE_FX = sa.text(
     sa.bindparam("earliest_impacted_date", type_=sa.Date()),
     sa.bindparam("generated_at", type_=sa.DateTime(timezone=True)),
 )
+_MARK_RECOVERED_SOURCE = sa.text(
+    """
+    UPDATE reprocessing_jobs
+    SET failure_reason = :recovered_failure_reason,
+        updated_at = now()
+    WHERE id = :source_job_id
+      AND status = 'FAILED'
+      AND failure_reason = :cutover_failure_reason
+    """
+)
 _DOWNGRADE_PREFLIGHT = sa.text(
     rf"""
     DO $$
@@ -288,18 +301,30 @@ def upgrade() -> None:
         _active_payload_constraint(_FX_GENERATED_AT_TIMEZONE_PATTERN),
     )
     if recoverable:
+        ordered_recoverable = sorted(
+            recoverable,
+            key=lambda item: (
+                item["from_currency"],
+                item["to_currency"],
+                item["generated_at"],
+                item["content_hash"],
+                item["source_job_id"],
+            ),
+        )
         bind.execute(
             _RESTAGE_RECOVERABLE_FX,
-            sorted(
-                recoverable,
-                key=lambda item: (
-                    item["from_currency"],
-                    item["to_currency"],
-                    item["generated_at"],
-                    item["content_hash"],
-                    item["source_job_id"],
-                ),
-            ),
+            ordered_recoverable,
+        )
+        bind.execute(
+            _MARK_RECOVERED_SOURCE,
+            [
+                {
+                    "source_job_id": item["source_job_id"],
+                    "cutover_failure_reason": _CUTOVER_FAILURE_REASON,
+                    "recovered_failure_reason": _RECOVERED_FAILURE_REASON,
+                }
+                for item in ordered_recoverable
+            ],
         )
 
 
