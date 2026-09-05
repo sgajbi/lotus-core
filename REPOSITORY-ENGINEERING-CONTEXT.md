@@ -4080,7 +4080,9 @@ Most relevant current governance:
      encounter retained active replay payloads—including claim, Reset staging return, owned
      identity lookup, and stale discovery/revalidation—must cross the driver as `payload::text` and
      use the shared safe decoder. This preserves permitted unknown fields without allowing an
-     oversized extension number to abort unrelated work. Migration `c166b2c3d52d`
+     oversized extension number to abort unrelated work. Owned requeue must also carry a locked
+     sibling's usable earlier boundary through coalescing if that sibling becomes terminal after
+     the unlocked scan. Migration `c166b2c3d52d`
      corrects the zoned-timestamp CHECK without amending `c162b2c3d529` and re-stages only FX work
      that is provably valid at both boundaries. Do not generalize
      bound-parameter behavior to direct

@@ -879,7 +879,9 @@ the supported Python/PostgreSQL intersection whenever the accepted temporal gram
 Claim, Reset staging return, owned identity lookup, and stale discovery/revalidation select retained
 payloads as text and use the shared safe decoder. Preserve that boundary so a permitted unknown
 numeric extension cannot abort a batch or hide a required restatement; Reset coalescing retains
-unknown fields while advancing only to the earliest replay date.
+unknown fields while advancing only to the earliest replay date. If a sibling becomes terminal
+between discovery and row locking, owned requeue still carries its usable earlier boundary into the
+replacement pending job.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
 accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
