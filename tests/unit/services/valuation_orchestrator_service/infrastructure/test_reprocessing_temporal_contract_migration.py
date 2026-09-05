@@ -79,6 +79,7 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     )
 
     migration = runpy.run_path(str(MIGRATION))
+    assert migration["logger"].name == "alembic.runtime.migration"
     migration_logger = MagicMock()
     migration["upgrade"].__globals__["logger"] = migration_logger
     assert migration["revision"] == "c166b2c3d52d"
@@ -147,7 +148,10 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     assert "count(*) FILTER (WHERE job_type = 'RESET_FX_WATERMARKS')" in str(quarantine_statement)
     quarantine_result.one.assert_called_once_with()
     migration_logger.info.assert_called_once_with(
-        "reprocessing temporal grammar correction quarantined rows",
+        "reprocessing temporal grammar correction quarantined rows: "
+        "reset_watermarks_count=%d reset_fx_watermarks_count=%d",
+        3,
+        5,
         extra={"reset_watermarks_count": 3, "reset_fx_watermarks_count": 5},
     )
     recovery_statement, recovery_parameters = bind.execute.call_args_list[2].args

@@ -268,7 +268,11 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             quarantine_record = next(
                 record
                 for record in caplog.records
-                if record.message == "reprocessing temporal grammar correction quarantined rows"
+                if record.getMessage()
+                == (
+                    "reprocessing temporal grammar correction quarantined rows: "
+                    "reset_watermarks_count=0 reset_fx_watermarks_count=3"
+                )
             )
             assert quarantine_record.reset_watermarks_count == 0
             assert quarantine_record.reset_fx_watermarks_count == 3
