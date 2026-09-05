@@ -740,11 +740,17 @@ async def test_reset_staging_preserves_boundary_claimed_between_scan_and_lock(
         db: AsyncSession,
         *,
         candidate_ids: list[int],
+        malformed_candidate_ids: list[int],
         job_type: str,
     ):
         scan_completed.set()
         await allow_row_lock.wait()
-        return await original_lock(db, candidate_ids=candidate_ids, job_type=job_type)
+        return await original_lock(
+            db,
+            candidate_ids=candidate_ids,
+            malformed_candidate_ids=malformed_candidate_ids,
+            job_type=job_type,
+        )
 
     async def stage_boundary():
         async with session_factory() as staging_session, staging_session.begin():

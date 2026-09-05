@@ -1244,7 +1244,11 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
     }
     lock_statement, lock_parameters = mock_db_session.execute.await_args_list[1].args
     assert "FOR UPDATE" in str(lock_statement)
-    assert lock_parameters == {"candidate_ids": [12], "job_type": "RESET_WATERMARKS"}
+    assert lock_parameters == {
+        "candidate_ids": [12],
+        "malformed_candidate_ids": [],
+        "job_type": "RESET_WATERMARKS",
+    }
 
 
 async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(

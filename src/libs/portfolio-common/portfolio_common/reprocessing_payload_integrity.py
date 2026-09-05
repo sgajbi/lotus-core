@@ -327,9 +327,11 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
             {"identity_key": identity_key},
         )
     if recovery_plans:
+        recovery_ids = [int(plan["id"]) for plan in recovery_plans]
         locked_rows = await _lock_scanned_replay_rows(
             db,
-            candidate_ids=[int(plan["id"]) for plan in recovery_plans],
+            candidate_ids=recovery_ids,
+            malformed_candidate_ids=recovery_ids,
             job_type="RESET_WATERMARKS",
         )
         recovery_plans = [
@@ -420,7 +422,7 @@ PENDING_RESET_REPLAY_SIBLING = text(
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
-      AND status IN ('PENDING', 'PROCESSING')
+      AND status = 'PENDING'
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
@@ -438,7 +440,7 @@ PENDING_FX_REPLAY_SIBLING = text(
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
-      AND status IN ('PENDING', 'PROCESSING')
+      AND status = 'PENDING'
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
@@ -476,6 +478,10 @@ LOCK_SCANNED_REPLAY_CANDIDATES = text(
     FROM reprocessing_jobs
     WHERE id = ANY(CAST(:candidate_ids AS BIGINT[]))
       AND job_type = :job_type
+      AND (
+          status = 'PENDING'
+          OR id = ANY(CAST(:malformed_candidate_ids AS BIGINT[]))
+      )
     ORDER BY id
     FOR UPDATE
     """
@@ -489,15 +495,22 @@ async def _lock_scanned_replay_rows(
     db: AsyncSession,
     *,
     candidate_ids: list[int],
+    malformed_candidate_ids: list[int],
     job_type: str,
 ) -> list[Mapping[str, Any]]:
+    """Lock pending evidence plus prevalidated malformed rows that changed state."""
+
     if not candidate_ids:
         return []
     return (
         (
             await db.execute(
                 LOCK_SCANNED_REPLAY_CANDIDATES,
-                {"candidate_ids": sorted(set(candidate_ids)), "job_type": job_type},
+                {
+                    "candidate_ids": sorted(set(candidate_ids)),
+                    "malformed_candidate_ids": sorted(set(malformed_candidate_ids)),
+                    "job_type": job_type,
+                },
             )
         )
         .mappings()
@@ -525,6 +538,7 @@ async def _lock_matching_replay_rows(
     scanned_rows: list[Mapping[str, Any]],
     job_type: str,
     expected_identity: Mapping[str, str],
+    preserve_after_claim: bool = False,
 ) -> list[Mapping[str, Any]]:
     """Lock and revalidate only rows whose retained identity matches the request."""
 
@@ -540,6 +554,7 @@ async def _lock_matching_replay_rows(
     locked_rows = await _lock_scanned_replay_rows(
         db,
         candidate_ids=candidate_ids,
+        malformed_candidate_ids=candidate_ids if preserve_after_claim else [],
         job_type=job_type,
     )
     return [row for row in locked_rows if replay_row_matches_identity(row, expected_identity)]
@@ -693,20 +708,31 @@ async def quarantine_pending_fx_pair(
         },
     )
     expected_identity = {"from_currency": from_currency, "to_currency": to_currency}
+    required_validity_fields = (
+        "payload_representable",
+        "earliest_date_representable",
+        "generated_at_representable",
+    )
+    scanned_rows = result.mappings().all()
     rows = await _lock_matching_replay_rows(
         db,
-        scanned_rows=result.mappings().all(),
+        scanned_rows=[
+            row
+            for row in scanned_rows
+            if _replay_row_requires_quarantine(
+                row,
+                required_validity_fields=required_validity_fields,
+                validate=validate,
+            )
+        ],
         job_type="RESET_FX_WATERMARKS",
         expected_identity=expected_identity,
+        preserve_after_claim=True,
     )
     return await _quarantine_candidates(
         db,
         rows=rows,
-        required_validity_fields=(
-            "payload_representable",
-            "earliest_date_representable",
-            "generated_at_representable",
-        ),
+        required_validity_fields=required_validity_fields,
         validate=validate,
         parse_earliest_date=parse_earliest_date,
         failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
@@ -730,22 +756,49 @@ async def quarantine_pending_reset_security(
         },
     )
     expected_identity = {"security_id": security_id}
+    required_validity_fields = ("payload_representable", "earliest_date_representable")
+    scanned_rows = result.mappings().all()
     rows = await _lock_matching_replay_rows(
         db,
-        scanned_rows=result.mappings().all(),
+        scanned_rows=[
+            row
+            for row in scanned_rows
+            if _replay_row_requires_quarantine(
+                row,
+                required_validity_fields=required_validity_fields,
+                validate=validate,
+            )
+        ],
         job_type="RESET_WATERMARKS",
         expected_identity=expected_identity,
+        preserve_after_claim=True,
     )
     return await _quarantine_candidates(
         db,
         rows=rows,
-        required_validity_fields=("payload_representable", "earliest_date_representable"),
+        required_validity_fields=required_validity_fields,
         validate=validate,
         parse_earliest_date=parse_earliest_date,
         failure_reason=(
             "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
         ),
     )
+
+
+def _replay_row_requires_quarantine(
+    row: Mapping[str, Any],
+    *,
+    required_validity_fields: tuple[str, ...],
+    validate: Callable[[object], object],
+) -> bool:
+    payload = _decode_retained_payload(row.get("payload_json"))
+    try:
+        if not all(row[field] for field in required_validity_fields):
+            raise ValueError("replay payload is not PostgreSQL-representable")
+        validate(payload)
+    except (KeyError, TypeError, ValueError):
+        return True
+    return False
 
 
 async def _quarantine_candidates(
@@ -761,11 +814,11 @@ async def _quarantine_candidates(
     known_earliest_dates: list[date] = []
     for row in rows:
         payload = _decode_retained_payload(row.get("payload_json"))
-        try:
-            if not all(row[field] for field in required_validity_fields):
-                raise ValueError("replay payload is not PostgreSQL-representable")
-            validate(payload)
-        except (TypeError, ValueError):
+        if _replay_row_requires_quarantine(
+            row,
+            required_validity_fields=required_validity_fields,
+            validate=validate,
+        ):
             if (earliest_date := parse_earliest_date(payload)) is not None:
                 known_earliest_dates.append(earliest_date)
             if row["status"] == "PENDING":

@@ -12,6 +12,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
+    REPLAY_TEXT_TRIM_CHARS,
     _decode_retained_payload,
     _postgres_json_identity_text,
     _quarantine_candidates,
@@ -47,11 +48,12 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
             "btrim(payload->>"
         )
         assert "FOR UPDATE" not in sql
-        assert "status IN ('PENDING', 'PROCESSING')" in sql
+        assert "status = 'PENDING'" in sql
 
     lock_sql = str(LOCK_SCANNED_REPLAY_CANDIDATES)
     assert "id = ANY(CAST(:candidate_ids AS BIGINT[]))" in lock_sql
-    assert "status = 'PENDING'" not in lock_sql
+    assert "status = 'PENDING'" in lock_sql
+    assert "malformed_candidate_ids" in lock_sql
     assert "FOR UPDATE" in lock_sql
     assert lock_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < lock_sql.index(
         "json_typeof"
@@ -233,7 +235,11 @@ async def test_pending_sibling_requires_exact_retained_identity(
     assert all(scanned_parameters[field] == value for field, value in identity.items())
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
-    assert locked_parameters == {"candidate_ids": [8], "job_type": job_type}
+    assert locked_parameters == {
+        "candidate_ids": [8],
+        "malformed_candidate_ids": [],
+        "job_type": job_type,
+    }
 
 
 @pytest.mark.asyncio
@@ -297,9 +303,43 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters["candidate_ids"] == [7]
+    assert locked_parameters["malformed_candidate_ids"] == [7]
     assert db.execute.await_count == 3
     update_parameters = db.execute.await_args_list[2].args[0].compile().params
     assert next(value for value in update_parameters.values() if isinstance(value, list)) == [7]
+
+
+@pytest.mark.asyncio
+async def test_quarantine_does_not_row_lock_valid_processing_work() -> None:
+    db = AsyncMock()
+    scan_result = MagicMock()
+    scan_result.mappings.return_value.all.return_value = [
+        {
+            "id": 7,
+            "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-01-03"}'),
+            "status": "PROCESSING",
+            "payload_representable": True,
+            "earliest_date_representable": True,
+        }
+    ]
+    db.execute.return_value = scan_result
+
+    earliest = await quarantine_pending_reset_security(
+        db,
+        security_id="BOND-1",
+        validate=lambda payload: payload,
+        parse_earliest_date=lambda payload: (
+            date.fromisoformat(payload["earliest_impacted_date"])
+            if isinstance(payload, dict)
+            else None
+        ),
+    )
+
+    assert earliest is None
+    db.execute.assert_awaited_once_with(
+        PENDING_RESET_REPLAY_CANDIDATES,
+        {"security_id": "BOND-1", "trim_chars": REPLAY_TEXT_TRIM_CHARS},
+    )
 
 
 @pytest.mark.asyncio
