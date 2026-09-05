@@ -4088,9 +4088,11 @@ Most relevant current governance:
      lock, so requeue cannot block their lease renewal. Coalescing retains the
      maximum retry count and selects FX source authority by the established
      generated-at/content-hash ordering. If that source lacks correlation, retain the latest valid
-     available correlation without changing source authority. Reset coalescing uses valid sibling correlation at the
+     available correlation without changing source authority. Reset coalescing normalizes retained
+     correlation through the durable-lineage policy, uses only a real sibling correlation at the
      authoritative boundary, fills missing owned correlation at an equal boundary, and retains
-     known owned correlation when an earlier sibling has none. When an unrelated extension prevents
+     known owned correlation when an earlier sibling has only blank, sentinel, or absent lineage.
+     When an unrelated extension prevents
      full JSON decoding, retained replay reads recover only that job family's canonical fields so
      RESET stale recovery can proceed and the FX valuation adapter can validate execution identity
      and date. Staging
