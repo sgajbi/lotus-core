@@ -453,6 +453,10 @@ PENDING_FX_REPLAY_CANDIDATES = text(
         id,
         payload::text AS payload_json,
         status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -489,6 +493,10 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
         id,
         payload::text AS payload_json,
         status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -858,7 +866,7 @@ async def pending_replay_sibling_evidence(
         siblings=tuple(
             RetainedReplaySibling(
                 id=int(row["id"]),
-                payload=_retained_replay_source_payload(
+                payload=decode_retained_replay_source_payload(
                     row.get("payload_json"),
                     job_type=job_type,
                 ),
@@ -883,7 +891,9 @@ def _retained_replay_boundary(payload_json: object) -> date | None:
         return None
 
 
-def _retained_replay_source_payload(payload_json: object, *, job_type: str) -> object:
+def decode_retained_replay_source_payload(payload_json: object, *, job_type: str) -> object:
+    """Decode retained JSON, recovering canonical FX fields around unsafe extensions."""
+
     payload = decode_reprocessing_payload_text(payload_json)
     if isinstance(payload, dict) or job_type != "RESET_FX_WATERMARKS":
         return payload
@@ -907,8 +917,8 @@ async def quarantine_pending_fx_pair(
     to_currency: str,
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
-) -> date | None:
-    """Quarantine malformed retained FX work and return its usable earliest boundary."""
+) -> PendingReplaySiblingEvidence:
+    """Quarantine malformed FX work and return attributable replay evidence."""
 
     result = await db.execute(
         PENDING_FX_REPLAY_CANDIDATES,
@@ -947,6 +957,7 @@ async def quarantine_pending_fx_pair(
         validate=validate,
         parse_earliest_date=parse_earliest_date,
         failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
+        job_type="RESET_FX_WATERMARKS",
     )
 
 
@@ -984,7 +995,7 @@ async def quarantine_pending_reset_security(
         expected_identity=expected_identity,
         preserve_after_claim=True,
     )
-    return await _quarantine_candidates(
+    evidence = await _quarantine_candidates(
         db,
         rows=rows,
         required_validity_fields=required_validity_fields,
@@ -993,7 +1004,10 @@ async def quarantine_pending_reset_security(
         failure_reason=(
             "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
         ),
+        job_type="RESET_WATERMARKS",
     )
+    earliest_sibling = evidence.earliest_sibling
+    return earliest_sibling.earliest_impacted_date if earliest_sibling is not None else None
 
 
 def _replay_row_requires_quarantine(
@@ -1020,9 +1034,10 @@ async def _quarantine_candidates(
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
     failure_reason: str,
-) -> date | None:
+    job_type: str,
+) -> PendingReplaySiblingEvidence:
     malformed_ids: list[int] = []
-    known_earliest_dates: list[date] = []
+    siblings: list[RetainedReplaySibling] = []
     for row in rows:
         payload = decode_reprocessing_payload_text(row.get("payload_json"))
         if _replay_row_requires_quarantine(
@@ -1030,14 +1045,25 @@ async def _quarantine_candidates(
             required_validity_fields=required_validity_fields,
             validate=validate,
         ):
-            if (
-                earliest_date := _recover_retained_earliest_date(
-                    row,
-                    payload=payload,
-                    parse_earliest_date=parse_earliest_date,
+            earliest_date = _recover_retained_earliest_date(
+                row,
+                payload=payload,
+                parse_earliest_date=parse_earliest_date,
+            )
+            siblings.append(
+                RetainedReplaySibling(
+                    id=int(row["id"]),
+                    payload=decode_retained_replay_source_payload(
+                        row.get("payload_json"),
+                        job_type=job_type,
+                    ),
+                    earliest_impacted_date=earliest_date,
+                    attempt_count=int(row.get("attempt_count") or 0),
+                    correlation_id=row.get("correlation_id"),
+                    correlation_missing_reason=row.get("correlation_missing_reason"),
+                    alternate_lookup_key=row.get("alternate_lookup_key"),
                 )
-            ) is not None:
-                known_earliest_dates.append(earliest_date)
+            )
             if row["status"] == "PENDING":
                 malformed_ids.append(int(row["id"]))
 
@@ -1046,7 +1072,7 @@ async def _quarantine_candidates(
         job_ids=malformed_ids,
         failure_reason=failure_reason,
     )
-    return min(known_earliest_dates, default=None)
+    return PendingReplaySiblingEvidence(tuple(sorted(siblings, key=lambda sibling: sibling.id)))
 
 
 def _recover_retained_earliest_date(

@@ -42,7 +42,9 @@ from .reprocessing_payload_integrity import (
     LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
     REPLAY_TEXT_TRIM_CHARS,
     UPSERT_PENDING_RESET_WATERMARKS,
+    PendingReplaySiblingEvidence,
     decode_reprocessing_payload_text,
+    decode_retained_replay_source_payload,
     effective_dated_replay_identity_key,
     normalize_pending_reset_watermarks_duplicates,
     pending_replay_sibling_evidence,
@@ -210,15 +212,34 @@ class ReprocessingJobRepository:
             )
         )
 
-        quarantined_earliest_date = await self._quarantine_malformed_pending_fx_pair(
+        quarantined_evidence = await self._quarantine_malformed_pending_fx_pair(
             from_currency=from_currency,
             to_currency=to_currency,
         )
-        if quarantined_earliest_date is not None:
-            earliest_impacted_date = min(
-                earliest_impacted_date,
-                quarantined_earliest_date,
-            )
+        identity = _merge_replay_sibling_evidence(
+            _validated_effective_dated_replay_identity(
+                job_type="RESET_FX_WATERMARKS",
+                payload={
+                    "from_currency": from_currency,
+                    "to_currency": to_currency,
+                    "earliest_impacted_date": earliest_impacted_date.isoformat(),
+                    "content_hash": content_hash,
+                    "generated_at": generated_at.isoformat(),
+                },
+                attempt_count=attempt_count,
+                correlation_id=correlation_id,
+                correlation_missing_reason=correlation_missing_reason,
+                alternate_lookup_key=alternate_lookup_key,
+            ),
+            quarantined_evidence,
+        )
+        earliest_impacted_date = date.fromisoformat(identity.payload["earliest_impacted_date"])
+        content_hash = str(identity.payload["content_hash"])
+        generated_at = cast(datetime, identity.generated_at)
+        attempt_count = identity.attempt_count
+        correlation_id = identity.correlation_id
+        correlation_missing_reason = identity.correlation_missing_reason
+        alternate_lookup_key = identity.alternate_lookup_key
 
         statement = text(
             """
@@ -365,8 +386,8 @@ class ReprocessingJobRepository:
         *,
         from_currency: str,
         to_currency: str,
-    ) -> date | None:
-        """Validate predecessor pair work with the application grammar before coalescing."""
+    ) -> PendingReplaySiblingEvidence:
+        """Quarantine malformed pair work and retain its attributable replay evidence."""
         return await quarantine_pending_fx_pair(
             self.db,
             from_currency=from_currency,
@@ -1205,10 +1226,14 @@ def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[
 def _claimed_reprocessing_job(row: Any) -> ClaimedReprocessingJob:
     """Map one claim result after its JSON payload crossed the database as text."""
 
+    job_type = str(row["job_type"])
     return ClaimedReprocessingJob(
         id=int(row["id"]),
-        job_type=str(row["job_type"]),
-        payload=decode_reprocessing_payload_text(row["payload_json"]),
+        job_type=job_type,
+        payload=decode_retained_replay_source_payload(
+            row["payload_json"],
+            job_type=job_type,
+        ),
         status=str(row["status"]),
         correlation_id=row.get("correlation_id"),
         correlation_missing_reason=row.get("correlation_missing_reason"),

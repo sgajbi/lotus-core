@@ -652,7 +652,7 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
             job_type="RESET_FX_WATERMARKS",
             payload={"from_currency": "USD", "to_currency": "SGD"},
         )
-        unrelated_boundary = await quarantine_pending_fx_pair(
+        unrelated_evidence = await quarantine_pending_fx_pair(
             async_db_session,
             from_currency="USD",
             to_currency="SGD",
@@ -668,7 +668,7 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                 ReprocessingJob.correlation_id == "corr-unrelated-fx-poison"
             )
         )
-        preserved_earliest = await quarantine_pending_fx_pair(
+        preserved_evidence = await quarantine_pending_fx_pair(
             async_db_session,
             from_currency="EUR",
             to_currency="GBP",
@@ -679,7 +679,7 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                 else None
             ),
         )
-        oversized_extension_earliest = await quarantine_pending_fx_pair(
+        oversized_extension_evidence = await quarantine_pending_fx_pair(
             async_db_session,
             from_currency="JPY",
             to_currency="CHF",
@@ -700,10 +700,10 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
         )
 
         assert valid_sibling.exists is True
-        assert unrelated_boundary is None
+        assert unrelated_evidence.exists is False
         assert unrelated_status == "PENDING"
-        assert preserved_earliest == date(2025, 1, 3)
-        assert oversized_extension_earliest is None
+        assert preserved_evidence.earliest_sibling.earliest_impacted_date == date(2025, 1, 3)
+        assert oversized_extension_evidence.exists is False
         assert statuses["corr-nul-fx-identity"] == "PENDING"
         assert statuses["corr-unrelated-fx-poison"] == "FAILED"
         assert statuses["corr-valid-fx-identity"] == "PENDING"
@@ -1252,6 +1252,76 @@ async def test_staging_quarantines_postgres_unrepresentable_pending_fx_date(
     assert rows[1].payload["generated_at"] == "2026-08-27T10:00:00+00:00"
 
 
+async def test_staging_retains_newer_fx_authority_around_unbounded_extension(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    retained_hash = "sha256:" + ("f" * 64)
+    incoming_hash = "sha256:" + ("a" * 64)
+    retained_id = await async_db_session.scalar(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (
+                job_type, payload, status, attempt_count, correlation_id
+            )
+            VALUES (
+                'RESET_FX_WATERMARKS', CAST(:payload AS JSON), 'PENDING', 5, 'corr-retained-fx'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"from_currency":"USD","to_currency":"CAD",'
+                '"earliest_impacted_date":"2025-01-03",'
+                '"generated_at":"2025-01-08T00:00:00+00:00",'
+                f'"content_hash":"{retained_hash}",'
+                '"extension":1e999999999999999999999999999999999999999}'
+            )
+        },
+    )
+    assert retained_id is not None
+    await async_db_session.commit()
+
+    await ReprocessingJobRepository(async_db_session).stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="CAD",
+        earliest_impacted_date=date(2025, 1, 6),
+        content_hash=incoming_hash,
+        generated_at=datetime(2025, 1, 7, tzinfo=timezone.utc),
+        correlation_id="corr-incoming-fx",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+        attempt_count=1,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [row.status for row in rows] == ["FAILED", "PENDING"]
+    assert rows[0].id == retained_id
+    assert rows[1].payload == {
+        "from_currency": "USD",
+        "to_currency": "CAD",
+        "earliest_impacted_date": "2025-01-03",
+        "generated_at": "2025-01-08T00:00:00+00:00",
+        "content_hash": retained_hash,
+    }
+    assert rows[1].attempt_count == 5
+    assert rows[1].correlation_id == "corr-retained-fx"
+
+
 async def test_staging_quarantines_postgres_unrepresentable_pending_reset_date(
     clean_db,
     async_db_session: AsyncSession,
@@ -1631,6 +1701,48 @@ async def test_find_and_claim_jobs_decodes_oversized_extension_without_blocking_
     )
     assert [row["status"] for row in replay_rows] == ["COMPLETE", "PENDING"]
     assert "extension" not in replay_rows[1]["payload_json"]
+
+
+async def test_find_and_claim_fx_job_recovers_canonical_payload_around_unbounded_extension(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    content_hash = "sha256:" + ("d" * 64)
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES ('RESET_FX_WATERMARKS', CAST(:payload AS JSON), 'PENDING', 'corr-claim-fx')
+            """
+        ),
+        {
+            "payload": (
+                '{"from_currency":"USD","to_currency":"CHF",'
+                '"earliest_impacted_date":"2025-01-03",'
+                '"generated_at":"2025-01-08T00:00:00+00:00",'
+                f'"content_hash":"{content_hash}",'
+                '"extension":1e999999999999999999999999999999999999999}'
+            )
+        },
+    )
+    await async_db_session.commit()
+
+    claimed = await ReprocessingJobRepository(async_db_session).find_and_claim_jobs(
+        "RESET_FX_WATERMARKS",
+        batch_size=1,
+    )
+    await async_db_session.commit()
+
+    assert len(claimed) == 1
+    assert claimed[0].payload == {
+        "from_currency": "USD",
+        "to_currency": "CHF",
+        "earliest_impacted_date": "2025-01-03",
+        "generated_at": "2025-01-08T00:00:00+00:00",
+        "content_hash": content_hash,
+    }
+    assert claimed[0].correlation_id == "corr-claim-fx"
 
 
 async def test_reset_staging_coalesces_oversized_extension_through_safe_return(
