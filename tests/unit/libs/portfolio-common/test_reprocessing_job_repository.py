@@ -9,6 +9,7 @@ from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobTransitionOutcome,
     ResetWatermarksStageOutcome,
 )
+from portfolio_common.reprocessing_payload_integrity import PendingReplaySiblingEvidence
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,15 @@ def mock_db_session() -> AsyncMock:
 @pytest.fixture
 def repository(mock_db_session: AsyncMock) -> ReprocessingJobRepository:
     return ReprocessingJobRepository(db=mock_db_session)
+
+
+@pytest.fixture
+def pending_sibling_evidence():
+    with patch(
+        "portfolio_common.reprocessing_job_repository.pending_replay_sibling_evidence",
+        new_callable=AsyncMock,
+    ) as lookup:
+        yield lookup
 
 
 async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
@@ -1184,12 +1194,17 @@ async def test_update_job_status_requires_processing_ownership(
 
 async def test_owned_requeue_uses_repository_policy_for_direct_requeue(
     repository: ReprocessingJobRepository,
+    pending_sibling_evidence: AsyncMock,
 ) -> None:
-    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    identity = SimpleNamespace(
+        identity_key="RESET_WATERMARKS|2:S1",
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+    )
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
-    repository._pending_replay_sibling_exists = AsyncMock(return_value=False)
+    pending_sibling_evidence.return_value = PendingReplaySiblingEvidence(False, None)
     repository._apply_owned_transition = AsyncMock(
         return_value=ReprocessingJobTransitionOutcome.APPLIED
     )
@@ -1208,55 +1223,16 @@ async def test_owned_requeue_uses_repository_policy_for_direct_requeue(
     )
 
 
-async def test_reset_pending_sibling_lookup_uses_normalized_identity(
-    repository: ReprocessingJobRepository,
-    mock_db_session: AsyncMock,
-) -> None:
-    sibling_result = MagicMock()
-    sibling_result.mappings.return_value.all.return_value = [
-        {
-            "id": 12,
-            "payload": {"security_id": " BOND-1 "},
-            "payload_json": '{"security_id":" BOND-1 "}',
-        }
-    ]
-    mock_db_session.execute.return_value = sibling_result
-    identity = SimpleNamespace(
-        job_type="RESET_WATERMARKS",
-        payload={"security_id": "BOND-1"},
-    )
-
-    exists = await repository._pending_replay_sibling_exists(
-        job_id=11,
-        identity=identity,
-    )
-
-    assert exists is True
-    scan_statement, scan_parameters = mock_db_session.execute.await_args_list[0].args
-    scan_sql = str(scan_statement)
-    assert "btrim(payload->>'security_id', :trim_chars)" in scan_sql
-    assert "jsonb_typeof" not in scan_sql
-    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in scan_sql
-    assert "FOR UPDATE" not in scan_sql
-    assert scan_parameters == {
-        "job_id": 11,
-        "security_id": "BOND-1",
-        "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
-    }
-    lock_statement, lock_parameters = mock_db_session.execute.await_args_list[1].args
-    assert "FOR UPDATE" in str(lock_statement)
-    assert lock_parameters == {
-        "candidate_ids": [12],
-        "preserve_candidate_ids": [12],
-        "job_type": "RESET_WATERMARKS",
-    }
-
-
 async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
+    pending_sibling_evidence: AsyncMock,
 ) -> None:
-    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    identity = SimpleNamespace(
+        identity_key="RESET_WATERMARKS|2:S1",
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+    )
     savepoint = AsyncMock()
     call_order: list[str] = []
     savepoint.start.side_effect = lambda: call_order.append("savepoint_started")
@@ -1264,9 +1240,9 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
-    repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
+    pending_sibling_evidence.return_value = PendingReplaySiblingEvidence(True, date(2025, 1, 3))
     repository._coalesce_pending_replay = AsyncMock(
-        side_effect=lambda _identity: call_order.append("sibling_coalesced")
+        side_effect=lambda _identity, _boundary: call_order.append("sibling_coalesced")
     )
     repository._apply_owned_transition = AsyncMock(
         return_value=ReprocessingJobTransitionOutcome.APPLIED
@@ -1280,7 +1256,7 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
     assert call_order == ["savepoint_started", "sibling_coalesced"]
     savepoint.start.assert_awaited_once_with()
-    repository._coalesce_pending_replay.assert_awaited_once_with(identity)
+    repository._coalesce_pending_replay.assert_awaited_once_with(identity, date(2025, 1, 3))
     repository._apply_owned_transition.assert_awaited_once_with(
         99,
         "COMPLETE",
@@ -1293,14 +1269,19 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
 async def test_owned_requeue_rolls_back_sibling_change_after_lease_loss(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
+    pending_sibling_evidence: AsyncMock,
 ) -> None:
-    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    identity = SimpleNamespace(
+        identity_key="RESET_WATERMARKS|2:S1",
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+    )
     savepoint = AsyncMock()
     mock_db_session.begin_nested.return_value = savepoint
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
-    repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
+    pending_sibling_evidence.return_value = PendingReplaySiblingEvidence(True, None)
     repository._coalesce_pending_replay = AsyncMock()
     repository._apply_owned_transition = AsyncMock(
         return_value=ReprocessingJobTransitionOutcome.LEASE_EXPIRED

@@ -3,6 +3,7 @@
 import json
 import unicodedata
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, DecimalException
 from typing import Any
@@ -27,6 +28,14 @@ PYTHON_ISO_DATE_PATTERN = (
     r"[0-9]{4}-W[0-9]{2}(-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$"
 )
 REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
+
+
+@dataclass(frozen=True, slots=True)
+class PendingReplaySiblingEvidence:
+    """Locked sibling presence and any recoverable replay boundary."""
+
+    exists: bool
+    earliest_impacted_date: date | None
 
 
 def _retain_json_number_text(value: str) -> str:
@@ -712,14 +721,13 @@ def _postgres_json_identity_text(encoded_value: object) -> str | None:
     return encoded_value
 
 
-async def pending_replay_sibling_exists(
+async def pending_replay_sibling_evidence(
     db: AsyncSession,
-    *,
     job_id: int,
     job_type: str,
     payload: Mapping[str, Any],
-) -> bool:
-    """Lock and match a sibling without extracting an unsafe legacy JSON identity in SQL."""
+) -> PendingReplaySiblingEvidence:
+    """Lock a matching sibling and retain its usable boundary across a concurrent claim."""
 
     if job_type == "RESET_WATERMARKS":
         statement = PENDING_RESET_REPLAY_SIBLING
@@ -740,15 +748,32 @@ async def pending_replay_sibling_exists(
         .mappings()
         .all()
     )
-    return bool(
-        await _lock_matching_replay_rows(
-            db,
-            scanned_rows=scanned_rows,
-            job_type=job_type,
-            expected_identity=expected_identity,
-            preserve_after_claim=True,
-        )
+    locked_rows = await _lock_matching_replay_rows(
+        db,
+        scanned_rows=scanned_rows,
+        job_type=job_type,
+        expected_identity=expected_identity,
+        preserve_after_claim=True,
     )
+    boundaries = [
+        boundary
+        for row in locked_rows
+        if (boundary := _retained_replay_boundary(row.get("payload_json"))) is not None
+    ]
+    return PendingReplaySiblingEvidence(
+        exists=bool(locked_rows),
+        earliest_impacted_date=min(boundaries, default=None),
+    )
+
+
+def _retained_replay_boundary(payload_json: object) -> date | None:
+    value = _json_object_string_field(payload_json, "earliest_impacted_date")
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 async def quarantine_pending_fx_pair(

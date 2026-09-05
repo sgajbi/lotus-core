@@ -14,7 +14,7 @@ from portfolio_common.reprocessing_job_repository import (
     ResetWatermarksStageOutcome,
 )
 from portfolio_common.reprocessing_payload_integrity import (
-    pending_replay_sibling_exists,
+    pending_replay_sibling_evidence,
     quarantine_pending_fx_pair,
 )
 from sqlalchemy import func, select, text, update
@@ -643,7 +643,7 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                 },
             )
 
-        valid_sibling_exists = await pending_replay_sibling_exists(
+        valid_sibling = await pending_replay_sibling_evidence(
             async_db_session,
             job_id=0,
             job_type="RESET_FX_WATERMARKS",
@@ -696,7 +696,7 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
             ).all()
         )
 
-        assert valid_sibling_exists is True
+        assert valid_sibling.exists is True
         assert unrelated_boundary is None
         assert unrelated_status == "PENDING"
         assert preserved_earliest == date(2025, 1, 3)
@@ -2293,6 +2293,134 @@ async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
         "security_id": "OWNED-RACE",
         "earliest_impacted_date": "2025-01-03",
     }
+
+
+async def test_owned_fx_requeue_preserves_sibling_boundary_terminalized_after_scan(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    owned_hash = "sha256:" + ("a" * 64)
+    await repository.stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="SGD",
+        earliest_impacted_date=date(2025, 1, 7),
+        content_hash=owned_hash,
+        generated_at=datetime(2025, 1, 7, tzinfo=timezone.utc),
+        correlation_id="corr-owned-fx-race",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    owned = (await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    sibling_id = await async_db_session.scalar(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_FX_WATERMARKS', CAST(:payload AS json), 'PENDING', 'corr-fx-sibling-race'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"from_currency":" USD ","to_currency":"SGD",'
+                '"earliest_impacted_date":"2025-01-03",'
+                '"generated_at":"invalid","content_hash":"legacy"}'
+            )
+        },
+    )
+    assert sibling_id is not None
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    scan_completed = asyncio.Event()
+    allow_row_lock = asyncio.Event()
+    original_lock = payload_integrity._lock_scanned_replay_rows
+    first_lock = True
+
+    async def pause_first_lock_after_scan(
+        db: AsyncSession,
+        *,
+        candidate_ids: list[int],
+        preserve_candidate_ids: list[int],
+        job_type: str,
+    ):
+        nonlocal first_lock
+        if first_lock:
+            first_lock = False
+            scan_completed.set()
+            await allow_row_lock.wait()
+        return await original_lock(
+            db,
+            candidate_ids=candidate_ids,
+            preserve_candidate_ids=preserve_candidate_ids,
+            job_type=job_type,
+        )
+
+    async def requeue_owned():
+        async with session_factory() as requeue_session, requeue_session.begin():
+            return await ReprocessingJobRepository(
+                requeue_session
+            ).requeue_owned_effective_dated_job(
+                owned.id,
+                lease_token=owned.lease_token,
+            )
+
+    with patch.object(
+        payload_integrity,
+        "_lock_scanned_replay_rows",
+        side_effect=pause_first_lock_after_scan,
+    ):
+        requeue_task = asyncio.create_task(requeue_owned())
+        try:
+            await asyncio.wait_for(scan_completed.wait(), timeout=5)
+            async with session_factory() as claimant_session, claimant_session.begin():
+                claimant_repository = ReprocessingJobRepository(claimant_session)
+                claimed = await claimant_repository.find_and_claim_jobs(
+                    "RESET_FX_WATERMARKS",
+                    batch_size=1,
+                    lease_owner="fx-sibling-race-worker",
+                )
+                assert [job.id for job in claimed] == [sibling_id]
+                assert (
+                    await claimant_repository.update_job_status(
+                        sibling_id,
+                        "FAILED",
+                        lease_token=claimed[0].lease_token,
+                        failure_reason="invalid legacy FX replay payload",
+                    )
+                    is ReprocessingJobTransitionOutcome.APPLIED
+                )
+            allow_row_lock.set()
+            outcome = await asyncio.wait_for(requeue_task, timeout=5)
+        finally:
+            allow_row_lock.set()
+            if not requeue_task.done():
+                requeue_task.cancel()
+                await asyncio.gather(requeue_task, return_exceptions=True)
+
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    async with session_factory() as evidence_session:
+        rows = (
+            (
+                await evidence_session.execute(
+                    select(ReprocessingJob)
+                    .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                    .order_by(ReprocessingJob.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING"]
+    assert rows[1].id == sibling_id
+    assert rows[2].payload["earliest_impacted_date"] == "2025-01-03"
+    assert rows[2].payload["content_hash"] == owned_hash
+    assert rows[2].correlation_id == "corr-owned-fx-race"
 
 
 @pytest.mark.parametrize(
