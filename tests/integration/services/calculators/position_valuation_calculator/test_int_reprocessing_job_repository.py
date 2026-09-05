@@ -145,6 +145,18 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 status="PENDING",
                 correlation_id="corr-padded-numeric-text",
             ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": " STRING", "earliest_impacted_date": "2025-01-04"},
+                status="PENDING",
+                correlation_id="corr-padded-string",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "STRING", "earliest_impacted_date": "2025-01-02 BC"},
+                status="PENDING",
+                correlation_id="corr-malformed-canonical-string",
+            ),
         ]
     )
     await async_db_session.execute(
@@ -173,13 +185,17 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 4
+    assert len(rows) == 6
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
         row for row in rows if row.correlation_id == "corr-padded-numeric-text"
     )
     numeric_scalar = next(row for row in rows if row.correlation_id == "corr-numeric-scalar")
+    padded_string = next(row for row in rows if row.correlation_id == "corr-padded-string")
+    malformed_string = next(
+        row for row in rows if row.correlation_id == "corr-malformed-canonical-string"
+    )
     assert canonical.payload == {
         "security_id": "BOND-CANONICAL",
         "earliest_impacted_date": "2025-01-05",
@@ -207,7 +223,14 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         is False
     )
     assert numeric_scalar.failure_reason == (
-        "invalid_reset_watermarks_job_payload: scalar identity collision"
+        "invalid_reset_watermarks_job_payload: identity collision"
+    )
+    assert padded_string.status == "PENDING"
+    assert padded_string.payload["security_id"] == "STRING"
+    assert malformed_string.status == "FAILED"
+    assert malformed_string.payload["security_id"] == "STRING"
+    assert malformed_string.failure_reason == (
+        "invalid_reset_watermarks_job_payload: identity collision"
     )
 
 
@@ -1199,7 +1222,7 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     assert rows[1].failure_reason == (
         "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
     )
-    assert rows[1].payload["security_id"] == 123
+    assert rows[1].payload["security_id"] == "\tBOND-PADDED"
     assert rows[2].payload == {
         "security_id": "BOND-PADDED",
         "earliest_impacted_date": "2025-01-05",

@@ -178,7 +178,7 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     assert deleted_count == 2
     assert mock_db_session.execute.await_count == 2
     collision_stmt = mock_db_session.execute.await_args_list[0].args[0]
-    assert "scalar identity collision" in str(collision_stmt)
+    assert "identity collision" in str(collision_stmt)
     stmt = mock_db_session.execute.await_args_list[1].args[0]
     stmt_text = str(stmt)
     assert "WITH valid_candidates AS MATERIALIZED" in stmt_text
@@ -225,7 +225,7 @@ async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before
     collision_stmt = mock_db_session.execute.await_args_list[0].args[0]
     normalize_stmt = mock_db_session.execute.await_args_list[1].args[0]
     claim_stmt = mock_db_session.execute.await_args_list[2].args[0]
-    assert "scalar identity collision" in str(collision_stmt)
+    assert "identity collision" in str(collision_stmt)
     assert "WITH valid_candidates AS MATERIALIZED" in str(normalize_stmt)
     assert "UPDATE reprocessing_jobs" in str(claim_stmt)
 
