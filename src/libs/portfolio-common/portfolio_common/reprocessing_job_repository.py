@@ -21,10 +21,10 @@ from .infrastructure.persistence.statement_batching import (
 )
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .reprocessing_payload_integrity import (
-    NORMALIZE_PENDING_RESET_WATERMARKS,
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
+    normalize_pending_reset_watermarks_duplicates,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
 )
@@ -168,16 +168,15 @@ class ReprocessingJobRepository:
         self._default_lease_owner = f"reprocessing-repository-{uuid.uuid4().hex}"
 
     async def normalize_pending_reset_watermarks_duplicates(self) -> int:
+        """Coalesce valid historical RESET_WATERMARKS work by earliest date.
+
+        Scalar identities are failed before canonical string identities are rewritten.
+        This ordering prevents a legacy numeric/string collision from violating the
+        pending-work uniqueness fence and blocking claims for the entire queue.
+
+        Return the number of redundant valid rows removed.
         """
-        Coalesces any historically duplicated pending RESET_WATERMARKS jobs so that
-        one pending job remains per security_id with the earliest impacted date.
-        Returns the number of redundant rows removed.
-        """
-        result = await self.db.execute(
-            NORMALIZE_PENDING_RESET_WATERMARKS,
-            {"trim_chars": _REPLAY_TEXT_TRIM_CHARS},
-        )
-        deleted_count = int(result.scalar_one())
+        deleted_count = await normalize_pending_reset_watermarks_duplicates(self.db)
         if deleted_count:
             observe_reprocessing_duplicates_normalized(
                 "reset_watermarks_pending_jobs",

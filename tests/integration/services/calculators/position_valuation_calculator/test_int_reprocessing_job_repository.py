@@ -139,6 +139,18 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 status="PENDING",
                 correlation_id="corr-python-invalid-date",
             ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": " 123", "earliest_impacted_date": "2025-01-04"},
+                status="PENDING",
+                correlation_id="corr-padded-numeric-text",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": 123, "earliest_impacted_date": "2025-01-03"},
+                status="PENDING",
+                correlation_id="corr-numeric-scalar",
+            ),
         ]
     )
     await async_db_session.commit()
@@ -151,9 +163,13 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 2
-    canonical = next(row for row in rows if row.correlation_id != "corr-python-invalid-date")
+    assert len(rows) == 4
+    canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
+    padded_numeric_text = next(
+        row for row in rows if row.correlation_id == "corr-padded-numeric-text"
+    )
+    numeric_scalar = next(row for row in rows if row.correlation_id == "corr-numeric-scalar")
     assert canonical.payload == {
         "security_id": "BOND-CANONICAL",
         "earliest_impacted_date": "2025-01-05",
@@ -162,6 +178,19 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         "security_id": "\tBOND-CANONICAL",
         "earliest_impacted_date": "2025-01-02 BC",
     }
+    assert padded_numeric_text.status == "PENDING"
+    assert padded_numeric_text.payload == {
+        "security_id": "123",
+        "earliest_impacted_date": "2025-01-04",
+    }
+    assert numeric_scalar.status == "FAILED"
+    assert numeric_scalar.payload == {
+        "security_id": 123,
+        "earliest_impacted_date": "2025-01-03",
+    }
+    assert numeric_scalar.failure_reason == (
+        "invalid_reset_watermarks_job_payload: scalar identity collision"
+    )
 
 
 async def test_unnormalized_predecessor_security_replay_fails_without_rewriting_identity(
