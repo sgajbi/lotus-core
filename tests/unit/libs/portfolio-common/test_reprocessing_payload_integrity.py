@@ -13,10 +13,10 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
-    _decode_retained_payload,
     _postgres_json_identity_text,
     _quarantine_candidates,
     _reset_boundary_recovery_plan,
+    decode_reprocessing_payload_text,
     pending_replay_sibling_exists,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
@@ -129,7 +129,7 @@ def test_postgres_identity_text_rejects_non_json_and_invalid_json() -> None:
 
 def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
     oversized_integer = "1" * 5_000
-    payload = _decode_retained_payload(
+    payload = decode_reprocessing_payload_text(
         f'{{"security_id":"BOND-1","extension":{oversized_integer}}}'
     )
 
@@ -146,7 +146,7 @@ def test_retained_identity_scan_ignores_unbounded_numeric_extension() -> None:
     unbounded_number = "1e" + ("9" * 40)
     payload_json = f'{{"security_id":"BOND-1","extension":{unbounded_number}}}'
 
-    assert _decode_retained_payload(payload_json) is None
+    assert decode_reprocessing_payload_text(payload_json) is None
     assert replay_row_matches_identity(
         {"payload_json": payload_json},
         {"security_id": "BOND-1"},
@@ -218,7 +218,7 @@ def test_reset_boundary_recovery_plan_rejects_unowned_or_unparseable_boundaries(
 
 @pytest.mark.parametrize("payload_json", [None, '{"security_id":'])
 def test_retained_payload_decode_fails_closed(payload_json: object) -> None:
-    assert _decode_retained_payload(payload_json) is None
+    assert decode_reprocessing_payload_text(payload_json) is None
 
 
 @pytest.mark.asyncio

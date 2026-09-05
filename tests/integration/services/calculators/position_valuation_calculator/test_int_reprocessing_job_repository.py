@@ -1554,6 +1554,42 @@ async def test_find_and_claim_jobs_keeps_malformed_payload_from_blocking_valid_s
     )
 
 
+async def test_find_and_claim_jobs_decodes_oversized_extension_without_blocking_batch(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    oversized_integer = "7" * 5_000
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status)
+            VALUES
+              ('RESET_WATERMARKS', CAST(:oversized_payload AS JSON), 'PENDING'),
+              ('RESET_WATERMARKS', CAST(:ordinary_payload AS JSON), 'PENDING')
+            """
+        ),
+        {
+            "oversized_payload": (
+                '{"security_id":"S-LARGE","earliest_impacted_date":"2025-01-05",'
+                f'"extension":{oversized_integer}}}'
+            ),
+            "ordinary_payload": (
+                '{"security_id":"S-ORDINARY","earliest_impacted_date":"2025-01-06"}'
+            ),
+        },
+    )
+    await async_db_session.commit()
+
+    claimed = await ReprocessingJobRepository(async_db_session).find_and_claim_jobs(
+        "RESET_WATERMARKS",
+        batch_size=2,
+    )
+    await async_db_session.commit()
+
+    assert [job.payload["security_id"] for job in claimed] == ["S-LARGE", "S-ORDINARY"]
+    assert str(claimed[0].payload["extension"]) == oversized_integer
+
+
 async def test_find_and_claim_jobs_does_not_cast_unrepresentable_reset_date(
     clean_db,
     async_db_session: AsyncSession,
