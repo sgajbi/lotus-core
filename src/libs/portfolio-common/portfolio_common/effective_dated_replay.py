@@ -92,15 +92,9 @@ def merge_replay_sibling_evidence(
             (sibling for sibling in boundary_siblings if sibling.correlation_id is not None),
             None,
         )
-        if (
-            lineage_sibling is None
-            and earliest_boundary < owned_boundary
-            and identity.correlation_id is None
-        ):
+        if lineage_sibling is None and identity.correlation_id is None:
             lineage_sibling = earliest_sibling
-        if lineage_sibling is not None and (
-            earliest_boundary < owned_boundary or identity.correlation_id is None
-        ):
+        if lineage_sibling is not None:
             source = replace(
                 identity,
                 correlation_id=lineage_sibling.correlation_id,
