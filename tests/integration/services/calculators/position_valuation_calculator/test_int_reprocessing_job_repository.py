@@ -957,6 +957,133 @@ async def test_reset_staging_preserves_boundary_claimed_between_scan_and_lock(
     }
 
 
+async def test_reset_normalization_does_not_block_lease_after_concurrent_claim(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    source_id = await async_db_session.scalar(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING', 'corr-normalize-claim'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"NORMALIZE-CLAIM-RACE",'
+                '"earliest_impacted_date":"2025-01-02",'
+                '"legacy_number":1e999999999999999999999999999999999999999}'
+            )
+        },
+    )
+    assert source_id is not None
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    scan_completed = asyncio.Event()
+    allow_row_lock = asyncio.Event()
+    recovery_revalidated = asyncio.Event()
+    allow_normalization = asyncio.Event()
+    original_lock = payload_integrity._lock_scanned_replay_rows
+    original_mark = payload_integrity._mark_reprocessing_jobs_failed
+
+    async def pause_after_scan(
+        db: AsyncSession,
+        *,
+        candidate_ids: list[int],
+        preserve_candidate_ids: list[int],
+        job_type: str,
+    ):
+        scan_completed.set()
+        await allow_row_lock.wait()
+        return await original_lock(
+            db,
+            candidate_ids=candidate_ids,
+            preserve_candidate_ids=preserve_candidate_ids,
+            job_type=job_type,
+        )
+
+    async def pause_after_revalidation(
+        db: AsyncSession,
+        *,
+        job_ids: list[int],
+        failure_reason: str,
+    ) -> None:
+        await original_mark(db, job_ids=job_ids, failure_reason=failure_reason)
+        recovery_revalidated.set()
+        await allow_normalization.wait()
+
+    async def normalize() -> int:
+        async with session_factory() as normalization_session, normalization_session.begin():
+            return await ReprocessingJobRepository(
+                normalization_session
+            ).normalize_pending_reset_watermarks_duplicates()
+
+    with (
+        patch.object(payload_integrity, "_lock_scanned_replay_rows", side_effect=pause_after_scan),
+        patch.object(
+            payload_integrity,
+            "_mark_reprocessing_jobs_failed",
+            side_effect=pause_after_revalidation,
+        ),
+    ):
+        normalization_task = asyncio.create_task(normalize())
+        try:
+            await asyncio.wait_for(scan_completed.wait(), timeout=5)
+            async with session_factory() as claimant_session, claimant_session.begin():
+                claimed = await ReprocessingJobRepository(claimant_session).find_and_claim_jobs(
+                    "RESET_WATERMARKS",
+                    batch_size=1,
+                    lease_owner="normalization-claim-race-worker",
+                    normalize_reset_watermark_duplicates=False,
+                )
+            assert [job.id for job in claimed] == [source_id]
+            allow_row_lock.set()
+            await asyncio.wait_for(recovery_revalidated.wait(), timeout=5)
+            async with session_factory() as renewal_session, renewal_session.begin():
+                renewal = await asyncio.wait_for(
+                    ReprocessingJobRepository(renewal_session).renew_lease(
+                        int(source_id),
+                        lease_token=claimed[0].lease_token,
+                        lease_duration_seconds=120,
+                    ),
+                    timeout=5,
+                )
+            assert renewal is ReprocessingJobTransitionOutcome.APPLIED
+            allow_normalization.set()
+            deleted_count = await asyncio.wait_for(normalization_task, timeout=5)
+        finally:
+            allow_row_lock.set()
+            allow_normalization.set()
+            if not normalization_task.done():
+                normalization_task.cancel()
+                await asyncio.gather(normalization_task, return_exceptions=True)
+
+    assert deleted_count == 0
+    async with session_factory() as evidence_session:
+        rows = (
+            (
+                await evidence_session.execute(
+                    select(ReprocessingJob)
+                    .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                    .order_by(ReprocessingJob.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [row.status for row in rows] == ["PROCESSING", "PENDING"]
+    assert rows[1].payload == {
+        "security_id": "NORMALIZE-CLAIM-RACE",
+        "earliest_impacted_date": "2025-01-02",
+    }
+    assert rows[1].correlation_id == "corr-normalize-claim"
+
+
 async def test_unnormalized_predecessor_security_replay_fails_without_rewriting_identity(
     clean_db,
     async_db_session: AsyncSession,

@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
+import portfolio_common.reprocessing_payload_integrity as payload_integrity
 import pytest
 from portfolio_common.reprocessing_payload_integrity import (
     LOCK_SCANNED_REPLAY_CANDIDATES,
@@ -80,6 +81,61 @@ def test_reset_normalization_preserves_maximum_retry_history() -> None:
     assert "first_value(correlation_id) OVER" in sql
     assert "correlation_id = r.retained_correlation_id" in sql
     assert "j.correlation_id IS DISTINCT FROM r.retained_correlation_id" in sql
+
+
+@pytest.mark.asyncio
+async def test_reset_normalization_snapshots_recovery_claimed_after_scan(monkeypatch) -> None:
+    row = {
+        "id": 7,
+        "payload_json": (
+            '{"security_id":"BOND-1","earliest_impacted_date":"2025-01-03",'
+            '"extension":1e999999999999999999999999999999999999999}'
+        ),
+        "attempt_count": 2,
+        "correlation_id": "corr-claimed",
+        "correlation_missing_reason": None,
+        "alternate_lookup_key": None,
+        "status": "PROCESSING",
+    }
+    candidate_result = MagicMock()
+    candidate_result.mappings.return_value.all.return_value = [row]
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = ["BOND-1"]
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 0
+    db = AsyncMock()
+    db.execute.side_effect = [
+        candidate_result,
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+    ]
+    lock_rows = AsyncMock(return_value=[])
+    snapshot_rows = AsyncMock(return_value=[row])
+    mark_failed = AsyncMock()
+    monkeypatch.setattr(payload_integrity, "_lock_scanned_replay_rows", lock_rows)
+    monkeypatch.setattr(payload_integrity, "_snapshot_scanned_replay_rows", snapshot_rows)
+    monkeypatch.setattr(payload_integrity, "_mark_reprocessing_jobs_failed", mark_failed)
+
+    deleted_count = await payload_integrity.normalize_pending_reset_watermarks_duplicates(db)
+
+    assert deleted_count == 0
+    lock_rows.assert_awaited_once_with(
+        db,
+        candidate_ids=[7],
+        preserve_candidate_ids=[],
+        job_type="RESET_WATERMARKS",
+    )
+    snapshot_rows.assert_awaited_once_with(
+        db,
+        candidate_ids=[7],
+        job_type="RESET_WATERMARKS",
+    )
+    mark_failed.assert_awaited_once()
 
 
 def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:

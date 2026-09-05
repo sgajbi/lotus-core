@@ -446,14 +446,28 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
         )
     if recovery_plans:
         recovery_ids = [int(plan["id"]) for plan in recovery_plans]
+        expected_identity_keys = {
+            int(plan["id"]): str(plan["identity_key"]) for plan in recovery_plans
+        }
         locked_rows = await _lock_scanned_replay_rows(
             db,
             candidate_ids=recovery_ids,
-            preserve_candidate_ids=recovery_ids,
+            preserve_candidate_ids=[],
+            job_type="RESET_WATERMARKS",
+        )
+        locked_ids = {int(row["id"]) for row in locked_rows}
+        transitioned_rows = await _snapshot_scanned_replay_rows(
+            db,
+            candidate_ids=[
+                recovery_id for recovery_id in recovery_ids if recovery_id not in locked_ids
+            ],
             job_type="RESET_WATERMARKS",
         )
         recovery_plans = [
-            plan for row in locked_rows if (plan := _reset_boundary_recovery_plan(row)) is not None
+            plan
+            for row in [*locked_rows, *transitioned_rows]
+            if (plan := _reset_boundary_recovery_plan(row)) is not None
+            and plan["identity_key"] == expected_identity_keys[int(plan["id"])]
         ]
     if recovery_plans:
         await _mark_reprocessing_jobs_failed(
