@@ -1653,9 +1653,11 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
         .all()
     )
     assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
-    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING", "PENDING"]
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "FAILED", "PENDING"]
     assert rows[2].correlation_id == "corr-unrelated-jsonb-unrepresentable"
-    assert rows[2].failure_reason is None
+    assert rows[2].failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
     assert rows[3].payload == {
         "security_id": "123",
         "earliest_impacted_date": "2025-01-05",
