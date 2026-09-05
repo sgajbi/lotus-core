@@ -453,7 +453,11 @@ class ReprocessingJobRepository:
         correlation_id: str | None,
         attempt_count: int = 0,
     ) -> ResetWatermarksStageResult:
-        """Create or coalesce one pending reset job without committing the caller's UoW."""
+        """Create or coalesce one pending reset job without committing the caller's UoW.
+
+        The upsert returns retained JSON as text so permitted extension values cannot invoke the
+        driver's bounded decoder before this repository applies the shared payload policy.
+        """
         security_id = _required_replay_payload_text(
             {"security_id": security_id},
             "security_id",
@@ -492,6 +496,9 @@ class ReprocessingJobRepository:
         )
         row = dict(result.mappings().one())
         was_inserted = bool(row.pop("was_inserted"))
+        row["payload"] = decode_reprocessing_payload_text(row.pop("payload_json"))
+        if not isinstance(row["payload"], dict):
+            raise ValueError("staged reset-watermarks payload must be a JSON object")
         job = ReprocessingJob(**row)
         outcome = (
             ResetWatermarksStageOutcome.CREATED

@@ -148,7 +148,11 @@ UPSERT_PENDING_RESET_WATERMARKS = text(
             ELSE reprocessing_jobs.alternate_lookup_key
         END,
         updated_at = now()
-    RETURNING *, (xmax = 0) AS was_inserted
+    RETURNING id, job_type, payload::text AS payload_json, status,
+        correlation_id, correlation_missing_reason, alternate_lookup_key,
+        attempt_count, last_attempted_at, failure_reason, lease_owner,
+        lease_token, lease_expires_at, created_at, updated_at,
+        (xmax = 0) AS was_inserted
     """
 ).bindparams(
     bindparam("security_id", type_=String()),
