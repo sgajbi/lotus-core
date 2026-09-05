@@ -14,6 +14,10 @@ REPLAY_TEXT_TRIM_CHARS = (
     "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029"
     "\u202f\u205f\u3000"
 )
+PYTHON_ISO_DATE_PATTERN = (
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8}|"
+    r"[0-9]{4}-W[0-9]{2}(-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$"
+)
 
 NORMALIZE_PENDING_RESET_WATERMARKS = text(
     """
@@ -32,6 +36,7 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
               WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
               WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
               THEN FALSE
+              WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN FALSE
               ELSE btrim(payload->>'security_id', :trim_chars) <> ''
                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
           END

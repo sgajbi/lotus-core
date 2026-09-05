@@ -130,6 +130,15 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 status="PENDING",
                 correlation_id="corr-canonical",
             ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "\tBOND-CANONICAL",
+                    "earliest_impacted_date": "2025-01-02 BC",
+                },
+                status="PENDING",
+                correlation_id="corr-python-invalid-date",
+            ),
         ]
     )
     await async_db_session.commit()
@@ -142,10 +151,16 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 1
-    assert rows[0].payload == {
+    assert len(rows) == 2
+    canonical = next(row for row in rows if row.correlation_id != "corr-python-invalid-date")
+    malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
+    assert canonical.payload == {
         "security_id": "BOND-CANONICAL",
         "earliest_impacted_date": "2025-01-05",
+    }
+    assert malformed.payload == {
+        "security_id": "\tBOND-CANONICAL",
+        "earliest_impacted_date": "2025-01-02 BC",
     }
 
 
