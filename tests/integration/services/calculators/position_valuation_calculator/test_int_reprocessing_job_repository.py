@@ -1734,6 +1734,76 @@ async def test_owned_reset_requeue_quarantines_only_matching_jsonb_unrepresentab
     )
 
 
+async def test_reset_quarantine_does_not_lock_unrelated_jsonb_poison(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    matching_result = await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+              'RESET_WATERMARKS',
+              CAST(:payload AS JSON),
+              'PENDING',
+              'corr-matching-lock-probe'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"LOCK-PROBE",'
+                '"earliest_impacted_date":"2025-01-07",'
+                '"legacy_number":1e1000000}'
+            )
+        },
+    )
+    unrelated_result = await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+              'RESET_WATERMARKS',
+              CAST(:payload AS JSON),
+              'PENDING',
+              'corr-unrelated-lock-probe'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"OTHER-BOND",'
+                '"earliest_impacted_date":"2025-01-01",'
+                '"legacy_number":1e1000000}'
+            )
+        },
+    )
+    matching_id = int(matching_result.scalar_one())
+    unrelated_id = int(unrelated_result.scalar_one())
+    await async_db_session.commit()
+
+    repository = ReprocessingJobRepository(async_db_session)
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    async with session_factory() as unrelated_owner:
+        await unrelated_owner.execute(
+            select(ReprocessingJob).where(ReprocessingJob.id == unrelated_id).with_for_update()
+        )
+        earliest = await asyncio.wait_for(
+            repository._quarantine_malformed_pending_reset_watermarks(security_id="LOCK-PROBE"),
+            timeout=5,
+        )
+        await async_db_session.commit()
+
+    matching = await async_db_session.get(ReprocessingJob, matching_id)
+    unrelated = await async_db_session.get(ReprocessingJob, unrelated_id)
+    assert earliest == date(2025, 1, 7)
+    assert matching is not None and matching.status == "FAILED"
+    assert unrelated is not None and unrelated.status == "PENDING"
+
+
 async def test_owned_reset_requeue_without_sibling_reuses_claimed_row(
     clean_db,
     async_db_session: AsyncSession,

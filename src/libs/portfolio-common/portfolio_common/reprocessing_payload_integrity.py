@@ -241,7 +241,6 @@ PENDING_FX_REPLAY_CANDIDATES = text(
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
            AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
       END
-    FOR UPDATE
     """
 ).bindparams(
     bindparam("from_currency", type_=String()),
@@ -268,7 +267,6 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
       END
-    FOR UPDATE
     """
 ).bindparams(
     bindparam("security_id", type_=String()),
@@ -287,7 +285,6 @@ PENDING_RESET_REPLAY_SIBLING = text(
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
       END
     ORDER BY id
-    FOR UPDATE
     """
 )
 
@@ -306,8 +303,39 @@ PENDING_FX_REPLAY_SIBLING = text(
            AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
       END
     ORDER BY id
+    """
+)
+
+LOCK_PENDING_REPLAY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+        END AS earliest_date_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(
+                payload->>'generated_at', 'timestamp with time zone'
+            )
+        END AS generated_at_representable
+    FROM reprocessing_jobs
+    WHERE id = ANY(CAST(:candidate_ids AS BIGINT[]))
+      AND job_type = :job_type
+      AND status = 'PENDING'
+    ORDER BY id
     FOR UPDATE
     """
+).bindparams(
+    bindparam("candidate_ids"),
+    bindparam("job_type", type_=String()),
 )
 
 
@@ -323,6 +351,37 @@ def replay_row_matches_identity(
         and identity_text.strip(REPLAY_TEXT_TRIM_CHARS) == expected
         for field, expected in expected_identity.items()
     )
+
+
+async def _lock_matching_pending_replay_rows(
+    db: AsyncSession,
+    *,
+    scanned_rows: list[Mapping[str, Any]],
+    job_type: str,
+    expected_identity: Mapping[str, str],
+) -> list[Mapping[str, Any]]:
+    """Lock and revalidate only rows whose retained identity matches the request."""
+
+    candidate_ids = sorted(
+        {
+            int(row["id"])
+            for row in scanned_rows
+            if replay_row_matches_identity(row, expected_identity)
+        }
+    )
+    if not candidate_ids:
+        return []
+    locked_rows = (
+        (
+            await db.execute(
+                LOCK_PENDING_REPLAY_CANDIDATES,
+                {"candidate_ids": candidate_ids, "job_type": job_type},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return [row for row in locked_rows if replay_row_matches_identity(row, expected_identity)]
 
 
 def _json_object_field_identity_text(payload_json: object, field: str) -> str | None:
@@ -407,7 +466,7 @@ async def pending_replay_sibling_exists(
             "from_currency": str(payload["from_currency"]),
             "to_currency": str(payload["to_currency"]),
         }
-    rows = (
+    scanned_rows = (
         (
             await db.execute(
                 statement,
@@ -417,7 +476,14 @@ async def pending_replay_sibling_exists(
         .mappings()
         .all()
     )
-    return any(replay_row_matches_identity(row, expected_identity) for row in rows)
+    return bool(
+        await _lock_matching_pending_replay_rows(
+            db,
+            scanned_rows=scanned_rows,
+            job_type=job_type,
+            expected_identity=expected_identity,
+        )
+    )
 
 
 async def quarantine_pending_fx_pair(
@@ -439,9 +505,15 @@ async def quarantine_pending_fx_pair(
         },
     )
     expected_identity = {"from_currency": from_currency, "to_currency": to_currency}
+    rows = await _lock_matching_pending_replay_rows(
+        db,
+        scanned_rows=result.mappings().all(),
+        job_type="RESET_FX_WATERMARKS",
+        expected_identity=expected_identity,
+    )
     return await _quarantine_candidates(
         db,
-        rows=result.mappings().all(),
+        rows=rows,
         required_validity_fields=(
             "payload_representable",
             "earliest_date_representable",
@@ -449,7 +521,6 @@ async def quarantine_pending_fx_pair(
         ),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
-        belongs_to_identity=lambda row: replay_row_matches_identity(row, expected_identity),
         failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
     )
 
@@ -471,13 +542,18 @@ async def quarantine_pending_reset_security(
         },
     )
     expected_identity = {"security_id": security_id}
+    rows = await _lock_matching_pending_replay_rows(
+        db,
+        scanned_rows=result.mappings().all(),
+        job_type="RESET_WATERMARKS",
+        expected_identity=expected_identity,
+    )
     return await _quarantine_candidates(
         db,
-        rows=result.mappings().all(),
+        rows=rows,
         required_validity_fields=("payload_representable", "earliest_date_representable"),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
-        belongs_to_identity=lambda row: replay_row_matches_identity(row, expected_identity),
         failure_reason=(
             "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
         ),
@@ -492,13 +568,10 @@ async def _quarantine_candidates(
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
     failure_reason: str,
-    belongs_to_identity: Callable[[Mapping[str, Any]], bool] | None = None,
 ) -> date | None:
     malformed_ids: list[int] = []
     known_earliest_dates: list[date] = []
     for row in rows:
-        if belongs_to_identity is not None and not belongs_to_identity(row):
-            continue
         payload = _decode_retained_payload(row.get("payload_json"))
         try:
             if not all(row[field] for field in required_validity_fields):
