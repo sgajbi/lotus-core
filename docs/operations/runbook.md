@@ -881,8 +881,9 @@ payloads as text and use the shared safe decoder. Preserve that boundary so a pe
 numeric extension cannot abort a batch or hide a required restatement; Reset coalescing retains
 unknown fields while advancing only to the earliest replay date. Owned requeue carries an earlier
 sibling boundary into the replacement pending job when that sibling is already processing or
-becomes terminal between discovery and row locking. Already-processing siblings contribute a
-committed snapshot without a row lock, so requeue cannot block their lease renewal. The replacement
+becomes terminal between discovery and row locking. Siblings already processing or claimed during
+lock revalidation contribute a committed snapshot without a row lock, so requeue cannot block their
+lease renewal. The replacement
 retains maximum retry history and applies the established FX generated-at/content-hash
 ordering to source and correlation lineage. If an unrelated extension prevents full decoding, the
 required FX source fields are recovered lexically and revalidated; the extension remains only on
