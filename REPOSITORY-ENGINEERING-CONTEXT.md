@@ -4076,7 +4076,11 @@ Most relevant current governance:
      of an unexplained driver failure without falsely rejecting harmless literal escape text. The
      CHECK is authoritative for post-cutover representability and scalar types; retain tested
      runtime quarantine before every date-bearing coalescing cast for grammar-invalid or
-     storage-unrepresentable predecessor-schema and restored rows. Migration `c166b2c3d52d`
+     storage-unrepresentable predecessor-schema and restored rows. Every repository read that can
+     encounter retained active replay payloads—including claim, Reset staging return, owned
+     identity lookup, and stale discovery/revalidation—must cross the driver as `payload::text` and
+     use the shared safe decoder. This preserves permitted unknown fields without allowing an
+     oversized extension number to abort unrelated work. Migration `c166b2c3d52d`
      corrects the zoned-timestamp CHECK without amending `c162b2c3d529` and re-stages only FX work
      that is provably valid at both boundaries. Do not generalize
      bound-parameter behavior to direct

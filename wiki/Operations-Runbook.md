@@ -346,7 +346,10 @@ work at the post-cutover database boundary. Application `fromisoformat` is the g
 and PostgreSQL `pg_input_is_valid` is the storage representability authority; work must pass both.
 Runtime staging applies both checks before date-bearing SQL coalescing, and runtime quarantine
 remains required for grammar-invalid or storage-unrepresentable predecessor-schema or restored
-rows.
+rows. Claim, Reset staging return, owned identity lookup, and stale discovery/revalidation read
+retained payloads as text through the shared safe decoder, preventing a permitted unknown numeric
+extension from blocking replay. Reset coalescing preserves unknown fields and the earliest replay
+boundary.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
 restore it to active status by hand. Valid terminal historical evidence is not rewritten.
