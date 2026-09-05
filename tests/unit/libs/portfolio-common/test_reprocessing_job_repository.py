@@ -745,7 +745,7 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     assert "pg_advisory_xact_lock" in str(repeated_lock_statement)
     quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    assert "FOR UPDATE" in str(quarantine_statement)
+    assert "FOR UPDATE" not in str(quarantine_statement)
     quarantine_sql = str(quarantine_statement)
     assert "btrim(payload->>'from_currency', :trim_chars)" in quarantine_sql
     quarantine_parameters = mock_db_session.execute.await_args_list[2].args[1]
@@ -872,6 +872,7 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
     mock_db_session.execute.side_effect = [
         MagicMock(),
         quarantine_result,
+        quarantine_result,
         MagicMock(),
         MagicMock(),
     ]
@@ -888,10 +889,12 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
     )
 
     quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
-    assert "FOR UPDATE" in str(quarantine_statement)
-    quarantine_update = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" not in str(quarantine_statement)
+    lock_statement = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" in str(lock_statement)
+    quarantine_update = mock_db_session.execute.await_args_list[3].args[0]
     assert "status=:status" in str(quarantine_update)
-    _, upsert_parameters = mock_db_session.execute.await_args_list[3].args
+    _, upsert_parameters = mock_db_session.execute.await_args_list[4].args
     assert upsert_parameters["effective_date"] == date(2026, 4, 6)
 
 
@@ -928,6 +931,7 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
     mock_db_session.execute.side_effect = [
         MagicMock(),
         quarantine_result,
+        quarantine_result,
         MagicMock(),
         upsert_result,
     ]
@@ -940,10 +944,12 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
 
     quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    assert "FOR UPDATE" in str(quarantine_statement)
-    quarantine_update = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" not in str(quarantine_statement)
+    lock_statement = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" in str(lock_statement)
+    quarantine_update = mock_db_session.execute.await_args_list[3].args[0]
     assert "status=:status" in str(quarantine_update)
-    _, upsert_parameters = mock_db_session.execute.await_args_list[3].args
+    _, upsert_parameters = mock_db_session.execute.await_args_list[4].args
     assert upsert_parameters["earliest_impacted_date"] == date(2024, 12, 31)
 
 
@@ -1210,17 +1216,20 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
     )
 
     assert exists is True
-    statement, parameters = mock_db_session.execute.await_args.args
-    sql = str(statement)
-    assert "btrim(payload->>'security_id', :trim_chars)" in sql
-    assert "jsonb_typeof" not in sql
-    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in sql
-    assert "FOR UPDATE" in sql
-    assert parameters == {
+    scan_statement, scan_parameters = mock_db_session.execute.await_args_list[0].args
+    scan_sql = str(scan_statement)
+    assert "btrim(payload->>'security_id', :trim_chars)" in scan_sql
+    assert "jsonb_typeof" not in scan_sql
+    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in scan_sql
+    assert "FOR UPDATE" not in scan_sql
+    assert scan_parameters == {
         "job_id": 11,
         "security_id": "BOND-1",
         "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
     }
+    lock_statement, lock_parameters = mock_db_session.execute.await_args_list[1].args
+    assert "FOR UPDATE" in str(lock_statement)
+    assert lock_parameters == {"candidate_ids": [12], "job_type": "RESET_WATERMARKS"}
 
 
 async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.reprocessing_payload_integrity import (
+    LOCK_PENDING_REPLAY_CANDIDATES,
     PENDING_FX_REPLAY_CANDIDATES,
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_CANDIDATES,
@@ -32,6 +33,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
         assert sql.index("pg_input_is_valid(payload::text, 'jsonb')") < sql.index("json_typeof")
         guarded_predicate = sql.rindex("WHEN pg_input_is_valid(payload::text, 'jsonb')")
         assert guarded_predicate < sql.rindex("btrim(payload->>")
+        assert "FOR UPDATE" not in sql
 
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
@@ -42,6 +44,14 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
         assert sql.index("WHEN pg_input_is_valid(payload::text, 'jsonb')") < sql.index(
             "btrim(payload->>"
         )
+        assert "FOR UPDATE" not in sql
+
+    lock_sql = str(LOCK_PENDING_REPLAY_CANDIDATES)
+    assert "id = ANY(CAST(:candidate_ids AS BIGINT[]))" in lock_sql
+    assert "FOR UPDATE" in lock_sql
+    assert lock_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < lock_sql.index(
+        "json_typeof"
+    )
 
 
 def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:
@@ -158,8 +168,8 @@ async def test_pending_sibling_requires_exact_retained_identity(
     db = AsyncMock()
     result = MagicMock()
     result.mappings.return_value.all.return_value = [
-        {"payload_json": "{}"},
-        {"payload_json": json.dumps(identity)},
+        {"id": 7, "payload_json": "{}"},
+        {"id": 8, "payload_json": json.dumps(identity)},
     ]
     db.execute.return_value = result
 
@@ -169,10 +179,13 @@ async def test_pending_sibling_requires_exact_retained_identity(
         job_type=job_type,
         payload=payload,
     )
-    executed_statement, parameters = db.execute.await_args.args
-    assert executed_statement is statement
-    assert parameters["job_id"] == 41
-    assert all(parameters[field] == value for field, value in identity.items())
+    scanned_statement, scanned_parameters = db.execute.await_args_list[0].args
+    assert scanned_statement is statement
+    assert scanned_parameters["job_id"] == 41
+    assert all(scanned_parameters[field] == value for field, value in identity.items())
+    locked_statement, locked_parameters = db.execute.await_args_list[1].args
+    assert locked_statement is LOCK_PENDING_REPLAY_CANDIDATES
+    assert locked_parameters == {"candidate_ids": [8], "job_type": job_type}
 
 
 @pytest.mark.asyncio
@@ -203,8 +216,8 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
         "earliest_date_representable": True,
         "generated_at_representable": True,
     }
-    result = MagicMock()
-    result.mappings.return_value.all.return_value = [
+    scan_result = MagicMock()
+    scan_result.mappings.return_value.all.return_value = [
         {"id": 7, "payload_json": json.dumps(retained), **validity},
         {
             "id": 8,
@@ -212,7 +225,12 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
             **validity,
         },
     ]
-    db.execute.return_value = result
+    lock_result = MagicMock()
+    lock_result.mappings.return_value.all.return_value = [
+        {"id": 7, "payload_json": json.dumps(retained), **validity}
+    ]
+    update_result = MagicMock()
+    db.execute.side_effect = [scan_result, lock_result, update_result]
 
     earliest = await quarantine(
         db,
@@ -227,8 +245,11 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
 
     assert earliest == date(2026, 9, 1)
     assert db.execute.await_args_list[0].args[0] is candidate_statement
-    assert db.execute.await_count == 2
-    update_parameters = db.execute.await_args_list[1].args[0].compile().params
+    locked_statement, locked_parameters = db.execute.await_args_list[1].args
+    assert locked_statement is LOCK_PENDING_REPLAY_CANDIDATES
+    assert locked_parameters["candidate_ids"] == [7]
+    assert db.execute.await_count == 3
+    update_parameters = db.execute.await_args_list[2].args[0].compile().params
     assert next(value for value in update_parameters.values() if isinstance(value, list)) == [7]
 
 
