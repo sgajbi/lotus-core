@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any, Dict, Optional, cast
 
 from sqlalchemy import Date, DateTime, String, bindparam, func, select, text, tuple_, update
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
@@ -726,7 +727,7 @@ class ReprocessingJobRepository:
                     continue
                 identity = _validated_effective_dated_replay_identity(
                     job_type=str(locked_row.job_type),
-                    payload=locked_row.payload,
+                    payload=decode_reprocessing_payload_text(locked_row.payload_json),
                     attempt_count=int(locked_row.attempt_count),
                     correlation_id=locked_row.correlation_id,
                     correlation_missing_reason=locked_row.correlation_missing_reason,
@@ -734,32 +735,12 @@ class ReprocessingJobRepository:
                 )
                 if identity.identity_key != candidate_identity.identity_key:
                     continue
-                payload = identity.payload
-                if identity.job_type == "RESET_FX_WATERMARKS":
-                    await self.stage_pending_fx_revaluation_job(
-                        from_currency=payload["from_currency"],
-                        to_currency=payload["to_currency"],
-                        earliest_impacted_date=date.fromisoformat(
-                            payload["earliest_impacted_date"]
-                        ),
-                        content_hash=payload["content_hash"],
-                        generated_at=cast(datetime, identity.generated_at),
-                        correlation_id=identity.correlation_id,
-                        correlation_missing_reason=identity.correlation_missing_reason,
-                        alternate_lookup_key=identity.alternate_lookup_key,
-                        attempt_count=identity.attempt_count,
-                    )
-                    completion_reason = "Coalesced into pending FX replay during stale recovery"
-                else:
-                    await self.create_job(
-                        identity.job_type,
-                        payload,
-                        correlation_id=identity.correlation_id,
-                        attempt_count=identity.attempt_count,
-                    )
-                    completion_reason = (
-                        "Coalesced into pending security replay during stale recovery"
-                    )
+                await self._coalesce_pending_replay(identity)
+                completion_reason = (
+                    "Coalesced into pending FX replay during stale recovery"
+                    if identity.job_type == "RESET_FX_WATERMARKS"
+                    else "Coalesced into pending security replay during stale recovery"
+                )
             except (KeyError, TypeError, ValueError):
                 await self._fail_malformed_stale_replay(row)
                 continue
@@ -812,7 +793,7 @@ class ReprocessingJobRepository:
             await self.db.execute(
                 select(
                     ReprocessingJob.job_type,
-                    ReprocessingJob.payload,
+                    sql_cast(ReprocessingJob.payload, String).label("payload_json"),
                     ReprocessingJob.attempt_count,
                     ReprocessingJob.correlation_id,
                     ReprocessingJob.correlation_missing_reason,
@@ -964,7 +945,7 @@ class ReprocessingJobRepository:
             await self.db.execute(
                 select(
                     ReprocessingJob.job_type,
-                    ReprocessingJob.payload,
+                    sql_cast(ReprocessingJob.payload, String).label("payload_json"),
                     ReprocessingJob.attempt_count,
                     ReprocessingJob.correlation_id,
                     ReprocessingJob.correlation_missing_reason,
@@ -976,7 +957,7 @@ class ReprocessingJobRepository:
             return None
         return _validated_effective_dated_replay_identity(
             job_type=str(row.job_type),
-            payload=row.payload,
+            payload=decode_reprocessing_payload_text(row.payload_json),
             attempt_count=int(row.attempt_count),
             correlation_id=row.correlation_id,
             correlation_missing_reason=row.correlation_missing_reason,
@@ -1209,7 +1190,7 @@ def _retryable_stale_replay_identity(
         return None
     return _validated_effective_dated_replay_identity(
         job_type=str(row.job_type),
-        payload=row.payload,
+        payload=decode_reprocessing_payload_text(row.payload_json),
         attempt_count=int(row.attempt_count),
         correlation_id=row.correlation_id,
         correlation_missing_reason=row.correlation_missing_reason,
@@ -1327,7 +1308,7 @@ def _stale_reprocessing_jobs_stmt(
             ReprocessingJob.id,
             ReprocessingJob.attempt_count,
             ReprocessingJob.job_type,
-            ReprocessingJob.payload,
+            sql_cast(ReprocessingJob.payload, String).label("payload_json"),
             ReprocessingJob.correlation_id,
             ReprocessingJob.correlation_missing_reason,
             ReprocessingJob.alternate_lookup_key,

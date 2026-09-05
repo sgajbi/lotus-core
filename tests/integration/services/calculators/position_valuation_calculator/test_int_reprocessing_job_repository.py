@@ -1589,6 +1589,46 @@ async def test_find_and_claim_jobs_decodes_oversized_extension_without_blocking_
     assert [job.payload["security_id"] for job in claimed] == ["S-LARGE", "S-ORDINARY"]
     assert str(claimed[0].payload["extension"]) == oversized_integer
 
+    repository = ReprocessingJobRepository(async_db_session)
+    assert (
+        await repository.requeue_owned_effective_dated_job(
+            claimed[0].id,
+            lease_token=claimed[0].lease_token,
+        )
+        is ReprocessingJobTransitionOutcome.REQUEUED
+    )
+    await async_db_session.commit()
+
+    reclaimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await async_db_session.execute(
+        update(ReprocessingJob)
+        .where(ReprocessingJob.id == reclaimed.id)
+        .values(lease_expires_at=func.clock_timestamp() - text("INTERVAL '1 second'"))
+    )
+    await async_db_session.commit()
+
+    assert await repository.find_and_reset_stale_jobs(max_attempts=5) == 1
+    await async_db_session.commit()
+    replay_rows = (
+        (
+            await async_db_session.execute(
+                text(
+                    """
+                SELECT status, payload::text AS payload_json
+                FROM reprocessing_jobs
+                WHERE payload->>'security_id' = 'S-LARGE'
+                ORDER BY id
+                """
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+    assert [row["status"] for row in replay_rows] == ["COMPLETE", "PENDING"]
+    assert "extension" not in replay_rows[1]["payload_json"]
+
 
 async def test_find_and_claim_jobs_does_not_cast_unrepresentable_reset_date(
     clean_db,
