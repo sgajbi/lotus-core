@@ -9,13 +9,14 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
     _quarantine_candidates,
-    replay_payload_matches_identity,
+    replay_row_matches_identity,
 )
 
 
 def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() -> None:
     for statement in (PENDING_FX_REPLAY_CANDIDATES, PENDING_RESET_REPLAY_CANDIDATES):
         sql = str(statement)
+        assert "payload::text AS payload_json" in sql
         assert "AS payload_representable" in sql
         assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
@@ -25,6 +26,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
 
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
+        assert "payload::text AS payload_json" in sql
         assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
         assert sql.index("WHEN pg_input_is_valid(payload::text, 'jsonb')") < sql.index(
@@ -33,25 +35,47 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
 
 
 def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:
-    assert replay_payload_matches_identity(
-        {"security_id": " BOND-1 ", "legacy_number": 10**1000},
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":" BOND-1 ","legacy_number":1e1000000}'},
         {"security_id": "BOND-1"},
     )
-    assert not replay_payload_matches_identity(
-        {"security_id": "BOND\x00-1"},
+    assert not replay_row_matches_identity(
+        {"payload_json": '{"security_id":"BOND\\u0000-1"}'},
         {"security_id": "BOND-1"},
     )
 
 
 def test_python_identity_match_uses_postgres_json_text_semantics() -> None:
-    assert replay_payload_matches_identity({"security_id": 123}, {"security_id": "123"})
-    assert replay_payload_matches_identity({"security_id": True}, {"security_id": "true"})
-    assert replay_payload_matches_identity({"security_id": [123]}, {"security_id": "[123]"})
-    assert replay_payload_matches_identity(
-        {"security_id": {"scheme": "CUSIP"}},
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":123}'}, {"security_id": "123"}
+    )
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":true}'}, {"security_id": "true"}
+    )
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":[123]}'}, {"security_id": "[123]"}
+    )
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":{"scheme":"CUSIP"}}'},
         {"security_id": '{"scheme":"CUSIP"}'},
     )
-    assert not replay_payload_matches_identity({"security_id": None}, {"security_id": "null"})
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":1e2}'}, {"security_id": "1e2"}
+    )
+    assert not replay_row_matches_identity(
+        {"payload_json": '{"security_id":null}'}, {"security_id": "null"}
+    )
+
+
+def test_python_identity_match_preserves_structured_whitespace_and_last_duplicate() -> None:
+    assert replay_row_matches_identity(
+        {"payload_json": '{"security_id":[ 123 ],"security_id":1e2}'},
+        {"security_id": "1e2"},
+    )
+    assert not replay_row_matches_identity(
+        {"payload_json": '{"security_id":[ 123 ]}'},
+        {"security_id": "[123]"},
+    )
 
 
 @pytest.mark.asyncio
