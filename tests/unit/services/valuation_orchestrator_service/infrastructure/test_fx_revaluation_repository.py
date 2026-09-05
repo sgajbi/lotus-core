@@ -94,18 +94,16 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     sql, parameters = next(execution for execution in executions if "ON CONFLICT" in execution[0])
     assert "hashtextextended(:identity_key, 0)" in lock_sql
     assert lock_parameters == {"identity_key": "RESET_FX_WATERMARKS|3:USD|3:SGD"}
-    assert quarantine_sql.count("json_typeof") == 4
-    for field in (
-        "from_currency",
-        "to_currency",
-        "earliest_impacted_date",
-        "generated_at",
-    ):
+    assert quarantine_sql.count("json_typeof") == 2
+    for field in ("earliest_impacted_date", "generated_at"):
         assert f"json_typeof(payload->'{field}')" in quarantine_sql
+    assert "json_typeof(payload->'from_currency')" not in quarantine_sql
+    assert "json_typeof(payload->'to_currency')" not in quarantine_sql
     assert "pg_input_is_valid(payload->>'earliest_impacted_date', 'date')" in quarantine_sql
     assert "'timestamp with time zone'" in quarantine_sql
     assert "FOR UPDATE" in quarantine_sql
     assert "btrim(payload->>'from_currency', :trim_chars)" in quarantine_sql
+    assert "btrim(payload->>'to_currency', :trim_chars)" in quarantine_sql
     assert quarantine_parameters == {
         "from_currency": "USD",
         "to_currency": "SGD",
