@@ -272,7 +272,7 @@ async def test_pending_sibling_requires_exact_retained_identity(
         payload=payload,
     )
     assert evidence.exists is True
-    assert evidence.earliest_impacted_date == date(2025, 1, 3)
+    assert evidence.earliest_sibling.earliest_impacted_date == date(2025, 1, 3)
     scanned_statement, scanned_parameters = db.execute.await_args_list[0].args
     assert scanned_statement is statement
     assert scanned_parameters["job_id"] == 41

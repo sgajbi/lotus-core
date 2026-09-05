@@ -13,6 +13,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
 from .durable_correlation import durable_correlation_diagnostics
+from .effective_dated_replay import (
+    EARLIEST_IMPACTED_DATE_JOB_TYPES,
+)
+from .effective_dated_replay import (
+    EffectiveDatedReplayIdentity as _EffectiveDatedReplayIdentity,
+)
+from .effective_dated_replay import (
+    merge_replay_sibling_evidence as _merge_replay_sibling_evidence,
+)
+from .effective_dated_replay import (
+    parse_replay_earliest_date as _parse_replay_earliest_date,
+)
+from .effective_dated_replay import (
+    required_replay_payload_text as _required_replay_payload_text,
+)
+from .effective_dated_replay import (
+    validated_effective_dated_replay_identity as _validated_effective_dated_replay_identity,
+)
 from .infrastructure.persistence.statement_batching import (
     POSTGRES_STATEMENT_ROW_LIMIT,
     StatementBatchOperation,
@@ -30,13 +48,11 @@ from .reprocessing_payload_integrity import (
     pending_replay_sibling_evidence,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
-    replay_text_is_storage_safe,
 )
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
-EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset({"RESET_WATERMARKS", "RESET_FX_WATERMARKS"})
 _STALE_FAILED_RESERVED_BINDS = 7
 _STALE_RESET_RESERVED_BINDS = 5
 _LEASE_OWNER_MAX_LENGTH = 128
@@ -89,20 +105,6 @@ class ClaimedReprocessingJob:
     created_at: datetime
     lease_token: str
     lease_expires_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class _EffectiveDatedReplayIdentity:
-    """Validated identity needed to serialize one effective-dated replay family."""
-
-    job_type: str
-    identity_key: str
-    payload: dict[str, Any]
-    generated_at: datetime | None
-    attempt_count: int
-    correlation_id: str | None
-    correlation_missing_reason: str | None
-    alternate_lookup_key: str | None
 
 
 # Keep this statement static and select the ordering policy through a boolean bind.
@@ -742,7 +744,7 @@ class ReprocessingJobRepository:
                 )
                 if identity.identity_key != candidate_identity.identity_key:
                     continue
-                await self._coalesce_pending_replay(identity, None)
+                await self._coalesce_pending_replay(identity)
                 completion_reason = (
                     "Coalesced into pending FX replay during stale recovery"
                     if identity.job_type == "RESET_FX_WATERMARKS"
@@ -929,7 +931,7 @@ class ReprocessingJobRepository:
         savepoint = self.db.begin_nested()
         await savepoint.start()
         try:
-            await self._coalesce_pending_replay(identity, sibling.earliest_impacted_date)
+            await self._coalesce_pending_replay(_merge_replay_sibling_evidence(identity, sibling))
             outcome = await self._apply_owned_transition(
                 job_id,
                 "COMPLETE",
@@ -999,16 +1001,9 @@ class ReprocessingJobRepository:
         ).scalar_one_or_none()
         return owned_job_id is not None
 
-    async def _coalesce_pending_replay(
-        self,
-        identity: _EffectiveDatedReplayIdentity,
-        sibling_boundary: date | None,
-    ) -> None:
+    async def _coalesce_pending_replay(self, identity: _EffectiveDatedReplayIdentity) -> None:
         payload = identity.payload
-        earliest_impacted_date = min(
-            date.fromisoformat(payload["earliest_impacted_date"]),
-            sibling_boundary or date.max,
-        )
+        earliest_impacted_date = date.fromisoformat(payload["earliest_impacted_date"])
         if identity.job_type == "RESET_WATERMARKS":
             await self.stage_reset_watermarks_job(
                 security_id=payload["security_id"],
@@ -1197,66 +1192,6 @@ def _retryable_stale_replay_identity(
         correlation_missing_reason=row.correlation_missing_reason,
         alternate_lookup_key=row.alternate_lookup_key,
     )
-
-
-def _validated_effective_dated_replay_identity(
-    *,
-    job_type: str,
-    payload: Any,
-    attempt_count: int,
-    correlation_id: str | None,
-    correlation_missing_reason: str | None,
-    alternate_lookup_key: str | None,
-) -> _EffectiveDatedReplayIdentity:
-    if job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES or not isinstance(payload, dict):
-        raise ValueError("owned requeue requires a supported effective-dated replay payload")
-    earliest_impacted_date = _required_replay_payload_text(payload, "earliest_impacted_date")
-    date.fromisoformat(earliest_impacted_date)
-    components: tuple[str, ...]
-    generated_at: datetime | None = None
-    if job_type == "RESET_WATERMARKS":
-        components = (_required_replay_payload_text(payload, "security_id"),)
-    else:
-        components = (
-            _required_replay_payload_text(payload, "from_currency"),
-            _required_replay_payload_text(payload, "to_currency"),
-        )
-        _required_replay_payload_text(payload, "content_hash")
-        generated_at = datetime.fromisoformat(
-            _required_replay_payload_text(payload, "generated_at")
-        )
-        if generated_at.tzinfo is None or generated_at.utcoffset() is None:
-            raise ValueError("FX replay generated_at must be timezone-aware")
-    return _EffectiveDatedReplayIdentity(
-        job_type=job_type,
-        identity_key=effective_dated_replay_identity_key(job_type, *components),
-        payload=cast(dict[str, Any], payload),
-        generated_at=generated_at,
-        attempt_count=attempt_count,
-        correlation_id=correlation_id,
-        correlation_missing_reason=correlation_missing_reason,
-        alternate_lookup_key=alternate_lookup_key,
-    )
-
-
-def _required_replay_payload_text(payload: dict[str, Any], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"effective-dated replay payload requires {key}")
-    if value != value.strip():
-        raise ValueError(f"effective-dated replay payload {key} must be normalized")
-    if not replay_text_is_storage_safe(value):
-        raise ValueError(f"effective-dated replay payload {key} is not storage-safe text")
-    return value
-
-
-def _parse_replay_earliest_date(payload: object) -> date | None:
-    try:
-        if not isinstance(payload, dict):
-            return None
-        return date.fromisoformat(_required_replay_payload_text(payload, "earliest_impacted_date"))
-    except (TypeError, ValueError):
-        return None
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
