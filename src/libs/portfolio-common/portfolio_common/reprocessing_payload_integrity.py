@@ -849,7 +849,7 @@ def _replay_row_requires_quarantine(
     required_validity_fields: tuple[str, ...],
     validate: Callable[[object], object],
 ) -> bool:
-    payload = _decode_retained_payload(row.get("payload_json"))
+    payload = decode_reprocessing_payload_text(row.get("payload_json"))
     try:
         if not all(row[field] for field in required_validity_fields):
             raise ValueError("replay payload is not PostgreSQL-representable")
@@ -871,7 +871,7 @@ async def _quarantine_candidates(
     malformed_ids: list[int] = []
     known_earliest_dates: list[date] = []
     for row in rows:
-        payload = _decode_retained_payload(row.get("payload_json"))
+        payload = decode_reprocessing_payload_text(row.get("payload_json"))
         if _replay_row_requires_quarantine(
             row,
             required_validity_fields=required_validity_fields,
@@ -954,7 +954,7 @@ async def _mark_reprocessing_jobs_failed(
         )
 
 
-def _decode_retained_payload(payload_json: object) -> object:
+def decode_reprocessing_payload_text(payload_json: object) -> object:
     """Decode retained JSON without Python's bounded integer conversion."""
 
     if not isinstance(payload_json, str):

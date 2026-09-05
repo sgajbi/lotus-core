@@ -57,7 +57,8 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     assert "UPDATE reprocessing_jobs" in query_text
     assert "FOR UPDATE SKIP LOCKED" in query_text
     assert "WITH candidates AS MATERIALIZED" in query_text
-    assert "RETURNING target.*" in query_text
+    assert "target.payload::text AS payload_json" in query_text
+    assert "RETURNING target.*" not in query_text
     assert params["job_type"] == "RESET_WATERMARKS"
     assert params["batch_size"] == 25
     assert params["excluded_job_ids"] == []
@@ -134,11 +135,9 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
         {
             "id": 20,
             "job_type": "RESET_FX_WATERMARKS",
-            "payload": {
-                "from_currency": "USD",
-                "to_currency": "SGD",
-                "earliest_impacted_date": "not-a-date",
-            },
+            "payload_json": (
+                '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"not-a-date"}'
+            ),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -151,11 +150,9 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
         {
             "id": 10,
             "job_type": "RESET_FX_WATERMARKS",
-            "payload": {
-                "from_currency": "USD",
-                "to_currency": "SGD",
-                "earliest_impacted_date": "2026-04-10",
-            },
+            "payload_json": (
+                '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"2026-04-10"}'
+            ),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -312,7 +309,7 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
         {
             "id": 10,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+            "payload_json": ('{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -345,7 +342,7 @@ async def test_find_and_claim_jobs_preserves_malformed_payload_for_per_job_rejec
         {
             "id": 11,
             "job_type": "RESET_WATERMARKS",
-            "payload": None,
+            "payload_json": "null",
             "status": "PROCESSING",
             "attempt_count": 1,
             "created_at": datetime(2026, 8, 25, tzinfo=timezone.utc),
@@ -355,7 +352,7 @@ async def test_find_and_claim_jobs_preserves_malformed_payload_for_per_job_rejec
         {
             "id": 12,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+            "payload_json": ('{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "created_at": datetime(2026, 8, 25, tzinfo=timezone.utc),
@@ -391,7 +388,7 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
         {
             "id": 30,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "S1", "earliest_impacted_date": "2025-01-07"},
+            "payload_json": ('{"security_id":"S1","earliest_impacted_date":"2025-01-07"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -404,7 +401,7 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
         {
             "id": 20,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "S2", "earliest_impacted_date": "2025-01-05"},
+            "payload_json": ('{"security_id":"S2","earliest_impacted_date":"2025-01-05"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,

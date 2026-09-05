@@ -23,6 +23,7 @@ from .reprocessing_payload_integrity import (
     LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
     REPLAY_TEXT_TRIM_CHARS,
     UPSERT_PENDING_RESET_WATERMARKS,
+    decode_reprocessing_payload_text,
     effective_dated_replay_identity_key,
     normalize_pending_reset_watermarks_duplicates,
     pending_replay_sibling_exists,
@@ -104,45 +105,27 @@ class _EffectiveDatedReplayIdentity:
 
 
 def _claim_pending_jobs_query(job_type: str):
-    if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
-        return text(
-            """
-            WITH candidates AS MATERIALIZED (
-                SELECT id
-                FROM reprocessing_jobs
-                WHERE status = 'PENDING'
-                  AND job_type = :job_type
-                  AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
-                ORDER BY (payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC
-                LIMIT :batch_size
-                FOR UPDATE SKIP LOCKED
-            )
-            UPDATE reprocessing_jobs AS target
-            SET status = 'PROCESSING',
-                updated_at = now(),
-                last_attempted_at = now(),
-                attempt_count = attempt_count + 1,
-                lease_owner = :lease_owner,
-                lease_token = :lease_token,
-                lease_expires_at = clock_timestamp()
-                    + make_interval(secs => :lease_duration_seconds)
-            FROM candidates
-            WHERE target.id = candidates.id
-              AND target.status = 'PENDING'
-              AND target.job_type = :job_type
-            RETURNING target.*;
-            """
-        )
+    """Build the atomic claim while keeping payload decoding under application policy.
 
+    PostgreSQL returns payload text so the database driver cannot apply Python's
+    bounded integer conversion to an otherwise valid extension field. The mapping
+    boundary decodes each claimed payload with the shared retained-JSON policy.
+    """
+
+    order_by = (
+        "(payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC"
+        if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES
+        else "created_at ASC, id ASC"
+    )
     return text(
-        """
+        f"""
         WITH candidates AS MATERIALIZED (
             SELECT id
             FROM reprocessing_jobs
             WHERE status = 'PENDING'
               AND job_type = :job_type
               AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
-            ORDER BY created_at ASC, id ASC
+            ORDER BY {order_by}
             LIMIT :batch_size
             FOR UPDATE SKIP LOCKED
         )
@@ -159,7 +142,10 @@ def _claim_pending_jobs_query(job_type: str):
         WHERE target.id = candidates.id
           AND target.status = 'PENDING'
           AND target.job_type = :job_type
-        RETURNING target.*;
+        RETURNING target.id, target.job_type, target.payload::text AS payload_json,
+            target.status, target.correlation_id, target.correlation_missing_reason,
+            target.alternate_lookup_key, target.attempt_count, target.created_at, target.lease_token,
+            target.lease_expires_at;
         """
     )
 
@@ -1302,13 +1288,12 @@ def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[
 
 
 def _claimed_reprocessing_job(row: Any) -> ClaimedReprocessingJob:
+    """Map one claim result after its JSON payload crossed the database as text."""
+
     return ClaimedReprocessingJob(
         id=int(row["id"]),
         job_type=str(row["job_type"]),
-        # Preserve database JSON as-is so malformed legacy payloads are rejected
-        # inside their independently committed job execution, not while mapping
-        # the entire claim result.
-        payload=row["payload"],
+        payload=decode_reprocessing_payload_text(row["payload_json"]),
         status=str(row["status"]),
         correlation_id=row.get("correlation_id"),
         correlation_missing_reason=row.get("correlation_missing_reason"),
