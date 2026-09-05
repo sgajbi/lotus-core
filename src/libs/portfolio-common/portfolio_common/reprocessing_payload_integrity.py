@@ -449,7 +449,7 @@ async def quarantine_pending_fx_pair(
         ),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
-        preserve_earliest_if=lambda row: replay_row_matches_identity(row, expected_identity),
+        belongs_to_identity=lambda row: replay_row_matches_identity(row, expected_identity),
         failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
     )
 
@@ -477,7 +477,7 @@ async def quarantine_pending_reset_security(
         required_validity_fields=("payload_representable", "earliest_date_representable"),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
-        preserve_earliest_if=lambda row: replay_row_matches_identity(row, expected_identity),
+        belongs_to_identity=lambda row: replay_row_matches_identity(row, expected_identity),
         failure_reason=(
             "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
         ),
@@ -492,11 +492,13 @@ async def _quarantine_candidates(
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
     failure_reason: str,
-    preserve_earliest_if: Callable[[Mapping[str, Any]], bool] | None = None,
+    belongs_to_identity: Callable[[Mapping[str, Any]], bool] | None = None,
 ) -> date | None:
     malformed_ids: list[int] = []
     known_earliest_dates: list[date] = []
     for row in rows:
+        if belongs_to_identity is not None and not belongs_to_identity(row):
+            continue
         payload = _decode_retained_payload(row.get("payload_json"))
         try:
             if not all(row[field] for field in required_validity_fields):
@@ -504,9 +506,7 @@ async def _quarantine_candidates(
             validate(payload)
         except (TypeError, ValueError):
             malformed_ids.append(int(row["id"]))
-            if (preserve_earliest_if is None or preserve_earliest_if(row)) and (
-                earliest_date := parse_earliest_date(payload)
-            ) is not None:
+            if (earliest_date := parse_earliest_date(payload)) is not None:
                 known_earliest_dates.append(earliest_date)
 
     if malformed_ids:

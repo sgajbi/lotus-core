@@ -462,6 +462,22 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
             job_type="RESET_FX_WATERMARKS",
             payload={"from_currency": "USD", "to_currency": "SGD"},
         )
+        unrelated_boundary = await quarantine_pending_fx_pair(
+            async_db_session,
+            from_currency="USD",
+            to_currency="SGD",
+            validate=lambda payload: payload,
+            parse_earliest_date=lambda payload: (
+                date.fromisoformat(payload["earliest_impacted_date"])
+                if isinstance(payload, dict)
+                else None
+            ),
+        )
+        unrelated_status = await async_db_session.scalar(
+            select(ReprocessingJob.status).where(
+                ReprocessingJob.correlation_id == "corr-unrelated-fx-poison"
+            )
+        )
         preserved_earliest = await quarantine_pending_fx_pair(
             async_db_session,
             from_currency="EUR",
@@ -494,9 +510,11 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
         )
 
         assert valid_sibling_exists is True
+        assert unrelated_boundary is None
+        assert unrelated_status == "PENDING"
         assert preserved_earliest == date(2025, 1, 3)
         assert oversized_extension_earliest is None
-        assert statuses["corr-nul-fx-identity"] == "FAILED"
+        assert statuses["corr-nul-fx-identity"] == "PENDING"
         assert statuses["corr-unrelated-fx-poison"] == "FAILED"
         assert statuses["corr-valid-fx-identity"] == "PENDING"
         assert statuses["corr-oversized-json-integer"] == "PENDING"
@@ -629,7 +647,7 @@ async def test_reset_normalization_serializes_with_canonical_staging(
     )
     assert poisoned.status == "FAILED"
     assert poisoned.failure_reason == (
-        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+        "invalid_reset_watermarks_job_payload: unsafe identity representation"
     )
 
 
@@ -1633,7 +1651,7 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     ("security_id", "poisoned_security_id_json"),
     (("123", "123"), ("[123]", "[123]"), ("1e2", "1e2")),
 )
-async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
+async def test_owned_reset_requeue_quarantines_only_matching_jsonb_unrepresentable_sibling(
     clean_db,
     async_db_session: AsyncSession,
     predecessor_reprocessing_payload_schema,
@@ -1704,11 +1722,9 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
         .all()
     )
     assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
-    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "FAILED", "PENDING"]
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING", "PENDING"]
     assert rows[2].correlation_id == "corr-unrelated-jsonb-unrepresentable"
-    assert rows[2].failure_reason == (
-        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
-    )
+    assert rows[2].failure_reason is None
     assert rows[3].payload == {
         "security_id": security_id,
         "earliest_impacted_date": "2025-01-05",

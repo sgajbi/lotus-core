@@ -228,6 +228,8 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     assert earliest == date(2026, 9, 1)
     assert db.execute.await_args_list[0].args[0] is candidate_statement
     assert db.execute.await_count == 2
+    update_parameters = db.execute.await_args_list[1].args[0].compile().params
+    assert next(value for value in update_parameters.values() if isinstance(value, list)) == [7]
 
 
 @pytest.mark.asyncio
