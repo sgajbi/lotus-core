@@ -261,7 +261,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     '"generated_at":"2025-01-08T00:00:00+00:00"}'
                 ),
                 status="PENDING",
-                correlation_id=None,
+                correlation_id="  <NOT-SET>  ",
             )
             lowercase_timestamp_id = _insert_job(
                 connection,
