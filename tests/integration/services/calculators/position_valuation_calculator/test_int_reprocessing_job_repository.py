@@ -125,6 +125,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 },
                 status="PENDING",
                 correlation_id="corr-legacy-padded",
+                attempt_count=1,
             ),
             ReprocessingJob(
                 job_type="RESET_WATERMARKS",
@@ -134,6 +135,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 },
                 status="PENDING",
                 correlation_id="corr-canonical",
+                attempt_count=3,
             ),
             ReprocessingJob(
                 job_type="RESET_WATERMARKS",
@@ -287,6 +289,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     assert deleted_count == 1
     assert len(rows) == 18
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
+    assert canonical.attempt_count == 3
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
         row for row in rows if row.correlation_id == "corr-padded-numeric-text"
@@ -2421,6 +2424,83 @@ async def test_owned_fx_requeue_preserves_sibling_boundary_terminalized_after_sc
     assert rows[2].payload["earliest_impacted_date"] == "2025-01-03"
     assert rows[2].payload["content_hash"] == owned_hash
     assert rows[2].correlation_id == "corr-owned-fx-race"
+
+
+async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    owned_hash = "sha256:" + ("b" * 64)
+    await repository.stage_pending_fx_revaluation_job(
+        from_currency="USD",
+        to_currency="CHF",
+        earliest_impacted_date=date(2025, 1, 7),
+        content_hash=owned_hash,
+        generated_at=datetime(2025, 1, 7, tzinfo=timezone.utc),
+        correlation_id="corr-owned-before-scan",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    owned = (await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    sibling_id = await async_db_session.scalar(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_FX_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                'corr-processing-before-scan'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"from_currency":" USD ","to_currency":"CHF",'
+                '"earliest_impacted_date":"2025-01-03",'
+                '"generated_at":"invalid","content_hash":"legacy"}'
+            )
+        },
+    )
+    assert sibling_id is not None
+    await async_db_session.commit()
+    processing_sibling = (
+        await repository.find_and_claim_jobs(
+            "RESET_FX_WATERMARKS",
+            batch_size=1,
+            lease_owner="processing-before-scan-worker",
+        )
+    )[0]
+    assert processing_sibling.id == sibling_id
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        owned.id,
+        lease_token=owned.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "PROCESSING", "PENDING"]
+    assert rows[1].id == sibling_id
+    assert rows[1].lease_token == processing_sibling.lease_token
+    assert rows[2].payload["earliest_impacted_date"] == "2025-01-03"
+    assert rows[2].payload["content_hash"] == owned_hash
 
 
 @pytest.mark.parametrize(
