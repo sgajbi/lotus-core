@@ -23,6 +23,7 @@ from .monitoring import observe_reprocessing_duplicates_normalized
 from .reprocessing_payload_integrity import (
     LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
     REPLAY_TEXT_TRIM_CHARS,
+    UPSERT_PENDING_RESET_WATERMARKS,
     effective_dated_replay_identity_key,
     normalize_pending_reset_watermarks_duplicates,
     pending_replay_sibling_exists,
@@ -493,90 +494,8 @@ class ReprocessingJobRepository:
             correlation_id=correlation_id,
         )
         correlation_id = diagnostics.correlation_id
-        stmt = text(
-            """
-                INSERT INTO reprocessing_jobs (
-                    job_type,
-                    payload,
-                    status,
-                    attempt_count,
-                    correlation_id,
-                    correlation_missing_reason,
-                    alternate_lookup_key
-                )
-                VALUES (
-                    'RESET_WATERMARKS',
-                    json_build_object(
-                        'security_id', :security_id,
-                        'earliest_impacted_date', :earliest_impacted_date
-                    )::json,
-                    'PENDING',
-                    :attempt_count,
-                    :correlation_id,
-                    :correlation_missing_reason,
-                    :alternate_lookup_key
-                )
-                ON CONFLICT ((payload->>'security_id'))
-                WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
-                DO UPDATE
-                SET payload = jsonb_set(
-                        reprocessing_jobs.payload::jsonb,
-                        '{earliest_impacted_date}',
-                        to_jsonb(
-                            LEAST(
-                                (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
-                                CAST(:earliest_impacted_date AS date)
-                            )::text
-                        )
-                    )::json,
-                    attempt_count = GREATEST(
-                        reprocessing_jobs.attempt_count,
-                        EXCLUDED.attempt_count
-                    ),
-                    correlation_id = CASE
-                        WHEN CAST(:earliest_impacted_date AS date)
-                             < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
-                        THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                        THEN :correlation_id
-                        ELSE reprocessing_jobs.correlation_id
-                    END,
-                    correlation_missing_reason = CASE
-                        WHEN :correlation_id IS NOT NULL
-                        THEN NULL
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND CAST(:earliest_impacted_date AS date) <
-                                 CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
-                        THEN :correlation_missing_reason
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND reprocessing_jobs.correlation_missing_reason IS NULL
-                        THEN :correlation_missing_reason
-                        ELSE reprocessing_jobs.correlation_missing_reason
-                    END,
-                    alternate_lookup_key = CASE
-                        WHEN :correlation_id IS NOT NULL
-                        THEN NULL
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND CAST(:earliest_impacted_date AS date) <
-                                 CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
-                        THEN :alternate_lookup_key
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND reprocessing_jobs.alternate_lookup_key IS NULL
-                        THEN :alternate_lookup_key
-                        ELSE reprocessing_jobs.alternate_lookup_key
-                    END,
-                    updated_at = now()
-                RETURNING *, (xmax = 0) AS was_inserted;
-                """
-        ).bindparams(
-            bindparam("security_id", type_=String()),
-            bindparam("earliest_impacted_date", type_=Date()),
-            bindparam("correlation_id", type_=String()),
-            bindparam("correlation_missing_reason", type_=String()),
-            bindparam("alternate_lookup_key", type_=String()),
-        )
         result = await self.db.execute(
-            stmt,
+            UPSERT_PENDING_RESET_WATERMARKS,
             {
                 "security_id": security_id,
                 "earliest_impacted_date": earliest_impacted_date,

@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import String, bindparam, func, text, update
+from sqlalchemy import Date, Integer, String, bindparam, func, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
@@ -42,6 +42,107 @@ QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES = text(
       END
     """
 ).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
+
+PENDING_RESET_JSONB_INVALID_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key
+    FROM reprocessing_jobs
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE
+    ORDER BY id
+    """
+)
+
+UPSERT_PENDING_RESET_WATERMARKS = text(
+    """
+    INSERT INTO reprocessing_jobs (
+        job_type,
+        payload,
+        status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key
+    )
+    VALUES (
+        'RESET_WATERMARKS',
+        json_build_object(
+            'security_id', :security_id,
+            'earliest_impacted_date', :earliest_impacted_date
+        )::json,
+        'PENDING',
+        :attempt_count,
+        :correlation_id,
+        :correlation_missing_reason,
+        :alternate_lookup_key
+    )
+    ON CONFLICT ((payload->>'security_id'))
+    WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
+    DO UPDATE
+    SET payload = jsonb_set(
+            reprocessing_jobs.payload::jsonb,
+            '{earliest_impacted_date}',
+            to_jsonb(
+                LEAST(
+                    (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
+                    CAST(:earliest_impacted_date AS date)
+                )::text
+            )
+        )::json,
+        attempt_count = GREATEST(
+            reprocessing_jobs.attempt_count,
+            EXCLUDED.attempt_count
+        ),
+        correlation_id = CASE
+            WHEN CAST(:earliest_impacted_date AS date)
+                 < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
+            THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
+            WHEN reprocessing_jobs.correlation_id IS NULL
+            THEN :correlation_id
+            ELSE reprocessing_jobs.correlation_id
+        END,
+        correlation_missing_reason = CASE
+            WHEN :correlation_id IS NOT NULL
+            THEN NULL
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND CAST(:earliest_impacted_date AS date) <
+                     CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
+            THEN :correlation_missing_reason
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND reprocessing_jobs.correlation_missing_reason IS NULL
+            THEN :correlation_missing_reason
+            ELSE reprocessing_jobs.correlation_missing_reason
+        END,
+        alternate_lookup_key = CASE
+            WHEN :correlation_id IS NOT NULL
+            THEN NULL
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND CAST(:earliest_impacted_date AS date) <
+                     CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
+            THEN :alternate_lookup_key
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND reprocessing_jobs.alternate_lookup_key IS NULL
+            THEN :alternate_lookup_key
+            ELSE reprocessing_jobs.alternate_lookup_key
+        END,
+        updated_at = now()
+    RETURNING *, (xmax = 0) AS was_inserted
+    """
+).bindparams(
+    bindparam("security_id", type_=String()),
+    bindparam("earliest_impacted_date", type_=Date()),
+    bindparam("attempt_count", type_=Integer()),
+    bindparam("correlation_id", type_=String()),
+    bindparam("correlation_missing_reason", type_=String()),
+    bindparam("alternate_lookup_key", type_=String()),
+)
 
 PENDING_RESET_IDENTITY_LOCK_KEYS = text(
     """
@@ -195,19 +296,44 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
     """Quarantine unsafe identities, then serialize and coalesce valid repairs."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
+    invalid_rows = (await db.execute(PENDING_RESET_JSONB_INVALID_CANDIDATES)).mappings().all()
+    recovery_plans = [
+        plan for row in invalid_rows if (plan := _reset_boundary_recovery_plan(row)) is not None
+    ]
     identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
     identity_keys = sorted(
         {
             effective_dated_replay_identity_key("RESET_WATERMARKS", str(security_id))
             for security_id in identity_result.scalars().all()
         }
+        | {plan["identity_key"] for plan in recovery_plans}
     )
     for identity_key in identity_keys:
         await db.execute(
             LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
             {"identity_key": identity_key},
         )
+    if recovery_plans:
+        locked_rows = await _lock_pending_replay_rows(
+            db,
+            candidate_ids=[int(plan["id"]) for plan in recovery_plans],
+            job_type="RESET_WATERMARKS",
+        )
+        recovery_plans = [
+            plan for row in locked_rows if (plan := _reset_boundary_recovery_plan(row)) is not None
+        ]
+        if recovery_plans:
+            await _mark_reprocessing_jobs_failed(
+                db,
+                job_ids=[int(plan["id"]) for plan in recovery_plans],
+                failure_reason=(
+                    "invalid_reset_watermarks_job_payload: unsafe storage "
+                    "representation; replay boundary recovered"
+                ),
+            )
     await db.execute(QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES)
+    for plan in recovery_plans:
+        await db.execute(UPSERT_PENDING_RESET_WATERMARKS, plan)
     await db.execute(QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS, parameters)
     result = await db.execute(NORMALIZE_PENDING_RESET_WATERMARKS, parameters)
     return int(result.scalar_one())
@@ -311,6 +437,10 @@ LOCK_PENDING_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload::text AS payload_json,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -337,6 +467,26 @@ LOCK_PENDING_REPLAY_CANDIDATES = text(
     bindparam("candidate_ids"),
     bindparam("job_type", type_=String()),
 )
+
+
+async def _lock_pending_replay_rows(
+    db: AsyncSession,
+    *,
+    candidate_ids: list[int],
+    job_type: str,
+) -> list[Mapping[str, Any]]:
+    if not candidate_ids:
+        return []
+    return (
+        (
+            await db.execute(
+                LOCK_PENDING_REPLAY_CANDIDATES,
+                {"candidate_ids": sorted(set(candidate_ids)), "job_type": job_type},
+            )
+        )
+        .mappings()
+        .all()
+    )
 
 
 def replay_row_matches_identity(
@@ -371,17 +521,41 @@ async def _lock_matching_pending_replay_rows(
     )
     if not candidate_ids:
         return []
-    locked_rows = (
-        (
-            await db.execute(
-                LOCK_PENDING_REPLAY_CANDIDATES,
-                {"candidate_ids": candidate_ids, "job_type": job_type},
-            )
-        )
-        .mappings()
-        .all()
+    locked_rows = await _lock_pending_replay_rows(
+        db,
+        candidate_ids=candidate_ids,
+        job_type=job_type,
     )
     return [row for row in locked_rows if replay_row_matches_identity(row, expected_identity)]
+
+
+def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    payload = _decode_retained_payload(row.get("payload_json"))
+    if not isinstance(payload, dict):
+        return None
+    security_id = payload.get("security_id")
+    earliest_value = payload.get("earliest_impacted_date")
+    if not isinstance(security_id, str) or not isinstance(earliest_value, str):
+        return None
+    security_id = security_id.strip(REPLAY_TEXT_TRIM_CHARS)
+    if not security_id or any(
+        ord(character) <= 31 or 127 <= ord(character) <= 159 for character in security_id
+    ):
+        return None
+    try:
+        earliest_impacted_date = date.fromisoformat(earliest_value)
+    except ValueError:
+        return None
+    return {
+        "id": int(row["id"]),
+        "identity_key": effective_dated_replay_identity_key("RESET_WATERMARKS", security_id),
+        "security_id": security_id,
+        "earliest_impacted_date": earliest_impacted_date,
+        "attempt_count": int(row.get("attempt_count") or 0),
+        "correlation_id": row.get("correlation_id"),
+        "correlation_missing_reason": row.get("correlation_missing_reason"),
+        "alternate_lookup_key": row.get("alternate_lookup_key"),
+    }
 
 
 def _json_object_field_identity_text(payload_json: object, field: str) -> str | None:
@@ -582,28 +756,42 @@ async def _quarantine_candidates(
             if (earliest_date := parse_earliest_date(payload)) is not None:
                 known_earliest_dates.append(earliest_date)
 
-    if malformed_ids:
-        observe_multi_statement_batch(
-            operation=StatementBatchOperation.REPROCESSING_INVALID_PAYLOAD_UPDATE,
-            item_count=len(malformed_ids),
-            binds_per_row=1,
-            reserved_binds=2,
-        )
-        for malformed_id_chunk in iter_statement_chunks(
-            malformed_ids,
-            binds_per_row=1,
-            reserved_binds=2,
-        ):
-            await db.execute(
-                update(ReprocessingJob)
-                .where(ReprocessingJob.id.in_(malformed_id_chunk))
-                .values(
-                    status="FAILED",
-                    failure_reason=failure_reason,
-                    updated_at=func.now(),
-                )
-            )
+    await _mark_reprocessing_jobs_failed(
+        db,
+        job_ids=malformed_ids,
+        failure_reason=failure_reason,
+    )
     return min(known_earliest_dates, default=None)
+
+
+async def _mark_reprocessing_jobs_failed(
+    db: AsyncSession,
+    *,
+    job_ids: list[int],
+    failure_reason: str,
+) -> None:
+    if not job_ids:
+        return
+    observe_multi_statement_batch(
+        operation=StatementBatchOperation.REPROCESSING_INVALID_PAYLOAD_UPDATE,
+        item_count=len(job_ids),
+        binds_per_row=1,
+        reserved_binds=2,
+    )
+    for job_id_chunk in iter_statement_chunks(
+        job_ids,
+        binds_per_row=1,
+        reserved_binds=2,
+    ):
+        await db.execute(
+            update(ReprocessingJob)
+            .where(ReprocessingJob.id.in_(job_id_chunk))
+            .values(
+                status="FAILED",
+                failure_reason=failure_reason,
+                updated_at=func.now(),
+            )
+        )
 
 
 def _decode_retained_payload(payload_json: object) -> object:

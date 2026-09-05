@@ -64,14 +64,6 @@
       "expires_on": "2027-02-28"
     },
     {
-      "path": "src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py",
-      "lines": 1502,
-      "owner": "lotus-core maintainers",
-      "rationale": "Legacy reprocessing repository pending bounded repository decomposition.",
-      "issue": "#462",
-      "expires_on": "2027-02-28"
-    },
-    {
       "path": "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py",
       "lines": 1555,
       "owner": "lotus-core maintainers",

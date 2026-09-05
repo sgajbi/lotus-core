@@ -191,6 +191,24 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
             )
         },
     )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                'corr-recoverable-storage-poison'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":" RECOVERY-BOND ",'
+                '"earliest_impacted_date":"2025-01-01",'
+                '"unrelated_oversized_number":1e1000000}'
+            )
+        },
+    )
     await async_db_session.commit()
 
     deleted_count = await ReprocessingJobRepository(
@@ -201,13 +219,23 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 8
+    assert len(rows) == 10
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
         row for row in rows if row.correlation_id == "corr-padded-numeric-text"
     )
     numeric_scalar = next(row for row in rows if row.correlation_id == "corr-numeric-scalar")
+    recoverable_source = next(
+        row
+        for row in rows
+        if row.correlation_id == "corr-recoverable-storage-poison" and row.status == "FAILED"
+    )
+    recovered_boundary = next(
+        row
+        for row in rows
+        if row.status == "PENDING" and row.payload.get("security_id") == "RECOVERY-BOND"
+    )
     padded_string = next(row for row in rows if row.correlation_id == "corr-padded-string")
     malformed_string = next(
         row for row in rows if row.correlation_id == "corr-malformed-canonical-string"
@@ -246,6 +274,15 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     assert numeric_scalar.failure_reason == (
         "invalid_reset_watermarks_job_payload: unsafe identity representation"
     )
+    assert recoverable_source.status == "FAILED"
+    assert recoverable_source.failure_reason == (
+        "invalid_reset_watermarks_job_payload: unsafe storage representation; "
+        "replay boundary recovered"
+    )
+    assert recovered_boundary.payload == {
+        "security_id": "RECOVERY-BOND",
+        "earliest_impacted_date": "2025-01-01",
+    }
     assert padded_string.status == "PENDING"
     assert padded_string.payload["security_id"] == "STRING"
     assert malformed_string.status == "FAILED"
