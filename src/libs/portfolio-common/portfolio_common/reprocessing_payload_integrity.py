@@ -193,7 +193,6 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
     """Quarantine unsafe identities, then serialize and coalesce valid repairs."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
-    await db.execute(QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES)
     identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
     identity_keys = sorted(
         {
@@ -206,6 +205,7 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
             LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
             {"identity_key": identity_key},
         )
+    await db.execute(QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES)
     await db.execute(QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS, parameters)
     result = await db.execute(NORMALIZE_PENDING_RESET_WATERMARKS, parameters)
     return int(result.scalar_one())

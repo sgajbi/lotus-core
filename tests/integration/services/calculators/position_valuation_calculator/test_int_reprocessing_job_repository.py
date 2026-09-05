@@ -500,6 +500,20 @@ async def test_reset_normalization_serializes_with_canonical_staging(
             correlation_id="corr-race-padded",
         )
     )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES ('RESET_WATERMARKS', CAST(:payload AS json), 'PENDING', 'corr-race-poison')
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"UNRELATED-POISON",'
+                '"earliest_impacted_date":"2025-01-02","legacy_number":1e1000000}'
+            )
+        },
+    )
     await async_db_session.commit()
 
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
@@ -551,9 +565,10 @@ async def test_reset_normalization_serializes_with_canonical_staging(
             .all()
         )
     assert deleted_count == 0
-    assert len(jobs) == 2
+    assert len(jobs) == 3
     canonical = next(job for job in jobs if job.correlation_id == "corr-race-canonical")
     padded = next(job for job in jobs if job.correlation_id == "corr-race-padded")
+    poisoned = next(job for job in jobs if job.correlation_id == "corr-race-poison")
     assert canonical.status == "PENDING"
     assert canonical.payload == {
         "security_id": "RACE-BOND",
@@ -565,6 +580,10 @@ async def test_reset_normalization_serializes_with_canonical_staging(
         "earliest_impacted_date": "2025-01-03",
     }
     assert padded.failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
+    assert poisoned.status == "FAILED"
+    assert poisoned.failure_reason == (
         "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
     )
 
