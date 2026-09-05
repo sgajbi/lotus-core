@@ -157,3 +157,28 @@ def test_reset_sibling_merge_fills_missing_lineage_at_equal_boundary() -> None:
     assert merged.correlation_id == "corr-sibling"
     assert merged.correlation_missing_reason is None
     assert merged.alternate_lookup_key is None
+
+
+def test_reset_sibling_merge_keeps_owned_lineage_when_earlier_sibling_lacks_it() -> None:
+    owned = _identity(
+        "RESET_WATERMARKS",
+        {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-07"},
+        attempt_count=2,
+        correlation_id="corr-owned",
+    )
+    sibling = _sibling(
+        {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-03"},
+        attempt_count=3,
+        correlation_id=None,
+    )
+
+    merged = merge_replay_sibling_evidence(
+        owned,
+        PendingReplaySiblingEvidence((sibling,)),
+    )
+
+    assert merged.payload["earliest_impacted_date"] == "2025-01-03"
+    assert merged.attempt_count == 3
+    assert merged.correlation_id == "corr-owned"
+    assert merged.correlation_missing_reason is None
+    assert merged.alternate_lookup_key is None
