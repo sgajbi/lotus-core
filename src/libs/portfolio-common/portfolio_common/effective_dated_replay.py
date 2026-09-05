@@ -116,7 +116,7 @@ def _latest_valid_fx_source(
     identity: EffectiveDatedReplayIdentity,
     evidence: PendingReplaySiblingEvidence,
 ) -> EffectiveDatedReplayIdentity:
-    source = identity
+    candidates = [identity]
     for sibling in evidence.siblings:
         try:
             candidate = validated_effective_dated_replay_identity(
@@ -129,8 +129,18 @@ def _latest_valid_fx_source(
             )
         except (TypeError, ValueError):
             continue
-        if _fx_source_key(candidate) > _fx_source_key(source):
-            source = candidate
+        candidates.append(candidate)
+    source = max(candidates, key=_fx_source_key)
+    if source.correlation_id is None:
+        correlated_candidates = [candidate for candidate in candidates if candidate.correlation_id]
+        if correlated_candidates:
+            lineage_source = max(correlated_candidates, key=_fx_source_key)
+            source = replace(
+                source,
+                correlation_id=lineage_source.correlation_id,
+                correlation_missing_reason=lineage_source.correlation_missing_reason,
+                alternate_lookup_key=lineage_source.alternate_lookup_key,
+            )
     return source
 
 

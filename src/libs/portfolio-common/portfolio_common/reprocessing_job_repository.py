@@ -407,8 +407,8 @@ class ReprocessingJobRepository:
         self,
         *,
         security_id: str,
-    ) -> date | None:
-        """Quarantine malformed retained security replay before date-bearing SQL."""
+    ) -> PendingReplaySiblingEvidence:
+        """Quarantine malformed retained security replay and retain its evidence."""
         return await quarantine_pending_reset_security(
             self.db,
             security_id=security_id,
@@ -488,14 +488,9 @@ class ReprocessingJobRepository:
         await self._lock_effective_dated_replay_identity(
             effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
         )
-        quarantined_earliest_date = await self._quarantine_malformed_pending_reset_watermarks(
+        quarantined_evidence = await self._quarantine_malformed_pending_reset_watermarks(
             security_id=security_id,
         )
-        if quarantined_earliest_date is not None:
-            earliest_impacted_date = min(
-                earliest_impacted_date,
-                quarantined_earliest_date,
-            )
         payload = {
             "security_id": security_id,
             "earliest_impacted_date": earliest_impacted_date.isoformat(),
@@ -506,6 +501,20 @@ class ReprocessingJobRepository:
             correlation_id=correlation_id,
         )
         correlation_id = diagnostics.correlation_id
+        identity = _merge_replay_sibling_evidence(
+            _validated_effective_dated_replay_identity(
+                job_type="RESET_WATERMARKS",
+                payload=payload,
+                attempt_count=attempt_count,
+                correlation_id=correlation_id,
+                correlation_missing_reason=diagnostics.correlation_missing_reason,
+                alternate_lookup_key=diagnostics.alternate_lookup_key,
+            ),
+            quarantined_evidence,
+        )
+        earliest_impacted_date = date.fromisoformat(identity.payload["earliest_impacted_date"])
+        attempt_count = identity.attempt_count
+        correlation_id = identity.correlation_id
         result = await self.db.execute(
             UPSERT_PENDING_RESET_WATERMARKS,
             {
@@ -513,8 +522,8 @@ class ReprocessingJobRepository:
                 "earliest_impacted_date": earliest_impacted_date,
                 "attempt_count": attempt_count,
                 "correlation_id": correlation_id,
-                "correlation_missing_reason": diagnostics.correlation_missing_reason,
-                "alternate_lookup_key": diagnostics.alternate_lookup_key,
+                "correlation_missing_reason": identity.correlation_missing_reason,
+                "alternate_lookup_key": identity.alternate_lookup_key,
             },
         )
         row = dict(result.mappings().one())

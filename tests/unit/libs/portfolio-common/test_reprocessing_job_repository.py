@@ -902,6 +902,10 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
                 '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"2026-04-06"}'
             ),
             "status": "PENDING",
+            "attempt_count": 4,
+            "correlation_id": "corr-retained",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
             "payload_representable": True,
             "earliest_date_representable": True,
             "generated_at_representable": False,
@@ -950,6 +954,10 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
             },
             "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-W01-2"}'),
             "status": "PENDING",
+            "attempt_count": 4,
+            "correlation_id": "corr-retained",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
             "payload_representable": True,
             "earliest_date_representable": False,
         }
@@ -960,7 +968,10 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
         "job_type": "RESET_WATERMARKS",
         "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2024-12-31"}'),
         "status": "PENDING",
-        "attempt_count": 0,
+        "attempt_count": 4,
+        "correlation_id": "corr-retained",
+        "correlation_missing_reason": None,
+        "alternate_lookup_key": None,
         "last_attempted_at": None,
         "failure_reason": None,
         "created_at": None,
@@ -990,6 +1001,8 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
     assert "status=:status" in str(quarantine_update)
     _, upsert_parameters = mock_db_session.execute.await_args_list[4].args
     assert upsert_parameters["earliest_impacted_date"] == date(2024, 12, 31)
+    assert upsert_parameters["attempt_count"] == 4
+    assert upsert_parameters["correlation_id"] == "corr-retained"
 
 
 async def test_replay_trim_contract_matches_python_strip_whitespace() -> None:

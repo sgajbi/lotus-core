@@ -1334,6 +1334,7 @@ async def test_staging_quarantines_postgres_unrepresentable_pending_reset_date(
             "earliest_impacted_date": "2025-W01-2",
         },
         status="PENDING",
+        attempt_count=5,
         correlation_id="corr-legacy-week-date",
     )
     async_db_session.add(legacy)
@@ -1372,7 +1373,8 @@ async def test_staging_quarantines_postgres_unrepresentable_pending_reset_date(
         "security_id": "BOND-WEEK-DATE",
         "earliest_impacted_date": "2024-12-31",
     }
-    assert rows[1].correlation_id == "corr-authoritative"
+    assert rows[1].attempt_count == 5
+    assert rows[1].correlation_id == "corr-legacy-week-date"
 
 
 async def test_staging_preserves_valid_compact_offset_pending_fx_lineage(
