@@ -142,16 +142,34 @@ def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
     )
 
 
-def test_retained_payload_decoders_fail_closed_on_unbounded_numeric_exponent() -> None:
+def test_retained_identity_scan_ignores_unbounded_numeric_extension() -> None:
     unbounded_number = "1e" + ("9" * 40)
     payload_json = f'{{"security_id":"BOND-1","extension":{unbounded_number}}}'
 
     assert _decode_retained_payload(payload_json) is None
-    assert not replay_row_matches_identity(
+    assert replay_row_matches_identity(
         {"payload_json": payload_json},
         {"security_id": "BOND-1"},
     )
-    assert _postgres_json_identity_text(unbounded_number) is None
+    assert _postgres_json_identity_text(unbounded_number) == unbounded_number
+
+
+def test_reset_boundary_recovery_ignores_extensions_and_trims_boundary_controls() -> None:
+    unbounded_number = "1e" + ("9" * 40)
+    plan = _reset_boundary_recovery_plan(
+        {
+            "id": 8,
+            "payload_json": (
+                '{"security_id":"\\tRECOVERY-BOND\\t",'
+                '"earliest_impacted_date":"2025-01-02",'
+                f'"extension":{unbounded_number}}}'
+            ),
+        }
+    )
+
+    assert plan is not None
+    assert plan["security_id"] == "RECOVERY-BOND"
+    assert plan["earliest_impacted_date"] == date(2025, 1, 2)
 
 
 def test_reset_boundary_recovery_plan_preserves_safe_identity_date_and_lineage() -> None:
