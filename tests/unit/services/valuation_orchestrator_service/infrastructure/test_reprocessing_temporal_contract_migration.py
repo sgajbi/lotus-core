@@ -76,7 +76,10 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
 
     migration["upgrade"]()
 
-    assert "ACCESS EXCLUSIVE" in str(operations[0][1])
+    cutover_guard = str(operations[0][1])
+    assert "set_config('lock_timeout', '5s', true)" in cutover_guard
+    assert "ACCESS EXCLUSIVE" in cutover_guard
+    assert cutover_guard.index("set_config") < cutover_guard.index("LOCK TABLE")
     assert operations[1][:3] == (
         "drop",
         "ck_reprocessing_jobs_active_payload_valid",
@@ -133,7 +136,11 @@ def test_downgrade_fails_closed_before_restoring_predecessor_constraint(monkeypa
 
     migration["downgrade"]()
 
-    assert "unsupported by the predecessor constraint" in str(operations[0][1])
+    downgrade_guard = str(operations[0][1])
+    assert "set_config('lock_timeout', '5s', true)" in downgrade_guard
+    assert "ACCESS EXCLUSIVE" in downgrade_guard
+    assert downgrade_guard.index("set_config") < downgrade_guard.index("LOCK TABLE")
+    assert "unsupported by the predecessor constraint" in downgrade_guard
     assert operations[1][0] == "drop"
     predecessor_constraint = operations[2][3]
     assert "[+-][0-9]{2}:?[0-9]{2}" in predecessor_constraint
