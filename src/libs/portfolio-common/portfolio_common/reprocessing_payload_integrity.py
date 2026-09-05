@@ -178,6 +178,7 @@ QUARANTINE_PENDING_RESET_RECOVERY_BLOCKER = text(
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
           WHEN payload->>'security_id' IS DISTINCT FROM :security_id THEN FALSE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN TRUE
           WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
           THEN TRUE
           WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN TRUE
