@@ -43,11 +43,15 @@ def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:
     )
 
 
-def test_python_identity_match_uses_postgres_scalar_text_semantics() -> None:
+def test_python_identity_match_uses_postgres_json_text_semantics() -> None:
     assert replay_payload_matches_identity({"security_id": 123}, {"security_id": "123"})
     assert replay_payload_matches_identity({"security_id": True}, {"security_id": "true"})
+    assert replay_payload_matches_identity({"security_id": [123]}, {"security_id": "[123]"})
+    assert replay_payload_matches_identity(
+        {"security_id": {"scheme": "CUSIP"}},
+        {"security_id": '{"scheme":"CUSIP"}'},
+    )
     assert not replay_payload_matches_identity({"security_id": None}, {"security_id": "null"})
-    assert not replay_payload_matches_identity({"security_id": [123]}, {"security_id": "[123]"})
 
 
 @pytest.mark.asyncio
