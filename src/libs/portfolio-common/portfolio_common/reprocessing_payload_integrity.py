@@ -939,21 +939,24 @@ def _retained_replay_boundary(payload_json: object) -> date | None:
 
 
 def decode_retained_replay_source_payload(payload_json: object, *, job_type: str) -> object:
-    """Decode retained JSON, recovering canonical FX fields around unsafe extensions."""
+    """Decode retained JSON, recovering canonical replay fields around unsafe extensions."""
 
     payload = decode_reprocessing_payload_text(payload_json)
-    if isinstance(payload, dict) or job_type != "RESET_FX_WATERMARKS":
+    if isinstance(payload, dict):
         return payload
-    fields = {
-        field: _json_object_string_field(payload_json, field)
-        for field in (
+    canonical_fields = {
+        "RESET_WATERMARKS": ("security_id", "earliest_impacted_date"),
+        "RESET_FX_WATERMARKS": (
             "from_currency",
             "to_currency",
             "earliest_impacted_date",
             "content_hash",
             "generated_at",
-        )
-    }
+        ),
+    }.get(job_type)
+    if canonical_fields is None:
+        return None
+    fields = {field: _json_object_string_field(payload_json, field) for field in canonical_fields}
     return fields if all(value is not None for value in fields.values()) else None
 
 
