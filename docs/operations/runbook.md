@@ -916,9 +916,10 @@ clock skew cannot disagree with the worker's database-time fence.
 When a live `RESET_WATERMARKS` or `RESET_FX_WATERMARKS` claim must retry, the repository owns the
 `PROCESSING -> PENDING` policy. It serializes the security or direct-currency-pair identity with a
 transaction-scoped PostgreSQL advisory lock and revalidates the exact token and database-clock
-lease before changing durable work. If another pending sibling exists, Core coalesces the claimed
-payload into that sibling in the same transaction, preserves the minimum `earliest_impacted_date`
-and required correlation/source lineage, and completes the superseded claimed row. Without a
+lease before changing durable work. If another same-identity sibling exists, Core coalesces retained
+evidence into one pending job in the same transaction, preserves the minimum
+`earliest_impacted_date` and required correlation/source lineage, and completes the superseded
+claimed row without taking an active sibling's lease. Without a
 sibling, the same row returns to `PENDING`. Operators must not manually rewrite either row or delete
 the sibling to resolve a uniqueness error. Inspect the support listing and correlated structured
 logs; an unchanged pending sibling after a stale-token attempt is the expected fail-closed result.

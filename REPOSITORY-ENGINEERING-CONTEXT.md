@@ -4045,8 +4045,9 @@ Most relevant current governance:
      ownership. Effective-dated `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` requeue is a
      repository-owned transition: serialize the security or direct-pair identity with a
      transaction-scoped PostgreSQL advisory lock, revalidate the live database-clock lease, and
-     atomically coalesce any pending sibling while preserving the minimum `earliest_impacted_date`
-     plus required source/correlation lineage. Callers must not restore generic
+     atomically coalesce retained same-identity sibling evidence into one pending job while
+     preserving the minimum `earliest_impacted_date` plus required source/correlation lineage
+     without taking an active sibling's lease. Callers must not restore generic
      `update_job_status(..., "PENDING")`, weaken the pending unique indexes, or delete a sibling to
      make the transition succeed. `make reprocessing-transition-boundary-guard` is the static
      boundary proof; the critical-lifecycle PostgreSQL lane owns concurrency, rollback, stale-token,

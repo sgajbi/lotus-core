@@ -32,7 +32,7 @@ REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
 
 @dataclass(frozen=True, slots=True)
 class RetainedReplaySibling:
-    """Locked sibling state needed to preserve replay truth during coalescing."""
+    """Retained sibling state needed to preserve replay truth during coalescing."""
 
     id: int
     payload: object
@@ -45,7 +45,7 @@ class RetainedReplaySibling:
 
 @dataclass(frozen=True, slots=True)
 class PendingReplaySiblingEvidence:
-    """Locked sibling evidence, including rows whose claim status changed."""
+    """Sibling evidence from locked pending rows or committed claim snapshots."""
 
     siblings: tuple[RetainedReplaySibling, ...]
 

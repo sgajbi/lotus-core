@@ -69,7 +69,7 @@ def merge_replay_sibling_evidence(
     identity: EffectiveDatedReplayIdentity,
     evidence: PendingReplaySiblingEvidence,
 ) -> EffectiveDatedReplayIdentity:
-    """Merge locked retry, boundary, and source truth without changing sibling ownership."""
+    """Merge retained retry, boundary, and source truth without changing sibling ownership."""
 
     owned_boundary = date.fromisoformat(identity.payload["earliest_impacted_date"])
     earliest_sibling = evidence.earliest_sibling

@@ -99,8 +99,9 @@ Guarded incident IDs: `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`, 
 `database-connectivity`, `kafka-connectivity`, and `security-audit-denial-spikes`.
 
 Effective-dated Reset and FX replay retries are repository-owned. A live claim either returns to
-`PENDING` when it is the only row for its security/direct pair, or is atomically coalesced into an
-existing pending sibling while preserving the earliest impacted date and required lineage. The
+`PENDING` when it is the only row for its security/direct pair, or its retained same-identity sibling
+evidence is atomically coalesced into one pending job while preserving the earliest impacted date
+and required lineage without taking an active sibling's lease. The
 exact database-clock lease and token remain authoritative. Do not repair a retry by rewriting job
 status, deleting the sibling, or weakening a pending uniqueness constraint; inspect the support
 listing and correlated logs, then correct the source or ownership failure.

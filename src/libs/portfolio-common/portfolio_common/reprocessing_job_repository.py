@@ -901,7 +901,7 @@ class ReprocessingJobRepository:
         *,
         lease_token: str,
     ) -> ReprocessingJobTransitionOutcome:
-        """Requeue a live claim and preserve any pending sibling's earliest replay boundary."""
+        """Requeue a live claim and preserve same-identity sibling replay evidence."""
 
         if not lease_token:
             raise ValueError("reprocessing lease token is required")
