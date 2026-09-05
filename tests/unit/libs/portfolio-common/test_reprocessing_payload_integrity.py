@@ -340,6 +340,40 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
 
 
 @pytest.mark.asyncio
+async def test_fx_quarantine_recovers_date_before_unbounded_numeric_extension() -> None:
+    unbounded_number = "1e" + ("9" * 40)
+    retained = (
+        '{"from_currency":"USD","to_currency":"CHF",'
+        '"earliest_impacted_date":"2026-09-01",'
+        f'"extension":{unbounded_number}}}'
+    )
+    row = {
+        "id": 7,
+        "payload_json": retained,
+        "status": "PENDING",
+        "payload_representable": False,
+        "earliest_date_representable": False,
+        "generated_at_representable": False,
+    }
+    db = AsyncMock()
+    scan_result = MagicMock()
+    scan_result.mappings.return_value.all.return_value = [row]
+    lock_result = MagicMock()
+    lock_result.mappings.return_value.all.return_value = [row]
+    db.execute.side_effect = [scan_result, lock_result, MagicMock()]
+
+    earliest = await quarantine_pending_fx_pair(
+        db,
+        from_currency="USD",
+        to_currency="CHF",
+        validate=lambda payload: payload,
+        parse_earliest_date=lambda payload: None,
+    )
+
+    assert earliest == date(2026, 9, 1)
+
+
+@pytest.mark.asyncio
 async def test_quarantine_does_not_row_lock_valid_processing_work() -> None:
     db = AsyncMock()
     scan_result = MagicMock()

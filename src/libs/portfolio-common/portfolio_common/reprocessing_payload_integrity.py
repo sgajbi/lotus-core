@@ -877,7 +877,13 @@ async def _quarantine_candidates(
             required_validity_fields=required_validity_fields,
             validate=validate,
         ):
-            if (earliest_date := parse_earliest_date(payload)) is not None:
+            if (
+                earliest_date := _recover_retained_earliest_date(
+                    row,
+                    payload=payload,
+                    parse_earliest_date=parse_earliest_date,
+                )
+            ) is not None:
                 known_earliest_dates.append(earliest_date)
             if row["status"] == "PENDING":
                 malformed_ids.append(int(row["id"]))
@@ -888,6 +894,31 @@ async def _quarantine_candidates(
         failure_reason=failure_reason,
     )
     return min(known_earliest_dates, default=None)
+
+
+def _recover_retained_earliest_date(
+    row: Mapping[str, Any],
+    *,
+    payload: object,
+    parse_earliest_date: Callable[[object], date | None],
+) -> date | None:
+    """Recover the source-owned replay date without decoding unrelated extensions."""
+
+    try:
+        if (earliest_date := parse_earliest_date(payload)) is not None:
+            return earliest_date
+    except (KeyError, TypeError, ValueError, DecimalException):
+        pass
+    earliest_value = _json_object_string_field(
+        row.get("payload_json"),
+        "earliest_impacted_date",
+    )
+    if earliest_value is None:
+        return None
+    try:
+        return date.fromisoformat(earliest_value)
+    except ValueError:
+        return None
 
 
 async def _mark_reprocessing_jobs_failed(

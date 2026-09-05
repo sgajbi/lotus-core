@@ -616,7 +616,7 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                         '"earliest_impacted_date":"2025-01-03",'
                         '"generated_at":"2025-01-03T00:00:00+00:00",'
                         '"content_hash":"unrelated-poison",'
-                        '"legacy_number":1e1000000}'
+                        '"legacy_number":1e9999999999999999999999999999999999999999}'
                     )
                 },
             )
