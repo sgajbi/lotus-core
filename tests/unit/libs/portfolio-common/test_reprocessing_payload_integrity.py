@@ -53,7 +53,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     lock_sql = str(LOCK_SCANNED_REPLAY_CANDIDATES)
     assert "id = ANY(CAST(:candidate_ids AS BIGINT[]))" in lock_sql
     assert "status = 'PENDING'" in lock_sql
-    assert "malformed_candidate_ids" in lock_sql
+    assert "preserve_candidate_ids" in lock_sql
     assert "FOR UPDATE" in lock_sql
     assert lock_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < lock_sql.index(
         "json_typeof"
@@ -140,6 +140,18 @@ def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
         {"payload_json": '{"security_id":[ 123 ]}'},
         {"security_id": "[123]"},
     )
+
+
+def test_retained_payload_decoders_fail_closed_on_unbounded_numeric_exponent() -> None:
+    unbounded_number = "1e" + ("9" * 40)
+    payload_json = f'{{"security_id":"BOND-1","extension":{unbounded_number}}}'
+
+    assert _decode_retained_payload(payload_json) is None
+    assert not replay_row_matches_identity(
+        {"payload_json": payload_json},
+        {"security_id": "BOND-1"},
+    )
+    assert _postgres_json_identity_text(unbounded_number) is None
 
 
 def test_reset_boundary_recovery_plan_preserves_safe_identity_date_and_lineage() -> None:
@@ -237,7 +249,7 @@ async def test_pending_sibling_requires_exact_retained_identity(
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters == {
         "candidate_ids": [8],
-        "malformed_candidate_ids": [],
+        "preserve_candidate_ids": [8],
         "job_type": job_type,
     }
 
@@ -303,7 +315,7 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters["candidate_ids"] == [7]
-    assert locked_parameters["malformed_candidate_ids"] == [7]
+    assert locked_parameters["preserve_candidate_ids"] == [7]
     assert db.execute.await_count == 3
     update_parameters = db.execute.await_args_list[2].args[0].compile().params
     assert next(value for value in update_parameters.values() if isinstance(value, list)) == [7]

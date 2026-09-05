@@ -4,7 +4,7 @@ import json
 import unicodedata
 from collections.abc import Callable, Mapping
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from typing import Any
 
 from sqlalchemy import Date, Integer, String, bindparam, func, text, update
@@ -352,7 +352,7 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
         locked_rows = await _lock_scanned_replay_rows(
             db,
             candidate_ids=recovery_ids,
-            malformed_candidate_ids=recovery_ids,
+            preserve_candidate_ids=recovery_ids,
             job_type="RESET_WATERMARKS",
         )
         recovery_plans = [
@@ -509,7 +509,7 @@ LOCK_SCANNED_REPLAY_CANDIDATES = text(
       AND job_type = :job_type
       AND (
           status = 'PENDING'
-          OR id = ANY(CAST(:malformed_candidate_ids AS BIGINT[]))
+          OR id = ANY(CAST(:preserve_candidate_ids AS BIGINT[]))
       )
     ORDER BY id
     FOR UPDATE
@@ -524,10 +524,10 @@ async def _lock_scanned_replay_rows(
     db: AsyncSession,
     *,
     candidate_ids: list[int],
-    malformed_candidate_ids: list[int],
+    preserve_candidate_ids: list[int],
     job_type: str,
 ) -> list[Mapping[str, Any]]:
-    """Lock pending evidence plus prevalidated malformed rows that changed state."""
+    """Lock pending evidence plus scanned rows that must survive a claim race."""
 
     if not candidate_ids:
         return []
@@ -537,7 +537,7 @@ async def _lock_scanned_replay_rows(
                 LOCK_SCANNED_REPLAY_CANDIDATES,
                 {
                     "candidate_ids": sorted(set(candidate_ids)),
-                    "malformed_candidate_ids": sorted(set(malformed_candidate_ids)),
+                    "preserve_candidate_ids": sorted(set(preserve_candidate_ids)),
                     "job_type": job_type,
                 },
             )
@@ -583,7 +583,7 @@ async def _lock_matching_replay_rows(
     locked_rows = await _lock_scanned_replay_rows(
         db,
         candidate_ids=candidate_ids,
-        malformed_candidate_ids=candidate_ids if preserve_after_claim else [],
+        preserve_candidate_ids=candidate_ids if preserve_after_claim else [],
         job_type=job_type,
     )
     return [row for row in locked_rows if replay_row_matches_identity(row, expected_identity)]
@@ -650,7 +650,7 @@ def _json_object_field_identity_text(payload_json: object, field: str) -> str | 
             if payload_json[index] != ",":
                 return None
             index += 1
-    except ValueError:
+    except (ValueError, DecimalException):
         return None
 
 
@@ -671,7 +671,7 @@ def _postgres_json_identity_text(encoded_value: object) -> str | None:
             parse_int=Decimal,
             parse_float=Decimal,
         )
-    except ValueError:
+    except (ValueError, DecimalException):
         return None
     if isinstance(decoded_value, str):
         return decoded_value
@@ -714,6 +714,7 @@ async def pending_replay_sibling_exists(
             scanned_rows=scanned_rows,
             job_type=job_type,
             expected_identity=expected_identity,
+            preserve_after_claim=True,
         )
     )
 
@@ -905,5 +906,5 @@ def _decode_retained_payload(payload_json: object) -> object:
             parse_int=Decimal,
             parse_float=Decimal,
         )
-    except (ValueError, RecursionError):
+    except (ValueError, RecursionError, DecimalException):
         return None

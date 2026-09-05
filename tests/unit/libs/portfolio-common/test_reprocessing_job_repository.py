@@ -1246,7 +1246,7 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
     assert "FOR UPDATE" in str(lock_statement)
     assert lock_parameters == {
         "candidate_ids": [12],
-        "malformed_candidate_ids": [],
+        "preserve_candidate_ids": [12],
         "job_type": "RESET_WATERMARKS",
     }
 
