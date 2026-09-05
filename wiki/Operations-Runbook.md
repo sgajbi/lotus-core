@@ -352,8 +352,8 @@ retained payloads as text through the shared safe decoder, preventing a permitte
 extension from blocking replay. Reset coalescing preserves unknown fields and the earliest replay
 boundary. Owned requeue also retains a usable earlier sibling boundary when the sibling is already
 processing or becomes terminal between discovery and row locking. Siblings already processing or
-claimed during lock revalidation are read as committed snapshots without row locks, so their lease
-renewal is not blocked. Legacy Reset
+claimed during lock revalidation, including normalization recovery, are read as committed snapshots
+without row locks, so their lease renewal is not blocked. Legacy Reset
  duplicate normalization and owned sibling coalescing retain the maximum retry count and available
  valid correlation fallback; FX source
  authority continues to follow generated-at/content-hash ordering. If that source lacks correlation,
