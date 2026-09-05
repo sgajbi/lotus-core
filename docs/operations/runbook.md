@@ -887,9 +887,10 @@ lease renewal. The replacement
 retains maximum retry history and applies the established FX generated-at/content-hash
 ordering to source and correlation lineage. Reset coalescing uses valid sibling correlation at the
 authoritative boundary, fills missing owned correlation at an equal boundary, and retains known
-owned correlation when an earlier sibling has none. If an unrelated extension prevents full decoding, the
-required FX source fields are recovered lexically and revalidated; the extension remains only on
-the quarantined source row. Legacy Reset duplicate normalization retains the maximum retry count
+owned correlation when an earlier sibling has none. If an unrelated extension prevents full
+decoding, claim mapping recovers and revalidates canonical FX fields so attributable replay proceeds.
+Staging quarantine carries recovered boundary, source, retry, and lineage evidence through the same
+merge policy; the extension remains only on the original retained row. Legacy Reset duplicate normalization retains the maximum retry count
 across the coalesced rows.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
