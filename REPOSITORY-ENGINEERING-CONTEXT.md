@@ -4065,6 +4065,9 @@ Most relevant current governance:
      the application grammar pre-filter and PostgreSQL `pg_input_is_valid` is the storage
      representability authority; active work is accepted only at their intersection. Do not assume
      that one parser accepting a value proves the other boundary can persist it. Schema
+     Claim priority compares PostgreSQL date values rather than raw accepted ISO spellings, while
+     predecessor-schema values PostgreSQL cannot represent sort after valid dates without being
+     cast. Raw lexical ordering must not let a later financial boundary run first.
      cutover must drain `PROCESSING` work, classify temporal strings with Python while the exclusive
      lock is held, quarantine invalid or unnormalized pending rows with bounded family counts,
      preserve terminal payload evidence, and reject future malformed active writes through the
@@ -4089,7 +4092,8 @@ Most relevant current governance:
      maximum retry count and selects FX source authority by the established
      generated-at/content-hash ordering. If that source lacks correlation, retain the latest valid
      available correlation without changing source authority. Reset coalescing normalizes retained
-     correlation through the durable-lineage policy, uses only a real sibling correlation at the
+     correlation through the durable-lineage policy at Python merge and SQL upsert/normalization
+     boundaries, uses only a real sibling correlation at the
      authoritative boundary, fills missing owned correlation at an equal boundary, and retains
      known owned correlation when an earlier sibling has only blank, sentinel, or absent lineage.
      When an unrelated extension prevents

@@ -887,7 +887,8 @@ sibling boundary into the replacement pending job when that sibling is already p
  retains maximum retry history and applies the established FX generated-at/content-hash
  ordering to source authority. If that source lacks correlation, the latest valid available
  correlation is retained without changing source authority. Reset coalescing normalizes retained
-correlation through the durable-lineage policy, uses only a real sibling correlation at the
+correlation through the durable-lineage policy at Python merge and SQL upsert/normalization
+boundaries, uses only a real sibling correlation at the
 authoritative boundary, fills missing owned correlation at an equal boundary, and retains known
 owned correlation when an earlier sibling has only blank, sentinel, or absent lineage. If an
 unrelated extension prevents full
@@ -897,6 +898,9 @@ recovery can proceed and the FX valuation adapter can validate execution identit
  merge policy; the extension remains only on the original retained row. Legacy Reset duplicate
  normalization retains the maximum retry count and an available valid correlation fallback across
  the coalesced rows.
+Effective-dated claim priority compares PostgreSQL date values rather than raw accepted ISO
+spellings. A predecessor-schema value PostgreSQL cannot represent sorts after valid dates without
+being cast, so one malformed row cannot abort the claim batch.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
 accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
