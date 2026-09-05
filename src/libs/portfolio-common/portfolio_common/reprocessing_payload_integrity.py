@@ -24,6 +24,32 @@ PYTHON_ISO_DATE_PATTERN = (
     r"[0-9]{4}-W[0-9]{2}(-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$"
 )
 
+PENDING_RESET_IDENTITY_LOCK_KEYS = text(
+    """
+    SELECT DISTINCT btrim(payload->>'security_id', :trim_chars) AS security_id
+    FROM reprocessing_jobs
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE btrim(payload->>'security_id', :trim_chars) <> ''
+      END
+    ORDER BY security_id
+    """
+)
+LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY = text(
+    "SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"
+)
+
+
+def effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
+    """Encode one replay-family identity without delimiter ambiguity."""
+
+    encoded_components = "|".join(f"{len(component)}:{component}" for component in components)
+    return f"{job_type}|{encoded_components}"
+
+
 QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
     """
     WITH valid_string_identities AS MATERIALIZED (
@@ -135,6 +161,18 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
     """Quarantine scalar collisions, then coalesce valid pending identities."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
+    identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
+    identity_keys = sorted(
+        {
+            effective_dated_replay_identity_key("RESET_WATERMARKS", str(security_id))
+            for security_id in identity_result.scalars().all()
+        }
+    )
+    for identity_key in identity_keys:
+        await db.execute(
+            LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
+            {"identity_key": identity_key},
+        )
     await db.execute(QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS, parameters)
     result = await db.execute(NORMALIZE_PENDING_RESET_WATERMARKS, parameters)
     return int(result.scalar_one())

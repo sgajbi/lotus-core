@@ -21,9 +21,11 @@ from .infrastructure.persistence.statement_batching import (
 )
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .reprocessing_payload_integrity import (
+    LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
+    effective_dated_replay_identity_key,
     normalize_pending_reset_watermarks_duplicates,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
@@ -214,7 +216,7 @@ class ReprocessingJobRepository:
         content_hash = _required_replay_payload_text(staging_payload, "content_hash")
 
         await self._lock_effective_dated_replay_identity(
-            _effective_dated_replay_identity_key(
+            effective_dated_replay_identity_key(
                 "RESET_FX_WATERMARKS",
                 from_currency,
                 to_currency,
@@ -472,7 +474,7 @@ class ReprocessingJobRepository:
             "security_id",
         )
         await self._lock_effective_dated_replay_identity(
-            _effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+            effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
         )
         quarantined_earliest_date = await self._quarantine_malformed_pending_reset_watermarks(
             security_id=security_id,
@@ -610,7 +612,7 @@ class ReprocessingJobRepository:
         """Pre-lock a replay batch in the global identity order for this transaction."""
 
         await self._lock_effective_dated_replay_identities(
-            _effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+            effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
             for security_id in security_ids
         )
 
@@ -1081,7 +1083,7 @@ class ReprocessingJobRepository:
 
     async def _lock_effective_dated_replay_identity(self, identity_key: str) -> None:
         await self.db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"),
+            LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
             {"identity_key": identity_key},
         )
 
@@ -1359,7 +1361,7 @@ def _validated_effective_dated_replay_identity(
             raise ValueError("FX replay generated_at must be timezone-aware")
     return _EffectiveDatedReplayIdentity(
         job_type=job_type,
-        identity_key=_effective_dated_replay_identity_key(job_type, *components),
+        identity_key=effective_dated_replay_identity_key(job_type, *components),
         payload=cast(dict[str, Any], payload),
         generated_at=generated_at,
         attempt_count=attempt_count,
@@ -1387,11 +1389,6 @@ def _parse_replay_earliest_date(payload: object) -> date | None:
         return date.fromisoformat(_required_replay_payload_text(payload, "earliest_impacted_date"))
     except (TypeError, ValueError):
         return None
-
-
-def _effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
-    encoded_components = "|".join(f"{len(component)}:{component}" for component in components)
-    return f"{job_type}|{encoded_components}"
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
