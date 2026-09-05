@@ -15,6 +15,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     _decode_retained_payload,
     _postgres_json_identity_text,
     _quarantine_candidates,
+    _reset_boundary_recovery_plan,
     pending_replay_sibling_exists,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
@@ -134,6 +135,49 @@ def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
         {"payload_json": '{"security_id":[ 123 ]}'},
         {"security_id": "[123]"},
     )
+
+
+def test_reset_boundary_recovery_plan_preserves_safe_identity_date_and_lineage() -> None:
+    oversized_integer = "1" * 5_000
+    plan = _reset_boundary_recovery_plan(
+        {
+            "id": 7,
+            "payload_json": (
+                '{"security_id":" RECOVERY-BOND ",'
+                '"earliest_impacted_date":"2025-W01-2",'
+                f'"extension":{oversized_integer}}}'
+            ),
+            "attempt_count": 3,
+            "correlation_id": "corr-source",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": "alt-source",
+        }
+    )
+
+    assert plan == {
+        "id": 7,
+        "identity_key": "RESET_WATERMARKS|13:RECOVERY-BOND",
+        "security_id": "RECOVERY-BOND",
+        "earliest_impacted_date": date(2024, 12, 31),
+        "attempt_count": 3,
+        "correlation_id": "corr-source",
+        "correlation_missing_reason": None,
+        "alternate_lookup_key": "alt-source",
+    }
+
+
+@pytest.mark.parametrize(
+    "payload_json",
+    [
+        '{"security_id":123,"earliest_impacted_date":"2025-01-01"}',
+        '{"security_id":"BAD\\u0000ID","earliest_impacted_date":"2025-01-01"}',
+        '{"security_id":"BOND-1","earliest_impacted_date":"2025-01-01 BC"}',
+    ],
+)
+def test_reset_boundary_recovery_plan_rejects_unowned_or_unparseable_boundaries(
+    payload_json: str,
+) -> None:
+    assert _reset_boundary_recovery_plan({"id": 7, "payload_json": payload_json}) is None
 
 
 @pytest.mark.parametrize("payload_json", [None, '{"security_id":'])
