@@ -4086,13 +4086,14 @@ Most relevant current governance:
      becomes terminal after the unlocked scan. Siblings already processing or claimed during lock
      revalidation contribute a committed snapshot without a row lock, so requeue cannot block their
      lease renewal. Coalescing retains the
-     maximum retry count and selects FX source/correlation lineage by the established
-     generated-at/content-hash ordering. Reset coalescing uses valid sibling correlation at the
+     maximum retry count and selects FX source authority by the established
+     generated-at/content-hash ordering. If that source lacks correlation, retain the latest valid
+     available correlation without changing source authority. Reset coalescing uses valid sibling correlation at the
      authoritative boundary, fills missing owned correlation at an equal boundary, and retains
      known owned correlation when an earlier sibling has none. When an unrelated extension prevents
      full JSON decoding, claim mapping recovers canonical FX fields so the valuation adapter can
      validate the execution identity and date and attributable replay can proceed. Staging
-     quarantine validates and carries recovered boundary, source, retry, and lineage
+     quarantine for both replay families validates and carries recovered boundary, source, retry, and lineage
      evidence through the same merge policy; the extension is never promoted. Legacy Reset duplicate
      normalization must retain the maximum
      retry count as well as the earliest boundary. Migration `c166b2c3d52d`
