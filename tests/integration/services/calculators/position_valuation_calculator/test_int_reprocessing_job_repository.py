@@ -105,6 +105,50 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
     assert jobs[1].correlation_id == "corr-stale-earliest"
 
 
+async def test_reset_duplicate_normalization_preserves_canonical_identity_and_earliest_date(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": " BOND-CANONICAL",
+                    "earliest_impacted_date": "2025-01-05",
+                },
+                status="PENDING",
+                correlation_id="corr-legacy-padded",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "BOND-CANONICAL",
+                    "earliest_impacted_date": "2025-01-07",
+                },
+                status="PENDING",
+                correlation_id="corr-canonical",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    deleted_count = await ReprocessingJobRepository(
+        async_db_session
+    ).normalize_pending_reset_watermarks_duplicates()
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
+    assert deleted_count == 1
+    assert len(rows) == 1
+    assert rows[0].payload == {
+        "security_id": "BOND-CANONICAL",
+        "earliest_impacted_date": "2025-01-05",
+    }
+
+
 async def test_unnormalized_predecessor_security_replay_fails_without_rewriting_identity(
     clean_db,
     async_db_session: AsyncSession,
@@ -1098,6 +1142,62 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
         "earliest_impacted_date": "2025-01-05",
     }
     assert rows[2].correlation_id == "corr-claimed"
+
+
+async def test_owned_reset_requeue_ignores_jsonb_unrepresentable_sibling(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "BOND-JSON", "earliest_impacted_date": "2025-01-05"},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+              'RESET_WATERMARKS',
+              CAST(:payload AS JSON),
+              'PENDING',
+              'corr-jsonb-unrepresentable'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":" BOND-JSON",'
+                '"earliest_impacted_date":"2025-01-07",'
+                '"legacy_number":1e1000000}'
+            )
+        },
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.REQUEUED
+    assert [row.status for row in rows] == ["PENDING", "PENDING"]
+    assert rows[0].payload == {
+        "security_id": "BOND-JSON",
+        "earliest_impacted_date": "2025-01-05",
+    }
 
 
 async def test_owned_reset_requeue_without_sibling_reuses_claimed_row(
