@@ -886,9 +886,11 @@ sibling boundary into the replacement pending job when that sibling is already p
  lock, so requeue cannot block their lease renewal. The replacement
  retains maximum retry history and applies the established FX generated-at/content-hash
  ordering to source authority. If that source lacks correlation, the latest valid available
- correlation is retained without changing source authority. Reset coalescing uses valid sibling correlation at the
+ correlation is retained without changing source authority. Reset coalescing normalizes retained
+correlation through the durable-lineage policy, uses only a real sibling correlation at the
 authoritative boundary, fills missing owned correlation at an equal boundary, and retains known
-owned correlation when an earlier sibling has none. If an unrelated extension prevents full
+owned correlation when an earlier sibling has only blank, sentinel, or absent lineage. If an
+unrelated extension prevents full
 decoding, retained replay reads recover only that job family's canonical fields so RESET stale
 recovery can proceed and the FX valuation adapter can validate execution identity and date. Staging quarantine for both replay
  families validates and carries recovered boundary, source, retry, and lineage evidence through the same

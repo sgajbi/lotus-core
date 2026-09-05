@@ -358,8 +358,10 @@ without row locks, so their lease renewal is not blocked. Legacy Reset
  valid correlation fallback; FX source
  authority continues to follow generated-at/content-hash ordering. If that source lacks correlation,
  the latest valid available correlation is retained without changing source authority. Reset coalescing
-uses valid sibling correlation at the authoritative boundary, fills missing owned correlation at an
-equal boundary, and retains known owned correlation when an earlier sibling has none. Retained replay
+normalizes retained correlation through the durable-lineage policy, uses only a real sibling
+correlation at the authoritative boundary, fills missing owned correlation at an equal boundary,
+and retains known owned correlation when an earlier sibling has only blank, sentinel, or absent
+lineage. Retained replay
 reads recover only the job family's canonical fields around an unrepresentable extension so RESET
 stale recovery can proceed and the FX valuation adapter can validate execution identity and date. Staging quarantine for both
  replay families validates and carries recovered boundary, source, retry, and lineage evidence
