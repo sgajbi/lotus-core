@@ -352,7 +352,9 @@ extension from blocking replay. Reset coalescing preserves unknown fields and th
 boundary. Owned requeue also retains a usable earlier sibling boundary when the sibling is already
 processing or becomes terminal between discovery and row locking, without taking its lease. Legacy
 Reset duplicate normalization and owned sibling coalescing retain the maximum retry count; FX
-source/correlation lineage continues to follow generated-at/content-hash ordering.
+source/correlation lineage continues to follow generated-at/content-hash ordering. Canonical FX
+source fields can be recovered lexically around an unrepresentable extension, then are revalidated;
+the extension is not copied into replacement work.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
 restore it to active status by hand. Valid terminal historical evidence is not rewritten.
