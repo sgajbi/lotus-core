@@ -873,7 +873,9 @@ PostgreSQL `pg_input_is_valid` is the storage representability authority; active
 both. Runtime staging validates matching predecessor rows before any date-bearing SQL coalescing,
 so an invalid historical boundary cannot be silently replaced or abort unrelated work. Runtime
 quarantine therefore remains required for grammar-invalid or storage-unrepresentable
-predecessor-schema and restored rows. Do not tighten SQL with a second hand-written ISO parser.
+predecessor-schema and restored rows. Keep the centralized SQL grammar predicates in
+`database_text_contract.py`, migration constraints, and their executable parity tests aligned with
+the supported Python/PostgreSQL intersection whenever the accepted temporal grammar changes.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
 accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
