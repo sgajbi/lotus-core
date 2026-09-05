@@ -80,6 +80,9 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     assert "set_config('lock_timeout', '5s', true)" in cutover_guard
     assert "ACCESS EXCLUSIVE" in cutover_guard
     assert cutover_guard.index("set_config") < cutover_guard.index("LOCK TABLE")
+    assert "status = 'PROCESSING'" in cutover_guard
+    assert "requires a drained PROCESSING queue" in cutover_guard
+    assert cutover_guard.index("LOCK TABLE") < cutover_guard.index("status = 'PROCESSING'")
     assert operations[1][:3] == (
         "drop",
         "ck_reprocessing_jobs_active_payload_valid",

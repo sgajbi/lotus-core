@@ -91,6 +91,50 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
 
     with db_engine.connect() as connection:
         with _predecessor_constraint(migration, connection):
+            processing_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"CAD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-02",'
+                    '"content_hash":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",'
+                    '"generated_at":"2025-01-07T08:00:00+00:00"}'
+                ),
+                status="PENDING",
+                correlation_id="corr-processing-cutover",
+            )
+            connection.execute(
+                text(
+                    """
+                    UPDATE reprocessing_jobs
+                    SET status = 'PROCESSING',
+                        lease_owner = 'migration-test-worker',
+                        lease_token = '0123456789abcdef0123456789abcdef',
+                        lease_expires_at = now() + interval '5 minutes'
+                    WHERE id = :processing_id
+                    """
+                ),
+                {"processing_id": processing_id},
+            )
+
+            blocked_upgrade = connection.begin_nested()
+            with pytest.raises(DBAPIError, match="requires a drained PROCESSING queue"):
+                migration["upgrade"]()
+            blocked_upgrade.rollback()
+            assert "[+-][0-9]{2}:?[0-9]{2}" in _constraint_sql(connection)
+            connection.execute(
+                text(
+                    """
+                    UPDATE reprocessing_jobs
+                    SET status = 'COMPLETE',
+                        lease_owner = NULL,
+                        lease_token = NULL,
+                        lease_expires_at = NULL
+                    WHERE id = :processing_id
+                    """
+                ),
+                {"processing_id": processing_id},
+            )
+
             recovered_source_id = _insert_job(
                 connection,
                 payload=(
