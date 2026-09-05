@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable, Mapping
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import String, bindparam, func, text, update
@@ -216,7 +217,6 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     """
     SELECT
         id,
-        payload,
         payload::text AS payload_json,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
@@ -253,7 +253,6 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     """
     SELECT
         id,
-        payload,
         payload::text AS payload_json,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
@@ -278,7 +277,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
 
 PENDING_RESET_REPLAY_SIBLING = text(
     """
-    SELECT id, payload, payload::text AS payload_json
+    SELECT id, payload::text AS payload_json
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
@@ -296,7 +295,6 @@ PENDING_FX_REPLAY_SIBLING = text(
     """
     SELECT
         id,
-        payload,
         payload::text AS payload_json
     FROM reprocessing_jobs
     WHERE id <> :job_id
@@ -332,7 +330,7 @@ def _json_object_field_identity_text(payload_json: object, field: str) -> str | 
 
     if not isinstance(payload_json, str):
         return None
-    decoder = json.JSONDecoder()
+    decoder = json.JSONDecoder(parse_int=Decimal, parse_float=Decimal)
     index = _skip_json_whitespace(payload_json, 0)
     if index >= len(payload_json) or payload_json[index] != "{":
         return None
@@ -377,7 +375,11 @@ def _postgres_json_identity_text(encoded_value: object) -> str | None:
     if not isinstance(encoded_value, str):
         return None
     try:
-        decoded_value = json.loads(encoded_value)
+        decoded_value = json.loads(
+            encoded_value,
+            parse_int=Decimal,
+            parse_float=Decimal,
+        )
     except ValueError:
         return None
     if isinstance(decoded_value, str):
@@ -495,7 +497,7 @@ async def _quarantine_candidates(
     malformed_ids: list[int] = []
     known_earliest_dates: list[date] = []
     for row in rows:
-        payload = row["payload"]
+        payload = _decode_retained_payload(row.get("payload_json"))
         try:
             if not all(row[field] for field in required_validity_fields):
                 raise ValueError("replay payload is not PostgreSQL-representable")
@@ -529,3 +531,18 @@ async def _quarantine_candidates(
                 )
             )
     return min(known_earliest_dates, default=None)
+
+
+def _decode_retained_payload(payload_json: object) -> object:
+    """Decode retained JSON without Python's bounded integer conversion."""
+
+    if not isinstance(payload_json, str):
+        return None
+    try:
+        return json.loads(
+            payload_json,
+            parse_int=Decimal,
+            parse_float=Decimal,
+        )
+    except (ValueError, RecursionError):
+        return None

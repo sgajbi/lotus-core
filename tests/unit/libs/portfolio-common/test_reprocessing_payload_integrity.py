@@ -1,5 +1,6 @@
 """Boundary tests for retained reprocessing payload quarantine."""
 
+from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
+    _decode_retained_payload,
     _quarantine_candidates,
     replay_row_matches_identity,
 )
@@ -17,6 +19,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     for statement in (PENDING_FX_REPLAY_CANDIDATES, PENDING_RESET_REPLAY_CANDIDATES):
         sql = str(statement)
         assert "payload::text AS payload_json" in sql
+        assert "\n        payload," not in sql
         assert "AS payload_representable" in sql
         assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
@@ -27,6 +30,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
         assert "payload::text AS payload_json" in sql
+        assert "SELECT id, payload," not in sql
         assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
         assert sql.index("WHEN pg_input_is_valid(payload::text, 'jsonb')") < sql.index(
@@ -72,6 +76,17 @@ def test_python_identity_match_preserves_structured_whitespace_and_last_duplicat
         {"payload_json": '{"security_id":[ 123 ],"security_id":1e2}'},
         {"security_id": "1e2"},
     )
+
+
+def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
+    oversized_integer = "1" * 5_000
+    payload = _decode_retained_payload(
+        f'{{"security_id":"BOND-1","extension":{oversized_integer}}}'
+    )
+
+    assert isinstance(payload, dict)
+    assert payload["security_id"] == "BOND-1"
+    assert payload["extension"] == Decimal(oversized_integer)
     assert not replay_row_matches_identity(
         {"payload_json": '{"security_id":[ 123 ]}'},
         {"security_id": "[123]"},
@@ -84,7 +99,7 @@ async def test_quarantine_updates_large_malformed_cohort_in_bounded_statements()
     rows = [
         {
             "id": job_id,
-            "payload": {},
+            "payload_json": "{}",
             "payload_representable": False,
             "earliest_date_representable": False,
         }

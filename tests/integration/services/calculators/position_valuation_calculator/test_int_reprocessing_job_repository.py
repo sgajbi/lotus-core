@@ -302,7 +302,6 @@ async def test_reset_normalization_quarantines_nul_before_identity_extraction(
                     )
                 },
             )
-
         deleted_count = await ReprocessingJobRepository(
             async_db_session
         ).normalize_pending_reset_watermarks_duplicates()
@@ -434,6 +433,28 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                     )
                 },
             )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+                    VALUES (
+                      'RESET_FX_WATERMARKS',
+                      CAST(:payload AS JSON),
+                      'PENDING',
+                      'corr-oversized-json-integer'
+                    )
+                    """
+                ),
+                {
+                    "payload": (
+                        '{"from_currency":"JPY","to_currency":"CHF",'
+                        '"earliest_impacted_date":"2025-01-04",'
+                        '"generated_at":"2025-01-04T00:00:00+00:00",'
+                        '"content_hash":"valid-extension",'
+                        f'"extension":{("1" * 5_000)}}}'
+                    )
+                },
+            )
 
         valid_sibling_exists = await pending_replay_sibling_exists(
             async_db_session,
@@ -452,6 +473,17 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                 else None
             ),
         )
+        oversized_extension_earliest = await quarantine_pending_fx_pair(
+            async_db_session,
+            from_currency="JPY",
+            to_currency="CHF",
+            validate=lambda payload: payload,
+            parse_earliest_date=lambda payload: (
+                date.fromisoformat(payload["earliest_impacted_date"])
+                if isinstance(payload, dict)
+                else None
+            ),
+        )
         await async_db_session.commit()
         statuses = dict(
             (
@@ -463,9 +495,11 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
 
         assert valid_sibling_exists is True
         assert preserved_earliest == date(2025, 1, 3)
+        assert oversized_extension_earliest is None
         assert statuses["corr-nul-fx-identity"] == "FAILED"
         assert statuses["corr-unrelated-fx-poison"] == "FAILED"
         assert statuses["corr-valid-fx-identity"] == "PENDING"
+        assert statuses["corr-oversized-json-integer"] == "PENDING"
     finally:
         await async_db_session.rollback()
         with db_engine.begin() as connection:
