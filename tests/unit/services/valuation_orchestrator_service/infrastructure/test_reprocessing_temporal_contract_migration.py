@@ -37,6 +37,7 @@ def _recoverable_row(**overrides: object) -> dict[str, object]:
         "correlation_id": "corr-recovered",
         "correlation_missing_reason": None,
         "alternate_lookup_key": None,
+        "payload_representable": True,
         "earliest_date_representable": True,
         "generated_at_representable": True,
         "timezone_pattern_matches": True,
@@ -105,6 +106,11 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     recovery_query, query_parameters = bind.execute.call_args_list[0].args
     assert "status = 'FAILED'" in str(recovery_query)
     assert "pg_input_is_valid" in str(recovery_query)
+    recovery_sql = str(recovery_query)
+    assert recovery_sql.count("pg_input_is_valid(payload::text, 'jsonb')") == 4
+    assert recovery_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < recovery_sql.index(
+        "json_typeof"
+    )
     assert query_parameters == {
         "failure_reason": ("invalid_reprocessing_job_payload: quarantined during contract cutover")
     }
@@ -155,6 +161,7 @@ def test_recovery_rejects_python_or_database_temporal_mismatch() -> None:
     recover = migration["_recoverable_fx_parameters"]
 
     assert recover(_recoverable_row()) is not None
+    assert recover(_recoverable_row(payload_representable=False)) is None
     assert recover(_recoverable_row(earliest_date_representable=False)) is None
     assert recover(_recoverable_row(generated_at_representable=False)) is None
     assert recover(_recoverable_row(timezone_pattern_matches=False)) is None
