@@ -794,7 +794,10 @@ async def pending_replay_sibling_evidence(
         siblings=tuple(
             RetainedReplaySibling(
                 id=int(row["id"]),
-                payload=decode_reprocessing_payload_text(row.get("payload_json")),
+                payload=_retained_replay_source_payload(
+                    row.get("payload_json"),
+                    job_type=job_type,
+                ),
                 earliest_impacted_date=_retained_replay_boundary(row.get("payload_json")),
                 attempt_count=int(row.get("attempt_count") or 0),
                 correlation_id=row.get("correlation_id"),
@@ -814,6 +817,23 @@ def _retained_replay_boundary(payload_json: object) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _retained_replay_source_payload(payload_json: object, *, job_type: str) -> object:
+    payload = decode_reprocessing_payload_text(payload_json)
+    if isinstance(payload, dict) or job_type != "RESET_FX_WATERMARKS":
+        return payload
+    fields = {
+        field: _json_object_string_field(payload_json, field)
+        for field in (
+            "from_currency",
+            "to_currency",
+            "earliest_impacted_date",
+            "content_hash",
+            "generated_at",
+        )
+    }
+    return fields if all(value is not None for value in fields.values()) else None
 
 
 async def quarantine_pending_fx_pair(
