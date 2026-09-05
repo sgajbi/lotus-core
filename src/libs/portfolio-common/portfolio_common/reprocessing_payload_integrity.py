@@ -42,7 +42,6 @@ QUARANTINE_PENDING_RESET_SCALAR_COLLISIONS = text(
     FROM valid_string_identities AS valid
     WHERE collision.status = 'PENDING'
       AND collision.job_type = 'RESET_WATERMARKS'
-      AND pg_input_is_valid(collision.payload::text, 'jsonb') IS TRUE
       AND json_typeof(collision.payload->'security_id') IS DISTINCT FROM 'string'
       AND btrim(collision.payload->>'security_id', :trim_chars) = valid.security_id
     """

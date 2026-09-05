@@ -145,13 +145,23 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 status="PENDING",
                 correlation_id="corr-padded-numeric-text",
             ),
-            ReprocessingJob(
-                job_type="RESET_WATERMARKS",
-                payload={"security_id": 123, "earliest_impacted_date": "2025-01-03"},
-                status="PENDING",
-                correlation_id="corr-numeric-scalar",
-            ),
         ]
+    )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING', 'corr-numeric-scalar'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":123,"earliest_impacted_date":"2025-01-03",'
+                '"unrelated_oversized_number":1e1000000}'
+            )
+        },
     )
     await async_db_session.commit()
 
@@ -184,10 +194,18 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         "earliest_impacted_date": "2025-01-04",
     }
     assert numeric_scalar.status == "FAILED"
-    assert numeric_scalar.payload == {
-        "security_id": 123,
-        "earliest_impacted_date": "2025-01-03",
-    }
+    assert numeric_scalar.payload["security_id"] == 123
+    assert numeric_scalar.payload["earliest_impacted_date"] == "2025-01-03"
+    assert (
+        await async_db_session.scalar(
+            text(
+                "SELECT pg_input_is_valid(payload::text, 'jsonb') "
+                "FROM reprocessing_jobs WHERE id = :id"
+            ),
+            {"id": numeric_scalar.id},
+        )
+        is False
+    )
     assert numeric_scalar.failure_reason == (
         "invalid_reset_watermarks_job_payload: scalar identity collision"
     )
