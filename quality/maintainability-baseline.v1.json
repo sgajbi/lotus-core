@@ -25,7 +25,7 @@
     {
       "path": "src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py",
       "rank": "C",
-      "mi": 5.355795255412348,
+      "mi": 5.40597175532023,
       "owner": "lotus-core maintainers",
       "rationale": "Existing reprocessing repository hotspot; baseline has zero growth headroom.",
       "issue": "#462"
