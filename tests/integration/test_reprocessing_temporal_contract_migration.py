@@ -191,7 +191,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     '"generated_at":"2025-01-07T08:00:00-07"}'
                 ),
                 status="FAILED",
-                correlation_id="corr-recovered-source",
+                correlation_id="  <NOT-SET>  ",
                 failure_reason=CUTOVER_REASON,
             )
             standalone_source_id = _insert_job(
@@ -216,7 +216,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     f'"extension":{("1" * 5_000)}}}'
                 ),
                 status="FAILED",
-                correlation_id="corr-oversized-extension-source",
+                correlation_id="  <NOT-SET>  ",
                 failure_reason=CUTOVER_REASON,
             )
             python_invalid_pending_id = _insert_job(
@@ -261,7 +261,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     '"generated_at":"2025-01-08T00:00:00+00:00"}'
                 ),
                 status="PENDING",
-                correlation_id="  <NOT-SET>  ",
+                correlation_id="corr-existing-pending",
             )
             lowercase_timestamp_id = _insert_job(
                 connection,
@@ -353,7 +353,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert by_id[pending_id]["status"] == "PENDING"
             assert by_id[pending_id]["payload"]["earliest_impacted_date"] == "2025-01-04"
             assert by_id[pending_id]["payload"]["generated_at"] == "2025-01-08T00:00:00+00:00"
-            assert by_id[pending_id]["correlation_id"] == "corr-recovered-source"
+            assert by_id[pending_id]["correlation_id"] == "corr-existing-pending"
             assert by_id[lowercase_timestamp_id]["status"] == "PENDING"
             assert (
                 by_id[lowercase_timestamp_id]["payload"]["generated_at"]
@@ -398,7 +398,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 connection.execute(
                     text(
                         """
-                        SELECT payload
+                        SELECT payload, correlation_id
                         FROM reprocessing_jobs
                         WHERE job_type = 'RESET_FX_WATERMARKS'
                           AND status = 'PENDING'
@@ -409,6 +409,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 )
             ).one()
             assert oversized_replay.payload["earliest_impacted_date"] == "2025-01-02"
+            assert oversized_replay.correlation_id is None
 
             accepted_id = _insert_job(
                 connection,
