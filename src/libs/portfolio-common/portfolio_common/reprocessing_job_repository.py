@@ -104,28 +104,25 @@ class _EffectiveDatedReplayIdentity:
     alternate_lookup_key: str | None
 
 
-def _claim_pending_jobs_query(job_type: str):
-    """Build the atomic claim while keeping payload decoding under application policy.
-
-    PostgreSQL returns payload text so the database driver cannot apply Python's
-    bounded integer conversion to an otherwise valid extension field. The mapping
-    boundary decodes each claimed payload with the shared retained-JSON policy.
+# Keep this statement static and select the ordering policy through a boolean bind.
+# Effective-dated work is prioritized by its source boundary; all other work uses
+# creation order. Payload crosses the driver as text so Python's bounded integer
+# conversion cannot abort the whole claim batch for a permitted extension field.
+# Each row is decoded at the mapping boundary with the retained-JSON policy.
+CLAIM_PENDING_JOBS = text(
     """
-
-    order_by = (
-        "(payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC"
-        if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES
-        else "created_at ASC, id ASC"
-    )
-    return text(
-        f"""
         WITH candidates AS MATERIALIZED (
             SELECT id
             FROM reprocessing_jobs
             WHERE status = 'PENDING'
               AND job_type = :job_type
               AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
-            ORDER BY {order_by}
+            ORDER BY
+                CASE WHEN :prioritize_effective_date
+                    THEN payload->>'earliest_impacted_date'
+                END ASC,
+                created_at ASC,
+                id ASC
             LIMIT :batch_size
             FOR UPDATE SKIP LOCKED
         )
@@ -144,10 +141,11 @@ def _claim_pending_jobs_query(job_type: str):
           AND target.job_type = :job_type
         RETURNING target.id, target.job_type, target.payload::text AS payload_json,
             target.status, target.correlation_id, target.correlation_missing_reason,
-            target.alternate_lookup_key, target.attempt_count, target.created_at, target.lease_token,
+            target.alternate_lookup_key, target.attempt_count, target.created_at,
+            target.lease_token,
             target.lease_expires_at;
         """
-    )
+)
 
 
 class ReprocessingJobRepository:
@@ -549,12 +547,12 @@ class ReprocessingJobRepository:
                     extra={"deleted_count": normalized_count},
                 )
 
-        query = _claim_pending_jobs_query(job_type)
         lease_token = uuid.uuid4().hex
         result = await self.db.execute(
-            query,
+            CLAIM_PENDING_JOBS,
             {
                 "job_type": job_type,
+                "prioritize_effective_date": job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES,
                 "batch_size": batch_size,
                 "lease_owner": resolved_lease_owner,
                 "lease_token": lease_token,
