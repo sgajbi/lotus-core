@@ -797,6 +797,13 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
         (
             "RESET_WATERMARKS",
             {
+                "security_id": "unsafe\ud800identity",
+                "earliest_impacted_date": "2026-04-08",
+            },
+        ),
+        (
+            "RESET_WATERMARKS",
+            {
                 "security_id": " SEC-1 ",
                 "earliest_impacted_date": "2026-04-08",
             },

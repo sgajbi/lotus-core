@@ -1,6 +1,5 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
-import unicodedata
 import uuid
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
@@ -29,6 +28,7 @@ from .reprocessing_payload_integrity import (
     pending_replay_sibling_exists,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
+    replay_text_is_storage_safe,
 )
 from .utils import async_timed
 
@@ -1279,8 +1279,8 @@ def _required_replay_payload_text(payload: dict[str, Any], key: str) -> str:
         raise ValueError(f"effective-dated replay payload requires {key}")
     if value != value.strip():
         raise ValueError(f"effective-dated replay payload {key} must be normalized")
-    if any(unicodedata.category(character) == "Cc" for character in value):
-        raise ValueError(f"effective-dated replay payload {key} contains a control character")
+    if not replay_text_is_storage_safe(value):
+        raise ValueError(f"effective-dated replay payload {key} is not storage-safe text")
     return value
 
 
