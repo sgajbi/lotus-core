@@ -31,11 +31,42 @@ REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
 
 
 @dataclass(frozen=True, slots=True)
-class PendingReplaySiblingEvidence:
-    """Locked sibling presence and any recoverable replay boundary."""
+class RetainedReplaySibling:
+    """Locked sibling state needed to preserve replay truth during coalescing."""
 
-    exists: bool
+    id: int
+    payload: object
     earliest_impacted_date: date | None
+    attempt_count: int
+    correlation_id: str | None
+    correlation_missing_reason: str | None
+    alternate_lookup_key: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PendingReplaySiblingEvidence:
+    """Locked sibling evidence, including rows whose claim status changed."""
+
+    siblings: tuple[RetainedReplaySibling, ...]
+
+    @property
+    def exists(self) -> bool:
+        return bool(self.siblings)
+
+    @property
+    def earliest_sibling(self) -> RetainedReplaySibling | None:
+        candidates = [
+            sibling for sibling in self.siblings if sibling.earliest_impacted_date is not None
+        ]
+        return min(
+            candidates,
+            key=lambda sibling: (sibling.earliest_impacted_date, sibling.id),
+            default=None,
+        )
+
+    @property
+    def max_attempt_count(self) -> int:
+        return max((sibling.attempt_count for sibling in self.siblings), default=0)
 
 
 def _retain_json_number_text(value: str) -> str:
@@ -759,14 +790,19 @@ async def pending_replay_sibling_evidence(
         expected_identity=expected_identity,
         preserve_after_claim=True,
     )
-    boundaries = [
-        boundary
-        for row in locked_rows
-        if (boundary := _retained_replay_boundary(row.get("payload_json"))) is not None
-    ]
     return PendingReplaySiblingEvidence(
-        exists=bool(locked_rows),
-        earliest_impacted_date=min(boundaries, default=None),
+        siblings=tuple(
+            RetainedReplaySibling(
+                id=int(row["id"]),
+                payload=decode_reprocessing_payload_text(row.get("payload_json")),
+                earliest_impacted_date=_retained_replay_boundary(row.get("payload_json")),
+                attempt_count=int(row.get("attempt_count") or 0),
+                correlation_id=row.get("correlation_id"),
+                correlation_missing_reason=row.get("correlation_missing_reason"),
+                alternate_lookup_key=row.get("alternate_lookup_key"),
+            )
+            for row in locked_rows
+        )
     )
 
 

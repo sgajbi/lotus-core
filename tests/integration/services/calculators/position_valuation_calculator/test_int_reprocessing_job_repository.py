@@ -2433,6 +2433,7 @@ async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
 ) -> None:
     repository = ReprocessingJobRepository(async_db_session)
     owned_hash = "sha256:" + ("b" * 64)
+    sibling_hash = "sha256:" + ("c" * 64)
     await repository.stage_pending_fx_revaluation_job(
         from_currency="USD",
         to_currency="CHF",
@@ -2449,9 +2450,11 @@ async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
     sibling_id = await async_db_session.scalar(
         text(
             """
-            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            INSERT INTO reprocessing_jobs (
+                job_type, payload, status, attempt_count, correlation_id
+            )
             VALUES (
-                'RESET_FX_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                'RESET_FX_WATERMARKS', CAST(:payload AS json), 'PENDING', 4,
                 'corr-processing-before-scan'
             )
             RETURNING id
@@ -2459,9 +2462,9 @@ async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
         ),
         {
             "payload": (
-                '{"from_currency":" USD ","to_currency":"CHF",'
+                '{"from_currency":"USD","to_currency":"CHF",'
                 '"earliest_impacted_date":"2025-01-03",'
-                '"generated_at":"invalid","content_hash":"legacy"}'
+                f'"generated_at":"2025-01-08T00:00:00+00:00","content_hash":"{sibling_hash}"}}'
             )
         },
     )
@@ -2499,8 +2502,11 @@ async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
     assert [row.status for row in rows] == ["COMPLETE", "PROCESSING", "PENDING"]
     assert rows[1].id == sibling_id
     assert rows[1].lease_token == processing_sibling.lease_token
+    assert rows[1].attempt_count == 5
     assert rows[2].payload["earliest_impacted_date"] == "2025-01-03"
-    assert rows[2].payload["content_hash"] == owned_hash
+    assert rows[2].payload["content_hash"] == sibling_hash
+    assert rows[2].attempt_count == 5
+    assert rows[2].correlation_id == "corr-processing-before-scan"
 
 
 @pytest.mark.parametrize(
