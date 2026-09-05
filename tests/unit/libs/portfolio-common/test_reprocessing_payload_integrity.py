@@ -12,18 +12,23 @@ from portfolio_common.reprocessing_payload_integrity import (
 )
 
 
-def test_candidate_queries_return_jsonb_invalid_rows_for_quarantine() -> None:
+def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() -> None:
     for statement in (PENDING_FX_REPLAY_CANDIDATES, PENDING_RESET_REPLAY_CANDIDATES):
         sql = str(statement)
         assert "AS payload_representable" in sql
         assert "THEN TRUE" not in sql
         assert "btrim(payload->>" in sql
         assert sql.index("pg_input_is_valid(payload::text, 'jsonb')") < sql.index("json_typeof")
+        guarded_predicate = sql.rindex("WHEN pg_input_is_valid(payload::text, 'jsonb')")
+        assert guarded_predicate < sql.rindex("btrim(payload->>")
 
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
         assert "THEN TRUE" not in sql
         assert "btrim(payload->>" in sql
+        assert sql.index("WHEN pg_input_is_valid(payload::text, 'jsonb')") < sql.index(
+            "btrim(payload->>"
+        )
 
 
 @pytest.mark.asyncio

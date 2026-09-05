@@ -12,6 +12,11 @@ from portfolio_common.reprocessing_job_repository import (
     ReprocessingJobTransitionOutcome,
     ResetWatermarksStageOutcome,
 )
+from portfolio_common.reprocessing_payload_integrity import (
+    PENDING_FX_REPLAY_CANDIDATES,
+    PENDING_FX_REPLAY_SIBLING,
+    REPLAY_TEXT_TRIM_CHARS,
+)
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -365,6 +370,91 @@ async def test_reset_normalization_quarantines_nul_before_identity_extraction(
                         trim(payload->>'security_id'), status, created_at, id
                     )
                     WHERE job_type = 'RESET_WATERMARKS'
+                    """
+                )
+            )
+
+
+async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_pair(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    try:
+        with db_engine.begin() as connection:
+            connection.execute(text('DROP INDEX "uq_reproc_jobs_pending_fx_pair"'))
+            connection.execute(text('DROP INDEX "ix_reproc_jobs_pending_fx_priority"'))
+            connection.execute(
+                text(
+                    r"""
+                    INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+                    VALUES
+                        (
+                            'RESET_FX_WATERMARKS',
+                            CAST(
+                                '{"from_currency":"US\u0000D","to_currency":"CAD",'
+                                '"earliest_impacted_date":"2025-01-03",'
+                                '"generated_at":"2025-01-03T00:00:00+00:00",'
+                                '"content_hash":"poisoned"}' AS json
+                            ),
+                            'PENDING', 'corr-nul-fx-identity'
+                        ),
+                        (
+                            'RESET_FX_WATERMARKS',
+                            CAST(
+                                '{"from_currency":"USD","to_currency":"SGD",'
+                                '"earliest_impacted_date":"2025-01-03",'
+                                '"generated_at":"2025-01-03T00:00:00+00:00",'
+                                '"content_hash":"valid"}' AS json
+                            ),
+                            'PENDING', 'corr-valid-fx-identity'
+                        )
+                    """
+                )
+            )
+
+        parameters = {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "trim_chars": REPLAY_TEXT_TRIM_CHARS,
+        }
+        candidates = (
+            (await async_db_session.execute(PENDING_FX_REPLAY_CANDIDATES, parameters))
+            .mappings()
+            .all()
+        )
+        sibling_id = await async_db_session.scalar(
+            PENDING_FX_REPLAY_SIBLING,
+            {"job_id": 0, **parameters},
+        )
+
+        assert [row["payload"]["from_currency"] for row in candidates] == ["USD"]
+        assert sibling_id == candidates[0]["id"]
+    finally:
+        await async_db_session.rollback()
+        with db_engine.begin() as connection:
+            connection.execute(text("DELETE FROM reprocessing_jobs"))
+        with db_engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_reproc_jobs_pending_fx_pair
+                    ON reprocessing_jobs (
+                        (payload->>'from_currency'), (payload->>'to_currency')
+                    )
+                    WHERE job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_reproc_jobs_pending_fx_priority
+                    ON reprocessing_jobs (
+                        (payload->>'earliest_impacted_date'), created_at, id
+                    )
+                    WHERE job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'
                     """
                 )
             )
