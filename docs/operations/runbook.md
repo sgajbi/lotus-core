@@ -881,8 +881,10 @@ payloads as text and use the shared safe decoder. Preserve that boundary so a pe
 numeric extension cannot abort a batch or hide a required restatement; Reset coalescing retains
 unknown fields while advancing only to the earliest replay date. Owned requeue carries an earlier
 sibling boundary into the replacement pending job when that sibling is already processing or
-becomes terminal between discovery and row locking; it never takes the sibling's lease. Legacy
-Reset duplicate normalization retains the maximum retry count across the coalesced rows.
+becomes terminal between discovery and row locking; it never takes the sibling's lease. The
+replacement retains maximum retry history and applies the established FX generated-at/content-hash
+ordering to source and correlation lineage. Legacy Reset duplicate normalization retains the
+maximum retry count across the coalesced rows.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
 accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
