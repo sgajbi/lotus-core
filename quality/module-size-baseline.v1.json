@@ -65,7 +65,7 @@
     },
     {
       "path": "src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py",
-      "lines": 1519,
+      "lines": 1502,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy reprocessing repository pending bounded repository decomposition.",
       "issue": "#462",

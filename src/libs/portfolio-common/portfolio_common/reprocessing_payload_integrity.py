@@ -235,7 +235,7 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     WHERE job_type = 'RESET_FX_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
            AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
       END
@@ -263,7 +263,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     WHERE job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
       END
     FOR UPDATE
@@ -275,38 +275,82 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
 
 PENDING_RESET_REPLAY_SIBLING = text(
     """
-    SELECT id
+    SELECT id, payload
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
       END
     ORDER BY id
-    LIMIT 1
     FOR UPDATE
     """
 )
 
 PENDING_FX_REPLAY_SIBLING = text(
     """
-    SELECT id
+    SELECT id, payload
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
            AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
       END
     ORDER BY id
-    LIMIT 1
     FOR UPDATE
     """
 )
+
+
+def replay_payload_matches_identity(
+    payload: object,
+    expected_identity: Mapping[str, str],
+) -> bool:
+    """Match an identity in Python when PostgreSQL cannot safely extract its JSON text."""
+
+    if not isinstance(payload, Mapping):
+        return False
+    return all(
+        isinstance(value := payload.get(field), str)
+        and value.strip(REPLAY_TEXT_TRIM_CHARS) == expected
+        for field, expected in expected_identity.items()
+    )
+
+
+async def pending_replay_sibling_exists(
+    db: AsyncSession,
+    *,
+    job_id: int,
+    job_type: str,
+    payload: Mapping[str, Any],
+) -> bool:
+    """Lock and match a sibling without extracting an unsafe legacy JSON identity in SQL."""
+
+    if job_type == "RESET_WATERMARKS":
+        statement = PENDING_RESET_REPLAY_SIBLING
+        expected_identity = {"security_id": str(payload["security_id"])}
+    else:
+        statement = PENDING_FX_REPLAY_SIBLING
+        expected_identity = {
+            "from_currency": str(payload["from_currency"]),
+            "to_currency": str(payload["to_currency"]),
+        }
+    rows = (
+        (
+            await db.execute(
+                statement,
+                {"job_id": job_id, "trim_chars": REPLAY_TEXT_TRIM_CHARS, **expected_identity},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return any(replay_payload_matches_identity(row["payload"], expected_identity) for row in rows)
 
 
 async def quarantine_pending_fx_pair(
@@ -327,6 +371,7 @@ async def quarantine_pending_fx_pair(
             "trim_chars": REPLAY_TEXT_TRIM_CHARS,
         },
     )
+    expected_identity = {"from_currency": from_currency, "to_currency": to_currency}
     return await _quarantine_candidates(
         db,
         rows=result.mappings().all(),
@@ -337,6 +382,9 @@ async def quarantine_pending_fx_pair(
         ),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
+        preserve_earliest_if=lambda payload: replay_payload_matches_identity(
+            payload, expected_identity
+        ),
         failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
     )
 
@@ -357,12 +405,16 @@ async def quarantine_pending_reset_security(
             "trim_chars": REPLAY_TEXT_TRIM_CHARS,
         },
     )
+    expected_identity = {"security_id": security_id}
     return await _quarantine_candidates(
         db,
         rows=result.mappings().all(),
         required_validity_fields=("payload_representable", "earliest_date_representable"),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
+        preserve_earliest_if=lambda payload: replay_payload_matches_identity(
+            payload, expected_identity
+        ),
         failure_reason=(
             "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
         ),
@@ -377,6 +429,7 @@ async def _quarantine_candidates(
     validate: Callable[[object], object],
     parse_earliest_date: Callable[[object], date | None],
     failure_reason: str,
+    preserve_earliest_if: Callable[[object], bool] | None = None,
 ) -> date | None:
     malformed_ids: list[int] = []
     known_earliest_dates: list[date] = []
@@ -388,7 +441,9 @@ async def _quarantine_candidates(
             validate(payload)
         except (TypeError, ValueError):
             malformed_ids.append(int(row["id"]))
-            if (earliest_date := parse_earliest_date(payload)) is not None:
+            if (preserve_earliest_if is None or preserve_earliest_if(payload)) and (
+                earliest_date := parse_earliest_date(payload)
+            ) is not None:
                 known_earliest_dates.append(earliest_date)
 
     if malformed_ids:

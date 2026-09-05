@@ -22,11 +22,10 @@ from .infrastructure.persistence.statement_batching import (
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .reprocessing_payload_integrity import (
     LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
-    PENDING_FX_REPLAY_SIBLING,
-    PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
     effective_dated_replay_identity_key,
     normalize_pending_reset_watermarks_duplicates,
+    pending_replay_sibling_exists,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
 )
@@ -1115,28 +1114,12 @@ class ReprocessingJobRepository:
         job_id: int,
         identity: _EffectiveDatedReplayIdentity,
     ) -> bool:
-        if identity.job_type == "RESET_WATERMARKS":
-            statement = PENDING_RESET_REPLAY_SIBLING
-            parameters = {
-                "job_id": job_id,
-                "security_id": identity.payload["security_id"],
-                "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
-            }
-        else:
-            statement = PENDING_FX_REPLAY_SIBLING
-            parameters = {
-                "job_id": job_id,
-                "from_currency": identity.payload["from_currency"],
-                "to_currency": identity.payload["to_currency"],
-                "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
-            }
-        sibling_id = (
-            await self.db.execute(
-                statement,
-                parameters,
-            )
-        ).scalar_one_or_none()
-        return sibling_id is not None
+        return await pending_replay_sibling_exists(
+            self.db,
+            job_id=job_id,
+            job_type=identity.job_type,
+            payload=identity.payload,
+        )
 
     async def _coalesce_pending_replay(self, identity: _EffectiveDatedReplayIdentity) -> None:
         payload = identity.payload
