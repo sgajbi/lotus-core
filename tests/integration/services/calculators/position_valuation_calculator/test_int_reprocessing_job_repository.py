@@ -13,9 +13,8 @@ from portfolio_common.reprocessing_job_repository import (
     ResetWatermarksStageOutcome,
 )
 from portfolio_common.reprocessing_payload_integrity import (
-    PENDING_FX_REPLAY_CANDIDATES,
-    PENDING_FX_REPLAY_SIBLING,
-    REPLAY_TEXT_TRIM_CHARS,
+    pending_replay_sibling_exists,
+    quarantine_pending_fx_pair,
 )
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -409,28 +408,53 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                                 '"content_hash":"valid"}' AS json
                             ),
                             'PENDING', 'corr-valid-fx-identity'
+                        ),
+                        (
+                            'RESET_FX_WATERMARKS',
+                            CAST(
+                                '{"from_currency":"EUR","to_currency":"GBP",'
+                                '"earliest_impacted_date":"2025-01-03",'
+                                '"generated_at":"2025-01-03T00:00:00+00:00",'
+                                '"content_hash":"unrelated-poison",'
+                                '"legacy_number"\:1e1000000}' AS json
+                            ),
+                            'PENDING', 'corr-unrelated-fx-poison'
                         )
                     """
                 )
             )
 
-        parameters = {
-            "from_currency": "USD",
-            "to_currency": "SGD",
-            "trim_chars": REPLAY_TEXT_TRIM_CHARS,
-        }
-        candidates = (
-            (await async_db_session.execute(PENDING_FX_REPLAY_CANDIDATES, parameters))
-            .mappings()
-            .all()
+        valid_sibling_exists = await pending_replay_sibling_exists(
+            async_db_session,
+            job_id=0,
+            job_type="RESET_FX_WATERMARKS",
+            payload={"from_currency": "USD", "to_currency": "SGD"},
         )
-        sibling_id = await async_db_session.scalar(
-            PENDING_FX_REPLAY_SIBLING,
-            {"job_id": 0, **parameters},
+        preserved_earliest = await quarantine_pending_fx_pair(
+            async_db_session,
+            from_currency="EUR",
+            to_currency="GBP",
+            validate=lambda payload: payload,
+            parse_earliest_date=lambda payload: (
+                date.fromisoformat(payload["earliest_impacted_date"])
+                if isinstance(payload, dict)
+                else None
+            ),
+        )
+        await async_db_session.commit()
+        statuses = dict(
+            (
+                await async_db_session.execute(
+                    select(ReprocessingJob.correlation_id, ReprocessingJob.status)
+                )
+            ).all()
         )
 
-        assert [row["payload"]["from_currency"] for row in candidates] == ["USD"]
-        assert sibling_id == candidates[0]["id"]
+        assert valid_sibling_exists is True
+        assert preserved_earliest == date(2025, 1, 3)
+        assert statuses["corr-nul-fx-identity"] == "FAILED"
+        assert statuses["corr-unrelated-fx-poison"] == "FAILED"
+        assert statuses["corr-valid-fx-identity"] == "PENDING"
     finally:
         await async_db_session.rollback()
         with db_engine.begin() as connection:

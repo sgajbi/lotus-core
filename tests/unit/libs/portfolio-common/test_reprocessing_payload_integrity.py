@@ -9,6 +9,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
     _quarantine_candidates,
+    replay_payload_matches_identity,
 )
 
 
@@ -16,7 +17,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     for statement in (PENDING_FX_REPLAY_CANDIDATES, PENDING_RESET_REPLAY_CANDIDATES):
         sql = str(statement)
         assert "AS payload_representable" in sql
-        assert "THEN TRUE" not in sql
+        assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
         assert sql.index("pg_input_is_valid(payload::text, 'jsonb')") < sql.index("json_typeof")
         guarded_predicate = sql.rindex("WHEN pg_input_is_valid(payload::text, 'jsonb')")
@@ -24,11 +25,22 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
 
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
-        assert "THEN TRUE" not in sql
+        assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
         assert sql.index("WHEN pg_input_is_valid(payload::text, 'jsonb')") < sql.index(
             "btrim(payload->>"
         )
+
+
+def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:
+    assert replay_payload_matches_identity(
+        {"security_id": " BOND-1 ", "legacy_number": 10**1000},
+        {"security_id": "BOND-1"},
+    )
+    assert not replay_payload_matches_identity(
+        {"security_id": "BOND\x00-1"},
+        {"security_id": "BOND-1"},
+    )
 
 
 @pytest.mark.asyncio

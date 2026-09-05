@@ -1187,7 +1187,9 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
     mock_db_session: AsyncMock,
 ) -> None:
     sibling_result = MagicMock()
-    sibling_result.scalar_one_or_none.return_value = 12
+    sibling_result.mappings.return_value.all.return_value = [
+        {"id": 12, "payload": {"security_id": " BOND-1 "}}
+    ]
     mock_db_session.execute.return_value = sibling_result
     identity = SimpleNamespace(
         job_type="RESET_WATERMARKS",
@@ -1204,6 +1206,7 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
     sql = str(statement)
     assert "btrim(payload->>'security_id', :trim_chars)" in sql
     assert "jsonb_typeof" not in sql
+    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in sql
     assert "FOR UPDATE" in sql
     assert parameters == {
         "job_id": 11,
