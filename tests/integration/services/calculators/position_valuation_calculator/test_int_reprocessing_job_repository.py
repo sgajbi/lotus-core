@@ -207,6 +207,24 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
             INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
             VALUES (
                 'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                'corr-unbounded-exponent'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"UNBOUNDED-EXPONENT",'
+                '"earliest_impacted_date":"2025-01-03",'
+                '"legacy_number":1e9999999999999999999999999999999999999999}'
+            )
+        },
+    )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
                 'corr-numeric-recovery-blocker'
             )
             """
@@ -258,13 +276,16 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 14
+    assert len(rows) == 15
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
         row for row in rows if row.correlation_id == "corr-padded-numeric-text"
     )
     numeric_scalar = next(row for row in rows if row.correlation_id == "corr-numeric-scalar")
+    unbounded_exponent = next(
+        row for row in rows if row.correlation_id == "corr-unbounded-exponent"
+    )
     recoverable_source = next(
         row
         for row in rows
@@ -323,6 +344,10 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         is False
     )
     assert numeric_scalar.failure_reason == (
+        "invalid_reset_watermarks_job_payload: unsafe identity representation"
+    )
+    assert unbounded_exponent.status == "FAILED"
+    assert unbounded_exponent.failure_reason == (
         "invalid_reset_watermarks_job_payload: unsafe identity representation"
     )
     assert recoverable_source.status == "FAILED"
@@ -815,7 +840,7 @@ async def test_reset_staging_preserves_boundary_claimed_between_scan_and_lock(
         db: AsyncSession,
         *,
         candidate_ids: list[int],
-        malformed_candidate_ids: list[int],
+        preserve_candidate_ids: list[int],
         job_type: str,
     ):
         scan_completed.set()
@@ -823,7 +848,7 @@ async def test_reset_staging_preserves_boundary_claimed_between_scan_and_lock(
         return await original_lock(
             db,
             candidate_ids=candidate_ids,
-            malformed_candidate_ids=malformed_candidate_ids,
+            preserve_candidate_ids=preserve_candidate_ids,
             job_type=job_type,
         )
 
@@ -1872,6 +1897,115 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
         "earliest_impacted_date": "2025-01-05",
     }
     assert rows[2].correlation_id == "corr-claimed"
+
+
+async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "OWNED-RACE", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-owned-race",
+    )
+    await async_db_session.commit()
+    owned = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    sibling_id = await async_db_session.scalar(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING', 'corr-sibling-race'
+            )
+            RETURNING id
+            """
+        ),
+        {"payload": ('{"security_id":" OWNED-RACE ","earliest_impacted_date":"2025-01-03"}')},
+    )
+    assert sibling_id is not None
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    scan_completed = asyncio.Event()
+    allow_row_lock = asyncio.Event()
+    original_lock = payload_integrity._lock_scanned_replay_rows
+    first_lock = True
+
+    async def pause_first_lock_after_scan(
+        db: AsyncSession,
+        *,
+        candidate_ids: list[int],
+        preserve_candidate_ids: list[int],
+        job_type: str,
+    ):
+        nonlocal first_lock
+        if first_lock:
+            first_lock = False
+            scan_completed.set()
+            await allow_row_lock.wait()
+        return await original_lock(
+            db,
+            candidate_ids=candidate_ids,
+            preserve_candidate_ids=preserve_candidate_ids,
+            job_type=job_type,
+        )
+
+    async def requeue_owned():
+        async with session_factory() as requeue_session, requeue_session.begin():
+            return await ReprocessingJobRepository(
+                requeue_session
+            ).requeue_owned_effective_dated_job(
+                owned.id,
+                lease_token=owned.lease_token,
+            )
+
+    with patch.object(
+        payload_integrity,
+        "_lock_scanned_replay_rows",
+        side_effect=pause_first_lock_after_scan,
+    ):
+        requeue_task = asyncio.create_task(requeue_owned())
+        try:
+            await asyncio.wait_for(scan_completed.wait(), timeout=5)
+            async with session_factory() as claimant_session, claimant_session.begin():
+                claimed = await ReprocessingJobRepository(claimant_session).find_and_claim_jobs(
+                    "RESET_WATERMARKS",
+                    batch_size=1,
+                    lease_owner="sibling-race-worker",
+                    normalize_reset_watermark_duplicates=False,
+                )
+                assert [job.id for job in claimed] == [sibling_id]
+            allow_row_lock.set()
+            outcome = await asyncio.wait_for(requeue_task, timeout=5)
+        finally:
+            allow_row_lock.set()
+            if not requeue_task.done():
+                requeue_task.cancel()
+                await asyncio.gather(requeue_task, return_exceptions=True)
+
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    async with session_factory() as evidence_session:
+        rows = (
+            (
+                await evidence_session.execute(
+                    select(ReprocessingJob)
+                    .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                    .order_by(ReprocessingJob.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [row.status for row in rows] == ["COMPLETE", "PROCESSING", "PENDING"]
+    assert rows[1].id == sibling_id
+    assert rows[1].lease_owner == "sibling-race-worker"
+    assert rows[2].payload == {
+        "security_id": "OWNED-RACE",
+        "earliest_impacted_date": "2025-01-03",
+    }
 
 
 @pytest.mark.parametrize(
