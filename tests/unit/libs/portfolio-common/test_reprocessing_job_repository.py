@@ -497,7 +497,7 @@ async def test_stale_reprocessing_claim_locks_rows_only_after_identity_phase(
         id=10,
         attempt_count=1,
         job_type="RESET_WATERMARKS",
-        payload={"security_id": "BOND-1", "earliest_impacted_date": "2026-08-01"},
+        payload_json=('{"security_id":"BOND-1","earliest_impacted_date":"2026-08-01"}'),
         correlation_id="corr-claim-order",
         correlation_missing_reason=None,
         alternate_lookup_key=None,
@@ -710,13 +710,12 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             id=10,
             attempt_count=2,
             job_type="RESET_FX_WATERMARKS",
-            payload={
-                "from_currency": "USD",
-                "to_currency": "SGD",
-                "earliest_impacted_date": "2026-04-08",
-                "content_hash": "sha256:" + ("a" * 64),
-                "generated_at": "2026-04-10T08:00:00+00:00",
-            },
+            payload_json=(
+                '{"from_currency":"USD","to_currency":"SGD",'
+                '"earliest_impacted_date":"2026-04-08",'
+                f'"content_hash":"sha256:{"a" * 64}",'
+                '"generated_at":"2026-04-10T08:00:00+00:00"}'
+            ),
             correlation_id="corr-stale",
             correlation_missing_reason=None,
             alternate_lookup_key=None,
