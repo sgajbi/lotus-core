@@ -1561,6 +1561,57 @@ async def test_staging_preserves_valid_compact_offset_pending_fx_lineage(
     assert rows[0].correlation_id == "corr-latest-authoritative"
 
 
+async def test_staging_preserves_correlation_when_valid_pending_fx_source_is_newer(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    pending_hash = "sha256:" + ("d" * 64)
+    pending = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "EUR",
+            "to_currency": "CHF",
+            "earliest_impacted_date": "2025-01-05",
+            "content_hash": pending_hash,
+            "generated_at": "2025-01-09T00:00:00+00:00",
+        },
+        status="PENDING",
+        correlation_id=None,
+        correlation_missing_reason="legacy_correlation_unavailable",
+        alternate_lookup_key="legacy:eur-chf",
+    )
+    async_db_session.add(pending)
+    await async_db_session.flush()
+    pending_id = pending.id
+    await async_db_session.commit()
+
+    await ReprocessingJobRepository(async_db_session).stage_pending_fx_revaluation_job(
+        from_currency="EUR",
+        to_currency="CHF",
+        earliest_impacted_date=date(2025, 1, 3),
+        content_hash="sha256:" + ("c" * 64),
+        generated_at=datetime(2025, 1, 8, tzinfo=timezone.utc),
+        correlation_id="corr-older-correction",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    row = await async_db_session.get(ReprocessingJob, pending_id)
+    assert row is not None
+    assert row.payload == {
+        "from_currency": "EUR",
+        "to_currency": "CHF",
+        "earliest_impacted_date": "2025-01-03",
+        "content_hash": pending_hash,
+        "generated_at": "2025-01-09T00:00:00+00:00",
+    }
+    assert row.correlation_id == "corr-older-correction"
+    assert row.correlation_missing_reason is None
+    assert row.alternate_lookup_key is None
+
+
 async def test_stale_control_character_payload_fails_before_identity_lock_binding(
     clean_db,
     async_db_session: AsyncSession,
