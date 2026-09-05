@@ -24,28 +24,42 @@ PYTHON_ISO_DATE_PATTERN = (
     r"[0-9]{4}-W[0-9]{2}(-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$"
 )
 
-QUARANTINE_PENDING_RESET_SCALAR_COLLISIONS = text(
+QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
     """
     WITH valid_string_identities AS MATERIALIZED (
         SELECT DISTINCT btrim(payload->>'security_id', :trim_chars) AS security_id
         FROM reprocessing_jobs
         WHERE status = 'PENDING'
           AND job_type = 'RESET_WATERMARKS'
-          AND pg_input_is_valid(payload::text, 'jsonb') IS TRUE
-          AND json_typeof(payload->'security_id') = 'string'
-          AND btrim(payload->>'security_id', :trim_chars) <> ''
+          AND CASE
+              WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+              WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+              WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+              THEN FALSE
+              WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN FALSE
+              ELSE btrim(payload->>'security_id', :trim_chars) <> ''
+               AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+          END
     )
     UPDATE reprocessing_jobs AS collision
     SET status = 'FAILED',
-        failure_reason = 'invalid_reset_watermarks_job_payload: scalar identity collision',
+        failure_reason = 'invalid_reset_watermarks_job_payload: identity collision',
         updated_at = now()
     FROM valid_string_identities AS valid
     WHERE collision.status = 'PENDING'
       AND collision.job_type = 'RESET_WATERMARKS'
-      AND json_typeof(collision.payload->'security_id') IS DISTINCT FROM 'string'
-      AND btrim(collision.payload->>'security_id', :trim_chars) = valid.security_id
+      AND collision.payload->>'security_id' = valid.security_id
+      AND CASE
+          WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          WHEN json_typeof(collision.payload->'security_id') IS DISTINCT FROM 'string' THEN TRUE
+          WHEN json_typeof(collision.payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+          THEN TRUE
+          WHEN collision.payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN TRUE
+          ELSE btrim(collision.payload->>'security_id', :trim_chars) = ''
+            OR pg_input_is_valid(collision.payload->>'earliest_impacted_date', 'date') IS NOT TRUE
+      END
     """
-)
+).bindparams(bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN))
 
 
 NORMALIZE_PENDING_RESET_WATERMARKS = text(
@@ -121,7 +135,7 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
     """Quarantine scalar collisions, then coalesce valid pending identities."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
-    await db.execute(QUARANTINE_PENDING_RESET_SCALAR_COLLISIONS, parameters)
+    await db.execute(QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS, parameters)
     result = await db.execute(NORMALIZE_PENDING_RESET_WATERMARKS, parameters)
     return int(result.scalar_one())
 
