@@ -207,6 +207,18 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
             INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
             VALUES (
                 'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                'corr-numeric-recovery-blocker'
+            )
+            """
+        ),
+        {"payload": '{"security_id":456,"earliest_impacted_date":"2025-01-03"}'},
+    )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
                 'corr-recoverable-storage-poison'
             )
             """
@@ -215,6 +227,23 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
             "payload": (
                 '{"security_id":" RECOVERY-BOND ",'
                 '"earliest_impacted_date":"2025-01-01",'
+                '"unrelated_oversized_number":1e1000000}'
+            )
+        },
+    )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                'corr-numeric-recovery-source'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":" 456 ","earliest_impacted_date":"2025-01-01",'
                 '"unrelated_oversized_number":1e1000000}'
             )
         },
@@ -229,7 +258,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 11
+    assert len(rows) == 14
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
@@ -245,6 +274,15 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         row
         for row in rows
         if row.status == "PENDING" and row.payload.get("security_id") == "RECOVERY-BOND"
+    )
+    numeric_recovery_source = next(
+        row for row in rows if row.correlation_id == "corr-numeric-recovery-source"
+    )
+    numeric_recovery_blocker = next(
+        row for row in rows if row.correlation_id == "corr-numeric-recovery-blocker"
+    )
+    numeric_recovered_boundary = next(
+        row for row in rows if row.status == "PENDING" and row.payload.get("security_id") == "456"
     )
     padded_string = next(row for row in rows if row.correlation_id == "corr-padded-string")
     malformed_string = next(
@@ -294,6 +332,23 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     )
     assert recovered_boundary.payload == {
         "security_id": "RECOVERY-BOND",
+        "earliest_impacted_date": "2025-01-01",
+    }
+    assert numeric_recovery_source.status == "FAILED"
+    assert numeric_recovery_source.failure_reason == (
+        "invalid_reset_watermarks_job_payload: unsafe storage representation; "
+        "replay boundary recovered"
+    )
+    assert numeric_recovery_blocker.status == "FAILED"
+    assert numeric_recovery_blocker.payload == {
+        "security_id": 456,
+        "earliest_impacted_date": "2025-01-03",
+    }
+    assert numeric_recovery_blocker.failure_reason == (
+        "invalid_reset_watermarks_job_payload: identity collision"
+    )
+    assert numeric_recovered_boundary.payload == {
+        "security_id": "456",
         "earliest_impacted_date": "2025-01-01",
     }
     assert padded_string.status == "PENDING"
