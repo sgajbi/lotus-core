@@ -2544,6 +2544,56 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     assert rows[2].correlation_id == "corr-legacy-padded"
 
 
+async def test_owned_reset_requeue_ignores_sentinel_sibling_correlation(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "BOND-SENTINEL", "earliest_impacted_date": "2025-01-07"},
+        correlation_id="corr-claimed",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    async_db_session.add(
+        ReprocessingJob(
+            job_type="RESET_WATERMARKS",
+            payload={
+                "security_id": " BOND-SENTINEL",
+                "earliest_impacted_date": "2025-01-05",
+            },
+            status="PENDING",
+            correlation_id="  <NOT-SET>  ",
+        )
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (await async_db_session.execute(select(ReprocessingJob).order_by(ReprocessingJob.id.asc())))
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING"]
+    assert rows[2].payload == {
+        "security_id": "BOND-SENTINEL",
+        "earliest_impacted_date": "2025-01-05",
+    }
+    assert rows[2].correlation_id == "corr-claimed"
+    assert rows[2].correlation_missing_reason is None
+    assert rows[2].alternate_lookup_key is None
+
+
 async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
     clean_db,
     async_db_session: AsyncSession,
