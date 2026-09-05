@@ -23,6 +23,9 @@ MIGRATION = (
 )
 CONSTRAINT = "ck_reprocessing_jobs_active_payload_valid"
 CUTOVER_REASON = "invalid_reprocessing_job_payload: quarantined during contract cutover"
+RECOVERED_REASON = (
+    "invalid_reprocessing_job_payload: recovered by c166 temporal-contract correction"
+)
 
 
 def _bind_operations(migration: dict[str, Any], connection) -> None:
@@ -222,7 +225,9 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert by_id[jsonb_unrepresentable_source_id]["status"] == "FAILED"
             assert by_id[jsonb_unrepresentable_source_id]["failure_reason"] == CUTOVER_REASON
             assert by_id[recovered_source_id]["status"] == "FAILED"
+            assert by_id[recovered_source_id]["failure_reason"] == RECOVERED_REASON
             assert by_id[standalone_source_id]["status"] == "FAILED"
+            assert by_id[standalone_source_id]["failure_reason"] == RECOVERED_REASON
             assert by_id[pending_id]["status"] == "PENDING"
             assert by_id[pending_id]["payload"]["earliest_impacted_date"] == "2025-01-04"
             assert by_id[pending_id]["payload"]["generated_at"] == "2025-01-08T00:00:00+00:00"
@@ -292,3 +297,20 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             )
             migration["downgrade"]()
             assert "[+-][0-9]{2}:?[0-9]{2}" in _constraint_sql(connection)
+
+            migration["upgrade"]()
+            assert (
+                connection.execute(
+                    text(
+                        """
+                        SELECT count(*)
+                        FROM reprocessing_jobs
+                        WHERE job_type = 'RESET_FX_WATERMARKS'
+                          AND status = 'PENDING'
+                          AND payload->>'from_currency' = 'EUR'
+                          AND payload->>'to_currency' = 'SGD'
+                        """
+                    )
+                ).scalar_one()
+                == 0
+            )
