@@ -4084,8 +4084,10 @@ Most relevant current governance:
      sibling's usable earlier boundary through coalescing when the sibling is already processing or
      becomes terminal after the unlocked scan, without taking its lease. Coalescing also retains the
      maximum retry count and selects FX source/correlation lineage by the established
-     generated-at/content-hash ordering. Legacy Reset duplicate normalization must retain the
-     maximum retry count as well as the earliest boundary. Migration `c166b2c3d52d`
+     generated-at/content-hash ordering. When an unrelated extension prevents full JSON decoding,
+     required FX source fields are recovered lexically and revalidated before selection; the
+     extension is never promoted. Legacy Reset duplicate normalization must retain the maximum
+     retry count as well as the earliest boundary. Migration `c166b2c3d52d`
      corrects the zoned-timestamp CHECK without amending `c162b2c3d529` and re-stages only FX work
      that is provably valid at both boundaries. Do not generalize
      bound-parameter behavior to direct

@@ -883,8 +883,10 @@ unknown fields while advancing only to the earliest replay date. Owned requeue c
 sibling boundary into the replacement pending job when that sibling is already processing or
 becomes terminal between discovery and row locking; it never takes the sibling's lease. The
 replacement retains maximum retry history and applies the established FX generated-at/content-hash
-ordering to source and correlation lineage. Legacy Reset duplicate normalization retains the
-maximum retry count across the coalesced rows.
+ordering to source and correlation lineage. If an unrelated extension prevents full decoding, the
+required FX source fields are recovered lexically and revalidated; the extension remains only on
+the quarantined source row. Legacy Reset duplicate normalization retains the maximum retry count
+across the coalesced rows.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
 accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
