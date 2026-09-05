@@ -122,6 +122,8 @@ def _active_payload_constraint(
 _CUTOVER_GUARD = sa.text(
     """
     DO $$
+    DECLARE
+        invalid_active_payload_count bigint;
     BEGIN
         PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
@@ -132,6 +134,24 @@ _CUTOVER_GUARD = sa.text(
             RAISE EXCEPTION USING
                 MESSAGE = 'temporal cutover requires a drained PROCESSING queue',
                 HINT = 'pause the worker, recover or terminalize in-flight rows, then retry';
+        END IF;
+
+        SELECT count(*)
+        INTO invalid_active_payload_count
+        FROM reprocessing_jobs
+        WHERE status = 'PENDING'
+          AND job_type IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')
+          AND pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE;
+
+        IF invalid_active_payload_count > 0 THEN
+            RAISE EXCEPTION USING
+                MESSAGE = 'reprocessing temporal cutover found '
+                    || invalid_active_payload_count::text
+                    || ' pending row(s) whose payload cannot be represented as jsonb',
+                HINT = (
+                    'terminalize the affected invalid replay work without rewriting source '
+                    'payload evidence, then retry the migration'
+                );
         END IF;
     END
     $$
@@ -321,11 +341,9 @@ _DOWNGRADE_PREFLIGHT = sa.text(
 
         IF incompatible_count > 0 THEN
             RAISE EXCEPTION USING
-                MESSAGE = format(
-                    'reprocessing temporal-contract downgrade found % active row(s) '
-                    'unsupported by the predecessor constraint',
-                    incompatible_count
-                ),
+                MESSAGE = 'reprocessing temporal-contract downgrade found '
+                    || incompatible_count::text
+                    || ' active row(s) unsupported by the predecessor constraint',
                 HINT = (
                     'drain or terminalize the affected replay work without rewriting source '
                     'payload evidence, then retry the downgrade'
