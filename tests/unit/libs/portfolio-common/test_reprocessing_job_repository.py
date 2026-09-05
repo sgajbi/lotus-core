@@ -194,8 +194,11 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
 
     assert deleted_count == 2
     assert mock_db_session.execute.await_count == 6
-    quarantine_control_stmt = mock_db_session.execute.await_args_list[0].args[0]
-    assert "control-bearing identity" in str(quarantine_control_stmt)
+    quarantine_unsafe_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    assert "unsafe identity representation" in str(quarantine_unsafe_stmt)
+    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in str(
+        quarantine_unsafe_stmt
+    )
     identity_stmt = mock_db_session.execute.await_args_list[1].args[0]
     assert "SELECT DISTINCT" in str(identity_stmt)
     assert "ORDER BY security_id" in str(identity_stmt)
@@ -208,6 +211,9 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     ]
     collision_stmt = mock_db_session.execute.await_args_list[4].args[0]
     assert "identity collision" in str(collision_stmt)
+    assert "WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN FALSE" in str(
+        collision_stmt
+    )
     stmt = mock_db_session.execute.await_args_list[5].args[0]
     stmt_text = str(stmt)
     assert "WITH valid_candidates AS MATERIALIZED" in stmt_text

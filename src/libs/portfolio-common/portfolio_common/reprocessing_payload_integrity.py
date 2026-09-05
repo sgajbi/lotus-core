@@ -25,16 +25,16 @@ PYTHON_ISO_DATE_PATTERN = (
 )
 REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
 
-QUARANTINE_PENDING_RESET_CONTROL_IDENTITIES = text(
+QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES = text(
     """
     UPDATE reprocessing_jobs
     SET status = 'FAILED',
-        failure_reason = 'invalid_reset_watermarks_job_payload: control-bearing identity',
+        failure_reason = 'invalid_reset_watermarks_job_payload: unsafe identity representation',
         updated_at = now()
     WHERE status = 'PENDING'
       AND job_type = 'RESET_WATERMARKS'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
           ELSE payload->>'security_id' ~ :replay_control_pattern
       END
@@ -95,7 +95,10 @@ QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
     FROM valid_string_identities AS valid
     WHERE collision.status = 'PENDING'
       AND collision.job_type = 'RESET_WATERMARKS'
-      AND collision.payload->>'security_id' = valid.security_id
+      AND CASE
+          WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          ELSE collision.payload->>'security_id' = valid.security_id
+      END
       AND CASE
           WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           WHEN json_typeof(collision.payload->'security_id') IS DISTINCT FROM 'string' THEN TRUE
@@ -187,10 +190,10 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
 
 
 async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int:
-    """Quarantine scalar collisions, then coalesce valid pending identities."""
+    """Quarantine unsafe identities, then serialize and coalesce valid repairs."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
-    await db.execute(QUARANTINE_PENDING_RESET_CONTROL_IDENTITIES)
+    await db.execute(QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES)
     identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
     identity_keys = sorted(
         {
