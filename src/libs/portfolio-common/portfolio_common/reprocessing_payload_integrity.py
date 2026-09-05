@@ -1,0 +1,1196 @@
+"""Guard and quarantine retained effective-dated replay payloads before SQL casts."""
+
+import json
+import unicodedata
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal, DecimalException
+from typing import Any
+
+from sqlalchemy import Date, Integer, String, bindparam, func, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .database_models import ReprocessingJob
+from .infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
+
+REPLAY_TEXT_TRIM_CHARS = (
+    "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029"
+    "\u202f\u205f\u3000"
+)
+PYTHON_ISO_DATE_PATTERN = (
+    r"^([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8}|"
+    r"[0-9]{4}-W[0-9]{2}(-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$"
+)
+REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
+
+
+@dataclass(frozen=True, slots=True)
+class RetainedReplaySibling:
+    """Retained sibling state needed to preserve replay truth during coalescing."""
+
+    id: int
+    payload: object
+    earliest_impacted_date: date | None
+    attempt_count: int
+    correlation_id: str | None
+    correlation_missing_reason: str | None
+    alternate_lookup_key: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PendingReplaySiblingEvidence:
+    """Sibling evidence from locked pending rows or committed claim snapshots."""
+
+    siblings: tuple[RetainedReplaySibling, ...]
+
+    @property
+    def exists(self) -> bool:
+        return bool(self.siblings)
+
+    @property
+    def earliest_sibling(self) -> RetainedReplaySibling | None:
+        candidates = [
+            sibling for sibling in self.siblings if sibling.earliest_impacted_date is not None
+        ]
+        return min(
+            candidates,
+            key=lambda sibling: (sibling.earliest_impacted_date, sibling.id),
+            default=None,
+        )
+
+    @property
+    def max_attempt_count(self) -> int:
+        return max((sibling.attempt_count for sibling in self.siblings), default=0)
+
+
+def _retain_json_number_text(value: str) -> str:
+    return value
+
+
+_RETAINED_JSON_LEXICAL_DECODER = json.JSONDecoder(
+    parse_int=_retain_json_number_text,
+    parse_float=_retain_json_number_text,
+)
+
+QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES = text(
+    """
+    UPDATE reprocessing_jobs
+    SET status = 'FAILED',
+        failure_reason = 'invalid_reset_watermarks_job_payload: unsafe identity representation',
+        updated_at = now()
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE payload->>'security_id' ~ :replay_control_pattern
+      END
+    """
+).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
+
+PENDING_RESET_RECOVERY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key
+    FROM reprocessing_jobs
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE payload->>'security_id' ~ :replay_control_pattern
+      END
+    ORDER BY id
+    """
+).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
+
+UPSERT_PENDING_RESET_WATERMARKS = text(
+    """
+    INSERT INTO reprocessing_jobs (
+        job_type,
+        payload,
+        status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key
+    )
+    VALUES (
+        'RESET_WATERMARKS',
+        json_build_object(
+            'security_id', :security_id,
+            'earliest_impacted_date', :earliest_impacted_date
+        )::json,
+        'PENDING',
+        :attempt_count,
+        :correlation_id,
+        :correlation_missing_reason,
+        :alternate_lookup_key
+    )
+    ON CONFLICT ((payload->>'security_id'))
+    WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
+    DO UPDATE
+    SET payload = jsonb_set(
+            reprocessing_jobs.payload::jsonb,
+            '{earliest_impacted_date}',
+            to_jsonb(
+                LEAST(
+                    (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
+                    CAST(:earliest_impacted_date AS date)
+                )::text
+            )
+        )::json,
+        attempt_count = GREATEST(
+            reprocessing_jobs.attempt_count,
+            EXCLUDED.attempt_count
+        ),
+        correlation_id = CASE
+            WHEN CAST(:earliest_impacted_date AS date)
+                 < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
+            THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
+            WHEN reprocessing_jobs.correlation_id IS NULL
+            THEN :correlation_id
+            ELSE reprocessing_jobs.correlation_id
+        END,
+        correlation_missing_reason = CASE
+            WHEN :correlation_id IS NOT NULL
+            THEN NULL
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND CAST(:earliest_impacted_date AS date) <
+                     CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
+            THEN :correlation_missing_reason
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND reprocessing_jobs.correlation_missing_reason IS NULL
+            THEN :correlation_missing_reason
+            ELSE reprocessing_jobs.correlation_missing_reason
+        END,
+        alternate_lookup_key = CASE
+            WHEN :correlation_id IS NOT NULL
+            THEN NULL
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND CAST(:earliest_impacted_date AS date) <
+                     CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
+            THEN :alternate_lookup_key
+            WHEN reprocessing_jobs.correlation_id IS NULL
+                 AND reprocessing_jobs.alternate_lookup_key IS NULL
+            THEN :alternate_lookup_key
+            ELSE reprocessing_jobs.alternate_lookup_key
+        END,
+        updated_at = now()
+    RETURNING id, job_type, payload::text AS payload_json, status,
+        correlation_id, correlation_missing_reason, alternate_lookup_key,
+        attempt_count, last_attempted_at, failure_reason, lease_owner,
+        lease_token, lease_expires_at, created_at, updated_at,
+        (xmax = 0) AS was_inserted
+    """
+).bindparams(
+    bindparam("security_id", type_=String()),
+    bindparam("earliest_impacted_date", type_=Date()),
+    bindparam("attempt_count", type_=Integer()),
+    bindparam("correlation_id", type_=String()),
+    bindparam("correlation_missing_reason", type_=String()),
+    bindparam("alternate_lookup_key", type_=String()),
+)
+
+PENDING_RESET_IDENTITY_LOCK_KEYS = text(
+    """
+    SELECT DISTINCT btrim(payload->>'security_id', :trim_chars) AS security_id
+    FROM reprocessing_jobs
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          WHEN payload->>'security_id' ~ :replay_control_pattern THEN FALSE
+          ELSE btrim(payload->>'security_id', :trim_chars) <> ''
+           AND payload->>'security_id'
+               IS DISTINCT FROM btrim(payload->>'security_id', :trim_chars)
+      END
+    ORDER BY security_id
+    """
+).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
+LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY = text(
+    "SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"
+)
+
+QUARANTINE_PENDING_RESET_RECOVERY_BLOCKER = text(
+    """
+    UPDATE reprocessing_jobs
+    SET status = 'FAILED',
+        failure_reason = 'invalid_reset_watermarks_job_payload: identity collision',
+        updated_at = now()
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND id <> :source_id
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN payload->>'security_id' IS DISTINCT FROM :security_id THEN FALSE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN TRUE
+          WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+          THEN TRUE
+          WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN TRUE
+          ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS NOT TRUE
+      END
+    """
+).bindparams(bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN))
+
+
+def effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
+    """Encode one replay-family identity without delimiter ambiguity."""
+
+    encoded_components = "|".join(f"{len(component)}:{component}" for component in components)
+    return f"{job_type}|{encoded_components}"
+
+
+def replay_text_is_storage_safe(value: str) -> bool:
+    """Return whether text can safely cross PostgreSQL's UTF-8 boundary."""
+
+    if any(unicodedata.category(character) in {"Cc", "Cs"} for character in value):
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
+    """
+    WITH valid_string_identities AS MATERIALIZED (
+        SELECT DISTINCT btrim(payload->>'security_id', :trim_chars) AS security_id
+        FROM reprocessing_jobs
+        WHERE status = 'PENDING'
+          AND job_type = 'RESET_WATERMARKS'
+          AND CASE
+              WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+              WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+              WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+              THEN FALSE
+              WHEN payload->>'security_id' ~ :replay_control_pattern THEN FALSE
+              WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN FALSE
+              ELSE btrim(payload->>'security_id', :trim_chars) <> ''
+               AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+          END
+    )
+    UPDATE reprocessing_jobs AS collision
+    SET status = 'FAILED',
+        failure_reason = 'invalid_reset_watermarks_job_payload: identity collision',
+        updated_at = now()
+    FROM valid_string_identities AS valid
+    WHERE collision.status = 'PENDING'
+      AND collision.job_type = 'RESET_WATERMARKS'
+      AND CASE
+          WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          ELSE collision.payload->>'security_id' = valid.security_id
+      END
+      AND CASE
+          WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          WHEN json_typeof(collision.payload->'security_id') IS DISTINCT FROM 'string' THEN TRUE
+          WHEN json_typeof(collision.payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+          THEN TRUE
+          WHEN collision.payload->>'security_id' ~ :replay_control_pattern THEN TRUE
+          WHEN collision.payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN TRUE
+          ELSE btrim(collision.payload->>'security_id', :trim_chars) = ''
+            OR pg_input_is_valid(collision.payload->>'earliest_impacted_date', 'date') IS NOT TRUE
+      END
+    """
+).bindparams(
+    bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN),
+    bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN),
+)
+
+
+NORMALIZE_PENDING_RESET_WATERMARKS = text(
+    """
+    WITH valid_candidates AS MATERIALIZED (
+        SELECT
+            id,
+            btrim(payload->>'security_id', :trim_chars) AS security_id,
+            payload,
+            payload->>'earliest_impacted_date' AS earliest_impacted_date,
+            attempt_count,
+            correlation_id,
+            correlation_missing_reason,
+            alternate_lookup_key,
+            created_at
+        FROM reprocessing_jobs
+        WHERE status = 'PENDING'
+          AND job_type = 'RESET_WATERMARKS'
+          AND CASE
+              WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+              WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+              WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+              THEN FALSE
+              WHEN payload->>'security_id' ~ :replay_control_pattern THEN FALSE
+              WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN FALSE
+              ELSE btrim(payload->>'security_id', :trim_chars) <> ''
+               AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+          END
+    ),
+    ranked AS (
+        SELECT
+            id,
+            security_id,
+            earliest_impacted_date::date AS earliest_impacted_date,
+            row_number() OVER (
+                PARTITION BY security_id
+                ORDER BY earliest_impacted_date::date ASC, created_at ASC, id ASC
+            ) AS rn,
+            min(earliest_impacted_date::date) OVER (
+                PARTITION BY security_id
+            ) AS min_impacted_date,
+            max(attempt_count) OVER (PARTITION BY security_id) AS max_attempt_count,
+            first_value(correlation_id) OVER (
+                PARTITION BY security_id
+                ORDER BY (correlation_id IS NULL), earliest_impacted_date::date, created_at, id
+            ) AS retained_correlation_id,
+            first_value(correlation_missing_reason) OVER (
+                PARTITION BY security_id
+                ORDER BY (correlation_id IS NULL), earliest_impacted_date::date, created_at, id
+            ) AS retained_correlation_missing_reason,
+            first_value(alternate_lookup_key) OVER (
+                PARTITION BY security_id
+                ORDER BY (correlation_id IS NULL), earliest_impacted_date::date, created_at, id
+            ) AS retained_alternate_lookup_key
+        FROM valid_candidates
+    ),
+    keepers AS (
+        UPDATE reprocessing_jobs j
+        SET payload = jsonb_set(
+                jsonb_set(
+                    j.payload::jsonb,
+                    '{security_id}',
+                    to_jsonb(r.security_id)
+                ),
+                '{earliest_impacted_date}',
+                to_jsonb(r.min_impacted_date::text)
+            )::json,
+            attempt_count = r.max_attempt_count,
+            correlation_id = r.retained_correlation_id,
+            correlation_missing_reason = CASE
+                WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                ELSE r.retained_correlation_missing_reason
+            END,
+            alternate_lookup_key = CASE
+                WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                ELSE r.retained_alternate_lookup_key
+            END,
+            updated_at = now()
+        FROM ranked r
+        WHERE j.id = r.id
+          AND r.rn = 1
+          AND (
+              j.payload->>'security_id' IS DISTINCT FROM r.security_id
+              OR (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
+              OR j.attempt_count <> r.max_attempt_count
+              OR j.correlation_id IS DISTINCT FROM r.retained_correlation_id
+              OR j.correlation_missing_reason IS DISTINCT FROM CASE
+                  WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                  ELSE r.retained_correlation_missing_reason
+              END
+              OR j.alternate_lookup_key IS DISTINCT FROM CASE
+                  WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                  ELSE r.retained_alternate_lookup_key
+              END
+          )
+        RETURNING j.id
+    ),
+    deleted AS (
+        DELETE FROM reprocessing_jobs j
+        USING ranked r
+        WHERE j.id = r.id
+          AND r.rn > 1
+        RETURNING j.id
+    )
+    SELECT count(*) FROM deleted;
+    """
+).bindparams(
+    bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN),
+    bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN),
+)
+
+
+async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int:
+    """Quarantine unsafe identities, then serialize and coalesce valid repairs."""
+
+    parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
+    recovery_candidates = (await db.execute(PENDING_RESET_RECOVERY_CANDIDATES)).mappings().all()
+    recovery_plans = [
+        plan
+        for row in recovery_candidates
+        if (plan := _reset_boundary_recovery_plan(row)) is not None
+    ]
+    identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
+    identity_keys = sorted(
+        {
+            effective_dated_replay_identity_key("RESET_WATERMARKS", str(security_id))
+            for security_id in identity_result.scalars().all()
+        }
+        | {plan["identity_key"] for plan in recovery_plans}
+    )
+    for identity_key in identity_keys:
+        await db.execute(
+            LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
+            {"identity_key": identity_key},
+        )
+    if recovery_plans:
+        recovery_ids = [int(plan["id"]) for plan in recovery_plans]
+        expected_identity_keys = {
+            int(plan["id"]): str(plan["identity_key"]) for plan in recovery_plans
+        }
+        locked_rows = await _lock_scanned_replay_rows(
+            db,
+            candidate_ids=recovery_ids,
+            preserve_candidate_ids=[],
+            job_type="RESET_WATERMARKS",
+        )
+        locked_ids = {int(row["id"]) for row in locked_rows}
+        transitioned_rows = await _snapshot_scanned_replay_rows(
+            db,
+            candidate_ids=[
+                recovery_id for recovery_id in recovery_ids if recovery_id not in locked_ids
+            ],
+            job_type="RESET_WATERMARKS",
+        )
+        recovery_plans = [
+            plan
+            for row in [*locked_rows, *transitioned_rows]
+            if (plan := _reset_boundary_recovery_plan(row)) is not None
+            and plan["identity_key"] == expected_identity_keys[int(plan["id"])]
+        ]
+    if recovery_plans:
+        await _mark_reprocessing_jobs_failed(
+            db,
+            job_ids=[int(plan["id"]) for plan in recovery_plans],
+            failure_reason=(
+                "invalid_reset_watermarks_job_payload: unsafe retained "
+                "representation; replay boundary recovered"
+            ),
+        )
+    await db.execute(QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES)
+    for plan in recovery_plans:
+        await db.execute(
+            QUARANTINE_PENDING_RESET_RECOVERY_BLOCKER,
+            {
+                "source_id": plan["id"],
+                "security_id": plan["security_id"],
+            },
+        )
+    for plan in recovery_plans:
+        await db.execute(UPSERT_PENDING_RESET_WATERMARKS, plan)
+    await db.execute(QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS, parameters)
+    result = await db.execute(NORMALIZE_PENDING_RESET_WATERMARKS, parameters)
+    return int(result.scalar_one())
+
+
+PENDING_FX_REPLAY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+        END AS earliest_date_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(
+                payload->>'generated_at', 'timestamp with time zone'
+            )
+        END AS generated_at_representable
+    FROM reprocessing_jobs
+    WHERE job_type = 'RESET_FX_WATERMARKS'
+      AND status IN ('PENDING', 'PROCESSING')
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
+           AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
+      END
+    """
+).bindparams(
+    bindparam("from_currency", type_=String()),
+    bindparam("to_currency", type_=String()),
+    bindparam("trim_chars", type_=String()),
+)
+
+PENDING_RESET_REPLAY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+        END AS earliest_date_representable
+    FROM reprocessing_jobs
+    WHERE job_type = 'RESET_WATERMARKS'
+      AND status IN ('PENDING', 'PROCESSING')
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
+      END
+    """
+).bindparams(
+    bindparam("security_id", type_=String()),
+    bindparam("trim_chars", type_=String()),
+)
+
+PENDING_RESET_REPLAY_SIBLING = text(
+    """
+    SELECT id, payload::text AS payload_json, status, attempt_count,
+           correlation_id, correlation_missing_reason, alternate_lookup_key
+    FROM reprocessing_jobs
+    WHERE id <> :job_id
+      AND job_type = 'RESET_WATERMARKS'
+      AND status IN ('PENDING', 'PROCESSING')
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
+      END
+    ORDER BY id
+    """
+)
+
+PENDING_FX_REPLAY_SIBLING = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key
+    FROM reprocessing_jobs
+    WHERE id <> :job_id
+      AND job_type = 'RESET_FX_WATERMARKS'
+      AND status IN ('PENDING', 'PROCESSING')
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
+           AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
+      END
+    ORDER BY id
+    """
+)
+
+LOCK_SCANNED_REPLAY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
+        status,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+        END AS earliest_date_representable,
+        CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
+            THEN FALSE
+            ELSE pg_input_is_valid(
+                payload->>'generated_at', 'timestamp with time zone'
+            )
+        END AS generated_at_representable
+    FROM reprocessing_jobs
+    WHERE id = ANY(CAST(:candidate_ids AS BIGINT[]))
+      AND job_type = :job_type
+      AND (
+          status = 'PENDING'
+          OR id = ANY(CAST(:preserve_candidate_ids AS BIGINT[]))
+      )
+    ORDER BY id
+    FOR UPDATE
+    """
+).bindparams(
+    bindparam("candidate_ids"),
+    bindparam("job_type", type_=String()),
+)
+
+SNAPSHOT_SCANNED_REPLAY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
+        status
+    FROM reprocessing_jobs
+    WHERE id = ANY(CAST(:candidate_ids AS BIGINT[]))
+      AND job_type = :job_type
+    ORDER BY id
+    """
+).bindparams(
+    bindparam("candidate_ids"),
+    bindparam("job_type", type_=String()),
+)
+
+
+async def _lock_scanned_replay_rows(
+    db: AsyncSession,
+    *,
+    candidate_ids: list[int],
+    preserve_candidate_ids: list[int],
+    job_type: str,
+) -> list[Mapping[str, Any]]:
+    """Lock pending evidence plus scanned rows that must survive a claim race."""
+
+    if not candidate_ids:
+        return []
+    return (
+        (
+            await db.execute(
+                LOCK_SCANNED_REPLAY_CANDIDATES,
+                {
+                    "candidate_ids": sorted(set(candidate_ids)),
+                    "preserve_candidate_ids": sorted(set(preserve_candidate_ids)),
+                    "job_type": job_type,
+                },
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def _snapshot_scanned_replay_rows(
+    db: AsyncSession,
+    *,
+    candidate_ids: list[int],
+    job_type: str,
+) -> list[Mapping[str, Any]]:
+    """Read committed candidate state without taking a live worker's row lock."""
+
+    if not candidate_ids:
+        return []
+    return (
+        (
+            await db.execute(
+                SNAPSHOT_SCANNED_REPLAY_CANDIDATES,
+                {"candidate_ids": sorted(set(candidate_ids)), "job_type": job_type},
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+def replay_row_matches_identity(
+    row: Mapping[str, Any],
+    expected_identity: Mapping[str, str],
+) -> bool:
+    """Match the exact JSON identity text retained by PostgreSQL."""
+
+    return all(
+        (identity_text := _json_object_field_identity_text(row.get("payload_json"), field))
+        is not None
+        and identity_text.strip(REPLAY_TEXT_TRIM_CHARS) == expected
+        for field, expected in expected_identity.items()
+    )
+
+
+async def _lock_matching_replay_rows(
+    db: AsyncSession,
+    *,
+    scanned_rows: list[Mapping[str, Any]],
+    job_type: str,
+    expected_identity: Mapping[str, str],
+    preserve_after_claim: bool = False,
+) -> list[Mapping[str, Any]]:
+    """Snapshot processing matches; lock and revalidate pending matches."""
+
+    matching_rows = [
+        row for row in scanned_rows if replay_row_matches_identity(row, expected_identity)
+    ]
+    processing_rows = [row for row in matching_rows if row.get("status") == "PROCESSING"]
+    candidate_ids = sorted(
+        int(row["id"]) for row in matching_rows if row.get("status") != "PROCESSING"
+    )
+    if not candidate_ids:
+        return processing_rows
+    locked_rows = await _lock_scanned_replay_rows(
+        db,
+        candidate_ids=candidate_ids,
+        preserve_candidate_ids=[],
+        job_type=job_type,
+    )
+    locked_ids = {int(row["id"]) for row in locked_rows}
+    transitioned_rows = (
+        await _snapshot_scanned_replay_rows(
+            db,
+            candidate_ids=[
+                candidate_id for candidate_id in candidate_ids if candidate_id not in locked_ids
+            ],
+            job_type=job_type,
+        )
+        if preserve_after_claim
+        else []
+    )
+    revalidated_rows = [
+        row
+        for row in [*locked_rows, *transitioned_rows]
+        if replay_row_matches_identity(row, expected_identity)
+    ]
+    return sorted([*processing_rows, *revalidated_rows], key=lambda row: int(row["id"]))
+
+
+def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    payload_json = row.get("payload_json")
+    security_id = _json_object_string_field(payload_json, "security_id")
+    earliest_value = _json_object_string_field(payload_json, "earliest_impacted_date")
+    if security_id is None or earliest_value is None:
+        return None
+    security_id = security_id.strip(REPLAY_TEXT_TRIM_CHARS)
+    if not security_id or not replay_text_is_storage_safe(security_id):
+        return None
+    try:
+        earliest_impacted_date = date.fromisoformat(earliest_value)
+    except ValueError:
+        return None
+    return {
+        "id": int(row["id"]),
+        "identity_key": effective_dated_replay_identity_key("RESET_WATERMARKS", security_id),
+        "security_id": security_id,
+        "earliest_impacted_date": earliest_impacted_date,
+        "attempt_count": int(row.get("attempt_count") or 0),
+        "correlation_id": row.get("correlation_id"),
+        "correlation_missing_reason": row.get("correlation_missing_reason"),
+        "alternate_lookup_key": row.get("alternate_lookup_key"),
+    }
+
+
+def _json_object_field_identity_text(payload_json: object, field: str) -> str | None:
+    """Extract a top-level JSON value without losing its stored lexical representation."""
+
+    encoded_value = _json_object_field_encoded_value(payload_json, field)
+    return _postgres_json_identity_text(encoded_value)
+
+
+def _json_object_string_field(payload_json: object, field: str) -> str | None:
+    encoded_value = _json_object_field_encoded_value(payload_json, field)
+    if encoded_value is None or not encoded_value.startswith('"'):
+        return None
+    try:
+        decoded_value = json.loads(encoded_value)
+    except (ValueError, RecursionError):
+        return None
+    return decoded_value if isinstance(decoded_value, str) else None
+
+
+def _json_object_field_encoded_value(payload_json: object, field: str) -> str | None:
+    """Return one top-level field token while scanning other values lexically."""
+
+    if not isinstance(payload_json, str):
+        return None
+    decoder = _RETAINED_JSON_LEXICAL_DECODER
+    index = _skip_json_whitespace(payload_json, 0)
+    if index >= len(payload_json) or payload_json[index] != "{":
+        return None
+    index += 1
+    matched_value: str | None = None
+    try:
+        while True:
+            index = _skip_json_whitespace(payload_json, index)
+            if index >= len(payload_json) or payload_json[index] == "}":
+                return matched_value
+            key, index = decoder.raw_decode(payload_json, index)
+            if not isinstance(key, str):
+                return None
+            index = _skip_json_whitespace(payload_json, index)
+            if index >= len(payload_json) or payload_json[index] != ":":
+                return None
+            value_start = _skip_json_whitespace(payload_json, index + 1)
+            _, value_end = decoder.raw_decode(payload_json, value_start)
+            if key == field:
+                matched_value = payload_json[value_start:value_end]
+            index = _skip_json_whitespace(payload_json, value_end)
+            if index >= len(payload_json):
+                return None
+            if payload_json[index] == "}":
+                return matched_value
+            if payload_json[index] != ",":
+                return None
+            index += 1
+    except (ValueError, RecursionError):
+        return None
+
+
+def _skip_json_whitespace(value: str, index: int) -> int:
+    while index < len(value) and value[index] in " \t\r\n":
+        index += 1
+    return index
+
+
+def _postgres_json_identity_text(encoded_value: object) -> str | None:
+    """Convert raw JSON field text to the corresponding ``json ->>`` identity."""
+
+    if not isinstance(encoded_value, str):
+        return None
+    try:
+        decoded_value = _RETAINED_JSON_LEXICAL_DECODER.decode(encoded_value)
+    except (ValueError, RecursionError):
+        return None
+    if encoded_value.startswith('"') and isinstance(decoded_value, str):
+        return decoded_value
+    if decoded_value is None:
+        return None
+    return encoded_value
+
+
+async def pending_replay_sibling_evidence(
+    db: AsyncSession,
+    job_id: int,
+    job_type: str,
+    payload: Mapping[str, Any],
+) -> PendingReplaySiblingEvidence:
+    """Lock a matching sibling and retain its usable boundary across a concurrent claim."""
+
+    if job_type == "RESET_WATERMARKS":
+        statement = PENDING_RESET_REPLAY_SIBLING
+        expected_identity = {"security_id": str(payload["security_id"])}
+    else:
+        statement = PENDING_FX_REPLAY_SIBLING
+        expected_identity = {
+            "from_currency": str(payload["from_currency"]),
+            "to_currency": str(payload["to_currency"]),
+        }
+    scanned_rows = (
+        (
+            await db.execute(
+                statement,
+                {"job_id": job_id, "trim_chars": REPLAY_TEXT_TRIM_CHARS, **expected_identity},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    locked_rows = await _lock_matching_replay_rows(
+        db,
+        scanned_rows=scanned_rows,
+        job_type=job_type,
+        expected_identity=expected_identity,
+        preserve_after_claim=True,
+    )
+    return PendingReplaySiblingEvidence(
+        siblings=tuple(
+            RetainedReplaySibling(
+                id=int(row["id"]),
+                payload=decode_retained_replay_source_payload(
+                    row.get("payload_json"),
+                    job_type=job_type,
+                ),
+                earliest_impacted_date=_retained_replay_boundary(row.get("payload_json")),
+                attempt_count=int(row.get("attempt_count") or 0),
+                correlation_id=row.get("correlation_id"),
+                correlation_missing_reason=row.get("correlation_missing_reason"),
+                alternate_lookup_key=row.get("alternate_lookup_key"),
+            )
+            for row in locked_rows
+        )
+    )
+
+
+def _retained_replay_boundary(payload_json: object) -> date | None:
+    value = _json_object_string_field(payload_json, "earliest_impacted_date")
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def decode_retained_replay_source_payload(payload_json: object, *, job_type: str) -> object:
+    """Decode retained JSON, recovering canonical replay fields around unsafe extensions."""
+
+    payload = decode_reprocessing_payload_text(payload_json)
+    if isinstance(payload, dict):
+        return payload
+    canonical_fields = {
+        "RESET_WATERMARKS": ("security_id", "earliest_impacted_date"),
+        "RESET_FX_WATERMARKS": (
+            "from_currency",
+            "to_currency",
+            "earliest_impacted_date",
+            "content_hash",
+            "generated_at",
+        ),
+    }.get(job_type)
+    if canonical_fields is None:
+        return None
+    fields = {field: _json_object_string_field(payload_json, field) for field in canonical_fields}
+    return fields if all(value is not None for value in fields.values()) else None
+
+
+async def quarantine_pending_fx_pair(
+    db: AsyncSession,
+    *,
+    from_currency: str,
+    to_currency: str,
+    validate: Callable[[object], object],
+    parse_earliest_date: Callable[[object], date | None],
+) -> PendingReplaySiblingEvidence:
+    """Quarantine malformed FX work and return attributable replay evidence."""
+
+    result = await db.execute(
+        PENDING_FX_REPLAY_CANDIDATES,
+        {
+            "from_currency": from_currency,
+            "to_currency": to_currency,
+            "trim_chars": REPLAY_TEXT_TRIM_CHARS,
+        },
+    )
+    expected_identity = {"from_currency": from_currency, "to_currency": to_currency}
+    required_validity_fields = (
+        "payload_representable",
+        "earliest_date_representable",
+        "generated_at_representable",
+    )
+    scanned_rows = result.mappings().all()
+    rows = await _lock_matching_replay_rows(
+        db,
+        scanned_rows=[
+            row
+            for row in scanned_rows
+            if _replay_row_requires_quarantine(
+                row,
+                required_validity_fields=required_validity_fields,
+                validate=validate,
+            )
+        ],
+        job_type="RESET_FX_WATERMARKS",
+        expected_identity=expected_identity,
+        preserve_after_claim=True,
+    )
+    return await _quarantine_candidates(
+        db,
+        rows=rows,
+        required_validity_fields=required_validity_fields,
+        validate=validate,
+        parse_earliest_date=parse_earliest_date,
+        failure_reason="invalid_fx_revaluation_job_payload: superseded during valid replay staging",
+        job_type="RESET_FX_WATERMARKS",
+    )
+
+
+async def quarantine_pending_reset_security(
+    db: AsyncSession,
+    *,
+    security_id: str,
+    validate: Callable[[object], object],
+    parse_earliest_date: Callable[[object], date | None],
+) -> PendingReplaySiblingEvidence:
+    """Quarantine malformed retained security work and return attributable replay evidence."""
+
+    result = await db.execute(
+        PENDING_RESET_REPLAY_CANDIDATES,
+        {
+            "security_id": security_id,
+            "trim_chars": REPLAY_TEXT_TRIM_CHARS,
+        },
+    )
+    expected_identity = {"security_id": security_id}
+    required_validity_fields = ("payload_representable", "earliest_date_representable")
+    scanned_rows = result.mappings().all()
+    rows = await _lock_matching_replay_rows(
+        db,
+        scanned_rows=[
+            row
+            for row in scanned_rows
+            if _replay_row_requires_quarantine(
+                row,
+                required_validity_fields=required_validity_fields,
+                validate=validate,
+            )
+        ],
+        job_type="RESET_WATERMARKS",
+        expected_identity=expected_identity,
+        preserve_after_claim=True,
+    )
+    return await _quarantine_candidates(
+        db,
+        rows=rows,
+        required_validity_fields=required_validity_fields,
+        validate=validate,
+        parse_earliest_date=parse_earliest_date,
+        failure_reason=(
+            "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+        ),
+        job_type="RESET_WATERMARKS",
+    )
+
+
+def _replay_row_requires_quarantine(
+    row: Mapping[str, Any],
+    *,
+    required_validity_fields: tuple[str, ...],
+    validate: Callable[[object], object],
+) -> bool:
+    payload = decode_reprocessing_payload_text(row.get("payload_json"))
+    try:
+        if not all(row[field] for field in required_validity_fields):
+            raise ValueError("replay payload is not PostgreSQL-representable")
+        validate(payload)
+    except (KeyError, TypeError, ValueError):
+        return True
+    return False
+
+
+async def _quarantine_candidates(
+    db: AsyncSession,
+    *,
+    rows: list[Mapping[str, Any]],
+    required_validity_fields: tuple[str, ...],
+    validate: Callable[[object], object],
+    parse_earliest_date: Callable[[object], date | None],
+    failure_reason: str,
+    job_type: str,
+) -> PendingReplaySiblingEvidence:
+    malformed_ids: list[int] = []
+    siblings: list[RetainedReplaySibling] = []
+    for row in rows:
+        payload = decode_reprocessing_payload_text(row.get("payload_json"))
+        if _replay_row_requires_quarantine(
+            row,
+            required_validity_fields=required_validity_fields,
+            validate=validate,
+        ):
+            earliest_date = _recover_retained_earliest_date(
+                row,
+                payload=payload,
+                parse_earliest_date=parse_earliest_date,
+            )
+            siblings.append(
+                RetainedReplaySibling(
+                    id=int(row["id"]),
+                    payload=decode_retained_replay_source_payload(
+                        row.get("payload_json"),
+                        job_type=job_type,
+                    ),
+                    earliest_impacted_date=earliest_date,
+                    attempt_count=int(row.get("attempt_count") or 0),
+                    correlation_id=row.get("correlation_id"),
+                    correlation_missing_reason=row.get("correlation_missing_reason"),
+                    alternate_lookup_key=row.get("alternate_lookup_key"),
+                )
+            )
+            if row["status"] == "PENDING":
+                malformed_ids.append(int(row["id"]))
+
+    await _mark_reprocessing_jobs_failed(
+        db,
+        job_ids=malformed_ids,
+        failure_reason=failure_reason,
+    )
+    return PendingReplaySiblingEvidence(tuple(sorted(siblings, key=lambda sibling: sibling.id)))
+
+
+def _recover_retained_earliest_date(
+    row: Mapping[str, Any],
+    *,
+    payload: object,
+    parse_earliest_date: Callable[[object], date | None],
+) -> date | None:
+    """Recover the source-owned replay date without decoding unrelated extensions."""
+
+    try:
+        if (earliest_date := parse_earliest_date(payload)) is not None:
+            return earliest_date
+    except (KeyError, TypeError, ValueError, DecimalException):
+        pass
+    earliest_value = _json_object_string_field(
+        row.get("payload_json"),
+        "earliest_impacted_date",
+    )
+    if earliest_value is None:
+        return None
+    try:
+        return date.fromisoformat(earliest_value)
+    except ValueError:
+        return None
+
+
+async def _mark_reprocessing_jobs_failed(
+    db: AsyncSession,
+    *,
+    job_ids: list[int],
+    failure_reason: str,
+) -> None:
+    if not job_ids:
+        return
+    observe_multi_statement_batch(
+        operation=StatementBatchOperation.REPROCESSING_INVALID_PAYLOAD_UPDATE,
+        item_count=len(job_ids),
+        binds_per_row=1,
+        reserved_binds=2,
+    )
+    for job_id_chunk in iter_statement_chunks(
+        job_ids,
+        binds_per_row=1,
+        reserved_binds=2,
+    ):
+        await db.execute(
+            update(ReprocessingJob)
+            .where(
+                ReprocessingJob.id.in_(job_id_chunk),
+                ReprocessingJob.status == "PENDING",
+            )
+            .values(
+                status="FAILED",
+                failure_reason=failure_reason,
+                updated_at=func.now(),
+            )
+        )
+
+
+def decode_reprocessing_payload_text(payload_json: object) -> object:
+    """Decode retained JSON without Python's bounded integer conversion."""
+
+    if not isinstance(payload_json, str):
+        return None
+    try:
+        return json.loads(
+            payload_json,
+            parse_int=Decimal,
+            parse_float=Decimal,
+        )
+    except (ValueError, RecursionError, DecimalException):
+        return None

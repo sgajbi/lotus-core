@@ -868,11 +868,43 @@ also quarantined rather than normalized or rewritten.
 After quarantine, `ck_reprocessing_jobs_active_payload_valid` is authoritative for post-cutover
 database representability and scalar types. It rejects unsafe extraction, non-string or incomplete
 or unnormalized identity fields, database-invalid effective dates, and database-invalid or
-timezone-less FX source timestamps. Application `fromisoformat` validation remains the
-temporal-grammar authority; runtime staging validates matching predecessor rows before SQL
-coalescing so an invalid historical boundary cannot be silently replaced. Runtime quarantine
-therefore remains required for grammar-invalid predecessor-schema or restored rows. Do not tighten
-SQL with a second hand-written ISO parser.
+timezone-less FX source timestamps. Application `fromisoformat` is the grammar pre-filter and
+PostgreSQL `pg_input_is_valid` is the storage representability authority; active work must pass
+both. Runtime staging validates matching predecessor rows before any date-bearing SQL coalescing,
+so an invalid historical boundary cannot be silently replaced or abort unrelated work. Runtime
+quarantine therefore remains required for grammar-invalid or storage-unrepresentable
+predecessor-schema and restored rows. Keep the centralized SQL grammar predicates in
+`database_text_contract.py`, migration constraints, and their executable parity tests aligned with
+the supported Python/PostgreSQL intersection whenever the accepted temporal grammar changes.
+Claim, Reset staging return, owned identity lookup, and stale discovery/revalidation select retained
+payloads as text and use the shared safe decoder. Preserve that boundary so a permitted unknown
+numeric extension cannot abort a batch or hide a required restatement; Reset coalescing retains
+unknown fields while advancing only to the earliest replay date. Owned requeue carries an earlier
+sibling boundary into the replacement pending job when that sibling is already processing or
+ becomes terminal between discovery and row locking. Siblings already processing or claimed during
+ lock revalidation, including normalization recovery, contribute a committed snapshot without a row
+ lock, so requeue cannot block their lease renewal. The replacement
+ retains maximum retry history and applies the established FX generated-at/content-hash
+ ordering to source authority. If that source lacks correlation, the latest valid available
+ correlation is retained without changing source authority. Reset coalescing uses valid sibling correlation at the
+authoritative boundary, fills missing owned correlation at an equal boundary, and retains known
+owned correlation when an earlier sibling has none. If an unrelated extension prevents full
+decoding, retained replay reads recover only that job family's canonical fields so RESET stale
+recovery can proceed and the FX valuation adapter can validate execution identity and date. Staging quarantine for both replay
+ families validates and carries recovered boundary, source, retry, and lineage evidence through the same
+ merge policy; the extension remains only on the original retained row. Legacy Reset duplicate
+ normalization retains the maximum retry count and an available valid correlation fallback across
+ the coalesced rows.
+
+Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
+accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
+migration. Under an exclusive lock it examines only FX rows that c162 quarantined, re-stages a row
+only when its identity, date, timestamp, and content lineage pass both authorities, and leaves the
+ original failed evidence intact. Duplicate recoverable work is coalesced using the normal replay
+ identity, earliest-date, source-authority, and correlation-fallback rules. Its downgrade fails
+ closed while active work uses a timestamp
+form that the predecessor constraint cannot represent; terminalize or drain that work before a
+deliberate rollback.
 Investigate quarantined rows through the support API, correlation evidence, and source lineage;
 never repair payloads or reactivate rows directly. Recreate required work through its governed
 source command after correcting authoritative input. Downgrade removes the new-write constraint
@@ -889,9 +921,10 @@ clock skew cannot disagree with the worker's database-time fence.
 When a live `RESET_WATERMARKS` or `RESET_FX_WATERMARKS` claim must retry, the repository owns the
 `PROCESSING -> PENDING` policy. It serializes the security or direct-currency-pair identity with a
 transaction-scoped PostgreSQL advisory lock and revalidates the exact token and database-clock
-lease before changing durable work. If another pending sibling exists, Core coalesces the claimed
-payload into that sibling in the same transaction, preserves the minimum `earliest_impacted_date`
-and required correlation/source lineage, and completes the superseded claimed row. Without a
+lease before changing durable work. If another same-identity sibling exists, Core coalesces retained
+evidence into one pending job in the same transaction, preserves the minimum
+`earliest_impacted_date` and required correlation/source lineage, and completes the superseded
+claimed row without taking an active sibling's lease. Without a
 sibling, the same row returns to `PENDING`. Operators must not manually rewrite either row or delete
 the sibling to resolve a uniqueness error. Inspect the support listing and correlated structured
 logs; an unchanged pending sibling after a stale-token attempt is the expected fail-closed result.

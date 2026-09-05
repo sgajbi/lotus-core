@@ -4045,8 +4045,9 @@ Most relevant current governance:
      ownership. Effective-dated `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` requeue is a
      repository-owned transition: serialize the security or direct-pair identity with a
      transaction-scoped PostgreSQL advisory lock, revalidate the live database-clock lease, and
-     atomically coalesce any pending sibling while preserving the minimum `earliest_impacted_date`
-     plus required source/correlation lineage. Callers must not restore generic
+     atomically coalesce retained same-identity sibling evidence into one pending job while
+     preserving the minimum `earliest_impacted_date` plus required source/correlation lineage
+     without taking an active sibling's lease. Callers must not restore generic
      `update_job_status(..., "PENDING")`, weaken the pending unique indexes, or delete a sibling to
      make the transition succeed. `make reprocessing-transition-boundary-guard` is the static
      boundary proof; the critical-lifecycle PostgreSQL lane owns concurrency, rollback, stale-token,
@@ -4060,8 +4061,10 @@ Most relevant current governance:
      Active `RESET_WATERMARKS` and `RESET_FX_WATERMARKS` rows must satisfy the database-owned
      payload contract introduced by migration `c162b2c3d529`: safely extractable, string-typed,
      complete normalized identity and temporal fields, and, for FX, complete string content hash
-     plus a database-representable, explicitly zoned source timestamp. Python `fromisoformat`
-     remains the temporal-grammar authority; do not copy that grammar into SQL predicates. Schema
+     plus a database-representable, explicitly zoned source timestamp. Python `fromisoformat` is
+     the application grammar pre-filter and PostgreSQL `pg_input_is_valid` is the storage
+     representability authority; active work is accepted only at their intersection. Do not assume
+     that one parser accepting a value proves the other boundary can persist it. Schema
      cutover must drain `PROCESSING` work, classify temporal strings with Python while the exclusive
      lock is held, quarantine invalid or unnormalized pending rows with bounded family counts,
      preserve terminal payload evidence, and reject future malformed active writes through the
@@ -4073,7 +4076,31 @@ Most relevant current governance:
      extraction so a legacy literal-SQL row produces a bounded actionable migration error instead
      of an unexplained driver failure without falsely rejecting harmless literal escape text. The
      CHECK is authoritative for post-cutover representability and scalar types; retain tested
-     runtime quarantine for grammar-invalid predecessor-schema and restored rows. Do not generalize
+     runtime quarantine before every date-bearing coalescing cast for grammar-invalid or
+     storage-unrepresentable predecessor-schema and restored rows. Every repository read that can
+     encounter retained active replay payloads—including claim, Reset staging return, owned
+     identity lookup, and stale discovery/revalidation—must cross the driver as `payload::text` and
+     use the shared safe decoder. This preserves permitted unknown fields without allowing an
+     oversized extension number to abort unrelated work. Owned requeue must also carry a locked
+     sibling's usable earlier boundary through coalescing when the sibling is already processing or
+     becomes terminal after the unlocked scan. Siblings already processing or claimed during lock
+     revalidation—including normalization recovery—contribute a committed snapshot without a row
+     lock, so requeue cannot block their lease renewal. Coalescing retains the
+     maximum retry count and selects FX source authority by the established
+     generated-at/content-hash ordering. If that source lacks correlation, retain the latest valid
+     available correlation without changing source authority. Reset coalescing uses valid sibling correlation at the
+     authoritative boundary, fills missing owned correlation at an equal boundary, and retains
+     known owned correlation when an earlier sibling has none. When an unrelated extension prevents
+     full JSON decoding, retained replay reads recover only that job family's canonical fields so
+     RESET stale recovery can proceed and the FX valuation adapter can validate execution identity
+     and date. Staging
+     quarantine for both replay families validates and carries recovered boundary, source, retry, and lineage
+     evidence through the same merge policy; the extension is never promoted. Legacy Reset duplicate
+     normalization must retain the maximum retry count and an available valid correlation fallback
+     as well as the earliest boundary. Migration `c166b2c3d52d`
+     corrects the zoned-timestamp CHECK without amending `c162b2c3d529` and re-stages only FX work
+     that is provably valid at both boundaries; migration coalescing retains available correlation
+     even when the existing pending FX source remains authoritative. Do not generalize
      bound-parameter behavior to direct
      SQL, restore, or migration paths.
      Aggregation-owned expired

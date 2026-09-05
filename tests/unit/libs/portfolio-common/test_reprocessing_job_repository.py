@@ -4,9 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.reprocessing_job_repository import (
+    _REPLAY_TEXT_TRIM_CHARS,
     ReprocessingJobRepository,
     ReprocessingJobTransitionOutcome,
     ResetWatermarksStageOutcome,
+    _validated_effective_dated_replay_identity,
+)
+from portfolio_common.reprocessing_payload_integrity import (
+    PendingReplaySiblingEvidence,
+    RetainedReplaySibling,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +21,17 @@ pytestmark = pytest.mark.asyncio
 
 LEASE_TOKEN = "a" * 32
 LEASE_EXPIRES_AT = datetime(2026, 8, 25, 1, 0, tzinfo=timezone.utc)
+
+
+def _reset_replay_identity():
+    return _validated_effective_dated_replay_identity(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+        attempt_count=1,
+        correlation_id="corr-owned",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
+    )
 
 
 @pytest.fixture
@@ -27,28 +44,48 @@ def repository(mock_db_session: AsyncMock) -> ReprocessingJobRepository:
     return ReprocessingJobRepository(db=mock_db_session)
 
 
+@pytest.fixture
+def pending_sibling_evidence():
+    with patch(
+        "portfolio_common.reprocessing_job_repository.pending_replay_sibling_evidence",
+        new_callable=AsyncMock,
+    ) as lookup:
+        yield lookup
+
+
 async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
     mock_result = MagicMock()
     mock_result.mappings.return_value.all.return_value = []
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
     normalize_result = MagicMock()
     normalize_result.scalar_one.return_value = 0
-    mock_db_session.execute.side_effect = [normalize_result, mock_result]
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+        mock_result,
+    ]
 
     await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=25)
 
-    assert mock_db_session.execute.await_count == 2
-    query = mock_db_session.execute.await_args_list[1].args[0]
-    params = mock_db_session.execute.await_args_list[1].args[1]
+    assert mock_db_session.execute.await_count == 6
+    query = mock_db_session.execute.await_args_list[5].args[0]
+    params = mock_db_session.execute.await_args_list[5].args[1]
     query_text = str(query)
 
     assert "UPDATE reprocessing_jobs" in query_text
     assert "FOR UPDATE SKIP LOCKED" in query_text
     assert "WITH candidates AS MATERIALIZED" in query_text
-    assert "RETURNING target.*" in query_text
+    assert "target.payload::text AS payload_json" in query_text
+    assert "RETURNING target.*" not in query_text
     assert params["job_type"] == "RESET_WATERMARKS"
+    assert params["prioritize_effective_date"] is True
     assert params["batch_size"] == 25
     assert params["excluded_job_ids"] == []
     assert params["lease_owner"].startswith("reprocessing-repository-")
@@ -56,7 +93,7 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     assert params["lease_duration_seconds"] == 900
     assert "lease_expires_at = clock_timestamp()" in query_text
     assert "make_interval(secs => :lease_duration_seconds)" in query_text
-    assert "(payload->>'earliest_impacted_date') ASC" in query_text
+    assert "payload->>'earliest_impacted_date'" in query_text
 
 
 @pytest.mark.parametrize(
@@ -97,8 +134,8 @@ async def test_find_and_claim_jobs_uses_default_created_at_order_for_other_job_t
     query = mock_db_session.execute.await_args.args[0]
     query_text = str(query)
 
-    assert "ORDER BY created_at ASC, id ASC" in query_text
-    assert "(payload->>'earliest_impacted_date')::date ASC" not in query_text
+    assert "CASE WHEN :prioritize_effective_date" in query_text
+    assert mock_db_session.execute.await_args.args[1]["prioritize_effective_date"] is False
 
 
 async def test_find_and_claim_fx_jobs_prioritizes_earliest_impacted_date(
@@ -112,7 +149,9 @@ async def test_find_and_claim_fx_jobs_prioritizes_earliest_impacted_date(
     await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=10)
 
     query = mock_db_session.execute.await_args.args[0]
-    assert "(payload->>'earliest_impacted_date') ASC" in str(query)
+    params = mock_db_session.execute.await_args.args[1]
+    assert "payload->>'earliest_impacted_date'" in str(query)
+    assert params["prioritize_effective_date"] is True
 
 
 async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
@@ -124,11 +163,9 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
         {
             "id": 20,
             "job_type": "RESET_FX_WATERMARKS",
-            "payload": {
-                "from_currency": "USD",
-                "to_currency": "SGD",
-                "earliest_impacted_date": "not-a-date",
-            },
+            "payload_json": (
+                '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"not-a-date"}'
+            ),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -141,11 +178,9 @@ async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
         {
             "id": 10,
             "job_type": "RESET_FX_WATERMARKS",
-            "payload": {
-                "from_currency": "USD",
-                "to_currency": "SGD",
-                "earliest_impacted_date": "2026-04-10",
-            },
+            "payload_json": (
+                '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"2026-04-10"}'
+            ),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -168,16 +203,52 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_result = MagicMock()
-    mock_result.scalar_one.return_value = 2
-    mock_db_session.execute.return_value = mock_result
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = ["BOND-B", "BOND-A", "BOND-A"]
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 2
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+    ]
 
     deleted_count = await repository.normalize_pending_reset_watermarks_duplicates()
 
     assert deleted_count == 2
-    stmt = mock_db_session.execute.await_args.args[0]
+    assert mock_db_session.execute.await_count == 7
+    identity_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    assert "SELECT DISTINCT" in str(identity_stmt)
+    assert "ORDER BY security_id" in str(identity_stmt)
+    assert "IS DISTINCT FROM btrim" in str(identity_stmt)
+    assert "replay_control_pattern" in str(identity_stmt)
+    lock_parameters = [call.args[1] for call in mock_db_session.execute.await_args_list[2:4]]
+    assert lock_parameters == [
+        {"identity_key": "RESET_WATERMARKS|6:BOND-A"},
+        {"identity_key": "RESET_WATERMARKS|6:BOND-B"},
+    ]
+    quarantine_unsafe_stmt = mock_db_session.execute.await_args_list[4].args[0]
+    assert "unsafe identity representation" in str(quarantine_unsafe_stmt)
+    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in str(
+        quarantine_unsafe_stmt
+    )
+    collision_stmt = mock_db_session.execute.await_args_list[5].args[0]
+    assert "identity collision" in str(collision_stmt)
+    assert "WHEN pg_input_is_valid(collision.payload::text, 'jsonb') IS NOT TRUE THEN FALSE" in str(
+        collision_stmt
+    )
+    stmt = mock_db_session.execute.await_args_list[6].args[0]
     stmt_text = str(stmt)
-    assert "WITH ranked AS" in stmt_text
+    assert "WITH valid_candidates AS MATERIALIZED" in stmt_text
+    assert "pg_input_is_valid" in stmt_text
+    assert "earliest_impacted_date' !~ :python_iso_date_pattern" in stmt_text
+    assert "btrim(payload->>'security_id', :trim_chars)" in stmt_text
+    assert mock_db_session.execute.await_args.args[1] == {"trim_chars": _REPLAY_TEXT_TRIM_CHARS}
+    assert stmt.compile().params["python_iso_date_pattern"]
     assert "DELETE FROM reprocessing_jobs" in stmt_text
     assert "jsonb_set" in stmt_text
 
@@ -186,9 +257,17 @@ async def test_normalize_pending_reset_watermarks_duplicates_emits_metric(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_result = MagicMock()
-    mock_result.scalar_one.return_value = 3
-    mock_db_session.execute.return_value = mock_result
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 3
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+    ]
 
     with patch(
         "portfolio_common.reprocessing_job_repository.observe_reprocessing_duplicates_normalized"
@@ -207,14 +286,26 @@ async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before
     normalize_result.scalar_one.return_value = 1
     claim_result = MagicMock()
     claim_result.mappings.return_value.all.return_value = []
-    mock_db_session.execute.side_effect = [normalize_result, claim_result]
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    collision_result = MagicMock()
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        identity_result,
+        MagicMock(),
+        collision_result,
+        normalize_result,
+        claim_result,
+    ]
 
     await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
 
-    assert mock_db_session.execute.await_count == 2
-    normalize_stmt = mock_db_session.execute.await_args_list[0].args[0]
-    claim_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    assert "WITH ranked AS" in str(normalize_stmt)
+    assert mock_db_session.execute.await_count == 6
+    collision_stmt = mock_db_session.execute.await_args_list[3].args[0]
+    normalize_stmt = mock_db_session.execute.await_args_list[4].args[0]
+    claim_stmt = mock_db_session.execute.await_args_list[5].args[0]
+    assert "identity collision" in str(collision_stmt)
+    assert "WITH valid_candidates AS MATERIALIZED" in str(normalize_stmt)
     assert "UPDATE reprocessing_jobs" in str(claim_stmt)
 
 
@@ -246,7 +337,7 @@ async def test_find_and_claim_jobs_maps_rows_to_models(
         {
             "id": 10,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+            "payload_json": ('{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -279,7 +370,7 @@ async def test_find_and_claim_jobs_preserves_malformed_payload_for_per_job_rejec
         {
             "id": 11,
             "job_type": "RESET_WATERMARKS",
-            "payload": None,
+            "payload_json": "null",
             "status": "PROCESSING",
             "attempt_count": 1,
             "created_at": datetime(2026, 8, 25, tzinfo=timezone.utc),
@@ -289,7 +380,7 @@ async def test_find_and_claim_jobs_preserves_malformed_payload_for_per_job_rejec
         {
             "id": 12,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+            "payload_json": ('{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "created_at": datetime(2026, 8, 25, tzinfo=timezone.utc),
@@ -297,7 +388,16 @@ async def test_find_and_claim_jobs_preserves_malformed_payload_for_per_job_rejec
             "lease_expires_at": LEASE_EXPIRES_AT,
         },
     ]
-    mock_db_session.execute.side_effect = [normalize_result, claim_result]
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+        claim_result,
+    ]
 
     claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=2)
 
@@ -316,7 +416,7 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
         {
             "id": 30,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "S1", "earliest_impacted_date": "2025-01-07"},
+            "payload_json": ('{"security_id":"S1","earliest_impacted_date":"2025-01-07"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -329,7 +429,7 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
         {
             "id": 20,
             "job_type": "RESET_WATERMARKS",
-            "payload": {"security_id": "S2", "earliest_impacted_date": "2025-01-05"},
+            "payload_json": ('{"security_id":"S2","earliest_impacted_date":"2025-01-05"}'),
             "status": "PROCESSING",
             "attempt_count": 1,
             "last_attempted_at": None,
@@ -340,7 +440,16 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
             "lease_expires_at": LEASE_EXPIRES_AT,
         },
     ]
-    mock_db_session.execute.side_effect = [normalize_result, claim_result]
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+        claim_result,
+    ]
 
     claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
 
@@ -413,7 +522,7 @@ async def test_stale_reprocessing_claim_locks_rows_only_after_identity_phase(
         id=10,
         attempt_count=1,
         job_type="RESET_WATERMARKS",
-        payload={"security_id": "BOND-1", "earliest_impacted_date": "2026-08-01"},
+        payload_json=('{"security_id":"BOND-1","earliest_impacted_date":"2026-08-01"}'),
         correlation_id="corr-claim-order",
         correlation_missing_reason=None,
         alternate_lookup_key=None,
@@ -626,13 +735,13 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             id=10,
             attempt_count=2,
             job_type="RESET_FX_WATERMARKS",
-            payload={
-                "from_currency": "USD",
-                "to_currency": "SGD",
-                "earliest_impacted_date": "2026-04-08",
-                "content_hash": "sha256:" + ("a" * 64),
-                "generated_at": "2026-04-10T08:00:00+00:00",
-            },
+            payload_json=(
+                '{"from_currency":"USD","to_currency":"SGD",'
+                '"earliest_impacted_date":"2026-04-08",'
+                f'"content_hash":"sha256:{"a" * 64}",'
+                '"generated_at":"2026-04-10T08:00:00+00:00",'
+                '"extension":1e999999999999999999999999999999999999999}'
+            ),
             correlation_id="corr-stale",
             correlation_missing_reason=None,
             alternate_lookup_key=None,
@@ -667,7 +776,7 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     assert "pg_advisory_xact_lock" in str(repeated_lock_statement)
     quarantine_statement = mock_db_session.execute.await_args_list[2].args[0]
     assert "pg_input_is_valid" in str(quarantine_statement)
-    assert "FOR UPDATE" in str(quarantine_statement)
+    assert "FOR UPDATE" not in str(quarantine_statement)
     quarantine_sql = str(quarantine_statement)
     assert "btrim(payload->>'from_currency', :trim_chars)" in quarantine_sql
     quarantine_parameters = mock_db_session.execute.await_args_list[2].args[1]
@@ -707,6 +816,13 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             "RESET_WATERMARKS",
             {
                 "security_id": "unsafe\x00identity",
+                "earliest_impacted_date": "2026-04-08",
+            },
+        ),
+        (
+            "RESET_WATERMARKS",
+            {
+                "security_id": "unsafe\ud800identity",
                 "earliest_impacted_date": "2026-04-08",
             },
         ),
@@ -783,10 +899,22 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
                 "content_hash": "sha256:" + ("b" * 64),
                 "generated_at": "not-a-timestamp",
             },
+            "payload_json": (
+                '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"2026-04-06"}'
+            ),
+            "status": "PENDING",
+            "attempt_count": 4,
+            "correlation_id": "corr-retained",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
+            "payload_representable": True,
+            "earliest_date_representable": True,
+            "generated_at_representable": False,
         }
     ]
     mock_db_session.execute.side_effect = [
         MagicMock(),
+        quarantine_result,
         quarantine_result,
         MagicMock(),
         MagicMock(),
@@ -804,11 +932,84 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
     )
 
     quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
-    assert "FOR UPDATE" in str(quarantine_statement)
-    quarantine_update = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" not in str(quarantine_statement)
+    lock_statement = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" in str(lock_statement)
+    quarantine_update = mock_db_session.execute.await_args_list[3].args[0]
     assert "status=:status" in str(quarantine_update)
-    _, upsert_parameters = mock_db_session.execute.await_args_list[3].args
+    _, upsert_parameters = mock_db_session.execute.await_args_list[4].args
     assert upsert_parameters["effective_date"] == date(2026, 4, 6)
+
+
+async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    quarantine_result = MagicMock()
+    quarantine_result.mappings.return_value.all.return_value = [
+        {
+            "id": 7,
+            "payload": {
+                "security_id": "BOND-1",
+                "earliest_impacted_date": "2025-W01-2",
+            },
+            "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-W01-2"}'),
+            "status": "PENDING",
+            "attempt_count": 4,
+            "correlation_id": "corr-retained",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
+            "payload_representable": True,
+            "earliest_date_representable": False,
+        }
+    ]
+    upsert_result = MagicMock()
+    upsert_result.mappings.return_value.one.return_value = {
+        "id": 8,
+        "job_type": "RESET_WATERMARKS",
+        "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2024-12-31"}'),
+        "status": "PENDING",
+        "attempt_count": 4,
+        "correlation_id": "corr-retained",
+        "correlation_missing_reason": None,
+        "alternate_lookup_key": None,
+        "last_attempted_at": None,
+        "failure_reason": None,
+        "created_at": None,
+        "updated_at": None,
+        "was_inserted": True,
+    }
+    mock_db_session.execute.side_effect = [
+        MagicMock(),
+        quarantine_result,
+        quarantine_result,
+        MagicMock(),
+        upsert_result,
+    ]
+
+    await repository.stage_reset_watermarks_job(
+        security_id="BOND-1",
+        earliest_impacted_date=date(2025, 1, 6),
+        correlation_id="corr-authoritative",
+    )
+
+    quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert "pg_input_is_valid" in str(quarantine_statement)
+    assert "FOR UPDATE" not in str(quarantine_statement)
+    lock_statement = mock_db_session.execute.await_args_list[2].args[0]
+    assert "FOR UPDATE" in str(lock_statement)
+    quarantine_update = mock_db_session.execute.await_args_list[3].args[0]
+    assert "status=:status" in str(quarantine_update)
+    _, upsert_parameters = mock_db_session.execute.await_args_list[4].args
+    assert upsert_parameters["earliest_impacted_date"] == date(2024, 12, 31)
+    assert upsert_parameters["attempt_count"] == 4
+    assert upsert_parameters["correlation_id"] == "corr-retained"
+
+
+async def test_replay_trim_contract_matches_python_strip_whitespace() -> None:
+    assert set(_REPLAY_TEXT_TRIM_CHARS) == {
+        chr(codepoint) for codepoint in range(0x110000) if chr(codepoint).isspace()
+    }
 
 
 async def test_create_job_coalesces_pending_reset_watermarks_job(
@@ -819,7 +1020,7 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 10,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": '{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}',
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -841,7 +1042,7 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 3
 
 
 async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
@@ -852,7 +1053,7 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 10,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": '{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}',
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -873,7 +1074,7 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     assert result.correlation_id is None
     mock_db_session.add.assert_not_called()
     mock_db_session.flush.assert_not_awaited()
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 3
 
 
 async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
@@ -884,7 +1085,7 @@ async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 11,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": '{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}',
         "status": "PENDING",
         "correlation_id": "corr-05",
         "attempt_count": 0,
@@ -922,7 +1123,7 @@ async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 12,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-01-05"}'),
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -946,6 +1147,8 @@ async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
     assert lock_parameters == {"identity_key": "RESET_WATERMARKS|6:BOND-1"}
     statement = str(mock_db_session.execute.await_args.args[0])
     assert "(xmax = 0) AS was_inserted" in statement
+    assert "payload::text AS payload_json" in statement
+    assert "RETURNING *" not in statement
 
 
 async def test_reset_watermarks_batch_locks_unique_identities_in_global_order(
@@ -1020,12 +1223,13 @@ async def test_update_job_status_requires_processing_ownership(
 
 async def test_owned_requeue_uses_repository_policy_for_direct_requeue(
     repository: ReprocessingJobRepository,
+    pending_sibling_evidence: AsyncMock,
 ) -> None:
-    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    identity = _reset_replay_identity()
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
-    repository._pending_replay_sibling_exists = AsyncMock(return_value=False)
+    pending_sibling_evidence.return_value = PendingReplaySiblingEvidence(())
     repository._apply_owned_transition = AsyncMock(
         return_value=ReprocessingJobTransitionOutcome.APPLIED
     )
@@ -1047,8 +1251,9 @@ async def test_owned_requeue_uses_repository_policy_for_direct_requeue(
 async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
+    pending_sibling_evidence: AsyncMock,
 ) -> None:
-    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    identity = _reset_replay_identity()
     savepoint = AsyncMock()
     call_order: list[str] = []
     savepoint.start.side_effect = lambda: call_order.append("savepoint_started")
@@ -1056,7 +1261,19 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
-    repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
+    pending_sibling_evidence.return_value = PendingReplaySiblingEvidence(
+        (
+            RetainedReplaySibling(
+                id=12,
+                payload={"security_id": "S1", "earliest_impacted_date": "2025-01-03"},
+                earliest_impacted_date=date(2025, 1, 3),
+                attempt_count=3,
+                correlation_id="corr-sibling",
+                correlation_missing_reason=None,
+                alternate_lookup_key=None,
+            ),
+        )
+    )
     repository._coalesce_pending_replay = AsyncMock(
         side_effect=lambda _identity: call_order.append("sibling_coalesced")
     )
@@ -1072,7 +1289,10 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
     assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
     assert call_order == ["savepoint_started", "sibling_coalesced"]
     savepoint.start.assert_awaited_once_with()
-    repository._coalesce_pending_replay.assert_awaited_once_with(identity)
+    merged_identity = repository._coalesce_pending_replay.await_args.args[0]
+    assert merged_identity.payload["earliest_impacted_date"] == "2025-01-03"
+    assert merged_identity.attempt_count == 3
+    assert merged_identity.correlation_id == "corr-sibling"
     repository._apply_owned_transition.assert_awaited_once_with(
         99,
         "COMPLETE",
@@ -1085,14 +1305,27 @@ async def test_owned_requeue_coalesces_pending_sibling_before_completing_claim(
 async def test_owned_requeue_rolls_back_sibling_change_after_lease_loss(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
+    pending_sibling_evidence: AsyncMock,
 ) -> None:
-    identity = SimpleNamespace(identity_key="RESET_WATERMARKS|2:S1")
+    identity = _reset_replay_identity()
     savepoint = AsyncMock()
     mock_db_session.begin_nested.return_value = savepoint
     repository._effective_dated_replay_identity = AsyncMock(return_value=identity)
     repository._lock_effective_dated_replay_identity = AsyncMock()
     repository._lock_live_owned_job = AsyncMock(return_value=True)
-    repository._pending_replay_sibling_exists = AsyncMock(return_value=True)
+    pending_sibling_evidence.return_value = PendingReplaySiblingEvidence(
+        (
+            RetainedReplaySibling(
+                id=12,
+                payload=None,
+                earliest_impacted_date=None,
+                attempt_count=2,
+                correlation_id=None,
+                correlation_missing_reason=None,
+                alternate_lookup_key=None,
+            ),
+        )
+    )
     repository._coalesce_pending_replay = AsyncMock()
     repository._apply_owned_transition = AsyncMock(
         return_value=ReprocessingJobTransitionOutcome.LEASE_EXPIRED

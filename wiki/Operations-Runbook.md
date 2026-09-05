@@ -99,8 +99,9 @@ Guarded incident IDs: `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`, 
 `database-connectivity`, `kafka-connectivity`, and `security-audit-denial-spikes`.
 
 Effective-dated Reset and FX replay retries are repository-owned. A live claim either returns to
-`PENDING` when it is the only row for its security/direct pair, or is atomically coalesced into an
-existing pending sibling while preserving the earliest impacted date and required lineage. The
+`PENDING` when it is the only row for its security/direct pair, or its retained same-identity sibling
+evidence is atomically coalesced into one pending job while preserving the earliest impacted date
+and required lineage without taking an active sibling's lease. The
 exact database-clock lease and token remain authoritative. Do not repair a retry by rewriting job
 status, deleting the sibling, or weakening a pending uniqueness constraint; inspect the support
 listing and correlated logs, then correct the source or ownership failure.
@@ -342,12 +343,37 @@ so PostgreSQL-only spellings such as `infinity` are quarantined without copying 
 SQL. Padded replay identities and hashes are quarantined rather than normalized or rewritten.
 It then installs `ck_reprocessing_jobs_active_payload_valid`, which authoritatively rejects unsafe,
 non-string, incomplete, unnormalized, or database-unrepresentable `PENDING`/`PROCESSING` Reset/FX
-work at the post-cutover database boundary. Application `fromisoformat` validation remains
-authoritative for temporal grammar; runtime staging applies it before SQL coalescing, and runtime
-quarantine remains required for grammar-invalid predecessor-schema or restored rows.
+work at the post-cutover database boundary. Application `fromisoformat` is the grammar pre-filter
+and PostgreSQL `pg_input_is_valid` is the storage representability authority; work must pass both.
+Runtime staging applies both checks before date-bearing SQL coalescing, and runtime quarantine
+remains required for grammar-invalid or storage-unrepresentable predecessor-schema or restored
+rows. Claim, Reset staging return, owned identity lookup, and stale discovery/revalidation read
+retained payloads as text through the shared safe decoder, preventing a permitted unknown numeric
+extension from blocking replay. Reset coalescing preserves unknown fields and the earliest replay
+boundary. Owned requeue also retains a usable earlier sibling boundary when the sibling is already
+processing or becomes terminal between discovery and row locking. Siblings already processing or
+claimed during lock revalidation, including normalization recovery, are read as committed snapshots
+without row locks, so their lease renewal is not blocked. Legacy Reset
+ duplicate normalization and owned sibling coalescing retain the maximum retry count and available
+ valid correlation fallback; FX source
+ authority continues to follow generated-at/content-hash ordering. If that source lacks correlation,
+ the latest valid available correlation is retained without changing source authority. Reset coalescing
+uses valid sibling correlation at the authoritative boundary, fills missing owned correlation at an
+equal boundary, and retains known owned correlation when an earlier sibling has none. Retained replay
+reads recover only the job family's canonical fields around an unrepresentable extension so RESET
+stale recovery can proceed and the FX valuation adapter can validate execution identity and date. Staging quarantine for both
+ replay families validates and carries recovered boundary, source, retry, and lineage evidence
+through the same merge policy; the extension is not copied into replacement work.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
 restore it to active status by hand. Valid terminal historical evidence is not rewritten.
+
+Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept bare-hour offsets such
+as `-07` when both Python and PostgreSQL accept them. It does not alter c162. Under an exclusive
+lock it examines only rows quarantined by the c162 cutover, re-stages only work provably valid at
+both boundaries, coalesces duplicate pair work by the governed earliest-date rule, and preserves
+the original failed evidence. Downgrade fails closed while active work uses a timestamp form that
+the predecessor constraint cannot represent.
 
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply

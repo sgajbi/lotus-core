@@ -1,6 +1,5 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
-import unicodedata
 import uuid
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
@@ -9,10 +8,29 @@ from enum import StrEnum
 from typing import Any, Dict, Optional, cast
 
 from sqlalchemy import Date, DateTime, String, bindparam, func, select, text, tuple_, update
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
 from .durable_correlation import durable_correlation_diagnostics
+from .effective_dated_replay import (
+    EARLIEST_IMPACTED_DATE_JOB_TYPES,
+)
+from .effective_dated_replay import (
+    EffectiveDatedReplayIdentity as _EffectiveDatedReplayIdentity,
+)
+from .effective_dated_replay import (
+    merge_replay_sibling_evidence as _merge_replay_sibling_evidence,
+)
+from .effective_dated_replay import (
+    parse_replay_earliest_date as _parse_replay_earliest_date,
+)
+from .effective_dated_replay import (
+    required_replay_payload_text as _required_replay_payload_text,
+)
+from .effective_dated_replay import (
+    validated_effective_dated_replay_identity as _validated_effective_dated_replay_identity,
+)
 from .infrastructure.persistence.statement_batching import (
     POSTGRES_STATEMENT_ROW_LIMIT,
     StatementBatchOperation,
@@ -20,22 +38,30 @@ from .infrastructure.persistence.statement_batching import (
     observe_multi_statement_batch,
 )
 from .monitoring import observe_reprocessing_duplicates_normalized
+from .reprocessing_payload_integrity import (
+    LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
+    REPLAY_TEXT_TRIM_CHARS,
+    UPSERT_PENDING_RESET_WATERMARKS,
+    PendingReplaySiblingEvidence,
+    decode_reprocessing_payload_text,
+    decode_retained_replay_source_payload,
+    effective_dated_replay_identity_key,
+    normalize_pending_reset_watermarks_duplicates,
+    pending_replay_sibling_evidence,
+    quarantine_pending_fx_pair,
+    quarantine_pending_reset_security,
+)
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
-EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset({"RESET_WATERMARKS", "RESET_FX_WATERMARKS"})
 _STALE_FAILED_RESERVED_BINDS = 7
 _STALE_RESET_RESERVED_BINDS = 5
 _LEASE_OWNER_MAX_LENGTH = 128
 _DEFAULT_LEASE_DURATION_SECONDS = 15 * 60
 _OWNED_TRANSITION_STATUSES = frozenset({"COMPLETE", "FAILED"})
 _STALE_RECOVERY_COHORT_LOCK_KEY = "lotus-core:reprocessing-stale-cohort"
-_REPLAY_TEXT_TRIM_CHARS = (
-    "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680"
-    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029"
-    "\u202f\u205f\u3000"
-)
+_REPLAY_TEXT_TRIM_CHARS = REPLAY_TEXT_TRIM_CHARS
 
 
 class ResetWatermarksStageOutcome(StrEnum):
@@ -83,60 +109,25 @@ class ClaimedReprocessingJob:
     lease_expires_at: datetime
 
 
-@dataclass(frozen=True, slots=True)
-class _EffectiveDatedReplayIdentity:
-    """Validated identity needed to serialize one effective-dated replay family."""
-
-    job_type: str
-    identity_key: str
-    payload: dict[str, Any]
-    generated_at: datetime | None
-    attempt_count: int
-    correlation_id: str | None
-    correlation_missing_reason: str | None
-    alternate_lookup_key: str | None
-
-
-def _claim_pending_jobs_query(job_type: str):
-    if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
-        return text(
-            """
-            WITH candidates AS MATERIALIZED (
-                SELECT id
-                FROM reprocessing_jobs
-                WHERE status = 'PENDING'
-                  AND job_type = :job_type
-                  AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
-                ORDER BY (payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC
-                LIMIT :batch_size
-                FOR UPDATE SKIP LOCKED
-            )
-            UPDATE reprocessing_jobs AS target
-            SET status = 'PROCESSING',
-                updated_at = now(),
-                last_attempted_at = now(),
-                attempt_count = attempt_count + 1,
-                lease_owner = :lease_owner,
-                lease_token = :lease_token,
-                lease_expires_at = clock_timestamp()
-                    + make_interval(secs => :lease_duration_seconds)
-            FROM candidates
-            WHERE target.id = candidates.id
-              AND target.status = 'PENDING'
-              AND target.job_type = :job_type
-            RETURNING target.*;
-            """
-        )
-
-    return text(
-        """
+# Keep this statement static and select the ordering policy through a boolean bind.
+# Effective-dated work is prioritized by its source boundary; all other work uses
+# creation order. Payload crosses the driver as text so Python's bounded integer
+# conversion cannot abort the whole claim batch for a permitted extension field.
+# Each row is decoded at the mapping boundary with the retained-JSON policy.
+CLAIM_PENDING_JOBS = text(
+    """
         WITH candidates AS MATERIALIZED (
             SELECT id
             FROM reprocessing_jobs
             WHERE status = 'PENDING'
               AND job_type = :job_type
               AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
-            ORDER BY created_at ASC, id ASC
+            ORDER BY
+                CASE WHEN :prioritize_effective_date
+                    THEN payload->>'earliest_impacted_date'
+                END ASC,
+                created_at ASC,
+                id ASC
             LIMIT :batch_size
             FOR UPDATE SKIP LOCKED
         )
@@ -153,9 +144,13 @@ def _claim_pending_jobs_query(job_type: str):
         WHERE target.id = candidates.id
           AND target.status = 'PENDING'
           AND target.job_type = :job_type
-        RETURNING target.*;
+        RETURNING target.id, target.job_type, target.payload::text AS payload_json,
+            target.status, target.correlation_id, target.correlation_missing_reason,
+            target.alternate_lookup_key, target.attempt_count, target.created_at,
+            target.lease_token,
+            target.lease_expires_at;
         """
-    )
+)
 
 
 class ReprocessingJobRepository:
@@ -164,57 +159,15 @@ class ReprocessingJobRepository:
         self._default_lease_owner = f"reprocessing-repository-{uuid.uuid4().hex}"
 
     async def normalize_pending_reset_watermarks_duplicates(self) -> int:
+        """Coalesce valid historical RESET_WATERMARKS work by earliest date.
+
+        Scalar identities are failed before canonical string identities are rewritten.
+        This ordering prevents a legacy numeric/string collision from violating the
+        pending-work uniqueness fence and blocking claims for the entire queue.
+
+        Return the number of redundant valid rows removed.
         """
-        Coalesces any historically duplicated pending RESET_WATERMARKS jobs so that
-        one pending job remains per security_id with the earliest impacted date.
-        Returns the number of redundant rows removed.
-        """
-        normalize_stmt = text(
-            """
-            WITH ranked AS (
-                SELECT
-                    id,
-                    payload->>'security_id' AS security_id,
-                    (payload->>'earliest_impacted_date')::date AS earliest_impacted_date,
-                    row_number() OVER (
-                        PARTITION BY payload->>'security_id'
-                        ORDER BY
-                            (payload->>'earliest_impacted_date')::date ASC,
-                            created_at ASC,
-                            id ASC
-                    ) AS rn,
-                    min((payload->>'earliest_impacted_date')::date) OVER (
-                        PARTITION BY payload->>'security_id'
-                    ) AS min_impacted_date
-                FROM reprocessing_jobs
-                WHERE status = 'PENDING' AND job_type = 'RESET_WATERMARKS'
-            ),
-            keepers AS (
-                UPDATE reprocessing_jobs j
-                SET payload = jsonb_set(
-                        j.payload::jsonb,
-                        '{earliest_impacted_date}',
-                        to_jsonb(r.min_impacted_date::text)
-                    )::json,
-                    updated_at = now()
-                FROM ranked r
-                WHERE j.id = r.id
-                  AND r.rn = 1
-                  AND (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
-                RETURNING j.id
-            ),
-            deleted AS (
-                DELETE FROM reprocessing_jobs j
-                USING ranked r
-                WHERE j.id = r.id
-                  AND r.rn > 1
-                RETURNING j.id
-            )
-            SELECT count(*) FROM deleted;
-            """
-        )
-        result = await self.db.execute(normalize_stmt)
-        deleted_count = int(result.scalar_one())
+        deleted_count = await normalize_pending_reset_watermarks_duplicates(self.db)
         if deleted_count:
             observe_reprocessing_duplicates_normalized(
                 "reset_watermarks_pending_jobs",
@@ -252,22 +205,41 @@ class ReprocessingJobRepository:
         content_hash = _required_replay_payload_text(staging_payload, "content_hash")
 
         await self._lock_effective_dated_replay_identity(
-            _effective_dated_replay_identity_key(
+            effective_dated_replay_identity_key(
                 "RESET_FX_WATERMARKS",
                 from_currency,
                 to_currency,
             )
         )
 
-        quarantined_earliest_date = await self._quarantine_malformed_pending_fx_pair(
+        quarantined_evidence = await self._quarantine_malformed_pending_fx_pair(
             from_currency=from_currency,
             to_currency=to_currency,
         )
-        if quarantined_earliest_date is not None:
-            earliest_impacted_date = min(
-                earliest_impacted_date,
-                quarantined_earliest_date,
-            )
+        identity = _merge_replay_sibling_evidence(
+            _validated_effective_dated_replay_identity(
+                job_type="RESET_FX_WATERMARKS",
+                payload={
+                    "from_currency": from_currency,
+                    "to_currency": to_currency,
+                    "earliest_impacted_date": earliest_impacted_date.isoformat(),
+                    "content_hash": content_hash,
+                    "generated_at": generated_at.isoformat(),
+                },
+                attempt_count=attempt_count,
+                correlation_id=correlation_id,
+                correlation_missing_reason=correlation_missing_reason,
+                alternate_lookup_key=alternate_lookup_key,
+            ),
+            quarantined_evidence,
+        )
+        earliest_impacted_date = date.fromisoformat(identity.payload["earliest_impacted_date"])
+        content_hash = str(identity.payload["content_hash"])
+        generated_at = cast(datetime, identity.generated_at)
+        attempt_count = identity.attempt_count
+        correlation_id = identity.correlation_id
+        correlation_missing_reason = identity.correlation_missing_reason
+        alternate_lookup_key = identity.alternate_lookup_key
 
         statement = text(
             """
@@ -350,34 +322,36 @@ class ReprocessingJobRepository:
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
                     )
                     THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-                    ELSE reprocessing_jobs.correlation_id
+                    ELSE COALESCE(reprocessing_jobs.correlation_id, :correlation_id)
                 END,
                 correlation_missing_reason = CASE
+                    WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL
+                    THEN NULL
                     WHEN ROW(
                         CAST(:generated_at AS timestamptz),
                         :content_hash
-                    ) <= ROW(
+                    ) > ROW(
                         COALESCE(
                             CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                             '-infinity'::timestamptz
                         ),
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    ) THEN reprocessing_jobs.correlation_missing_reason
-                    WHEN :correlation_id IS NOT NULL THEN NULL
+                    ) THEN :correlation_missing_reason
                     ELSE reprocessing_jobs.correlation_missing_reason
                 END,
                 alternate_lookup_key = CASE
+                    WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL
+                    THEN NULL
                     WHEN ROW(
                         CAST(:generated_at AS timestamptz),
                         :content_hash
-                    ) <= ROW(
+                    ) > ROW(
                         COALESCE(
                             CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                             '-infinity'::timestamptz
                         ),
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    ) THEN reprocessing_jobs.alternate_lookup_key
-                    WHEN :correlation_id IS NOT NULL THEN NULL
+                    ) THEN :alternate_lookup_key
                     ELSE reprocessing_jobs.alternate_lookup_key
                 END,
                 updated_at = now()
@@ -414,74 +388,42 @@ class ReprocessingJobRepository:
         *,
         from_currency: str,
         to_currency: str,
-    ) -> date | None:
-        """Validate predecessor pair work with the application grammar before coalescing."""
-
-        candidate_statement = text(
-            """
-            SELECT id, payload
-            FROM reprocessing_jobs
-            WHERE job_type = 'RESET_FX_WATERMARKS'
-              AND status = 'PENDING'
-              AND CASE
-                  WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
-                  WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
-                  WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
-                  ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
-                   AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
-              END
-            FOR UPDATE
-            """
-        ).bindparams(
-            bindparam("from_currency", type_=String()),
-            bindparam("to_currency", type_=String()),
-            bindparam("trim_chars", type_=String()),
+    ) -> PendingReplaySiblingEvidence:
+        """Quarantine malformed pair work and retain its attributable replay evidence."""
+        return await quarantine_pending_fx_pair(
+            self.db,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            validate=lambda payload: _validated_effective_dated_replay_identity(
+                job_type="RESET_FX_WATERMARKS",
+                payload=payload,
+                attempt_count=0,
+                correlation_id=None,
+                correlation_missing_reason=None,
+                alternate_lookup_key=None,
+            ),
+            parse_earliest_date=_parse_replay_earliest_date,
         )
-        result = await self.db.execute(
-            candidate_statement,
-            {
-                "from_currency": from_currency,
-                "to_currency": to_currency,
-                "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
-            },
-        )
-        malformed_ids: list[int] = []
-        known_earliest_dates: list[date] = []
-        for row in result.mappings().all():
-            payload = row["payload"]
-            try:
-                _validated_effective_dated_replay_identity(
-                    job_type="RESET_FX_WATERMARKS",
-                    payload=payload,
-                    attempt_count=0,
-                    correlation_id=None,
-                    correlation_missing_reason=None,
-                    alternate_lookup_key=None,
-                )
-            except (TypeError, ValueError):
-                malformed_ids.append(int(row["id"]))
-                try:
-                    known_earliest_dates.append(
-                        date.fromisoformat(
-                            _required_replay_payload_text(payload, "earliest_impacted_date")
-                        )
-                    )
-                except (TypeError, ValueError):
-                    pass
 
-        if malformed_ids:
-            await self.db.execute(
-                update(ReprocessingJob)
-                .where(ReprocessingJob.id.in_(malformed_ids))
-                .values(
-                    status="FAILED",
-                    failure_reason=(
-                        "invalid_fx_revaluation_job_payload: superseded during valid replay staging"
-                    ),
-                    updated_at=func.now(),
-                )
-            )
-        return min(known_earliest_dates, default=None)
+    async def _quarantine_malformed_pending_reset_watermarks(
+        self,
+        *,
+        security_id: str,
+    ) -> PendingReplaySiblingEvidence:
+        """Quarantine malformed retained security replay and retain its evidence."""
+        return await quarantine_pending_reset_security(
+            self.db,
+            security_id=security_id,
+            validate=lambda payload: _validated_effective_dated_replay_identity(
+                job_type="RESET_WATERMARKS",
+                payload=payload,
+                attempt_count=0,
+                correlation_id=None,
+                correlation_missing_reason=None,
+                alternate_lookup_key=None,
+            ),
+            parse_earliest_date=_parse_replay_earliest_date,
+        )
 
     @async_timed(repository="ReprocessingJobRepository", method="create_job")
     async def create_job(
@@ -536,9 +478,20 @@ class ReprocessingJobRepository:
         correlation_id: str | None,
         attempt_count: int = 0,
     ) -> ResetWatermarksStageResult:
-        """Create or coalesce one pending reset job without committing the caller's UoW."""
+        """Create or coalesce one pending reset job without committing the caller's UoW.
+
+        The upsert returns retained JSON as text so permitted extension values cannot invoke the
+        driver's bounded decoder before this repository applies the shared payload policy.
+        """
+        security_id = _required_replay_payload_text(
+            {"security_id": security_id},
+            "security_id",
+        )
         await self._lock_effective_dated_replay_identity(
-            _effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+            effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+        )
+        quarantined_evidence = await self._quarantine_malformed_pending_reset_watermarks(
+            security_id=security_id,
         )
         payload = {
             "security_id": security_id,
@@ -550,101 +503,36 @@ class ReprocessingJobRepository:
             correlation_id=correlation_id,
         )
         correlation_id = diagnostics.correlation_id
-        stmt = text(
-            """
-                INSERT INTO reprocessing_jobs (
-                    job_type,
-                    payload,
-                    status,
-                    attempt_count,
-                    correlation_id,
-                    correlation_missing_reason,
-                    alternate_lookup_key
-                )
-                VALUES (
-                    'RESET_WATERMARKS',
-                    json_build_object(
-                        'security_id', :security_id,
-                        'earliest_impacted_date', :earliest_impacted_date
-                    )::json,
-                    'PENDING',
-                    :attempt_count,
-                    :correlation_id,
-                    :correlation_missing_reason,
-                    :alternate_lookup_key
-                )
-                ON CONFLICT ((payload->>'security_id'))
-                WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
-                DO UPDATE
-                SET payload = jsonb_set(
-                        reprocessing_jobs.payload::jsonb,
-                        '{earliest_impacted_date}',
-                        to_jsonb(
-                            LEAST(
-                                (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
-                                CAST(:earliest_impacted_date AS date)
-                            )::text
-                        )
-                    )::json,
-                    attempt_count = GREATEST(
-                        reprocessing_jobs.attempt_count,
-                        EXCLUDED.attempt_count
-                    ),
-                    correlation_id = CASE
-                        WHEN CAST(:earliest_impacted_date AS date)
-                             < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
-                        THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                        THEN :correlation_id
-                        ELSE reprocessing_jobs.correlation_id
-                    END,
-                    correlation_missing_reason = CASE
-                        WHEN :correlation_id IS NOT NULL
-                        THEN NULL
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND CAST(:earliest_impacted_date AS date) <
-                                 CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
-                        THEN :correlation_missing_reason
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND reprocessing_jobs.correlation_missing_reason IS NULL
-                        THEN :correlation_missing_reason
-                        ELSE reprocessing_jobs.correlation_missing_reason
-                    END,
-                    alternate_lookup_key = CASE
-                        WHEN :correlation_id IS NOT NULL
-                        THEN NULL
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND CAST(:earliest_impacted_date AS date) <
-                                 CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
-                        THEN :alternate_lookup_key
-                        WHEN reprocessing_jobs.correlation_id IS NULL
-                             AND reprocessing_jobs.alternate_lookup_key IS NULL
-                        THEN :alternate_lookup_key
-                        ELSE reprocessing_jobs.alternate_lookup_key
-                    END,
-                    updated_at = now()
-                RETURNING *, (xmax = 0) AS was_inserted;
-                """
-        ).bindparams(
-            bindparam("security_id", type_=String()),
-            bindparam("earliest_impacted_date", type_=Date()),
-            bindparam("correlation_id", type_=String()),
-            bindparam("correlation_missing_reason", type_=String()),
-            bindparam("alternate_lookup_key", type_=String()),
+        identity = _merge_replay_sibling_evidence(
+            _validated_effective_dated_replay_identity(
+                job_type="RESET_WATERMARKS",
+                payload=payload,
+                attempt_count=attempt_count,
+                correlation_id=correlation_id,
+                correlation_missing_reason=diagnostics.correlation_missing_reason,
+                alternate_lookup_key=diagnostics.alternate_lookup_key,
+            ),
+            quarantined_evidence,
         )
+        earliest_impacted_date = date.fromisoformat(identity.payload["earliest_impacted_date"])
+        attempt_count = identity.attempt_count
+        correlation_id = identity.correlation_id
         result = await self.db.execute(
-            stmt,
+            UPSERT_PENDING_RESET_WATERMARKS,
             {
                 "security_id": security_id,
                 "earliest_impacted_date": earliest_impacted_date,
                 "attempt_count": attempt_count,
                 "correlation_id": correlation_id,
-                "correlation_missing_reason": diagnostics.correlation_missing_reason,
-                "alternate_lookup_key": diagnostics.alternate_lookup_key,
+                "correlation_missing_reason": identity.correlation_missing_reason,
+                "alternate_lookup_key": identity.alternate_lookup_key,
             },
         )
         row = dict(result.mappings().one())
         was_inserted = bool(row.pop("was_inserted"))
+        row["payload"] = decode_reprocessing_payload_text(row.pop("payload_json"))
+        if not isinstance(row["payload"], dict):
+            raise ValueError("staged reset-watermarks payload must be a JSON object")
         job = ReprocessingJob(**row)
         outcome = (
             ResetWatermarksStageOutcome.CREATED
@@ -668,7 +556,7 @@ class ReprocessingJobRepository:
         """Pre-lock a replay batch in the global identity order for this transaction."""
 
         await self._lock_effective_dated_replay_identities(
-            _effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
+            effective_dated_replay_identity_key("RESET_WATERMARKS", security_id)
             for security_id in security_ids
         )
 
@@ -701,12 +589,12 @@ class ReprocessingJobRepository:
                     extra={"deleted_count": normalized_count},
                 )
 
-        query = _claim_pending_jobs_query(job_type)
         lease_token = uuid.uuid4().hex
         result = await self.db.execute(
-            query,
+            CLAIM_PENDING_JOBS,
             {
                 "job_type": job_type,
+                "prioritize_effective_date": job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES,
                 "batch_size": batch_size,
                 "lease_owner": resolved_lease_owner,
                 "lease_token": lease_token,
@@ -880,7 +768,10 @@ class ReprocessingJobRepository:
                     continue
                 identity = _validated_effective_dated_replay_identity(
                     job_type=str(locked_row.job_type),
-                    payload=locked_row.payload,
+                    payload=decode_retained_replay_source_payload(
+                        locked_row.payload_json,
+                        job_type=str(locked_row.job_type),
+                    ),
                     attempt_count=int(locked_row.attempt_count),
                     correlation_id=locked_row.correlation_id,
                     correlation_missing_reason=locked_row.correlation_missing_reason,
@@ -888,32 +779,12 @@ class ReprocessingJobRepository:
                 )
                 if identity.identity_key != candidate_identity.identity_key:
                     continue
-                payload = identity.payload
-                if identity.job_type == "RESET_FX_WATERMARKS":
-                    await self.stage_pending_fx_revaluation_job(
-                        from_currency=payload["from_currency"],
-                        to_currency=payload["to_currency"],
-                        earliest_impacted_date=date.fromisoformat(
-                            payload["earliest_impacted_date"]
-                        ),
-                        content_hash=payload["content_hash"],
-                        generated_at=cast(datetime, identity.generated_at),
-                        correlation_id=identity.correlation_id,
-                        correlation_missing_reason=identity.correlation_missing_reason,
-                        alternate_lookup_key=identity.alternate_lookup_key,
-                        attempt_count=identity.attempt_count,
-                    )
-                    completion_reason = "Coalesced into pending FX replay during stale recovery"
-                else:
-                    await self.create_job(
-                        identity.job_type,
-                        payload,
-                        correlation_id=identity.correlation_id,
-                        attempt_count=identity.attempt_count,
-                    )
-                    completion_reason = (
-                        "Coalesced into pending security replay during stale recovery"
-                    )
+                await self._coalesce_pending_replay(identity)
+                completion_reason = (
+                    "Coalesced into pending FX replay during stale recovery"
+                    if identity.job_type == "RESET_FX_WATERMARKS"
+                    else "Coalesced into pending security replay during stale recovery"
+                )
             except (KeyError, TypeError, ValueError):
                 await self._fail_malformed_stale_replay(row)
                 continue
@@ -966,7 +837,7 @@ class ReprocessingJobRepository:
             await self.db.execute(
                 select(
                     ReprocessingJob.job_type,
-                    ReprocessingJob.payload,
+                    sql_cast(ReprocessingJob.payload, String).label("payload_json"),
                     ReprocessingJob.attempt_count,
                     ReprocessingJob.correlation_id,
                     ReprocessingJob.correlation_missing_reason,
@@ -1065,7 +936,7 @@ class ReprocessingJobRepository:
         *,
         lease_token: str,
     ) -> ReprocessingJobTransitionOutcome:
-        """Requeue a live claim and preserve any pending sibling's earliest replay boundary."""
+        """Requeue a live claim and preserve same-identity sibling replay evidence."""
 
         if not lease_token:
             raise ValueError("reprocessing lease token is required")
@@ -1077,10 +948,10 @@ class ReprocessingJobRepository:
         if not await self._lock_live_owned_job(job_id=job_id, lease_token=lease_token):
             return await self._classify_owned_transition_failure(job_id, lease_token)
 
-        if not await self._pending_replay_sibling_exists(
-            job_id=job_id,
-            identity=identity,
-        ):
+        sibling = await pending_replay_sibling_evidence(
+            self.db, job_id, identity.job_type, identity.payload
+        )
+        if not sibling.exists:
             outcome = await self._apply_owned_transition(
                 job_id,
                 "PENDING",
@@ -1095,7 +966,7 @@ class ReprocessingJobRepository:
         savepoint = self.db.begin_nested()
         await savepoint.start()
         try:
-            await self._coalesce_pending_replay(identity)
+            await self._coalesce_pending_replay(_merge_replay_sibling_evidence(identity, sibling))
             outcome = await self._apply_owned_transition(
                 job_id,
                 "COMPLETE",
@@ -1118,7 +989,7 @@ class ReprocessingJobRepository:
             await self.db.execute(
                 select(
                     ReprocessingJob.job_type,
-                    ReprocessingJob.payload,
+                    sql_cast(ReprocessingJob.payload, String).label("payload_json"),
                     ReprocessingJob.attempt_count,
                     ReprocessingJob.correlation_id,
                     ReprocessingJob.correlation_missing_reason,
@@ -1130,7 +1001,10 @@ class ReprocessingJobRepository:
             return None
         return _validated_effective_dated_replay_identity(
             job_type=str(row.job_type),
-            payload=row.payload,
+            payload=decode_retained_replay_source_payload(
+                row.payload_json,
+                job_type=str(row.job_type),
+            ),
             attempt_count=int(row.attempt_count),
             correlation_id=row.correlation_id,
             correlation_missing_reason=row.correlation_missing_reason,
@@ -1139,7 +1013,7 @@ class ReprocessingJobRepository:
 
     async def _lock_effective_dated_replay_identity(self, identity_key: str) -> None:
         await self.db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"),
+            LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY,
             {"identity_key": identity_key},
         )
 
@@ -1164,61 +1038,6 @@ class ReprocessingJobRepository:
             )
         ).scalar_one_or_none()
         return owned_job_id is not None
-
-    async def _pending_replay_sibling_exists(
-        self,
-        *,
-        job_id: int,
-        identity: _EffectiveDatedReplayIdentity,
-    ) -> bool:
-        predicates = [
-            ReprocessingJob.id != job_id,
-            ReprocessingJob.job_type == identity.job_type,
-            ReprocessingJob.status == "PENDING",
-        ]
-        if identity.job_type == "RESET_WATERMARKS":
-            predicates.append(
-                ReprocessingJob.payload["security_id"].as_string()
-                == identity.payload["security_id"]
-            )
-        if identity.job_type == "RESET_WATERMARKS":
-            sibling_id = (
-                await self.db.execute(
-                    select(ReprocessingJob.id).where(*predicates).with_for_update()
-                )
-            ).scalar_one_or_none()
-        else:
-            sibling_id = (
-                await self.db.execute(
-                    text(
-                        """
-                        SELECT id
-                        FROM reprocessing_jobs
-                        WHERE id <> :job_id
-                          AND job_type = 'RESET_FX_WATERMARKS'
-                          AND status = 'PENDING'
-                          AND jsonb_typeof(payload::jsonb->'from_currency')
-                              IS NOT DISTINCT FROM 'string'
-                          AND jsonb_typeof(payload::jsonb->'to_currency')
-                              IS NOT DISTINCT FROM 'string'
-                          AND btrim(payload->>'from_currency', :trim_chars)
-                              = :from_currency
-                          AND btrim(payload->>'to_currency', :trim_chars)
-                              = :to_currency
-                        ORDER BY id
-                        LIMIT 1
-                        FOR UPDATE
-                        """
-                    ),
-                    {
-                        "job_id": job_id,
-                        "from_currency": identity.payload["from_currency"],
-                        "to_currency": identity.payload["to_currency"],
-                        "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
-                    },
-                )
-            ).scalar_one_or_none()
-        return sibling_id is not None
 
     async def _coalesce_pending_replay(self, identity: _EffectiveDatedReplayIdentity) -> None:
         payload = identity.payload
@@ -1405,68 +1224,15 @@ def _retryable_stale_replay_identity(
         return None
     return _validated_effective_dated_replay_identity(
         job_type=str(row.job_type),
-        payload=row.payload,
+        payload=decode_retained_replay_source_payload(
+            row.payload_json,
+            job_type=str(row.job_type),
+        ),
         attempt_count=int(row.attempt_count),
         correlation_id=row.correlation_id,
         correlation_missing_reason=row.correlation_missing_reason,
         alternate_lookup_key=row.alternate_lookup_key,
     )
-
-
-def _validated_effective_dated_replay_identity(
-    *,
-    job_type: str,
-    payload: Any,
-    attempt_count: int,
-    correlation_id: str | None,
-    correlation_missing_reason: str | None,
-    alternate_lookup_key: str | None,
-) -> _EffectiveDatedReplayIdentity:
-    if job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES or not isinstance(payload, dict):
-        raise ValueError("owned requeue requires a supported effective-dated replay payload")
-    earliest_impacted_date = _required_replay_payload_text(payload, "earliest_impacted_date")
-    date.fromisoformat(earliest_impacted_date)
-    components: tuple[str, ...]
-    generated_at: datetime | None = None
-    if job_type == "RESET_WATERMARKS":
-        components = (_required_replay_payload_text(payload, "security_id"),)
-    else:
-        components = (
-            _required_replay_payload_text(payload, "from_currency"),
-            _required_replay_payload_text(payload, "to_currency"),
-        )
-        _required_replay_payload_text(payload, "content_hash")
-        generated_at = datetime.fromisoformat(
-            _required_replay_payload_text(payload, "generated_at")
-        )
-        if generated_at.tzinfo is None or generated_at.utcoffset() is None:
-            raise ValueError("FX replay generated_at must be timezone-aware")
-    return _EffectiveDatedReplayIdentity(
-        job_type=job_type,
-        identity_key=_effective_dated_replay_identity_key(job_type, *components),
-        payload=cast(dict[str, Any], payload),
-        generated_at=generated_at,
-        attempt_count=attempt_count,
-        correlation_id=correlation_id,
-        correlation_missing_reason=correlation_missing_reason,
-        alternate_lookup_key=alternate_lookup_key,
-    )
-
-
-def _required_replay_payload_text(payload: dict[str, Any], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"effective-dated replay payload requires {key}")
-    if value != value.strip():
-        raise ValueError(f"effective-dated replay payload {key} must be normalized")
-    if any(unicodedata.category(character) == "Cc" for character in value):
-        raise ValueError(f"effective-dated replay payload {key} contains a control character")
-    return value
-
-
-def _effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
-    encoded_components = "|".join(f"{len(component)}:{component}" for component in components)
-    return f"{job_type}|{encoded_components}"
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
@@ -1478,13 +1244,16 @@ def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[
 
 
 def _claimed_reprocessing_job(row: Any) -> ClaimedReprocessingJob:
+    """Map one claim result after its JSON payload crossed the database as text."""
+
+    job_type = str(row["job_type"])
     return ClaimedReprocessingJob(
         id=int(row["id"]),
-        job_type=str(row["job_type"]),
-        # Preserve database JSON as-is so malformed legacy payloads are rejected
-        # inside their independently committed job execution, not while mapping
-        # the entire claim result.
-        payload=row["payload"],
+        job_type=job_type,
+        payload=decode_retained_replay_source_payload(
+            row["payload_json"],
+            job_type=job_type,
+        ),
         status=str(row["status"]),
         correlation_id=row.get("correlation_id"),
         correlation_missing_reason=row.get("correlation_missing_reason"),
@@ -1520,7 +1289,7 @@ def _stale_reprocessing_jobs_stmt(
             ReprocessingJob.id,
             ReprocessingJob.attempt_count,
             ReprocessingJob.job_type,
-            ReprocessingJob.payload,
+            sql_cast(ReprocessingJob.payload, String).label("payload_json"),
             ReprocessingJob.correlation_id,
             ReprocessingJob.correlation_missing_reason,
             ReprocessingJob.alternate_lookup_key,

@@ -22,7 +22,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
-from .database_text_contract import PYTHON_STRIP_BOUNDARY_SQL
+from .database_text_contract import (
+    PYTHON_ISO_DATE_TEXT_VALID_SQL,
+    PYTHON_ISO_DATETIME_WITH_TIMEZONE_PATTERN_SQL,
+    PYTHON_STRIP_BOUNDARY_SQL,
+)
 from .db_base import Base
 from .domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
@@ -46,10 +50,6 @@ from .source_lifecycle_predicates import (
 )
 
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
-_FX_GENERATED_AT_TIMEZONE_PATTERN = (
-    r"'^[0-9]{4}-?[0-9]{2}-?[0-9]{2}.+[0-9]{2}"
-    r".*(Z|[+-][0-9]{2}:?[0-9]{2}(:?[0-9]{2}([.,][0-9]+)?)?)$'"
-)
 
 
 def _normalized_replay_text_sql(expression: str) -> str:
@@ -5163,11 +5163,11 @@ class ReprocessingJob(Base):
                     AND ({_FX_CONTENT_HASH_TEXT_VALID})
                     AND ({_FX_EARLIEST_DATE_TEXT_VALID})
                     AND ({_FX_GENERATED_AT_TEXT_VALID})
-                    AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                    AND ({PYTHON_ISO_DATE_TEXT_VALID_SQL})
                     AND pg_input_is_valid(
                         payload->>'generated_at', 'timestamp with time zone'
                     ) IS TRUE
-                    AND payload->>'generated_at' ~ {_FX_GENERATED_AT_TIMEZONE_PATTERN}
+                    AND payload->>'generated_at' ~ {PYTHON_ISO_DATETIME_WITH_TIMEZONE_PATTERN_SQL}
                 )
                 WHEN job_type = 'RESET_WATERMARKS' THEN (
                     jsonb_typeof(payload::jsonb->'security_id') IS NOT DISTINCT FROM 'string'
@@ -5175,7 +5175,7 @@ class ReprocessingJob(Base):
                         IS NOT DISTINCT FROM 'string'
                     AND ({_RESET_SECURITY_ID_TEXT_VALID})
                     AND ({_FX_EARLIEST_DATE_TEXT_VALID})
-                    AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                    AND ({PYTHON_ISO_DATE_TEXT_VALID_SQL})
                 )
                 ELSE TRUE
             END
