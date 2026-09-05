@@ -358,8 +358,9 @@ duplicate normalization and owned sibling coalescing retain the maximum retry co
 source/correlation lineage continues to follow generated-at/content-hash ordering. Reset coalescing
 uses valid sibling correlation at the authoritative boundary, fills missing owned correlation at an
 equal boundary, and retains known owned correlation when an earlier sibling has none. Canonical FX
-fields are recovered and revalidated around an unrepresentable extension so attributable claimed
-work proceeds. Staging quarantine carries recovered boundary, source, retry, and lineage evidence
+fields are recovered around an unrepresentable extension so the valuation adapter can validate the
+execution identity and date and attributable claimed work can proceed. Staging quarantine validates
+and carries recovered boundary, source, retry, and lineage evidence
 through the same merge policy; the extension is not copied into replacement work.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
