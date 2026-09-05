@@ -116,8 +116,9 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
         "failure_reason": ("invalid_reprocessing_job_payload: quarantined during contract cutover")
     }
     quarantine_statement = bind.execute.call_args_list[1].args[0]
-    assert "Python date grammar correction" in str(quarantine_statement)
+    assert "c166 temporal grammar correction" in str(quarantine_statement)
     assert "earliest_impacted_date' !~" in str(quarantine_statement)
+    assert "generated_at' !~" in str(quarantine_statement)
     recovery_statement, recovery_parameters = bind.execute.call_args_list[2].args
     assert "ON CONFLICT" in str(recovery_statement)
     assert len(recovery_parameters) == 1
