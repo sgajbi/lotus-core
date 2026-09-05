@@ -240,7 +240,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         is False
     )
     assert numeric_scalar.failure_reason == (
-        "invalid_reset_watermarks_job_payload: identity collision"
+        "invalid_reset_watermarks_job_payload: unsafe identity representation"
     )
     assert padded_string.status == "PENDING"
     assert padded_string.payload["security_id"] == "STRING"
@@ -253,9 +253,121 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     assert all(row.status == "FAILED" for row in control_rows)
     assert all("\x01" in row.payload["security_id"] for row in control_rows)
     assert all(
-        row.failure_reason == "invalid_reset_watermarks_job_payload: control-bearing identity"
+        row.failure_reason == "invalid_reset_watermarks_job_payload: unsafe identity representation"
         for row in control_rows
     )
+
+
+async def test_reset_normalization_quarantines_nul_before_identity_extraction(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    try:
+        with db_engine.begin() as connection:
+            connection.execute(
+                text('DROP INDEX "uq_reprocessing_jobs_pending_reset_watermarks_security"')
+            )
+            connection.execute(text('DROP INDEX "ix_reproc_resetwm_sec_status_created_id"'))
+            connection.execute(
+                text('DROP INDEX "ix_reprocessing_jobs_pending_resetwatermarks_priority"')
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+                    VALUES
+                        (
+                            'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
+                            'corr-nul-identity'
+                        ),
+                        (
+                            'RESET_WATERMARKS',
+                            CAST(
+                                '{"security_id":"VALID",'
+                                '"earliest_impacted_date":"2025-01-03"}' AS json
+                            ),
+                            'PENDING', 'corr-valid-identity'
+                        )
+                    """
+                ),
+                {
+                    "payload": (
+                        '{"security_id":"NUL\\u0000KEY","earliest_impacted_date":"2025-01-03"}'
+                    )
+                },
+            )
+
+        deleted_count = await ReprocessingJobRepository(
+            async_db_session
+        ).normalize_pending_reset_watermarks_duplicates()
+        await async_db_session.commit()
+        evidence = (
+            await async_db_session.execute(
+                text(
+                    """
+                    SELECT status, failure_reason, payload::text
+                    FROM reprocessing_jobs
+                    WHERE correlation_id = 'corr-nul-identity'
+                    """
+                )
+            )
+        ).one()
+        assert deleted_count == 0
+        assert evidence.status == "FAILED"
+        assert evidence.failure_reason == (
+            "invalid_reset_watermarks_job_payload: unsafe identity representation"
+        )
+        assert "\\u0000" in evidence[2]
+        valid_status = await async_db_session.scalar(
+            text(
+                """
+                SELECT status
+                FROM reprocessing_jobs
+                WHERE correlation_id = 'corr-valid-identity'
+                """
+            )
+        )
+        assert valid_status == "PENDING"
+    finally:
+        await async_db_session.rollback()
+        with db_engine.begin() as connection:
+            connection.execute(text("DELETE FROM reprocessing_jobs"))
+        with db_engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                    uq_reprocessing_jobs_pending_reset_watermarks_security
+                    ON reprocessing_jobs ((payload->>'security_id'))
+                    WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS
+                    ix_reprocessing_jobs_pending_resetwatermarks_priority
+                    ON reprocessing_jobs (
+                        (payload->>'earliest_impacted_date'), created_at, id
+                    )
+                    WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_reproc_resetwm_sec_status_created_id
+                    ON reprocessing_jobs (
+                        trim(payload->>'security_id'), status, created_at, id
+                    )
+                    WHERE job_type = 'RESET_WATERMARKS'
+                    """
+                )
+            )
 
 
 async def test_reset_normalization_serializes_with_canonical_staging(
