@@ -26,6 +26,9 @@ CUTOVER_REASON = "invalid_reprocessing_job_payload: quarantined during contract 
 RECOVERED_REASON = (
     "invalid_reprocessing_job_payload: recovered by c166 temporal-contract correction"
 )
+PYTHON_DATE_QUARANTINE_REASON = (
+    "invalid_reprocessing_job_payload: quarantined by c166 Python date grammar correction"
+)
 
 
 def _bind_operations(migration: dict[str, Any], connection) -> None:
@@ -174,6 +177,17 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 correlation_id="corr-standalone-source",
                 failure_reason=CUTOVER_REASON,
             )
+            python_invalid_pending_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"EUR","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-02 BC",'
+                    '"content_hash":"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",'
+                    '"generated_at":"2025-01-06T08:00:00+00:00"}'
+                ),
+                status="PENDING",
+                correlation_id="corr-python-invalid-pending",
+            )
             pending_id = _insert_job(
                 connection,
                 payload=(
@@ -200,6 +214,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         :jsonb_unrepresentable_source_id,
                         :recovered_source_id,
                         :standalone_source_id,
+                        :python_invalid_pending_id,
                         :pending_id
                     )
                        OR (
@@ -215,6 +230,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         "jsonb_unrepresentable_source_id": jsonb_unrepresentable_source_id,
                         "recovered_source_id": recovered_source_id,
                         "standalone_source_id": standalone_source_id,
+                        "python_invalid_pending_id": python_invalid_pending_id,
                         "pending_id": pending_id,
                     },
                 )
@@ -228,6 +244,10 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert by_id[recovered_source_id]["failure_reason"] == RECOVERED_REASON
             assert by_id[standalone_source_id]["status"] == "FAILED"
             assert by_id[standalone_source_id]["failure_reason"] == RECOVERED_REASON
+            assert by_id[python_invalid_pending_id]["status"] == "FAILED"
+            assert (
+                by_id[python_invalid_pending_id]["failure_reason"] == PYTHON_DATE_QUARANTINE_REASON
+            )
             assert by_id[pending_id]["status"] == "PENDING"
             assert by_id[pending_id]["payload"]["earliest_impacted_date"] == "2025-01-04"
             assert by_id[pending_id]["payload"]["generated_at"] == "2025-01-08T00:00:00+00:00"
@@ -241,6 +261,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     jsonb_unrepresentable_source_id,
                     recovered_source_id,
                     standalone_source_id,
+                    python_invalid_pending_id,
                     pending_id,
                 }
             )

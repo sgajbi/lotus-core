@@ -25,6 +25,14 @@ _CUTOVER_FAILURE_REASON = "invalid_reprocessing_job_payload: quarantined during 
 _RECOVERED_FAILURE_REASON = (
     "invalid_reprocessing_job_payload: recovered by c166 temporal-contract correction"
 )
+_PYTHON_ISO_DATE_PATTERN = (
+    r"'^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8}|"
+    r"[0-9]{4}-W[0-9]{2}(?:-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$'"
+)
+_PYTHON_ISO_DATE_TEXT_VALID = (
+    "pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE "
+    f"AND payload->>'earliest_impacted_date' ~ {_PYTHON_ISO_DATE_PATTERN}"
+)
 _REPLAY_TEXT_TRIM_CHARS = (
     r"U&' \0009\000A\000B\000C\000D\001C\001D\001E\001F\0020\0085\00A0\1680"
     r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029"
@@ -57,7 +65,16 @@ _FX_GENERATED_AT_TEXT_VALID = _normalized_replay_text_sql("payload->>'generated_
 _RESET_SECURITY_ID_TEXT_VALID = _normalized_replay_text_sql("payload->>'security_id'")
 
 
-def _active_payload_constraint(timezone_pattern: str) -> str:
+def _active_payload_constraint(
+    timezone_pattern: str,
+    *,
+    require_python_date_grammar: bool = True,
+) -> str:
+    python_date_clause = (
+        f"AND ({_PYTHON_ISO_DATE_TEXT_VALID})"
+        if require_python_date_grammar
+        else "AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE"
+    )
     return f"""
         CASE
             WHEN status NOT IN ('PENDING', 'PROCESSING') THEN TRUE
@@ -75,7 +92,7 @@ def _active_payload_constraint(timezone_pattern: str) -> str:
                 AND ({_FX_CONTENT_HASH_TEXT_VALID})
                 AND ({_FX_EARLIEST_DATE_TEXT_VALID})
                 AND ({_FX_GENERATED_AT_TEXT_VALID})
-                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                {python_date_clause}
                 AND pg_input_is_valid(
                     payload->>'generated_at', 'timestamp with time zone'
                 ) IS TRUE
@@ -87,7 +104,7 @@ def _active_payload_constraint(timezone_pattern: str) -> str:
                     IS NOT DISTINCT FROM 'string'
                 AND ({_RESET_SECURITY_ID_TEXT_VALID})
                 AND ({_FX_EARLIEST_DATE_TEXT_VALID})
-                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                {python_date_clause}
             )
             ELSE TRUE
         END
@@ -147,6 +164,22 @@ _RECOVERY_CANDIDATES = sa.text(
       AND status = 'FAILED'
       AND failure_reason = :failure_reason
     ORDER BY id
+    """
+)
+_QUARANTINE_PYTHON_INVALID_PENDING_DATES = sa.text(
+    rf"""
+    UPDATE reprocessing_jobs
+    SET status = 'FAILED',
+        failure_reason = (
+            'invalid_reprocessing_job_payload: quarantined by c166 Python date grammar correction'
+        ),
+        updated_at = now()
+    WHERE status = 'PENDING'
+      AND job_type IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')
+      AND pg_input_is_valid(payload::text, 'jsonb') IS TRUE
+      AND json_typeof(payload->'earliest_impacted_date') = 'string'
+      AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+      AND payload->>'earliest_impacted_date' !~ {_PYTHON_ISO_DATE_PATTERN}
     """
 )
 _RESTAGE_RECOVERABLE_FX = sa.text(
@@ -293,6 +326,7 @@ def upgrade() -> None:
         for row in candidates
         if (recovered := _recoverable_fx_parameters(row)) is not None
     ]
+    bind.execute(_QUARANTINE_PYTHON_INVALID_PENDING_DATES)
 
     op.drop_constraint(_ACTIVE_PAYLOAD_CONSTRAINT, _TABLE_NAME, type_="check")
     op.create_check_constraint(
@@ -384,5 +418,8 @@ def downgrade() -> None:
     op.create_check_constraint(
         _ACTIVE_PAYLOAD_CONSTRAINT,
         _TABLE_NAME,
-        _active_payload_constraint(_OLD_FX_GENERATED_AT_TIMEZONE_PATTERN),
+        _active_payload_constraint(
+            _OLD_FX_GENERATED_AT_TIMEZONE_PATTERN,
+            require_python_date_grammar=False,
+        ),
     )
