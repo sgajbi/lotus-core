@@ -180,8 +180,10 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     stmt_text = str(stmt)
     assert "WITH valid_candidates AS MATERIALIZED" in stmt_text
     assert "pg_input_is_valid" in stmt_text
+    assert "earliest_impacted_date' !~ :python_iso_date_pattern" in stmt_text
     assert "btrim(payload->>'security_id', :trim_chars)" in stmt_text
-    assert mock_db_session.execute.await_args.args[1] == {"trim_chars": _REPLAY_TEXT_TRIM_CHARS}
+    assert mock_db_session.execute.await_args.args[1]["trim_chars"] == _REPLAY_TEXT_TRIM_CHARS
+    assert mock_db_session.execute.await_args.args[1]["python_iso_date_pattern"]
     assert "DELETE FROM reprocessing_jobs" in stmt_text
     assert "jsonb_set" in stmt_text
 
