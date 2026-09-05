@@ -884,13 +884,14 @@ sibling boundary into the replacement pending job when that sibling is already p
 becomes terminal between discovery and row locking. Siblings already processing or claimed during
 lock revalidation contribute a committed snapshot without a row lock, so requeue cannot block their
 lease renewal. The replacement
-retains maximum retry history and applies the established FX generated-at/content-hash
-ordering to source and correlation lineage. Reset coalescing uses valid sibling correlation at the
+ retains maximum retry history and applies the established FX generated-at/content-hash
+ ordering to source authority. If that source lacks correlation, the latest valid available
+ correlation is retained without changing source authority. Reset coalescing uses valid sibling correlation at the
 authoritative boundary, fills missing owned correlation at an equal boundary, and retains known
 owned correlation when an earlier sibling has none. If an unrelated extension prevents full
 decoding, claim mapping recovers canonical FX fields so the valuation adapter can validate the
-execution identity and date and attributable replay can proceed. Staging quarantine validates and
-carries recovered boundary, source, retry, and lineage evidence through the same
+ execution identity and date and attributable replay can proceed. Staging quarantine for both replay
+ families validates and carries recovered boundary, source, retry, and lineage evidence through the same
 merge policy; the extension remains only on the original retained row. Legacy Reset duplicate normalization retains the maximum retry count
 across the coalesced rows.
 

@@ -354,13 +354,14 @@ boundary. Owned requeue also retains a usable earlier sibling boundary when the 
 processing or becomes terminal between discovery and row locking. Siblings already processing or
 claimed during lock revalidation are read as committed snapshots without row locks, so their lease
 renewal is not blocked. Legacy Reset
-duplicate normalization and owned sibling coalescing retain the maximum retry count; FX
-source/correlation lineage continues to follow generated-at/content-hash ordering. Reset coalescing
+ duplicate normalization and owned sibling coalescing retain the maximum retry count; FX source
+ authority continues to follow generated-at/content-hash ordering. If that source lacks correlation,
+ the latest valid available correlation is retained without changing source authority. Reset coalescing
 uses valid sibling correlation at the authoritative boundary, fills missing owned correlation at an
 equal boundary, and retains known owned correlation when an earlier sibling has none. Canonical FX
 fields are recovered around an unrepresentable extension so the valuation adapter can validate the
-execution identity and date and attributable claimed work can proceed. Staging quarantine validates
-and carries recovered boundary, source, retry, and lineage evidence
+ execution identity and date and attributable claimed work can proceed. Staging quarantine for both
+ replay families validates and carries recovered boundary, source, retry, and lineage evidence
 through the same merge policy; the extension is not copied into replacement work.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
