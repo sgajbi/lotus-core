@@ -16,12 +16,14 @@ def test_candidate_queries_return_jsonb_invalid_rows_for_quarantine() -> None:
     for statement in (PENDING_FX_REPLAY_CANDIDATES, PENDING_RESET_REPLAY_CANDIDATES):
         sql = str(statement)
         assert "AS payload_representable" in sql
-        assert "WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in sql
+        assert "THEN TRUE" not in sql
+        assert "btrim(payload->>" in sql
         assert sql.index("pg_input_is_valid(payload::text, 'jsonb')") < sql.index("json_typeof")
 
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
-        assert "WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE" in sql
+        assert "THEN TRUE" not in sql
+        assert "btrim(payload->>" in sql
 
 
 @pytest.mark.asyncio

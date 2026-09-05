@@ -1152,6 +1152,7 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     assert rows[1].failure_reason == (
         "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
     )
+    assert rows[1].payload["security_id"] == 123
     assert rows[2].payload == {
         "security_id": "BOND-PADDED",
         "earliest_impacted_date": "2025-01-05",
@@ -1167,7 +1168,7 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
     repository = ReprocessingJobRepository(async_db_session)
     await repository.create_job(
         "RESET_WATERMARKS",
-        {"security_id": "BOND-JSON", "earliest_impacted_date": "2025-01-05"},
+        {"security_id": "123", "earliest_impacted_date": "2025-01-05"},
         correlation_id="corr-claimed",
     )
     await async_db_session.commit()
@@ -1187,8 +1188,28 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
         ),
         {
             "payload": (
-                '{"security_id":" BOND-JSON",'
+                '{"security_id":123,'
                 '"earliest_impacted_date":"2025-01-07",'
+                '"legacy_number":1e1000000}'
+            )
+        },
+    )
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            VALUES (
+              'RESET_WATERMARKS',
+              CAST(:payload AS JSON),
+              'PENDING',
+              'corr-unrelated-jsonb-unrepresentable'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"OTHER-BOND",'
+                '"earliest_impacted_date":"2025-01-01",'
                 '"legacy_number":1e1000000}'
             )
         },
@@ -1208,9 +1229,11 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
         .all()
     )
     assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
-    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING"]
-    assert rows[2].payload == {
-        "security_id": "BOND-JSON",
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING", "PENDING"]
+    assert rows[2].correlation_id == "corr-unrelated-jsonb-unrepresentable"
+    assert rows[2].failure_reason is None
+    assert rows[3].payload == {
+        "security_id": "123",
         "earliest_impacted_date": "2025-01-05",
     }
     assert rows[1].failure_reason == (
