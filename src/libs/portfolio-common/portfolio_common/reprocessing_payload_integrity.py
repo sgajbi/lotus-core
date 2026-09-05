@@ -85,7 +85,7 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
     )
     SELECT count(*) FROM deleted;
     """
-)
+).bindparams(bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN))
 
 PENDING_FX_REPLAY_CANDIDATES = text(
     """
