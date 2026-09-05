@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.reprocessing_payload_integrity import (
     LOCK_SCANNED_REPLAY_CANDIDATES,
+    NORMALIZE_PENDING_RESET_WATERMARKS,
     PENDING_FX_REPLAY_CANDIDATES,
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_CANDIDATES,
@@ -48,7 +49,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
             "btrim(payload->>"
         )
         assert "FOR UPDATE" not in sql
-        assert "status = 'PENDING'" in sql
+        assert "status IN ('PENDING', 'PROCESSING')" in sql
 
     lock_sql = str(LOCK_SCANNED_REPLAY_CANDIDATES)
     assert "id = ANY(CAST(:candidate_ids AS BIGINT[]))" in lock_sql
@@ -58,6 +59,13 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     assert lock_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < lock_sql.index(
         "json_typeof"
     )
+
+
+def test_reset_normalization_preserves_maximum_retry_history() -> None:
+    sql = str(NORMALIZE_PENDING_RESET_WATERMARKS)
+    assert "max(attempt_count) OVER (PARTITION BY security_id)" in sql
+    assert "attempt_count = r.max_attempt_count" in sql
+    assert "j.attempt_count <> r.max_attempt_count" in sql
 
 
 def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:
@@ -249,7 +257,11 @@ async def test_pending_sibling_requires_exact_retained_identity(
     result = MagicMock()
     result.mappings.return_value.all.return_value = [
         {"id": 7, "payload_json": "{}", "status": "PENDING"},
-        {"id": 8, "payload_json": json.dumps(identity), "status": "PENDING"},
+        {
+            "id": 8,
+            "payload_json": json.dumps({**identity, "earliest_impacted_date": "2025-01-03"}),
+            "status": "PROCESSING",
+        },
     ]
     db.execute.return_value = result
 
@@ -260,7 +272,7 @@ async def test_pending_sibling_requires_exact_retained_identity(
         payload=payload,
     )
     assert evidence.exists is True
-    assert evidence.earliest_impacted_date is None
+    assert evidence.earliest_impacted_date == date(2025, 1, 3)
     scanned_statement, scanned_parameters = db.execute.await_args_list[0].args
     assert scanned_statement is statement
     assert scanned_parameters["job_id"] == 41

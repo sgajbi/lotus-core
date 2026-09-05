@@ -288,6 +288,7 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
             btrim(payload->>'security_id', :trim_chars) AS security_id,
             payload,
             payload->>'earliest_impacted_date' AS earliest_impacted_date,
+            attempt_count,
             created_at
         FROM reprocessing_jobs
         WHERE status = 'PENDING'
@@ -314,7 +315,8 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
             ) AS rn,
             min(earliest_impacted_date::date) OVER (
                 PARTITION BY security_id
-            ) AS min_impacted_date
+            ) AS min_impacted_date,
+            max(attempt_count) OVER (PARTITION BY security_id) AS max_attempt_count
         FROM valid_candidates
     ),
     keepers AS (
@@ -328,6 +330,7 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
                 '{earliest_impacted_date}',
                 to_jsonb(r.min_impacted_date::text)
             )::json,
+            attempt_count = r.max_attempt_count,
             updated_at = now()
         FROM ranked r
         WHERE j.id = r.id
@@ -335,6 +338,7 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
           AND (
               j.payload->>'security_id' IS DISTINCT FROM r.security_id
               OR (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
+              OR j.attempt_count <> r.max_attempt_count
           )
         RETURNING j.id
     ),
@@ -480,7 +484,7 @@ PENDING_RESET_REPLAY_SIBLING = text(
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
-      AND status = 'PENDING'
+      AND status IN ('PENDING', 'PROCESSING')
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
@@ -498,7 +502,7 @@ PENDING_FX_REPLAY_SIBLING = text(
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
-      AND status = 'PENDING'
+      AND status IN ('PENDING', 'PROCESSING')
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
