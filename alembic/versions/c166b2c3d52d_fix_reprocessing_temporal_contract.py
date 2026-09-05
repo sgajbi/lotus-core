@@ -118,21 +118,24 @@ _RECOVERY_CANDIDATES = sa.text(
         correlation_id,
         correlation_missing_reason,
         alternate_lookup_key,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
-            WHEN jsonb_typeof(payload::jsonb->'earliest_impacted_date')
-                IS DISTINCT FROM 'string'
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
             THEN FALSE
             ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
         END AS earliest_date_representable,
         CASE
-            WHEN jsonb_typeof(payload::jsonb->'generated_at') IS DISTINCT FROM 'string'
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
             THEN FALSE
             ELSE pg_input_is_valid(
                 payload->>'generated_at', 'timestamp with time zone'
             )
         END AS generated_at_representable,
         CASE
-            WHEN jsonb_typeof(payload::jsonb->'generated_at') IS DISTINCT FROM 'string'
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+            WHEN json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
             THEN FALSE
             ELSE payload->>'generated_at' ~ {_FX_GENERATED_AT_TIMEZONE_PATTERN}
         END AS timezone_pattern_matches
@@ -301,6 +304,8 @@ def upgrade() -> None:
 
 
 def _recoverable_fx_parameters(row: Any) -> dict[str, Any] | None:
+    if not row["payload_representable"]:
+        return None
     payload = row["payload"]
     if not isinstance(payload, dict):
         return None

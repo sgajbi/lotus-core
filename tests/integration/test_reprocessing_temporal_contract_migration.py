@@ -135,6 +135,18 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 {"processing_id": processing_id},
             )
 
+            jsonb_unrepresentable_source_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"CHF","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-02",'
+                    '"content_hash":"sha256:9999999999999999999999999999999999999999999999999999999999999999",'
+                    '"generated_at":"2025-01-07T08:00:00+00:00","note":"\\u0000"}'
+                ),
+                status="FAILED",
+                correlation_id="corr-jsonb-unrepresentable",
+                failure_reason=CUTOVER_REASON,
+            )
             recovered_source_id = _insert_job(
                 connection,
                 payload=(
@@ -181,7 +193,12 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         """
                     SELECT id, payload, status, failure_reason, correlation_id
                     FROM reprocessing_jobs
-                    WHERE id IN (:recovered_source_id, :standalone_source_id, :pending_id)
+                    WHERE id IN (
+                        :jsonb_unrepresentable_source_id,
+                        :recovered_source_id,
+                        :standalone_source_id,
+                        :pending_id
+                    )
                        OR (
                            job_type = 'RESET_FX_WATERMARKS'
                            AND status = 'PENDING'
@@ -192,6 +209,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     """
                     ),
                     {
+                        "jsonb_unrepresentable_source_id": jsonb_unrepresentable_source_id,
                         "recovered_source_id": recovered_source_id,
                         "standalone_source_id": standalone_source_id,
                         "pending_id": pending_id,
@@ -201,6 +219,8 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 .all()
             )
             by_id = {row["id"]: row for row in rows}
+            assert by_id[jsonb_unrepresentable_source_id]["status"] == "FAILED"
+            assert by_id[jsonb_unrepresentable_source_id]["failure_reason"] == CUTOVER_REASON
             assert by_id[recovered_source_id]["status"] == "FAILED"
             assert by_id[standalone_source_id]["status"] == "FAILED"
             assert by_id[pending_id]["status"] == "PENDING"
@@ -211,7 +231,13 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             standalone = next(
                 row
                 for row in rows
-                if row["id"] not in {recovered_source_id, standalone_source_id, pending_id}
+                if row["id"]
+                not in {
+                    jsonb_unrepresentable_source_id,
+                    recovered_source_id,
+                    standalone_source_id,
+                    pending_id,
+                }
             )
             assert standalone["status"] == "PENDING"
             assert standalone["payload"]["earliest_impacted_date"] == "2025-01-03"
