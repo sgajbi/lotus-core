@@ -511,7 +511,8 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
 
 PENDING_RESET_REPLAY_SIBLING = text(
     """
-    SELECT id, payload::text AS payload_json, status
+    SELECT id, payload::text AS payload_json, status, attempt_count,
+           correlation_id, correlation_missing_reason, alternate_lookup_key
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
@@ -529,7 +530,11 @@ PENDING_FX_REPLAY_SIBLING = text(
     SELECT
         id,
         payload::text AS payload_json,
-        status
+        status,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
@@ -633,24 +638,27 @@ async def _lock_matching_replay_rows(
     expected_identity: Mapping[str, str],
     preserve_after_claim: bool = False,
 ) -> list[Mapping[str, Any]]:
-    """Lock and revalidate only rows whose retained identity matches the request."""
+    """Snapshot processing matches; lock and revalidate pending matches."""
 
+    matching_rows = [
+        row for row in scanned_rows if replay_row_matches_identity(row, expected_identity)
+    ]
+    processing_rows = [row for row in matching_rows if row.get("status") == "PROCESSING"]
     candidate_ids = sorted(
-        {
-            int(row["id"])
-            for row in scanned_rows
-            if replay_row_matches_identity(row, expected_identity)
-        }
+        int(row["id"]) for row in matching_rows if row.get("status") != "PROCESSING"
     )
     if not candidate_ids:
-        return []
+        return processing_rows
     locked_rows = await _lock_scanned_replay_rows(
         db,
         candidate_ids=candidate_ids,
         preserve_candidate_ids=candidate_ids if preserve_after_claim else [],
         job_type=job_type,
     )
-    return [row for row in locked_rows if replay_row_matches_identity(row, expected_identity)]
+    revalidated_rows = [
+        row for row in locked_rows if replay_row_matches_identity(row, expected_identity)
+    ]
+    return sorted([*processing_rows, *revalidated_rows], key=lambda row: int(row["id"]))
 
 
 def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | None:
