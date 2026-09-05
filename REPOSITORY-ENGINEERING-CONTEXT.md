@@ -4090,8 +4090,9 @@ Most relevant current governance:
      generated-at/content-hash ordering. Reset coalescing uses valid sibling correlation at the
      authoritative boundary, fills missing owned correlation at an equal boundary, and retains
      known owned correlation when an earlier sibling has none. When an unrelated extension prevents
-     full JSON decoding, claim mapping recovers and revalidates canonical FX fields so attributable
-     replay proceeds. Staging quarantine carries recovered boundary, source, retry, and lineage
+     full JSON decoding, claim mapping recovers canonical FX fields so the valuation adapter can
+     validate the execution identity and date and attributable replay can proceed. Staging
+     quarantine validates and carries recovered boundary, source, retry, and lineage
      evidence through the same merge policy; the extension is never promoted. Legacy Reset duplicate
      normalization must retain the maximum
      retry count as well as the earliest boundary. Migration `c166b2c3d52d`
