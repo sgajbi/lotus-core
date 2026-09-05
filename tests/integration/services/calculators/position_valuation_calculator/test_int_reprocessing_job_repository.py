@@ -173,6 +173,15 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
             ),
             ReprocessingJob(
                 job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "\tTRIM-CONTROL\t",
+                    "earliest_impacted_date": "2025-01-02",
+                },
+                status="PENDING",
+                correlation_id="corr-trim-control-source",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
                 payload={"security_id": " A\x01A ", "earliest_impacted_date": "2025-01-01"},
                 status="PENDING",
                 correlation_id="corr-padded-control-string",
@@ -276,7 +285,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 15
+    assert len(rows) == 18
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
@@ -285,6 +294,11 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     numeric_scalar = next(row for row in rows if row.correlation_id == "corr-numeric-scalar")
     unbounded_exponent = next(
         row for row in rows if row.correlation_id == "corr-unbounded-exponent"
+    )
+    unbounded_boundary = next(
+        row
+        for row in rows
+        if row.status == "PENDING" and row.payload.get("security_id") == "UNBOUNDED-EXPONENT"
     )
     recoverable_source = next(
         row
@@ -311,6 +325,14 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     )
     malformed_recovery_blocker = next(
         row for row in rows if row.correlation_id == "corr-malformed-recovery-blocker"
+    )
+    trim_control_source = next(
+        row for row in rows if row.correlation_id == "corr-trim-control-source"
+    )
+    trim_control_boundary = next(
+        row
+        for row in rows
+        if row.status == "PENDING" and row.payload.get("security_id") == "TRIM-CONTROL"
     )
     control_rows = [
         row
@@ -348,11 +370,16 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     )
     assert unbounded_exponent.status == "FAILED"
     assert unbounded_exponent.failure_reason == (
-        "invalid_reset_watermarks_job_payload: unsafe identity representation"
+        "invalid_reset_watermarks_job_payload: unsafe retained representation; "
+        "replay boundary recovered"
     )
+    assert unbounded_boundary.payload == {
+        "security_id": "UNBOUNDED-EXPONENT",
+        "earliest_impacted_date": "2025-01-03",
+    }
     assert recoverable_source.status == "FAILED"
     assert recoverable_source.failure_reason == (
-        "invalid_reset_watermarks_job_payload: unsafe storage representation; "
+        "invalid_reset_watermarks_job_payload: unsafe retained representation; "
         "replay boundary recovered"
     )
     assert recovered_boundary.payload == {
@@ -361,7 +388,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     }
     assert numeric_recovery_source.status == "FAILED"
     assert numeric_recovery_source.failure_reason == (
-        "invalid_reset_watermarks_job_payload: unsafe storage representation; "
+        "invalid_reset_watermarks_job_payload: unsafe retained representation; "
         "replay boundary recovered"
     )
     assert numeric_recovery_blocker.status == "FAILED"
@@ -391,6 +418,15 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     assert malformed_recovery_blocker.failure_reason == (
         "invalid_reset_watermarks_job_payload: identity collision"
     )
+    assert trim_control_source.status == "FAILED"
+    assert trim_control_source.failure_reason == (
+        "invalid_reset_watermarks_job_payload: unsafe retained representation; "
+        "replay boundary recovered"
+    )
+    assert trim_control_boundary.payload == {
+        "security_id": "TRIM-CONTROL",
+        "earliest_impacted_date": "2025-01-02",
+    }
     assert len(control_rows) == 2
     assert all(row.status == "FAILED" for row in control_rows)
     assert all("\x01" in row.payload["security_id"] for row in control_rows)

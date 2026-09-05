@@ -28,6 +28,16 @@ PYTHON_ISO_DATE_PATTERN = (
 )
 REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
 
+
+def _retain_json_number_text(value: str) -> str:
+    return value
+
+
+_RETAINED_JSON_LEXICAL_DECODER = json.JSONDecoder(
+    parse_int=_retain_json_number_text,
+    parse_float=_retain_json_number_text,
+)
+
 QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES = text(
     """
     UPDATE reprocessing_jobs
@@ -44,7 +54,7 @@ QUARANTINE_PENDING_RESET_UNSAFE_IDENTITIES = text(
     """
 ).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
 
-PENDING_RESET_JSONB_INVALID_CANDIDATES = text(
+PENDING_RESET_RECOVERY_CANDIDATES = text(
     """
     SELECT
         id,
@@ -56,10 +66,14 @@ PENDING_RESET_JSONB_INVALID_CANDIDATES = text(
     FROM reprocessing_jobs
     WHERE status = 'PENDING'
       AND job_type = 'RESET_WATERMARKS'
-      AND pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE payload->>'security_id' ~ :replay_control_pattern
+      END
     ORDER BY id
     """
-)
+).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
 
 UPSERT_PENDING_RESET_WATERMARKS = text(
     """
@@ -330,9 +344,11 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
     """Quarantine unsafe identities, then serialize and coalesce valid repairs."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
-    invalid_rows = (await db.execute(PENDING_RESET_JSONB_INVALID_CANDIDATES)).mappings().all()
+    recovery_candidates = (await db.execute(PENDING_RESET_RECOVERY_CANDIDATES)).mappings().all()
     recovery_plans = [
-        plan for row in invalid_rows if (plan := _reset_boundary_recovery_plan(row)) is not None
+        plan
+        for row in recovery_candidates
+        if (plan := _reset_boundary_recovery_plan(row)) is not None
     ]
     identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
     identity_keys = sorted(
@@ -363,7 +379,7 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
             db,
             job_ids=[int(plan["id"]) for plan in recovery_plans],
             failure_reason=(
-                "invalid_reset_watermarks_job_payload: unsafe storage "
+                "invalid_reset_watermarks_job_payload: unsafe retained "
                 "representation; replay boundary recovered"
             ),
         )
@@ -590,12 +606,10 @@ async def _lock_matching_replay_rows(
 
 
 def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | None:
-    payload = _decode_retained_payload(row.get("payload_json"))
-    if not isinstance(payload, dict):
-        return None
-    security_id = payload.get("security_id")
-    earliest_value = payload.get("earliest_impacted_date")
-    if not isinstance(security_id, str) or not isinstance(earliest_value, str):
+    payload_json = row.get("payload_json")
+    security_id = _json_object_string_field(payload_json, "security_id")
+    earliest_value = _json_object_string_field(payload_json, "earliest_impacted_date")
+    if security_id is None or earliest_value is None:
         return None
     security_id = security_id.strip(REPLAY_TEXT_TRIM_CHARS)
     if not security_id or not replay_text_is_storage_safe(security_id):
@@ -619,9 +633,27 @@ def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | No
 def _json_object_field_identity_text(payload_json: object, field: str) -> str | None:
     """Extract a top-level JSON value without losing its stored lexical representation."""
 
+    encoded_value = _json_object_field_encoded_value(payload_json, field)
+    return _postgres_json_identity_text(encoded_value)
+
+
+def _json_object_string_field(payload_json: object, field: str) -> str | None:
+    encoded_value = _json_object_field_encoded_value(payload_json, field)
+    if encoded_value is None or not encoded_value.startswith('"'):
+        return None
+    try:
+        decoded_value = json.loads(encoded_value)
+    except (ValueError, RecursionError):
+        return None
+    return decoded_value if isinstance(decoded_value, str) else None
+
+
+def _json_object_field_encoded_value(payload_json: object, field: str) -> str | None:
+    """Return one top-level field token while scanning other values lexically."""
+
     if not isinstance(payload_json, str):
         return None
-    decoder = json.JSONDecoder(parse_int=Decimal, parse_float=Decimal)
+    decoder = _RETAINED_JSON_LEXICAL_DECODER
     index = _skip_json_whitespace(payload_json, 0)
     if index >= len(payload_json) or payload_json[index] != "{":
         return None
@@ -641,7 +673,7 @@ def _json_object_field_identity_text(payload_json: object, field: str) -> str | 
             value_start = _skip_json_whitespace(payload_json, index + 1)
             _, value_end = decoder.raw_decode(payload_json, value_start)
             if key == field:
-                matched_value = _postgres_json_identity_text(payload_json[value_start:value_end])
+                matched_value = payload_json[value_start:value_end]
             index = _skip_json_whitespace(payload_json, value_end)
             if index >= len(payload_json):
                 return None
@@ -650,7 +682,7 @@ def _json_object_field_identity_text(payload_json: object, field: str) -> str | 
             if payload_json[index] != ",":
                 return None
             index += 1
-    except (ValueError, DecimalException):
+    except (ValueError, RecursionError):
         return None
 
 
@@ -666,14 +698,10 @@ def _postgres_json_identity_text(encoded_value: object) -> str | None:
     if not isinstance(encoded_value, str):
         return None
     try:
-        decoded_value = json.loads(
-            encoded_value,
-            parse_int=Decimal,
-            parse_float=Decimal,
-        )
-    except (ValueError, DecimalException):
+        decoded_value = _RETAINED_JSON_LEXICAL_DECODER.decode(encoded_value)
+    except (ValueError, RecursionError):
         return None
-    if isinstance(decoded_value, str):
+    if encoded_value.startswith('"') and isinstance(decoded_value, str):
         return decoded_value
     if decoded_value is None:
         return None
