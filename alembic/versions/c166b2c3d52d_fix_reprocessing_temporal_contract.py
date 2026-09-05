@@ -22,7 +22,7 @@ down_revision: str | Sequence[str] | None = "c165b2c3d52c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("alembic.runtime.migration")
 
 _TABLE_NAME = "reprocessing_jobs"
 _ACTIVE_PAYLOAD_CONSTRAINT = "ck_reprocessing_jobs_active_payload_valid"
@@ -372,11 +372,16 @@ def upgrade() -> None:
         if (recovered := _recoverable_fx_parameters(row)) is not None
     ]
     quarantine_counts = bind.execute(_QUARANTINE_PYTHON_INVALID_PENDING_TEMPORAL_VALUES).one()
+    reset_watermarks_count = int(quarantine_counts.reset_count)
+    reset_fx_watermarks_count = int(quarantine_counts.reset_fx_count)
     logger.info(
-        "reprocessing temporal grammar correction quarantined rows",
+        "reprocessing temporal grammar correction quarantined rows: "
+        "reset_watermarks_count=%d reset_fx_watermarks_count=%d",
+        reset_watermarks_count,
+        reset_fx_watermarks_count,
         extra={
-            "reset_watermarks_count": int(quarantine_counts.reset_count),
-            "reset_fx_watermarks_count": int(quarantine_counts.reset_fx_count),
+            "reset_watermarks_count": reset_watermarks_count,
+            "reset_fx_watermarks_count": reset_fx_watermarks_count,
         },
     )
 
