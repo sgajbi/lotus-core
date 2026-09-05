@@ -739,7 +739,8 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
                 '{"from_currency":"USD","to_currency":"SGD",'
                 '"earliest_impacted_date":"2026-04-08",'
                 f'"content_hash":"sha256:{"a" * 64}",'
-                '"generated_at":"2026-04-10T08:00:00+00:00"}'
+                '"generated_at":"2026-04-10T08:00:00+00:00",'
+                '"extension":1e999999999999999999999999999999999999999}'
             ),
             correlation_id="corr-stale",
             correlation_missing_reason=None,

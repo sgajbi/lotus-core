@@ -77,6 +77,9 @@ def test_reset_normalization_preserves_maximum_retry_history() -> None:
     assert "max(attempt_count) OVER (PARTITION BY security_id)" in sql
     assert "attempt_count = r.max_attempt_count" in sql
     assert "j.attempt_count <> r.max_attempt_count" in sql
+    assert "first_value(correlation_id) OVER" in sql
+    assert "correlation_id = r.retained_correlation_id" in sql
+    assert "j.correlation_id IS DISTINCT FROM r.retained_correlation_id" in sql
 
 
 def test_python_identity_match_distinguishes_unrelated_payload_poison() -> None:

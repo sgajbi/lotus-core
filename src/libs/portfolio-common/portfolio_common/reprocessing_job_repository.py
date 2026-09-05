@@ -766,7 +766,10 @@ class ReprocessingJobRepository:
                     continue
                 identity = _validated_effective_dated_replay_identity(
                     job_type=str(locked_row.job_type),
-                    payload=decode_reprocessing_payload_text(locked_row.payload_json),
+                    payload=decode_retained_replay_source_payload(
+                        locked_row.payload_json,
+                        job_type=str(locked_row.job_type),
+                    ),
                     attempt_count=int(locked_row.attempt_count),
                     correlation_id=locked_row.correlation_id,
                     correlation_missing_reason=locked_row.correlation_missing_reason,
@@ -996,7 +999,10 @@ class ReprocessingJobRepository:
             return None
         return _validated_effective_dated_replay_identity(
             job_type=str(row.job_type),
-            payload=decode_reprocessing_payload_text(row.payload_json),
+            payload=decode_retained_replay_source_payload(
+                row.payload_json,
+                job_type=str(row.job_type),
+            ),
             attempt_count=int(row.attempt_count),
             correlation_id=row.correlation_id,
             correlation_missing_reason=row.correlation_missing_reason,
@@ -1216,7 +1222,10 @@ def _retryable_stale_replay_identity(
         return None
     return _validated_effective_dated_replay_identity(
         job_type=str(row.job_type),
-        payload=decode_reprocessing_payload_text(row.payload_json),
+        payload=decode_retained_replay_source_payload(
+            row.payload_json,
+            job_type=str(row.job_type),
+        ),
         attempt_count=int(row.attempt_count),
         correlation_id=row.correlation_id,
         correlation_missing_reason=row.correlation_missing_reason,
