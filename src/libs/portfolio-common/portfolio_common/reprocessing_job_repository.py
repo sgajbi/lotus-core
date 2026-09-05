@@ -22,6 +22,7 @@ from .infrastructure.persistence.statement_batching import (
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .reprocessing_payload_integrity import (
     NORMALIZE_PENDING_RESET_WATERMARKS,
+    PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
     quarantine_pending_fx_pair,
@@ -1121,26 +1122,7 @@ class ReprocessingJobRepository:
                 "trim_chars": _REPLAY_TEXT_TRIM_CHARS,
             }
         else:
-            statement = text(
-                """
-                SELECT id
-                FROM reprocessing_jobs
-                WHERE id <> :job_id
-                  AND job_type = 'RESET_FX_WATERMARKS'
-                  AND status = 'PENDING'
-                  AND jsonb_typeof(payload::jsonb->'from_currency')
-                      IS NOT DISTINCT FROM 'string'
-                  AND jsonb_typeof(payload::jsonb->'to_currency')
-                      IS NOT DISTINCT FROM 'string'
-                  AND btrim(payload->>'from_currency', :trim_chars)
-                      = :from_currency
-                  AND btrim(payload->>'to_currency', :trim_chars)
-                      = :to_currency
-                ORDER BY id
-                LIMIT 1
-                FOR UPDATE
-                """
-            )
+            statement = PENDING_FX_REPLAY_SIBLING
             parameters = {
                 "job_id": job_id,
                 "from_currency": identity.payload["from_currency"],
