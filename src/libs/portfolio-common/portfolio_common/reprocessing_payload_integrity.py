@@ -1,6 +1,7 @@
 """Guard and quarantine retained effective-dated replay payloads before SQL casts."""
 
 import json
+import unicodedata
 from collections.abc import Callable, Mapping
 from datetime import date
 from decimal import Decimal
@@ -171,6 +172,18 @@ def effective_dated_replay_identity_key(job_type: str, *components: str) -> str:
 
     encoded_components = "|".join(f"{len(component)}:{component}" for component in components)
     return f"{job_type}|{encoded_components}"
+
+
+def replay_text_is_storage_safe(value: str) -> bool:
+    """Return whether text can safely cross PostgreSQL's UTF-8 boundary."""
+
+    if any(unicodedata.category(character) in {"Cc", "Cs"} for character in value):
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
@@ -541,9 +554,7 @@ def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | No
     if not isinstance(security_id, str) or not isinstance(earliest_value, str):
         return None
     security_id = security_id.strip(REPLAY_TEXT_TRIM_CHARS)
-    if not security_id or any(
-        ord(character) <= 31 or 127 <= ord(character) <= 159 for character in security_id
-    ):
+    if not security_id or not replay_text_is_storage_safe(security_id):
         return None
     try:
         earliest_impacted_date = date.fromisoformat(earliest_value)

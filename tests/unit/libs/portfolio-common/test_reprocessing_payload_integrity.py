@@ -174,6 +174,7 @@ def test_reset_boundary_recovery_plan_preserves_safe_identity_date_and_lineage()
     [
         '{"security_id":123,"earliest_impacted_date":"2025-01-01"}',
         '{"security_id":"BAD\\u0000ID","earliest_impacted_date":"2025-01-01"}',
+        '{"security_id":"BAD\\ud800ID","earliest_impacted_date":"2025-01-01"}',
         '{"security_id":"BOND-1","earliest_impacted_date":"2025-01-01 BC"}',
     ],
 )

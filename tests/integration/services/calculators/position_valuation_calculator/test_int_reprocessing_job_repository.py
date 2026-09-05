@@ -300,11 +300,21 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     )
 
 
-async def test_reset_normalization_quarantines_nul_before_identity_extraction(
+@pytest.mark.parametrize(
+    ("encoded_identity", "correlation_id", "expected_escape"),
+    [
+        ("NUL\\u0000KEY", "corr-nul-identity", "\\u0000"),
+        ("BAD\\ud800ID", "corr-surrogate-identity", "\\ud800"),
+    ],
+)
+async def test_reset_normalization_quarantines_unencodable_identity_before_locking(
     clean_db,
     db_engine,
     async_db_session: AsyncSession,
     predecessor_reprocessing_payload_schema,
+    encoded_identity: str,
+    correlation_id: str,
+    expected_escape: str,
 ) -> None:
     try:
         with db_engine.begin() as connection:
@@ -322,7 +332,7 @@ async def test_reset_normalization_quarantines_nul_before_identity_extraction(
                     VALUES
                         (
                             'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
-                            'corr-nul-identity'
+                            :correlation_id
                         ),
                         (
                             'RESET_WATERMARKS',
@@ -336,8 +346,10 @@ async def test_reset_normalization_quarantines_nul_before_identity_extraction(
                 ),
                 {
                     "payload": (
-                        '{"security_id":"NUL\\u0000KEY","earliest_impacted_date":"2025-01-03"}'
-                    )
+                        f'{{"security_id":"{encoded_identity}",'
+                        '"earliest_impacted_date":"2025-01-03"}'
+                    ),
+                    "correlation_id": correlation_id,
                 },
             )
         deleted_count = await ReprocessingJobRepository(
@@ -350,9 +362,10 @@ async def test_reset_normalization_quarantines_nul_before_identity_extraction(
                     """
                     SELECT status, failure_reason, payload::text
                     FROM reprocessing_jobs
-                    WHERE correlation_id = 'corr-nul-identity'
+                    WHERE correlation_id = :correlation_id
                     """
-                )
+                ),
+                {"correlation_id": correlation_id},
             )
         ).one()
         assert deleted_count == 0
@@ -360,7 +373,7 @@ async def test_reset_normalization_quarantines_nul_before_identity_extraction(
         assert evidence.failure_reason == (
             "invalid_reset_watermarks_job_payload: unsafe identity representation"
         )
-        assert "\\u0000" in evidence[2]
+        assert expected_escape in evidence[2]
         valid_status = await async_db_session.scalar(
             text(
                 """
