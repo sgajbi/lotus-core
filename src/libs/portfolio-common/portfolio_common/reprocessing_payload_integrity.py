@@ -23,6 +23,23 @@ PYTHON_ISO_DATE_PATTERN = (
     r"^([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8}|"
     r"[0-9]{4}-W[0-9]{2}(-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$"
 )
+REPLAY_CONTROL_PATTERN = r"[\u0001-\u001f\u007f-\u009f]"
+
+QUARANTINE_PENDING_RESET_CONTROL_IDENTITIES = text(
+    """
+    UPDATE reprocessing_jobs
+    SET status = 'FAILED',
+        failure_reason = 'invalid_reset_watermarks_job_payload: control-bearing identity',
+        updated_at = now()
+    WHERE status = 'PENDING'
+      AND job_type = 'RESET_WATERMARKS'
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE payload->>'security_id' ~ :replay_control_pattern
+      END
+    """
+).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
 
 PENDING_RESET_IDENTITY_LOCK_KEYS = text(
     """
@@ -33,11 +50,14 @@ PENDING_RESET_IDENTITY_LOCK_KEYS = text(
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
           WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          WHEN payload->>'security_id' ~ :replay_control_pattern THEN FALSE
           ELSE btrim(payload->>'security_id', :trim_chars) <> ''
+           AND payload->>'security_id'
+               IS DISTINCT FROM btrim(payload->>'security_id', :trim_chars)
       END
     ORDER BY security_id
     """
-)
+).bindparams(bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN))
 LOCK_EFFECTIVE_DATED_REPLAY_IDENTITY = text(
     "SELECT pg_advisory_xact_lock(hashtextextended(:identity_key, 0))"
 )
@@ -62,6 +82,7 @@ QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
               WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
               WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
               THEN FALSE
+              WHEN payload->>'security_id' ~ :replay_control_pattern THEN FALSE
               WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN FALSE
               ELSE btrim(payload->>'security_id', :trim_chars) <> ''
                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
@@ -80,12 +101,16 @@ QUARANTINE_PENDING_RESET_IDENTITY_COLLISIONS = text(
           WHEN json_typeof(collision.payload->'security_id') IS DISTINCT FROM 'string' THEN TRUE
           WHEN json_typeof(collision.payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
           THEN TRUE
+          WHEN collision.payload->>'security_id' ~ :replay_control_pattern THEN TRUE
           WHEN collision.payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN TRUE
           ELSE btrim(collision.payload->>'security_id', :trim_chars) = ''
             OR pg_input_is_valid(collision.payload->>'earliest_impacted_date', 'date') IS NOT TRUE
       END
     """
-).bindparams(bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN))
+).bindparams(
+    bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN),
+    bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN),
+)
 
 
 NORMALIZE_PENDING_RESET_WATERMARKS = text(
@@ -105,6 +130,7 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
               WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
               WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
               THEN FALSE
+              WHEN payload->>'security_id' ~ :replay_control_pattern THEN FALSE
               WHEN payload->>'earliest_impacted_date' !~ :python_iso_date_pattern THEN FALSE
               ELSE btrim(payload->>'security_id', :trim_chars) <> ''
                AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
@@ -154,13 +180,17 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
     )
     SELECT count(*) FROM deleted;
     """
-).bindparams(bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN))
+).bindparams(
+    bindparam("python_iso_date_pattern", value=PYTHON_ISO_DATE_PATTERN),
+    bindparam("replay_control_pattern", value=REPLAY_CONTROL_PATTERN),
+)
 
 
 async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int:
     """Quarantine scalar collisions, then coalesce valid pending identities."""
 
     parameters = {"trim_chars": REPLAY_TEXT_TRIM_CHARS}
+    await db.execute(QUARANTINE_PENDING_RESET_CONTROL_IDENTITIES)
     identity_result = await db.execute(PENDING_RESET_IDENTITY_LOCK_KEYS, parameters)
     identity_keys = sorted(
         {
