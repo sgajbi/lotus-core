@@ -5,10 +5,12 @@ Revises: c165b2c3d52c
 Create Date: 2026-09-05
 """
 
+import json
 import logging
 import unicodedata
 from collections.abc import Sequence
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 import sqlalchemy as sa
@@ -139,7 +141,7 @@ _RECOVERY_CANDIDATES = sa.text(
     rf"""
     SELECT
         id,
-        payload,
+        payload::text AS payload_json,
         attempt_count,
         correlation_id,
         correlation_missing_reason,
@@ -397,7 +399,7 @@ def upgrade() -> None:
 def _recoverable_fx_parameters(row: Any) -> dict[str, Any] | None:
     if not row["payload_representable"]:
         return None
-    payload = row["payload"]
+    payload = _decode_recovery_payload(row["payload_json"])
     if not isinstance(payload, dict):
         return None
     try:
@@ -431,6 +433,19 @@ def _recoverable_fx_parameters(row: Any) -> dict[str, Any] | None:
         "correlation_missing_reason": row["correlation_missing_reason"],
         "alternate_lookup_key": row["alternate_lookup_key"],
     }
+
+
+def _decode_recovery_payload(payload_json: object) -> object:
+    if not isinstance(payload_json, str):
+        return None
+    try:
+        return json.loads(
+            payload_json,
+            parse_int=Decimal,
+            parse_float=Decimal,
+        )
+    except (ValueError, RecursionError):
+        return None
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import runpy
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -24,15 +25,19 @@ def _normalized_sql(value: object) -> str:
 
 
 def _recoverable_row(**overrides: object) -> dict[str, object]:
-    row: dict[str, object] = {
-        "id": 17,
-        "payload": {
+    payload = overrides.pop(
+        "payload",
+        {
             "from_currency": "USD",
             "to_currency": "SGD",
             "earliest_impacted_date": "2025-01-04",
             "content_hash": "sha256:" + ("a" * 64),
             "generated_at": "2025-01-07T08:00:00-07",
         },
+    )
+    row: dict[str, object] = {
+        "id": 17,
+        "payload_json": json.dumps(payload),
         "attempt_count": 2,
         "correlation_id": "corr-recovered",
         "correlation_missing_reason": None,
@@ -113,6 +118,8 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     assert "status = 'FAILED'" in str(recovery_query)
     assert "pg_input_is_valid" in str(recovery_query)
     recovery_sql = str(recovery_query)
+    assert "payload::text AS payload_json" in recovery_sql
+    assert "\n        payload," not in recovery_sql
     assert recovery_sql.count("pg_input_is_valid(payload::text, 'jsonb')") == 4
     assert recovery_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < recovery_sql.index(
         "json_typeof"
@@ -198,6 +205,21 @@ def test_recovery_rejects_python_or_database_temporal_mismatch() -> None:
     assert recover(_recoverable_row(earliest_date_representable=False)) is None
     assert recover(_recoverable_row(generated_at_representable=False)) is None
     assert recover(_recoverable_row(timezone_pattern_matches=False)) is None
+    oversized_integer = "1" * 5_000
+    assert (
+        recover(
+            _recoverable_row(
+                payload_json=(
+                    '{"from_currency":"USD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-04",'
+                    '"content_hash":"sha256:aaaaaaaa",'
+                    '"generated_at":"2025-01-07T08:00:00-07",'
+                    f'"extension":{oversized_integer}}}'
+                )
+            )
+        )
+        is not None
+    )
     assert (
         recover(
             _recoverable_row(

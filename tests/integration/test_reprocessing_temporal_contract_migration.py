@@ -179,6 +179,19 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 correlation_id="corr-standalone-source",
                 failure_reason=CUTOVER_REASON,
             )
+            oversized_extension_source_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"AUD","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-02",'
+                    '"content_hash":"sha256:abababababababababababababababababababababababababababababababab",'
+                    '"generated_at":"2025-01-07T08:00:00+00:00",'
+                    f'"extension":{("1" * 5_000)}}}'
+                ),
+                status="FAILED",
+                correlation_id="corr-oversized-extension-source",
+                failure_reason=CUTOVER_REASON,
+            )
             python_invalid_pending_id = _insert_job(
                 connection,
                 payload=(
@@ -316,6 +329,36 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert standalone["payload"]["earliest_impacted_date"] == "2025-01-03"
             assert standalone["payload"]["generated_at"] == "2025-01-07T08:00:00+00"
             assert standalone["correlation_id"] == "corr-standalone-source"
+
+            oversized_source = (
+                connection.execute(
+                    text(
+                        """
+                        SELECT status, failure_reason
+                        FROM reprocessing_jobs
+                        WHERE id = :source_id
+                        """
+                    ),
+                    {"source_id": oversized_extension_source_id},
+                )
+            ).one()
+            assert oversized_source.status == "FAILED"
+            assert oversized_source.failure_reason == RECOVERED_REASON
+            oversized_replay = (
+                connection.execute(
+                    text(
+                        """
+                        SELECT payload
+                        FROM reprocessing_jobs
+                        WHERE job_type = 'RESET_FX_WATERMARKS'
+                          AND status = 'PENDING'
+                          AND payload->>'from_currency' = 'AUD'
+                          AND payload->>'to_currency' = 'SGD'
+                        """
+                    )
+                )
+            ).one()
+            assert oversized_replay.payload["earliest_impacted_date"] == "2025-01-02"
 
             accepted_id = _insert_job(
                 connection,
