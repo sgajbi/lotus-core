@@ -57,17 +57,31 @@ async def _wait_for_backend_advisory_lock(
 async def test_stale_security_replay_coalesces_with_newer_pending_job(
     clean_db,
     async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
 ) -> None:
-    stale_job = ReprocessingJob(
-        job_type="RESET_WATERMARKS",
-        payload={"security_id": "S-STALE", "earliest_impacted_date": "2025-01-05"},
-        status="PROCESSING",
-        attempt_count=2,
-        correlation_id="corr-stale-earliest",
-        lease_owner="stale-security-worker",
-        lease_token="1" * 32,
-        lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    stale_id = await async_db_session.scalar(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (
+                job_type, payload, status, attempt_count, correlation_id,
+                lease_owner, lease_token, lease_expires_at
+            ) VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS JSON), 'PROCESSING', 2,
+                'corr-stale-earliest', 'stale-security-worker', :lease_token,
+                clock_timestamp() - interval '30 minutes'
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"S-STALE","earliest_impacted_date":"2025-01-05",'
+                '"extension":1e999999999999999999999999999999999999999}'
+            ),
+            "lease_token": "1" * 32,
+        },
     )
+    assert stale_id is not None
     pending_job = ReprocessingJob(
         job_type="RESET_WATERMARKS",
         payload={"security_id": "S-STALE", "earliest_impacted_date": "2025-01-07"},
@@ -75,7 +89,7 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
         attempt_count=0,
         correlation_id="corr-pending-later",
     )
-    async_db_session.add_all([stale_job, pending_job])
+    async_db_session.add(pending_job)
     await async_db_session.commit()
 
     recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
@@ -97,6 +111,7 @@ async def test_stale_security_replay_coalesces_with_newer_pending_job(
     )
     assert recovered_count == 1
     assert len(jobs) == 2
+    assert jobs[0].id == stale_id
     assert jobs[0].status == "COMPLETE"
     assert jobs[0].failure_reason == (
         "Coalesced into pending security replay during stale recovery"

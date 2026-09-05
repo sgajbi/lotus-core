@@ -21,6 +21,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     _quarantine_candidates,
     _reset_boundary_recovery_plan,
     decode_reprocessing_payload_text,
+    decode_retained_replay_source_payload,
     pending_replay_sibling_evidence,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
@@ -230,6 +231,19 @@ def test_retained_identity_scan_ignores_unbounded_numeric_extension() -> None:
         {"security_id": "BOND-1"},
     )
     assert _postgres_json_identity_text(unbounded_number) == unbounded_number
+
+
+def test_retained_reset_source_recovers_canonical_fields_around_unbounded_extension() -> None:
+    payload = decode_retained_replay_source_payload(
+        '{"security_id":"BOND-1","earliest_impacted_date":"2025-01-03",'
+        '"extension":1e999999999999999999999999999999999999999}',
+        job_type="RESET_WATERMARKS",
+    )
+
+    assert payload == {
+        "security_id": "BOND-1",
+        "earliest_impacted_date": "2025-01-03",
+    }
 
 
 def test_reset_boundary_recovery_ignores_extensions_and_trims_boundary_controls() -> None:
