@@ -1159,7 +1159,7 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     assert rows[2].correlation_id == "corr-claimed"
 
 
-async def test_owned_reset_requeue_ignores_jsonb_unrepresentable_sibling(
+async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
     clean_db,
     async_db_session: AsyncSession,
     predecessor_reprocessing_payload_schema,
@@ -1207,12 +1207,15 @@ async def test_owned_reset_requeue_ignores_jsonb_unrepresentable_sibling(
         .scalars()
         .all()
     )
-    assert outcome is ReprocessingJobTransitionOutcome.REQUEUED
-    assert [row.status for row in rows] == ["PENDING", "PENDING"]
-    assert rows[0].payload == {
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING"]
+    assert rows[2].payload == {
         "security_id": "BOND-JSON",
         "earliest_impacted_date": "2025-01-05",
     }
+    assert rows[1].failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
 
 
 async def test_owned_reset_requeue_without_sibling_reuses_claimed_row(

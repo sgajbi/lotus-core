@@ -8,6 +8,11 @@ from sqlalchemy import String, bindparam, func, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
+from .infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 
 REPLAY_TEXT_TRIM_CHARS = (
     "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680"
@@ -92,12 +97,15 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
             WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
             THEN FALSE
             ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
         END AS earliest_date_representable,
         CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
             WHEN json_typeof(payload->'generated_at') IS DISTINCT FROM 'string'
             THEN FALSE
             ELSE pg_input_is_valid(
@@ -108,7 +116,7 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     WHERE job_type = 'RESET_FX_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
           WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
@@ -127,7 +135,9 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload,
+        pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
+            WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
             WHEN json_typeof(payload->'earliest_impacted_date') IS DISTINCT FROM 'string'
             THEN FALSE
             ELSE pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
@@ -136,7 +146,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     WHERE job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
       END
@@ -155,9 +165,29 @@ PENDING_RESET_REPLAY_SIBLING = text(
       AND job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
       AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
+      END
+    ORDER BY id
+    LIMIT 1
+    FOR UPDATE
+    """
+)
+
+PENDING_FX_REPLAY_SIBLING = text(
+    """
+    SELECT id
+    FROM reprocessing_jobs
+    WHERE id <> :job_id
+      AND job_type = 'RESET_FX_WATERMARKS'
+      AND status = 'PENDING'
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
+          WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
+          WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
+           AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
       END
     ORDER BY id
     LIMIT 1
@@ -188,6 +218,7 @@ async def quarantine_pending_fx_pair(
         db,
         rows=result.mappings().all(),
         required_validity_fields=(
+            "payload_representable",
             "earliest_date_representable",
             "generated_at_representable",
         ),
@@ -216,7 +247,7 @@ async def quarantine_pending_reset_security(
     return await _quarantine_candidates(
         db,
         rows=result.mappings().all(),
-        required_validity_fields=("earliest_date_representable",),
+        required_validity_fields=("payload_representable", "earliest_date_representable"),
         validate=validate,
         parse_earliest_date=parse_earliest_date,
         failure_reason=(
@@ -248,13 +279,24 @@ async def _quarantine_candidates(
                 known_earliest_dates.append(earliest_date)
 
     if malformed_ids:
-        await db.execute(
-            update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(malformed_ids))
-            .values(
-                status="FAILED",
-                failure_reason=failure_reason,
-                updated_at=func.now(),
-            )
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.REPROCESSING_INVALID_PAYLOAD_UPDATE,
+            item_count=len(malformed_ids),
+            binds_per_row=1,
+            reserved_binds=2,
         )
+        for malformed_id_chunk in iter_statement_chunks(
+            malformed_ids,
+            binds_per_row=1,
+            reserved_binds=2,
+        ):
+            await db.execute(
+                update(ReprocessingJob)
+                .where(ReprocessingJob.id.in_(malformed_id_chunk))
+                .values(
+                    status="FAILED",
+                    failure_reason=failure_reason,
+                    updated_at=func.now(),
+                )
+            )
     return min(known_earliest_dates, default=None)
