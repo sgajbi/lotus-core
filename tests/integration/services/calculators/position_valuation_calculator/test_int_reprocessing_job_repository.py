@@ -234,6 +234,91 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     )
 
 
+async def test_reset_normalization_serializes_with_canonical_staging(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    async_db_session.add(
+        ReprocessingJob(
+            job_type="RESET_WATERMARKS",
+            payload={
+                "security_id": " RACE-BOND",
+                "earliest_impacted_date": "2025-01-03",
+            },
+            status="PENDING",
+            correlation_id="corr-race-padded",
+        )
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    staging_session = session_factory()
+    await staging_session.begin()
+    staged = await ReprocessingJobRepository(staging_session).stage_reset_watermarks_job(
+        security_id="RACE-BOND",
+        earliest_impacted_date=date(2025, 1, 5),
+        correlation_id="corr-race-canonical",
+    )
+    assert staged.outcome == ResetWatermarksStageOutcome.CREATED
+
+    normalizer_pid: asyncio.Future[int] = asyncio.get_running_loop().create_future()
+
+    async def normalize() -> int:
+        async with session_factory() as normalization_session, normalization_session.begin():
+            backend_pid = await normalization_session.scalar(select(func.pg_backend_pid()))
+            assert backend_pid is not None
+            normalizer_pid.set_result(int(backend_pid))
+            return await ReprocessingJobRepository(
+                normalization_session
+            ).normalize_pending_reset_watermarks_duplicates()
+
+    normalization_task = asyncio.create_task(normalize())
+    try:
+        backend_pid = await asyncio.wait_for(normalizer_pid, timeout=5)
+        await _wait_for_backend_advisory_lock(
+            session_factory=session_factory,
+            backend_pid=backend_pid,
+        )
+        await staging_session.commit()
+        deleted_count = await asyncio.wait_for(normalization_task, timeout=5)
+    finally:
+        if staging_session.in_transaction():
+            await staging_session.rollback()
+        await staging_session.close()
+        if not normalization_task.done():
+            normalization_task.cancel()
+            await asyncio.gather(normalization_task, return_exceptions=True)
+
+    async with session_factory() as evidence_session:
+        jobs = (
+            (
+                await evidence_session.execute(
+                    select(ReprocessingJob).where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert deleted_count == 0
+    assert len(jobs) == 2
+    canonical = next(job for job in jobs if job.correlation_id == "corr-race-canonical")
+    padded = next(job for job in jobs if job.correlation_id == "corr-race-padded")
+    assert canonical.status == "PENDING"
+    assert canonical.payload == {
+        "security_id": "RACE-BOND",
+        "earliest_impacted_date": "2025-01-03",
+    }
+    assert padded.status == "FAILED"
+    assert padded.payload == {
+        "security_id": " RACE-BOND",
+        "earliest_impacted_date": "2025-01-03",
+    }
+    assert padded.failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
+
+
 async def test_unnormalized_predecessor_security_replay_fails_without_rewriting_identity(
     clean_db,
     async_db_session: AsyncSession,

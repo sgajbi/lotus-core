@@ -34,15 +34,22 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
 ) -> None:
     mock_result = MagicMock()
     mock_result.mappings.return_value.all.return_value = []
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
     normalize_result = MagicMock()
     normalize_result.scalar_one.return_value = 0
-    mock_db_session.execute.side_effect = [MagicMock(), normalize_result, mock_result]
+    mock_db_session.execute.side_effect = [
+        identity_result,
+        MagicMock(),
+        normalize_result,
+        mock_result,
+    ]
 
     await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=25)
 
-    assert mock_db_session.execute.await_count == 3
-    query = mock_db_session.execute.await_args_list[2].args[0]
-    params = mock_db_session.execute.await_args_list[2].args[1]
+    assert mock_db_session.execute.await_count == 4
+    query = mock_db_session.execute.await_args_list[3].args[0]
+    params = mock_db_session.execute.await_args_list[3].args[1]
     query_text = str(query)
 
     assert "UPDATE reprocessing_jobs" in query_text
@@ -169,17 +176,33 @@ async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_clea
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_result = MagicMock()
-    mock_result.scalar_one.return_value = 2
-    mock_db_session.execute.return_value = mock_result
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = ["BOND-B", "BOND-A", "BOND-A"]
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 2
+    mock_db_session.execute.side_effect = [
+        identity_result,
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        normalize_result,
+    ]
 
     deleted_count = await repository.normalize_pending_reset_watermarks_duplicates()
 
     assert deleted_count == 2
-    assert mock_db_session.execute.await_count == 2
-    collision_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    assert mock_db_session.execute.await_count == 5
+    identity_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    assert "SELECT DISTINCT" in str(identity_stmt)
+    assert "ORDER BY security_id" in str(identity_stmt)
+    lock_parameters = [call.args[1] for call in mock_db_session.execute.await_args_list[1:3]]
+    assert lock_parameters == [
+        {"identity_key": "RESET_WATERMARKS|6:BOND-A"},
+        {"identity_key": "RESET_WATERMARKS|6:BOND-B"},
+    ]
+    collision_stmt = mock_db_session.execute.await_args_list[3].args[0]
     assert "identity collision" in str(collision_stmt)
-    stmt = mock_db_session.execute.await_args_list[1].args[0]
+    stmt = mock_db_session.execute.await_args_list[4].args[0]
     stmt_text = str(stmt)
     assert "WITH valid_candidates AS MATERIALIZED" in stmt_text
     assert "pg_input_is_valid" in stmt_text
@@ -195,9 +218,11 @@ async def test_normalize_pending_reset_watermarks_duplicates_emits_metric(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_result = MagicMock()
-    mock_result.scalar_one.return_value = 3
-    mock_db_session.execute.return_value = mock_result
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    normalize_result = MagicMock()
+    normalize_result.scalar_one.return_value = 3
+    mock_db_session.execute.side_effect = [identity_result, MagicMock(), normalize_result]
 
     with patch(
         "portfolio_common.reprocessing_job_repository.observe_reprocessing_duplicates_normalized"
@@ -216,15 +241,22 @@ async def test_find_and_claim_jobs_normalizes_reset_watermarks_duplicates_before
     normalize_result.scalar_one.return_value = 1
     claim_result = MagicMock()
     claim_result.mappings.return_value.all.return_value = []
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
     collision_result = MagicMock()
-    mock_db_session.execute.side_effect = [collision_result, normalize_result, claim_result]
+    mock_db_session.execute.side_effect = [
+        identity_result,
+        collision_result,
+        normalize_result,
+        claim_result,
+    ]
 
     await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
 
-    assert mock_db_session.execute.await_count == 3
-    collision_stmt = mock_db_session.execute.await_args_list[0].args[0]
-    normalize_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    claim_stmt = mock_db_session.execute.await_args_list[2].args[0]
+    assert mock_db_session.execute.await_count == 4
+    collision_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    normalize_stmt = mock_db_session.execute.await_args_list[2].args[0]
+    claim_stmt = mock_db_session.execute.await_args_list[3].args[0]
     assert "identity collision" in str(collision_stmt)
     assert "WITH valid_candidates AS MATERIALIZED" in str(normalize_stmt)
     assert "UPDATE reprocessing_jobs" in str(claim_stmt)
@@ -309,7 +341,14 @@ async def test_find_and_claim_jobs_preserves_malformed_payload_for_per_job_rejec
             "lease_expires_at": LEASE_EXPIRES_AT,
         },
     ]
-    mock_db_session.execute.side_effect = [MagicMock(), normalize_result, claim_result]
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.side_effect = [
+        identity_result,
+        MagicMock(),
+        normalize_result,
+        claim_result,
+    ]
 
     claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=2)
 
@@ -352,7 +391,14 @@ async def test_find_and_claim_jobs_returns_reset_watermarks_in_priority_order(
             "lease_expires_at": LEASE_EXPIRES_AT,
         },
     ]
-    mock_db_session.execute.side_effect = [MagicMock(), normalize_result, claim_result]
+    identity_result = MagicMock()
+    identity_result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.side_effect = [
+        identity_result,
+        MagicMock(),
+        normalize_result,
+        claim_result,
+    ]
 
     claimed = await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=10)
 
