@@ -202,7 +202,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
 
             migration["upgrade"]()
             constraint_sql = _constraint_sql(connection)
-            assert "[+-][0-9]{2}(:?[0-9]{2}" in constraint_sql
+            assert "[T ]" in constraint_sql
 
             rows = (
                 connection.execute(
@@ -297,6 +297,21 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     correlation_id="corr-naive-active",
                 )
             rejected.rollback()
+
+            doubled_separator = connection.begin_nested()
+            with pytest.raises(IntegrityError):
+                _insert_job(
+                    connection,
+                    payload=(
+                        '{"from_currency":"AUD","to_currency":"SGD",'
+                        '"earliest_impacted_date":"2025-01-09",'
+                        '"content_hash":"sha256:abababababababababababababababababababababababababababababababab",'
+                        '"generated_at":"2025-01-09  08:00:00+08"}'
+                    ),
+                    status="PENDING",
+                    correlation_id="corr-double-separator-active",
+                )
+            doubled_separator.rollback()
 
             blocked_downgrade = connection.begin_nested()
             with pytest.raises(DBAPIError, match="unsupported by the predecessor constraint"):

@@ -95,7 +95,8 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
         "reprocessing_jobs",
     )
     corrected_constraint = operations[2][3]
-    assert "[+-][0-9]{2}(:?[0-9]{2}" in corrected_constraint
+    assert "[T ]" in corrected_constraint
+    assert ".+" not in corrected_constraint
     model_constraint = next(
         item
         for item in ReprocessingJob.__table__.constraints
@@ -170,7 +171,7 @@ def test_downgrade_fails_closed_before_restoring_predecessor_constraint(monkeypa
     assert operations[1][0] == "drop"
     predecessor_constraint = operations[2][3]
     assert "[+-][0-9]{2}:?[0-9]{2}" in predecessor_constraint
-    assert "[+-][0-9]{2}(:?[0-9]{2}" not in predecessor_constraint
+    assert "[T ]" not in predecessor_constraint
     assert "earliest_impacted_date' ~" not in predecessor_constraint
 
 
