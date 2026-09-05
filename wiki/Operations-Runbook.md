@@ -349,8 +349,9 @@ remains required for grammar-invalid or storage-unrepresentable predecessor-sche
 rows. Claim, Reset staging return, owned identity lookup, and stale discovery/revalidation read
 retained payloads as text through the shared safe decoder, preventing a permitted unknown numeric
 extension from blocking replay. Reset coalescing preserves unknown fields and the earliest replay
-boundary. Owned requeue also retains a usable earlier sibling boundary when the sibling becomes
-terminal between discovery and row locking.
+boundary. Owned requeue also retains a usable earlier sibling boundary when the sibling is already
+processing or becomes terminal between discovery and row locking, without taking its lease. Legacy
+Reset duplicate normalization retains the maximum retry count.
 Review the recorded counts after upgrade and
 investigate each failed row through the support API and source lineage; do not edit the payload or
 restore it to active status by hand. Valid terminal historical evidence is not rewritten.
