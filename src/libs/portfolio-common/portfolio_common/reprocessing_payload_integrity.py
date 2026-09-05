@@ -115,13 +115,8 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     FROM reprocessing_jobs
     WHERE job_type = 'RESET_FX_WATERMARKS'
       AND status = 'PENDING'
-      AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
-          WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
-          WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
-          ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
-           AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
-      END
+      AND btrim(payload->>'from_currency', :trim_chars) = :from_currency
+      AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
     FOR UPDATE
     """
 ).bindparams(
@@ -145,11 +140,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     FROM reprocessing_jobs
     WHERE job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
-      AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
-          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
-          ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
-      END
+      AND btrim(payload->>'security_id', :trim_chars) = :security_id
     FOR UPDATE
     """
 ).bindparams(
@@ -164,11 +155,7 @@ PENDING_RESET_REPLAY_SIBLING = text(
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
-      AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
-          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
-          ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
-      END
+      AND btrim(payload->>'security_id', :trim_chars) = :security_id
     ORDER BY id
     LIMIT 1
     FOR UPDATE
@@ -182,13 +169,8 @@ PENDING_FX_REPLAY_SIBLING = text(
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
       AND status = 'PENDING'
-      AND CASE
-          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
-          WHEN json_typeof(payload->'from_currency') IS DISTINCT FROM 'string' THEN FALSE
-          WHEN json_typeof(payload->'to_currency') IS DISTINCT FROM 'string' THEN FALSE
-          ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
-           AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
-      END
+      AND btrim(payload->>'from_currency', :trim_chars) = :from_currency
+      AND btrim(payload->>'to_currency', :trim_chars) = :to_currency
     ORDER BY id
     LIMIT 1
     FOR UPDATE
