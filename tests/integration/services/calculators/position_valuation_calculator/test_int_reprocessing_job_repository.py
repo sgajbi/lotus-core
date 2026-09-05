@@ -2450,6 +2450,55 @@ async def test_owned_fx_requeue_preserves_sibling_boundary_terminalized_after_sc
     assert rows[2].correlation_id == "corr-owned-fx-race"
 
 
+async def test_owned_reset_requeue_adopts_equal_boundary_sibling_lineage(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    payload = {"security_id": "EQUAL-LINEAGE", "earliest_impacted_date": "2025-01-03"}
+    await repository.create_job("RESET_WATERMARKS", payload, correlation_id=None)
+    await async_db_session.commit()
+    owned = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    assert owned.correlation_id is None
+    await async_db_session.commit()
+
+    await repository.create_job(
+        "RESET_WATERMARKS",
+        payload,
+        correlation_id="corr-equal-boundary-sibling",
+    )
+    await async_db_session.commit()
+    sibling = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        owned.id,
+        lease_token=owned.lease_token,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "PROCESSING", "PENDING"]
+    assert rows[1].id == sibling.id
+    assert rows[2].payload == payload
+    assert rows[2].correlation_id == "corr-equal-boundary-sibling"
+    assert rows[2].correlation_missing_reason is None
+    assert rows[2].alternate_lookup_key is None
+
+
 async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
     clean_db,
     async_db_session: AsyncSession,
