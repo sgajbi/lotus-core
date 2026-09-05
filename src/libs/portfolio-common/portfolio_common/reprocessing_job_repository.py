@@ -322,34 +322,36 @@ class ReprocessingJobRepository:
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
                     )
                     THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-                    ELSE reprocessing_jobs.correlation_id
+                    ELSE COALESCE(reprocessing_jobs.correlation_id, :correlation_id)
                 END,
                 correlation_missing_reason = CASE
+                    WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL
+                    THEN NULL
                     WHEN ROW(
                         CAST(:generated_at AS timestamptz),
                         :content_hash
-                    ) <= ROW(
+                    ) > ROW(
                         COALESCE(
                             CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                             '-infinity'::timestamptz
                         ),
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    ) THEN reprocessing_jobs.correlation_missing_reason
-                    WHEN :correlation_id IS NOT NULL THEN NULL
+                    ) THEN :correlation_missing_reason
                     ELSE reprocessing_jobs.correlation_missing_reason
                 END,
                 alternate_lookup_key = CASE
+                    WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL
+                    THEN NULL
                     WHEN ROW(
                         CAST(:generated_at AS timestamptz),
                         :content_hash
-                    ) <= ROW(
+                    ) > ROW(
                         COALESCE(
                             CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                             '-infinity'::timestamptz
                         ),
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    ) THEN reprocessing_jobs.alternate_lookup_key
-                    WHEN :correlation_id IS NOT NULL THEN NULL
+                    ) THEN :alternate_lookup_key
                     ELSE reprocessing_jobs.alternate_lookup_key
                 END,
                 updated_at = now()
