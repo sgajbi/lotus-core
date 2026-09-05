@@ -53,7 +53,11 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
     keepers AS (
         UPDATE reprocessing_jobs j
         SET payload = jsonb_set(
-                j.payload::jsonb,
+                jsonb_set(
+                    j.payload::jsonb,
+                    '{security_id}',
+                    to_jsonb(r.security_id)
+                ),
                 '{earliest_impacted_date}',
                 to_jsonb(r.min_impacted_date::text)
             )::json,
@@ -61,7 +65,10 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
         FROM ranked r
         WHERE j.id = r.id
           AND r.rn = 1
-          AND (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
+          AND (
+              j.payload->>'security_id' IS DISTINCT FROM r.security_id
+              OR (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
+          )
         RETURNING j.id
     ),
     deleted AS (
@@ -142,9 +149,11 @@ PENDING_RESET_REPLAY_SIBLING = text(
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
       AND status = 'PENDING'
-      AND pg_input_is_valid(payload::text, 'jsonb') IS TRUE
-      AND jsonb_typeof(payload::jsonb->'security_id') IS NOT DISTINCT FROM 'string'
-      AND btrim(payload->>'security_id', :trim_chars) = :security_id
+      AND CASE
+          WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
+          WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string' THEN FALSE
+          ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
+      END
     ORDER BY id
     LIMIT 1
     FOR UPDATE

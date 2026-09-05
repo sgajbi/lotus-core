@@ -1127,7 +1127,10 @@ async def test_reset_pending_sibling_lookup_uses_normalized_identity(
     statement, parameters = mock_db_session.execute.await_args.args
     sql = str(statement)
     assert "btrim(payload->>'security_id', :trim_chars)" in sql
-    assert "jsonb_typeof" in sql
+    assert "AND CASE" in sql
+    assert "WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE" in sql
+    assert "WHEN json_typeof(payload->'security_id') IS DISTINCT FROM 'string'" in sql
+    assert "jsonb_typeof" not in sql
     assert "FOR UPDATE" in sql
     assert parameters == {
         "job_id": 11,
