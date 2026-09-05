@@ -97,6 +97,14 @@ _CUTOVER_GUARD = sa.text(
     BEGIN
         PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
+
+        IF EXISTS (
+            SELECT 1 FROM reprocessing_jobs WHERE status = 'PROCESSING'
+        ) THEN
+            RAISE EXCEPTION USING
+                MESSAGE = 'temporal cutover requires a drained PROCESSING queue',
+                HINT = 'pause the worker, recover or terminalize in-flight rows, then retry';
+        END IF;
     END
     $$
     """
