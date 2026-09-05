@@ -145,6 +145,40 @@ def test_fx_sibling_merge_preserves_known_lineage_when_newest_source_lacks_it() 
     assert merged.correlation_id == "corr-owned"
 
 
+def test_fx_sibling_merge_treats_sentinel_lineage_as_missing() -> None:
+    owned = _identity(
+        "RESET_FX_WATERMARKS",
+        {
+            "from_currency": "USD",
+            "to_currency": "CHF",
+            "earliest_impacted_date": "2025-01-07",
+            "generated_at": "2025-01-07T00:00:00+00:00",
+            "content_hash": "sha256:owned",
+        },
+        attempt_count=1,
+        correlation_id="corr-owned",
+    )
+    sibling = _sibling(
+        {
+            "from_currency": "USD",
+            "to_currency": "CHF",
+            "earliest_impacted_date": "2025-01-03",
+            "generated_at": "2025-01-08T00:00:00+00:00",
+            "content_hash": "sha256:sibling",
+        },
+        attempt_count=2,
+        correlation_id="  <NOT-SET>  ",
+    )
+
+    merged = merge_replay_sibling_evidence(
+        owned,
+        PendingReplaySiblingEvidence((sibling,)),
+    )
+
+    assert merged.payload["content_hash"] == "sha256:sibling"
+    assert merged.correlation_id == "corr-owned"
+
+
 def test_fx_sibling_merge_fills_lineage_from_equal_authority_sibling() -> None:
     payload = {
         "from_currency": "USD",
@@ -245,6 +279,29 @@ def test_reset_sibling_merge_keeps_owned_lineage_when_earlier_sibling_lacks_it()
     assert merged.correlation_id == "corr-owned"
     assert merged.correlation_missing_reason is None
     assert merged.alternate_lookup_key is None
+
+
+def test_reset_sibling_merge_treats_blank_and_sentinel_lineage_as_missing() -> None:
+    for retained_correlation_id in ("   ", "<not-set>"):
+        owned = _identity(
+            "RESET_WATERMARKS",
+            {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-07"},
+            attempt_count=2,
+            correlation_id="corr-owned",
+        )
+        sibling = _sibling(
+            {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-03"},
+            attempt_count=3,
+            correlation_id=retained_correlation_id,
+        )
+
+        merged = merge_replay_sibling_evidence(
+            owned,
+            PendingReplaySiblingEvidence((sibling,)),
+        )
+
+        assert merged.payload["earliest_impacted_date"] == "2025-01-03"
+        assert merged.correlation_id == "corr-owned"
 
 
 def test_reset_sibling_merge_uses_existing_sibling_lineage_at_equal_boundary() -> None:

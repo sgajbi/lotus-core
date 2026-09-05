@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from typing import Any, cast
 
+from .logging_utils import normalize_lineage_value
 from .reprocessing_payload_integrity import (
     PendingReplaySiblingEvidence,
     effective_dated_replay_identity_key,
@@ -53,15 +54,20 @@ def validated_effective_dated_replay_identity(
         generated_at = datetime.fromisoformat(required_replay_payload_text(payload, "generated_at"))
         if generated_at.tzinfo is None or generated_at.utcoffset() is None:
             raise ValueError("FX replay generated_at must be timezone-aware")
+    normalized_correlation_id = normalize_lineage_value(correlation_id)
     return EffectiveDatedReplayIdentity(
         job_type=job_type,
         identity_key=effective_dated_replay_identity_key(job_type, *components),
         payload=cast(dict[str, Any], payload),
         generated_at=generated_at,
         attempt_count=attempt_count,
-        correlation_id=correlation_id,
-        correlation_missing_reason=correlation_missing_reason,
-        alternate_lookup_key=alternate_lookup_key,
+        correlation_id=normalized_correlation_id,
+        correlation_missing_reason=(
+            None if normalized_correlation_id is not None else correlation_missing_reason
+        ),
+        alternate_lookup_key=(
+            None if normalized_correlation_id is not None else alternate_lookup_key
+        ),
     )
 
 
@@ -89,17 +95,30 @@ def merge_replay_sibling_evidence(
             if sibling.earliest_impacted_date == earliest_boundary
         ]
         lineage_sibling = next(
-            (sibling for sibling in boundary_siblings if sibling.correlation_id is not None),
+            (
+                sibling
+                for sibling in boundary_siblings
+                if normalize_lineage_value(sibling.correlation_id) is not None
+            ),
             None,
         )
         if lineage_sibling is None and identity.correlation_id is None:
             lineage_sibling = earliest_sibling
         if lineage_sibling is not None:
+            retained_correlation_id = normalize_lineage_value(lineage_sibling.correlation_id)
             source = replace(
                 identity,
-                correlation_id=lineage_sibling.correlation_id,
-                correlation_missing_reason=lineage_sibling.correlation_missing_reason,
-                alternate_lookup_key=lineage_sibling.alternate_lookup_key,
+                correlation_id=retained_correlation_id,
+                correlation_missing_reason=(
+                    None
+                    if retained_correlation_id is not None
+                    else lineage_sibling.correlation_missing_reason
+                ),
+                alternate_lookup_key=(
+                    None
+                    if retained_correlation_id is not None
+                    else lineage_sibling.alternate_lookup_key
+                ),
             )
     elif identity.job_type == "RESET_FX_WATERMARKS":
         source = _latest_valid_fx_source(identity, evidence)
