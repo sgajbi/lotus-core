@@ -885,7 +885,8 @@ becomes terminal between discovery and row locking. Siblings already processing 
 lock revalidation contribute a committed snapshot without a row lock, so requeue cannot block their
 lease renewal. The replacement
 retains maximum retry history and applies the established FX generated-at/content-hash
-ordering to source and correlation lineage. If an unrelated extension prevents full decoding, the
+ordering to source and correlation lineage. At an equal Reset boundary, valid sibling correlation
+fills missing owned lineage. If an unrelated extension prevents full decoding, the
 required FX source fields are recovered lexically and revalidated; the extension remains only on
 the quarantined source row. Legacy Reset duplicate normalization retains the maximum retry count
 across the coalesced rows.
