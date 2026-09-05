@@ -42,6 +42,8 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
         assert "payload::text AS payload_json" in sql
+        assert "attempt_count" in sql
+        assert "correlation_id" in sql
         assert "SELECT id, payload," not in sql
         assert "THEN TRUE" in sql
         assert "btrim(payload->>" in sql
@@ -260,7 +262,7 @@ async def test_pending_sibling_requires_exact_retained_identity(
         {
             "id": 8,
             "payload_json": json.dumps({**identity, "earliest_impacted_date": "2025-01-03"}),
-            "status": "PROCESSING",
+            "status": "PENDING",
         },
     ]
     db.execute.return_value = result
@@ -317,6 +319,7 @@ async def test_pending_fx_sibling_recovers_source_fields_around_unrepresentable_
         "content_hash": "sha256:newer",
     }
     assert evidence.max_attempt_count == 5
+    db.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio

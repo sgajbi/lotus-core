@@ -2482,11 +2482,28 @@ async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
     assert processing_sibling.id == sibling_id
     await async_db_session.commit()
 
-    outcome = await repository.requeue_owned_effective_dated_job(
-        owned.id,
-        lease_token=owned.lease_token,
-    )
-    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    async with session_factory() as requeue_session, requeue_session.begin():
+        outcome = await ReprocessingJobRepository(
+            requeue_session
+        ).requeue_owned_effective_dated_job(
+            owned.id,
+            lease_token=owned.lease_token,
+        )
+        async with session_factory() as renewal_session, renewal_session.begin():
+            renewal = await asyncio.wait_for(
+                renewal_session.execute(
+                    update(ReprocessingJob)
+                    .where(
+                        ReprocessingJob.id == sibling_id,
+                        ReprocessingJob.status == "PROCESSING",
+                        ReprocessingJob.lease_token == processing_sibling.lease_token,
+                    )
+                    .values(lease_expires_at=func.clock_timestamp() + text("INTERVAL '30 minutes'"))
+                ),
+                timeout=5,
+            )
+            assert renewal.rowcount == 1
     async_db_session.expire_all()
 
     rows = (
