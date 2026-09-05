@@ -17,6 +17,7 @@ from .infrastructure.persistence.statement_batching import (
     iter_statement_chunks,
     observe_multi_statement_batch,
 )
+from .logging_utils import normalize_lineage_value
 
 REPLAY_TEXT_TRIM_CHARS = (
     "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680"
@@ -804,9 +805,8 @@ async def _lock_matching_replay_rows(
 
 
 def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | None:
-    payload_json = row.get("payload_json")
-    security_id = _json_object_string_field(payload_json, "security_id")
-    earliest_value = _json_object_string_field(payload_json, "earliest_impacted_date")
+    security_id = _json_object_string_field(row.get("payload_json"), "security_id")
+    earliest_value = _json_object_string_field(row.get("payload_json"), "earliest_impacted_date")
     if security_id is None or earliest_value is None:
         return None
     security_id = security_id.strip(REPLAY_TEXT_TRIM_CHARS)
@@ -822,7 +822,7 @@ def _reset_boundary_recovery_plan(row: Mapping[str, Any]) -> dict[str, Any] | No
         "security_id": security_id,
         "earliest_impacted_date": earliest_impacted_date,
         "attempt_count": int(row.get("attempt_count") or 0),
-        "correlation_id": row.get("correlation_id"),
+        "correlation_id": normalize_lineage_value(row.get("correlation_id")),
         "correlation_missing_reason": row.get("correlation_missing_reason"),
         "alternate_lookup_key": row.get("alternate_lookup_key"),
     }

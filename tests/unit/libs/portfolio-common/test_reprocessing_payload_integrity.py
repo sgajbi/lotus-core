@@ -293,6 +293,47 @@ def test_reset_boundary_recovery_plan_preserves_safe_identity_date_and_lineage()
     }
 
 
+@pytest.mark.parametrize("correlation_id", [None, "", "  <NOT-SET>  "])
+def test_reset_boundary_recovery_plan_normalizes_missing_lineage(
+    correlation_id: str | None,
+) -> None:
+    plan = _reset_boundary_recovery_plan(
+        {
+            "id": 9,
+            "payload_json": (
+                '{"security_id":"RECOVERY-BOND","earliest_impacted_date":"2025-01-02"}'
+            ),
+            "correlation_id": correlation_id,
+            "correlation_missing_reason": "source omitted correlation",
+            "alternate_lookup_key": "source-job:9",
+        }
+    )
+
+    assert plan is not None
+    assert plan["correlation_id"] is None
+    assert plan["correlation_missing_reason"] == "source omitted correlation"
+    assert plan["alternate_lookup_key"] == "source-job:9"
+
+
+def test_reset_boundary_recovery_plan_normalizes_real_lineage() -> None:
+    plan = _reset_boundary_recovery_plan(
+        {
+            "id": 9,
+            "payload_json": (
+                '{"security_id":"RECOVERY-BOND","earliest_impacted_date":"2025-01-02"}'
+            ),
+            "correlation_id": "  corr-source  ",
+            "correlation_missing_reason": "stale diagnostic",
+            "alternate_lookup_key": "stale-alternate",
+        }
+    )
+
+    assert plan is not None
+    assert plan["correlation_id"] == "corr-source"
+    assert plan["correlation_missing_reason"] == "stale diagnostic"
+    assert plan["alternate_lookup_key"] == "stale-alternate"
+
+
 @pytest.mark.parametrize(
     "payload_json",
     [

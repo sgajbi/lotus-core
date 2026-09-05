@@ -475,6 +475,7 @@ def _recoverable_fx_parameters(row: Any) -> dict[str, Any] | None:
             return None
     except (TypeError, ValueError):
         return None
+    correlation_id = _normalize_lineage_value(row["correlation_id"])
     return {
         "source_job_id": int(row["id"]),
         "from_currency": from_currency,
@@ -484,10 +485,23 @@ def _recoverable_fx_parameters(row: Any) -> dict[str, Any] | None:
         "generated_at": generated_at,
         "generated_at_text": generated_at_text,
         "attempt_count": int(row["attempt_count"]),
-        "correlation_id": row["correlation_id"],
-        "correlation_missing_reason": row["correlation_missing_reason"],
-        "alternate_lookup_key": row["alternate_lookup_key"],
+        "correlation_id": correlation_id,
+        "correlation_missing_reason": (
+            None if correlation_id is not None else row["correlation_missing_reason"]
+        ),
+        "alternate_lookup_key": (
+            None if correlation_id is not None else row["alternate_lookup_key"]
+        ),
     }
+
+
+def _normalize_lineage_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized or normalized.lower() == "<not-set>":
+        return None
+    return normalized
 
 
 def _decode_recovery_payload(payload_json: object) -> object:

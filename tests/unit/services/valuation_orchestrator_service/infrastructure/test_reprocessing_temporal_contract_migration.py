@@ -249,3 +249,31 @@ def test_recovery_rejects_python_or_database_temporal_mismatch() -> None:
         )
         is None
     )
+
+
+def test_recovery_parameters_normalize_lineage_before_restaging() -> None:
+    recover = runpy.run_path(str(MIGRATION))["_recoverable_fx_parameters"]
+
+    missing = recover(
+        _recoverable_row(
+            correlation_id="  <NOT-SET>  ",
+            correlation_missing_reason="source omitted correlation",
+            alternate_lookup_key="source-job:17",
+        )
+    )
+    real = recover(
+        _recoverable_row(
+            correlation_id="  corr-recovered  ",
+            correlation_missing_reason="stale diagnostic",
+            alternate_lookup_key="stale-alternate",
+        )
+    )
+
+    assert missing is not None
+    assert missing["correlation_id"] is None
+    assert missing["correlation_missing_reason"] == "source omitted correlation"
+    assert missing["alternate_lookup_key"] == "source-job:17"
+    assert real is not None
+    assert real["correlation_id"] == "corr-recovered"
+    assert real["correlation_missing_reason"] is None
+    assert real["alternate_lookup_key"] is None
