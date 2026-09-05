@@ -4091,8 +4091,9 @@ Most relevant current governance:
      available correlation without changing source authority. Reset coalescing uses valid sibling correlation at the
      authoritative boundary, fills missing owned correlation at an equal boundary, and retains
      known owned correlation when an earlier sibling has none. When an unrelated extension prevents
-     full JSON decoding, claim mapping recovers canonical FX fields so the valuation adapter can
-     validate the execution identity and date and attributable replay can proceed. Staging
+     full JSON decoding, retained replay reads recover only that job family's canonical fields so
+     RESET stale recovery can proceed and the FX valuation adapter can validate execution identity
+     and date. Staging
      quarantine for both replay families validates and carries recovered boundary, source, retry, and lineage
      evidence through the same merge policy; the extension is never promoted. Legacy Reset duplicate
      normalization must retain the maximum retry count and an available valid correlation fallback
