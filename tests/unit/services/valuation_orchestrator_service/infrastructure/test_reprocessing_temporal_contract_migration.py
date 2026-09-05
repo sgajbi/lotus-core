@@ -57,7 +57,7 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
             generated_at_representable=False,
         ),
     ]
-    bind.execute.side_effect = [candidate_result, MagicMock(), MagicMock()]
+    bind.execute.side_effect = [candidate_result, MagicMock(), MagicMock(), MagicMock()]
     monkeypatch.setattr(op, "execute", lambda statement: operations.append(("execute", statement)))
     monkeypatch.setattr(op, "get_bind", lambda: bind)
     monkeypatch.setattr(
@@ -114,7 +114,10 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     assert query_parameters == {
         "failure_reason": ("invalid_reprocessing_job_payload: quarantined during contract cutover")
     }
-    recovery_statement, recovery_parameters = bind.execute.call_args_list[1].args
+    quarantine_statement = bind.execute.call_args_list[1].args[0]
+    assert "Python date grammar correction" in str(quarantine_statement)
+    assert "earliest_impacted_date' !~" in str(quarantine_statement)
+    recovery_statement, recovery_parameters = bind.execute.call_args_list[2].args
     assert "ON CONFLICT" in str(recovery_statement)
     assert len(recovery_parameters) == 1
     assert recovery_parameters[0]["source_job_id"] == 17
@@ -126,7 +129,7 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
         8,
         tzinfo=timezone(-timedelta(hours=7)),
     )
-    provenance_statement, provenance_parameters = bind.execute.call_args_list[2].args
+    provenance_statement, provenance_parameters = bind.execute.call_args_list[3].args
     assert "status = 'FAILED'" in str(provenance_statement)
     assert "failure_reason = :cutover_failure_reason" in str(provenance_statement)
     assert provenance_parameters == [
@@ -168,6 +171,7 @@ def test_downgrade_fails_closed_before_restoring_predecessor_constraint(monkeypa
     predecessor_constraint = operations[2][3]
     assert "[+-][0-9]{2}:?[0-9]{2}" in predecessor_constraint
     assert "[+-][0-9]{2}(:?[0-9]{2}" not in predecessor_constraint
+    assert "earliest_impacted_date' ~" not in predecessor_constraint
 
 
 def test_recovery_rejects_python_or_database_temporal_mismatch() -> None:

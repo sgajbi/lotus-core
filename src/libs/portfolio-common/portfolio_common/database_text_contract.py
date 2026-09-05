@@ -5,3 +5,9 @@ PYTHON_STRIP_BOUNDARY_SQL = (
     r"\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028"
     r"\2029\202F\205F\3000'"
 )
+PYTHON_ISO_DATE_TEXT_VALID_SQL = (
+    "pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE "
+    "AND payload->>'earliest_impacted_date' ~ "
+    r"'^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8}|"
+    r"[0-9]{4}-W[0-9]{2}(?:-[1-7])?|[0-9]{4}W[0-9]{2}[1-7]?)$'"
+)

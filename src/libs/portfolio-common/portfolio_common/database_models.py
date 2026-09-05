@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
-from .database_text_contract import PYTHON_STRIP_BOUNDARY_SQL
+from .database_text_contract import PYTHON_ISO_DATE_TEXT_VALID_SQL, PYTHON_STRIP_BOUNDARY_SQL
 from .db_base import Base
 from .domain.portfolio_party_roles import (
     PortfolioPartyRoleQualityStatus,
@@ -5163,7 +5163,7 @@ class ReprocessingJob(Base):
                     AND ({_FX_CONTENT_HASH_TEXT_VALID})
                     AND ({_FX_EARLIEST_DATE_TEXT_VALID})
                     AND ({_FX_GENERATED_AT_TEXT_VALID})
-                    AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                    AND ({PYTHON_ISO_DATE_TEXT_VALID_SQL})
                     AND pg_input_is_valid(
                         payload->>'generated_at', 'timestamp with time zone'
                     ) IS TRUE
@@ -5175,7 +5175,7 @@ class ReprocessingJob(Base):
                         IS NOT DISTINCT FROM 'string'
                     AND ({_RESET_SECURITY_ID_TEXT_VALID})
                     AND ({_FX_EARLIEST_DATE_TEXT_VALID})
-                    AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                    AND ({PYTHON_ISO_DATE_TEXT_VALID_SQL})
                 )
                 ELSE TRUE
             END
