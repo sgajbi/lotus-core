@@ -91,7 +91,16 @@ def _active_payload_constraint(timezone_pattern: str) -> str:
     """
 
 
-_LOCK_TABLE = sa.text("LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE")
+_CUTOVER_GUARD = sa.text(
+    """
+    DO $$
+    BEGIN
+        PERFORM set_config('lock_timeout', '5s', true);
+        LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
+    END
+    $$
+    """
+)
 _RECOVERY_CANDIDATES = sa.text(
     rf"""
     SELECT
@@ -216,6 +225,7 @@ _DOWNGRADE_PREFLIGHT = sa.text(
     DECLARE
         incompatible_count bigint;
     BEGIN
+        PERFORM set_config('lock_timeout', '5s', true);
         LOCK TABLE reprocessing_jobs IN ACCESS EXCLUSIVE MODE;
         SELECT count(*)
         INTO incompatible_count
@@ -246,7 +256,7 @@ _DOWNGRADE_PREFLIGHT = sa.text(
 def upgrade() -> None:
     """Install the parser/database intersection and recover provably valid work."""
 
-    op.execute(_LOCK_TABLE)
+    op.execute(_CUTOVER_GUARD)
     bind = op.get_bind()
     candidates = list(
         bind.execute(
