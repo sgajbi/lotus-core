@@ -5,6 +5,7 @@ Revises: c165b2c3d52c
 Create Date: 2026-09-05
 """
 
+import logging
 import unicodedata
 from collections.abc import Sequence
 from datetime import date, datetime
@@ -18,6 +19,8 @@ revision: str = "c166b2c3d52d"
 down_revision: str | Sequence[str] | None = "c165b2c3d52c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+logger = logging.getLogger(__name__)
 
 _TABLE_NAME = "reprocessing_jobs"
 _ACTIVE_PAYLOAD_CONSTRAINT = "ck_reprocessing_jobs_active_payload_valid"
@@ -171,30 +174,37 @@ _RECOVERY_CANDIDATES = sa.text(
 )
 _QUARANTINE_PYTHON_INVALID_PENDING_TEMPORAL_VALUES = sa.text(
     rf"""
-    UPDATE reprocessing_jobs
-    SET status = 'FAILED',
-        failure_reason = (
-            'invalid_reprocessing_job_payload: quarantined by c166 temporal grammar correction'
-        ),
-        updated_at = now()
-    WHERE status = 'PENDING'
-      AND job_type IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')
-      AND pg_input_is_valid(payload::text, 'jsonb') IS TRUE
-      AND (
-          (
-              json_typeof(payload->'earliest_impacted_date') = 'string'
-              AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
-              AND payload->>'earliest_impacted_date' !~ {_PYTHON_ISO_DATE_PATTERN}
+    WITH quarantined AS (
+        UPDATE reprocessing_jobs
+        SET status = 'FAILED',
+            failure_reason = (
+                'invalid_reprocessing_job_payload: quarantined by c166 temporal grammar correction'
+            ),
+            updated_at = now()
+        WHERE status = 'PENDING'
+          AND job_type IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')
+          AND pg_input_is_valid(payload::text, 'jsonb') IS TRUE
+          AND (
+              (
+                  json_typeof(payload->'earliest_impacted_date') = 'string'
+                  AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date') IS TRUE
+                  AND payload->>'earliest_impacted_date' !~ {_PYTHON_ISO_DATE_PATTERN}
+              )
+              OR (
+                  job_type = 'RESET_FX_WATERMARKS'
+                  AND json_typeof(payload->'generated_at') = 'string'
+                  AND pg_input_is_valid(
+                      payload->>'generated_at', 'timestamp with time zone'
+                  ) IS TRUE
+                  AND payload->>'generated_at' !~ {_FX_GENERATED_AT_TIMEZONE_PATTERN}
+              )
           )
-          OR (
-              job_type = 'RESET_FX_WATERMARKS'
-              AND json_typeof(payload->'generated_at') = 'string'
-              AND pg_input_is_valid(
-                  payload->>'generated_at', 'timestamp with time zone'
-              ) IS TRUE
-              AND payload->>'generated_at' !~ {_FX_GENERATED_AT_TIMEZONE_PATTERN}
-          )
-      )
+        RETURNING job_type
+    )
+    SELECT
+        count(*) FILTER (WHERE job_type = 'RESET_WATERMARKS') AS reset_count,
+        count(*) FILTER (WHERE job_type = 'RESET_FX_WATERMARKS') AS reset_fx_count
+    FROM quarantined
     """
 )
 _RESTAGE_RECOVERABLE_FX = sa.text(
@@ -341,7 +351,14 @@ def upgrade() -> None:
         for row in candidates
         if (recovered := _recoverable_fx_parameters(row)) is not None
     ]
-    bind.execute(_QUARANTINE_PYTHON_INVALID_PENDING_TEMPORAL_VALUES)
+    quarantine_counts = bind.execute(_QUARANTINE_PYTHON_INVALID_PENDING_TEMPORAL_VALUES).one()
+    logger.info(
+        "reprocessing temporal grammar correction quarantined rows",
+        extra={
+            "reset_watermarks_count": int(quarantine_counts.reset_count),
+            "reset_fx_watermarks_count": int(quarantine_counts.reset_fx_count),
+        },
+    )
 
     op.drop_constraint(_ACTIVE_PAYLOAD_CONSTRAINT, _TABLE_NAME, type_="check")
     op.create_check_constraint(

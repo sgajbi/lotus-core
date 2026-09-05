@@ -57,7 +57,9 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
             generated_at_representable=False,
         ),
     ]
-    bind.execute.side_effect = [candidate_result, MagicMock(), MagicMock(), MagicMock()]
+    quarantine_result = MagicMock()
+    quarantine_result.one.return_value = MagicMock(reset_count=3, reset_fx_count=5)
+    bind.execute.side_effect = [candidate_result, quarantine_result, MagicMock(), MagicMock()]
     monkeypatch.setattr(op, "execute", lambda statement: operations.append(("execute", statement)))
     monkeypatch.setattr(op, "get_bind", lambda: bind)
     monkeypatch.setattr(
@@ -72,6 +74,8 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     )
 
     migration = runpy.run_path(str(MIGRATION))
+    migration_logger = MagicMock()
+    migration["upgrade"].__globals__["logger"] = migration_logger
     assert migration["revision"] == "c166b2c3d52d"
     assert migration["down_revision"] == "c165b2c3d52c"
 
@@ -120,6 +124,14 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     assert "c166 temporal grammar correction" in str(quarantine_statement)
     assert "earliest_impacted_date' !~" in str(quarantine_statement)
     assert "generated_at' !~" in str(quarantine_statement)
+    assert "RETURNING job_type" in str(quarantine_statement)
+    assert "count(*) FILTER (WHERE job_type = 'RESET_WATERMARKS')" in str(quarantine_statement)
+    assert "count(*) FILTER (WHERE job_type = 'RESET_FX_WATERMARKS')" in str(quarantine_statement)
+    quarantine_result.one.assert_called_once_with()
+    migration_logger.info.assert_called_once_with(
+        "reprocessing temporal grammar correction quarantined rows",
+        extra={"reset_watermarks_count": 3, "reset_fx_watermarks_count": 5},
+    )
     recovery_statement, recovery_parameters = bind.execute.call_args_list[2].args
     assert "ON CONFLICT" in str(recovery_statement)
     assert len(recovery_parameters) == 1

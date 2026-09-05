@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import runpy
 from contextlib import contextmanager
 from pathlib import Path
@@ -92,8 +93,9 @@ def _insert_job(
 
 
 @pytest.mark.usefixtures("clean_db")
-def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engine) -> None:
+def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engine, caplog) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    caplog.set_level(logging.INFO)
 
     with db_engine.connect() as connection:
         with _predecessor_constraint(migration, connection):
@@ -223,6 +225,13 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             )
 
             migration["upgrade"]()
+            quarantine_record = next(
+                record
+                for record in caplog.records
+                if record.message == "reprocessing temporal grammar correction quarantined rows"
+            )
+            assert quarantine_record.reset_watermarks_count == 0
+            assert quarantine_record.reset_fx_watermarks_count == 3
             constraint_sql = _constraint_sql(connection)
             assert "[T ]" in constraint_sql
 
