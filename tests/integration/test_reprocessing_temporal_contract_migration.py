@@ -263,6 +263,17 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 status="PENDING",
                 correlation_id="corr-newer-sibling",
             )
+            lowercase_timestamp_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"DKK","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-09",'
+                    '"content_hash":"sha256:dadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadada",'
+                    '"generated_at":"2025-01-09t08:00:00+00:00"}'
+                ),
+                status="PENDING",
+                correlation_id="corr-lowercase-separator",
+            )
 
             migration["upgrade"]()
             quarantine_record = next(
@@ -277,7 +288,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert quarantine_record.reset_watermarks_count == 0
             assert quarantine_record.reset_fx_watermarks_count == 3
             constraint_sql = _constraint_sql(connection)
-            assert "[T ]" in constraint_sql
+            assert "[Tt ]" in constraint_sql
 
             rows = (
                 connection.execute(
@@ -292,6 +303,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         :python_invalid_pending_id,
                         :python_invalid_timestamp_id,
                         :python_invalid_hour_id,
+                        :lowercase_timestamp_id,
                         :pending_id
                     )
                        OR (
@@ -310,6 +322,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         "python_invalid_pending_id": python_invalid_pending_id,
                         "python_invalid_timestamp_id": python_invalid_timestamp_id,
                         "python_invalid_hour_id": python_invalid_hour_id,
+                        "lowercase_timestamp_id": lowercase_timestamp_id,
                         "pending_id": pending_id,
                     },
                 )
@@ -341,6 +354,11 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert by_id[pending_id]["payload"]["earliest_impacted_date"] == "2025-01-04"
             assert by_id[pending_id]["payload"]["generated_at"] == "2025-01-08T00:00:00+00:00"
             assert by_id[pending_id]["correlation_id"] == "corr-newer-sibling"
+            assert by_id[lowercase_timestamp_id]["status"] == "PENDING"
+            assert (
+                by_id[lowercase_timestamp_id]["payload"]["generated_at"]
+                == "2025-01-09t08:00:00+00:00"
+            )
 
             standalone = next(
                 row
@@ -353,6 +371,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     python_invalid_pending_id,
                     python_invalid_timestamp_id,
                     python_invalid_hour_id,
+                    lowercase_timestamp_id,
                     pending_id,
                 }
             )
@@ -403,6 +422,19 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 correlation_id="corr-bare-hour-active",
             )
             assert accepted_id > 0
+
+            lowercase_accepted_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"PLN","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-09",'
+                    '"content_hash":"sha256:dededededededededededededededededededededededededededededededede",'
+                    '"generated_at":"2025-01-09t08:00:00+00:00"}'
+                ),
+                status="PENDING",
+                correlation_id="corr-lowercase-active",
+            )
+            assert lowercase_accepted_id > 0
 
             rejected = connection.begin_nested()
             with pytest.raises(IntegrityError):
