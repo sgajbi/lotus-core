@@ -588,6 +588,26 @@ LOCK_SCANNED_REPLAY_CANDIDATES = text(
     bindparam("job_type", type_=String()),
 )
 
+SNAPSHOT_SCANNED_REPLAY_CANDIDATES = text(
+    """
+    SELECT
+        id,
+        payload::text AS payload_json,
+        attempt_count,
+        correlation_id,
+        correlation_missing_reason,
+        alternate_lookup_key,
+        status
+    FROM reprocessing_jobs
+    WHERE id = ANY(CAST(:candidate_ids AS BIGINT[]))
+      AND job_type = :job_type
+    ORDER BY id
+    """
+).bindparams(
+    bindparam("candidate_ids"),
+    bindparam("job_type", type_=String()),
+)
+
 
 async def _lock_scanned_replay_rows(
     db: AsyncSession,
@@ -609,6 +629,28 @@ async def _lock_scanned_replay_rows(
                     "preserve_candidate_ids": sorted(set(preserve_candidate_ids)),
                     "job_type": job_type,
                 },
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def _snapshot_scanned_replay_rows(
+    db: AsyncSession,
+    *,
+    candidate_ids: list[int],
+    job_type: str,
+) -> list[Mapping[str, Any]]:
+    """Read committed candidate state without taking a live worker's row lock."""
+
+    if not candidate_ids:
+        return []
+    return (
+        (
+            await db.execute(
+                SNAPSHOT_SCANNED_REPLAY_CANDIDATES,
+                {"candidate_ids": sorted(set(candidate_ids)), "job_type": job_type},
             )
         )
         .mappings()
@@ -652,11 +694,25 @@ async def _lock_matching_replay_rows(
     locked_rows = await _lock_scanned_replay_rows(
         db,
         candidate_ids=candidate_ids,
-        preserve_candidate_ids=candidate_ids if preserve_after_claim else [],
+        preserve_candidate_ids=[],
         job_type=job_type,
     )
+    locked_ids = {int(row["id"]) for row in locked_rows}
+    transitioned_rows = (
+        await _snapshot_scanned_replay_rows(
+            db,
+            candidate_ids=[
+                candidate_id for candidate_id in candidate_ids if candidate_id not in locked_ids
+            ],
+            job_type=job_type,
+        )
+        if preserve_after_claim
+        else []
+    )
     revalidated_rows = [
-        row for row in locked_rows if replay_row_matches_identity(row, expected_identity)
+        row
+        for row in [*locked_rows, *transitioned_rows]
+        if replay_row_matches_identity(row, expected_identity)
     ]
     return sorted([*processing_rows, *revalidated_rows], key=lambda row: int(row["id"]))
 

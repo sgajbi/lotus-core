@@ -14,6 +14,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
+    SNAPSHOT_SCANNED_REPLAY_CANDIDATES,
     _postgres_json_identity_text,
     _quarantine_candidates,
     _reset_boundary_recovery_plan,
@@ -61,6 +62,11 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     assert lock_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < lock_sql.index(
         "json_typeof"
     )
+
+    snapshot_sql = str(SNAPSHOT_SCANNED_REPLAY_CANDIDATES)
+    assert "payload::text AS payload_json" in snapshot_sql
+    assert "status = 'PENDING'" not in snapshot_sql
+    assert "FOR UPDATE" not in snapshot_sql
 
 
 def test_reset_normalization_preserves_maximum_retry_history() -> None:
@@ -283,9 +289,40 @@ async def test_pending_sibling_requires_exact_retained_identity(
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters == {
         "candidate_ids": [8],
-        "preserve_candidate_ids": [8],
+        "preserve_candidate_ids": [],
         "job_type": job_type,
     }
+
+
+@pytest.mark.asyncio
+async def test_pending_sibling_snapshots_candidate_claimed_during_lock_revalidation() -> None:
+    identity = {"security_id": "BOND-1"}
+    payload_json = json.dumps({**identity, "earliest_impacted_date": "2025-01-03"})
+    scan_result = MagicMock()
+    scan_result.mappings.return_value.all.return_value = [
+        {"id": 8, "payload_json": payload_json, "status": "PENDING", "attempt_count": 4}
+    ]
+    lock_result = MagicMock()
+    lock_result.mappings.return_value.all.return_value = []
+    snapshot_result = MagicMock()
+    snapshot_result.mappings.return_value.all.return_value = [
+        {"id": 8, "payload_json": payload_json, "status": "PROCESSING", "attempt_count": 5}
+    ]
+    db = AsyncMock()
+    db.execute.side_effect = [scan_result, lock_result, snapshot_result]
+
+    evidence = await pending_replay_sibling_evidence(
+        db,
+        job_id=41,
+        job_type="RESET_WATERMARKS",
+        payload=identity,
+    )
+
+    assert evidence.earliest_sibling.earliest_impacted_date == date(2025, 1, 3)
+    assert evidence.max_attempt_count == 5
+    snapshot_statement, snapshot_parameters = db.execute.await_args_list[2].args
+    assert snapshot_statement is SNAPSHOT_SCANNED_REPLAY_CANDIDATES
+    assert snapshot_parameters == {"candidate_ids": [8], "job_type": "RESET_WATERMARKS"}
 
 
 @pytest.mark.asyncio
@@ -383,7 +420,7 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters["candidate_ids"] == [7]
-    assert locked_parameters["preserve_candidate_ids"] == [7]
+    assert locked_parameters["preserve_candidate_ids"] == []
     assert db.execute.await_count == 3
     update_parameters = db.execute.await_args_list[2].args[0].compile().params
     assert next(value for value in update_parameters.values() if isinstance(value, list)) == [7]
