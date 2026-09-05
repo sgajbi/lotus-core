@@ -288,11 +288,35 @@ _RESTAGE_RECOVERABLE_FX = sa.text(
                 CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                 reprocessing_jobs.payload->>'content_hash'
             )
-            THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-            ELSE COALESCE(reprocessing_jobs.correlation_id, :correlation_id)
+            THEN COALESCE(
+                :correlation_id,
+                CASE
+                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    THEN NULL
+                    ELSE btrim(reprocessing_jobs.correlation_id)
+                END
+            )
+            ELSE COALESCE(
+                CASE
+                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    THEN NULL
+                    ELSE btrim(reprocessing_jobs.correlation_id)
+                END,
+                :correlation_id
+            )
         END,
         correlation_missing_reason = CASE
-            WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL THEN NULL
+            WHEN COALESCE(
+                :correlation_id,
+                CASE
+                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    THEN NULL
+                    ELSE btrim(reprocessing_jobs.correlation_id)
+                END
+            ) IS NOT NULL THEN NULL
             WHEN ROW(CAST(:generated_at AS timestamptz), :content_hash) > ROW(
                 CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                 reprocessing_jobs.payload->>'content_hash'
@@ -300,7 +324,15 @@ _RESTAGE_RECOVERABLE_FX = sa.text(
             ELSE reprocessing_jobs.correlation_missing_reason
         END,
         alternate_lookup_key = CASE
-            WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL THEN NULL
+            WHEN COALESCE(
+                :correlation_id,
+                CASE
+                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    THEN NULL
+                    ELSE btrim(reprocessing_jobs.correlation_id)
+                END
+            ) IS NOT NULL THEN NULL
             WHEN ROW(CAST(:generated_at AS timestamptz), :content_hash) > ROW(
                 CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
                 reprocessing_jobs.payload->>'content_hash'

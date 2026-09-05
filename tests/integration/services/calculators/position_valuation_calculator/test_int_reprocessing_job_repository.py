@@ -139,7 +139,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                     "earliest_impacted_date": "2025-01-05",
                 },
                 status="PENDING",
-                correlation_id=None,
+                correlation_id="  <NOT-SET>  ",
                 attempt_count=1,
             ),
             ReprocessingJob(
@@ -1585,7 +1585,7 @@ async def test_staging_preserves_valid_compact_offset_pending_fx_lineage(
     assert rows[0].correlation_id == "corr-latest-authoritative"
 
 
-async def test_staging_preserves_correlation_when_valid_pending_fx_source_is_newer(
+async def test_staging_preserves_real_correlation_when_newer_pending_fx_has_sentinel(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
@@ -1600,7 +1600,7 @@ async def test_staging_preserves_correlation_when_valid_pending_fx_source_is_new
             "generated_at": "2025-01-09T00:00:00+00:00",
         },
         status="PENDING",
-        correlation_id=None,
+        correlation_id="  <NOT-SET>  ",
         correlation_missing_reason="legacy_correlation_unavailable",
         alternate_lookup_key="legacy:eur-chf",
     )
@@ -1756,6 +1756,39 @@ async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(
     )
     assert len(remaining_rows) == 3
     assert {row.payload["security_id"] for row in remaining_rows} == {"S1", "S2", "S3"}
+
+
+async def test_find_and_claim_jobs_orders_accepted_iso_dates_chronologically(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add_all(
+        [
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S-DASHED", "earliest_impacted_date": "2025-01-02"},
+                status="PENDING",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "S-COMPACT", "earliest_impacted_date": "20250101"},
+                status="PENDING",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    claimed = await ReprocessingJobRepository(async_db_session).find_and_claim_jobs(
+        "RESET_WATERMARKS",
+        batch_size=1,
+    )
+    await async_db_session.commit()
+
+    assert len(claimed) == 1
+    assert claimed[0].payload == {
+        "security_id": "S-COMPACT",
+        "earliest_impacted_date": "20250101",
+    }
 
 
 async def test_find_and_claim_jobs_batch_size_one_updates_exactly_one_row(
@@ -2042,6 +2075,39 @@ async def test_reset_staging_coalesces_oversized_extension_through_safe_return(
     assert persisted.row_count == 1
     assert persisted.earliest_date == "2025-01-05"
     assert persisted.extension_preserved is True
+
+
+async def test_reset_staging_replaces_retained_sentinel_with_real_correlation(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add(
+        ReprocessingJob(
+            job_type="RESET_WATERMARKS",
+            payload={
+                "security_id": "S-SENTINEL-UPSERT",
+                "earliest_impacted_date": "2025-01-05",
+            },
+            status="PENDING",
+            correlation_id="  <NOT-SET>  ",
+            correlation_missing_reason="legacy_missing",
+            alternate_lookup_key="legacy:sentinel-upsert",
+        )
+    )
+    await async_db_session.commit()
+
+    result = await ReprocessingJobRepository(async_db_session).stage_reset_watermarks_job(
+        security_id="S-SENTINEL-UPSERT",
+        earliest_impacted_date=date(2025, 1, 7),
+        correlation_id="corr-later-correction",
+    )
+    await async_db_session.commit()
+
+    assert result.outcome is ResetWatermarksStageOutcome.COALESCED_PENDING
+    assert result.job.payload["earliest_impacted_date"] == "2025-01-05"
+    assert result.job.correlation_id == "corr-later-correction"
+    assert result.job.correlation_missing_reason is None
+    assert result.job.alternate_lookup_key is None
 
 
 async def test_find_and_claim_jobs_does_not_cast_unrepresentable_reset_date(

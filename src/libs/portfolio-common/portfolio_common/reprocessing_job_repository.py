@@ -124,8 +124,9 @@ CLAIM_PENDING_JOBS = text(
               AND NOT (id = ANY(CAST(:excluded_job_ids AS BIGINT[])))
             ORDER BY
                 CASE WHEN :prioritize_effective_date
-                    THEN payload->>'earliest_impacted_date'
-                END ASC,
+                    AND pg_input_is_valid(payload->>'earliest_impacted_date', 'date')
+                    THEN CAST(payload->>'earliest_impacted_date' AS date)
+                END ASC NULLS LAST,
                 created_at ASC,
                 id ASC
             LIMIT :batch_size
@@ -321,11 +322,35 @@ class ReprocessingJobRepository:
                         ),
                         COALESCE(reprocessing_jobs.payload->>'content_hash', '')
                     )
-                    THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-                    ELSE COALESCE(reprocessing_jobs.correlation_id, :correlation_id)
+                    THEN COALESCE(
+                        :correlation_id,
+                        CASE
+                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            THEN NULL
+                            ELSE btrim(reprocessing_jobs.correlation_id)
+                        END
+                    )
+                    ELSE COALESCE(
+                        CASE
+                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            THEN NULL
+                            ELSE btrim(reprocessing_jobs.correlation_id)
+                        END,
+                        :correlation_id
+                    )
                 END,
                 correlation_missing_reason = CASE
-                    WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL
+                    WHEN COALESCE(
+                        :correlation_id,
+                        CASE
+                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            THEN NULL
+                            ELSE btrim(reprocessing_jobs.correlation_id)
+                        END
+                    ) IS NOT NULL
                     THEN NULL
                     WHEN ROW(
                         CAST(:generated_at AS timestamptz),
@@ -340,7 +365,15 @@ class ReprocessingJobRepository:
                     ELSE reprocessing_jobs.correlation_missing_reason
                 END,
                 alternate_lookup_key = CASE
-                    WHEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id) IS NOT NULL
+                    WHEN COALESCE(
+                        :correlation_id,
+                        CASE
+                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            THEN NULL
+                            ELSE btrim(reprocessing_jobs.correlation_id)
+                        END
+                    ) IS NOT NULL
                     THEN NULL
                     WHEN ROW(
                         CAST(:generated_at AS timestamptz),
