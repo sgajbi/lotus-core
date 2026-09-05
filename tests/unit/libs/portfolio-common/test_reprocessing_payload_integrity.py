@@ -1,7 +1,9 @@
 """Boundary tests for retained reprocessing payload quarantine."""
 
+import json
+from datetime import date
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.reprocessing_payload_integrity import (
@@ -10,7 +12,11 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_CANDIDATES,
     PENDING_RESET_REPLAY_SIBLING,
     _decode_retained_payload,
+    _postgres_json_identity_text,
     _quarantine_candidates,
+    pending_replay_sibling_exists,
+    quarantine_pending_fx_pair,
+    quarantine_pending_reset_security,
     replay_row_matches_identity,
 )
 
@@ -78,6 +84,33 @@ def test_python_identity_match_preserves_structured_whitespace_and_last_duplicat
     )
 
 
+@pytest.mark.parametrize(
+    "payload_json",
+    [
+        None,
+        "[]",
+        "{}",
+        '{1:"BOND-1"}',
+        '{"security_id" "BOND-1"}',
+        '{"security_id":',
+        '{"other":"value"',
+        '{"other":"value";}',
+    ],
+)
+def test_python_identity_match_fails_closed_for_malformed_or_missing_identity(
+    payload_json: object,
+) -> None:
+    assert not replay_row_matches_identity(
+        {"payload_json": payload_json},
+        {"security_id": "BOND-1"},
+    )
+
+
+def test_postgres_identity_text_rejects_non_json_and_invalid_json() -> None:
+    assert _postgres_json_identity_text(123) is None
+    assert _postgres_json_identity_text("not-json") is None
+
+
 def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
     oversized_integer = "1" * 5_000
     payload = _decode_retained_payload(
@@ -91,6 +124,134 @@ def test_retained_payload_decode_preserves_oversized_numeric_type() -> None:
         {"payload_json": '{"security_id":[ 123 ]}'},
         {"security_id": "[123]"},
     )
+
+
+@pytest.mark.parametrize("payload_json", [None, '{"security_id":'])
+def test_retained_payload_decode_fails_closed(payload_json: object) -> None:
+    assert _decode_retained_payload(payload_json) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("job_type", "payload", "statement", "identity"),
+    [
+        (
+            "RESET_WATERMARKS",
+            {"security_id": "BOND-1"},
+            PENDING_RESET_REPLAY_SIBLING,
+            {"security_id": "BOND-1"},
+        ),
+        (
+            "RESET_FX_WATERMARKS",
+            {"from_currency": "USD", "to_currency": "CHF"},
+            PENDING_FX_REPLAY_SIBLING,
+            {"from_currency": "USD", "to_currency": "CHF"},
+        ),
+    ],
+)
+async def test_pending_sibling_requires_exact_retained_identity(
+    job_type: str,
+    payload: dict[str, str],
+    statement: object,
+    identity: dict[str, str],
+) -> None:
+    db = AsyncMock()
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = [
+        {"payload_json": "{}"},
+        {"payload_json": json.dumps(identity)},
+    ]
+    db.execute.return_value = result
+
+    assert await pending_replay_sibling_exists(
+        db,
+        job_id=41,
+        job_type=job_type,
+        payload=payload,
+    )
+    executed_statement, parameters = db.execute.await_args.args
+    assert executed_statement is statement
+    assert parameters["job_id"] == 41
+    assert all(parameters[field] == value for field, value in identity.items())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("quarantine", "identity", "candidate_statement"),
+    [
+        (
+            quarantine_pending_reset_security,
+            {"security_id": "BOND-1"},
+            PENDING_RESET_REPLAY_CANDIDATES,
+        ),
+        (
+            quarantine_pending_fx_pair,
+            {"from_currency": "USD", "to_currency": "CHF"},
+            PENDING_FX_REPLAY_CANDIDATES,
+        ),
+    ],
+)
+async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
+    quarantine,
+    identity: dict[str, str],
+    candidate_statement: object,
+) -> None:
+    db = AsyncMock()
+    retained = {**identity, "earliest_date": "2026-09-01"}
+    validity = {
+        "payload_representable": False,
+        "earliest_date_representable": True,
+        "generated_at_representable": True,
+    }
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = [
+        {"id": 7, "payload_json": json.dumps(retained), **validity},
+        {
+            "id": 8,
+            "payload_json": '{"security_id":"OTHER"}',
+            **validity,
+        },
+    ]
+    db.execute.return_value = result
+
+    earliest = await quarantine(
+        db,
+        **identity,
+        validate=lambda payload: payload,
+        parse_earliest_date=lambda payload: (
+            date.fromisoformat(payload["earliest_date"])
+            if isinstance(payload, dict) and payload.get("earliest_date")
+            else None
+        ),
+    )
+
+    assert earliest == date(2026, 9, 1)
+    assert db.execute.await_args_list[0].args[0] is candidate_statement
+    assert db.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_quarantine_leaves_valid_replay_work_unchanged() -> None:
+    db = AsyncMock()
+
+    earliest = await _quarantine_candidates(
+        db,
+        rows=[
+            {
+                "id": 9,
+                "payload_json": '{"security_id":"BOND-1"}',
+                "payload_representable": True,
+                "earliest_date_representable": True,
+            }
+        ],
+        required_validity_fields=("payload_representable", "earliest_date_representable"),
+        validate=lambda payload: payload,
+        parse_earliest_date=lambda payload: None,
+        failure_reason="invalid retained replay",
+    )
+
+    assert earliest is None
+    db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
