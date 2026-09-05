@@ -4082,7 +4082,8 @@ Most relevant current governance:
      use the shared safe decoder. This preserves permitted unknown fields without allowing an
      oversized extension number to abort unrelated work. Owned requeue must also carry a locked
      sibling's usable earlier boundary through coalescing when the sibling is already processing or
-     becomes terminal after the unlocked scan, without taking its lease. Coalescing also retains the
+     becomes terminal after the unlocked scan. Already-processing siblings contribute a committed
+     snapshot without a row lock, so requeue cannot block their lease renewal. Coalescing retains the
      maximum retry count and selects FX source/correlation lineage by the established
      generated-at/content-hash ordering. When an unrelated extension prevents full JSON decoding,
      required FX source fields are recovered lexically and revalidated before selection; the

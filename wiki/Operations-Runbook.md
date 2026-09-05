@@ -350,8 +350,9 @@ rows. Claim, Reset staging return, owned identity lookup, and stale discovery/re
 retained payloads as text through the shared safe decoder, preventing a permitted unknown numeric
 extension from blocking replay. Reset coalescing preserves unknown fields and the earliest replay
 boundary. Owned requeue also retains a usable earlier sibling boundary when the sibling is already
-processing or becomes terminal between discovery and row locking, without taking its lease. Legacy
-Reset duplicate normalization and owned sibling coalescing retain the maximum retry count; FX
+processing or becomes terminal between discovery and row locking. Already-processing siblings are
+read as committed snapshots without row locks, so their lease renewal is not blocked. Legacy Reset
+duplicate normalization and owned sibling coalescing retain the maximum retry count; FX
 source/correlation lineage continues to follow generated-at/content-hash ordering. Canonical FX
 source fields can be recovered lexically around an unrepresentable extension, then are revalidated;
 the extension is not copied into replacement work.
