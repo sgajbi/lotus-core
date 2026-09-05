@@ -157,6 +157,18 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                 status="PENDING",
                 correlation_id="corr-malformed-canonical-string",
             ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": " A\x01A ", "earliest_impacted_date": "2025-01-01"},
+                status="PENDING",
+                correlation_id="corr-padded-control-string",
+            ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={"security_id": "A\x01A", "earliest_impacted_date": "2025-01-02"},
+                status="PENDING",
+                correlation_id="corr-exact-control-string",
+            ),
         ]
     )
     await async_db_session.execute(
@@ -185,7 +197,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
 
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
-    assert len(rows) == 6
+    assert len(rows) == 8
     canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
@@ -196,6 +208,11 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     malformed_string = next(
         row for row in rows if row.correlation_id == "corr-malformed-canonical-string"
     )
+    control_rows = [
+        row
+        for row in rows
+        if row.correlation_id in {"corr-padded-control-string", "corr-exact-control-string"}
+    ]
     assert canonical.payload == {
         "security_id": "BOND-CANONICAL",
         "earliest_impacted_date": "2025-01-05",
@@ -231,6 +248,13 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     assert malformed_string.payload["security_id"] == "STRING"
     assert malformed_string.failure_reason == (
         "invalid_reset_watermarks_job_payload: identity collision"
+    )
+    assert len(control_rows) == 2
+    assert all(row.status == "FAILED" for row in control_rows)
+    assert all("\x01" in row.payload["security_id"] for row in control_rows)
+    assert all(
+        row.failure_reason == "invalid_reset_watermarks_job_payload: control-bearing identity"
+        for row in control_rows
     )
 
 
