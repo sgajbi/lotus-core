@@ -101,7 +101,7 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert "json_typeof(payload->'to_currency')" not in quarantine_sql
     assert "pg_input_is_valid(payload->>'earliest_impacted_date', 'date')" in quarantine_sql
     assert "'timestamp with time zone'" in quarantine_sql
-    assert "FOR UPDATE" in quarantine_sql
+    assert "FOR UPDATE" not in quarantine_sql
     assert "btrim(payload->>'from_currency', :trim_chars)" in quarantine_sql
     assert "btrim(payload->>'to_currency', :trim_chars)" in quarantine_sql
     assert quarantine_parameters == {
