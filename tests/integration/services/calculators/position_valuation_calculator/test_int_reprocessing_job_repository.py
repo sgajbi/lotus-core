@@ -2221,6 +2221,8 @@ async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     scan_completed = asyncio.Event()
     allow_row_lock = asyncio.Event()
+    requeue_applied = asyncio.Event()
+    allow_requeue_commit = asyncio.Event()
     original_lock = payload_integrity._lock_scanned_replay_rows
     first_lock = True
 
@@ -2245,12 +2247,15 @@ async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
 
     async def requeue_owned():
         async with session_factory() as requeue_session, requeue_session.begin():
-            return await ReprocessingJobRepository(
+            outcome = await ReprocessingJobRepository(
                 requeue_session
             ).requeue_owned_effective_dated_job(
                 owned.id,
                 lease_token=owned.lease_token,
             )
+            requeue_applied.set()
+            await allow_requeue_commit.wait()
+            return outcome
 
     with patch.object(
         payload_integrity,
@@ -2269,9 +2274,28 @@ async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
                 )
                 assert [job.id for job in claimed] == [sibling_id]
             allow_row_lock.set()
+            await asyncio.wait_for(requeue_applied.wait(), timeout=5)
+            async with session_factory() as renewal_session, renewal_session.begin():
+                renewal = await asyncio.wait_for(
+                    renewal_session.execute(
+                        update(ReprocessingJob)
+                        .where(
+                            ReprocessingJob.id == sibling_id,
+                            ReprocessingJob.status == "PROCESSING",
+                            ReprocessingJob.lease_token == claimed[0].lease_token,
+                        )
+                        .values(
+                            lease_expires_at=func.clock_timestamp() + text("INTERVAL '30 minutes'")
+                        )
+                    ),
+                    timeout=5,
+                )
+                assert renewal.rowcount == 1
+            allow_requeue_commit.set()
             outcome = await asyncio.wait_for(requeue_task, timeout=5)
         finally:
             allow_row_lock.set()
+            allow_requeue_commit.set()
             if not requeue_task.done():
                 requeue_task.cancel()
                 await asyncio.gather(requeue_task, return_exceptions=True)
