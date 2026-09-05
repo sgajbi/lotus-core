@@ -889,8 +889,8 @@ sibling boundary into the replacement pending job when that sibling is already p
  correlation is retained without changing source authority. Reset coalescing uses valid sibling correlation at the
 authoritative boundary, fills missing owned correlation at an equal boundary, and retains known
 owned correlation when an earlier sibling has none. If an unrelated extension prevents full
-decoding, claim mapping recovers canonical FX fields so the valuation adapter can validate the
- execution identity and date and attributable replay can proceed. Staging quarantine for both replay
+decoding, retained replay reads recover only that job family's canonical fields so RESET stale
+recovery can proceed and the FX valuation adapter can validate execution identity and date. Staging quarantine for both replay
  families validates and carries recovered boundary, source, retry, and lineage evidence through the same
  merge policy; the extension remains only on the original retained row. Legacy Reset duplicate
  normalization retains the maximum retry count and an available valid correlation fallback across
