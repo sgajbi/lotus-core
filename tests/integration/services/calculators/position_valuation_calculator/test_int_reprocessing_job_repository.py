@@ -408,20 +408,31 @@ async def test_fx_identity_queries_skip_nul_predecessor_without_blocking_valid_p
                                 '"content_hash":"valid"}' AS json
                             ),
                             'PENDING', 'corr-valid-fx-identity'
-                        ),
-                        (
-                            'RESET_FX_WATERMARKS',
-                            CAST(
-                                '{"from_currency":"EUR","to_currency":"GBP",'
-                                '"earliest_impacted_date":"2025-01-03",'
-                                '"generated_at":"2025-01-03T00:00:00+00:00",'
-                                '"content_hash":"unrelated-poison",'
-                                '"legacy_number"\:1e1000000}' AS json
-                            ),
-                            'PENDING', 'corr-unrelated-fx-poison'
                         )
                     """
                 )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+                    VALUES (
+                      'RESET_FX_WATERMARKS',
+                      CAST(:payload AS JSON),
+                      'PENDING',
+                      'corr-unrelated-fx-poison'
+                    )
+                    """
+                ),
+                {
+                    "payload": (
+                        '{"from_currency":"EUR","to_currency":"GBP",'
+                        '"earliest_impacted_date":"2025-01-03",'
+                        '"generated_at":"2025-01-03T00:00:00+00:00",'
+                        '"content_hash":"unrelated-poison",'
+                        '"legacy_number":1e1000000}'
+                    )
+                },
             )
 
         valid_sibling_exists = await pending_replay_sibling_exists(
@@ -1584,15 +1595,21 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     assert rows[2].correlation_id == "corr-claimed"
 
 
+@pytest.mark.parametrize(
+    ("security_id", "poisoned_security_id_json"),
+    (("123", "123"), ("[123]", "[123]")),
+)
 async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
     clean_db,
     async_db_session: AsyncSession,
     predecessor_reprocessing_payload_schema,
+    security_id: str,
+    poisoned_security_id_json: str,
 ) -> None:
     repository = ReprocessingJobRepository(async_db_session)
     await repository.create_job(
         "RESET_WATERMARKS",
-        {"security_id": "123", "earliest_impacted_date": "2025-01-05"},
+        {"security_id": security_id, "earliest_impacted_date": "2025-01-05"},
         correlation_id="corr-claimed",
     )
     await async_db_session.commit()
@@ -1612,7 +1629,7 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
         ),
         {
             "payload": (
-                '{"security_id":123,'
+                f'{{"security_id":{poisoned_security_id_json},'
                 '"earliest_impacted_date":"2025-01-07",'
                 '"legacy_number":1e1000000}'
             )
@@ -1659,7 +1676,7 @@ async def test_owned_reset_requeue_quarantines_jsonb_unrepresentable_sibling(
         "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
     )
     assert rows[3].payload == {
-        "security_id": "123",
+        "security_id": security_id,
         "earliest_impacted_date": "2025-01-05",
     }
     assert rows[1].failure_reason == (

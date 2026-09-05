@@ -1,7 +1,6 @@
 """Guard and quarantine retained effective-dated replay payloads before SQL casts."""
 
 import json
-import math
 from collections.abc import Callable, Mapping
 from datetime import date
 from typing import Any
@@ -318,24 +317,28 @@ def replay_payload_matches_identity(
     if not isinstance(payload, Mapping):
         return False
     return all(
-        (identity_text := _json_scalar_identity_text(payload.get(field))) is not None
+        (identity_text := _postgres_json_identity_text(payload.get(field))) is not None
         and identity_text.strip(REPLAY_TEXT_TRIM_CHARS) == expected
         for field, expected in expected_identity.items()
     )
 
 
-def _json_scalar_identity_text(value: object) -> str | None:
-    """Render a JSON scalar as PostgreSQL does for an expression-index identity."""
+def _postgres_json_identity_text(value: object) -> str | None:
+    """Render a JSON value as PostgreSQL does for an expression-index identity."""
 
     if isinstance(value, str):
         return value
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float) and math.isfinite(value):
-        return json.dumps(value, allow_nan=False)
-    return None
+    if value is None:
+        return None
+    try:
+        return json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 async def pending_replay_sibling_exists(
