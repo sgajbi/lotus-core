@@ -815,10 +815,15 @@ async def test_reset_normalization_serializes_with_canonical_staging(
             .all()
         )
     assert deleted_count == 0
-    assert len(jobs) == 3
+    assert len(jobs) == 4
     canonical = next(job for job in jobs if job.correlation_id == "corr-race-canonical")
     padded = next(job for job in jobs if job.correlation_id == "corr-race-padded")
     poisoned = next(job for job in jobs if job.correlation_id == "corr-race-poison")
+    recovered_poisoned_boundary = next(
+        job
+        for job in jobs
+        if job.status == "PENDING" and job.payload.get("security_id") == "UNRELATED-POISON"
+    )
     assert canonical.status == "PENDING"
     assert canonical.payload == {
         "security_id": "RACE-BOND",
@@ -834,8 +839,13 @@ async def test_reset_normalization_serializes_with_canonical_staging(
     )
     assert poisoned.status == "FAILED"
     assert poisoned.failure_reason == (
-        "invalid_reset_watermarks_job_payload: unsafe identity representation"
+        "invalid_reset_watermarks_job_payload: unsafe retained representation; "
+        "replay boundary recovered"
     )
+    assert recovered_poisoned_boundary.payload == {
+        "security_id": "UNRELATED-POISON",
+        "earliest_impacted_date": "2025-01-02",
+    }
 
 
 async def test_reset_staging_preserves_boundary_claimed_between_scan_and_lock(
