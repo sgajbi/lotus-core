@@ -354,8 +354,9 @@ processing or becomes terminal between discovery and row locking. Siblings alrea
 claimed during lock revalidation are read as committed snapshots without row locks, so their lease
 renewal is not blocked. Legacy Reset
 duplicate normalization and owned sibling coalescing retain the maximum retry count; FX
-source/correlation lineage continues to follow generated-at/content-hash ordering. At an equal Reset
-boundary, valid sibling correlation fills missing owned lineage. Canonical FX
+source/correlation lineage continues to follow generated-at/content-hash ordering. Reset coalescing
+uses valid sibling correlation at the authoritative boundary, fills missing owned correlation at an
+equal boundary, and retains known owned correlation when an earlier sibling has none. Canonical FX
 source fields can be recovered lexically around an unrepresentable extension, then are revalidated;
 the extension is not copied into replacement work.
 Review the recorded counts after upgrade and
