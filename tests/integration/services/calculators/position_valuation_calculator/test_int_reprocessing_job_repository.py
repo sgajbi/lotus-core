@@ -1630,6 +1630,62 @@ async def test_find_and_claim_jobs_decodes_oversized_extension_without_blocking_
     assert "extension" not in replay_rows[1]["payload_json"]
 
 
+async def test_reset_staging_coalesces_oversized_extension_through_safe_return(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    oversized_integer = "8" * 5_000
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (
+                job_type, payload, status, correlation_id
+            ) VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS JSON), 'PENDING', 'corr-original'
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"S-STAGE-LARGE",'
+                '"earliest_impacted_date":"2025-01-07",'
+                f'"extension":{oversized_integer}}}'
+            )
+        },
+    )
+    await async_db_session.commit()
+
+    result = await ReprocessingJobRepository(async_db_session).stage_reset_watermarks_job(
+        security_id="S-STAGE-LARGE",
+        earliest_impacted_date=date(2025, 1, 5),
+        correlation_id="corr-correction",
+    )
+    await async_db_session.commit()
+
+    assert result.outcome is ResetWatermarksStageOutcome.COALESCED_PENDING
+    assert result.job.payload["earliest_impacted_date"] == "2025-01-05"
+    assert str(result.job.payload["extension"]) == oversized_integer
+    assert result.job.correlation_id == "corr-correction"
+    persisted = (
+        await async_db_session.execute(
+            text(
+                """
+                SELECT count(*) AS row_count,
+                       min(payload->>'earliest_impacted_date') AS earliest_date,
+                       bool_and(payload::text LIKE '%"extension"%') AS extension_preserved
+                FROM reprocessing_jobs
+                WHERE status = 'PENDING'
+                  AND job_type = 'RESET_WATERMARKS'
+                  AND payload->>'security_id' = 'S-STAGE-LARGE'
+                """
+            )
+        )
+    ).one()
+    assert persisted.row_count == 1
+    assert persisted.earliest_date == "2025-01-05"
+    assert persisted.extension_preserved is True
+
+
 async def test_find_and_claim_jobs_does_not_cast_unrepresentable_reset_date(
     clean_db,
     async_db_session: AsyncSession,
@@ -1967,6 +2023,115 @@ async def test_owned_reset_requeue_coalesces_pending_sibling_without_narrowing_b
     assert rows[1].correlation_id == expected_correlation
     assert rows[0].lease_token is None
     assert rows[0].lease_expires_at is None
+
+
+async def test_owned_and_stale_recovery_coalesce_oversized_pending_siblings(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    oversized_integer = "9" * 5_000
+
+    async def claim_then_insert_sibling(
+        security_id: str,
+        *,
+        excluded_job_ids: tuple[int, ...] = (),
+    ):
+        await repository.stage_reset_watermarks_job(
+            security_id=security_id,
+            earliest_impacted_date=date(2025, 1, 7),
+            correlation_id=f"corr-{security_id}-claimed",
+        )
+        await async_db_session.commit()
+        claimed = (
+            await repository.find_and_claim_jobs(
+                "RESET_WATERMARKS",
+                batch_size=1,
+                excluded_job_ids=excluded_job_ids,
+            )
+        )[0]
+        await async_db_session.commit()
+        sibling_id = (
+            await async_db_session.execute(
+                text(
+                    """
+                INSERT INTO reprocessing_jobs (
+                    job_type, payload, status, correlation_id
+                ) VALUES (
+                    'RESET_WATERMARKS', CAST(:payload AS JSON), 'PENDING', :correlation_id
+                )
+                RETURNING id
+                """
+                ),
+                {
+                    "payload": (
+                        f'{{"security_id":"{security_id}",'
+                        '"earliest_impacted_date":"2025-01-05",'
+                        f'"extension":{oversized_integer}}}'
+                    ),
+                    "correlation_id": f"corr-{security_id}-sibling",
+                },
+            )
+        ).scalar_one()
+        await async_db_session.commit()
+        return claimed, sibling_id
+
+    owned, owned_sibling_id = await claim_then_insert_sibling("S-OWNED-LARGE")
+    assert (
+        await repository.requeue_owned_effective_dated_job(
+            owned.id,
+            lease_token=owned.lease_token,
+        )
+        is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    )
+    await async_db_session.commit()
+
+    stale, _ = await claim_then_insert_sibling(
+        "S-STALE-LARGE",
+        excluded_job_ids=(owned_sibling_id,),
+    )
+    await async_db_session.execute(
+        update(ReprocessingJob)
+        .where(ReprocessingJob.id == stale.id)
+        .values(lease_expires_at=func.clock_timestamp() - text("INTERVAL '1 second'"))
+    )
+    await async_db_session.commit()
+    assert await repository.find_and_reset_stale_jobs(max_attempts=5) == 1
+    await async_db_session.commit()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                text(
+                    """
+                SELECT payload->>'security_id' AS security_id,
+                       status,
+                       payload->>'earliest_impacted_date' AS earliest_date,
+                       correlation_id,
+                       payload::text LIKE '%"extension"%' AS extension_preserved
+                FROM reprocessing_jobs
+                WHERE payload->>'security_id' IN ('S-OWNED-LARGE', 'S-STALE-LARGE')
+                ORDER BY security_id, id
+                """
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+    assert [(row["security_id"], row["status"]) for row in rows] == [
+        ("S-OWNED-LARGE", "COMPLETE"),
+        ("S-OWNED-LARGE", "PENDING"),
+        ("S-STALE-LARGE", "COMPLETE"),
+        ("S-STALE-LARGE", "PENDING"),
+    ]
+    pending_rows = [row for row in rows if row["status"] == "PENDING"]
+    assert all(row["earliest_date"] == "2025-01-05" for row in pending_rows)
+    assert all(row["extension_preserved"] is True for row in pending_rows)
+    assert {row["correlation_id"] for row in pending_rows} == {
+        "corr-S-OWNED-LARGE-sibling",
+        "corr-S-STALE-LARGE-sibling",
+    }
 
 
 async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(

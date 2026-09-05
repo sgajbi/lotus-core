@@ -933,7 +933,7 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 8,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "BOND-1", "earliest_impacted_date": "2024-12-31"},
+        "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2024-12-31"}'),
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -981,7 +981,7 @@ async def test_create_job_coalesces_pending_reset_watermarks_job(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 10,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": '{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}',
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -1014,7 +1014,7 @@ async def test_create_job_updates_pending_reset_watermarks_job_to_earliest_date(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 10,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": '{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}',
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -1046,7 +1046,7 @@ async def test_create_job_preserves_earliest_correlation_for_reset_watermarks(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 11,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "AAPL", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": '{"security_id":"AAPL","earliest_impacted_date":"2025-01-05"}',
         "status": "PENDING",
         "correlation_id": "corr-05",
         "attempt_count": 0,
@@ -1084,7 +1084,7 @@ async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
     upsert_result.mappings.return_value.one.return_value = {
         "id": 12,
         "job_type": "RESET_WATERMARKS",
-        "payload": {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-05"},
+        "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-01-05"}'),
         "status": "PENDING",
         "attempt_count": 0,
         "last_attempted_at": None,
@@ -1108,6 +1108,8 @@ async def test_stage_reset_watermarks_job_reports_exact_upsert_outcome(
     assert lock_parameters == {"identity_key": "RESET_WATERMARKS|6:BOND-1"}
     statement = str(mock_db_session.execute.await_args.args[0])
     assert "(xmax = 0) AS was_inserted" in statement
+    assert "payload::text AS payload_json" in statement
+    assert "RETURNING *" not in statement
 
 
 async def test_reset_watermarks_batch_locks_unique_identities_in_global_order(
