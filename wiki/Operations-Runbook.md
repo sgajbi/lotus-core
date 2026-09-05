@@ -354,7 +354,8 @@ boundary. Owned requeue also retains a usable earlier sibling boundary when the 
 processing or becomes terminal between discovery and row locking. Siblings already processing or
 claimed during lock revalidation are read as committed snapshots without row locks, so their lease
 renewal is not blocked. Legacy Reset
- duplicate normalization and owned sibling coalescing retain the maximum retry count; FX source
+ duplicate normalization and owned sibling coalescing retain the maximum retry count and available
+ valid correlation fallback; FX source
  authority continues to follow generated-at/content-hash ordering. If that source lacks correlation,
  the latest valid available correlation is retained without changing source authority. Reset coalescing
 uses valid sibling correlation at the authoritative boundary, fills missing owned correlation at an

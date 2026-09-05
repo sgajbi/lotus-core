@@ -892,15 +892,17 @@ owned correlation when an earlier sibling has none. If an unrelated extension pr
 decoding, claim mapping recovers canonical FX fields so the valuation adapter can validate the
  execution identity and date and attributable replay can proceed. Staging quarantine for both replay
  families validates and carries recovered boundary, source, retry, and lineage evidence through the same
-merge policy; the extension remains only on the original retained row. Legacy Reset duplicate normalization retains the maximum retry count
-across the coalesced rows.
+ merge policy; the extension remains only on the original retained row. Legacy Reset duplicate
+ normalization retains the maximum retry count and an available valid correlation fallback across
+ the coalesced rows.
 
 Migration `c166b2c3d52d` corrects the FX zoned-timestamp constraint to accept the bare-hour offsets
 accepted by both Python and PostgreSQL, such as `-07`, without rewriting the deployed c162
 migration. Under an exclusive lock it examines only FX rows that c162 quarantined, re-stages a row
 only when its identity, date, timestamp, and content lineage pass both authorities, and leaves the
-original failed evidence intact. Duplicate recoverable work is coalesced using the normal replay
-identity and earliest-date rules. Its downgrade fails closed while active work uses a timestamp
+ original failed evidence intact. Duplicate recoverable work is coalesced using the normal replay
+ identity, earliest-date, source-authority, and correlation-fallback rules. Its downgrade fails
+ closed while active work uses a timestamp
 form that the predecessor constraint cannot represent; terminalize or drain that work before a
 deliberate rollback.
 Investigate quarantined rows through the support API, correlation evidence, and source lineage;

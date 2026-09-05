@@ -4095,10 +4095,11 @@ Most relevant current governance:
      validate the execution identity and date and attributable replay can proceed. Staging
      quarantine for both replay families validates and carries recovered boundary, source, retry, and lineage
      evidence through the same merge policy; the extension is never promoted. Legacy Reset duplicate
-     normalization must retain the maximum
-     retry count as well as the earliest boundary. Migration `c166b2c3d52d`
+     normalization must retain the maximum retry count and an available valid correlation fallback
+     as well as the earliest boundary. Migration `c166b2c3d52d`
      corrects the zoned-timestamp CHECK without amending `c162b2c3d529` and re-stages only FX work
-     that is provably valid at both boundaries. Do not generalize
+     that is provably valid at both boundaries; migration coalescing retains available correlation
+     even when the existing pending FX source remains authoritative. Do not generalize
      bound-parameter behavior to direct
      SQL, restore, or migration paths.
      Aggregation-owned expired
