@@ -60,6 +60,7 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     assert "target.payload::text AS payload_json" in query_text
     assert "RETURNING target.*" not in query_text
     assert params["job_type"] == "RESET_WATERMARKS"
+    assert params["prioritize_effective_date"] is True
     assert params["batch_size"] == 25
     assert params["excluded_job_ids"] == []
     assert params["lease_owner"].startswith("reprocessing-repository-")
@@ -67,7 +68,7 @@ async def test_find_and_claim_jobs_uses_atomic_skip_locked_update(
     assert params["lease_duration_seconds"] == 900
     assert "lease_expires_at = clock_timestamp()" in query_text
     assert "make_interval(secs => :lease_duration_seconds)" in query_text
-    assert "(payload->>'earliest_impacted_date') ASC" in query_text
+    assert "payload->>'earliest_impacted_date'" in query_text
 
 
 @pytest.mark.parametrize(
@@ -108,8 +109,8 @@ async def test_find_and_claim_jobs_uses_default_created_at_order_for_other_job_t
     query = mock_db_session.execute.await_args.args[0]
     query_text = str(query)
 
-    assert "ORDER BY created_at ASC, id ASC" in query_text
-    assert "(payload->>'earliest_impacted_date')::date ASC" not in query_text
+    assert "CASE WHEN :prioritize_effective_date" in query_text
+    assert mock_db_session.execute.await_args.args[1]["prioritize_effective_date"] is False
 
 
 async def test_find_and_claim_fx_jobs_prioritizes_earliest_impacted_date(
@@ -123,7 +124,9 @@ async def test_find_and_claim_fx_jobs_prioritizes_earliest_impacted_date(
     await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=10)
 
     query = mock_db_session.execute.await_args.args[0]
-    assert "(payload->>'earliest_impacted_date') ASC" in str(query)
+    params = mock_db_session.execute.await_args.args[1]
+    assert "payload->>'earliest_impacted_date'" in str(query)
+    assert params["prioritize_effective_date"] is True
 
 
 async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
