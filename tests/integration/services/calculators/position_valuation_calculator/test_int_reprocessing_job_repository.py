@@ -839,8 +839,16 @@ async def test_reset_normalization_serializes_with_canonical_staging(
         )
     assert deleted_count == 0
     assert len(jobs) == 4
-    canonical = next(job for job in jobs if job.correlation_id == "corr-race-canonical")
-    padded = next(job for job in jobs if job.correlation_id == "corr-race-padded")
+    canonical = next(
+        job
+        for job in jobs
+        if job.status == "PENDING" and job.payload.get("security_id") == "RACE-BOND"
+    )
+    padded = next(
+        job
+        for job in jobs
+        if job.status == "FAILED" and job.payload.get("security_id") == " RACE-BOND"
+    )
     poisoned = next(job for job in jobs if job.correlation_id == "corr-race-poison")
     recovered_poisoned_boundary = next(
         job
@@ -852,6 +860,7 @@ async def test_reset_normalization_serializes_with_canonical_staging(
         "security_id": "RACE-BOND",
         "earliest_impacted_date": "2025-01-03",
     }
+    assert canonical.correlation_id == "corr-race-padded"
     assert padded.status == "FAILED"
     assert padded.payload == {
         "security_id": " RACE-BOND",
@@ -2532,7 +2541,7 @@ async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
         "security_id": "BOND-PADDED",
         "earliest_impacted_date": "2025-01-05",
     }
-    assert rows[2].correlation_id == "corr-claimed"
+    assert rows[2].correlation_id == "corr-legacy-padded"
 
 
 async def test_owned_reset_requeue_preserves_sibling_claimed_after_scan(
@@ -3091,7 +3100,7 @@ async def test_reset_quarantine_does_not_lock_unrelated_jsonb_poison(
         await unrelated_owner.execute(
             select(ReprocessingJob).where(ReprocessingJob.id == unrelated_id).with_for_update()
         )
-        earliest = await asyncio.wait_for(
+        evidence = await asyncio.wait_for(
             repository._quarantine_malformed_pending_reset_watermarks(security_id="LOCK-PROBE"),
             timeout=5,
         )
@@ -3099,7 +3108,12 @@ async def test_reset_quarantine_does_not_lock_unrelated_jsonb_poison(
 
     matching = await async_db_session.get(ReprocessingJob, matching_id)
     unrelated = await async_db_session.get(ReprocessingJob, unrelated_id)
-    assert earliest == date(2025, 1, 7)
+    assert evidence.exists
+    assert evidence.earliest_sibling is not None
+    assert evidence.earliest_sibling.id == matching_id
+    assert evidence.earliest_sibling.earliest_impacted_date == date(2025, 1, 7)
+    assert evidence.earliest_sibling.correlation_id == "corr-matching-lock-probe"
+    assert evidence.max_attempt_count == 0
     assert matching is not None and matching.status == "FAILED"
     assert unrelated is not None and unrelated.status == "PENDING"
 
