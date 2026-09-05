@@ -27,7 +27,7 @@ from .reprocessing_payload_integrity import (
     decode_reprocessing_payload_text,
     effective_dated_replay_identity_key,
     normalize_pending_reset_watermarks_duplicates,
-    pending_replay_sibling_exists,
+    pending_replay_sibling_evidence,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
     replay_text_is_storage_safe,
@@ -742,7 +742,7 @@ class ReprocessingJobRepository:
                 )
                 if identity.identity_key != candidate_identity.identity_key:
                     continue
-                await self._coalesce_pending_replay(identity)
+                await self._coalesce_pending_replay(identity, None)
                 completion_reason = (
                     "Coalesced into pending FX replay during stale recovery"
                     if identity.job_type == "RESET_FX_WATERMARKS"
@@ -911,10 +911,10 @@ class ReprocessingJobRepository:
         if not await self._lock_live_owned_job(job_id=job_id, lease_token=lease_token):
             return await self._classify_owned_transition_failure(job_id, lease_token)
 
-        if not await self._pending_replay_sibling_exists(
-            job_id=job_id,
-            identity=identity,
-        ):
+        sibling = await pending_replay_sibling_evidence(
+            self.db, job_id, identity.job_type, identity.payload
+        )
+        if not sibling.exists:
             outcome = await self._apply_owned_transition(
                 job_id,
                 "PENDING",
@@ -929,7 +929,7 @@ class ReprocessingJobRepository:
         savepoint = self.db.begin_nested()
         await savepoint.start()
         try:
-            await self._coalesce_pending_replay(identity)
+            await self._coalesce_pending_replay(identity, sibling.earliest_impacted_date)
             outcome = await self._apply_owned_transition(
                 job_id,
                 "COMPLETE",
@@ -999,22 +999,16 @@ class ReprocessingJobRepository:
         ).scalar_one_or_none()
         return owned_job_id is not None
 
-    async def _pending_replay_sibling_exists(
+    async def _coalesce_pending_replay(
         self,
-        *,
-        job_id: int,
         identity: _EffectiveDatedReplayIdentity,
-    ) -> bool:
-        return await pending_replay_sibling_exists(
-            self.db,
-            job_id=job_id,
-            job_type=identity.job_type,
-            payload=identity.payload,
-        )
-
-    async def _coalesce_pending_replay(self, identity: _EffectiveDatedReplayIdentity) -> None:
+        sibling_boundary: date | None,
+    ) -> None:
         payload = identity.payload
-        earliest_impacted_date = date.fromisoformat(payload["earliest_impacted_date"])
+        earliest_impacted_date = min(
+            date.fromisoformat(payload["earliest_impacted_date"]),
+            sibling_boundary or date.max,
+        )
         if identity.job_type == "RESET_WATERMARKS":
             await self.stage_reset_watermarks_job(
                 security_id=payload["security_id"],

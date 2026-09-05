@@ -17,7 +17,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     _quarantine_candidates,
     _reset_boundary_recovery_plan,
     decode_reprocessing_payload_text,
-    pending_replay_sibling_exists,
+    pending_replay_sibling_evidence,
     quarantine_pending_fx_pair,
     quarantine_pending_reset_security,
     replay_row_matches_identity,
@@ -253,12 +253,14 @@ async def test_pending_sibling_requires_exact_retained_identity(
     ]
     db.execute.return_value = result
 
-    assert await pending_replay_sibling_exists(
+    evidence = await pending_replay_sibling_evidence(
         db,
         job_id=41,
         job_type=job_type,
         payload=payload,
     )
+    assert evidence.exists is True
+    assert evidence.earliest_impacted_date is None
     scanned_statement, scanned_parameters = db.execute.await_args_list[0].args
     assert scanned_statement is statement
     assert scanned_parameters["job_id"] == 41
