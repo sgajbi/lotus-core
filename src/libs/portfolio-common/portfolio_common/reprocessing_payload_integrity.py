@@ -320,6 +320,9 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
             payload,
             payload->>'earliest_impacted_date' AS earliest_impacted_date,
             attempt_count,
+            correlation_id,
+            correlation_missing_reason,
+            alternate_lookup_key,
             created_at
         FROM reprocessing_jobs
         WHERE status = 'PENDING'
@@ -347,7 +350,19 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
             min(earliest_impacted_date::date) OVER (
                 PARTITION BY security_id
             ) AS min_impacted_date,
-            max(attempt_count) OVER (PARTITION BY security_id) AS max_attempt_count
+            max(attempt_count) OVER (PARTITION BY security_id) AS max_attempt_count,
+            first_value(correlation_id) OVER (
+                PARTITION BY security_id
+                ORDER BY (correlation_id IS NULL), earliest_impacted_date::date, created_at, id
+            ) AS retained_correlation_id,
+            first_value(correlation_missing_reason) OVER (
+                PARTITION BY security_id
+                ORDER BY (correlation_id IS NULL), earliest_impacted_date::date, created_at, id
+            ) AS retained_correlation_missing_reason,
+            first_value(alternate_lookup_key) OVER (
+                PARTITION BY security_id
+                ORDER BY (correlation_id IS NULL), earliest_impacted_date::date, created_at, id
+            ) AS retained_alternate_lookup_key
         FROM valid_candidates
     ),
     keepers AS (
@@ -362,6 +377,15 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
                 to_jsonb(r.min_impacted_date::text)
             )::json,
             attempt_count = r.max_attempt_count,
+            correlation_id = r.retained_correlation_id,
+            correlation_missing_reason = CASE
+                WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                ELSE r.retained_correlation_missing_reason
+            END,
+            alternate_lookup_key = CASE
+                WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                ELSE r.retained_alternate_lookup_key
+            END,
             updated_at = now()
         FROM ranked r
         WHERE j.id = r.id
@@ -370,6 +394,15 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
               j.payload->>'security_id' IS DISTINCT FROM r.security_id
               OR (j.payload->>'earliest_impacted_date')::date <> r.min_impacted_date
               OR j.attempt_count <> r.max_attempt_count
+              OR j.correlation_id IS DISTINCT FROM r.retained_correlation_id
+              OR j.correlation_missing_reason IS DISTINCT FROM CASE
+                  WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                  ELSE r.retained_correlation_missing_reason
+              END
+              OR j.alternate_lookup_key IS DISTINCT FROM CASE
+                  WHEN r.retained_correlation_id IS NOT NULL THEN NULL
+                  ELSE r.retained_alternate_lookup_key
+              END
           )
         RETURNING j.id
     ),

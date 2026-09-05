@@ -124,7 +124,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                     "earliest_impacted_date": "2025-01-05",
                 },
                 status="PENDING",
-                correlation_id="corr-legacy-padded",
+                correlation_id=None,
                 attempt_count=1,
             ),
             ReprocessingJob(
@@ -288,8 +288,13 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     rows = (await async_db_session.execute(select(ReprocessingJob))).scalars().all()
     assert deleted_count == 1
     assert len(rows) == 18
-    canonical = next(row for row in rows if row.correlation_id == "corr-legacy-padded")
+    canonical = next(
+        row
+        for row in rows
+        if row.status == "PENDING" and row.payload.get("security_id") == "BOND-CANONICAL"
+    )
     assert canonical.attempt_count == 3
+    assert canonical.correlation_id == "corr-canonical"
     malformed = next(row for row in rows if row.correlation_id == "corr-python-invalid-date")
     padded_numeric_text = next(
         row for row in rows if row.correlation_id == "corr-padded-numeric-text"
@@ -1745,6 +1750,40 @@ async def test_find_and_claim_fx_job_recovers_canonical_payload_around_unbounded
         "content_hash": content_hash,
     }
     assert claimed[0].correlation_id == "corr-claim-fx"
+
+    await async_db_session.execute(
+        text(
+            """
+            UPDATE reprocessing_jobs
+            SET lease_expires_at = clock_timestamp() - interval '1 second'
+            WHERE id = :job_id
+            """
+        ),
+        {"job_id": claimed[0].id},
+    )
+    await async_db_session.commit()
+
+    recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        max_attempts=3
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert recovered_count == 1
+    assert [row.status for row in rows] == ["COMPLETE", "PENDING"]
+    assert rows[1].payload == claimed[0].payload
+    assert rows[1].correlation_id == "corr-claim-fx"
 
 
 async def test_reset_staging_coalesces_oversized_extension_through_safe_return(
