@@ -143,17 +143,44 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 {"processing_id": processing_id},
             )
 
+            operations = Operations(MigrationContext.configure(connection))
+            operations.drop_constraint(CONSTRAINT, "reprocessing_jobs", type_="check")
             jsonb_unrepresentable_source_id = _insert_job(
                 connection,
                 payload=(
                     '{"from_currency":"CHF","to_currency":"SGD",'
                     '"earliest_impacted_date":"2025-01-02",'
                     '"content_hash":"sha256:9999999999999999999999999999999999999999999999999999999999999999",'
-                    '"generated_at":"2025-01-07T08:00:00+00:00","note":"\\u0000"}'
+                    '"generated_at":"2025-01-07T08:00:00+00:00",'
+                    '"legacy_number":1e1000000}'
                 ),
-                status="FAILED",
+                status="PENDING",
                 correlation_id="corr-jsonb-unrepresentable",
-                failure_reason=CUTOVER_REASON,
+            )
+            invalid_payload_upgrade = connection.begin_nested()
+            with pytest.raises(DBAPIError, match="payload cannot be represented as jsonb"):
+                migration["upgrade"]()
+            invalid_payload_upgrade.rollback()
+            connection.execute(
+                text(
+                    """
+                    UPDATE reprocessing_jobs
+                    SET status = 'FAILED', failure_reason = :failure_reason
+                    WHERE id = :job_id
+                    """
+                ),
+                {
+                    "job_id": jsonb_unrepresentable_source_id,
+                    "failure_reason": CUTOVER_REASON,
+                },
+            )
+            operations.create_check_constraint(
+                CONSTRAINT,
+                "reprocessing_jobs",
+                migration["_active_payload_constraint"](
+                    migration["_OLD_FX_GENERATED_AT_TIMEZONE_PATTERN"],
+                    require_python_date_grammar=False,
+                ),
             )
             recovered_source_id = _insert_job(
                 connection,

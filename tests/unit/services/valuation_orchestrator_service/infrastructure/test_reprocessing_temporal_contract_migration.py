@@ -93,6 +93,17 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     assert "status = 'PROCESSING'" in cutover_guard
     assert "requires a drained PROCESSING queue" in cutover_guard
     assert cutover_guard.index("LOCK TABLE") < cutover_guard.index("status = 'PROCESSING'")
+    assert "invalid_active_payload_count" in cutover_guard
+    assert "status = 'PENDING'" in cutover_guard
+    assert "job_type IN ('RESET_FX_WATERMARKS', 'RESET_WATERMARKS')" in cutover_guard
+    assert "pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE" in cutover_guard
+    assert "pending row(s) whose payload" in cutover_guard
+    assert "cannot be represented as jsonb" in cutover_guard
+    assert "without rewriting source" in cutover_guard
+    assert "payload evidence, then retry the migration" in cutover_guard
+    assert cutover_guard.index("requires a drained PROCESSING queue") < cutover_guard.index(
+        "invalid_active_payload_count > 0"
+    )
     assert operations[1][:3] == (
         "drop",
         "ck_reprocessing_jobs_active_payload_valid",
