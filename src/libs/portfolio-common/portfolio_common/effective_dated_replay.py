@@ -82,15 +82,25 @@ def merge_replay_sibling_evidence(
         ),
     )
     source = identity
-    if identity.job_type == "RESET_WATERMARKS" and earliest_boundary < owned_boundary:
-        if earliest_sibling is None:  # pragma: no cover - implied by the comparison
-            raise AssertionError("earlier replay boundary requires sibling evidence")
-        source = replace(
-            identity,
-            correlation_id=earliest_sibling.correlation_id,
-            correlation_missing_reason=earliest_sibling.correlation_missing_reason,
-            alternate_lookup_key=earliest_sibling.alternate_lookup_key,
+    if identity.job_type == "RESET_WATERMARKS":
+        boundary_siblings = [
+            sibling
+            for sibling in evidence.siblings
+            if sibling.earliest_impacted_date == earliest_boundary
+        ]
+        lineage_sibling = next(
+            (sibling for sibling in boundary_siblings if sibling.correlation_id is not None),
+            earliest_sibling if earliest_boundary < owned_boundary else None,
         )
+        if lineage_sibling is not None and (
+            earliest_boundary < owned_boundary or identity.correlation_id is None
+        ):
+            source = replace(
+                identity,
+                correlation_id=lineage_sibling.correlation_id,
+                correlation_missing_reason=lineage_sibling.correlation_missing_reason,
+                alternate_lookup_key=lineage_sibling.alternate_lookup_key,
+            )
     elif identity.job_type == "RESET_FX_WATERMARKS":
         source = _latest_valid_fx_source(identity, evidence)
 

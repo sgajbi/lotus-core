@@ -10,7 +10,7 @@ from portfolio_common.reprocessing_payload_integrity import (
 )
 
 
-def _identity(job_type: str, payload: dict, *, attempt_count: int, correlation_id: str):
+def _identity(job_type: str, payload: dict, *, attempt_count: int, correlation_id: str | None):
     return validated_effective_dated_replay_identity(
         job_type=job_type,
         payload=payload,
@@ -25,7 +25,7 @@ def _sibling(
     payload: dict,
     *,
     attempt_count: int,
-    correlation_id: str,
+    correlation_id: str | None,
 ) -> RetainedReplaySibling:
     return RetainedReplaySibling(
         id=12,
@@ -132,3 +132,28 @@ def test_reset_sibling_merge_attributes_an_earlier_boundary_to_its_lineage() -> 
     assert merged.payload["earliest_impacted_date"] == "2025-01-03"
     assert merged.attempt_count == 3
     assert merged.correlation_id == "corr-sibling"
+
+
+def test_reset_sibling_merge_fills_missing_lineage_at_equal_boundary() -> None:
+    owned = _identity(
+        "RESET_WATERMARKS",
+        {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-03"},
+        attempt_count=2,
+        correlation_id=None,
+    )
+    sibling = _sibling(
+        {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-03"},
+        attempt_count=3,
+        correlation_id="corr-sibling",
+    )
+
+    merged = merge_replay_sibling_evidence(
+        owned,
+        PendingReplaySiblingEvidence((sibling,)),
+    )
+
+    assert merged.payload["earliest_impacted_date"] == "2025-01-03"
+    assert merged.attempt_count == 3
+    assert merged.correlation_id == "corr-sibling"
+    assert merged.correlation_missing_reason is None
+    assert merged.alternate_lookup_key is None
