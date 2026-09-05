@@ -4086,8 +4086,9 @@ Most relevant current governance:
      revalidation contribute a committed snapshot without a row lock, so requeue cannot block their
      lease renewal. Coalescing retains the
      maximum retry count and selects FX source/correlation lineage by the established
-     generated-at/content-hash ordering. Reset coalescing also fills missing owned correlation from
-     valid sibling lineage at the same authoritative boundary. When an unrelated extension prevents full JSON decoding,
+     generated-at/content-hash ordering. Reset coalescing uses valid sibling correlation at the
+     authoritative boundary, fills missing owned correlation at an equal boundary, and retains
+     known owned correlation when an earlier sibling has none. When an unrelated extension prevents full JSON decoding,
      required FX source fields are recovered lexically and revalidated before selection; the
      extension is never promoted. Legacy Reset duplicate normalization must retain the maximum
      retry count as well as the earliest boundary. Migration `c166b2c3d52d`
