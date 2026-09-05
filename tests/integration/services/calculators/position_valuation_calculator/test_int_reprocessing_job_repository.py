@@ -2464,7 +2464,9 @@ async def test_owned_fx_requeue_preserves_already_processing_sibling_boundary(
             "payload": (
                 '{"from_currency":"USD","to_currency":"CHF",'
                 '"earliest_impacted_date":"2025-01-03",'
-                f'"generated_at":"2025-01-08T00:00:00+00:00","content_hash":"{sibling_hash}"}}'
+                f'"generated_at":"2025-01-08T00:00:00+00:00",'
+                f'"content_hash":"{sibling_hash}",'
+                '"extension":1e999999999999999999999999999999999999999}'
             )
         },
     )

@@ -287,6 +287,39 @@ async def test_pending_sibling_requires_exact_retained_identity(
 
 
 @pytest.mark.asyncio
+async def test_pending_fx_sibling_recovers_source_fields_around_unrepresentable_extension() -> None:
+    payload_json = (
+        '{"from_currency":"USD","to_currency":"CHF",'
+        '"earliest_impacted_date":"2025-01-03",'
+        '"generated_at":"2025-01-08T00:00:00+00:00",'
+        '"content_hash":"sha256:newer",'
+        '"extension":1e999999999999999999999999999999999999999}'
+    )
+    db = AsyncMock()
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = [
+        {"id": 8, "payload_json": payload_json, "status": "PROCESSING", "attempt_count": 5}
+    ]
+    db.execute.return_value = result
+
+    evidence = await pending_replay_sibling_evidence(
+        db,
+        job_id=41,
+        job_type="RESET_FX_WATERMARKS",
+        payload={"from_currency": "USD", "to_currency": "CHF"},
+    )
+
+    assert evidence.siblings[0].payload == {
+        "from_currency": "USD",
+        "to_currency": "CHF",
+        "earliest_impacted_date": "2025-01-03",
+        "generated_at": "2025-01-08T00:00:00+00:00",
+        "content_hash": "sha256:newer",
+    }
+    assert evidence.max_attempt_count == 5
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("quarantine", "identity", "candidate_statement"),
     [
