@@ -96,6 +96,7 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
     )
     corrected_constraint = operations[2][3]
     assert "[T ]" in corrected_constraint
+    assert "([01][0-9]|2[0-3])" in corrected_constraint
     assert ".+" not in corrected_constraint
     model_constraint = next(
         item

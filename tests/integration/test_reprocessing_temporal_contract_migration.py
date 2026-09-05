@@ -199,6 +199,17 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 status="PENDING",
                 correlation_id="corr-python-invalid-timestamp",
             )
+            python_invalid_hour_id = _insert_job(
+                connection,
+                payload=(
+                    '{"from_currency":"SEK","to_currency":"SGD",'
+                    '"earliest_impacted_date":"2025-01-02",'
+                    '"content_hash":"sha256:fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe",'
+                    '"generated_at":"2025-01-09T24:00:00+08:00"}'
+                ),
+                status="PENDING",
+                correlation_id="corr-python-invalid-hour",
+            )
             pending_id = _insert_job(
                 connection,
                 payload=(
@@ -227,6 +238,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         :standalone_source_id,
                         :python_invalid_pending_id,
                         :python_invalid_timestamp_id,
+                        :python_invalid_hour_id,
                         :pending_id
                     )
                        OR (
@@ -244,6 +256,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                         "standalone_source_id": standalone_source_id,
                         "python_invalid_pending_id": python_invalid_pending_id,
                         "python_invalid_timestamp_id": python_invalid_timestamp_id,
+                        "python_invalid_hour_id": python_invalid_hour_id,
                         "pending_id": pending_id,
                     },
                 )
@@ -267,6 +280,10 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                 by_id[python_invalid_timestamp_id]["failure_reason"]
                 == PYTHON_TEMPORAL_QUARANTINE_REASON
             )
+            assert by_id[python_invalid_hour_id]["status"] == "FAILED"
+            assert (
+                by_id[python_invalid_hour_id]["failure_reason"] == PYTHON_TEMPORAL_QUARANTINE_REASON
+            )
             assert by_id[pending_id]["status"] == "PENDING"
             assert by_id[pending_id]["payload"]["earliest_impacted_date"] == "2025-01-04"
             assert by_id[pending_id]["payload"]["generated_at"] == "2025-01-08T00:00:00+00:00"
@@ -282,6 +299,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     standalone_source_id,
                     python_invalid_pending_id,
                     python_invalid_timestamp_id,
+                    python_invalid_hour_id,
                     pending_id,
                 }
             )
@@ -332,6 +350,21 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     correlation_id="corr-double-separator-active",
                 )
             doubled_separator.rollback()
+
+            invalid_hour = connection.begin_nested()
+            with pytest.raises(IntegrityError):
+                _insert_job(
+                    connection,
+                    payload=(
+                        '{"from_currency":"NOK","to_currency":"SGD",'
+                        '"earliest_impacted_date":"2025-01-09",'
+                        '"content_hash":"sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",'
+                        '"generated_at":"2025-01-09T24:00:00+08:00"}'
+                    ),
+                    status="PENDING",
+                    correlation_id="corr-invalid-hour-active",
+                )
+            invalid_hour.rollback()
 
             blocked_downgrade = connection.begin_nested()
             with pytest.raises(DBAPIError, match="unsupported by the predecessor constraint"):
