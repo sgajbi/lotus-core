@@ -15,6 +15,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
     SNAPSHOT_SCANNED_REPLAY_CANDIDATES,
+    PendingReplaySiblingEvidence,
     _postgres_json_identity_text,
     _quarantine_candidates,
     _reset_boundary_recovery_plan,
@@ -30,6 +31,8 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
     for statement in (PENDING_FX_REPLAY_CANDIDATES, PENDING_RESET_REPLAY_CANDIDATES):
         sql = str(statement)
         assert "payload::text AS payload_json" in sql
+        assert "attempt_count" in sql
+        assert "correlation_id" in sql
         assert "\n        payload," not in sql
         assert "AS payload_representable" in sql
         assert "THEN TRUE" in sql
@@ -404,7 +407,7 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     update_result = MagicMock()
     db.execute.side_effect = [scan_result, lock_result, update_result]
 
-    earliest = await quarantine(
+    recovered = await quarantine(
         db,
         **identity,
         validate=lambda payload: payload,
@@ -415,7 +418,10 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
         ),
     )
 
-    assert earliest == date(2026, 9, 1)
+    if isinstance(recovered, PendingReplaySiblingEvidence):
+        assert recovered.earliest_sibling.earliest_impacted_date == date(2026, 9, 1)
+    else:
+        assert recovered == date(2026, 9, 1)
     assert db.execute.await_args_list[0].args[0] is candidate_statement
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
     assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
@@ -432,6 +438,8 @@ async def test_fx_quarantine_recovers_date_before_unbounded_numeric_extension() 
     retained = (
         '{"from_currency":"USD","to_currency":"CHF",'
         '"earliest_impacted_date":"2026-09-01",'
+        '"generated_at":"2026-09-02T00:00:00+00:00",'
+        '"content_hash":"sha256:retained",'
         f'"extension":{unbounded_number}}}'
     )
     row = {
@@ -441,6 +449,10 @@ async def test_fx_quarantine_recovers_date_before_unbounded_numeric_extension() 
         "payload_representable": False,
         "earliest_date_representable": False,
         "generated_at_representable": False,
+        "attempt_count": 5,
+        "correlation_id": "corr-retained",
+        "correlation_missing_reason": None,
+        "alternate_lookup_key": None,
     }
     db = AsyncMock()
     scan_result = MagicMock()
@@ -449,7 +461,7 @@ async def test_fx_quarantine_recovers_date_before_unbounded_numeric_extension() 
     lock_result.mappings.return_value.all.return_value = [row]
     db.execute.side_effect = [scan_result, lock_result, MagicMock()]
 
-    earliest = await quarantine_pending_fx_pair(
+    evidence = await quarantine_pending_fx_pair(
         db,
         from_currency="USD",
         to_currency="CHF",
@@ -457,7 +469,16 @@ async def test_fx_quarantine_recovers_date_before_unbounded_numeric_extension() 
         parse_earliest_date=lambda payload: None,
     )
 
-    assert earliest == date(2026, 9, 1)
+    assert evidence.earliest_sibling.earliest_impacted_date == date(2026, 9, 1)
+    assert evidence.earliest_sibling.payload == {
+        "from_currency": "USD",
+        "to_currency": "CHF",
+        "earliest_impacted_date": "2026-09-01",
+        "generated_at": "2026-09-02T00:00:00+00:00",
+        "content_hash": "sha256:retained",
+    }
+    assert evidence.max_attempt_count == 5
+    assert evidence.earliest_sibling.correlation_id == "corr-retained"
 
 
 @pytest.mark.asyncio
@@ -497,7 +518,7 @@ async def test_quarantine_does_not_row_lock_valid_processing_work() -> None:
 async def test_quarantine_leaves_valid_replay_work_unchanged() -> None:
     db = AsyncMock()
 
-    earliest = await _quarantine_candidates(
+    evidence = await _quarantine_candidates(
         db,
         rows=[
             {
@@ -512,9 +533,10 @@ async def test_quarantine_leaves_valid_replay_work_unchanged() -> None:
         validate=lambda payload: payload,
         parse_earliest_date=lambda payload: None,
         failure_reason="invalid retained replay",
+        job_type="RESET_WATERMARKS",
     )
 
-    assert earliest is None
+    assert evidence.exists is False
     db.execute.assert_not_awaited()
 
 
@@ -522,7 +544,7 @@ async def test_quarantine_leaves_valid_replay_work_unchanged() -> None:
 async def test_quarantine_preserves_processing_boundary_without_stealing_lease() -> None:
     db = AsyncMock()
 
-    earliest = await _quarantine_candidates(
+    evidence = await _quarantine_candidates(
         db,
         rows=[
             {
@@ -544,9 +566,10 @@ async def test_quarantine_preserves_processing_boundary_without_stealing_lease()
             else None
         ),
         failure_reason="invalid retained replay",
+        job_type="RESET_WATERMARKS",
     )
 
-    assert earliest == date(2025, 1, 3)
+    assert evidence.earliest_sibling.earliest_impacted_date == date(2025, 1, 3)
     db.execute.assert_not_awaited()
 
 
@@ -564,16 +587,17 @@ async def test_quarantine_updates_large_malformed_cohort_in_bounded_statements()
         for job_id in range(1, 1_002)
     ]
 
-    earliest = await _quarantine_candidates(
+    evidence = await _quarantine_candidates(
         db,
         rows=rows,
         required_validity_fields=("payload_representable", "earliest_date_representable"),
         validate=lambda payload: payload,
         parse_earliest_date=lambda payload: None,
         failure_reason="invalid retained replay",
+        job_type="RESET_WATERMARKS",
     )
 
-    assert earliest is None
+    assert evidence.earliest_sibling is None
     assert db.execute.await_count == 2
     chunk_sizes = []
     for call in db.execute.await_args_list:
