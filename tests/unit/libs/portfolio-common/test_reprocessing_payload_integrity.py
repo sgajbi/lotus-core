@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.reprocessing_payload_integrity import (
-    LOCK_PENDING_REPLAY_CANDIDATES,
+    LOCK_SCANNED_REPLAY_CANDIDATES,
     PENDING_FX_REPLAY_CANDIDATES,
     PENDING_FX_REPLAY_SIBLING,
     PENDING_RESET_REPLAY_CANDIDATES,
@@ -35,6 +35,7 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
         guarded_predicate = sql.rindex("WHEN pg_input_is_valid(payload::text, 'jsonb')")
         assert guarded_predicate < sql.rindex("btrim(payload->>")
         assert "FOR UPDATE" not in sql
+        assert "status IN ('PENDING', 'PROCESSING')" in sql
 
     for statement in (PENDING_FX_REPLAY_SIBLING, PENDING_RESET_REPLAY_SIBLING):
         sql = str(statement)
@@ -46,9 +47,11 @@ def test_replay_identity_queries_guard_jsonb_invalid_rows_before_extraction() ->
             "btrim(payload->>"
         )
         assert "FOR UPDATE" not in sql
+        assert "status IN ('PENDING', 'PROCESSING')" in sql
 
-    lock_sql = str(LOCK_PENDING_REPLAY_CANDIDATES)
+    lock_sql = str(LOCK_SCANNED_REPLAY_CANDIDATES)
     assert "id = ANY(CAST(:candidate_ids AS BIGINT[]))" in lock_sql
+    assert "status = 'PENDING'" not in lock_sql
     assert "FOR UPDATE" in lock_sql
     assert lock_sql.index("pg_input_is_valid(payload::text, 'jsonb')") < lock_sql.index(
         "json_typeof"
@@ -212,8 +215,8 @@ async def test_pending_sibling_requires_exact_retained_identity(
     db = AsyncMock()
     result = MagicMock()
     result.mappings.return_value.all.return_value = [
-        {"id": 7, "payload_json": "{}"},
-        {"id": 8, "payload_json": json.dumps(identity)},
+        {"id": 7, "payload_json": "{}", "status": "PENDING"},
+        {"id": 8, "payload_json": json.dumps(identity), "status": "PENDING"},
     ]
     db.execute.return_value = result
 
@@ -228,7 +231,7 @@ async def test_pending_sibling_requires_exact_retained_identity(
     assert scanned_parameters["job_id"] == 41
     assert all(scanned_parameters[field] == value for field, value in identity.items())
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
-    assert locked_statement is LOCK_PENDING_REPLAY_CANDIDATES
+    assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters == {"candidate_ids": [8], "job_type": job_type}
 
 
@@ -262,16 +265,17 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     }
     scan_result = MagicMock()
     scan_result.mappings.return_value.all.return_value = [
-        {"id": 7, "payload_json": json.dumps(retained), **validity},
+        {"id": 7, "payload_json": json.dumps(retained), "status": "PENDING", **validity},
         {
             "id": 8,
             "payload_json": '{"security_id":"OTHER"}',
+            "status": "PENDING",
             **validity,
         },
     ]
     lock_result = MagicMock()
     lock_result.mappings.return_value.all.return_value = [
-        {"id": 7, "payload_json": json.dumps(retained), **validity}
+        {"id": 7, "payload_json": json.dumps(retained), "status": "PENDING", **validity}
     ]
     update_result = MagicMock()
     db.execute.side_effect = [scan_result, lock_result, update_result]
@@ -290,7 +294,7 @@ async def test_quarantine_preserves_only_matching_malformed_replay_boundary(
     assert earliest == date(2026, 9, 1)
     assert db.execute.await_args_list[0].args[0] is candidate_statement
     locked_statement, locked_parameters = db.execute.await_args_list[1].args
-    assert locked_statement is LOCK_PENDING_REPLAY_CANDIDATES
+    assert locked_statement is LOCK_SCANNED_REPLAY_CANDIDATES
     assert locked_parameters["candidate_ids"] == [7]
     assert db.execute.await_count == 3
     update_parameters = db.execute.await_args_list[2].args[0].compile().params
@@ -307,6 +311,7 @@ async def test_quarantine_leaves_valid_replay_work_unchanged() -> None:
             {
                 "id": 9,
                 "payload_json": '{"security_id":"BOND-1"}',
+                "status": "PENDING",
                 "payload_representable": True,
                 "earliest_date_representable": True,
             }
@@ -322,12 +327,45 @@ async def test_quarantine_leaves_valid_replay_work_unchanged() -> None:
 
 
 @pytest.mark.asyncio
+async def test_quarantine_preserves_processing_boundary_without_stealing_lease() -> None:
+    db = AsyncMock()
+
+    earliest = await _quarantine_candidates(
+        db,
+        rows=[
+            {
+                "id": 9,
+                "payload_json": (
+                    '{"security_id":"BOND-1","earliest_impacted_date":"2025-01-03",'
+                    '"extension":1e1000000}'
+                ),
+                "status": "PROCESSING",
+                "payload_representable": False,
+                "earliest_date_representable": False,
+            }
+        ],
+        required_validity_fields=("payload_representable", "earliest_date_representable"),
+        validate=lambda payload: payload,
+        parse_earliest_date=lambda payload: (
+            date.fromisoformat(payload["earliest_impacted_date"])
+            if isinstance(payload, dict)
+            else None
+        ),
+        failure_reason="invalid retained replay",
+    )
+
+    assert earliest == date(2025, 1, 3)
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_quarantine_updates_large_malformed_cohort_in_bounded_statements() -> None:
     db = AsyncMock()
     rows = [
         {
             "id": job_id,
             "payload_json": "{}",
+            "status": "PENDING",
             "payload_representable": False,
             "earliest_date_representable": False,
         }

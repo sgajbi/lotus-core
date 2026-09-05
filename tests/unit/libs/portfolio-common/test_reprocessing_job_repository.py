@@ -870,6 +870,7 @@ async def test_stage_pending_fx_revaluation_preserves_quarantined_earliest_date(
             "payload_json": (
                 '{"from_currency":"USD","to_currency":"SGD","earliest_impacted_date":"2026-04-06"}'
             ),
+            "status": "PENDING",
             "payload_representable": True,
             "earliest_date_representable": True,
             "generated_at_representable": False,
@@ -917,6 +918,7 @@ async def test_stage_reset_watermarks_preserves_quarantined_earliest_date(
                 "earliest_impacted_date": "2025-W01-2",
             },
             "payload_json": ('{"security_id":"BOND-1","earliest_impacted_date":"2025-W01-2"}'),
+            "status": "PENDING",
             "payload_representable": True,
             "earliest_date_representable": False,
         }

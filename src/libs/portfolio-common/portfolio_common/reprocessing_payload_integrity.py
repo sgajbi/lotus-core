@@ -314,7 +314,7 @@ async def normalize_pending_reset_watermarks_duplicates(db: AsyncSession) -> int
             {"identity_key": identity_key},
         )
     if recovery_plans:
-        locked_rows = await _lock_pending_replay_rows(
+        locked_rows = await _lock_scanned_replay_rows(
             db,
             candidate_ids=[int(plan["id"]) for plan in recovery_plans],
             job_type="RESET_WATERMARKS",
@@ -344,6 +344,7 @@ PENDING_FX_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload::text AS payload_json,
+        status,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -361,7 +362,7 @@ PENDING_FX_REPLAY_CANDIDATES = text(
         END AS generated_at_representable
     FROM reprocessing_jobs
     WHERE job_type = 'RESET_FX_WATERMARKS'
-      AND status = 'PENDING'
+      AND status IN ('PENDING', 'PROCESSING')
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
@@ -379,6 +380,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
     SELECT
         id,
         payload::text AS payload_json,
+        status,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -388,7 +390,7 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
         END AS earliest_date_representable
     FROM reprocessing_jobs
     WHERE job_type = 'RESET_WATERMARKS'
-      AND status = 'PENDING'
+      AND status IN ('PENDING', 'PROCESSING')
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
@@ -401,11 +403,11 @@ PENDING_RESET_REPLAY_CANDIDATES = text(
 
 PENDING_RESET_REPLAY_SIBLING = text(
     """
-    SELECT id, payload::text AS payload_json
+    SELECT id, payload::text AS payload_json, status
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_WATERMARKS'
-      AND status = 'PENDING'
+      AND status IN ('PENDING', 'PROCESSING')
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'security_id', :trim_chars) = :security_id
@@ -418,11 +420,12 @@ PENDING_FX_REPLAY_SIBLING = text(
     """
     SELECT
         id,
-        payload::text AS payload_json
+        payload::text AS payload_json,
+        status
     FROM reprocessing_jobs
     WHERE id <> :job_id
       AND job_type = 'RESET_FX_WATERMARKS'
-      AND status = 'PENDING'
+      AND status IN ('PENDING', 'PROCESSING')
       AND CASE
           WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN TRUE
           ELSE btrim(payload->>'from_currency', :trim_chars) = :from_currency
@@ -432,7 +435,7 @@ PENDING_FX_REPLAY_SIBLING = text(
     """
 )
 
-LOCK_PENDING_REPLAY_CANDIDATES = text(
+LOCK_SCANNED_REPLAY_CANDIDATES = text(
     """
     SELECT
         id,
@@ -441,6 +444,7 @@ LOCK_PENDING_REPLAY_CANDIDATES = text(
         correlation_id,
         correlation_missing_reason,
         alternate_lookup_key,
+        status,
         pg_input_is_valid(payload::text, 'jsonb') AS payload_representable,
         CASE
             WHEN pg_input_is_valid(payload::text, 'jsonb') IS NOT TRUE THEN FALSE
@@ -459,7 +463,6 @@ LOCK_PENDING_REPLAY_CANDIDATES = text(
     FROM reprocessing_jobs
     WHERE id = ANY(CAST(:candidate_ids AS BIGINT[]))
       AND job_type = :job_type
-      AND status = 'PENDING'
     ORDER BY id
     FOR UPDATE
     """
@@ -469,7 +472,7 @@ LOCK_PENDING_REPLAY_CANDIDATES = text(
 )
 
 
-async def _lock_pending_replay_rows(
+async def _lock_scanned_replay_rows(
     db: AsyncSession,
     *,
     candidate_ids: list[int],
@@ -480,7 +483,7 @@ async def _lock_pending_replay_rows(
     return (
         (
             await db.execute(
-                LOCK_PENDING_REPLAY_CANDIDATES,
+                LOCK_SCANNED_REPLAY_CANDIDATES,
                 {"candidate_ids": sorted(set(candidate_ids)), "job_type": job_type},
             )
         )
@@ -503,7 +506,7 @@ def replay_row_matches_identity(
     )
 
 
-async def _lock_matching_pending_replay_rows(
+async def _lock_matching_replay_rows(
     db: AsyncSession,
     *,
     scanned_rows: list[Mapping[str, Any]],
@@ -521,7 +524,7 @@ async def _lock_matching_pending_replay_rows(
     )
     if not candidate_ids:
         return []
-    locked_rows = await _lock_pending_replay_rows(
+    locked_rows = await _lock_scanned_replay_rows(
         db,
         candidate_ids=candidate_ids,
         job_type=job_type,
@@ -651,7 +654,7 @@ async def pending_replay_sibling_exists(
         .all()
     )
     return bool(
-        await _lock_matching_pending_replay_rows(
+        await _lock_matching_replay_rows(
             db,
             scanned_rows=scanned_rows,
             job_type=job_type,
@@ -679,7 +682,7 @@ async def quarantine_pending_fx_pair(
         },
     )
     expected_identity = {"from_currency": from_currency, "to_currency": to_currency}
-    rows = await _lock_matching_pending_replay_rows(
+    rows = await _lock_matching_replay_rows(
         db,
         scanned_rows=result.mappings().all(),
         job_type="RESET_FX_WATERMARKS",
@@ -716,7 +719,7 @@ async def quarantine_pending_reset_security(
         },
     )
     expected_identity = {"security_id": security_id}
-    rows = await _lock_matching_pending_replay_rows(
+    rows = await _lock_matching_replay_rows(
         db,
         scanned_rows=result.mappings().all(),
         job_type="RESET_WATERMARKS",
@@ -752,9 +755,10 @@ async def _quarantine_candidates(
                 raise ValueError("replay payload is not PostgreSQL-representable")
             validate(payload)
         except (TypeError, ValueError):
-            malformed_ids.append(int(row["id"]))
             if (earliest_date := parse_earliest_date(payload)) is not None:
                 known_earliest_dates.append(earliest_date)
+            if row["status"] == "PENDING":
+                malformed_ids.append(int(row["id"]))
 
     await _mark_reprocessing_jobs_failed(
         db,
@@ -785,7 +789,10 @@ async def _mark_reprocessing_jobs_failed(
     ):
         await db.execute(
             update(ReprocessingJob)
-            .where(ReprocessingJob.id.in_(job_id_chunk))
+            .where(
+                ReprocessingJob.id.in_(job_id_chunk),
+                ReprocessingJob.status == "PENDING",
+            )
             .values(
                 status="FAILED",
                 failure_reason=failure_reason,
