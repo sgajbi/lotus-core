@@ -1,5 +1,14 @@
 # Codebase Review Ledger
 
+CR-1721 Tenant-scoped transaction event fences (2026-09-07, fixed-local candidate): #798 tranche B
+showed that admitted tenant authority was dropped before Kafka publication and `processed_events`
+enforced transaction physical and semantic keys globally. Transaction events now require the
+admitted tenant; persistence verifies portfolio ownership; processing and cashflow claims use the
+same tenant dimension; migration c167 backfills transaction families and creates separate
+tenant/global partial unique indexes while failing closed on ambiguous upgrade or downgrade.
+Global market-data fences remain global, and later #798 durable/outbox/replay slices remain open.
+Evidence: [CR-1721-TENANT-SCOPED-TRANSACTION-EVENT-FENCES.md](./codebase-reviews/CR-1721-TENANT-SCOPED-TRANSACTION-EVENT-FENCES.md).
+
 CR-1720 HoldingsAsOf valuation-currency lineage (2026-09-04, fixed-local candidate): issue #997
 showed that a selected snapshot with absent or partial persisted valuation currencies could still
 be eligible for `COMPLETE`, because missing pair evidence was treated like proof that FX was not
