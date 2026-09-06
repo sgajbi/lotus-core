@@ -325,18 +325,22 @@ class ReprocessingJobRepository:
                     THEN COALESCE(
                         :correlation_id,
                         CASE
-                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            WHEN lower(
+                                btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                            ) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                             THEN NULL
-                            ELSE btrim(reprocessing_jobs.correlation_id)
+                            ELSE btrim(reprocessing_jobs.correlation_id, :trim_chars)
                         END
                     )
                     ELSE COALESCE(
                         CASE
-                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            WHEN lower(
+                                btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                            ) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                             THEN NULL
-                            ELSE btrim(reprocessing_jobs.correlation_id)
+                            ELSE btrim(reprocessing_jobs.correlation_id, :trim_chars)
                         END,
                         :correlation_id
                     )
@@ -345,10 +349,12 @@ class ReprocessingJobRepository:
                     WHEN COALESCE(
                         :correlation_id,
                         CASE
-                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            WHEN lower(
+                                btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                            ) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                             THEN NULL
-                            ELSE btrim(reprocessing_jobs.correlation_id)
+                            ELSE btrim(reprocessing_jobs.correlation_id, :trim_chars)
                         END
                     ) IS NOT NULL
                     THEN NULL
@@ -368,10 +374,12 @@ class ReprocessingJobRepository:
                     WHEN COALESCE(
                         :correlation_id,
                         CASE
-                            WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                              OR btrim(reprocessing_jobs.correlation_id) = ''
+                            WHEN lower(
+                                btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                            ) = '<not-set>'
+                              OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                             THEN NULL
-                            ELSE btrim(reprocessing_jobs.correlation_id)
+                            ELSE btrim(reprocessing_jobs.correlation_id, :trim_chars)
                         END
                     ) IS NOT NULL
                     THEN NULL
@@ -399,6 +407,7 @@ class ReprocessingJobRepository:
             bindparam("correlation_id", type_=String()),
             bindparam("correlation_missing_reason", type_=String()),
             bindparam("alternate_lookup_key", type_=String()),
+            bindparam("trim_chars", value=_REPLAY_TEXT_TRIM_CHARS),
         )
         await self.db.execute(
             statement,

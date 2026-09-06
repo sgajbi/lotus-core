@@ -16,6 +16,7 @@ from portfolio_common.reprocessing_payload_integrity import (
     PENDING_RESET_REPLAY_SIBLING,
     REPLAY_TEXT_TRIM_CHARS,
     SNAPSHOT_SCANNED_REPLAY_CANDIDATES,
+    UPSERT_PENDING_RESET_WATERMARKS,
     PendingReplaySiblingEvidence,
     _postgres_json_identity_text,
     _quarantine_candidates,
@@ -82,6 +83,14 @@ def test_reset_normalization_preserves_maximum_retry_history() -> None:
     assert "first_value(correlation_id) OVER" in sql
     assert "correlation_id = r.retained_correlation_id" in sql
     assert "j.correlation_id IS DISTINCT FROM r.retained_correlation_id" in sql
+
+
+def test_reset_conflict_sql_uses_governed_lineage_whitespace() -> None:
+    for statement in (UPSERT_PENDING_RESET_WATERMARKS, NORMALIZE_PENDING_RESET_WATERMARKS):
+        sql = str(statement)
+        assert "btrim(reprocessing_jobs.correlation_id)" not in sql
+        assert "btrim(correlation_id)" not in sql
+        assert ":trim_chars" in sql
 
 
 @pytest.mark.asyncio

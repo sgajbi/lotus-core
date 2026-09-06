@@ -191,7 +191,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     '"generated_at":"2025-01-07T08:00:00-07"}'
                 ),
                 status="FAILED",
-                correlation_id="  <NOT-SET>  ",
+                correlation_id="corr-recovered-source",
                 failure_reason=CUTOVER_REASON,
             )
             standalone_source_id = _insert_job(
@@ -261,7 +261,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
                     '"generated_at":"2025-01-08T00:00:00+00:00"}'
                 ),
                 status="PENDING",
-                correlation_id="corr-existing-pending",
+                correlation_id="\t<NOT-SET>\u00a0",
             )
             lowercase_timestamp_id = _insert_job(
                 connection,
@@ -353,7 +353,7 @@ def test_upgrade_recovers_bare_hour_work_and_coalesces_existing_sibling(db_engin
             assert by_id[pending_id]["status"] == "PENDING"
             assert by_id[pending_id]["payload"]["earliest_impacted_date"] == "2025-01-04"
             assert by_id[pending_id]["payload"]["generated_at"] == "2025-01-08T00:00:00+00:00"
-            assert by_id[pending_id]["correlation_id"] == "corr-existing-pending"
+            assert by_id[pending_id]["correlation_id"] == "corr-recovered-source"
             assert by_id[lowercase_timestamp_id]["status"] == "PENDING"
             assert (
                 by_id[lowercase_timestamp_id]["payload"]["generated_at"]
