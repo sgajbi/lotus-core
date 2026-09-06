@@ -100,7 +100,7 @@ quality-openapi-spectral-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/openapi_spectral_gate.py --output-dir $(OPENAPI_ARTIFACT_DIR)
 
 documentation-text-integrity-guard:
-	$(REPOSITORY_PYTHON) scripts/quality/documentation_text_integrity_guard.py
+	python scripts/development/repository_python.py scripts/quality/documentation_text_integrity_guard.py
 
 quality-wiki-docs-gate: documentation-text-integrity-guard
 	$(REPOSITORY_PYTHON) scripts/quality/wiki_validation_guard.py
