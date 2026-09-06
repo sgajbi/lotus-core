@@ -2,11 +2,13 @@
 
 CR-1721 Tenant-scoped transaction event fences (2026-09-07, fixed-local candidate): #798 tranche B
 showed that admitted tenant authority was dropped before Kafka publication and `processed_events`
-enforced transaction physical and semantic keys globally. Transaction events now require the
-admitted tenant; persistence verifies portfolio ownership; processing and cashflow claims use the
-same tenant dimension; migration c167 backfills transaction families and creates separate
+enforced transaction physical and semantic keys globally. Updated consumers now derive tenant from
+durable portfolio ownership before any transaction claim or mutation, while v1 payloads remain
+wire-compatible; an asserted tenant must match that owner. Processing and cashflow claims use the
+same tenant dimension, and migration c167 backfills transaction families and creates separate
 tenant/global partial unique indexes while failing closed on ambiguous upgrade or downgrade.
-Global market-data fences remain global, and later #798 durable/outbox/replay slices remain open.
+Global market-data and existing portfolio v1 fences remain global, and later #798 durable/outbox/
+replay and versioned producer slices remain open.
 Evidence: [CR-1721-TENANT-SCOPED-TRANSACTION-EVENT-FENCES.md](./codebase-reviews/CR-1721-TENANT-SCOPED-TRANSACTION-EVENT-FENCES.md).
 
 CR-1720 HoldingsAsOf valuation-currency lineage (2026-09-04, fixed-local candidate): issue #997
