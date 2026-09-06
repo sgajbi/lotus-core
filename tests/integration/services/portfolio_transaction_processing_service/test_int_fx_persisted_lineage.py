@@ -36,6 +36,7 @@ def _fx_transaction(*, source_system: str | None) -> BookedTransaction:
     return BookedTransaction(
         transaction_id="FX-LINEAGE-REPROCESS-001",
         portfolio_id="PORT-FX-LINEAGE-001",
+        tenant_id="tenant-test",
         instrument_id="FXC-EURUSD-LINEAGE-001",
         security_id="FXC-EURUSD-LINEAGE-001",
         transaction_date=datetime(2026, 4, 1, 9, 0, tzinfo=UTC),

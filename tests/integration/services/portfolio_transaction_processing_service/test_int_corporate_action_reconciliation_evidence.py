@@ -42,6 +42,7 @@ def _transaction(
     return BookedTransaction(
         transaction_id=transaction_id,
         portfolio_id="PORT-CA-MULTI-DEFECT-01",
+        tenant_id="tenant-test",
         instrument_id="SEC-CA-MULTI-DEFECT-01",
         security_id="SEC-CA-MULTI-DEFECT-01",
         transaction_date=datetime(2026, 8, 11, 9, 0, tzinfo=UTC),

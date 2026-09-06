@@ -1605,6 +1605,7 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_one_atomic_sta
     engine_transaction = EngineTransaction(
         transaction_id="BUY01",
         portfolio_id="PORT_COST_01",
+        tenant_id="tenant-test",
         instrument_id="SEC01",
         security_id="SEC01",
         transaction_type="BUY",
@@ -1644,6 +1645,7 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_one_atomic_sta
     assert isinstance(updated_transaction, BookedTransaction)
     assert updated_transaction is not db_transaction
     assert updated_transaction.net_cost == Decimal("1002")
+    assert updated_transaction.tenant_id == "tenant-test"
     db_session.execute.assert_awaited_once()
     persisted_statement = db_session.execute.await_args.args[0]
     statement_sql = str(persisted_statement)

@@ -30,6 +30,7 @@ def _redemption() -> BookedTransaction:
     return BookedTransaction(
         transaction_id="REDEMPTION-001",
         portfolio_id="PORTFOLIO-001",
+        tenant_id="tenant-test",
         instrument_id="BOND-001",
         security_id="BOND-001",
         transaction_date=datetime(2026, 4, 10),
@@ -61,6 +62,7 @@ def test_builds_linked_income_component_without_a_second_cash_leg() -> None:
 
     assert component is not None
     assert component.transaction_id == "REDEMPTION-001-ACCRUED-INTEREST"
+    assert component.tenant_id == "tenant-test"
     assert component.transaction_type == "INTEREST"
     assert component.component_type == REDEMPTION_ACCRUED_INTEREST_COMPONENT
     assert component.gross_transaction_amount == Decimal("25")

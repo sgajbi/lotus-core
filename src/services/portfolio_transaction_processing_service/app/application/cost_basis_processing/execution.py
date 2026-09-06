@@ -1,6 +1,7 @@
 """Execute prepared cost-basis and foreign-exchange transaction processing."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
@@ -113,6 +114,10 @@ class PreparedCostProcessingUseCase:
             )
             instrument_updates = ()
 
+        processed_transactions = tuple(
+            replace(transaction, tenant_id=prepared.transaction.tenant_id)
+            for transaction in processed_transactions
+        )
         return await coordinate_cost_processing_effects(
             processed_transactions=processed_transactions,
             instrument_updates=instrument_updates,

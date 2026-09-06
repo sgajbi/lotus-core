@@ -67,6 +67,7 @@ def build_generated_settlement_cash_leg(
     return BookedTransaction(
         transaction_id=f"{transaction.transaction_id}-CASHLEG",
         portfolio_id=transaction.portfolio_id,
+        tenant_id=transaction.tenant_id,
         instrument_id=cash_instrument_id,
         security_id=cash_instrument_id,
         transaction_date=settlement_at,

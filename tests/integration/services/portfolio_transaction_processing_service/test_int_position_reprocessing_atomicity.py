@@ -102,6 +102,7 @@ def _backdated_transaction() -> BookedTransaction:
     return BookedTransaction(
         transaction_id="TXN_ATOM_BACKDATED",
         portfolio_id=PORTFOLIO_ID,
+        tenant_id="tenant-test",
         instrument_id="ATS",
         security_id=SECURITY_ID,
         transaction_date=datetime(2025, 9, 5, 10, tzinfo=timezone.utc),

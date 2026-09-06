@@ -51,6 +51,7 @@ def _command(suffix: str) -> ProcessTransactionCommand:
         transaction=BookedTransaction(
             transaction_id=f"TX-UOW-{suffix}",
             portfolio_id=f"PB-UOW-{suffix}",
+            tenant_id="tenant-test",
             instrument_id="INST-UOW-001",
             security_id="SEC-UOW-001",
             transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
