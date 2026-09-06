@@ -107,6 +107,7 @@ async def test_search_portfolio_lookup_items_uses_bounded_repository_query(
     ):
         service = PortfolioService(AsyncMock(spec=AsyncSession))
         result = await service.search_portfolio_lookup_items(
+            tenant_context=TEST_TENANT_CONTEXT,
             client_id="CIF-1",
             booking_center_code="SG",
             q="PF",
@@ -118,6 +119,7 @@ async def test_search_portfolio_lookup_items_uses_bounded_repository_query(
         {"id": "PF_2", "label": "PF_2"},
     ]
     mock_portfolio_repo.search_portfolio_lookup_ids.assert_awaited_once_with(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         client_id="CIF-1",
         booking_center_code="SG",
         q="PF",
@@ -136,13 +138,21 @@ async def test_list_portfolio_currency_lookup_items_maps_codes(
         return_value=mock_portfolio_repo,
     ):
         service = PortfolioService(AsyncMock(spec=AsyncSession))
-        result = await service.list_currency_lookup_items(q="U", limit=10)
+        result = await service.list_currency_lookup_items(
+            tenant_context=TEST_TENANT_CONTEXT,
+            q="U",
+            limit=10,
+        )
 
     assert [item.model_dump() for item in result] == [
         {"id": "CHF", "label": "CHF"},
         {"id": "USD", "label": "USD"},
     ]
-    mock_portfolio_repo.list_currency_lookup_codes.assert_awaited_once_with(q="U", limit=10)
+    mock_portfolio_repo.list_currency_lookup_codes.assert_awaited_once_with(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
+        q="U",
+        limit=10,
+    )
     mock_portfolio_repo.get_portfolios.assert_not_awaited()
 
 

@@ -16,7 +16,7 @@ from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrume
 from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
 from src.services.query_service.app.dtos.price_dto import MarketPriceResponse
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -213,12 +213,14 @@ async def test_get_portfolio_lookups(async_test_client):
     response = await client.get("/lookups/portfolios")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "PF_1", "label": "PF_1"}]
-    mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
-        client_id=None,
-        booking_center_code=None,
-        q=None,
-        limit=500,
-    )
+    lookup_kwargs = dict(mock_portfolio_service.search_portfolio_lookup_items.await_args.kwargs)
+    assert lookup_kwargs.pop("tenant_context").tenant_id_text == TEST_TENANT_ID
+    assert lookup_kwargs == {
+        "client_id": None,
+        "booking_center_code": None,
+        "q": None,
+        "limit": 500,
+    }
     mock_portfolio_service.get_portfolios.assert_not_awaited()
 
 
@@ -231,12 +233,14 @@ async def test_get_portfolio_lookups_filters_query_and_limit(async_test_client):
     response = await client.get("/lookups/portfolios?client_id=CIF-9&q=PF_&limit=1")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "PF_1", "label": "PF_1"}]
-    mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
-        client_id="CIF-9",
-        booking_center_code=None,
-        q="PF_",
-        limit=1,
-    )
+    lookup_kwargs = dict(mock_portfolio_service.search_portfolio_lookup_items.await_args.kwargs)
+    assert lookup_kwargs.pop("tenant_context").tenant_id_text == TEST_TENANT_ID
+    assert lookup_kwargs == {
+        "client_id": "CIF-9",
+        "booking_center_code": None,
+        "q": "PF_",
+        "limit": 1,
+    }
     mock_portfolio_service.get_portfolios.assert_not_awaited()
 
 
@@ -288,7 +292,13 @@ async def test_get_currency_lookups(async_test_client):
         {"id": "EUR", "label": "EUR"},
         {"id": "USD", "label": "USD"},
     ]
-    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=500)
+    currency_call = mock_portfolio_service.list_currency_lookup_items.await_args
+    assert currency_call.kwargs["tenant_context"].tenant_id_text == TEST_TENANT_ID
+    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(
+        tenant_context=currency_call.kwargs["tenant_context"],
+        q=None,
+        limit=500,
+    )
     mock_instrument_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=500)
     mock_portfolio_service.get_portfolios.assert_not_awaited()
     mock_instrument_service.get_instruments.assert_not_awaited()
@@ -318,6 +328,15 @@ async def test_get_portfolio_lookups_unexpected_uses_global_500_envelope(async_t
     assert response.status_code == 500
     assert response.json()["error"] == "Internal Server Error"
     assert "correlation_id" in response.json()
+
+
+async def test_get_portfolio_lookups_requires_admitted_tenant(async_test_client):
+    client, _, _, _, mock_portfolio_service = async_test_client
+
+    response = await client.get("/lookups/portfolios", headers={"X-Tenant-Id": ""})
+
+    assert response.status_code == 401
+    mock_portfolio_service.search_portfolio_lookup_items.assert_not_awaited()
 
 
 async def test_get_instrument_lookups_unexpected_uses_global_500_envelope(async_test_client):

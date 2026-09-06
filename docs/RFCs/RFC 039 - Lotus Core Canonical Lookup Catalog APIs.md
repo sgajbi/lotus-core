@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-09-07 |
 | Owners | `query-service` lookup contracts |
 | Depends On | RFC 039 baseline, RFC 040 optimization/filter controls, RFC 041 invariant test gate |
 | Scope | Canonical selector catalogs for portfolios, instruments, currencies |
@@ -31,8 +31,8 @@ Original RFC 039 requested:
 Implemented:
 1. Endpoints exist under `/lookups/portfolios`, `/lookups/instruments`, and `/lookups/currencies`.
 2. Uniform `LookupResponse` contract with `items` list is returned.
-3. Portfolio and instrument lookups map canonical identifiers to user-facing selector labels.
-4. Currency lookup derives distinct uppercase codes from both portfolio base currencies and instrument reference data.
+3. Portfolio lookup IDs are restricted by the admitted tenant at the repository boundary; instrument lookups map shared reference identifiers to user-facing selector labels.
+4. Currency lookup derives distinct uppercase codes from tenant-owned portfolio base currencies and shared instrument reference data.
 5. Lookup routes are documented in OpenAPI and validated in integration tests.
 
 Evidence:
@@ -90,11 +90,13 @@ Aligned:
 
 ## Rollout and Backward Compatibility
 
-No runtime change introduced by this documentation retrofit.
+Tenant scoping preserves the response shape and filter vocabulary while intentionally narrowing
+portfolio-owned results to the admitted tenant. Consumers must not depend on foreign portfolio IDs
+or portfolio-derived currencies appearing in a selector response.
 
 ## Open Questions
 
-1. Should future entitlement-aware scoping live in these endpoints directly or in a policy-aware lookup adapter layer?
+None for the implemented selector contract. Broader portfolio entitlements beyond tenant ownership remain with their owning authorization programme.
 
 ## Next Actions
 

@@ -63,12 +63,14 @@ class PortfolioService:
     async def search_portfolio_lookup_items(
         self,
         *,
+        tenant_context: TenantContext,
         client_id: str | None = None,
         booking_center_code: str | None = None,
         q: str | None = None,
         limit: int,
     ) -> list[LookupItem]:
         portfolio_ids = await self.repo.search_portfolio_lookup_ids(
+            tenant_id=tenant_context.tenant_id,
             client_id=client_id,
             booking_center_code=booking_center_code,
             q=q,
@@ -79,10 +81,15 @@ class PortfolioService:
     async def list_currency_lookup_items(
         self,
         *,
+        tenant_context: TenantContext,
         q: str | None = None,
         limit: int,
     ) -> list[LookupItem]:
-        codes = await self.repo.list_currency_lookup_codes(q=q, limit=limit)
+        codes = await self.repo.list_currency_lookup_codes(
+            tenant_id=tenant_context.tenant_id,
+            q=q,
+            limit=limit,
+        )
         return [LookupItem(id=code, label=code) for code in codes]
 
     async def get_portfolio_by_id(

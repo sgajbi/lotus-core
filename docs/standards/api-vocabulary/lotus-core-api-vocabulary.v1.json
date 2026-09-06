@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-06T14:55:25.838658+00:00",
+  "generatedAt": "2026-09-06T16:05:17.547085+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -25042,7 +25042,7 @@
         "Lookup Catalogs"
       ],
       "summary": "Get portfolio selector catalog",
-      "description": "Returns portfolio selector options for lotus-gateway and UI portfolio selection workflows. Use this route for thin selector catalogs only; do not use it as a substitute for canonical portfolio detail or broader portfolio-state reads.",
+      "description": "Returns only portfolio selector options owned by the admitted X-Tenant-Id for lotus-gateway and UI portfolio selection workflows. Use this route for thin selector catalogs only; do not use it as a substitute for canonical portfolio detail or broader portfolio-state reads.",
       "naming": {
         "boundedContext": "lookup_catalogs",
         "canonicalTerms": [
@@ -25231,7 +25231,7 @@
         "Lookup Catalogs"
       ],
       "summary": "Get currency selector catalog",
-      "description": "Returns distinct currency selector options derived from portfolio base currencies and instrument currencies. Use this route for selector population only; do not use it as a substitute for FX-rate history or broader market-data contracts.",
+      "description": "Returns distinct currency selector options derived from portfolio base currencies owned by the admitted X-Tenant-Id and from shared instrument reference currencies. Use this route for selector population only; do not use it as a substitute for FX-rate history or broader market-data contracts.",
       "naming": {
         "boundedContext": "lookup_catalogs",
         "canonicalTerms": [
