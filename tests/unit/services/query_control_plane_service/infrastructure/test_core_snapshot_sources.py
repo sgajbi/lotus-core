@@ -130,7 +130,7 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
 
 
 @pytest.mark.asyncio
-async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None:
+async def test_maps_current_snapshot_position_with_independent_fact_and_state_epochs() -> None:
     portfolio_created_at = datetime(2026, 4, 9, 8, 0, tzinfo=UTC)
     portfolio_updated_at = datetime(2026, 4, 9, 9, 0, tzinfo=UTC)
     session = AsyncMock(spec=AsyncSession)
@@ -158,6 +158,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
                 _instrument(),
                 _state(),
                 "SEC_1",
+                4,
                 date(2026, 4, 10),
                 Decimal("975"),
                 Decimal("970"),
@@ -179,6 +180,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].cost_basis == Decimal("975")
     assert records[0].cost_basis_local == Decimal("970")
     assert records[0].epoch == 4
+    assert records[0].state_epoch == 4
     assert records[0].business_date == date(2026, 4, 9)
     assert records[0].portfolio_business_date == date(2026, 4, 10)
     assert records[0].valuation_status == "VALUED_STALE"
@@ -194,7 +196,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     sql = str(
         session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     ).lower()
-    assert "position_history.epoch = position_state.epoch" in sql
+    assert "position_history.epoch = position_state.epoch" not in sql
     assert "daily_position_snapshots.epoch" in sql
     assert "daily_position_snapshots.date <= '2026-04-10'" in sql
     assert "position_history.position_date" in sql
@@ -228,6 +230,7 @@ async def test_snapshot_read_fails_closed_for_incomplete_current_position_covera
         _instrument("SEC_1"),
         _state(),
         "SEC_1",
+        4,
         date(2026, 4, 10),
         Decimal("950"),
         Decimal("950"),
@@ -239,6 +242,7 @@ async def test_snapshot_read_fails_closed_for_incomplete_current_position_covera
         None if missing_source == "instrument" else _instrument("SEC_2"),
         _state(),
         "SEC_2",
+        4,
         date(2026, 4, 10),
         Decimal("500"),
         Decimal("500"),
@@ -262,6 +266,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     history = SimpleNamespace(
         position_date=date(2026, 4, 9),
         security_id="SEC_1",
+        epoch=5,
         quantity=Decimal("10"),
         cost_basis=Decimal("950"),
         cost_basis_local=Decimal("950"),
@@ -280,6 +285,8 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert records[0].market_value is None
     assert records[0].market_value_local is None
     assert records[0].cost_basis == Decimal("950")
+    assert records[0].epoch == 5
+    assert records[0].state_epoch == 4
     assert records[0].business_date == date(2026, 4, 9)
     assert records[0].portfolio_business_date == date(2026, 4, 9)
     assert records[0].valuation_status is None
@@ -295,7 +302,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     ).lower()
     assert "position_history.position_date <= '2026-04-10'" in sql
     assert "position_history.quantity != 0" in sql
-    assert "position_history.epoch = position_state.epoch" in sql
+    assert "position_history.epoch = position_state.epoch" not in sql
 
 
 @pytest.mark.asyncio
