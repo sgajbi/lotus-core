@@ -315,12 +315,15 @@ def setup_transaction_type_coverage_data(
             ]
         },
     )
-    e2e_api_client.poll_for_data(
-        f"/portfolios?portfolio_id={portfolio_id}",
-        lambda data: (
-            [portfolio["portfolio_id"] for portfolio in data.get("portfolios", [])]
-            == [portfolio_id]
-        ),
+    poll_db_until(
+        query="""
+            SELECT tenant_id
+            FROM portfolios
+            WHERE portfolio_id = :portfolio_id
+              AND tenant_id = :tenant_id
+        """,
+        params={"portfolio_id": portfolio_id, "tenant_id": e2e_api_client.tenant_id},
+        validation_func=lambda row: row is not None and row.tenant_id == e2e_api_client.tenant_id,
         fail_message=(
             "Tenant-owned transaction-coverage portfolio did not become durable "
             "before transaction admission."
