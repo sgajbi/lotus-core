@@ -229,6 +229,14 @@ Primary operational tables include:
 These tables are part of the supported operational contract. Replay, support, lineage, and
 reconciliation behavior is not incidental implementation detail in `lotus-core`.
 
+`processed_events` separates tenant-owned transaction fences from deliberately global event
+families. Transaction persistence, combined transaction processing, and cashflow fences require a
+normalized tenant and enforce physical and semantic uniqueness within that tenant. Global price and
+FX fences retain null tenant attribution and their own partial unique keys. The tenant-fence
+migration derives existing transaction ownership only from the persisted portfolio and stops when
+any row is unattributable; rollback also stops when cross-tenant keys cannot safely return to the
+former global constraint.
+
 ## Model rules that matter
 
 1. New temporal semantics must follow
