@@ -34,6 +34,30 @@ def _reset_replay_identity():
     )
 
 
+async def test_reset_coalescing_forwards_attributable_missing_lineage() -> None:
+    repository = ReprocessingJobRepository(db=AsyncMock(spec=AsyncSession))
+    identity = _validated_effective_dated_replay_identity(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-01-05"},
+        attempt_count=3,
+        correlation_id=None,
+        correlation_missing_reason="source_correlation_absent",
+        alternate_lookup_key="source-event:reset-001",
+    )
+
+    with patch.object(repository, "stage_reset_watermarks_job", new=AsyncMock()) as stage:
+        await repository._coalesce_pending_replay(identity)
+
+    stage.assert_awaited_once_with(
+        security_id="S1",
+        earliest_impacted_date=date(2025, 1, 5),
+        correlation_id=None,
+        correlation_missing_reason="source_correlation_absent",
+        alternate_lookup_key="source-event:reset-001",
+        attempt_count=3,
+    )
+
+
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
     return AsyncMock(spec=AsyncSession)

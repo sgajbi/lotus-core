@@ -492,6 +492,8 @@ class ReprocessingJobRepository:
                     security_id=str(payload["security_id"]),
                     earliest_impacted_date=date.fromisoformat(payload["earliest_impacted_date"]),
                     correlation_id=correlation_id,
+                    correlation_missing_reason=diagnostics.correlation_missing_reason,
+                    alternate_lookup_key=diagnostics.alternate_lookup_key,
                     attempt_count=attempt_count,
                 )
             ).job
@@ -518,6 +520,8 @@ class ReprocessingJobRepository:
         security_id: str,
         earliest_impacted_date: date,
         correlation_id: str | None,
+        correlation_missing_reason: str | None = None,
+        alternate_lookup_key: str | None = None,
         attempt_count: int = 0,
     ) -> ResetWatermarksStageResult:
         """Create or coalesce one pending reset job without committing the caller's UoW.
@@ -545,14 +549,22 @@ class ReprocessingJobRepository:
             correlation_id=correlation_id,
         )
         correlation_id = diagnostics.correlation_id
+        if correlation_id is None:
+            correlation_missing_reason = (
+                correlation_missing_reason or diagnostics.correlation_missing_reason
+            )
+            alternate_lookup_key = alternate_lookup_key or diagnostics.alternate_lookup_key
+        else:
+            correlation_missing_reason = None
+            alternate_lookup_key = None
         identity = _merge_replay_sibling_evidence(
             _validated_effective_dated_replay_identity(
                 job_type="RESET_WATERMARKS",
                 payload=payload,
                 attempt_count=attempt_count,
                 correlation_id=correlation_id,
-                correlation_missing_reason=diagnostics.correlation_missing_reason,
-                alternate_lookup_key=diagnostics.alternate_lookup_key,
+                correlation_missing_reason=correlation_missing_reason,
+                alternate_lookup_key=alternate_lookup_key,
             ),
             quarantined_evidence,
         )
@@ -1089,6 +1101,8 @@ class ReprocessingJobRepository:
                 security_id=payload["security_id"],
                 earliest_impacted_date=earliest_impacted_date,
                 correlation_id=identity.correlation_id,
+                correlation_missing_reason=identity.correlation_missing_reason,
+                alternate_lookup_key=identity.alternate_lookup_key,
                 attempt_count=identity.attempt_count,
             )
             return
