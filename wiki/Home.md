@@ -1,7 +1,7 @@
 # Home
 
-`lotus-core` is the authoritative portfolio, booking, account, holding, and transaction domain
-platform for Lotus.
+`lotus-core` is the portfolio and transaction foundation for Lotus: the authoritative system of
+record for portfolio, account, transaction, position, valuation, cashflow, and historical facts.
 
 This wiki is the operator and onboarding map for the repo. It summarizes current implementation
 truth and links to deeper docs; it is not a substitute for repo-native validation evidence.
