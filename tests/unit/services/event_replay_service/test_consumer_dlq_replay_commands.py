@@ -432,6 +432,12 @@ async def test_consumer_dlq_replay_publish_failure_records_only_source_safe_reas
         "message": safe_reason,
         "replay_audit_id": "audit-failed",
     }
+    replay_payload_dispatcher.replay_payload.assert_awaited_once_with(
+        endpoint=context.endpoint,
+        payload=context.request_payload,
+        idempotency_key=context.idempotency_key,
+        tenant_id=TENANT_ID,
+    )
     _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
     assert audit_kwargs["replay_reason"] == safe_reason
     assert "credential" not in str(audit_kwargs)

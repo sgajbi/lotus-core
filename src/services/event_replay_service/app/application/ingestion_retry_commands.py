@@ -355,6 +355,7 @@ class IngestionRetryCommandService:
                 endpoint=context.endpoint,
                 payload=replay_payload,
                 idempotency_key=context.idempotency_key,
+                tenant_id=tenant_id,
                 replay_payload_dispatcher=self.replay_payload_dispatcher,
             )
         except Exception as exc:
@@ -601,6 +602,7 @@ async def _replay_job_payload(
     endpoint: str,
     payload: dict[str, Any],
     idempotency_key: str | None,
+    tenant_id: str,
     replay_payload_dispatcher: ReplayPayloadDispatcher,
 ) -> None:
     with ingestion_job_scope(job_id):
@@ -608,6 +610,7 @@ async def _replay_job_payload(
             endpoint=endpoint,
             payload=payload,
             idempotency_key=idempotency_key,
+            tenant_id=tenant_id,
         )
 
 
