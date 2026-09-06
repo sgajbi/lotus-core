@@ -31,6 +31,7 @@ def _row_state(
         cost_basis=None,
         cost_basis_local=None,
         epoch=epoch or 0,
+        state_epoch=epoch or 0,
         source_created_at=row_created_at,
         source_updated_at=row_updated_at,
         state_created_at=state_created_at,

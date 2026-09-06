@@ -49,6 +49,7 @@ class CoreSnapshotPositionSource:
     cost_basis: Decimal | None
     cost_basis_local: Decimal | None
     epoch: int
+    state_epoch: int | None
     source_created_at: datetime | None
     source_updated_at: datetime | None
     state_created_at: datetime | None
