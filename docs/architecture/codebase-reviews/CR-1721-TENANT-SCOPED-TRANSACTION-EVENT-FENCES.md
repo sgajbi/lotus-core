@@ -1,8 +1,8 @@
 # CR-1721 Tenant-Scoped Transaction Event Fences
 
-Date: 2026-09-07  
-Issue: #798 tranche B  
-Status: Fixed-local candidate
+- Date: 2026-09-07
+- Issue: #798 tranche B
+- Status: Fixed-local candidate
 
 ## Invariant
 
