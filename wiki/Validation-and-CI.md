@@ -411,6 +411,7 @@ used by release enforcement and does not replace protected PR or exact-main proo
 - generated API route catalog coverage
 - README/wiki front-door synchronization
 - wiki source publication readiness
+- forbidden control-byte rejection across every tracked Markdown document
 - aggregate, changed-code, and critical-path coverage reporting
 - architecture boundaries
 - image provenance, release supply-chain, and runtime version metadata
@@ -430,9 +431,10 @@ used by release enforcement and does not replace protected PR or exact-main proo
   [generated API route catalog](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-route-catalog.v1.json), and the deep
   architecture index before changing code or docs
 - wiki docs gate failure:
-  update repo-local `wiki/` source first, keep `_Sidebar.md` aligned with every publishable page,
-  and run the optional published-wiki parity check only against a generated or cloned publication
-  target
+  inspect the named file and byte offset first; repair corrupted identifiers from implementation
+  evidence, then update repo-local `wiki/` source when the failure is wiki-specific. Keep
+  `_Sidebar.md` aligned with every publishable page and run the optional published-wiki parity check
+  only against a generated or cloned publication target
 - security-control coverage failure:
   update `contracts/security/security-control-coverage.v1.json` and the app bootstrap together;
   do not add a matrix entry that claims live ingress, IAM, or WAF evidence without separate runtime
