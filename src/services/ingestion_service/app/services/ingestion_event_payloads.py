@@ -25,9 +25,8 @@ def transaction_event_payload(
     *,
     tenant_id: str,
 ) -> RawIngestionEventPayload:
-    payload = transaction.model_dump()
-    payload["tenant_id"] = TenantId(tenant_id).value
-    return payload
+    _ = TenantId(tenant_id)
+    return transaction.model_dump()
 
 
 def instrument_event_payload(instrument: Instrument) -> RawIngestionEventPayload:

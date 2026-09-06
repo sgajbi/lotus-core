@@ -28,6 +28,10 @@ from ...application import (
     TransactionProcessingIntent,
     TransactionProcessingRejected,
 )
+from ...application.transaction_tenant_authority import (
+    TransactionTenantAuthorityPort,
+    TransactionTenantAuthorityUnavailable,
+)
 from .transaction_event_mapper import map_transaction_event
 
 logger = logging.getLogger(__name__)
@@ -52,6 +56,7 @@ class TransactionProcessingConsumer(BaseConsumer):
         *,
         use_case: ProcessTransactionUseCase,
         route_corporate_action_child: RouteCorporateActionChildArrivalUseCase,
+        tenant_authority: TransactionTenantAuthorityPort,
     ) -> None:
         super().__init__(
             bootstrap_servers=bootstrap_servers,
@@ -66,6 +71,7 @@ class TransactionProcessingConsumer(BaseConsumer):
         )
         self._use_case = use_case
         self._route_corporate_action_child = route_corporate_action_child
+        self._tenant_authority = tenant_authority
 
     async def process_message(self, msg: Message) -> None:
         event_id = _message_event_id(msg)
@@ -75,6 +81,14 @@ class TransactionProcessingConsumer(BaseConsumer):
             fallback_correlation_id=data.get("correlation_id"),
         ) as correlation_id:
             event = TransactionEvent.model_validate(data)
+            try:
+                tenant_id = await self._tenant_authority.resolve(
+                    portfolio_id=event.portfolio_id,
+                    asserted_tenant_id=event.tenant_id,
+                )
+            except TransactionTenantAuthorityUnavailable as exc:
+                raise RetryableConsumerError(str(exc)) from exc
+            event = event.model_copy(update={"tenant_id": tenant_id})
             processing_intent = _message_processing_intent(msg)
             command = map_transaction_event(
                 event,

@@ -166,3 +166,12 @@ def test_transaction_event_accepts_governed_envelope_metadata() -> None:
     assert event.schema_version == "1.0.0"
     assert event.correlation_id == "corr-transaction-envelope"
     assert event.traceparent == "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+
+
+def test_transaction_event_accepts_v1_payload_for_source_owned_tenant_enrichment() -> None:
+    payload = _txn("TXN_V1", datetime(2026, 1, 10, 8, 0, tzinfo=UTC), None).model_dump()
+    payload.pop("tenant_id")
+
+    event = TransactionEvent.model_validate(payload)
+
+    assert event.tenant_id is None

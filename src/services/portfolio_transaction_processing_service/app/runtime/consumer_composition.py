@@ -11,6 +11,7 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
+from portfolio_common.db import get_async_session_factory
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_consumer_execution import (
     KafkaConsumerExecutionProfile,
@@ -28,6 +29,7 @@ from ..application.corporate_action_manifest_ingestion import (
 from ..application.fixed_income_book_cost import (
     HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
+from ..application.transaction_tenant_authority import TransactionTenantAuthorityPort
 from ..delivery.kafka import (
     BookedTransactionReplayRequestConsumer,
     CorporateActionManifestConsumer,
@@ -35,6 +37,7 @@ from ..delivery.kafka import (
     FixedIncomeBookCostCorrectionReplayConsumer,
     TransactionProcessingConsumer,
 )
+from ..infrastructure.transaction_tenant_authority import SqlAlchemyTransactionTenantAuthority
 from .dependency_composition import (
     build_corporate_action_child_arrival_use_case,
     build_corporate_action_manifest_use_case,
@@ -78,6 +81,7 @@ def build_transaction_processing_consumers(
     ),
     corporate_action_manifest_consumer_factory: ConsumerFactory = CorporateActionManifestConsumer,
     execution_profile_loader: ExecutionProfileLoader = load_kafka_consumer_execution_profile,
+    tenant_authority: TransactionTenantAuthorityPort | None = None,
 ) -> tuple[BaseConsumer, BaseConsumer, BaseConsumer, BaseConsumer, BaseConsumer]:
     """Compose transaction, replay, source-authority, and manifest consumers."""
     process_use_case = (
@@ -122,6 +126,11 @@ def build_transaction_processing_consumers(
         service_prefix="TXNPROC",
         use_case=process_use_case,
         route_corporate_action_child=corporate_action_arrival,
+        tenant_authority=(
+            tenant_authority
+            if tenant_authority is not None
+            else SqlAlchemyTransactionTenantAuthority(get_async_session_factory())
+        ),
         execution_profile=live_execution_profile,
         retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
     )

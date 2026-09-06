@@ -273,7 +273,7 @@ class InstrumentEvent(CoreEventModel):
 class TransactionEvent(CoreEventModel):
     transaction_id: str
     portfolio_id: str
-    tenant_id: str
+    tenant_id: Optional[str] = None
     instrument_id: str
     security_id: str
     transaction_date: datetime
@@ -383,7 +383,9 @@ class TransactionEvent(CoreEventModel):
 
     @field_validator("tenant_id", mode="before")
     @classmethod
-    def _normalize_tenant_id(cls, value: object) -> str:
+    def _normalize_tenant_id(cls, value: object) -> str | None:
+        if value is None:
+            return None
         if not isinstance(value, str):
             raise TypeError("tenant_id must be a string")
         return TenantId(value).value

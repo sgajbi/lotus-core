@@ -9,7 +9,7 @@ from typing import Any, TypeVar
 from confluent_kafka import Message
 from pydantic import BaseModel
 
-from .events import GOVERNED_EVENT_SCHEMA_VERSION
+from .events import GOVERNED_EVENT_SCHEMA_VERSION, TransactionEvent
 
 EventT = TypeVar("EventT", bound=BaseModel)
 DEFAULT_ACCEPTED_EVENT_SCHEMA_VERSIONS = (GOVERNED_EVENT_SCHEMA_VERSION,)
@@ -84,6 +84,12 @@ def validate_kafka_event_payload(
 def outbox_event_payload(event: BaseModel) -> dict[str, Any]:
     """Serialize a governed event model for outbox payload persistence."""
     return event.model_dump(mode="json")
+
+
+def transaction_event_v1_payload(event: TransactionEvent) -> dict[str, Any]:
+    """Serialize the v1 transaction contract without the staged tenant extension."""
+
+    return event.model_dump(mode="json", exclude={"tenant_id"})
 
 
 def _require_expected_event_type(data: dict[str, Any], expected_event_type: str) -> None:
