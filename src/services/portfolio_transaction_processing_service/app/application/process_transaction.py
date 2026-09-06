@@ -146,6 +146,7 @@ class ProcessTransactionUseCase:
                 TransactionProcessingOperation.IDEMPOTENCY
             ) as idempotency_observation:
                 idempotency_outcome = await unit_of_work.idempotency.claim(
+                    tenant_id=transaction.tenant_id or "",
                     event_id=metadata.event_id,
                     portfolio_id=transaction.portfolio_id,
                     semantic_key=identity.semantic_key,
@@ -159,6 +160,7 @@ class ProcessTransactionUseCase:
                 ):
                     identity = build_transaction_correction_identity(transaction)
                     idempotency_outcome = await unit_of_work.idempotency.claim(
+                        tenant_id=transaction.tenant_id or "",
                         event_id=metadata.event_id,
                         portfolio_id=transaction.portfolio_id,
                         semantic_key=identity.semantic_key,
@@ -177,6 +179,7 @@ class ProcessTransactionUseCase:
                 )
                 repair_delivery_claimed = repair_delivery_required and (
                     await unit_of_work.idempotency.claim_repair_delivery(
+                        tenant_id=transaction.tenant_id or "",
                         event_id=metadata.repair_delivery_id or metadata.event_id,
                         portfolio_id=transaction.portfolio_id,
                         correlation_id=metadata.correlation_id,

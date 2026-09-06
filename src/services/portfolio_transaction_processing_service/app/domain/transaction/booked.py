@@ -130,6 +130,7 @@ class BookedTransaction:
     synthetic_flow_source: str | None = None
     created_at: datetime | None = None
     epoch: int | None = None
+    tenant_id: str | None = None
     calculation_lineage: CalculationLineage | None = None
     lot_restatement: dict[str, Decimal] | None = None
     source_lot_order_quantity: Decimal | None = None

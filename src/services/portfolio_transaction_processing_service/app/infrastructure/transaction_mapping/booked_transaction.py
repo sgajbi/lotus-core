@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import fields
+from typing import Any
 
 from portfolio_common.events import GOVERNED_EVENT_ENVELOPE_FIELDS, TransactionEvent
 
@@ -38,6 +40,21 @@ def to_transaction_event(
 def to_booked_transaction(event: TransactionEvent) -> BookedTransaction:
     payload = event.model_dump(mode="python")
     domain_values = {name: payload[name] for name in _EVENT_DOMAIN_FIELD_NAMES}
+    for field_name in _TUPLE_FIELDS:
+        value = domain_values[field_name]
+        domain_values[field_name] = tuple(value) if value is not None else None
+    return BookedTransaction(**domain_values)
+
+
+def to_booked_transaction_from_record(record: object) -> BookedTransaction:
+    """Map an internal persisted row without pretending it is a transport event."""
+
+    def record_value(name: str) -> Any:
+        if isinstance(record, Mapping):
+            return record.get(name)
+        return getattr(record, name, None)
+
+    domain_values = {name: record_value(name) for name in _EVENT_DOMAIN_FIELD_NAMES}
     for field_name in _TUPLE_FIELDS:
         value = domain_values[field_name]
         domain_values[field_name] = tuple(value) if value is not None else None

@@ -7,7 +7,6 @@ from portfolio_common.database_models import (
     FinancialReconciliationRun,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.events import TransactionEvent
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +17,7 @@ from ...ports import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationKey,
 )
-from ..transaction_mapping.booked_transaction import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction_from_record
 
 CORPORATE_ACTION_RECONCILIATION_RESOLUTION_ACTOR = "corporate-action-reconciliation"
 
@@ -44,7 +43,7 @@ class SqlAlchemyCorporateActionReconciliationRepository:
             )
         )
         rows = (await self._session.execute(stmt)).scalars().all()
-        return tuple(to_booked_transaction(TransactionEvent.model_validate(row)) for row in rows)
+        return tuple(to_booked_transaction_from_record(row) for row in rows)
 
     async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
         run = asdict(evidence.run)

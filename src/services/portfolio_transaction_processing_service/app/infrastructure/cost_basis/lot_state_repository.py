@@ -9,7 +9,6 @@ from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     calculation_lineage_from_payload,
 )
-from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.utils import async_timed
 from sqlalchemy import func, select
@@ -24,7 +23,7 @@ from ...domain.cost_basis.state_lineage import (
     build_cost_basis_state_lineage,
 )
 from ...ports import OpenLotCheckpointRecord
-from ..transaction_mapping.booked_transaction import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction_from_record
 from .lot_state_lineage import lot_state_lineage_output_from_row
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 
@@ -221,7 +220,7 @@ class SqlAlchemyCostBasisLotRepository:
         transaction: DBTransaction,
     ) -> OpenLotCheckpointRecord:
         return OpenLotCheckpointRecord(
-            transaction=to_booked_transaction(TransactionEvent.model_validate(transaction)),
+            transaction=to_booked_transaction_from_record(transaction),
             original_quantity=lot.original_quantity,
             quantity=lot.open_quantity,
             cost_local=lot.lot_cost_local,
