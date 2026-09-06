@@ -479,7 +479,7 @@ async def test_core_snapshot_fails_closed_for_fact_state_epoch_mismatch(
     assert response.freshness_status == "UNAVAILABLE"
 
 
-async def test_core_snapshot_fails_closed_while_position_state_is_reprocessing(
+async def test_core_snapshot_lifecycle_fences_reprocessing_and_restores_replacement_valuation(
     mock_dependencies,
 ) -> None:
     position_repo, _, _, _, _, _ = mock_dependencies
@@ -503,6 +503,32 @@ async def test_core_snapshot_fails_closed_while_position_state_is_reprocessing(
     assert response.valuation_context.effective_as_of_date == date(2026, 2, 27)
     assert response.valuation_context.supportability == "UNAVAILABLE"
     assert response.valuation_context.reason_code == "POSITION_STATE_NOT_CURRENT"
+
+    replacement_timestamp = datetime(2026, 2, 27, 11, tzinfo=UTC)
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        replace(
+            source,
+            state_status="CURRENT",
+            source_created_at=replacement_timestamp,
+            source_updated_at=replacement_timestamp,
+            state_updated_at=replacement_timestamp,
+        )
+    ]
+
+    replacement = await _service(mock_dependencies).get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert replacement.reconciliation_status == COMPLETE
+    assert replacement.data_quality_status == COMPLETE
+    assert replacement.source_evidence_current is True
+    assert replacement.freshness_status == "CURRENT"
+    assert replacement.valuation_context.supportability == "READY"
+    assert replacement.valuation_context.reason_code == "SOURCE_EVIDENCE_READY"
 
 
 @pytest.mark.parametrize(
