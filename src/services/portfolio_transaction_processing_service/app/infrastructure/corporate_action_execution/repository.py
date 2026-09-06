@@ -11,6 +11,7 @@ from portfolio_common.database_models import (
     CorporateActionExecutionMemberRecord,
     CorporateActionExecutionReleaseRecord,
     CorporateActionReadinessEvaluationRecord,
+    Portfolio,
 )
 from portfolio_common.database_models import Transaction as TransactionRecord
 from sqlalchemy import case, func, insert, literal, or_, select, text, update
@@ -197,17 +198,21 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             raise LostCorporateActionExecutionLeaseError(
                 "corporate-action release lease ownership was lost before payload load"
             )
-        persisted = await self._session.scalar(
-            select(TransactionRecord).where(
-                TransactionRecord.transaction_id == claim.next_member.transaction_id
+        persisted = (
+            await self._session.execute(
+                select(TransactionRecord, Portfolio.tenant_id)
+                .join(Portfolio, Portfolio.portfolio_id == TransactionRecord.portfolio_id)
+                .where(TransactionRecord.transaction_id == claim.next_member.transaction_id)
             )
-        )
+        ).one_or_none()
         if persisted is None:
             raise CorporateActionExecutionPayloadAuthorityError(
-                "corporate-action release transaction payload is unavailable"
+                "corporate-action release transaction payload or portfolio authority is unavailable"
             )
+        transaction_record, tenant_id = persisted
         transaction = replace(
-            to_booked_transaction_from_record(persisted),
+            to_booked_transaction_from_record(transaction_record),
+            tenant_id=cast(str, tenant_id),
             epoch=claim.next_member.transaction_epoch,
         )
         identity = build_transaction_semantic_identity(transaction)
