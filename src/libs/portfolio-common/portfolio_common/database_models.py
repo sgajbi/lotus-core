@@ -35,6 +35,7 @@ from .domain.portfolio_party_roles import (
 )
 from .financial_numeric import ExactNumeric
 from .ingestion_job_schema import ingestion_job_table_args
+from .processed_event_schema import processed_event_table_args
 from .source_lifecycle_predicates import (
     BENCHMARK_DEFINITION_ACTIVE,
     CLIENT_INCOME_NEEDS_ACTIVE,
@@ -4436,50 +4437,9 @@ class ProcessedEvent(Base):
     payload_fingerprint = Column(String, nullable=True)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        CheckConstraint(
-            "(service_name NOT IN ('persistence-transactions', "
-            "'portfolio-transaction-processing', 'cashflow-calculator') "
-            "OR tenant_id IS NOT NULL) AND (tenant_id IS NULL OR "
-            "(tenant_id = btrim(tenant_id) AND tenant_id <> '' "
-            "AND char_length(tenant_id) <= 128))",
-            name="ck_processed_events_tenant_authority",
-        ),
-        Index(
-            "uq_processed_events_tenant_event_service",
-            "tenant_id",
-            "event_id",
-            "service_name",
-            unique=True,
-            postgresql_where=tenant_id.isnot(None),
-            sqlite_where=tenant_id.isnot(None),
-        ),
-        Index(
-            "uq_processed_events_global_event_service",
-            "event_id",
-            "service_name",
-            unique=True,
-            postgresql_where=tenant_id.is_(None),
-            sqlite_where=tenant_id.is_(None),
-        ),
-        Index("ix_processed_events_alternate_lookup_key", "alternate_lookup_key"),
-        Index(
-            "uq_processed_events_tenant_service_semantic_key",
-            "tenant_id",
-            "service_name",
-            "semantic_key",
-            unique=True,
-            postgresql_where=tenant_id.isnot(None) & semantic_key.isnot(None),
-            sqlite_where=tenant_id.isnot(None) & semantic_key.isnot(None),
-        ),
-        Index(
-            "uq_processed_events_global_service_semantic_key",
-            "service_name",
-            "semantic_key",
-            unique=True,
-            postgresql_where=tenant_id.is_(None) & semantic_key.isnot(None),
-            sqlite_where=tenant_id.is_(None) & semantic_key.isnot(None),
-        ),
+    __table_args__ = processed_event_table_args(
+        tenant_id=tenant_id,
+        semantic_key=semantic_key,
     )
 
 
