@@ -13,6 +13,7 @@ from .logging_utils import normalize_lineage_value
 TRANSACTION_PROCESSING_INTENT_HEADER = "lotus-transaction-processing-intent"
 TRANSACTION_PROCESSING_REPAIR_VALUE = b"repair"
 TRANSACTION_REPAIR_DELIVERY_ID_HEADER = "lotus-transaction-repair-delivery-id"
+TRANSACTION_REPLAY_SOURCE_FIELD_NAMES = tuple(TransactionEvent.model_fields)
 
 
 class ReprocessingReplayError(RuntimeError):

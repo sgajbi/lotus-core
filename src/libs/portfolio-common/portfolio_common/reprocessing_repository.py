@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import Portfolio
 from .database_models import Transaction as DBTransaction
-from .events import TransactionEvent
 from .ingestion_lineage import ingestion_job_id_var, normalize_ingestion_job_id
 from .kafka_utils import KafkaProducer
 from .logging_utils import correlation_id_var, normalize_lineage_value
@@ -18,6 +17,7 @@ from .reprocessing_replay import (
     TransactionReplayMessage,
     TransactionReplayPublisher,
     TransactionReplayReader,
+    TRANSACTION_REPLAY_SOURCE_FIELD_NAMES,
     ordered_unique_transaction_ids,
     plan_transaction_replay,
     publish_transaction_replay_plan,
@@ -141,7 +141,7 @@ def _transactions_to_replay_stmt(ordered_transaction_ids: list[str]) -> Any:
         select(
             *(
                 DBTransaction.__table__.columns[field_name]
-                for field_name in TransactionEvent.model_fields
+                for field_name in TRANSACTION_REPLAY_SOURCE_FIELD_NAMES
                 if field_name in DBTransaction.__table__.columns
             ),
             Portfolio.tenant_id.label("tenant_id"),
