@@ -121,6 +121,8 @@ verifies:
 - DPM portfolio-universe candidates return the governed three-candidate source scenario and prove
   full continuation-token paging through terminal page exhaustion; the complete READY response
   must carry a non-placeholder `sha256:` `content_hash` with an identical `source_digest`
+- the final Core snapshot reports `COMPLETE` reconciliation and data quality, current source
+  evidence and freshness, and `READY` valuation supportability for the governed as-of date
 - gateway performance summary resolves with benchmark-linked content
 - core analytics reference `performance_end_date` is at or after the seed end date and represents
   a complete calculable performance horizon across portfolio and position analytics source
