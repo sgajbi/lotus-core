@@ -122,7 +122,9 @@ verifies:
   full continuation-token paging through terminal page exhaustion; the complete READY response
   must carry a non-placeholder `sha256:` `content_hash` with an identical `source_digest`
 - the final Core snapshot reports `COMPLETE` reconciliation and data quality, current source
-  evidence and freshness, and `READY` valuation supportability for the governed as-of date
+  evidence and freshness, and `READY` valuation supportability for the governed as-of date; every
+  selected position-state key must be `CURRENT`, because an active `REPROCESSING` key returns
+  `POSITION_STATE_NOT_CURRENT` and keeps valuation supportability unavailable
 - gateway performance summary resolves with benchmark-linked content
 - core analytics reference `performance_end_date` is at or after the seed end date and represents
   a complete calculable performance horizon across portfolio and position analytics source

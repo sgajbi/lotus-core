@@ -28,6 +28,7 @@ def _row(
     portfolio_fact_updated_at: datetime | None = None,
     state_updated_at: datetime | None = None,
     state_epoch: int | None = None,
+    state_status: str = "CURRENT",
 ) -> CoreSnapshotPositionSource:
     portfolio_timestamp = portfolio_fact_updated_at or updated_at
     return CoreSnapshotPositionSource(
@@ -40,6 +41,7 @@ def _row(
         cost_basis_local=None,
         epoch=epoch,
         state_epoch=epoch if state_epoch is None else state_epoch,
+        state_status=state_status,
         source_created_at=updated_at - timedelta(hours=1),
         source_updated_at=updated_at,
         state_created_at=None,
@@ -211,6 +213,9 @@ def test_core_snapshot_source_hash_is_order_independent_and_value_sensitive() ->
     )
     assert core_snapshot_source_content_hash([first]) != core_snapshot_source_content_hash(
         [_row(valuation_fx_rate=Decimal("1.35"))]
+    )
+    assert core_snapshot_source_content_hash([first]) != core_snapshot_source_content_hash(
+        [_row(state_status="REPROCESSING")]
     )
 
 

@@ -76,6 +76,7 @@ def _source(row: SimpleNamespace, instrument: CoreSnapshotInstrument) -> CoreSna
         cost_basis_local=getattr(row, "cost_basis_local", None),
         epoch=1,
         state_epoch=1,
+        state_status="CURRENT",
         source_created_at=None,
         source_updated_at=None,
         state_created_at=None,

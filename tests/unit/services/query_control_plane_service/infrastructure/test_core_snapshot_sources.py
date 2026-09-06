@@ -49,9 +49,10 @@ def _instrument(security_id: str = " SEC_1 ") -> SimpleNamespace:
     )
 
 
-def _state(epoch: int = 4) -> SimpleNamespace:
+def _state(epoch: int = 4, status: str = "CURRENT") -> SimpleNamespace:
     return SimpleNamespace(
         epoch=epoch,
+        status=status,
         created_at=datetime(2026, 4, 10, 1, 0, tzinfo=UTC),
         updated_at=datetime(2026, 4, 10, 2, 0, tzinfo=UTC),
     )
@@ -181,6 +182,7 @@ async def test_maps_current_snapshot_position_with_independent_fact_and_state_ep
     assert records[0].cost_basis_local == Decimal("970")
     assert records[0].epoch == 4
     assert records[0].state_epoch == 4
+    assert records[0].state_status == "CURRENT"
     assert records[0].business_date == date(2026, 4, 9)
     assert records[0].portfolio_business_date == date(2026, 4, 10)
     assert records[0].valuation_status == "VALUED_STALE"
@@ -287,6 +289,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert records[0].cost_basis == Decimal("950")
     assert records[0].epoch == 5
     assert records[0].state_epoch == 4
+    assert records[0].state_status == "CURRENT"
     assert records[0].business_date == date(2026, 4, 9)
     assert records[0].portfolio_business_date == date(2026, 4, 9)
     assert records[0].valuation_status is None

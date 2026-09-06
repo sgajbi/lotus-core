@@ -49,6 +49,7 @@ def _row(
     market_evidence_timestamp: datetime | None = None,
     portfolio_evidence_timestamp: datetime | None = None,
     instrument_evidence_timestamp: datetime | None = None,
+    state_status: str = "CURRENT",
 ) -> CoreSnapshotPositionSource:
     evidence_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
     market_timestamp = market_evidence_timestamp or evidence_timestamp
@@ -68,6 +69,7 @@ def _row(
         cost_basis_local=cost_basis_local,
         epoch=epoch,
         state_epoch=epoch,
+        state_status=state_status,
         source_created_at=market_timestamp,
         source_updated_at=market_timestamp,
         state_created_at=evidence_timestamp,
@@ -197,6 +199,16 @@ def test_source_provenance_rejects_missing_snapshot_date() -> None:
     assert resolution.effective_as_of_date is None
     assert resolution.source_provenance.portfolio.as_of is None
     assert resolution.source_provenance.portfolio.freshness_status == "UNAVAILABLE"
+
+
+def test_source_provenance_rejects_valuation_while_position_state_is_reprocessing() -> None:
+    resolution = _resolve(_row("SEC_A", state_status="REPROCESSING"))
+
+    assert resolution.effective_as_of_date == date(2026, 2, 27)
+    assert resolution.supportability is CoreSnapshotValuationSupportability.UNAVAILABLE
+    assert resolution.reason_code is CoreSnapshotValuationReason.POSITION_STATE_NOT_CURRENT
+    assert resolution.source_provenance.portfolio.freshness_status == "CURRENT"
+    assert resolution.source_provenance.market_data.freshness_status == "CURRENT"
 
 
 def test_source_provenance_uses_snapshot_date_when_mutation_date_is_newer() -> None:

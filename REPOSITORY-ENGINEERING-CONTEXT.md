@@ -3536,7 +3536,10 @@ Most relevant current governance:
      mutation and reconciliation lineage without treating them as competing valuation dates.
      Preserve projected price dates and non-identity FX dates through calculation and
      serialization. `READY` requires one coherent date per source family, equality between
-     families, and equality to the requested business date. Historical cost-basis fallback,
+     families, equality to the requested business date, and `CURRENT` lifecycle status for every
+     selected position-state key. A `REPROCESSING` key retains its source-effective date but makes
+     valuation supportability unavailable with `POSITION_STATE_NOT_CURRENT`; a prior valued row and
+     completed reconciliation control must never certify an in-flight rebuild. Historical cost-basis fallback,
      missing valuations, mixed daily snapshot dates, and carried-forward
      observations fail closed with stable reason codes. Do not let consumers synthesize these
      dates from request fields, wall-clock time, or several weaker routes.

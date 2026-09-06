@@ -8,6 +8,7 @@ from typing import Literal, cast
 
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.valuation import is_quote_independent_flat_position
+from portfolio_common.domain.valuation.position_state import PositionStateStatus
 
 from ...contracts.core_snapshot import (
     CoreSnapshotSourceProvenance,
@@ -166,6 +167,7 @@ def resolve_core_snapshot_source_provenance(
         requested_as_of_date=requested_as_of_date,
         portfolio_date=portfolio_date,
         market_date=market_date,
+        position_state_current=_position_state_current(position_rows),
     )
     return CoreSnapshotSourceProvenanceResolution(
         source_provenance=provenance,
@@ -333,6 +335,7 @@ def _valuation_readiness(
     requested_as_of_date: date,
     portfolio_date: _SourceFamilyDate,
     market_date: _SourceFamilyDate,
+    position_state_current: bool,
 ) -> tuple[
     date | None,
     CoreSnapshotValuationSupportability,
@@ -350,12 +353,26 @@ def _valuation_readiness(
     if portfolio_date.as_of != market_date.as_of:
         return None, unavailable, CoreSnapshotValuationReason.SOURCE_AS_OF_MISMATCH
     effective_date = portfolio_date.as_of
+    if not position_state_current:
+        return (
+            effective_date,
+            unavailable,
+            CoreSnapshotValuationReason.POSITION_STATE_NOT_CURRENT,
+        )
     if effective_date != requested_as_of_date:
         return effective_date, unavailable, CoreSnapshotValuationReason.SOURCE_AS_OF_STALE
     return (
         effective_date,
         CoreSnapshotValuationSupportability.READY,
         CoreSnapshotValuationReason.SOURCE_EVIDENCE_READY,
+    )
+
+
+def _position_state_current(position_rows: tuple[CoreSnapshotPositionSource, ...]) -> bool:
+    """Require every selected position key to be outside a reprocessing window."""
+
+    return bool(position_rows) and all(
+        row.state_status.strip().upper() == PositionStateStatus.CURRENT for row in position_rows
     )
 
 
