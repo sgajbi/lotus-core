@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
 from src.services.query_service.app.services.portfolio_service import PortfolioService
-from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -60,16 +60,23 @@ async def test_get_portfolios(mock_portfolio_repo: AsyncMock):
         }
 
         # ACT
-        response_dto = await service.get_portfolios(**filters)
+        response_dto = await service.get_portfolios(
+            tenant_context=TEST_TENANT_CONTEXT,
+            **filters,
+        )
 
         # ASSERT
         # 1. Assert the repository was called correctly
-        mock_portfolio_repo.get_portfolios.assert_awaited_once_with(**filters)
+        mock_portfolio_repo.get_portfolios.assert_awaited_once_with(
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
+            **filters,
+        )
 
         # 2. Assert the response DTO is structured correctly
         assert len(response_dto.portfolios) == 1
         portfolio_record = response_dto.portfolios[0]
         assert portfolio_record.portfolio_id == "P1"
+        assert portfolio_record.tenant_id == TEST_TENANT_ID
         assert portfolio_record.client_id == "C100"
         assert portfolio_record.status == "ACTIVE"
         assert portfolio_record.cost_basis_method == "FIFO"
@@ -84,7 +91,7 @@ async def test_get_portfolios_empty_result(mock_portfolio_repo: AsyncMock):
         service = PortfolioService(mock_db_session)
         mock_portfolio_repo.get_portfolios.return_value = []
 
-        response_dto = await service.get_portfolios()
+        response_dto = await service.get_portfolios(tenant_context=TEST_TENANT_CONTEXT)
 
         assert response_dto.portfolios == []
 
@@ -161,11 +168,18 @@ async def test_get_portfolio_by_id_success(mock_portfolio_repo: AsyncMock):
             cost_basis_method="FIFO",
         )
 
-        result = await service.get_portfolio_by_id("P1")
+        result = await service.get_portfolio_by_id(
+            "P1",
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
 
         assert result.portfolio_id == "P1"
+        assert result.tenant_id == TEST_TENANT_ID
         assert result.cost_basis_method == "FIFO"
-        mock_portfolio_repo.get_by_id.assert_awaited_once_with("P1")
+        mock_portfolio_repo.get_by_id.assert_awaited_once_with(
+            "P1",
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
+        )
 
 
 async def test_get_portfolio_by_id_not_found(mock_portfolio_repo: AsyncMock):
@@ -178,4 +192,7 @@ async def test_get_portfolio_by_id_not_found(mock_portfolio_repo: AsyncMock):
         mock_portfolio_repo.get_by_id.return_value = None
 
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_portfolio_by_id("P404")
+            await service.get_portfolio_by_id(
+                "P404",
+                tenant_context=TEST_TENANT_CONTEXT,
+            )

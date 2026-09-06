@@ -1,7 +1,7 @@
 # services/query-service/app/routers/portfolios.py
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 
 from ..dependencies import get_portfolio_service
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
@@ -18,14 +18,16 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-DISC-0
     response_model=PortfolioQueryResponse,
     summary="Get portfolio discovery records",
     description=(
-        "Returns canonical portfolio discovery records with optional filtering by portfolio ID, "
-        "portfolio identifier list, client grouping ID, and booking center. Use this route for "
+        "Returns canonical portfolio discovery records owned by the admitted tenant, with optional "
+        "filtering by portfolio ID, portfolio identifier list, client grouping ID, and booking "
+        "center. Each record includes persisted source tenant attribution. Use this route for "
         "portfolio lookup, selector population, and navigation scope discovery; do not use it as "
         "a substitute for single-portfolio detail, workspace composition, or holdings/reporting "
         "reads."
     ),
 )
 async def get_portfolios(
+    request: Request,
     portfolio_id: Optional[str] = Query(
         None,
         description="Filter by a single, specific portfolio ID.",
@@ -49,6 +51,7 @@ async def get_portfolios(
     service: PortfolioService = Depends(get_portfolio_service),
 ):
     return await service.get_portfolios(
+        tenant_context=request.state.tenant_context,
         portfolio_id=portfolio_id,
         portfolio_ids=portfolio_ids,
         client_id=client_id,
@@ -67,13 +70,16 @@ async def get_portfolios(
     },
     summary="Get canonical portfolio detail by ID",
     description=(
-        "Returns the canonical portfolio identity and standing metadata for one portfolio "
-        "identifier. Use this route when a downstream workflow needs the source-owned portfolio "
-        "record before composing workspace, holdings, transaction, or reporting reads; do not use "
-        "it as a substitute for portfolio positions, transaction-ledger, or reporting routes."
+        "Returns the canonical portfolio identity, persisted source tenant attribution, and "
+        "standing metadata for one portfolio owned by the admitted tenant. A portfolio owned by "
+        "another tenant is indistinguishable from an absent portfolio. Use this route when a "
+        "downstream workflow needs the source-owned portfolio record before composing workspace, "
+        "holdings, transaction, or reporting reads; do not use it as a substitute for portfolio "
+        "positions, transaction-ledger, or reporting routes."
     ),
 )
 async def get_portfolio_by_id(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -86,7 +92,10 @@ async def get_portfolio_by_id(
     Returns a `404 Not Found` if the portfolio does not exist.
     """
     try:
-        portfolio = await service.get_portfolio_by_id(portfolio_id)
+        portfolio = await service.get_portfolio_by_id(
+            portfolio_id,
+            tenant_context=request.state.tenant_context,
+        )
         return portfolio
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

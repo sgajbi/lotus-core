@@ -9,6 +9,11 @@ class PortfolioRecord(BaseModel):
     Represents a single, detailed portfolio record for API responses.
     """
 
+    tenant_id: str = Field(
+        ...,
+        description="Persisted source-owned tenant identifier for this portfolio.",
+        examples=["tenant_sg_pb"],
+    )
     portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])
     base_currency: str = Field(..., description="ISO base currency code.", examples=["USD"])
     open_date: date = Field(

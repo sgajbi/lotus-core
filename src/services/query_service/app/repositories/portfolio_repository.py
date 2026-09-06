@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 
 from portfolio_common.database_models import Portfolio
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,8 @@ class PortfolioRepository:
 
     async def get_portfolios(
         self,
+        *,
+        tenant_id: TenantId,
         portfolio_id: Optional[str] = None,
         portfolio_ids: Optional[list[str]] = None,
         client_id: Optional[str] = None,
@@ -28,7 +31,7 @@ class PortfolioRepository:
         """
         Retrieves a list of portfolios with optional filters.
         """
-        stmt = select(Portfolio)
+        stmt = select(Portfolio).where(Portfolio.tenant_id == tenant_id.value)
 
         if portfolio_id:
             stmt = stmt.filter_by(portfolio_id=portfolio_id)
@@ -104,8 +107,16 @@ class PortfolioRepository:
         result = await self.db.execute(stmt.order_by(currency_code.asc()).limit(limit))
         return list(result.scalars().all())
 
-    async def get_by_id(self, portfolio_id: str) -> Optional[Portfolio]:
-        """Retrieves a single portfolio by its unique portfolio_id."""
-        stmt = select(Portfolio).filter_by(portfolio_id=portfolio_id)
+    async def get_by_id(
+        self,
+        portfolio_id: str,
+        *,
+        tenant_id: TenantId,
+    ) -> Optional[Portfolio]:
+        """Retrieve a portfolio only when it belongs to the admitted tenant."""
+        stmt = select(Portfolio).where(
+            Portfolio.portfolio_id == portfolio_id,
+            Portfolio.tenant_id == tenant_id.value,
+        )
         result = await self.db.execute(stmt)
         return result.scalars().first()
