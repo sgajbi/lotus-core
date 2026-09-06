@@ -77,10 +77,31 @@ here.
 
 ## First Local Setup
 
+Create an isolated Python 3.12 environment before `make install`. The bootstrap installs into the
+interpreter that invokes it; it does not create or select a virtual environment for you.
+
+Linux and macOS:
+
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python --version
 make install
 cp .env.example .env
 ```
+
+Windows PowerShell:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+python --version
+make install
+Copy-Item .env.example .env
+```
+
+`python --version` must report `3.12.x` before installation. A global interpreter, an already
+populated environment, or packages inherited through `PYTHONPATH` are not valid bootstrap proof.
 
 Then run the fastest repo-native confidence check:
 
@@ -107,22 +128,43 @@ as a readiness claim.
 
 ## App-Local Runtime
 
-Use this path for isolated backend work:
+Use this path for isolated backend work after activating the environment created above:
 
 ```bash
-docker compose up -d
-python -m tools.kafka_setup
-python -m alembic upgrade head
+docker compose up -d --build
 ```
 
-Then inspect the runtime:
+Compose owns the startup ordering. `kafka-topic-creator` provisions the required topics through
+`python -m tools.kafka_setup`; `migration-runner` applies `alembic upgrade head`; dependent services
+start only after those one-shot containers exit successfully. Do not repeat either command against
+the host network with container-only connection names.
+
+Inspect that provisioning, migration, and service readiness all completed:
 
 ```bash
-docker compose ps
+docker compose ps --all
 docker compose logs --tail=200 migration-runner
 docker compose logs --tail=200 kafka-topic-creator
-make test-docker-smoke
+curl --fail http://localhost:8200/health/ready
+curl --fail http://localhost:8201/health/ready
+curl --fail http://localhost:8202/health/ready
 ```
+
+The two one-shot containers must show exit code `0`; each readiness request must return HTTP `200`.
+Use `make test-docker-smoke` when the task requires the broader Docker contract rather than initial
+setup proof.
+
+## Clean-Checkout Proof
+
+The documented path must be tested from a new clone, not inferred from a developer's existing
+environment. Use a disposable checkout, confirm its Compose project has no containers, create the
+virtual environment there, and execute [First Local Setup](#first-local-setup) followed by
+[App-Local Runtime](#app-local-runtime). Before the run, clear inherited `PYTHONPATH` and verify the
+selected interpreter and `docker compose ps --all` output.
+
+Record the tested commit, operating system, Python version, Compose version, provisioning and
+migration exit codes, readiness status codes, and teardown result on the owning GitHub issue or PR.
+Do not put changing run identifiers or a delivery diary in this durable page.
 
 ## Runtime Choice
 

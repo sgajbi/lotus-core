@@ -42,24 +42,28 @@ is designed to report an explicit unavailable or blocked state rather than a pla
 
 Prerequisites:
 
-- Python and tooling versions declared by `pyproject.toml` and the locked requirements files;
+- Python 3.12 for the host-side development and validation gates;
 - GNU Make;
 - Docker with Compose for the isolated PostgreSQL and Kafka-backed runtime.
 
-From the repository root:
+From the repository root on Linux or macOS, create the isolated environment before installing:
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python --version
 make install
 cp .env.example .env
-docker compose up -d
-python -m tools.kafka_setup
-python -m alembic upgrade head
-curl --fail http://localhost:8090/health/ready
+docker compose up -d --build
+docker compose ps --all
+curl --fail http://localhost:8201/health/ready
 ```
 
-Expected result: the readiness request returns HTTP `200` after the local database, messaging
-dependencies, schema, and Core services are ready. `.env.example` is local-only; do not reuse its
-plaintext or development settings in a promoted environment.
+Expected result: Python reports `3.12.x`; Kafka topic provisioning and the migration runner exit
+successfully; the query-service readiness request returns HTTP `200`. Windows commands, the full
+readiness set, and clean-checkout proof are in [Getting Started](wiki/Getting-Started.md).
+`.env.example` is local-only; do not reuse its plaintext or development settings in a promoted
+environment.
 
 For the integrated, populated front-office journey, use the
 [Workbench canonical local runtime](https://github.com/sgajbi/lotus-workbench/blob/main/docs/operations/canonical-front-office-local-runtime.md).
