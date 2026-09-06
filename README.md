@@ -16,7 +16,7 @@ Consumers should use Core contracts rather than re-derive source truth.
 
 | Capability | Financial outcome |
 | --- | --- |
-| Portfolio and account records | Maintains tenant-owned portfolios, accounts, holdings, mandates, instruments, and source lineage. |
+| Portfolio and account records | Maintains source-owned portfolios plus foundational account, holding, mandate, instrument, and lineage records. |
 | Transaction processing | Books supported transaction and corporate-action lifecycles with idempotent, auditable cost, cashflow, and position effects. |
 | Positions and cash | Reconstructs dated quantity and cash state from authoritative events without silently substituting missing evidence. |
 | Valuation | Produces valuation evidence against explicit as-of dates, prices, FX rates, quantity epochs, and reconciliation state. |
@@ -37,6 +37,11 @@ contracts. Production certification is separate: deployment identity, external m
 feeds, treasury or OMS integration, IAM, operational evidence, and downstream journeys must be
 proven in their owning environments. Where authoritative evidence is absent or inconsistent, Core
 is designed to report an explicit unavailable or blocked state rather than a plausible value.
+
+Tenant authority is enforced at ingress and durable root portfolio ownership. Propagation across
+every stateful fence, ledger record, derived-state job, query, and replay path remains unfinished
+under [#798](https://github.com/sgajbi/lotus-core/issues/798); do not treat the current runtime as
+certified for shared multi-tenant deployment.
 
 ## Quick Start
 
@@ -98,7 +103,9 @@ See the [architecture index](docs/architecture/README.md),
 
 ## Financial Trust Model
 
-Core changes are expected to preserve these invariants:
+Core changes must converge on and preserve these invariants. The tenant invariant is only partially
+enforced today, as described in [Availability](#availability); its presence here is mandatory design
+authority, not a completion claim.
 
 1. financial amounts and quantities use exact, governed numeric semantics;
 2. trade, settlement, booking, effective, observation, valuation, correction, and ingestion time
