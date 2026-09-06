@@ -1014,7 +1014,10 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
         "do not use it as a substitute for single-portfolio detail"
         in (portfolio_query["description"])
     )
-    assert "canonical portfolio identity and standing metadata" in single_portfolio["description"]
+    assert "owned by the admitted tenant" in portfolio_query["description"]
+    assert "persisted source tenant attribution" in portfolio_query["description"]
+    assert "persisted source tenant attribution" in single_portfolio["description"]
+    assert "indistinguishable from an absent portfolio" in single_portfolio["description"]
     assert (
         "do not use it as a substitute for portfolio positions" in single_portfolio["description"]
     )
@@ -1050,6 +1053,10 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
     assert portfolio_record["properties"]["objective"]["description"] == (
         "Primary client objective for this portfolio."
     )
+    assert portfolio_record["properties"]["tenant_id"]["description"] == (
+        "Persisted source-owned tenant identifier for this portfolio."
+    )
+    assert "tenant_id" in portfolio_record["required"]
     assert portfolio_record["properties"]["cost_basis_method"]["description"] == (
         "Portfolio-level cost-basis accounting method used by lot accounting."
     )

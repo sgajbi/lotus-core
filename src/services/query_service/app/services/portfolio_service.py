@@ -2,6 +2,7 @@
 import logging
 from typing import Optional
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,8 @@ class PortfolioService:
 
     async def get_portfolios(
         self,
+        *,
+        tenant_context: TenantContext,
         portfolio_id: Optional[str] = None,
         portfolio_ids: Optional[list[str]] = None,
         client_id: Optional[str] = None,
@@ -46,6 +49,7 @@ class PortfolioService:
         )
 
         db_results = await self.repo.get_portfolios(
+            tenant_id=tenant_context.tenant_id,
             portfolio_id=portfolio_id,
             portfolio_ids=portfolio_ids,
             client_id=client_id,
@@ -81,7 +85,12 @@ class PortfolioService:
         codes = await self.repo.list_currency_lookup_codes(q=q, limit=limit)
         return [LookupItem(id=code, label=code) for code in codes]
 
-    async def get_portfolio_by_id(self, portfolio_id: str) -> PortfolioRecord:
+    async def get_portfolio_by_id(
+        self,
+        portfolio_id: str,
+        *,
+        tenant_context: TenantContext,
+    ) -> PortfolioRecord:
         """
         Retrieves a single portfolio by its ID.
         Raises an exception if the portfolio is not found.
@@ -95,7 +104,10 @@ class PortfolioService:
                 reason_code="request_received",
             ),
         )
-        db_portfolio = await self.repo.get_by_id(portfolio_id)
+        db_portfolio = await self.repo.get_by_id(
+            portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         if not db_portfolio:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         return PortfolioRecord.model_validate(db_portfolio)

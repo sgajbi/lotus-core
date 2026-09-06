@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dependencies import get_portfolio_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.portfolio_service import PortfolioService
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -33,6 +33,7 @@ async def test_get_portfolios_success(async_test_client):
     mock_service.get_portfolios.return_value = {
         "portfolios": [
             {
+                "tenant_id": TEST_TENANT_ID,
                 "portfolio_id": "P1",
                 "base_currency": "USD",
                 "open_date": date(2025, 1, 1),
@@ -55,6 +56,7 @@ async def test_get_portfolios_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolios"][0]["portfolio_id"] == "P1"
+    assert response.json()["portfolios"][0]["tenant_id"] == TEST_TENANT_ID
     assert response.json()["portfolios"][0]["cost_basis_method"] == "FIFO"
     assert "X-Correlation-ID" in response.headers
 
@@ -73,6 +75,7 @@ async def test_get_portfolios_unexpected_maps_to_500(async_test_client):
 async def test_get_portfolio_by_id_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_portfolio_by_id.return_value = {
+        "tenant_id": TEST_TENANT_ID,
         "portfolio_id": "P2",
         "base_currency": "USD",
         "open_date": date(2025, 1, 1),
@@ -93,6 +96,10 @@ async def test_get_portfolio_by_id_success(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P2"
+    assert response.json()["tenant_id"] == TEST_TENANT_ID
+    call = mock_service.get_portfolio_by_id.await_args
+    assert call.args == ("P2",)
+    assert call.kwargs["tenant_context"].tenant_id_text == TEST_TENANT_ID
 
 
 async def test_get_portfolio_by_id_not_found_maps_to_404(async_test_client):
@@ -103,6 +110,18 @@ async def test_get_portfolio_by_id_not_found_maps_to_404(async_test_client):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+    call = mock_service.get_portfolio_by_id.await_args
+    assert call.args == ("P404",)
+    assert call.kwargs["tenant_context"].tenant_id_text == TEST_TENANT_ID
+
+
+async def test_get_portfolios_requires_admitted_tenant(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/portfolios/", headers={"X-Tenant-Id": ""})
+
+    assert response.status_code == 401
+    mock_service.get_portfolios.assert_not_awaited()
 
 
 async def test_get_portfolio_service_dependency_factory():
@@ -123,7 +142,9 @@ async def test_get_portfolios_forwards_portfolio_ids(async_test_client):
     )
 
     assert response.status_code == 200
-    mock_service.get_portfolios.assert_awaited_once_with(
+    call_kwargs = dict(mock_service.get_portfolios.await_args.kwargs)
+    assert call_kwargs.pop("tenant_context").tenant_id_text == TEST_TENANT_ID
+    assert call_kwargs == dict(
         portfolio_id=None,
         portfolio_ids=["P1", "P2"],
         client_id=None,
@@ -145,7 +166,9 @@ async def test_get_portfolios_forwards_discovery_filters(async_test_client):
     )
 
     assert response.status_code == 200
-    mock_service.get_portfolios.assert_awaited_once_with(
+    call_kwargs = dict(mock_service.get_portfolios.await_args.kwargs)
+    assert call_kwargs.pop("tenant_context").tenant_id_text == TEST_TENANT_ID
+    assert call_kwargs == dict(
         portfolio_id="P1",
         portfolio_ids=None,
         client_id="CIF-1",
