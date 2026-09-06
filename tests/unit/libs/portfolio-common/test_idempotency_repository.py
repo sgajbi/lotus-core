@@ -95,7 +95,7 @@ async def test_mark_event_processed_inserts_processed_event_fence(
     stmt_text = str(stmt)
 
     assert "INSERT INTO processed_events" in stmt_text
-    assert "ON CONFLICT (event_id, service_name) DO NOTHING" in stmt_text
+    assert "ON CONFLICT (event_id, service_name) WHERE tenant_id IS NULL DO NOTHING" in stmt_text
     assert "RETURNING processed_events.id" in stmt_text
 
 
@@ -176,6 +176,7 @@ async def test_semantic_claim_classifies_existing_fence(
     mock_db_session.execute.side_effect = [insert_result, select_result]
 
     outcome = await repository.claim_semantic_event_processing(
+        tenant_id="tenant-a",
         event_id="topic-0-42",
         portfolio_id="P1",
         service_name="transaction-processing",
@@ -196,6 +197,7 @@ async def test_semantic_claim_returns_claimed_for_new_fence(
     mock_db_session.execute.return_value = insert_result
 
     outcome = await repository.claim_semantic_event_processing(
+        tenant_id="tenant-a",
         event_id="topic-0-42",
         portfolio_id="P1",
         service_name="transaction-processing",
@@ -223,6 +225,7 @@ async def test_semantic_claim_fails_closed_when_conflict_row_is_not_visible(
 
     with pytest.raises(RuntimeError, match="without a matching durable fence"):
         await repository.claim_semantic_event_processing(
+            tenant_id="tenant-a",
             event_id="topic-0-42",
             portfolio_id="P1",
             service_name="transaction-processing",
