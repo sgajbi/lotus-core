@@ -51,7 +51,10 @@ The contract is evidence of Core source-data support only. It does not certify d
 - `GET /portfolios/`
 - `GET /portfolios/{portfolio_id}`
 
-Use this family for portfolio discovery, navigation, and attribute retrieval.
+Use this family for portfolio discovery, navigation, and attribute retrieval. Both routes are
+fenced to the admitted `X-Tenant-Id` authority at the repository boundary. Responses include the
+persisted source `tenant_id`; direct detail requests for another tenant's portfolio return the same
+`404 Not Found` contract as an absent identifier.
 
 Supported filters:
 

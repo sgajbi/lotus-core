@@ -118,6 +118,17 @@ each route family to example IDs and is guarded by `make api-example-catalog-gua
 error, idempotency, pagination, security, dependency-timeout, and degraded-source-data examples
 instead of copying unverified prose snippets.
 
+Portfolio discovery and detail:
+
+```text
+GET /portfolios/
+GET /portfolios/{portfolio_id}
+```
+
+Both routes require admitted `X-Tenant-Id` authority and apply it at the repository read boundary.
+Each record carries its persisted source `tenant_id`. A detail request for a portfolio owned by a
+different tenant returns the same `404 Not Found` response as an absent portfolio.
+
 Operational read:
 
 ```text
