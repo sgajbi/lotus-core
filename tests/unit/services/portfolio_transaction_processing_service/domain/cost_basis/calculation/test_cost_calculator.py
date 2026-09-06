@@ -204,6 +204,7 @@ def test_transaction_cost_authority_requires_current_input_and_output_bound_line
     lineage = buy_transaction.calculation_lineage
 
     assert has_governed_transaction_cost_authority(payload)
+    assert has_governed_transaction_cost_authority({**payload, "tenant_id": "tenant-a"})
     assert not has_governed_transaction_cost_authority({**payload, "net_cost": None})
     assert not has_governed_transaction_cost_authority({**payload, "net_cost_local": None})
     assert not has_governed_transaction_cost_authority({**payload, "calculation_lineage": None})

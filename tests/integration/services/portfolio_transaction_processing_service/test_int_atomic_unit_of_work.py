@@ -239,6 +239,7 @@ async def test_historical_fee_dominated_delivery_remains_an_idempotent_duplicate
                 event_id=historical_event_id,
                 portfolio_id=command.transaction.portfolio_id,
                 service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
+                tenant_id=command.transaction.tenant_id,
                 correlation_id="corr-historical",
                 semantic_key=identity.semantic_key,
                 payload_fingerprint=identity.payload_fingerprint,
