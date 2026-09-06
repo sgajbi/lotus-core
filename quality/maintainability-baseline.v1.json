@@ -1,7 +1,7 @@
 {
   "schema_version": "lotus.core.maintainability-baseline.v1",
   "max_allowed_rank": "B",
-  "recorded_on": "2026-09-07",
+  "recorded_on": "2026-09-05",
   "tracked_files_only": true,
   "entries": [
     {
@@ -50,7 +50,7 @@
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
       "rank": "C",
-      "mi": 5.782730937321192,
+      "mi": 5.761932500404426,
       "owner": "lotus-core maintainers",
       "rationale": "Existing analytics application hotspot scheduled for family-aligned decomposition.",
       "issue": "#462"
