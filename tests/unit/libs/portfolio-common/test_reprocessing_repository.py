@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.events import TransactionEvent
 from portfolio_common.ingestion_lineage import ingestion_job_id_var
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var
@@ -47,6 +48,7 @@ def _replay_transaction(transaction_id: str, portfolio_id: str = "P1") -> Simple
     return SimpleNamespace(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date=datetime.now(UTC),
@@ -58,6 +60,20 @@ def _replay_transaction(transaction_id: str, portfolio_id: str = "P1") -> Simple
         trade_currency="USD",
         trade_fee=Decimal("0.0"),
     )
+
+
+def _tenant_owned_rows(transactions: list[DBTransaction]) -> list[dict[str, object]]:
+    return [
+        {
+            **{
+                column.name: getattr(transaction, column.name)
+                for column in DBTransaction.__table__.columns
+                if column.name in TransactionEvent.model_fields
+            },
+            "tenant_id": "tenant-test",
+        }
+        for transaction in transactions
+    ]
 
 
 @pytest.fixture
@@ -109,7 +125,7 @@ async def test_reprocess_transactions_by_ids_success(
     ]
 
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_result.mappings.return_value.all.return_value = _tenant_owned_rows(mock_transactions)
     mock_db_session.execute.return_value = mock_result
 
     # ACT
@@ -139,7 +155,7 @@ async def test_reprocess_no_transactions_found(
     """
     # ARRANGE
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = []  # No transactions found
+    mock_result.mappings.return_value.all.return_value = []  # No transactions found
     mock_db_session.execute.return_value = mock_result
 
     # ACT
@@ -192,7 +208,7 @@ async def test_reprocess_transactions_preserves_requested_input_order(
     ]
 
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_result.mappings.return_value.all.return_value = _tenant_owned_rows(mock_transactions)
     mock_db_session.execute.return_value = mock_result
 
     count = await repository.reprocess_transactions_by_ids(transaction_ids=["TXN_B", "TXN_A"])
@@ -245,7 +261,7 @@ async def test_reprocess_transactions_deduplicates_requested_ids(
     ]
 
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_result.mappings.return_value.all.return_value = _tenant_owned_rows(mock_transactions)
     mock_db_session.execute.return_value = mock_result
 
     count = await repository.reprocess_transactions_by_ids(
@@ -281,7 +297,7 @@ async def test_reprocess_transactions_omits_not_set_correlation_header(
     ]
 
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_result.mappings.return_value.all.return_value = _tenant_owned_rows(mock_transactions)
     mock_db_session.execute.return_value = mock_result
 
     token = correlation_id_var.set("<not-set>")
@@ -345,7 +361,7 @@ async def test_reprocess_transactions_reports_remaining_ids_on_partial_publish_f
     ]
 
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_result.mappings.return_value.all.return_value = _tenant_owned_rows(mock_transactions)
     mock_db_session.execute.return_value = mock_result
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
 
@@ -392,7 +408,7 @@ async def test_reprocess_transactions_fails_on_flush_timeout(
     ]
 
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = mock_transactions
+    mock_result.mappings.return_value.all.return_value = _tenant_owned_rows(mock_transactions)
     mock_db_session.execute.return_value = mock_result
     mock_kafka_producer.flush.return_value = 1
 
