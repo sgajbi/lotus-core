@@ -1,473 +1,157 @@
 # lotus-core
 
-Authoritative portfolio, booking, account, holding, and transaction platform for the Lotus
-ecosystem.
+The portfolio and transaction foundation for Lotus.
 
-Service profile: `domain-service`; primary runtime: Python FastAPI services plus governed workers
-and operators.
+`lotus-core` is the authoritative system of record for portfolio and account records, transaction
+processing, positions, valuations, cashflows, and historical data used by downstream Lotus
+applications. It preserves financial and temporal truth so every published value can be traced to
+its source evidence, replayed deterministically, and defended operationally.
 
-Repository-local engineering context:
-[REPOSITORY-ENGINEERING-CONTEXT.md](REPOSITORY-ENGINEERING-CONTEXT.md)
+Core supplies governed facts. Performance conclusions belong to `lotus-performance`, risk
+conclusions to `lotus-risk`, advisory decisions to `lotus-advise`, mandate workflow to
+`lotus-manage`, and client-facing publication to Gateway, Workbench, Report, Render, and Archive.
+Consumers should use Core contracts rather than re-derive source truth.
 
-Primary target architecture:
-[docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
+## Capabilities
 
-Contract-family inventory:
-[docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
-
-Architecture index:
-[docs/architecture/README.md](docs/architecture/README.md)
-
-## Purpose And Scope
-
-`lotus-core` is the system of record for foundational portfolio-management and transaction data in
-Lotus.
-
-It owns:
-
-- portfolio, account, holding, mandate, and transaction domain data
-- write-ingress and persistence of source data
-- position, valuation, cashflow, and time-series foundations
-- operational read-plane contracts
-- governed analytics-input, snapshot/simulation, support, lineage, and policy contracts
-
-It does not own:
-
-- downstream performance analytics conclusions
-- downstream risk analytics conclusions
-- product-facing review narratives or report composition
-- advisory recommendation logic
-- the cross-cutting ecosystem platform layer
-
-## Ownership And Boundaries
-
-`lotus-core` is a domain-authoritative backend, not a product surface and not a cross-cutting
-platform repository.
-
-Boundary rules that matter:
-
-1. foundational portfolio and transaction truth stays here
-2. downstream analytics conclusions stay in their authoritative services
-3. downstream-facing APIs must remain classified under RFC-0082 contract families
-4. shared infrastructure ownership now belongs in `lotus-platform`, while `lotus-core` may still
-   provide app-local isolated runtime support
-
-## Ecosystem Role
-
-Primary downstream consumers:
-
-- `lotus-gateway` and `lotus-workbench` for governed read publication and front-office surfaces
-- `lotus-performance` and `lotus-risk` for source-owned performance and risk calculations
-- `lotus-advise`, `lotus-manage`, and `lotus-report` for advisory, mandate, and reporting workflows
-- platform validators that certify source-data contracts, trust telemetry, and operating posture
-
-Primary upstream dependencies:
-
-- app-local PostgreSQL/Kafka infrastructure for isolated development
-- shared platform contracts and validators from `lotus-platform`
-- external market, reference, treasury, and OMS evidence only through bounded, fail-closed source
-  product contracts
-
-## Data Mesh Posture
-
-`lotus-core` is the source authority for Core-owned source-data products. Product declarations,
-source-security profiles, route-family metadata, trust-telemetry coverage, and methodology docs
-are implementation truth only when repo-native validation proves them.
-
-Important boundary: active declarations, CI-backed implementation, live validator proof, trust
-telemetry coverage, and platform mesh certification are separate statuses. Do not document a
-product as mesh certified unless current generated platform certification artifacts prove that
-exact state.
-
-## Current Operational Posture
-
-`lotus-core` is an implementation-backed domain service with a heavy validation contract. It is not
-a marketing surface, and this README does not claim bank-buyable readiness by itself.
-
-Current repo truth:
-
-1. RFC-0082 governs downstream-facing contract-family ownership.
-2. RFC-0083 governs the system-of-record target architecture and hardening program.
-3. `query_service` is the operational read plane.
-4. `query_control_plane_service` is the governed plane for analytics-input, snapshot/simulation,
-   support, lineage, policy, source-data product, and capability contracts.
-5. App-local Docker Compose remains available for isolated backend development; shared platform
-   runtime and ingress ownership belongs in `lotus-platform`.
-6. `make lotus-core-validate` writes machine-readable app-level evidence under
-   `output/lotus-core-validation/` and is blocking in the PR Merge Gate. The workflow checks out
-   `lotus-platform` validation contracts so repo-native domain-product validation has its required
-   platform vocabulary and validator.
-7. `make docs-evidence-pack` writes a documentation release evidence manifest under
-   `output/documentation-evidence/`, covering README/wiki link validation, API vocabulary artifact
-   generation, critical-path coverage contract validation, RFC ledger checks,
-   supported-feature truth, and runbook validation.
-   Supported-feature publication is backed by
-   `contracts/supported-features/lotus-core-supported-features.v1.json` and
-   `make supported-features-guard`.
-8. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
-   [CR-1123](docs/architecture/codebase-reviews/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
-9. Production-like deployments default to the governed service-local enterprise security profile:
-   write authorization, read authorization, read auditing, capability-rule enforcement, and
-   runtime configuration enforcement are on unless explicitly overridden through
-   `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false`. This does not replace gateway/platform ingress
-   and IAM proof.
-10. Service images carry OCI provenance labels and matching runtime environment metadata for Git
-    commit SHA, Git branch, build timestamp, repo URL, image version, and CI run ID. The resolved
-    image digest is captured after push in the release manifest and is supplied to deployment
-    runtime metadata because a build-time self-digest label would change the image digest. API-facing
-    and worker health web apps expose the same release metadata and OCI label map at
-    `GET /version`; `/health/live` and `/health/ready` also include a bounded `runtime` block with
-    service name, app version, environment, runtime profile, started-at, uptime, and build
-    metadata for incident triage. Local builds use `LOTUS_IMAGE_DIGEST=unknown` unless the
-    build/release lane or deploy manifest supplies a resolved digest.
-11. Immutable image publication is CI-only through `.github/workflows/image-release.yml`: images
-    are tagged with the full Git SHA, pushed to GHCR, scanned, signed, emitted with BuildKit SBOM
-    and provenance attestations, exported with CycloneDX SBOM artifacts, and recorded in per-image
-    release manifests that use digest references for Kubernetes deployment and same-image promotion
-    evidence across `dev`, `uat`, and `prod`.
-12. App-local Compose and every Compose-backed CI runtime lane use one
-    `portfolio_transaction_processing_service` for atomic cost, cashflow, and position processing.
-    The internal modules remain separate, valuation remains independently deployable, and the
-    Kubernetes source plus CI release renderer use the target digest. Legacy transaction-calculator
-    packages are removed locally; registry/cluster proof remains governed release work.
-13. PR and main runtime gates consume one exact-source image set per workflow SHA. The producer
-    records build timings and exports an integrity manifest; each Docker-backed job verifies source
-    SHA, dependency closure, bundle digest, image IDs, and OCI labels before startup. This ephemeral
-    transport does not publish images or replace the signed GHCR release lane.
-14. Compose-backed validation owns a unique project, reserved dynamic ports, runtime-derived
-    endpoints, project-identified diagnostics, and teardown through one managed runtime contract.
-    Explicit endpoint URLs and `--skip-compose` support operator-owned external targets; ordinary
-    managed runs do not inherit another test process's project or host ports.
-
-For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
-For exact transaction, corporate-action, and private-banking product lifecycle posture, use
-[wiki/Transaction-and-Product-Lifecycle-Capabilities.md](wiki/Transaction-and-Product-Lifecycle-Capabilities.md).
-For detailed source-data products and boundary caveats, use
-[wiki/Mesh-Data-Products.md](wiki/Mesh-Data-Products.md) and the methodology docs under
-[docs/methodologies/source-data-products/](docs/methodologies/source-data-products).
-
-## Reader Paths
-
-- Business, sales, and demo readers:
-  [Supported Features](wiki/Supported-Features.md), [Overview](wiki/Overview.md), and
-  [Integrations](wiki/Integrations.md)
-- Operators and support teams:
-  [Operations Runbook](wiki/Operations-Runbook.md), [Support and Lineage](wiki/Support-and-Lineage.md),
-  and [Troubleshooting](wiki/Troubleshooting.md)
-- Engineers:
-  [Getting Started](wiki/Getting-Started.md), [Development Workflow](wiki/Development-Workflow.md),
-  [Validation and CI](wiki/Validation-and-CI.md), and
-  [Current-State Architecture Map](docs/architecture/current-state-architecture-map.md)
-- API and contract reviewers:
-  [API Surface](wiki/API-Surface.md), [RFC Index](wiki/RFC-Index.md), and
-  [RFC-0082 Contract Family Inventory](docs/architecture/RFC-0082-contract-family-inventory.md)
-
-## Architecture At A Glance
-
-```mermaid
-flowchart LR
-    Ingress["ingestion_service<br/>write ingress and adapter ingestion"]
-    Store["Persistence and Core store<br/>portfolio, account, holding, transaction truth"]
-    Query["query_service<br/>operational read plane"]
-    QCP["query_control_plane_service<br/>analytics-input, support, lineage, policy"]
-    Replay["event_replay_service<br/>DLQ, replay, audit, ops control"]
-    Calc["transaction processing and generators<br/>cost, cashflow, position, valuation, timeseries"]
-    Downstream["Gateway / Workbench / Performance / Risk / Advise / Manage / Report"]
-
-    Ingress --> Store
-    Store --> Query
-    Store --> QCP
-    Store --> Replay
-    Store --> Calc
-    Query --> Downstream
-    QCP --> Downstream
-    Replay --> Downstream
-    Calc --> Store
-```
-
-Primary runtime surfaces:
-
-- `query_service`
-  operational read plane
-- `query_control_plane_service`
-  analytics-input, snapshot/simulation, support, lineage, policy, and export contracts
-- `ingestion_service`
-  write ingress and adapter ingestion contracts
-- `event_replay_service`
-  replay, ingestion-health, DLQ, and operations control-plane contracts
-- `financial_reconciliation_service`
-  reconciliation execution, monotonic/latest-epoch control evidence, and atomic completion/control
-  publication; portfolio aggregation stages reconciliation requests directly
-- `portfolio_transaction_processing_service`
-  one app-local/CI deployable and one transaction for cost, cashflow, position,
-  transaction readiness, semantic idempotency, and compatibility outbox effects;
-  `portfolio_security_day.valuation.ready` is staged only after all financial effects succeed,
-  while `transactions.cost.processed` and `cashflows.calculated` remain compatibility facts with no
-  active in-repo consumer; valuation remains independently scalable
-- valuation and derived state
-  valuation remains independently scalable; position and portfolio time-series materialization run
-  as separate modules in one `portfolio_derived_state_service` deployable
-
-Primary architecture references:
-
-- [RFC-0082 Contract Family Inventory](docs/architecture/RFC-0082-contract-family-inventory.md)
-- [RFC-0083 Target-State Gap Analysis](docs/architecture/RFC-0083-target-state-gap-analysis.md)
-- [Query Service And Control Plane Boundary](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
-- [Microservice Boundaries and Trigger Matrix](docs/architecture/microservice-boundaries-and-trigger-matrix.md)
-- [Calculator Runtime Consolidation Decision](docs/architecture/calculator-runtime-consolidation-decision.md)
-
-## Repository Layout
-
-| Path | Responsibility |
+| Capability | Financial outcome |
 | --- | --- |
-| `src/services/query_service/` | Operational read-plane API for portfolio, position, transaction, cash, market, and reporting reads. |
-| `src/services/query_control_plane_service/` | Control-plane and downstream analytics-input, snapshot, simulation, support, lineage, policy, and export contracts. |
-| `src/services/ingestion_service/` | Source-data and adapter write ingress. Keep routers as HTTP binding/response adapters; put write-mode, rate-limit, idempotent job lifecycle, publish/persist, failure marking, and bookkeeping orchestration behind ingestion command handlers. |
-| `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
-| `src/services/persistence_service/` | Persistence orchestration. |
-| `src/services/portfolio_transaction_processing_service/` | Active app-local/CI combined cost, cashflow, and position runtime with layered delivery, application, domain/ports, infrastructure, and runtime packages. |
-| `src/services/financial_reconciliation_service/` | Independent reconciliation controls plane. Owns run/finding policy, durable control evidence, and completion/control event staging. |
-| `src/services/calculators/` | Independently deployable position valuation only. Cost, cashflow, and position transaction processing are target-owned modules in `portfolio_transaction_processing_service`. |
-| `src/services/valuation_orchestrator_service/` | Valuation scheduling, job lifecycle, reprocessing state, and dispatch. |
-| `src/services/portfolio_derived_state_service/` | Layered position and portfolio time-series materialization, durable aggregation scheduling, and reconciliation-request staging. |
-| `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
-| `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
-| `scripts/` | Gates, guards, manifests, smoke tools, proof generators, and operational scripts. |
-| `docs/` | Detailed architecture, standards, features, operations, methodology, and RFC material. |
-| `wiki/` | Canonical authored source for GitHub wiki publication. |
+| Portfolio and account records | Maintains tenant-owned portfolios, accounts, holdings, mandates, instruments, and source lineage. |
+| Transaction processing | Books supported transaction and corporate-action lifecycles with idempotent, auditable cost, cashflow, and position effects. |
+| Positions and cash | Reconstructs dated quantity and cash state from authoritative events without silently substituting missing evidence. |
+| Valuation | Produces valuation evidence against explicit as-of dates, prices, FX rates, quantity epochs, and reconciliation state. |
+| Cashflows and history | Serves governed transaction windows, cashflows, valuations, and time-series foundations for downstream analytics. |
+| Reconciliation and recovery | Detects inconsistent source or derived state, fences stale work, and supports controlled replay, reprocessing, and recovery. |
+| Governed reads | Exposes operational reads plus analytics-input, lineage, policy, support, snapshot, and simulation contracts. |
+
+The supported feature catalogue is maintained in
+[Supported Features](wiki/Supported-Features.md). Exact route ownership and schemas are available
+through the [API Surface](wiki/API-Surface.md),
+[API route catalogue](docs/standards/api-route-catalog.v1.json), and
+[route-family registry](docs/standards/route-contract-family-registry.json).
+
+## Availability
+
+The repository implements and tests the capabilities declared in its supported-feature and route
+contracts. Production certification is separate: deployment identity, external market/reference
+feeds, treasury or OMS integration, IAM, operational evidence, and downstream journeys must be
+proven in their owning environments. Where authoritative evidence is absent or inconsistent, Core
+is designed to report an explicit unavailable or blocked state rather than a plausible value.
 
 ## Quick Start
 
-Install dependencies:
+Prerequisites:
+
+- Python and tooling versions declared by `pyproject.toml` and the locked requirements files;
+- GNU Make;
+- Docker with Compose for the isolated PostgreSQL and Kafka-backed runtime.
+
+From the repository root:
 
 ```bash
 make install
-```
-
-Fast local feature-lane parity:
-
-```bash
-make ci-local
-```
-
-App-local isolated stack:
-
-```bash
 cp .env.example .env
 docker compose up -d
 python -m tools.kafka_setup
 python -m alembic upgrade head
-curl http://localhost:8090/health/ready
+curl --fail http://localhost:8090/health/ready
 ```
 
-The example file explicitly declares `ENVIRONMENT=local` and
-`KAFKA_SECURITY_PROTOCOL=PLAINTEXT`. Do not reuse those local-only settings in a promoted
-environment.
+Expected result: the readiness request returns HTTP `200` after the local database, messaging
+dependencies, schema, and Core services are ready. `.env.example` is local-only; do not reuse its
+plaintext or development settings in a promoted environment.
 
-Important runtime note:
+For the integrated, populated front-office journey, use the
+[Workbench canonical local runtime](https://github.com/sgajbi/lotus-workbench/blob/main/docs/operations/canonical-front-office-local-runtime.md).
 
-- use `lotus-core` app-local compose for isolated backend development
-- use `lotus-platform/platform-stack` for shared infrastructure support
-- use `lotus-workbench` canonical runtime when the task is really front-office populated product
-  proof
+## How Core Fits
 
-## Common Commands
+```mermaid
+flowchart LR
+    Sources["Source ingestion<br/>bank, market and reference evidence"] --> Processing["Core processing<br/>booking, positions, cashflows, valuation"]
+    Processing --> Store["Authoritative store<br/>tenant, time, lineage and audit"]
+    Store --> Reads["Governed reads<br/>operational, analytics-input and support"]
+    Reads --> Consumers["Gateway, Workbench, Performance, Risk,<br/>Advise, Manage and Reporting"]
+    Store --> Recovery["Reconciliation and replay"]
+    Recovery --> Processing
+```
 
-- `make install`
-  install development dependencies
-- `make ci-local`
-  feature-lane parity
-- `make ci`
-  PR merge gate parity
-- `make ci-main`
-  main releasability parity
-- `make lint`
-  repository-wide Ruff check and format proof plus the governed domain and contract guards; the
-  target verifies the active Ruff version against `requirements/ci-tooling.lock.txt` and fails with
-  a bootstrap remediation instead of accepting ambient tooling
-- `make verify-dependencies`
-  integrity-check and reuse the content-addressed dependency-health environment when inputs match
-- `make verify-dependencies-clean`
-  force clean dependency installation proof without weakening the reusable feature/PR path
-- `make security-audit`
-  audit the verified dependency-health environment and write machine-readable evidence
-- `make test`
-  targeted unit gate
-- `make test-unit-db`
-  database-backed unit gate
-- `make test-integration-lite`
-  integration-lite suite
-- `make test-transaction-processing-contract`
-  complete DB-direct combined cost, cashflow, position, replay, and rollback contract
-- `make profile-cost-history-capacity`
-  reproducible FIFO/AVCO long-history engine profile with machine-readable output
-- `make profile-cost-processing-modes`
-  ordered opening, ordered disposal, and backdated rebuild engine capacity profile
-- `make test-e2e-smoke`
-  E2E smoke
-- `make test-docker-smoke`
-  deterministic Docker endpoint smoke
-- `make route-contract-family-guard`
-  RFC-0082 route-family enforcement
-- `make source-data-product-contract-guard`
-  source-data product contract enforcement
-- `make endpoint-consolidation-watchlist-guard`
-  RFC-0083 endpoint consolidation watchlist enforcement
-- `make analytics-input-consumer-contract-guard`
-  downstream analytics-input consumer enforcement
-- `make event-runtime-contract-guard`
-  eventing and supportability contract enforcement
-- `make rfc0083-closure-guard`
-  RFC-0083 closure ledger enforcement
-- `make rfc-status-ledger-guard`
-  full RFC status ledger coverage across core RFCs, transaction specs, architecture RFC material,
-  and operations RFC playbooks
-- `make front-door-sync-guard`
-  README/wiki/sidebar/documentation front-door synchronization and PR documentation decision check
-- `make critical-path-coverage-guard`
-  critical-path coverage contract and changed-code coverage reporting guard
-- `make generated-artifact-tracking-guard`
-  tracked generated-artifact guard for build, cache, package, and output evidence paths
-- `make api-route-catalog-guard`
-  generated API route catalog drift check across OpenAPI and route-family governance
-- `make image-provenance-guard`
-  OCI label, CI build-arg, CI-only image release, release-manifest, digest-deploy,
-  no-build-secret, and `/version` metadata enforcement
-- `make architecture-docs-catalog-guard`
-  architecture documentation catalog, current-state/review/historical classification, and
-  uncataloged architecture document enforcement
-- `make clean`
-  remove governed local caches, build byproducts, coverage files, and generated `output/`
-  evidence artifacts through the reviewed cleanup script
+The runtime is split by ownership boundary rather than by presentation surface:
 
-## Validation And CI Lanes
+- `ingestion_service` admits source-owned writes and ingestion jobs;
+- `portfolio_transaction_processing_service` applies atomic cost, cashflow, position, and
+  transaction-readiness effects;
+- valuation and derived-state services schedule and materialize dated financial state;
+- `financial_reconciliation_service` owns reconciliation evidence and lifecycle controls;
+- `query_service` is the operational read plane;
+- `query_control_plane_service` owns governed analytics-input, lineage, policy, snapshot,
+  simulation, export, and support contracts;
+- `event_replay_service` owns replay, DLQ, ingestion-health, and remediation operations.
 
-`lotus-core` uses:
+See the [architecture index](docs/architecture/README.md),
+[current-state architecture map](docs/architecture/current-state-architecture-map.md), and
+[repository engineering context](REPOSITORY-ENGINEERING-CONTEXT.md) for detailed boundaries.
 
-1. `Remote Feature Lane`
-2. `Pull Request Merge Gate`
-3. `Main Releasability Gate`
+## Financial Trust Model
 
-Important lane mapping:
+Core changes are expected to preserve these invariants:
 
-- `make ci-local`
-  fast local feature-lane parity
-- `make ci`
-  PR merge gate parity
-- `make ci-main`
-  main releasability parity
+1. financial amounts and quantities use exact, governed numeric semantics;
+2. trade, settlement, booking, effective, observation, valuation, correction, and ingestion time
+   are not interchangeable;
+3. tenant ownership is source-validated and durable across ingress, persistence, events, jobs,
+   replay, and reads;
+4. idempotency and fencing prevent duplicate or stale work from becoming authoritative;
+5. every derived value retains source, price, FX, policy/version, epoch, and correlation lineage
+   required to explain it;
+6. reconciliation and readiness fail closed when required evidence is missing, stale, mismatched,
+   or unresolved;
+7. replay and recovery reproduce the same authoritative outcome or surface a controlled failure.
 
-Coverage posture:
+Detailed temporal, transaction, source-product, security, and methodology contracts are indexed in
+[docs](docs/README.md) and the [RFC index](wiki/RFC-Index.md).
 
-- `make coverage-gate` enforces the zero-warning unit budget and branch-aware 98% Query Service
-  aggregate threshold from the same unit execution. `make ci-local` therefore runs the complete
-  unit and integration-lite suites once, while hosted CI can still run the standalone
-  `make warning-gate` for earlier failure isolation.
-- It writes `output/coverage/query-service-coverage.json` for the aggregate scope,
-  `output/coverage/coverage.json` for Query Service plus exact changed-critical modules, and
-  `output/coverage/critical-path-coverage-report.json` for changed-file lineage and thresholds.
-  Contract-only checks write `output/coverage/critical-path-coverage-contract-report.json` so they
-  cannot overwrite measured evidence.
-  Rename/copy records preserve previous and current paths, deleted paths are audit-only, and an
-  existing changed critical module absent from coverage fails with
-  `CHANGED_CRITICAL_SOURCE_UNMEASURED`. Measured changed critical modules must satisfy both the
-  governed line and branch thresholds. Contract matching covers governed Python paths outside
-  `src/`, including exact changed Alembic migrations.
-- `docs/standards/critical-path-coverage.v1.json` is the governed contract for critical-path
-  module groups, source scopes, minimum measured coverage expectations, test-family expectations,
-  fail-closed changed-source evidence, and exception policy.
+## Security And Operations
 
-Because this repo has a heavy validation contract, targeted local proof plus GitHub-backed heavy
-execution is often the right workflow.
+Production-like profiles enforce authenticated tenant and capability boundaries plus durable audit
+delivery before protected work. A missing or invalid authority, audit-store failure, incompatible
+source state, or unavailable dependency must not widen access or fabricate a result.
 
-The approval-grade institutional completion and sign-off lane is available through an explicit
-manual Main Releasability run and the `test-institutional-release-gates` Make target. Each merged PR
-dispatches the faster release gates through an immutable tag bound to the exact merge SHA; default
-post-merge and manual runs intentionally skip the 100k-transaction lane.
+Start with:
 
-## Contract Notes
+- [Operations Runbook](wiki/Operations-Runbook.md)
+- [Security and Governance](wiki/Security-and-Governance.md)
+- [Support and Lineage](wiki/Support-and-Lineage.md)
+- [Troubleshooting](wiki/Troubleshooting.md)
 
-Important current core truths:
+## Development And Validation
 
-1. `query_service` is the operational read plane
-2. `query_control_plane_service` owns analytics-input, snapshot/simulation, support, lineage,
-   integration policy, capability, and export contracts
-3. `lotus-core` owns canonical source data and analytics inputs, not downstream performance or risk
-   conclusions
-4. route-family, temporal-vocabulary, source-data-product, security, and event-runtime governance
-   are all active and enforced by repo-native guards
-5. app-local runtime support is still valid here, but cross-cutting platform ownership lives in
-   `lotus-platform`
-6. production-like environments use the shared production security profile for service-local
-   enterprise auth/audit defaults; local/dev/test environments remain opt-in
-7. the query-control-plane wheel and image are package-independent from Query Service implementation
-   source; QCP runtime composition uses QCP-owned ports/adapters and Compose must not mask missing
-   dependencies with cross-service source mounts
+Use repository-native targets so local and CI evidence share the same entrypoints:
 
-Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wiki/API-Surface.md).
+```bash
+make ci-local        # fast feature-lane parity
+make ci              # pull-request merge-gate parity
+make ci-main         # main releasability parity
+make front-door-sync-guard
+make quality-wiki-docs-gate
+```
 
-## Documentation Map
+The full command catalogue, coverage mechanics, database/runtime gates, release procedure, and
+image provenance live in the [development workflow](wiki/Development-Workflow.md),
+[Validation and CI](wiki/Validation-and-CI.md), and
+[operations runbook](docs/operations/runbook.md).
 
-Start here:
+## Navigate
 
-- architecture index:
-  [docs/architecture/README.md](docs/architecture/README.md)
-- wiki home:
-  [wiki/Home.md](wiki/Home.md)
+| Reader or task | Authoritative starting point |
+| --- | --- |
+| Product and business capability | [Supported Features](wiki/Supported-Features.md) and [Overview](wiki/Overview.md) |
+| API integration | [API Surface](wiki/API-Surface.md) and [Integrations](wiki/Integrations.md) |
+| Architecture and ownership | [Architecture index](docs/architecture/README.md) and [repository context](REPOSITORY-ENGINEERING-CONTEXT.md) |
+| Operations and recovery | [Operations Runbook](wiki/Operations-Runbook.md) and [Troubleshooting](wiki/Troubleshooting.md) |
+| Validation and contribution | [Validation and CI](wiki/Validation-and-CI.md) and [Development Workflow](wiki/Development-Workflow.md) |
+| Current implementation status | [Supported Features](wiki/Supported-Features.md) and [RFC Index](wiki/RFC-Index.md) |
 
-Architecture and contract truth:
-
-- target architecture:
-  [docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
-- contract-family inventory:
-  [docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
-- RFC-0083 target-state gap analysis:
-  [docs/architecture/RFC-0083-target-state-gap-analysis.md](docs/architecture/RFC-0083-target-state-gap-analysis.md)
-- query/control-plane boundary:
-  [docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
-- route-family registry:
-  [docs/standards/route-contract-family-registry.json](docs/standards/route-contract-family-registry.json)
-- generated API route catalog:
-  [docs/standards/api-route-catalog.v1.json](docs/standards/api-route-catalog.v1.json)
-- front-door synchronization contract:
-  [docs/standards/front-door-sync.v1.json](docs/standards/front-door-sync.v1.json)
-- endpoint consolidation watchlist:
-  [docs/standards/endpoint-consolidation-watchlist.json](docs/standards/endpoint-consolidation-watchlist.json)
-- temporal vocabulary:
-  [docs/standards/temporal-vocabulary.md](docs/standards/temporal-vocabulary.md)
-
-Operator and onboarding wiki:
-
-- API surface and route-family examples:
-  [wiki/API-Surface.md](wiki/API-Surface.md)
-- query control plane:
-  [wiki/Query-Control-Plane.md](wiki/Query-Control-Plane.md)
-- support and lineage:
-  [wiki/Support-and-Lineage.md](wiki/Support-and-Lineage.md)
-- operations runbook:
-  [wiki/Operations-Runbook.md](wiki/Operations-Runbook.md)
-- validation and CI:
-  [wiki/Validation-and-CI.md](wiki/Validation-and-CI.md)
-- getting started:
-  [wiki/Getting-Started.md](wiki/Getting-Started.md)
-
-Service and subsystem pages:
-
-- data models:
-  [wiki/Data-Models.md](wiki/Data-Models.md)
-- event replay:
-  [wiki/Event-Replay-Service.md](wiki/Event-Replay-Service.md)
-- financial reconciliation:
-  [wiki/Financial-Reconciliation.md](wiki/Financial-Reconciliation.md)
-- timeseries and aggregation:
-  [wiki/Timeseries-and-Aggregation.md](wiki/Timeseries-and-Aggregation.md)
-- database migrations:
-  [wiki/Database-Migrations.md](wiki/Database-Migrations.md)
-- testing guide:
-  [wiki/Testing-Guide.md](wiki/Testing-Guide.md)
-
-## Wiki Source
-
-Repository-authored wiki pages live under [wiki/](wiki). If the GitHub wiki is published later,
-keep `wiki/` as the canonical source and treat any separate `*.wiki.git` clone as publication
-plumbing only.
+Repo-local `wiki/` is the authored source for the
+[published GitHub wiki](https://github.com/sgajbi/lotus-core/wiki). The separate wiki repository is
+publication transport only.
