@@ -8,6 +8,7 @@ from src.services.ingestion_service.app.DTOs.instrument_dto import Instrument
 from src.services.ingestion_service.app.services.upload_publishers import (
     IngestionServiceUploadPublisher,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 
 @pytest.mark.asyncio
@@ -23,6 +24,10 @@ async def test_ingestion_service_upload_publisher_dispatches_by_entity() -> None
         product_type="bond",
     )
 
-    await publisher.publish_records("instruments", [instrument])
+    await publisher.publish_records(
+        "instruments",
+        [instrument],
+        tenant_context=TEST_TENANT_CONTEXT,
+    )
 
     ingestion_service.publish_instruments.assert_awaited_once_with([instrument])

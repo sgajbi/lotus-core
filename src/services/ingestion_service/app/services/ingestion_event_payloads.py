@@ -1,5 +1,7 @@
 from typing import Any
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..DTOs.business_date_dto import BusinessDate
 from ..DTOs.fx_rate_dto import FxRate
 from ..DTOs.instrument_dto import Instrument
@@ -18,8 +20,14 @@ def portfolio_event_payload(portfolio: Portfolio) -> RawIngestionEventPayload:
     return portfolio.model_dump()
 
 
-def transaction_event_payload(transaction: Transaction) -> RawIngestionEventPayload:
-    return transaction.model_dump()
+def transaction_event_payload(
+    transaction: Transaction,
+    *,
+    tenant_id: str,
+) -> RawIngestionEventPayload:
+    payload = transaction.model_dump()
+    payload["tenant_id"] = TenantId(tenant_id).value
+    return payload
 
 
 def instrument_event_payload(instrument: Instrument) -> RawIngestionEventPayload:
