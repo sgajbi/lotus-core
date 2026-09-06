@@ -4428,6 +4428,7 @@ class ProcessedEvent(Base):
     event_id = Column(String, nullable=False)
     portfolio_id = Column(String, nullable=False)
     service_name = Column(String, nullable=False)
+    tenant_id = Column(String(128), nullable=True)
     correlation_id = Column(String, nullable=True)
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
@@ -4436,14 +4437,48 @@ class ProcessedEvent(Base):
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("event_id", "service_name", name="_event_service_uc"),
+        CheckConstraint(
+            "(service_name NOT IN ('persistence-transactions', "
+            "'portfolio-transaction-processing', 'cashflow-calculator') "
+            "OR tenant_id IS NOT NULL) AND (tenant_id IS NULL OR "
+            "(tenant_id = btrim(tenant_id) AND tenant_id <> '' "
+            "AND char_length(tenant_id) <= 128))",
+            name="ck_processed_events_tenant_authority",
+        ),
+        Index(
+            "uq_processed_events_tenant_event_service",
+            "tenant_id",
+            "event_id",
+            "service_name",
+            unique=True,
+            postgresql_where=tenant_id.isnot(None),
+            sqlite_where=tenant_id.isnot(None),
+        ),
+        Index(
+            "uq_processed_events_global_event_service",
+            "event_id",
+            "service_name",
+            unique=True,
+            postgresql_where=tenant_id.is_(None),
+            sqlite_where=tenant_id.is_(None),
+        ),
         Index("ix_processed_events_alternate_lookup_key", "alternate_lookup_key"),
         Index(
-            "uq_processed_events_service_semantic_key",
+            "uq_processed_events_tenant_service_semantic_key",
+            "tenant_id",
             "service_name",
             "semantic_key",
             unique=True,
-            postgresql_where=semantic_key.isnot(None),
+            postgresql_where=tenant_id.isnot(None) & semantic_key.isnot(None),
+            sqlite_where=tenant_id.isnot(None) & semantic_key.isnot(None),
+        ),
+        Index(
+            "uq_processed_events_global_service_semantic_key",
+            "service_name",
+            "semantic_key",
+            unique=True,
+            postgresql_where=tenant_id.is_(None) & semantic_key.isnot(None),
+            sqlite_where=tenant_id.is_(None) & semantic_key.isnot(None),
         ),
     )
 
