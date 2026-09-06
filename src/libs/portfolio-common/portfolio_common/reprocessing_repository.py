@@ -1,11 +1,14 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_repository.py
 import logging
+from types import SimpleNamespace
 from typing import Any, cast
 
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .database_models import Portfolio
 from .database_models import Transaction as DBTransaction
+from .events import TransactionEvent
 from .ingestion_lineage import ingestion_job_id_var, normalize_ingestion_job_id
 from .kafka_utils import KafkaProducer
 from .logging_utils import correlation_id_var, normalize_lineage_value
@@ -83,9 +86,11 @@ class ReprocessingRepository:
             transactions=transactions_to_replay,
             correlation=correlation,
         )
-        replayed_count = publish_transaction_replay_plan(
-            plan=plan,
-            publisher=self._publisher,
+        replayed_count = int(
+            publish_transaction_replay_plan(
+                plan=plan,
+                publisher=self._publisher,
+            )
         )
         logger.info(f"Successfully republished {replayed_count} transaction event(s).")
 
@@ -99,9 +104,9 @@ class SqlAlchemyTransactionReplayReader(TransactionReplayReader):
     async def list_transactions_to_replay(
         self,
         ordered_transaction_ids: list[str],
-    ) -> list[DBTransaction]:
+    ) -> list[Any]:
         result = await self._db.execute(_transactions_to_replay_stmt(ordered_transaction_ids))
-        return cast(list[DBTransaction], result.scalars().all())
+        return [SimpleNamespace(**row) for row in result.mappings().all()]
 
 
 class KafkaTransactionReplayPublisher(TransactionReplayPublisher):
@@ -133,7 +138,15 @@ def _transactions_to_replay_stmt(ordered_transaction_ids: list[str]) -> Any:
         value=DBTransaction.transaction_id,
     )
     return (
-        select(DBTransaction)
+        select(
+            *(
+                DBTransaction.__table__.columns[field_name]
+                for field_name in TransactionEvent.model_fields
+                if field_name in DBTransaction.__table__.columns
+            ),
+            Portfolio.tenant_id.label("tenant_id"),
+        )
+        .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
         .where(DBTransaction.transaction_id.in_(ordered_transaction_ids))
         .order_by(ordering)
     )

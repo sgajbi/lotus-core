@@ -26,6 +26,7 @@ def _transaction(
     return SimpleNamespace(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id=security_id,
         transaction_date=datetime(2026, 1, 2, 10, 0, 0, tzinfo=UTC),
