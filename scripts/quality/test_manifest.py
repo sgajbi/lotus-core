@@ -37,6 +37,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/libs/portfolio-common/test_latest_position_query_plans.py",
         "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py",
         "tests/integration/test_valuation_job_hot_path_migration.py",
+        "tests/integration/test_transaction_event_fence_tenant_migration.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
