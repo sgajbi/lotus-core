@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     TransactionCost,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction import (
     canonical_transaction_identity_record_values,
     transaction_identity_ownership,
@@ -44,6 +45,16 @@ class TransactionReferenceAvailability:
 class TransactionDBRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def resolve_portfolio_tenant(self, portfolio_id: str) -> str | None:
+        """Return normalized source-owned tenant authority for one portfolio."""
+
+        tenant_id = (
+            await self.db.execute(
+                select(Portfolio.tenant_id).where(Portfolio.portfolio_id == portfolio_id)
+            )
+        ).scalar_one_or_none()
+        return TenantId(tenant_id).value if tenant_id is not None else None
 
     async def resolve_transaction_reference_availability(
         self,

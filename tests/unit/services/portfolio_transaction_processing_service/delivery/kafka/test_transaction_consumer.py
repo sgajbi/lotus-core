@@ -21,6 +21,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingIntent,
     TransactionProcessingRejected,
     TransactionProcessingStatus,
+    transaction_tenant_authority,
 )
 from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     TransactionProcessingConsumer,
@@ -73,13 +74,17 @@ def _consumer(
     use_case: AsyncMock,
     *,
     route_corporate_action_child: AsyncMock | None = None,
+    tenant_authority: AsyncMock | None = None,
 ) -> TransactionProcessingConsumer:
+    authority = tenant_authority or AsyncMock()
+    authority.resolve.return_value = "tenant-test"
     return TransactionProcessingConsumer(
         bootstrap_servers="mock_server",
         topic="transactions.persisted",
         group_id="portfolio_transaction_processing_group",
         use_case=use_case,
         route_corporate_action_child=route_corporate_action_child or _ordinary_arrival(),
+        tenant_authority=authority,
     )
 
 
@@ -97,6 +102,7 @@ async def test_consumer_maps_source_lineage_and_invokes_combined_use_case_once()
 
     command = use_case.execute.await_args.args[0]
     assert command.transaction.transaction_id == "TX-001"
+    assert command.transaction.tenant_id == "tenant-test"
     assert command.metadata.event_id == "transactions.persisted-3-42"
     assert command.metadata.correlation_id == "header-corr-001"
     assert command.metadata.traceparent == (
@@ -104,6 +110,50 @@ async def test_consumer_maps_source_lineage_and_invokes_combined_use_case_once()
     )
     assert command.metadata.processing_intent is TransactionProcessingIntent.STANDARD
     use_case.execute.assert_awaited_once()
+
+
+async def test_consumer_resolves_legacy_v1_event_tenant_from_portfolio_authority() -> None:
+    use_case = AsyncMock()
+    use_case.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.PROCESSED,
+        input_transaction_id="TX-001",
+    )
+    authority = AsyncMock()
+    authority.resolve.return_value = "tenant-test"
+    message = _message()
+    payload = json.loads(message.value.return_value.decode("utf-8"))
+    payload.pop("tenant_id")
+    message.value.return_value = json_bytes(payload)
+
+    await _consumer(use_case, tenant_authority=authority).process_message(message)
+
+    authority.resolve.assert_awaited_once_with(
+        portfolio_id="PB-001",
+        asserted_tenant_id=None,
+    )
+    assert use_case.execute.await_args.args[0].transaction.tenant_id == "tenant-test"
+
+
+async def test_consumer_rejects_tenant_that_conflicts_with_portfolio_authority() -> None:
+    use_case = AsyncMock()
+    route = _ordinary_arrival()
+    authority = AsyncMock()
+    authority.resolve.side_effect = transaction_tenant_authority.TransactionTenantAuthorityMismatch(
+        "scope mismatch"
+    )
+
+    with pytest.raises(
+        transaction_tenant_authority.TransactionTenantAuthorityMismatch,
+        match="scope mismatch",
+    ):
+        await _consumer(
+            use_case,
+            route_corporate_action_child=route,
+            tenant_authority=authority,
+        ).process_message(_message())
+
+    route.execute.assert_not_awaited()
+    use_case.execute.assert_not_awaited()
 
 
 async def test_consumer_acknowledges_parked_child_without_financial_mutation() -> None:
@@ -219,6 +269,8 @@ async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart
         detail={"dependency_error": "InstrumentReferenceUnavailableError"},
         retryable=True,
     )
+    tenant_authority = AsyncMock()
+    tenant_authority.resolve.return_value = "tenant-test"
     consumer = TransactionProcessingConsumer(
         bootstrap_servers="mock_server",
         topic="transactions.persisted",
@@ -226,6 +278,7 @@ async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart
         dlq_topic="dlq.persistence_service",
         use_case=use_case,
         route_corporate_action_child=_ordinary_arrival(),
+        tenant_authority=tenant_authority,
         execution_profile=KafkaConsumerExecutionProfile(retryable_failure_backoff_seconds=0.001),
         retryable_failure_max_attempts=2,
     )

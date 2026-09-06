@@ -21,6 +21,9 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     map_transaction_event,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_tenant_authority import (  # noqa: E501
+    SqlAlchemyTransactionTenantAuthority,
+)
 from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
     build_process_transaction_use_case,
 )
@@ -150,6 +153,12 @@ async def process_booked_transaction(
     correlation_id: str,
     processing_intent: TransactionProcessingIntent = TransactionProcessingIntent.STANDARD,
 ) -> ProcessTransactionResult:
+    if event.tenant_id is None:
+        tenant_id = await SqlAlchemyTransactionTenantAuthority(context.session_factory).resolve(
+            portfolio_id=event.portfolio_id,
+            asserted_tenant_id=None,
+        )
+        event = event.model_copy(update={"tenant_id": tenant_id})
     return await context.use_case.execute(
         map_transaction_event(
             event,

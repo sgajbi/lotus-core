@@ -71,6 +71,7 @@ async def test_transaction_reference_availability_resolves_governed_state(
     repository = TransactionDBRepository(async_db_session)
     availability = await repository.resolve_transaction_reference_availability(
         portfolio_id="PORT_REFERENCE_01",
+        tenant_id=TEST_TENANT_ID,
         security_id=" SEC_REFERENCE_01 ",
         cash_account_id=" CASH_REFERENCE_01 ",
         cash_security_id=" CASH_USD ",
@@ -78,6 +79,7 @@ async def test_transaction_reference_availability_resolves_governed_state(
     )
     missing_availability = await repository.resolve_transaction_reference_availability(
         portfolio_id="PORT_REFERENCE_404",
+        tenant_id=TEST_TENANT_ID,
         security_id="SEC_REFERENCE_404",
         cash_account_id=None,
         cash_security_id=None,

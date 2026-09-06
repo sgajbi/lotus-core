@@ -43,6 +43,12 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         """The unique name of the service for idempotency tracking."""
         pass
 
+    @property
+    def tenant_scoped_idempotency(self) -> bool:
+        """Whether this consumer's processed-event identity includes tenant ownership."""
+
+        return False
+
     @abstractmethod
     async def handle_persistence(self, db_session, event: BaseModel) -> Any:
         """
@@ -51,6 +57,11 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         It should return the persisted database object if an outbox event is needed.
         """
         pass
+
+    async def prepare_event(self, db_session, event: BaseModel) -> BaseModel:
+        """Resolve consumer-specific authority before the idempotency claim."""
+
+        return event
 
     def get_outbox_event(self, persisted_object: Any) -> Optional[Dict[str, Any]]:
         """
@@ -79,12 +90,11 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
 
                 async for db in get_async_db_session():
                     async with db.begin():
+                        event = await self.prepare_event(db, event)
                         idempotency_repo = IdempotencyRepository(db)
-                        tenant_scope = (
-                            {"tenant_id": envelope.tenant_id}
-                            if envelope.tenant_id is not None
-                            else {}
-                        )
+                        tenant_scope: dict[str, str | None] = {}
+                        if self.tenant_scoped_idempotency:
+                            tenant_scope["tenant_id"] = getattr(event, "tenant_id", None)
                         if not await idempotency_repo.claim_event_processing(
                             envelope.idempotency_key,
                             envelope.portfolio_id,

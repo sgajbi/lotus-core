@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from .config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from .domain.eventing import transaction_partition_key
+from .event_mapping import transaction_event_v1_payload
 from .events import TransactionEvent
 from .ingestion_lineage import INGESTION_JOB_ID_HEADER, normalize_ingestion_job_id
 from .logging_utils import normalize_lineage_value
@@ -198,7 +199,7 @@ def _transaction_replay_message(
                 None,
             ),
         ).value,
-        payload=event_to_publish.model_dump(mode="json"),
+        payload=transaction_event_v1_payload(event_to_publish),
         headers=[
             *headers,
             (TRANSACTION_PROCESSING_INTENT_HEADER, TRANSACTION_PROCESSING_REPAIR_VALUE),

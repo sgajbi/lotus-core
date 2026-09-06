@@ -41,7 +41,7 @@ def test_transaction_event_payload_preserves_boundary_types_and_lineage() -> Non
     payload = transaction_event_payload(transaction, tenant_id=TEST_TENANT_ID)
 
     assert payload["transaction_id"] == "TXN-PAYLOAD-001"
-    assert payload["tenant_id"] == TEST_TENANT_ID
+    assert "tenant_id" not in payload
     assert payload["portfolio_id"] == "PORT-PAYLOAD-001"
     assert payload["transaction_type"] == "BUY"
     assert payload["transaction_date"] == datetime(2026, 3, 25, 9, 30, tzinfo=UTC)

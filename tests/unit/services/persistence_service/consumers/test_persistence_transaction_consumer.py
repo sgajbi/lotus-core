@@ -1,4 +1,5 @@
 # tests/unit/services/persistence_service/consumers/test_persistence_transaction_consumer.py
+import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -72,6 +73,7 @@ def mock_dependencies():
     mock_repo = AsyncMock(spec=TransactionDBRepository)
     mock_outbox_repo = AsyncMock(spec=OutboxRepository)
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
+    mock_repo.resolve_portfolio_tenant.return_value = "tenant-test"
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     # FIX: The `begin()` method must return an async context manager.
@@ -166,6 +168,42 @@ async def test_process_message_success(
         mock_send_to_dlq.assert_not_called()
 
 
+async def test_legacy_v1_message_resolves_tenant_before_idempotency_and_persistence(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+    mock_dependencies: dict,
+) -> None:
+    payload = valid_transaction_event.model_dump(exclude={"tenant_id"}, mode="json")
+    message = MagicMock()
+    message.value.return_value = json.dumps(payload).encode("utf-8")
+    message.topic.return_value = "transactions.raw.received"
+    message.partition.return_value = 0
+    message.offset.return_value = 7
+    message.headers.return_value = [("correlation_id", b"legacy-corr")]
+    mock_repo = mock_dependencies["repo"]
+    mock_repo.resolve_transaction_reference_availability.return_value = (
+        TransactionReferenceAvailability(
+            portfolio_exists=True,
+            instrument_exists=True,
+            cash_account_exists=None,
+        )
+    )
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+
+    await transaction_consumer.process_message(message)
+
+    mock_repo.resolve_portfolio_tenant.assert_awaited_once_with("PORT_UT_01")
+    persisted_event = mock_repo.create_or_update_transaction.await_args.args[0]
+    assert persisted_event.tenant_id == "tenant-test"
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_awaited_once_with(
+        "UNIT_TEST_01",
+        "PORT_UT_01",
+        "persistence-transactions",
+        "legacy-corr",
+        tenant_id="tenant-test",
+    )
+
+
 async def test_persisted_linked_transaction_retains_group_partition_identity(
     transaction_consumer: TransactionPersistenceConsumer,
     valid_transaction_event: TransactionEvent,
@@ -201,6 +239,7 @@ async def test_persisted_transaction_publishes_canonical_identity(
     assert outbox_event["partition_key"].value == "PORT_UT_01|SEC_UT_01"
     assert outbox_event["payload"]["transaction_id"] == "UNIT_TEST_01"
     assert outbox_event["payload"]["portfolio_id"] == "PORT_UT_01"
+    assert "tenant_id" not in outbox_event["payload"]
 
 
 async def test_process_message_uses_header_correlation_on_direct_path(

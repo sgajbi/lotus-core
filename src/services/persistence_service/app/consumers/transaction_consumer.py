@@ -4,9 +4,11 @@ from typing import Any, Dict, Optional
 
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.domain.eventing import transaction_partition_key
-from portfolio_common.event_mapping import outbox_event_payload
+from portfolio_common.domain.tenant import TenantId
+from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import log_operation_event
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
@@ -40,6 +42,34 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
     @property
     def service_name(self) -> str:
         return "persistence-transactions"
+
+    @property
+    def tenant_scoped_idempotency(self) -> bool:
+        return True
+
+    @retry(
+        wait=wait_fixed(2),
+        stop=stop_after_delay(10),
+        retry=retry_if_exception_type(PortfolioNotFoundError),
+        reraise=True,
+    )
+    async def prepare_event(
+        self,
+        db_session: AsyncSession,
+        event: BaseModel,
+    ) -> BaseModel:
+        if not isinstance(event, TransactionEvent):
+            raise TypeError("Transaction persistence requires a transaction event")
+        source_tenant_id = await TransactionDBRepository(db_session).resolve_portfolio_tenant(
+            event.portfolio_id
+        )
+        if source_tenant_id is None:
+            raise PortfolioNotFoundError(
+                f"Portfolio {event.portfolio_id} has no durable tenant authority. Retrying..."
+            )
+        if event.tenant_id is not None and TenantId(event.tenant_id).value != source_tenant_id:
+            raise ValueError("Transaction tenant does not own the referenced portfolio")
+        return event.model_copy(update={"tenant_id": source_tenant_id})
 
     @retry(
         wait=wait_fixed(2),
@@ -117,5 +147,5 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
             ),
             "event_type": "RawTransactionPersisted",
             "topic": KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
-            "payload": outbox_event_payload(persisted_object),
+            "payload": transaction_event_v1_payload(persisted_object),
         }
