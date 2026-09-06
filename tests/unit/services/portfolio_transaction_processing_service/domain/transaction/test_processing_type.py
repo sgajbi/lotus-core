@@ -15,6 +15,7 @@ def _base_event() -> TransactionEvent:
     return TransactionEvent(
         transaction_id="FX-PROC-001",
         portfolio_id="PORT-001",
+        tenant_id="tenant-test",
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
         transaction_date=datetime(2026, 4, 1, 9, 0, 0, tzinfo=timezone.utc),

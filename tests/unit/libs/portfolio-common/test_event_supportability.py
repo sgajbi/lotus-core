@@ -51,6 +51,7 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
         "TransactionEvent": {
             "transaction_id": "T1",
             "portfolio_id": "P1",
+            "tenant_id": "tenant-test",
             "instrument_id": "I1",
             "security_id": "S1",
             "transaction_date": "2026-04-10T00:00:00Z",

@@ -102,6 +102,7 @@ def booked_transaction_event(
     return TransactionEvent(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
+        tenant_id=TEST_TENANT_ID,
         instrument_id=security_id,
         security_id=security_id,
         transaction_date=transaction_date,

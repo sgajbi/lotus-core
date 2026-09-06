@@ -24,6 +24,7 @@ def base_transaction_event() -> TransactionEvent:
     return TransactionEvent(
         transaction_id="TXN_CASHFLOW_01",
         portfolio_id="PORT_CF_01",
+        tenant_id="tenant-test",
         instrument_id="INST_CF_01",
         security_id="SEC_CF_01",
         transaction_date=datetime(2025, 8, 1, 10, 0, 0, tzinfo=timezone.utc),

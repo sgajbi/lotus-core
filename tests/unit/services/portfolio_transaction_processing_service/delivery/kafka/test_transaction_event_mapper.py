@@ -24,6 +24,7 @@ def _transaction_event() -> TransactionEvent:
         traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
         transaction_id="TX-001",
         portfolio_id="PB-001",
+        tenant_id="tenant-test",
         instrument_id="INST-001",
         security_id="SEC-001",
         transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),

@@ -51,6 +51,7 @@ def _event(
     return TransactionEvent(
         transaction_id=raw["transaction_id"],
         portfolio_id=raw["portfolio_id"],
+        tenant_id="tenant-test",
         instrument_id=raw["security_id"],
         security_id=raw["security_id"],
         transaction_date=datetime(2026, 4, 10, 10, 0, 0, tzinfo=UTC),

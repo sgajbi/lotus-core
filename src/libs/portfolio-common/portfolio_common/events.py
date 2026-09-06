@@ -273,6 +273,7 @@ class InstrumentEvent(CoreEventModel):
 class TransactionEvent(CoreEventModel):
     transaction_id: str
     portfolio_id: str
+    tenant_id: str
     instrument_id: str
     security_id: str
     transaction_date: datetime
@@ -379,6 +380,13 @@ class TransactionEvent(CoreEventModel):
     synthetic_flow_source: Optional[str] = None
     created_at: Optional[datetime] = None
     epoch: Optional[int] = None
+
+    @field_validator("tenant_id", mode="before")
+    @classmethod
+    def _normalize_tenant_id(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("tenant_id must be a string")
+        return TenantId(value).value
 
     @field_validator(
         "transaction_id",

@@ -19,6 +19,7 @@ def test_transaction_event_requires_redemption_settlement_date(
         TransactionEvent(
             transaction_id="RED-NO-VALUE-DATE",
             portfolio_id="PORT_META_001",
+            tenant_id="tenant-test",
             instrument_id="BOND-001",
             security_id="BOND-001",
             transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -35,6 +36,7 @@ def test_transaction_event_normalizes_control_codes_without_defaulting() -> None
     event = TransactionEvent(
         transaction_id="EVENT_CONTROL_001",
         portfolio_id="PORT_META_001",
+        tenant_id="tenant-test",
         instrument_id="SEC_EQ_US_001",
         security_id="SEC_EQ_US_001",
         transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -66,6 +68,7 @@ def test_transaction_event_normalizes_control_codes_without_defaulting() -> None
     implicit_event = TransactionEvent(
         transaction_id="EVENT_CONTROL_002",
         portfolio_id="PORT_META_001",
+        tenant_id="tenant-test",
         instrument_id="SEC_EQ_US_001",
         security_id="SEC_EQ_US_001",
         transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -104,6 +107,7 @@ def test_transaction_event_aggregates_trade_fee_from_components() -> None:
     event = TransactionEvent(
         transaction_id="EVENT_FEE_COMPONENTS_001",
         portfolio_id="PORT_META_001",
+        tenant_id="tenant-test",
         instrument_id="SEC_EQ_US_001",
         security_id="SEC_EQ_US_001",
         transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -129,6 +133,7 @@ def test_transaction_event_rejects_negative_trade_fee() -> None:
         TransactionEvent(
             transaction_id="EVENT_NEGATIVE_FEE_001",
             portfolio_id="PORT_META_001",
+            tenant_id="tenant-test",
             instrument_id="SEC_EQ_US_001",
             security_id="SEC_EQ_US_001",
             transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -147,6 +152,7 @@ def test_transaction_event_rejects_negative_fee_component() -> None:
         TransactionEvent(
             transaction_id="EVENT_NEGATIVE_COMPONENT_001",
             portfolio_id="PORT_META_001",
+            tenant_id="tenant-test",
             instrument_id="SEC_EQ_US_001",
             security_id="SEC_EQ_US_001",
             transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -166,6 +172,7 @@ def test_transaction_event_rejects_negative_core_amount() -> None:
         TransactionEvent(
             transaction_id="EVENT_NEGATIVE_AMOUNT_001",
             portfolio_id="PORT_META_001",
+            tenant_id="tenant-test",
             instrument_id="SEC_EQ_US_001",
             security_id="SEC_EQ_US_001",
             transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -182,6 +189,7 @@ def test_transaction_event_normalizes_string_amount_guards() -> None:
     event = TransactionEvent(
         transaction_id="EVENT_STRING_AMOUNTS_001",
         portfolio_id="PORT_META_001",
+        tenant_id="tenant-test",
         instrument_id="FX_EUR_USD_001",
         security_id="FX_EUR_USD_001",
         transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -208,6 +216,7 @@ def test_transaction_event_rejects_negative_interest_deduction_amount() -> None:
         TransactionEvent(
             transaction_id="EVENT_NEGATIVE_INTEREST_DEDUCTION_001",
             portfolio_id="PORT_META_001",
+            tenant_id="tenant-test",
             instrument_id="SEC_BOND_US_001",
             security_id="SEC_BOND_US_001",
             transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -226,6 +235,7 @@ def test_transaction_event_rejects_nonpositive_fx_amounts_and_rates() -> None:
         TransactionEvent(
             transaction_id="EVENT_NONPOSITIVE_FX_001",
             portfolio_id="PORT_META_001",
+            tenant_id="tenant-test",
             instrument_id="FX_EUR_USD_001",
             security_id="FX_EUR_USD_001",
             transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
@@ -271,6 +281,7 @@ def test_transaction_event_rejects_aggregated_fee_overflow() -> None:
         TransactionEvent(
             transaction_id="EVENT_FEE_PRECISION_REJECT_001",
             portfolio_id="PORT_PRECISION_001",
+            tenant_id="tenant-test",
             instrument_id="SEC_PRECISION_001",
             security_id="SEC_PRECISION_001",
             transaction_date=datetime(2026, 7, 28, 10, 0, tzinfo=timezone.utc),

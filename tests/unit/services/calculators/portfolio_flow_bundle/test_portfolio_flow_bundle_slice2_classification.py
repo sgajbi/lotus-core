@@ -18,6 +18,7 @@ def test_slice2_tax_rule_alignment_marks_portfolio_flow_true() -> None:
     event = TransactionEvent(
         transaction_id="TXN-TAX-074-01",
         portfolio_id="PORT-074",
+        tenant_id="tenant-test",
         instrument_id="INST-074",
         security_id="SEC-074",
         transaction_date=datetime(2026, 3, 5, 12, 0, 0, tzinfo=UTC),
@@ -52,6 +53,7 @@ def test_ca_transfer_classification_signs_for_in_and_out() -> None:
     in_event = TransactionEvent(
         transaction_id="TXN-CA-IN-01",
         portfolio_id="PORT-074",
+        tenant_id="tenant-test",
         instrument_id="INST-074",
         security_id="SEC-074",
         transaction_date=datetime(2026, 3, 5, 12, 0, 0, tzinfo=UTC),
