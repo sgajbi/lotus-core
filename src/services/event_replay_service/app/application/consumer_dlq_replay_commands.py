@@ -453,6 +453,7 @@ class ConsumerDlqReplayCommandService:
                     endpoint=context.endpoint,
                     payload=context.request_payload,
                     idempotency_key=context.idempotency_key,
+                    tenant_id=context.tenant_id,
                 )
         except Exception as exc:
             failure_reason = project_ingestion_failure_evidence(

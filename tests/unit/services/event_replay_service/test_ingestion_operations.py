@@ -78,6 +78,7 @@ async def test_replay_payload_dispatcher_dispatches_list_field_payload_with_idem
         endpoint="/ingest/business-dates",
         payload={"business_dates": [{"business_date": "2026-06-22"}]},
         idempotency_key="idem-001",
+        tenant_id="TENANT-SG",
     )
 
     ingestion_service.publish_business_dates.assert_awaited_once()
@@ -97,12 +98,50 @@ async def test_replay_payload_dispatcher_dispatches_whole_portfolio_bundle_reque
         endpoint="/ingest/portfolio-bundle",
         payload={"business_dates": [{"business_date": "2026-06-22"}]},
         idempotency_key="idem-002",
+        tenant_id="TENANT-SG",
     )
 
     ingestion_service.publish_portfolio_bundle.assert_awaited_once()
     args, kwargs = ingestion_service.publish_portfolio_bundle.await_args
     assert args[0].business_dates[0].business_date == date(2026, 6, 22)
-    assert kwargs == {"idempotency_key": "idem-002"}
+    assert kwargs == {"idempotency_key": "idem-002", "tenant_id": "TENANT-SG"}
+
+
+@pytest.mark.asyncio
+async def test_replay_payload_dispatcher_carries_tenant_to_transaction_publisher() -> None:
+    ingestion_service = MagicMock()
+    ingestion_service.publish_transactions = AsyncMock()
+    dispatcher, _ = _dispatcher(ingestion_service)
+
+    await dispatcher.replay_payload(
+        endpoint="/ingest/transactions",
+        payload={
+            "transactions": [
+                {
+                    "transaction_id": "TXN-001",
+                    "portfolio_id": "PORT-001",
+                    "instrument_id": "SEC-001",
+                    "security_id": "SEC-001",
+                    "transaction_date": "2026-06-22T00:00:00Z",
+                    "transaction_type": "BUY",
+                    "quantity": "1",
+                    "price": "100",
+                    "gross_transaction_amount": "100",
+                    "trade_currency": "USD",
+                    "currency": "USD",
+                }
+            ]
+        },
+        idempotency_key="idem-transaction",
+        tenant_id="TENANT-SG",
+    )
+
+    ingestion_service.publish_transactions.assert_awaited_once()
+    _, kwargs = ingestion_service.publish_transactions.await_args
+    assert kwargs == {
+        "idempotency_key": "idem-transaction",
+        "tenant_id": "TENANT-SG",
+    }
 
 
 @pytest.mark.asyncio
@@ -114,6 +153,7 @@ async def test_replay_payload_dispatcher_rejects_unsupported_endpoint() -> None:
             endpoint="/ingest/not-supported",
             payload={},
             idempotency_key=None,
+            tenant_id="TENANT-SG",
         )
 
 
@@ -131,6 +171,7 @@ async def test_replay_payload_dispatcher_resolves_reprocessing_ordering_targets(
         endpoint="/reprocess/transactions",
         payload={"transaction_ids": [" TXN-1 ", "TXN-2"]},
         idempotency_key="idem-reprocess",
+        tenant_id="TENANT-SG",
     )
 
     resolver.execute.assert_awaited_once_with(["TXN-1", "TXN-2"])

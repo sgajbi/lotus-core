@@ -22,6 +22,7 @@ class ReplayPayloadDispatcher(Protocol):
         endpoint: str,
         payload: dict[str, Any],
         idempotency_key: str | None,
+        tenant_id: str,
     ) -> None: ...
 
 
@@ -31,7 +32,11 @@ class IngestionReplayPublisher(Protocol):
     ) -> None: ...
 
     async def publish_transactions(
-        self, transactions: Any, idempotency_key: str | None = None
+        self,
+        transactions: Any,
+        idempotency_key: str | None = None,
+        *,
+        tenant_id: str,
     ) -> None: ...
 
     async def publish_portfolios(
@@ -49,7 +54,11 @@ class IngestionReplayPublisher(Protocol):
     async def publish_fx_rates(self, fx_rates: Any, idempotency_key: str | None = None) -> None: ...
 
     async def publish_portfolio_bundle(
-        self, bundle: Any, idempotency_key: str | None = None
+        self,
+        bundle: Any,
+        idempotency_key: str | None = None,
+        *,
+        tenant_id: str,
     ) -> None: ...
 
     async def publish_reprocessing_requests(
@@ -66,12 +75,14 @@ class _ReplayPayloadPublisher:
     request_model: type[Any]
     publish_method: str
     payload_field: str | None
+    requires_tenant: bool = False
 
     async def publish(
         self,
         *,
         payload: dict[str, Any],
         idempotency_key: str | None,
+        tenant_id: str,
         ingestion_service: IngestionReplayPublisher,
     ) -> None:
         request_model = self.request_model.model_validate(payload)
@@ -80,10 +91,10 @@ class _ReplayPayloadPublisher:
             if self.payload_field is None
             else getattr(request_model, self.payload_field)
         )
-        await getattr(ingestion_service, self.publish_method)(
-            publish_payload,
-            idempotency_key=idempotency_key,
-        )
+        publish_kwargs: dict[str, Any] = {"idempotency_key": idempotency_key}
+        if self.requires_tenant:
+            publish_kwargs["tenant_id"] = tenant_id
+        await getattr(ingestion_service, self.publish_method)(publish_payload, **publish_kwargs)
 
 
 _REPLAY_PAYLOAD_PUBLISHERS = {
@@ -91,6 +102,7 @@ _REPLAY_PAYLOAD_PUBLISHERS = {
         request_model=TransactionIngestionRequest,
         publish_method="publish_transactions",
         payload_field="transactions",
+        requires_tenant=True,
     ),
     "/ingest/portfolios": _ReplayPayloadPublisher(
         request_model=PortfolioIngestionRequest,
@@ -121,6 +133,7 @@ _REPLAY_PAYLOAD_PUBLISHERS = {
         request_model=PortfolioBundleIngestionRequest,
         publish_method="publish_portfolio_bundle",
         payload_field=None,
+        requires_tenant=True,
     ),
 }
 
@@ -136,6 +149,7 @@ class IngestionServiceReplayPayloadDispatcher:
         endpoint: str,
         payload: dict[str, Any],
         idempotency_key: str | None,
+        tenant_id: str,
     ) -> None:
         if endpoint == "/reprocess/transactions":
             request = ReprocessingRequest.model_validate(payload)
@@ -154,5 +168,6 @@ class IngestionServiceReplayPayloadDispatcher:
         await publisher.publish(
             payload=payload,
             idempotency_key=idempotency_key,
+            tenant_id=tenant_id,
             ingestion_service=self.ingestion_service,
         )

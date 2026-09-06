@@ -412,6 +412,12 @@ async def test_ingestion_job_retry_publish_failure_uses_recovery_detail() -> Non
         "replay_audit_id": "audit-pub",
         "replay_fingerprint": "fp-001",
     }
+    replay_payload_dispatcher.replay_payload.assert_awaited_once_with(
+        endpoint="/ingest/transactions",
+        payload={"transactions": [{"transaction_id": "T1"}]},
+        idempotency_key="idem-001",
+        tenant_id=TENANT_ID,
+    )
     _, audit_kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
     assert audit_kwargs["replay_reason"] == (
         "Ingestion job retry could not be published to the downstream ingestion pipeline."
