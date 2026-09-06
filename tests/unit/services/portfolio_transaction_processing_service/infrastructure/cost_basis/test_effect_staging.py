@@ -9,7 +9,7 @@ from portfolio_common.domain.eventing import (
     portfolio_partition_key,
     security_partition_key,
 )
-from portfolio_common.events import event_business_payload
+from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
@@ -91,9 +91,10 @@ async def test_stage_processed_transaction_preserves_payload_and_epoch(epoch: in
         partition_key=portfolio_partition_key("PORT-OUTBOX-01"),
         event_type="ProcessedTransactionPersisted",
         topic="transactions.cost.processed",
-        payload=event_business_payload(expected_event, mode="json"),
+        payload=transaction_event_v1_payload(expected_event),
         correlation_id="corr-outbox-01",
     )
+    assert "tenant_id" not in outbox.create_outbox_event.await_args.kwargs["payload"]
 
 
 @pytest.mark.parametrize(

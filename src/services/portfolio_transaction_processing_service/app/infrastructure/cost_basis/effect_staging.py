@@ -7,7 +7,7 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
 from portfolio_common.domain.eventing import portfolio_partition_key, security_partition_key
-from portfolio_common.events import event_business_payload
+from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.utils import async_timed
@@ -62,7 +62,7 @@ class TransactionalCostProcessingEffectStager:
                 partition_key=portfolio_partition_key(event.portfolio_id),
                 event_type="ProcessedTransactionPersisted",
                 topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
-                payload=event_business_payload(event, mode="json"),
+                payload=transaction_event_v1_payload(event),
                 correlation_id=correlation_id,
             )
             _record_outbox_lifecycle(event.transaction_type)
