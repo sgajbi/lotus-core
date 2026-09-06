@@ -3125,6 +3125,16 @@ def test_front_office_seed_verification_rejects_scheduler_amplification_until_st
             200,
             {"performance_end_date": "2026-04-10"},
         ),
+        "http://cp.dev/integration/portfolios/P1/core-snapshot": (
+            200,
+            {
+                "reconciliation_status": "COMPLETE",
+                "data_quality_status": "COMPLETE",
+                "source_evidence_current": True,
+                "freshness_status": "CURRENT",
+                "valuation_context": {"supportability": "READY"},
+            },
+        ),
         (
             "http://query.dev/portfolios/P1/cashflow-projection"
             "?as_of_date=2026-04-10&horizon_days=30&include_projected=true"
@@ -3255,6 +3265,11 @@ def test_front_office_seed_verification_rejects_scheduler_amplification_until_st
     assert verification["income_types"] == 2
     assert verification["activity_buckets"] == 3
     assert verification["positions_data_quality_status"] == "COMPLETE"
+    assert verification["core_snapshot_reconciliation_status"] == "COMPLETE"
+    assert verification["core_snapshot_data_quality_status"] == "COMPLETE"
+    assert verification["core_snapshot_source_evidence_current"] is True
+    assert verification["core_snapshot_freshness_status"] == "CURRENT"
+    assert verification["core_snapshot_valuation_supportability"] == "READY"
     assert verification["stale_processing_valuation_jobs"] == 0
     assert verification["failed_valuation_jobs"] == 0
     assert verification["pending_aggregation_jobs"] == 0
@@ -3269,6 +3284,7 @@ def test_front_office_seed_verification_rejects_scheduler_amplification_until_st
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)
+    assert any("core-snapshot" in url for url in requested_urls)
     assert any("period=EXPLICIT" in url for url in requested_urls)
     assert any("report_start_date=2025-03-31" in url for url in requested_urls)
     assert any("report_end_date=2026-04-10" in url for url in requested_urls)
@@ -3300,6 +3316,11 @@ def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
 
     assert blockers == [
         "cash_data_quality_not_complete",
+        "core_snapshot_reconciliation_not_complete",
+        "core_snapshot_data_quality_not_complete",
+        "core_snapshot_source_evidence_not_current",
+        "core_snapshot_freshness_not_current",
+        "core_snapshot_valuation_not_ready",
         "pending_valuation_jobs=3",
         "stale_processing_valuation_jobs=2",
         "failed_valuation_jobs=5",
@@ -3320,6 +3341,11 @@ def test_front_office_readiness_blocks_open_aggregation_work() -> None:
         {
             "positions_data_quality_status": "COMPLETE",
             "cash_data_quality_status": "COMPLETE",
+            "core_snapshot_reconciliation_status": "COMPLETE",
+            "core_snapshot_data_quality_status": "COMPLETE",
+            "core_snapshot_source_evidence_current": True,
+            "core_snapshot_freshness_status": "CURRENT",
+            "core_snapshot_valuation_supportability": "READY",
             "pending_valuation_jobs": 0,
             "processing_valuation_jobs": 0,
             "stale_processing_valuation_jobs": 0,
