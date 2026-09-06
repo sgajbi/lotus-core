@@ -42,6 +42,7 @@ class TransactionIdempotencyPort(Protocol):
     async def claim(
         self,
         *,
+        tenant_id: str,
         event_id: str,
         portfolio_id: str,
         semantic_key: str,
@@ -52,6 +53,7 @@ class TransactionIdempotencyPort(Protocol):
     async def claim_repair_delivery(
         self,
         *,
+        tenant_id: str,
         event_id: str,
         portfolio_id: str,
         correlation_id: str | None,

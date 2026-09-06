@@ -139,6 +139,7 @@ def _event(
     return TransactionEvent(
         transaction_id=transaction_id,
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_type=transaction_type,
@@ -209,7 +210,7 @@ def _persisted_buy(transaction_id: str, transaction_date: datetime) -> DBTransac
 def _history_transaction(transaction: DBTransaction) -> BookedTransaction:
     """Map a persisted test row through the repository's canonical history boundary."""
 
-    return booked_transaction.to_booked_transaction(TransactionEvent.model_validate(transaction))
+    return booked_transaction.to_booked_transaction_from_record(transaction)
 
 
 async def test_later_sell_restores_open_lots_without_loading_full_history() -> None:

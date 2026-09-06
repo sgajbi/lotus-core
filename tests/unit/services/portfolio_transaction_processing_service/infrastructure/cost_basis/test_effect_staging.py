@@ -34,6 +34,7 @@ def _transaction(*, transaction_type: str = "BUY", epoch: int | None = None) -> 
     return BookedTransaction(
         transaction_id=f"{transaction_type}-OUTBOX-01",
         portfolio_id="PORT-OUTBOX-01",
+        tenant_id="tenant-test",
         instrument_id="INSTRUMENT-OUTBOX-01",
         security_id="SECURITY-OUTBOX-01",
         transaction_date=datetime(2026, 7, 14, 10, 0, tzinfo=timezone.utc),

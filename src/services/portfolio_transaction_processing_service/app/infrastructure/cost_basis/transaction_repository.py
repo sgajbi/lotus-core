@@ -20,7 +20,6 @@ from portfolio_common.domain.transaction import (
     transaction_identity_ownership,
 )
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
-from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
@@ -38,7 +37,7 @@ from ...domain.transaction.redemption import (
     REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS,
     REDEMPTION_TRANSACTION_TYPES,
 )
-from ..transaction_mapping.booked_transaction import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction_from_record
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -167,7 +166,7 @@ def _to_persisted_booked_transaction(
 ) -> BookedTransaction:
     """Rehydrate the internal calculation receipt excluded from the public event contract."""
 
-    booked = to_booked_transaction(TransactionEvent.model_validate(transaction))
+    booked = to_booked_transaction_from_record(transaction)
     booked = replace(
         booked,
         calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),

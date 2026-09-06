@@ -12,7 +12,6 @@ from portfolio_common.domain.calculation_lineage import (
     calculation_lineage_from_payload,
 )
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
-from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -31,7 +30,7 @@ from ...domain.cost_basis.state_lineage import (
     canonical_cost_basis_output_payload,
 )
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
-from ..transaction_mapping.booked_transaction import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction_from_record
 from .lot_state_lineage import (
     LOT_STATE_LINEAGE_OUTPUT_FIELDS,
     lot_state_lineage_output_from_mapping,
@@ -105,7 +104,7 @@ class SqlAlchemyAverageCostPoolRepository:
                 calculation_lineage=calculation_lineage_from_payload(state.calculation_lineage),
             ),
             representative_transaction=(
-                to_booked_transaction(TransactionEvent.model_validate(representative_transaction))
+                to_booked_transaction_from_record(representative_transaction)
                 if representative_transaction is not None
                 else None
             ),

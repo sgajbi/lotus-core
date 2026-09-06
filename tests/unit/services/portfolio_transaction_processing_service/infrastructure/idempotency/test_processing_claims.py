@@ -45,6 +45,7 @@ async def test_semantic_claim_preserves_repository_outcome(
     adapter = SqlAlchemyTransactionIdempotencyAdapter(repository)
 
     claimed = await adapter.claim(
+        tenant_id="tenant-a",
         event_id="transactions.persisted-0-42",
         portfolio_id="PB-001",
         semantic_key="transaction-processing:v1:PB-001:TX-001:0",
@@ -54,6 +55,7 @@ async def test_semantic_claim_preserves_repository_outcome(
 
     assert claimed is application_outcome
     repository.claim_semantic_event_processing.assert_awaited_once_with(
+        tenant_id="tenant-a",
         event_id="transactions.persisted-0-42",
         portfolio_id="PB-001",
         service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
@@ -74,6 +76,7 @@ async def test_repair_claim_preserves_physical_claim_result(
     adapter = SqlAlchemyTransactionIdempotencyAdapter(repository)
 
     claimed = await adapter.claim_repair_delivery(
+        tenant_id="tenant-a",
         event_id="transactions.persisted-0-42",
         portfolio_id="PB-001",
         correlation_id="corr-001",
@@ -81,6 +84,7 @@ async def test_repair_claim_preserves_physical_claim_result(
 
     assert claimed is expected
     repository.claim_event_processing.assert_awaited_once_with(
+        tenant_id="tenant-a",
         event_id="transactions.persisted-0-42",
         portfolio_id="PB-001",
         service_name=TRANSACTION_PROCESSING_SERVICE_NAME,

@@ -13,7 +13,6 @@ from portfolio_common.database_models import (
     CorporateActionReadinessEvaluationRecord,
 )
 from portfolio_common.database_models import Transaction as TransactionRecord
-from portfolio_common.events import TransactionEvent
 from sqlalchemy import case, func, insert, literal, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -34,7 +33,7 @@ from ...application.corporate_action_release import (
     build_corporate_action_execution_member_authority,
 )
 from ...domain import BookedTransaction, build_transaction_semantic_identity
-from ..transaction_mapping.booked_transaction import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction_from_record
 
 
 class SqlAlchemyCorporateActionExecutionReleaseRepository:
@@ -208,7 +207,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 "corporate-action release transaction payload is unavailable"
             )
         transaction = replace(
-            to_booked_transaction(TransactionEvent.model_validate(persisted)),
+            to_booked_transaction_from_record(persisted),
             epoch=claim.next_member.transaction_epoch,
         )
         identity = build_transaction_semantic_identity(transaction)
@@ -529,7 +528,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                     "READY release member lacks transaction payload authority"
                 )
             booked = replace(
-                to_booked_transaction(TransactionEvent.model_validate(persisted)),
+                to_booked_transaction_from_record(persisted),
                 epoch=observed.transaction_epoch,
             )
             _require_transaction_scope(plan, booked)

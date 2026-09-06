@@ -65,6 +65,7 @@ class SqlAlchemyCashflowProcessingState:
                 transaction.portfolio_id,
                 CASHFLOW_PROCESSING_SERVICE_NAME,
                 correlation_id or "",
+                tenant_id=transaction.tenant_id or "",
             )
         )
         if not claimed:

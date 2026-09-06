@@ -24,6 +24,7 @@ def _transaction() -> BookedTransaction:
     return BookedTransaction(
         transaction_id="TX-001",
         portfolio_id="PB-001",
+        tenant_id="tenant-test",
         instrument_id="INST-001",
         security_id="SEC-001",
         transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),

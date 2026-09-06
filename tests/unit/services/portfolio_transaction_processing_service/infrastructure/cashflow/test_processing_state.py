@@ -25,6 +25,7 @@ def _transaction() -> BookedTransaction:
     return BookedTransaction(
         transaction_id="TX-001",
         portfolio_id="PB-001",
+        tenant_id="tenant-test",
         instrument_id="INST-001",
         security_id="SEC-001",
         transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
@@ -126,4 +127,5 @@ async def test_processing_state_claims_semantic_cashflow_identity() -> None:
         "PB-001",
         CASHFLOW_PROCESSING_SERVICE_NAME,
         "corr-001",
+        tenant_id="tenant-test",
     )
