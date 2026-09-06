@@ -147,7 +147,7 @@ def test_core_snapshot_scopes_pair_portfolio_date_with_portfolio_fact_timestamp(
             _row(
                 updated_at=market_timestamp,
                 portfolio_fact_updated_at=portfolio_timestamp,
-                state_updated_at=portfolio_timestamp - timedelta(minutes=1),
+                state_updated_at=market_timestamp + timedelta(minutes=1),
             )
         ]
     )

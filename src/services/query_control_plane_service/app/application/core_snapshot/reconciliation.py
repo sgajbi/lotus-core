@@ -31,7 +31,12 @@ class CoreSnapshotReconciliationEvidence:
 def core_snapshot_reconciliation_scopes(
     rows: list[CoreSnapshotPositionSource],
 ) -> HoldingsReconciliationScopes:
-    """Coalesce selected baseline rows by collective portfolio-day target epoch."""
+    """Coalesce source financial facts by portfolio day and collective target epoch.
+
+    Position-state timestamps are derived-state lifecycle evidence. Valuation can
+    advance them without changing the position fact certified by reconciliation,
+    so they must not invalidate a completed financial control.
+    """
 
     return collective_holdings_reconciliation_scopes(
         [
@@ -42,8 +47,6 @@ def core_snapshot_reconciliation_scopes(
                 latest_evidence_timestamp=_latest_timestamp(
                     row.portfolio_fact_created_at,
                     row.portfolio_fact_updated_at,
-                    row.state_created_at,
-                    row.state_updated_at,
                 ),
             )
             for row in rows
