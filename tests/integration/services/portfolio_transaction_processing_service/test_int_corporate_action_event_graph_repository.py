@@ -661,6 +661,7 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
     )
     loaded = await releases.load_owned_transaction(claimed)
     assert loaded.transaction_id == claimed.next_member.transaction_id
+    assert loaded.tenant_id == manifest.tenant_id
     assert (
         build_transaction_semantic_identity(loaded).payload_fingerprint
         == claimed.next_member.transaction_payload_fingerprint
