@@ -15,7 +15,7 @@ def test_accepts_printable_text_and_line_endings(tmp_path: Path) -> None:
 def test_reports_every_forbidden_control_byte_with_path_and_offset(tmp_path: Path) -> None:
     path = tmp_path / "docs" / "corrupt.md"
     path.parent.mkdir()
-    path.write_bytes(b"a\x08b\x09c\x0cd\x1be\x00f\rg")
+    path.write_bytes(b"a\x08b\x09c\x0cd\x1be\x00f\rg\x7f")
 
     assert guard.find_forbidden_control_bytes((path,), repo_root=tmp_path) == [
         "docs/corrupt.md: offset 1: 0x08",
@@ -24,6 +24,7 @@ def test_reports_every_forbidden_control_byte_with_path_and_offset(tmp_path: Pat
         "docs/corrupt.md: offset 7: 0x1b",
         "docs/corrupt.md: offset 9: 0x00",
         "docs/corrupt.md: offset 11: 0x0d",
+        "docs/corrupt.md: offset 13: 0x7f",
     ]
 
 

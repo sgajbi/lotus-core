@@ -37,7 +37,7 @@ def find_forbidden_control_bytes(
                 and offset + 1 < len(content)
                 and content[offset + 1] == _LINE_FEED
             )
-            if value < 0x20 and not (is_line_feed or is_crlf_carriage_return):
+            if (value < 0x20 and not (is_line_feed or is_crlf_carriage_return)) or value == 0x7F:
                 relative_path = path.relative_to(repo_root).as_posix()
                 violations.append(f"{relative_path}: offset {offset}: 0x{value:02x}")
     return violations
