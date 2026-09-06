@@ -55,6 +55,7 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
         repo = TransactionDBRepository(db_session)
         reference_availability = await repo.resolve_transaction_reference_availability(
             portfolio_id=event.portfolio_id,
+            tenant_id=event.tenant_id,
             security_id=event.security_id,
             cash_account_id=event.settlement_cash_account_id,
             cash_security_id=event.settlement_cash_instrument_id,

@@ -33,6 +33,7 @@ def _source_event(transaction_id: str, *, portfolio_id: str = "PORT-OWNER-A") ->
     return TransactionEvent(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
+        tenant_id="tenant-test",
         instrument_id="SEC-OWNER-1",
         security_id="SEC-OWNER-1",
         transaction_date=datetime(2026, 8, 8, 9, 0, tzinfo=UTC),
@@ -55,6 +56,7 @@ def _generated_event(
         return TransactionEvent(
             transaction_id="ROOT-OWNER-1-CASHLEG",
             portfolio_id=portfolio_id,
+            tenant_id="tenant-test",
             instrument_id="CASH-USD",
             security_id="CASH-USD",
             transaction_date=datetime(2026, 8, 10, 9, 0, tzinfo=UTC),
@@ -72,6 +74,7 @@ def _generated_event(
     return TransactionEvent(
         transaction_id="ROOT-OWNER-1-ACCRUED-INTEREST",
         portfolio_id=portfolio_id,
+        tenant_id="tenant-test",
         instrument_id="SEC-OWNER-1",
         security_id="SEC-OWNER-1",
         transaction_date=datetime(2026, 8, 10, 9, 0, tzinfo=UTC),

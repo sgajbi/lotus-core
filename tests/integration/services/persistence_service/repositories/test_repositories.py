@@ -405,6 +405,7 @@ async def test_transaction_repository_is_idempotent(clean_db, async_db_session: 
     event = TransactionEvent(
         transaction_id="IDEMPOTENCY_TEST_01",
         portfolio_id="PORT_T1",
+        tenant_id="tenant-test",
         instrument_id="INST_T1",
         security_id="SEC_T1",
         transaction_date=datetime(2025, 7, 31, 10, 0, 0, tzinfo=UTC),
@@ -459,6 +460,7 @@ async def test_transaction_repository_persists_named_fee_source_authority(
     event = TransactionEvent(
         transaction_id="FEE_SOURCE_01",
         portfolio_id="PORT_FEE_SOURCE_01",
+        tenant_id="tenant-test",
         instrument_id="INST_FEE_SOURCE_01",
         security_id="SEC_FEE_SOURCE_01",
         transaction_date=datetime(2026, 8, 21, 10, 0, tzinfo=UTC),
@@ -555,6 +557,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
     event = TransactionEvent(
         transaction_id="META_TEST_01",
         portfolio_id="PORT_META_01",
+        tenant_id="tenant-test",
         instrument_id="INST_META_01",
         security_id="SEC_META_01",
         transaction_date=datetime(2026, 2, 28, 10, 0, 0, tzinfo=UTC),
@@ -631,6 +634,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
     event = TransactionEvent(
         transaction_id="META_INT_TEST_01",
         portfolio_id="PORT_META_INT_01",
+        tenant_id="tenant-test",
         instrument_id="INST_META_INT_01",
         security_id="SEC_META_INT_01",
         transaction_date=datetime(2026, 3, 2, 10, 0, 0, tzinfo=UTC),
@@ -722,6 +726,7 @@ async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
     event = TransactionEvent(
         transaction_id="META_ADJ_TEST_01",
         portfolio_id="PORT_META_ADJ_01",
+        tenant_id="tenant-test",
         instrument_id="CASH-USD",
         security_id="CASH-USD",
         transaction_date=datetime(2026, 3, 5, 10, 0, 0, tzinfo=UTC),
@@ -784,6 +789,7 @@ async def test_transaction_repository_persists_fx_metadata(
     event = TransactionEvent(
         transaction_id="META_FX_TEST_01",
         portfolio_id="PORT_META_FX_01",
+        tenant_id="tenant-test",
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
         transaction_date=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),

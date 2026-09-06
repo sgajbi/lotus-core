@@ -80,11 +80,17 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
+                        tenant_scope = (
+                            {"tenant_id": envelope.tenant_id}
+                            if envelope.tenant_id is not None
+                            else {}
+                        )
                         if not await idempotency_repo.claim_event_processing(
                             envelope.idempotency_key,
                             envelope.portfolio_id,
                             self.service_name,
                             correlation_id,
+                            **tenant_scope,
                         ):
                             logger.warning(
                                 f"Event {envelope.idempotency_key} already processed. Skipping."

@@ -23,6 +23,7 @@ def _transaction_payload() -> dict[str, object]:
     return {
         "transaction_id": "TXN-SEMANTIC-DUPLICATE-001",
         "portfolio_id": "PORT-SEMANTIC-DUPLICATE",
+        "tenant_id": "tenant-test",
         "instrument_id": "INST-SEMANTIC-DUPLICATE",
         "security_id": "SEC-SEMANTIC-DUPLICATE",
         "transaction_date": "2026-04-10T09:00:00Z",

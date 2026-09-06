@@ -25,6 +25,7 @@ def event_business_record_values(
 
 _TRANSACTION_EVENT_ONLY_FIELDS = frozenset(
     {
+        "tenant_id",
         "epoch",
         "brokerage",
         "stamp_duty",
