@@ -16,6 +16,25 @@ image; use [Validation and CI](Validation-and-CI) and the linked runbooks for th
 | Isolated service diagnosis | [App-Local Runtime](#app-local-runtime) | Developer compose posture, not canonical front-office proof. |
 | Product/demo runtime | [Runtime Choice](#runtime-choice) | Routes canonical proof to the governed Workbench flow. |
 
+## Progressive Context Discovery
+
+Before changing code or documentation:
+
+1. read repo-root [`AGENTS.md`](https://github.com/sgajbi/lotus-core/blob/main/AGENTS.md) for the
+   mandatory Lotus operating contract;
+2. read the Platform
+   [quickstart](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-QUICKSTART-CONTEXT.md)
+   for ecosystem ownership;
+3. read Core's
+   [repository context](https://github.com/sgajbi/lotus-core/blob/main/REPOSITORY-ENGINEERING-CONTEXT.md)
+   for financial invariants, architecture, task routes, and completion evidence;
+4. use the Platform
+   [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
+   to load only the specialist guidance required by the task.
+
+`CLAUDE.md` is a thin adapter to the same sources, not a second policy. Keep active issue, PR, and
+blocker state in GitHub rather than adding it to durable repository context.
+
 ## Prerequisites
 
 - Python 3.12 for local work — see the version note below,
