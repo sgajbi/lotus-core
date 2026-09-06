@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
@@ -255,6 +257,10 @@ class ProcessTransactionUseCase:
             financial_effect_transactions = _financial_effect_transactions(
                 cost_result.processed_transactions,
                 position_results,
+            )
+            financial_effect_transactions = tuple(
+                replace(rebuilt, tenant_id=transaction.tenant_id)
+                for rebuilt in financial_effect_transactions
             )
             cashflow_results = []
             current_transaction_keys = {

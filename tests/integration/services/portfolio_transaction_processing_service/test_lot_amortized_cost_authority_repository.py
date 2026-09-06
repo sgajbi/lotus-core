@@ -299,6 +299,7 @@ async def test_authority_correction_survives_restart_with_one_durable_replay_int
     )
     assert replay_result.transaction_id == "AMORT_SELL_001"
     replay_event = TransactionEvent.model_validate(producer.messages[0]["value"])
+    replay_event = replay_event.model_copy(update={"tenant_id": scope.tenant_id})
     repair_command = map_transaction_event(
         replay_event,
         event_id="transactions.persisted-0-47802",

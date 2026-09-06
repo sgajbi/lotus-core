@@ -20,6 +20,7 @@ def _dividend_transaction() -> BookedTransaction:
     return BookedTransaction(
         transaction_id="DIV-001",
         portfolio_id="PORT-001",
+        tenant_id="tenant-test",
         instrument_id="SEC-AAA",
         security_id="SEC-AAA",
         transaction_date=datetime(2026, 3, 5, 10, 0, 0),
@@ -73,6 +74,7 @@ def test_generated_cash_leg_preserves_trade_and_income_economics(
 
     assert cash_leg.transaction_type == "ADJUSTMENT"
     assert cash_leg.transaction_id == "DIV-001-CASHLEG"
+    assert cash_leg.tenant_id == "tenant-test"
     assert cash_leg.originating_transaction_id == "DIV-001"
     assert cash_leg.originating_transaction_type == transaction_type
     assert cash_leg.movement_direction == direction

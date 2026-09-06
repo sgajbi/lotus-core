@@ -76,6 +76,7 @@ def build_redemption_accrued_interest_component(
     return BookedTransaction(
         transaction_id=transaction_id,
         portfolio_id=redemption.portfolio_id,
+        tenant_id=redemption.tenant_id,
         instrument_id=redemption.instrument_id,
         security_id=redemption.security_id,
         transaction_date=redemption.transaction_date,

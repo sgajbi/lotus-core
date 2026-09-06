@@ -163,6 +163,7 @@ def _to_persisted_booked_transaction(
     transaction: DBTransaction,
     *,
     fee_components: dict[str, Decimal] | None = None,
+    tenant_id: str | None = None,
 ) -> BookedTransaction:
     """Rehydrate the internal calculation receipt excluded from the public event contract."""
 
@@ -170,6 +171,7 @@ def _to_persisted_booked_transaction(
     booked = replace(
         booked,
         calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),
+        tenant_id=tenant_id,
     )
     if fee_components is None:
         return booked
@@ -390,7 +392,10 @@ class SqlAlchemyCostBasisTransactionRepository:
                 db_txn=db_transaction,
             )
         )
-        return _to_persisted_booked_transaction(db_transaction)
+        return _to_persisted_booked_transaction(
+            db_transaction,
+            tenant_id=getattr(transaction_result, "tenant_id", None),
+        )
 
     @async_timed(repository="CostBasisTransactionRepository", method="get_booked_transaction")
     async def get_booked_transaction(
@@ -481,4 +486,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
         if persisted is None:
             raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
-        return _to_persisted_booked_transaction(persisted)
+        return _to_persisted_booked_transaction(
+            persisted,
+            tenant_id=transaction.tenant_id,
+        )

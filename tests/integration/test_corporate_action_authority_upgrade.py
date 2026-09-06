@@ -87,15 +87,18 @@ def test_populated_c152_upgrade_preserves_manifest_and_backfills_transaction_aut
             text(
                 """
                 INSERT INTO processed_events (
-                    event_id, portfolio_id, service_name, semantic_key, payload_fingerprint
+                    event_id, portfolio_id, service_name, tenant_id,
+                    semantic_key, payload_fingerprint
                 ) VALUES (
                     'legacy-processed-1', :portfolio_id,
-                    'portfolio-transaction-processing', :semantic_key, :fingerprint
+                    'portfolio-transaction-processing', :tenant_id,
+                    :semantic_key, :fingerprint
                 )
                 """
             ),
             {
                 "portfolio_id": legacy.portfolio_id,
+                "tenant_id": legacy.tenant_id,
                 "semantic_key": (
                     "transaction-processing:v1:"
                     f"{legacy.portfolio_id}:{source_child.transaction_id}:1"
@@ -231,13 +234,27 @@ def test_c153_upgrade_fails_closed_without_transaction_semantic_authority(
 
 
 def _normalize_before_c152(connection, migrations: list[dict[str, Any]]) -> None:
-    if (
+    has_book_scope_function = (
         connection.scalar(
             text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
         )
         is not None
-    ):
-        migrations[3]["downgrade"]()
+    )
+    if has_book_scope_function:
+        has_book_scope_trigger = bool(
+            connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_trigger "
+                    "WHERE tgname = 'trg_ca_manifest_payload_book_scope')"
+                )
+            )
+        )
+        if has_book_scope_trigger:
+            migrations[3]["downgrade"]()
+        else:
+            connection.execute(
+                text("DROP FUNCTION IF EXISTS enforce_ca_manifest_payload_book_scope()")
+            )
     inspector = inspect(connection)
     if "corporate_action_events" in inspector.get_table_names() and any(
         index["name"] == "ix_ca_event_book_scope_updated"
