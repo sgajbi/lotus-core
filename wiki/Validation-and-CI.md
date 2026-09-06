@@ -411,7 +411,8 @@ used by release enforcement and does not replace protected PR or exact-main proo
 - generated API route catalog coverage
 - README/wiki front-door synchronization
 - wiki source publication readiness
-- forbidden control-byte rejection across every tracked Markdown document
+- corrupting control-byte rejection across a non-empty inventory of every tracked Markdown
+  document, while preserving valid tabs and LF/CRLF line endings
 - aggregate, changed-code, and critical-path coverage reporting
 - architecture boundaries
 - image provenance, release supply-chain, and runtime version metadata

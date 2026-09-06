@@ -5,9 +5,9 @@ import pytest
 from scripts.quality import documentation_text_integrity_guard as guard
 
 
-def test_accepts_printable_text_and_line_endings(tmp_path: Path) -> None:
+def test_accepts_printable_text_tabs_and_line_endings(tmp_path: Path) -> None:
     path = tmp_path / "valid.md"
-    path.write_bytes(b"# Valid\r\ntext\n")
+    path.write_bytes(b"# Valid\r\n\tindented code\n````text\nvalue\tvalue\n````\n")
 
     assert guard.find_forbidden_control_bytes((path,), repo_root=tmp_path) == []
 
@@ -19,7 +19,6 @@ def test_reports_every_forbidden_control_byte_with_path_and_offset(tmp_path: Pat
 
     assert guard.find_forbidden_control_bytes((path,), repo_root=tmp_path) == [
         "docs/corrupt.md: offset 1: 0x08",
-        "docs/corrupt.md: offset 3: 0x09",
         "docs/corrupt.md: offset 5: 0x0c",
         "docs/corrupt.md: offset 7: 0x1b",
         "docs/corrupt.md: offset 9: 0x00",
@@ -47,3 +46,15 @@ def test_discovers_only_git_tracked_markdown(
     assert paths == (tmp_path / "README.md", tmp_path / "docs" / "guide.md")
     assert subprocess_commands[0][0] == ["git", "ls-files", "-z", "--", "*.md"]
     assert subprocess_commands[0][1]["cwd"] == tmp_path
+
+
+def test_main_fails_when_tracked_markdown_inventory_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(guard, "tracked_markdown_paths", lambda: ())
+
+    assert guard.main() == 1
+    assert capsys.readouterr().out == (
+        "Documentation text integrity failed: no tracked Markdown files were found.\n"
+    )
