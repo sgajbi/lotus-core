@@ -2604,6 +2604,77 @@ async def test_owned_and_stale_recovery_coalesce_oversized_pending_siblings(
     }
 
 
+async def test_owned_reset_requeue_preserves_quarantined_sibling_lookup_lineage(
+    clean_db,
+    async_db_session: AsyncSession,
+    predecessor_reprocessing_payload_schema,
+) -> None:
+    repository = ReprocessingJobRepository(async_db_session)
+    await repository.stage_reset_watermarks_job(
+        security_id="S-OWNED-MISSING-LINEAGE",
+        earliest_impacted_date=date(2025, 1, 7),
+        correlation_id=None,
+        correlation_missing_reason="claimed_source_missing_correlation",
+        alternate_lookup_key="claimed-source:owned-missing-lineage",
+    )
+    await async_db_session.commit()
+    claimed = (await repository.find_and_claim_jobs("RESET_WATERMARKS", batch_size=1))[0]
+    await async_db_session.commit()
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO reprocessing_jobs (
+                job_type, payload, status, correlation_id,
+                correlation_missing_reason, alternate_lookup_key
+            ) VALUES (
+                'RESET_WATERMARKS', CAST(:payload AS JSON), 'PENDING', NULL,
+                :correlation_missing_reason, :alternate_lookup_key
+            )
+            """
+        ),
+        {
+            "payload": (
+                '{"security_id":"S-OWNED-MISSING-LINEAGE",'
+                '"earliest_impacted_date":"2025-01-05",'
+                '"extension":1e999999999999999999999999999999999999999}'
+            ),
+            "correlation_missing_reason": "sibling_source_missing_correlation",
+            "alternate_lookup_key": "source-event:reset-lookup-001",
+        },
+    )
+    await async_db_session.commit()
+
+    outcome = await repository.requeue_owned_effective_dated_job(
+        claimed.id,
+        lease_token=claimed.lease_token,
+    )
+    await async_db_session.commit()
+    rows = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert outcome is ReprocessingJobTransitionOutcome.COALESCED_PENDING
+    assert [row.status for row in rows] == ["COMPLETE", "FAILED", "PENDING"]
+    assert rows[1].failure_reason == (
+        "invalid_reset_watermarks_job_payload: superseded during valid replay staging"
+    )
+    assert rows[2].payload == {
+        "security_id": "S-OWNED-MISSING-LINEAGE",
+        "earliest_impacted_date": "2025-01-05",
+    }
+    assert rows[2].correlation_id is None
+    assert rows[2].correlation_missing_reason == "sibling_source_missing_correlation"
+    assert rows[2].alternate_lookup_key == "source-event:reset-lookup-001"
+
+
 async def test_owned_reset_requeue_quarantines_normalized_legacy_sibling(
     clean_db,
     async_db_session: AsyncSession,
