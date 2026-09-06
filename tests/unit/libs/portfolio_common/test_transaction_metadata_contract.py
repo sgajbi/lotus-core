@@ -9,6 +9,7 @@ def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
     event = TransactionEvent(
         transaction_id="TXN-META-001",
         portfolio_id="PORT-001",
+        tenant_id="tenant-test",
         instrument_id="INST-001",
         security_id="SEC-001",
         transaction_date=datetime(2026, 2, 28, 12, 30, 0, tzinfo=timezone.utc),

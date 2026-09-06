@@ -58,6 +58,7 @@ def test_interest_fee_transformation_to_engine_fees_structure() -> None:
     event = TransactionEvent(
         transaction_id="INT_SLICE0_002",
         portfolio_id="PORT_SLICE0",
+        tenant_id="tenant-test",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
         transaction_date=datetime(2026, 2, 20, tzinfo=UTC),
@@ -116,6 +117,7 @@ def test_interest_position_calculation_preserves_quantity_and_cost_basis() -> No
     event = TransactionEvent(
         transaction_id="INT_SLICE0_004",
         portfolio_id="PORT_SLICE0",
+        tenant_id="tenant-test",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
         transaction_date=datetime(2026, 2, 20, tzinfo=UTC),
@@ -137,6 +139,7 @@ def test_interest_cashflow_current_behavior_positive_income_inflow() -> None:
     event = TransactionEvent(
         transaction_id="INT_SLICE0_005",
         portfolio_id="PORT_SLICE0",
+        tenant_id="tenant-test",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
         transaction_date=datetime(2026, 2, 20, 10, 0, 0, tzinfo=UTC),

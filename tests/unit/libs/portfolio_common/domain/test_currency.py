@@ -189,6 +189,7 @@ def test_transaction_event_normalizes_currency_codes() -> None:
     event = TransactionEvent(
         transaction_id="TX_CANONICAL_CCY_001",
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date="2026-05-28T10:00:00Z",

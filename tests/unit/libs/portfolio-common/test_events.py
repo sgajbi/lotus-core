@@ -15,6 +15,7 @@ def _txn(
     return TransactionEvent(
         transaction_id=transaction_id,
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date=transaction_date,
@@ -33,6 +34,7 @@ def test_transaction_event_normalizes_persisted_and_published_identity() -> None
     event = TransactionEvent(
         transaction_id="  TX-IDENTITY-001  ",
         portfolio_id="  PORT-001  ",
+        tenant_id="tenant-test",
         instrument_id="  INST-001  ",
         security_id="  SEC-001  ",
         transaction_date=datetime(2026, 1, 10, tzinfo=UTC),

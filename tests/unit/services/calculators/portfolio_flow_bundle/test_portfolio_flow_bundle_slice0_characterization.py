@@ -38,6 +38,7 @@ def _event(
     return TransactionEvent(
         transaction_id=f"SLICE0_{transaction_type}_01",
         portfolio_id="PORT_074",
+        tenant_id="tenant-test",
         instrument_id="INST_074",
         security_id="SEC_074",
         transaction_date=datetime(2026, 3, 5, 10, 0, 0, tzinfo=UTC),

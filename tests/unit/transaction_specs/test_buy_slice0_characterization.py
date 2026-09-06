@@ -44,6 +44,7 @@ def test_buy_fee_transformation_to_engine_fees_structure() -> None:
     event = TransactionEvent(
         transaction_id="BUY_SLICE0_002",
         portfolio_id="PORT_SLICE0",
+        tenant_id="tenant-test",
         instrument_id="SEC_UST_5Y",
         security_id="SEC_UST_5Y",
         transaction_date=datetime(2026, 1, 15, tzinfo=UTC),
@@ -70,6 +71,7 @@ def test_buy_position_calculation_increases_quantity_and_cost_basis() -> None:
     event = TransactionEvent(
         transaction_id="BUY_SLICE0_003",
         portfolio_id="PORT_SLICE0",
+        tenant_id="tenant-test",
         instrument_id="SEC_UST_5Y",
         security_id="SEC_UST_5Y",
         transaction_date=datetime(2026, 1, 15, tzinfo=UTC),

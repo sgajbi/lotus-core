@@ -66,6 +66,7 @@ def test_validate_kafka_event_payload_preserves_decimal_dates_and_lineage() -> N
             {
                 "transaction_id": "TXN-EVENT-MAP-001",
                 "portfolio_id": "PORT-EVENT-MAP",
+                "tenant_id": "tenant-test",
                 "instrument_id": "INST-EVENT-MAP",
                 "security_id": "SEC-EVENT-MAP",
                 "transaction_date": "2026-03-25T09:30:00Z",
@@ -239,6 +240,7 @@ def test_outbox_event_payload_preserves_schema_correlation_and_json_safe_values(
     event = TransactionEvent(
         transaction_id="TXN-EVENT-MAP-003",
         portfolio_id="PORT-EVENT-MAP",
+        tenant_id="tenant-test",
         instrument_id="INST-EVENT-MAP",
         security_id="SEC-EVENT-MAP",
         transaction_date="2026-03-25T09:30:00Z",
