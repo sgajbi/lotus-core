@@ -123,6 +123,7 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
         await service.publish_transaction(
             transaction,
             idempotency_key="idem-boundary-001",
+            tenant_id="tenant-test",
         )
     finally:
         correlation_id_var.reset(correlation_token)
@@ -134,7 +135,7 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
         "correlation_id": "corr-boundary-001",
         "idempotency_key": "idem-boundary-001",
     }
-    assert published["value"] == transaction_event_payload(transaction)
+    assert published["value"] == transaction_event_payload(transaction, tenant_id="tenant-test")
 
     event_payload = _kafka_json_round_trip(
         {
@@ -177,6 +178,7 @@ def test_transaction_event_mapping_rejects_unknown_and_missing_fields() -> None:
     payload = {
         "transaction_id": "TXN-MAP-002",
         "portfolio_id": "PORT-MAP-001",
+        "tenant_id": "tenant-test",
         "instrument_id": "EQ_US_AAPL",
         "security_id": "EQ_US_AAPL",
         "transaction_date": "2026-03-25T09:30:00+00:00",
@@ -206,6 +208,7 @@ def test_persistence_message_adapter_preserves_event_identity_and_lineage() -> N
     payload = {
         "transaction_id": "TXN-MAP-003",
         "portfolio_id": "PORT-MAP-001",
+        "tenant_id": "tenant-test",
         "instrument_id": "EQ_US_AAPL",
         "security_id": "EQ_US_AAPL",
         "transaction_date": "2026-03-25T09:30:00+00:00",

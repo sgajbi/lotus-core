@@ -27,6 +27,7 @@ async def test_create_or_update_transaction_uses_canonical_currency_codes() -> N
     event = TransactionEvent(
         transaction_id="TX_CANONICAL_CCY_001",
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date="2026-05-28T10:00:00Z",
@@ -66,6 +67,7 @@ async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> N
     event = TransactionEvent(
         transaction_id="TX_FEE_COMPONENTS_001",
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date="2026-05-28T10:00:00Z",
@@ -110,6 +112,7 @@ async def test_create_or_update_transaction_clears_explicit_zero_named_fee_autho
     event = TransactionEvent(
         transaction_id="TX_ZERO_FEE_COMPONENTS_001",
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date="2026-05-28T10:00:00Z",
@@ -143,6 +146,7 @@ async def test_create_or_update_transaction_rejects_existing_foreign_identity() 
     event = TransactionEvent(
         transaction_id="SOURCE-1-CASHLEG",
         portfolio_id="PORT-1",
+        tenant_id="tenant-test",
         instrument_id="CASH-USD",
         security_id="CASH-USD",
         transaction_date="2026-05-28T10:00:00Z",
@@ -178,6 +182,7 @@ async def test_create_or_update_transaction_persists_canonical_generated_identit
     event = TransactionEvent(
         transaction_id="  SOURCE-1-CASHLEG  ",
         portfolio_id="  PORT-1  ",
+        tenant_id="tenant-test",
         instrument_id="CASH-USD",
         security_id="CASH-USD",
         transaction_date="2026-05-28T10:00:00Z",
@@ -205,6 +210,7 @@ def test_transaction_event_to_record_values_excludes_traceparent_envelope() -> N
     event = TransactionEvent(
         transaction_id="TX_TRACEPARENT_001",
         portfolio_id="P1",
+        tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
         transaction_date="2026-05-28T10:00:00Z",
@@ -235,6 +241,7 @@ async def test_transaction_reference_availability_uses_one_query_without_cash_ac
 
     availability = await repo.resolve_transaction_reference_availability(
         portfolio_id="P1",
+        tenant_id="tenant-test",
         security_id=" SEC-1 ",
         cash_account_id=None,
         cash_security_id=None,
@@ -261,6 +268,7 @@ async def test_transaction_reference_availability_includes_active_cash_account()
 
     availability = await repo.resolve_transaction_reference_availability(
         portfolio_id="P1",
+        tenant_id="tenant-test",
         security_id="SEC-1",
         cash_account_id=" CASH-ACC-1 ",
         cash_security_id=" CASH_USD ",

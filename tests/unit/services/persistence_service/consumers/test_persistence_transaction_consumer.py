@@ -39,6 +39,7 @@ def valid_transaction_event():
     return TransactionEvent(
         transaction_id="UNIT_TEST_01",
         portfolio_id="PORT_UT_01",
+        tenant_id="tenant-test",
         instrument_id="INST_UT_01",
         security_id="SEC_UT_01",
         transaction_date="2025-07-31T12:00:00Z",
@@ -142,6 +143,7 @@ async def test_process_message_success(
         mock_repo.create_or_update_transaction.assert_called_once()
         mock_repo.resolve_transaction_reference_availability.assert_awaited_once_with(
             portfolio_id="PORT_UT_01",
+            tenant_id="tenant-test",
             security_id="SEC_UT_01",
             cash_account_id=None,
             cash_security_id=None,
@@ -159,6 +161,7 @@ async def test_process_message_success(
             "PORT_UT_01",
             "persistence-transactions",
             "test-corr-id",
+            tenant_id="tenant-test",
         )
         mock_send_to_dlq.assert_not_called()
 
@@ -232,6 +235,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
         "PORT_UT_01",
         "persistence-transactions",
         "test-corr-id",
+        tenant_id="tenant-test",
     )
 
 
@@ -331,6 +335,7 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_cas
 
     mock_repo.resolve_transaction_reference_availability.assert_awaited_once_with(
         portfolio_id="PORT_UT_01",
+        tenant_id="tenant-test",
         security_id="SEC_UT_01",
         cash_account_id=" CASH-ACC-404 ",
         cash_security_id=" CASH_USD ",

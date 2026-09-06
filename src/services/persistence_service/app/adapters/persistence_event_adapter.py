@@ -33,6 +33,7 @@ class PersistenceEventEnvelope(Generic[EventT]):
     event: EventT
     idempotency_key: str
     portfolio_id: str
+    tenant_id: str | None
 
 
 def persistence_event_id(msg: Message) -> str:
@@ -61,4 +62,5 @@ def validate_persistence_event_payload(
         event=event,
         idempotency_key=getattr(event, "transaction_id", payload.event_id),
         portfolio_id=getattr(event, "portfolio_id", None) or "N/A",
+        tenant_id=getattr(event, "tenant_id", None),
     )
