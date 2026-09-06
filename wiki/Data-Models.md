@@ -232,7 +232,10 @@ reconciliation behavior is not incidental implementation detail in `lotus-core`.
 `processed_events` separates tenant-owned transaction fences from deliberately global event
 families. Transaction persistence, combined transaction processing, and cashflow fences require a
 normalized tenant and enforce physical and semantic uniqueness within that tenant. Global price and
-FX fences retain null tenant attribution and their own partial unique keys. The tenant-fence
+FX fences, plus existing portfolio v1 fences, retain null tenant attribution and their own partial
+unique keys. During the compatible transaction-v1 transition, consumers derive tenant from durable
+portfolio ownership before claiming a fence; payloads do not silently add a field that older
+strict consumers would reject. An asserted tenant must match the portfolio owner. The tenant-fence
 migration derives existing transaction ownership only from the persisted portfolio and stops when
 any row is unattributable; rollback also stops when cross-tenant keys cannot safely return to the
 former global constraint.
