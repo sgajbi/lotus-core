@@ -85,6 +85,7 @@ def _core_snapshot_source_row_payload(row: CoreSnapshotPositionSource) -> dict[s
         "business_date": row.business_date,
         "epoch": row.epoch,
         "state_epoch": row.state_epoch,
+        "state_status": row.state_status,
         "source_created_at": row.source_created_at,
         "source_updated_at": row.source_updated_at,
         "state_created_at": row.state_created_at,

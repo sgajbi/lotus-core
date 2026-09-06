@@ -17,6 +17,7 @@ from portfolio_common.reconciliation_quality import (
     FINANCIAL_RECONCILIATION_STAGE,
     UNKNOWN,
 )
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
@@ -211,6 +212,25 @@ async def test_later_valuation_state_update_does_not_stale_reconciled_position_f
     assert controls[0].updated_at == control_time
     assert scopes.items[0].latest_evidence_timestamp == fact_time
     assert evidence.status == COMPLETE
+
+    await async_db_session.execute(
+        update(PositionState)
+        .where(
+            PositionState.portfolio_id == portfolio_id,
+            PositionState.security_id == security_id,
+        )
+        .values(status="REPROCESSING")
+    )
+    await async_db_session.commit()
+    reprocessing_rows = await reader.get_position_snapshot(
+        portfolio_id=portfolio_id,
+        as_of_date=business_date,
+    )
+
+    assert len(reprocessing_rows) == 1
+    assert reprocessing_rows[0].epoch == 0
+    assert reprocessing_rows[0].state_epoch == 0
+    assert reprocessing_rows[0].state_status == "REPROCESSING"
 
     correction_time = valuation_time + timedelta(minutes=5)
     async_db_session.add(

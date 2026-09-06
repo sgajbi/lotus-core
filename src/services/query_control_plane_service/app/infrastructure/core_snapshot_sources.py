@@ -386,6 +386,7 @@ def _position_source(
         ),
         epoch=int(portfolio_fact_epoch if portfolio_fact_epoch is not None else row.epoch),
         state_epoch=int(state.epoch),
+        state_status=str(state.status).strip().upper(),
         source_created_at=getattr(row, "created_at", None),
         source_updated_at=getattr(row, "updated_at", None),
         state_created_at=state.created_at,

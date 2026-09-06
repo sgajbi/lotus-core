@@ -514,7 +514,9 @@ it must not busy-loop against the shared runtime.
 The same final verification requires the Core snapshot to report `COMPLETE` reconciliation and
 data quality, `source_evidence_current=true`, `freshness_status=CURRENT`, and `READY` valuation
 supportability for the governed as-of date. A contradictory or stale snapshot keeps the seed
-unready even when every background queue is empty.
+unready even when every background queue is empty. Every selected position-state key must also be
+`CURRENT`; `REPROCESSING` returns `POSITION_STATE_NOT_CURRENT` with unavailable valuation
+supportability until rebuilt valuations are durable.
 Use `--evidence-output <path>` to retain a source-safe JSON receipt. The tool first compares every
 expected seed-owned assignment and source fact with the latest-version rows from a read-only
 PostgreSQL projection and fails
