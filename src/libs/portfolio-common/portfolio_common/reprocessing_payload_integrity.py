@@ -162,33 +162,41 @@ UPSERT_PENDING_RESET_WATERMARKS = text(
             THEN COALESCE(
                 :correlation_id,
                 CASE
-                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    WHEN lower(
+                        btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                    ) = '<not-set>'
+                      OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                     THEN NULL
-                    ELSE btrim(reprocessing_jobs.correlation_id)
+                    ELSE btrim(reprocessing_jobs.correlation_id, :trim_chars)
                 END
             )
             WHEN reprocessing_jobs.correlation_id IS NULL
-              OR lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-              OR btrim(reprocessing_jobs.correlation_id) = ''
+              OR lower(
+                  btrim(reprocessing_jobs.correlation_id, :trim_chars)
+              ) = '<not-set>'
+              OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
             THEN :correlation_id
-            ELSE btrim(reprocessing_jobs.correlation_id)
+            ELSE btrim(reprocessing_jobs.correlation_id, :trim_chars)
         END,
         correlation_missing_reason = CASE
             WHEN :correlation_id IS NOT NULL
             THEN NULL
             WHEN (
                      reprocessing_jobs.correlation_id IS NULL
-                     OR lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                     OR btrim(reprocessing_jobs.correlation_id) = ''
+                     OR lower(
+                         btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                     ) = '<not-set>'
+                     OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                  )
                  AND CAST(:earliest_impacted_date AS date) <
                      CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
             THEN :correlation_missing_reason
             WHEN (
                      reprocessing_jobs.correlation_id IS NULL
-                     OR lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                     OR btrim(reprocessing_jobs.correlation_id) = ''
+                     OR lower(
+                         btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                     ) = '<not-set>'
+                     OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                  )
                  AND reprocessing_jobs.correlation_missing_reason IS NULL
             THEN :correlation_missing_reason
@@ -199,16 +207,20 @@ UPSERT_PENDING_RESET_WATERMARKS = text(
             THEN NULL
             WHEN (
                      reprocessing_jobs.correlation_id IS NULL
-                     OR lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                     OR btrim(reprocessing_jobs.correlation_id) = ''
+                     OR lower(
+                         btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                     ) = '<not-set>'
+                     OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                  )
                  AND CAST(:earliest_impacted_date AS date) <
                      CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
             THEN :alternate_lookup_key
             WHEN (
                      reprocessing_jobs.correlation_id IS NULL
-                     OR lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                     OR btrim(reprocessing_jobs.correlation_id) = ''
+                     OR lower(
+                         btrim(reprocessing_jobs.correlation_id, :trim_chars)
+                     ) = '<not-set>'
+                     OR btrim(reprocessing_jobs.correlation_id, :trim_chars) = ''
                  )
                  AND reprocessing_jobs.alternate_lookup_key IS NULL
             THEN :alternate_lookup_key
@@ -228,6 +240,7 @@ UPSERT_PENDING_RESET_WATERMARKS = text(
     bindparam("correlation_id", type_=String()),
     bindparam("correlation_missing_reason", type_=String()),
     bindparam("alternate_lookup_key", type_=String()),
+    bindparam("trim_chars", value=REPLAY_TEXT_TRIM_CHARS),
 )
 
 PENDING_RESET_IDENTITY_LOCK_KEYS = text(
@@ -348,10 +361,10 @@ NORMALIZE_PENDING_RESET_WATERMARKS = text(
             payload->>'earliest_impacted_date' AS earliest_impacted_date,
             attempt_count,
             CASE
-                WHEN lower(btrim(correlation_id)) = '<not-set>'
-                  OR btrim(correlation_id) = ''
+                WHEN lower(btrim(correlation_id, :trim_chars)) = '<not-set>'
+                  OR btrim(correlation_id, :trim_chars) = ''
                 THEN NULL
-                ELSE btrim(correlation_id)
+                ELSE btrim(correlation_id, :trim_chars)
             END AS correlation_id,
             correlation_missing_reason,
             alternate_lookup_key,

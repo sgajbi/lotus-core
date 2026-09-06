@@ -230,7 +230,7 @@ _QUARANTINE_PYTHON_INVALID_PENDING_TEMPORAL_VALUES = sa.text(
     """
 )
 _RESTAGE_RECOVERABLE_FX = sa.text(
-    """
+    rf"""
     INSERT INTO reprocessing_jobs (
         job_type,
         payload,
@@ -291,18 +291,30 @@ _RESTAGE_RECOVERABLE_FX = sa.text(
             THEN COALESCE(
                 :correlation_id,
                 CASE
-                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    WHEN lower(btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )) = '<not-set>'
+                      OR btrim(
+                          reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                      ) = ''
                     THEN NULL
-                    ELSE btrim(reprocessing_jobs.correlation_id)
+                    ELSE btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )
                 END
             )
             ELSE COALESCE(
                 CASE
-                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    WHEN lower(btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )) = '<not-set>'
+                      OR btrim(
+                          reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                      ) = ''
                     THEN NULL
-                    ELSE btrim(reprocessing_jobs.correlation_id)
+                    ELSE btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )
                 END,
                 :correlation_id
             )
@@ -311,10 +323,16 @@ _RESTAGE_RECOVERABLE_FX = sa.text(
             WHEN COALESCE(
                 :correlation_id,
                 CASE
-                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    WHEN lower(btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )) = '<not-set>'
+                      OR btrim(
+                          reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                      ) = ''
                     THEN NULL
-                    ELSE btrim(reprocessing_jobs.correlation_id)
+                    ELSE btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )
                 END
             ) IS NOT NULL THEN NULL
             WHEN ROW(CAST(:generated_at AS timestamptz), :content_hash) > ROW(
@@ -327,10 +345,16 @@ _RESTAGE_RECOVERABLE_FX = sa.text(
             WHEN COALESCE(
                 :correlation_id,
                 CASE
-                    WHEN lower(btrim(reprocessing_jobs.correlation_id)) = '<not-set>'
-                      OR btrim(reprocessing_jobs.correlation_id) = ''
+                    WHEN lower(btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )) = '<not-set>'
+                      OR btrim(
+                          reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                      ) = ''
                     THEN NULL
-                    ELSE btrim(reprocessing_jobs.correlation_id)
+                    ELSE btrim(
+                        reprocessing_jobs.correlation_id, {_REPLAY_TEXT_TRIM_CHARS}
+                    )
                 END
             ) IS NOT NULL THEN NULL
             WHEN ROW(CAST(:generated_at AS timestamptz), :content_hash) > ROW(

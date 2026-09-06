@@ -139,7 +139,7 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
                     "earliest_impacted_date": "2025-01-05",
                 },
                 status="PENDING",
-                correlation_id="  <NOT-SET>  ",
+                correlation_id="\t<NOT-SET>\u00a0",
                 attempt_count=1,
             ),
             ReprocessingJob(
@@ -1467,7 +1467,7 @@ async def test_staging_retains_newer_fx_authority_around_unbounded_extension(
                 job_type, payload, status, attempt_count, correlation_id
             )
             VALUES (
-                'RESET_FX_WATERMARKS', CAST(:payload AS JSON), 'PENDING', 5, 'corr-retained-fx'
+                'RESET_FX_WATERMARKS', CAST(:payload AS JSON), 'PENDING', 5, :correlation_id
             )
             RETURNING id
             """
@@ -1479,7 +1479,8 @@ async def test_staging_retains_newer_fx_authority_around_unbounded_extension(
                 '"generated_at":"2025-01-08T00:00:00+00:00",'
                 f'"content_hash":"{retained_hash}",'
                 '"extension":1e999999999999999999999999999999999999999}'
-            )
+            ),
+            "correlation_id": "\t<NOT-SET>\u00a0",
         },
     )
     assert retained_id is not None
@@ -1520,7 +1521,7 @@ async def test_staging_retains_newer_fx_authority_around_unbounded_extension(
         "content_hash": retained_hash,
     }
     assert rows[1].attempt_count == 5
-    assert rows[1].correlation_id == "corr-retained-fx"
+    assert rows[1].correlation_id == "corr-incoming-fx"
 
 
 async def test_staging_quarantines_postgres_unrepresentable_pending_reset_date(
@@ -1645,7 +1646,7 @@ async def test_staging_preserves_real_correlation_when_newer_pending_fx_has_sent
             "generated_at": "2025-01-09T00:00:00+00:00",
         },
         status="PENDING",
-        correlation_id="  <NOT-SET>  ",
+        correlation_id="\t<NOT-SET>\u00a0",
         correlation_missing_reason="legacy_correlation_unavailable",
         alternate_lookup_key="legacy:eur-chf",
     )
@@ -2134,7 +2135,7 @@ async def test_reset_staging_replaces_retained_sentinel_with_real_correlation(
                 "earliest_impacted_date": "2025-01-05",
             },
             status="PENDING",
-            correlation_id="  <NOT-SET>  ",
+            correlation_id="\t<NOT-SET>\u00a0",
             correlation_missing_reason="legacy_missing",
             alternate_lookup_key="legacy:sentinel-upsert",
         )

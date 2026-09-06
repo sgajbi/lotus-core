@@ -119,6 +119,8 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert "CAST(:generated_at AS timestamptz)" in sql
     assert "COALESCE(reprocessing_jobs.payload->>'content_hash', '')" in sql
     assert "GREATEST" in sql
+    assert "btrim(reprocessing_jobs.correlation_id)" not in sql
+    assert "btrim(reprocessing_jobs.correlation_id, :trim_chars)" in sql
     assert parameters["from_currency"] == "USD"
     assert parameters["to_currency"] == "SGD"
     assert parameters["effective_date"] == date(2026, 4, 10)

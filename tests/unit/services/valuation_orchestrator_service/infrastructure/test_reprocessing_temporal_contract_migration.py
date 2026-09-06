@@ -155,7 +155,10 @@ def test_upgrade_replaces_constraint_and_restages_only_provable_work(monkeypatch
         extra={"reset_watermarks_count": 3, "reset_fx_watermarks_count": 5},
     )
     recovery_statement, recovery_parameters = bind.execute.call_args_list[2].args
-    assert "ON CONFLICT" in str(recovery_statement)
+    recovery_statement_sql = str(recovery_statement)
+    assert "ON CONFLICT" in recovery_statement_sql
+    assert "btrim(reprocessing_jobs.correlation_id)" not in recovery_statement_sql
+    assert r"\00A0\1680" in recovery_statement_sql
     assert len(recovery_parameters) == 1
     assert recovery_parameters[0]["source_job_id"] == 17
     assert recovery_parameters[0]["earliest_impacted_date"] == date(2025, 1, 4)
