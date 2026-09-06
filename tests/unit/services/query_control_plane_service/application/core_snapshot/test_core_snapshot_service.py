@@ -416,6 +416,44 @@ async def test_core_snapshot_product_timestamp_includes_newer_market_evidence(
     assert response.latest_evidence_timestamp == market_timestamp
 
 
+async def test_core_snapshot_remains_current_after_later_valuation_state_write(
+    mock_dependencies,
+) -> None:
+    position_repo, _, _, _, _, _ = mock_dependencies
+    fact_timestamp = datetime(2026, 2, 27, 10, tzinfo=UTC)
+    control_timestamp = datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
+    valuation_timestamp = datetime(2026, 2, 27, 10, 10, tzinfo=UTC)
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        replace(
+            position_repo.get_latest_positions_by_portfolio_as_of_date.return_value[0],
+            source_created_at=valuation_timestamp,
+            source_updated_at=valuation_timestamp,
+            portfolio_fact_created_at=fact_timestamp,
+            portfolio_fact_updated_at=fact_timestamp,
+            state_created_at=fact_timestamp,
+            state_updated_at=valuation_timestamp,
+        )
+    ]
+    position_repo.get_financial_reconciliation_controls.return_value = [
+        _reconciliation_control(updated_at=control_timestamp)
+    ]
+
+    response = await _service(mock_dependencies).get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.reconciliation_status == COMPLETE
+    assert response.data_quality_status == COMPLETE
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
+    assert response.valuation_context.supportability == "READY"
+    assert response.valuation_context.reason_code == "SOURCE_EVIDENCE_READY"
+
+
 @pytest.mark.parametrize(
     (
         "control_status",
@@ -463,6 +501,14 @@ async def test_core_snapshot_fails_closed_for_untrusted_reconciliation_controls(
         if control_status is None
         else [_reconciliation_control(status=control_status, updated_at=control_timestamp)]
     )
+    if expected_status == STALE:
+        source = position_repo.get_latest_positions_by_portfolio_as_of_date.return_value[0]
+        position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+            replace(
+                source,
+                portfolio_fact_updated_at=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
+            )
+        ]
     service = _service(mock_dependencies)
 
     response = await service.get_core_snapshot(
