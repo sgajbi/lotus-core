@@ -11,7 +11,7 @@ class PortfolioRecord(BaseModel):
 
     tenant_id: str = Field(
         ...,
-        description="Persisted source-owned tenant identifier for this portfolio.",
+        description="Source-owned tenant identifier.",
         examples=["tenant_sg_pb"],
     )
     portfolio_id: str = Field(..., description="Unique portfolio identifier.", examples=["PF-001"])

@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-01T03:17:39.817995+00:00",
+  "generatedAt": "2026-09-06T14:55:25.838658+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -6382,6 +6382,7 @@
       "description": "List of portfolio records matching the applied query filters.",
       "example": [
         {
+          "tenant_id": "tenant_sg_pb",
           "portfolio_id": "PF-001",
           "base_currency": "USD",
           "open_date": "2024-01-01",
@@ -9931,8 +9932,8 @@
       "semanticId": "lotus.tenant_id",
       "canonicalTerm": "tenant_id",
       "preferredName": "tenant_id",
-      "description": "Tenant or book-of-record scope for this source-data product. Null until runtime tenant enforcement is available for this product.",
-      "example": "tenant-sg",
+      "description": "Source-owned tenant identifier.",
+      "example": "tenant_sg_pb",
       "type": "string",
       "locations": [
         "body",
@@ -14419,7 +14420,7 @@
         "Portfolios"
       ],
       "summary": "Get portfolio discovery records",
-      "description": "Returns canonical portfolio discovery records with optional filtering by portfolio ID, portfolio identifier list, client grouping ID, and booking center. Use this route for portfolio lookup, selector population, and navigation scope discovery; do not use it as a substitute for single-portfolio detail, workspace composition, or holdings/reporting reads.",
+      "description": "Returns canonical portfolio discovery records owned by the admitted tenant, with optional filtering by portfolio ID, portfolio identifier list, client grouping ID, and booking center. Each record includes persisted source tenant attribution. Use this route for portfolio lookup, selector population, and navigation scope discovery; do not use it as a substitute for single-portfolio detail, workspace composition, or holdings/reporting reads.",
       "naming": {
         "boundedContext": "portfolios",
         "canonicalTerms": [
@@ -14439,6 +14440,7 @@
           "portfolios",
           "risk_exposure",
           "status",
+          "tenant_id",
           "x_tenant_id"
         ]
       },
@@ -14497,6 +14499,14 @@
             "type": "array",
             "semanticId": "lotus.portfolios",
             "attributeRef": "lotus.portfolios"
+          },
+          {
+            "name": "portfolios[].tenant_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
           },
           {
             "name": "portfolios[].portfolio_id",
@@ -14623,7 +14633,7 @@
         "Portfolios"
       ],
       "summary": "Get canonical portfolio detail by ID",
-      "description": "Returns the canonical portfolio identity and standing metadata for one portfolio identifier. Use this route when a downstream workflow needs the source-owned portfolio record before composing workspace, holdings, transaction, or reporting reads; do not use it as a substitute for portfolio positions, transaction-ledger, or reporting routes.",
+      "description": "Returns the canonical portfolio identity, persisted source tenant attribution, and standing metadata for one portfolio owned by the admitted tenant. A portfolio owned by another tenant is indistinguishable from an absent portfolio. Use this route when a downstream workflow needs the source-owned portfolio record before composing workspace, holdings, transaction, or reporting reads; do not use it as a substitute for portfolio positions, transaction-ledger, or reporting routes.",
       "naming": {
         "boundedContext": "portfolios",
         "canonicalTerms": [
@@ -14641,6 +14651,7 @@
           "portfolio_type",
           "risk_exposure",
           "status",
+          "tenant_id",
           "x_tenant_id"
         ]
       },
@@ -14668,6 +14679,14 @@
         "httpStatus": 200,
         "model": "PortfolioRecord",
         "fields": [
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
           {
             "name": "portfolio_id",
             "location": "body",

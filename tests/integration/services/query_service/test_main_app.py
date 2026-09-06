@@ -1054,7 +1054,7 @@ async def test_openapi_describes_portfolio_discovery_contract_examples(async_tes
         "Primary client objective for this portfolio."
     )
     assert portfolio_record["properties"]["tenant_id"]["description"] == (
-        "Persisted source-owned tenant identifier for this portfolio."
+        "Source-owned tenant identifier."
     )
     assert "tenant_id" in portfolio_record["required"]
     assert portfolio_record["properties"]["cost_basis_method"]["description"] == (
