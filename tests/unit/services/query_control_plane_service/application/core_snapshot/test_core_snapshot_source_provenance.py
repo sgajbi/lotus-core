@@ -67,6 +67,7 @@ def _row(
         cost_basis=cost_basis,
         cost_basis_local=cost_basis_local,
         epoch=epoch,
+        state_epoch=epoch,
         source_created_at=market_timestamp,
         source_updated_at=market_timestamp,
         state_created_at=evidence_timestamp,

@@ -43,7 +43,7 @@ def core_snapshot_reconciliation_scopes(
             HoldingsReconciliationSource(
                 business_date=row.portfolio_business_date,
                 row_epoch=row.epoch,
-                state_epoch=row.epoch,
+                state_epoch=row.state_epoch,
                 latest_evidence_timestamp=_latest_timestamp(
                     row.portfolio_fact_created_at,
                     row.portfolio_fact_updated_at,
@@ -84,6 +84,7 @@ def _core_snapshot_source_row_payload(row: CoreSnapshotPositionSource) -> dict[s
         "portfolio_business_date": row.portfolio_business_date,
         "business_date": row.business_date,
         "epoch": row.epoch,
+        "state_epoch": row.state_epoch,
         "source_created_at": row.source_created_at,
         "source_updated_at": row.source_updated_at,
         "state_created_at": row.state_created_at,

@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from portfolio_common.domain.holdings_reconciliation import FinancialReconciliationControl
-from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, STALE
+from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, STALE, UNKNOWN
 
 from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
     core_snapshot_reconciliation_evidence,
@@ -27,6 +27,7 @@ def _row(
     valuation_fx_rate: Decimal | None = None,
     portfolio_fact_updated_at: datetime | None = None,
     state_updated_at: datetime | None = None,
+    state_epoch: int | None = None,
 ) -> CoreSnapshotPositionSource:
     portfolio_timestamp = portfolio_fact_updated_at or updated_at
     return CoreSnapshotPositionSource(
@@ -38,6 +39,7 @@ def _row(
         cost_basis=None,
         cost_basis_local=None,
         epoch=epoch,
+        state_epoch=epoch if state_epoch is None else state_epoch,
         source_created_at=updated_at - timedelta(hours=1),
         source_updated_at=updated_at,
         state_created_at=None,
@@ -123,6 +125,15 @@ def test_core_snapshot_scopes_fail_closed_for_unscoped_rows() -> None:
 
     assert scopes.items == ()
     assert scopes.unscoped_source_row_count == 1
+
+
+def test_core_snapshot_scopes_fail_closed_for_fact_state_epoch_mismatch() -> None:
+    scopes = core_snapshot_reconciliation_scopes([_row(epoch=5, state_epoch=4)])
+    evidence = core_snapshot_reconciliation_evidence(scopes=scopes, controls=[])
+
+    assert scopes.items == ()
+    assert scopes.unscoped_source_row_count == 1
+    assert evidence.status == UNKNOWN
 
 
 def test_core_snapshot_scopes_use_position_history_date_not_market_snapshot_date() -> None:

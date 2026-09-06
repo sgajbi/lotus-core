@@ -141,6 +141,7 @@ def _position_source(
         cost_basis=getattr(row, "cost_basis", None),
         cost_basis_local=getattr(row, "cost_basis_local", None),
         epoch=int(getattr(state, "epoch", 0)),
+        state_epoch=int(getattr(state, "epoch", 0)),
         source_created_at=getattr(row, "created_at", None),
         source_updated_at=getattr(row, "updated_at", None),
         state_created_at=getattr(state, "created_at", None),
@@ -452,6 +453,29 @@ async def test_core_snapshot_remains_current_after_later_valuation_state_write(
     assert response.freshness_status == "CURRENT"
     assert response.valuation_context.supportability == "READY"
     assert response.valuation_context.reason_code == "SOURCE_EVIDENCE_READY"
+
+
+async def test_core_snapshot_fails_closed_for_fact_state_epoch_mismatch(
+    mock_dependencies,
+) -> None:
+    position_repo, _, _, _, _, _ = mock_dependencies
+    source = position_repo.get_latest_positions_by_portfolio_as_of_date.return_value[0]
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        replace(source, epoch=8, state_epoch=7)
+    ]
+
+    response = await _service(mock_dependencies).get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.reconciliation_status == UNKNOWN
+    assert response.data_quality_status == UNKNOWN
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
 
 
 @pytest.mark.parametrize(

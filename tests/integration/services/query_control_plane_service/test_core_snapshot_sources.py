@@ -12,7 +12,11 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.domain.holdings_reconciliation import HoldingsReconciliationScope
-from portfolio_common.reconciliation_quality import COMPLETE, FINANCIAL_RECONCILIATION_STAGE
+from portfolio_common.reconciliation_quality import (
+    COMPLETE,
+    FINANCIAL_RECONCILIATION_STAGE,
+    UNKNOWN,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
@@ -207,3 +211,37 @@ async def test_later_valuation_state_update_does_not_stale_reconciled_position_f
     assert controls[0].updated_at == control_time
     assert scopes.items[0].latest_evidence_timestamp == fact_time
     assert evidence.status == COMPLETE
+
+    correction_time = valuation_time + timedelta(minutes=5)
+    async_db_session.add(
+        PositionHistory(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_id="CORE-SNAPSHOT-RECONCILIATION-TXN-1",
+            position_date=business_date,
+            quantity=Decimal("11"),
+            cost_basis=Decimal("1100"),
+            epoch=1,
+            created_at=correction_time,
+            updated_at=correction_time,
+        )
+    )
+    await async_db_session.commit()
+
+    history_rows = await reader.get_position_history(
+        portfolio_id=portfolio_id,
+        as_of_date=business_date,
+    )
+    mismatch_scopes = core_snapshot_reconciliation_scopes(history_rows)
+    mismatch_evidence = core_snapshot_reconciliation_evidence(
+        scopes=mismatch_scopes,
+        controls=[],
+    )
+
+    assert len(history_rows) == 1
+    assert history_rows[0].quantity == Decimal("11")
+    assert history_rows[0].epoch == 1
+    assert history_rows[0].state_epoch == 0
+    assert mismatch_scopes.items == ()
+    assert mismatch_scopes.unscoped_source_row_count == 1
+    assert mismatch_evidence.status == UNKNOWN

@@ -35,7 +35,7 @@ from ..domain.core_snapshot import (
 
 
 class SqlAlchemyCoreSnapshotSourceReader:
-    """Resolve effective snapshot evidence using deterministic current-epoch queries."""
+    """Resolve latest financial facts with their independently persisted state epoch."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -57,7 +57,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
     async def get_position_snapshot(
         self, *, portfolio_id: str, as_of_date: date
     ) -> list[CoreSnapshotPositionSource]:
-        latest_history = self._latest_current_history(
+        latest_history = self._latest_position_history(
             portfolio_id=portfolio_id, as_of_date=as_of_date
         )
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
@@ -94,6 +94,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 Instrument,
                 PositionState,
                 latest_history.c.security_id,
+                latest_history.c.epoch,
                 latest_history.c.portfolio_business_date,
                 latest_history.c.cost_basis,
                 latest_history.c.cost_basis_local,
@@ -124,7 +125,6 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 and_(
                     PositionState.portfolio_id == latest_history.c.portfolio_id,
                     state_security_id == latest_history.c.security_id,
-                    PositionState.epoch == latest_history.c.epoch,
                 ),
             )
             .where(latest_history.c.quantity != 0)
@@ -153,6 +153,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 instrument,
                 state,
                 use_snapshot=True,
+                portfolio_fact_epoch=portfolio_fact_epoch,
                 portfolio_business_date=portfolio_business_date,
                 portfolio_cost_basis=portfolio_cost_basis,
                 portfolio_cost_basis_local=portfolio_cost_basis_local,
@@ -164,6 +165,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 instrument,
                 state,
                 _expected_security_id,
+                portfolio_fact_epoch,
                 portfolio_business_date,
                 portfolio_cost_basis,
                 portfolio_cost_basis_local,
@@ -187,14 +189,6 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 )
                 .label("rn"),
             )
-            .join(
-                PositionState,
-                and_(
-                    PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    history_security_id == state_security_id,
-                    PositionHistory.epoch == PositionState.epoch,
-                ),
-            )
             .where(
                 PositionHistory.portfolio_id == portfolio_id,
                 PositionHistory.position_date <= as_of_date,
@@ -213,7 +207,6 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 and_(
                     PositionState.portfolio_id == PositionHistory.portfolio_id,
                     state_security_id == history_security_id,
-                    PositionState.epoch == PositionHistory.epoch,
                 ),
             )
             .where(PositionHistory.quantity != 0)
@@ -320,9 +313,8 @@ class SqlAlchemyCoreSnapshotSourceReader:
         ]
 
     @staticmethod
-    def _latest_current_history(*, portfolio_id: str, as_of_date: date):
+    def _latest_position_history(*, portfolio_id: str, as_of_date: date):
         history_security_id = func.trim(PositionHistory.security_id)
-        state_security_id = func.trim(PositionState.security_id)
         ranked = (
             select(
                 PositionHistory.portfolio_id.label("portfolio_id"),
@@ -340,14 +332,6 @@ class SqlAlchemyCoreSnapshotSourceReader:
                     order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
                 )
                 .label("rn"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    history_security_id == state_security_id,
-                    PositionHistory.epoch == PositionState.epoch,
-                ),
             )
             .where(
                 PositionHistory.portfolio_id == portfolio_id,
@@ -383,6 +367,7 @@ def _position_source(
     state: PositionState,
     *,
     use_snapshot: bool,
+    portfolio_fact_epoch: int | None = None,
     portfolio_business_date: date | None = None,
     portfolio_cost_basis: Decimal | None = None,
     portfolio_cost_basis_local: Decimal | None = None,
@@ -399,7 +384,8 @@ def _position_source(
         cost_basis_local=(
             portfolio_cost_basis_local if use_snapshot else getattr(row, "cost_basis_local", None)
         ),
-        epoch=int(state.epoch),
+        epoch=int(portfolio_fact_epoch if portfolio_fact_epoch is not None else row.epoch),
+        state_epoch=int(state.epoch),
         source_created_at=getattr(row, "created_at", None),
         source_updated_at=getattr(row, "updated_at", None),
         state_created_at=state.created_at,
