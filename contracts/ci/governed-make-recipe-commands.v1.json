@@ -87,6 +87,9 @@
     "dependency-technology-inventory": [
       "$(REPOSITORY_PYTHON) scripts/quality/dependency_technology_inventory_guard.py"
     ],
+    "documentation-text-integrity-guard": [
+      "$(REPOSITORY_PYTHON) scripts/quality/documentation_text_integrity_guard.py"
+    ],
     "domain-layer-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/domain_layer_guard.py"
     ],
