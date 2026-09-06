@@ -67,7 +67,7 @@ make route-contract-family-guard
 Route contract-family guard passed.
 
 make domain-product-validate
-Validated 1 repo-native producer declaration(s) and 0 repo-native consumer declaration(s) in C:\Users\Sandeep\projects\lotus-core\contracts\domain-data-products
+Validated 1 repo-native producer declaration and 0 repo-native consumer declarations in `contracts/domain-data-products`.
 ```
 
 ## Critical Review

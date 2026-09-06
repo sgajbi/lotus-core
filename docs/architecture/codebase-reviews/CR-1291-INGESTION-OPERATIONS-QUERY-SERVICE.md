@@ -50,11 +50,11 @@ Focused local validation:
    - passed.
 6. `make quality-wiki-docs-gate`
    - passed.
-7. `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki`
+7. `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki`
    - passed after replacing a legacy scratch term in `wiki/Security-and-Governance.md`.
 8. `python -m pytest tests\unit\docs\test_source_data_product_boundaries.py tests\unit\test_ci_workflow_action_versions.py`
    - 33 passed.
-9. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
+9. `powershell -NoProfile -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
    - reported expected pre-merge publication drift for authored wiki source:
      `API-Surface.md`, `Architecture.md`, `Event-Replay-Service.md`, `Home.md`,
      `Security-and-Governance.md`, and `_Sidebar.md`.

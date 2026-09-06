@@ -60,9 +60,9 @@ Local evidence before commit:
 - `make lint` passed, including `structured-log-guard`.
 - `make typecheck` passed with no issues in 50 source files.
 - `make quality-wiki-docs-gate` passed.
-- `python C:\Users\Sandeep\projects\lotus-platform\codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki` passed.
+- `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki` passed.
 - `git diff --check` passed.
-- `powershell -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core` reported expected pre-publication drift for `Operations-Runbook.md` and pre-existing drift for `Outbox-Events.md`.
+- `powershell -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core` reported expected pre-publication drift for `Operations-Runbook.md` and pre-existing drift for `Outbox-Events.md`.
 - Stranded-truth reconciliation found only active Dependabot branches:
   `origin/dependabot/github_actions/github-actions-02325a8da5` and
   `origin/dependabot/pip/python-runtime-b808a9fc65`.

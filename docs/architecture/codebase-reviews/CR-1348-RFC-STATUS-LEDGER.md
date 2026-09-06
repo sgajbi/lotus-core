@@ -63,7 +63,7 @@ Focused validation before commit:
 - `python -m ruff format --check scripts/quality/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
 - `make quality-wiki-docs-gate`
 - `make docs-evidence-pack`
-- `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki --changed-page RFC-Index.md --changed-page Validation-and-CI.md`
+- `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki --changed-page RFC-Index.md --changed-page Validation-and-CI.md`
 - `make lint`
 - `git diff --check`
 

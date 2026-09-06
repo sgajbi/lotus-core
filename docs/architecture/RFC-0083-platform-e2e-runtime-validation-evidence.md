@@ -34,21 +34,21 @@ Canonical validation:
 npm run live:validate
 ```
 
-The validation ran from `C:\Users\Sandeep\projects\lotus-workbench`.
+The validation ran from the `lotus-workbench` repository root.
 
 ## Runtime Evidence Summary
 
 Generated evidence:
 
-1. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\live-validation-summary.json`
-2. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\SHOT-INDEX.md`
-3. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\portfolio-summary-live.png`
-4. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\portfolio-detailed-live.png`
-5. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\performance-summary-live.png`
-6. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\performance-analysis-live.png`
-7. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\performance-advisor-brief-live.png`
-8. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\performance-risk-live.png`
-9. `C:\Users\Sandeep\projects\lotus-workbench\output\playwright\live-canonical\performance-evidence-live.png`
+1. `output/playwright/live-canonical/live-validation-summary.json`
+2. `output/playwright/live-canonical/SHOT-INDEX.md`
+3. `output/playwright/live-canonical/portfolio-summary-live.png`
+4. `output/playwright/live-canonical/portfolio-detailed-live.png`
+5. `output/playwright/live-canonical/performance-summary-live.png`
+6. `output/playwright/live-canonical/performance-analysis-live.png`
+7. `output/playwright/live-canonical/performance-advisor-brief-live.png`
+8. `output/playwright/live-canonical/performance-risk-live.png`
+9. `output/playwright/live-canonical/performance-evidence-live.png`
 
 The final validation command passed with:
 

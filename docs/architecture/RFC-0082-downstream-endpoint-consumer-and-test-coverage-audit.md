@@ -763,7 +763,7 @@ Focused certification evidence on April 18, 2026 rechecked the deeper evidence r
 3. Live probe: `GET /support/portfolios/PB_SG_GLOBAL_BAL_001/reprocessing-keys` returned eleven current keys with explicit watermark dates, stale-state classification, and `product_name=IngestionEvidenceBundle`.
 4. Live probe: `GET /support/portfolios/PB_SG_GLOBAL_BAL_001/reprocessing-jobs` returned an empty-but-explicit list with `total=0`, confirming the route publishes a truthful zero-backlog state rather than a missing-resource error.
 5. Live probe: `GET /lineage/portfolios/PB_SG_GLOBAL_BAL_001/keys` returned eleven lineage keys with latest history/snapshot/valuation evidence and operator-facing `operational_state`.
-6. Downstream code scan: `rg -n "reconciliation-runs|reprocessing-keys|reprocessing-jobs|lineage/portfolios" C:\Users\Sandeep\projects\lotus-gateway C:\Users\Sandeep\projects\lotus-risk C:\Users\Sandeep\projects\lotus-manage C:\Users\Sandeep\projects\lotus-report C:\Users\Sandeep\projects\lotus-advise` found no active direct product client binding for the deeper reconciliation, replay, or lineage routes.
+6. From the workspace root, the downstream scan `rg -n "reconciliation-runs|reprocessing-keys|reprocessing-jobs|lineage/portfolios" lotus-gateway lotus-risk lotus-manage lotus-report lotus-advise` found no active direct product client binding for the deeper reconciliation, replay, or lineage routes.
 
 ### Issue Disposition For This Endpoint Family
 

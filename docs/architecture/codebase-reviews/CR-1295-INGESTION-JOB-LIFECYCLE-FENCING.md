@@ -54,11 +54,11 @@ Focused local validation:
    - passed.
 4. `make quality-wiki-docs-gate`
    - passed.
-5. `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki`
+5. `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki`
    - passed.
 6. `git diff --check`
    - passed with CRLF normalization warnings only.
-7. `powershell -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
+7. `powershell -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
    - reported expected pre-merge published-wiki drift for authored pages including
      `Event-Replay-Service.md` and `Ingestion-Service.md`; publish after merge remains required.
 

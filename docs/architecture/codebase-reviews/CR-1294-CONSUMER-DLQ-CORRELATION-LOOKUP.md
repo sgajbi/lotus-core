@@ -82,11 +82,11 @@ Focused local validation:
    - rendered `CREATE INDEX ix_ingestion_jobs_correlation_status_id ON ingestion_jobs (correlation_id, status, id DESC);`.
 6. `make quality-wiki-docs-gate`
    - passed.
-7. `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki`
+7. `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki`
    - passed.
 8. `git diff --check`
    - passed with CRLF normalization warnings only.
-9. `powershell -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
+9. `powershell -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
    - reported expected pre-merge published-wiki drift for authored pages including
      `Event-Replay-Service.md`; publish after merge remains required.
 
