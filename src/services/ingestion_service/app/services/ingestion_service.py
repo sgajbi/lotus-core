@@ -368,11 +368,15 @@ class IngestionService:
                     raise publish_exc from exc
 
     async def publish_transaction(
-        self, transaction: Transaction, idempotency_key: str | None = None
+        self,
+        transaction: Transaction,
+        idempotency_key: str | None = None,
+        *,
+        tenant_id: str,
     ) -> None:
         """Publishes a single transaction to the raw transactions topic."""
         headers = self._get_headers(idempotency_key)
-        transaction_payload = transaction_event_payload(transaction)
+        transaction_payload = transaction_event_payload(transaction, tenant_id=tenant_id)
         portfolio_id = self._partition_key_or_raise(
             key=transaction.portfolio_id,
             field_name="portfolio_id",
@@ -401,13 +405,17 @@ class IngestionService:
             ) from exc
 
     async def publish_transactions(
-        self, transactions: List[Transaction], idempotency_key: str | None = None
+        self,
+        transactions: List[Transaction],
+        idempotency_key: str | None = None,
+        *,
+        tenant_id: str,
     ) -> None:
         """Publishes a list of transactions to the raw transactions topic."""
         headers = self._get_headers(idempotency_key)
         record_keys = [transaction.transaction_id for transaction in transactions]
         for idx, transaction in enumerate(transactions):
-            transaction_payload = transaction_event_payload(transaction)
+            transaction_payload = transaction_event_payload(transaction, tenant_id=tenant_id)
             portfolio_id = self._partition_key_or_raise(
                 key=transaction.portfolio_id,
                 field_name="portfolio_id",
@@ -530,7 +538,11 @@ class IngestionService:
                     raise publish_exc from exc
 
     async def publish_portfolio_bundle(
-        self, bundle: PortfolioBundleIngestionRequest, idempotency_key: str | None = None
+        self,
+        bundle: PortfolioBundleIngestionRequest,
+        idempotency_key: str | None = None,
+        *,
+        tenant_id: str,
     ) -> dict[str, int]:
         """
         Publishes a mixed portfolio bundle for UI/file-upload workflows.
@@ -555,7 +567,11 @@ class IngestionService:
             await self.publish_instruments(bundle.instruments, idempotency_key)
             published_counts["instruments"] = len(bundle.instruments)
 
-            await self.publish_transactions(bundle.transactions, idempotency_key)
+            await self.publish_transactions(
+                bundle.transactions,
+                idempotency_key,
+                tenant_id=tenant_id,
+            )
             published_counts["transactions"] = len(bundle.transactions)
 
             await self.publish_market_prices(bundle.market_prices, idempotency_key)

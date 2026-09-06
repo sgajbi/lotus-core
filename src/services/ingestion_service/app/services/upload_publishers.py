@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from portfolio_common.domain.tenant import TenantContext
 from pydantic import BaseModel
 
 from ..application.upload_commands import UploadEntity
@@ -21,15 +22,19 @@ class IngestionServiceUploadPublisher(UploadRecordPublisher):
         self,
         entity_type: UploadEntity,
         valid_models: list[BaseModel],
+        *,
+        tenant_context: TenantContext,
     ) -> None:
         publishers = {
             "portfolios": self._publish_portfolios,
             "instruments": self._publish_instruments,
-            "transactions": self._publish_transactions,
             "market_prices": self._publish_market_prices,
             "fx_rates": self._publish_fx_rates,
             "business_dates": self._publish_business_dates,
         }
+        if entity_type == "transactions":
+            await self._publish_transactions(valid_models, tenant_context=tenant_context)
+            return
         await publishers[entity_type](valid_models)
 
     async def _publish_portfolios(self, valid_models: list[BaseModel]) -> None:
@@ -42,9 +47,15 @@ class IngestionServiceUploadPublisher(UploadRecordPublisher):
             [model for model in valid_models if isinstance(model, Instrument)]
         )
 
-    async def _publish_transactions(self, valid_models: list[BaseModel]) -> None:
+    async def _publish_transactions(
+        self,
+        valid_models: list[BaseModel],
+        *,
+        tenant_context: TenantContext,
+    ) -> None:
         await self._ingestion_service.publish_transactions(
-            [model for model in valid_models if isinstance(model, Transaction)]
+            [model for model in valid_models if isinstance(model, Transaction)],
+            tenant_id=tenant_context.tenant_id_text,
         )
 
     async def _publish_market_prices(self, valid_models: list[BaseModel]) -> None:

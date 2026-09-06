@@ -429,6 +429,7 @@ async def test_single_publish_command_has_no_job_lifecycle() -> None:
 
     result = await handler.ingest_single(
         SinglePublishIngestionCommand(
+            tenant_context=TEST_TENANT_CONTEXT,
             endpoint="/ingest/transaction",
             entity_type="transaction",
             record={"transaction_id": "T1"},
@@ -454,6 +455,7 @@ async def test_command_error_maps_blocked_mode_without_router_logic() -> None:
     with pytest.raises(IngestionPublishCommandError) as exc_info:
         await handler.ingest_single(
             SinglePublishIngestionCommand(
+                tenant_context=TEST_TENANT_CONTEXT,
                 endpoint="/ingest/transaction",
                 entity_type="transaction",
                 record={"transaction_id": "T1"},

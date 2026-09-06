@@ -102,6 +102,7 @@ async def ingest_transaction(
     try:
         result = await command_handler.ingest_transaction(
             SinglePublishIngestionCommand(
+                tenant_context=request.state.tenant_context,
                 endpoint=str(request.url.path),
                 entity_type="transaction",
                 record=transaction,
