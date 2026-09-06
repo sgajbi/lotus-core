@@ -12,12 +12,12 @@ from .ingestion_lineage import ingestion_job_id_var, normalize_ingestion_job_id
 from .kafka_utils import KafkaProducer
 from .logging_utils import correlation_id_var, normalize_lineage_value
 from .reprocessing_replay import (
+    TRANSACTION_REPLAY_SOURCE_FIELD_NAMES,
     ReplayCorrelationMetadata,
     ReprocessingReplayError,
     TransactionReplayMessage,
     TransactionReplayPublisher,
     TransactionReplayReader,
-    TRANSACTION_REPLAY_SOURCE_FIELD_NAMES,
     ordered_unique_transaction_ids,
     plan_transaction_replay,
     publish_transaction_replay_plan,
