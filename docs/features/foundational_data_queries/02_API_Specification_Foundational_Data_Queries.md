@@ -15,14 +15,25 @@ This document provides the detailed technical specification for the foundational
 ### Get a List of Portfolios
 * **Method:** `GET`
 * **Path:** `/portfolios/`
-* **Description:** Retrieves a list of portfolios, with optional filters.
+* **Description:** Retrieves portfolios owned by the admitted `X-Tenant-Id` authority, with
+  optional filters. Each record returns the persisted source `tenant_id`; it is not copied from a
+  query parameter.
 
 #### Query Parameters
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
 | `portfolio_id` | string | (Optional) Filter by a single, specific portfolio ID. |
-| `cif_id` | string | (Optional) Filter by the client grouping ID (CIF) to get all portfolios for a client. |
-| `booking_center` | string | (Optional) Filter by booking center. |
+| `portfolio_ids` | string[] | (Optional) Filter by an explicit portfolio identifier list. |
+| `client_id` | string | (Optional) Filter by the client grouping ID (CIF). |
+| `booking_center_code` | string | (Optional) Filter by booking center. |
+
+### Get Portfolio Detail
+
+* **Method:** `GET`
+* **Path:** `/portfolios/{portfolio_id}`
+* **Description:** Retrieves a source-owned portfolio record within the admitted tenant. A known
+  identifier owned by another tenant returns the same `404 Not Found` contract as an absent
+  identifier.
 
 ---
 
