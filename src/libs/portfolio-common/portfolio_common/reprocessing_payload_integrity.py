@@ -136,8 +136,8 @@ UPSERT_PENDING_RESET_WATERMARKS = text(
         'PENDING',
         :attempt_count,
         :correlation_id,
-        :correlation_missing_reason,
-        :alternate_lookup_key
+        CASE WHEN :correlation_id IS NOT NULL THEN NULL ELSE :correlation_missing_reason END,
+        CASE WHEN :correlation_id IS NOT NULL THEN NULL ELSE :alternate_lookup_key END
     )
     ON CONFLICT ((payload->>'security_id'))
     WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'

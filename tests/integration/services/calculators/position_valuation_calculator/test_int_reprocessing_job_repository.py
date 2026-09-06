@@ -257,10 +257,13 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     await async_db_session.execute(
         text(
             """
-            INSERT INTO reprocessing_jobs (job_type, payload, status, correlation_id)
+            INSERT INTO reprocessing_jobs (
+                job_type, payload, status, correlation_id,
+                correlation_missing_reason, alternate_lookup_key
+            )
             VALUES (
                 'RESET_WATERMARKS', CAST(:payload AS json), 'PENDING',
-                'corr-unbounded-exponent'
+                '  corr-unbounded-exponent  ', 'stale missing reason', 'stale-alternate'
             )
             """
         ),
@@ -343,7 +346,9 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
     )
     numeric_scalar = next(row for row in rows if row.correlation_id == "corr-numeric-scalar")
     unbounded_exponent = next(
-        row for row in rows if row.correlation_id == "corr-unbounded-exponent"
+        row
+        for row in rows
+        if row.status == "FAILED" and row.payload.get("security_id") == "UNBOUNDED-EXPONENT"
     )
     unbounded_boundary = next(
         row
@@ -432,6 +437,9 @@ async def test_reset_duplicate_normalization_preserves_canonical_identity_and_ea
         "security_id": "UNBOUNDED-EXPONENT",
         "earliest_impacted_date": "2025-01-03",
     }
+    assert unbounded_boundary.correlation_id == "corr-unbounded-exponent"
+    assert unbounded_boundary.correlation_missing_reason is None
+    assert unbounded_boundary.alternate_lookup_key is None
     assert recoverable_source.status == "FAILED"
     assert recoverable_source.failure_reason == (
         "invalid_reset_watermarks_job_payload: unsafe retained representation; "
