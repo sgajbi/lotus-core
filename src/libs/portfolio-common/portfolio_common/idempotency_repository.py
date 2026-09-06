@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ProcessedEvent
+from .domain.tenant import TenantId
 from .durable_correlation import durable_correlation_diagnostics
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,13 @@ class IdempotencyRepository:
         """
         self.db = db
 
-    async def is_event_processed(self, event_id: str, service_name: str) -> bool:
+    async def is_event_processed(
+        self,
+        event_id: str,
+        service_name: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> bool:
         """
         Asynchronously checks if an event has already been processed by a specific service.
         Args:
@@ -44,9 +51,12 @@ class IdempotencyRepository:
         Returns:
             True if the event has been processed, False otherwise.
         """
+        normalized_tenant_id = self._normalize_tenant_id(tenant_id)
         stmt = select(
             exists().where(
-                ProcessedEvent.event_id == event_id, ProcessedEvent.service_name == service_name
+                ProcessedEvent.event_id == event_id,
+                ProcessedEvent.service_name == service_name,
+                self._tenant_predicate(normalized_tenant_id),
             )
         )
         result = await self.db.execute(stmt)
@@ -58,6 +68,8 @@ class IdempotencyRepository:
         portfolio_id: str,
         service_name: str,
         correlation_id: Optional[str] = None,
+        *,
+        tenant_id: str | None = None,
     ) -> bool:
         """
         Asynchronously records an event as processed using a schema-backed upsert.
@@ -70,6 +82,7 @@ class IdempotencyRepository:
             service_name: The name of the service that processed the event.
             correlation_id: The correlation ID for tracing the event flow.
         """
+        normalized_tenant_id = self._normalize_tenant_id(tenant_id)
         diagnostics = durable_correlation_diagnostics(
             correlation_id=correlation_id,
             record_family="processed_event",
@@ -84,13 +97,12 @@ class IdempotencyRepository:
                 event_id=event_id,
                 portfolio_id=portfolio_id,
                 service_name=service_name,
+                tenant_id=normalized_tenant_id,
                 correlation_id=correlation_id,
                 correlation_missing_reason=diagnostics.correlation_missing_reason,
                 alternate_lookup_key=diagnostics.alternate_lookup_key,
             )
-            .on_conflict_do_nothing(
-                index_elements=["event_id", "service_name"],
-            )
+            .on_conflict_do_nothing(**self._physical_conflict_target(normalized_tenant_id))
             .returning(ProcessedEvent.id)
         )
         inserted_id = (await self.db.execute(stmt)).scalar_one_or_none()
@@ -113,6 +125,8 @@ class IdempotencyRepository:
         portfolio_id: str,
         service_name: str,
         correlation_id: Optional[str] = None,
+        *,
+        tenant_id: str | None = None,
     ) -> bool:
         """
         Atomically claims an event-processing fence at the start of a transaction.
@@ -125,6 +139,7 @@ class IdempotencyRepository:
             portfolio_id=portfolio_id,
             service_name=service_name,
             correlation_id=correlation_id,
+            tenant_id=tenant_id,
         )
 
     async def claim_semantic_event_processing(
@@ -136,8 +151,10 @@ class IdempotencyRepository:
         semantic_key: str,
         payload_fingerprint: str,
         correlation_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> SemanticEventClaimOutcome:
         """Atomically claim physical and semantic identity in the caller's transaction."""
+        normalized_tenant_id = self._normalize_tenant_id(tenant_id)
         diagnostics = durable_correlation_diagnostics(
             correlation_id=correlation_id,
             record_family="processed_event",
@@ -151,6 +168,7 @@ class IdempotencyRepository:
                 event_id=event_id,
                 portfolio_id=portfolio_id,
                 service_name=service_name,
+                tenant_id=normalized_tenant_id,
                 correlation_id=diagnostics.correlation_id,
                 correlation_missing_reason=diagnostics.correlation_missing_reason,
                 alternate_lookup_key=diagnostics.alternate_lookup_key,
@@ -172,6 +190,7 @@ class IdempotencyRepository:
                     ProcessedEvent.payload_fingerprint,
                 ).where(
                     ProcessedEvent.service_name == service_name,
+                    self._tenant_predicate(normalized_tenant_id),
                     or_(
                         ProcessedEvent.event_id == event_id,
                         ProcessedEvent.semantic_key == semantic_key,
@@ -195,3 +214,25 @@ class IdempotencyRepository:
             if existing_semantic_key == semantic_key:
                 return SemanticEventClaimOutcome.SEMANTIC_DUPLICATE
         raise RuntimeError("Semantic event claim conflicted without a matching durable fence")
+
+    @staticmethod
+    def _normalize_tenant_id(tenant_id: str | None) -> str | None:
+        return TenantId(tenant_id).value if tenant_id is not None else None
+
+    @staticmethod
+    def _tenant_predicate(tenant_id: str | None):
+        if tenant_id is None:
+            return ProcessedEvent.tenant_id.is_(None)
+        return ProcessedEvent.tenant_id == tenant_id
+
+    @staticmethod
+    def _physical_conflict_target(tenant_id: str | None) -> dict[str, object]:
+        if tenant_id is None:
+            return {
+                "index_elements": ["event_id", "service_name"],
+                "index_where": ProcessedEvent.tenant_id.is_(None),
+            }
+        return {
+            "index_elements": ["tenant_id", "event_id", "service_name"],
+            "index_where": ProcessedEvent.tenant_id.isnot(None),
+        }
