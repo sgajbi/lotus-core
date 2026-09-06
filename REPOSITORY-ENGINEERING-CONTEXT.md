@@ -212,6 +212,20 @@ schema, machine-readable contracts, or executable evidence.
   or obsolete paths rather than preserving them by habit.
 - Repository docs must distinguish implemented capability, local validation, mesh certification,
   release evidence, and production availability.
+- Active source-product declaration, local implementation proof, live validator proof, repo-owned
+  telemetry, and mesh certification are distinct states; trust telemetry proof currently covers
+  exactly `PortfolioStateSnapshot:v1` and `DpmSourceReadiness:v1`; it is not blanket certification.
+- `PortfolioStateSnapshot:v1` publishes independent portfolio and market-data dates through
+  `source_provenance`, including carried-forward evidence. Do not let consumers synthesize these
+  dates from request or wall-clock time.
+- Managed-gate orchestration failures emit a credential-redacting
+  `lotus.managed-gate-orchestration-failure.v1` receipt with `non_certifying_failure` posture; a
+  failure receipt is operational evidence, never certification.
+- The governed producer capacity profile materializes 10,000 positions and reports
+  publication-age p50/p95/p99 plus processed-event throughput. Keep
+  `outbox-capacity-profile.v1.json` and
+  `outbox-capacity-profile-guard` aligned so a bounded sample cannot be mistaken for total producer
+  throughput.
 
 ## Context Maintenance Rule
 
