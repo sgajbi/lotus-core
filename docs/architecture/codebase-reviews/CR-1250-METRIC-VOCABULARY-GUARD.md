@@ -43,7 +43,7 @@ move into the shared registry or be explicitly registered with an owning service
 - `make typecheck` -> passed; no issues found in 50 source files.
 - `make quality-wiki-docs-gate` -> passed.
 - `git diff --check` -> passed.
-- `powershell -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
+- `powershell -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
   -> expected unpublished wiki drift for changed `Operations-Runbook.md` plus existing
   `Outbox-Events.md`; publication remains post-merge.
 - Stranded-truth reconciliation on 2026-07-01 found only active Dependabot branches:

@@ -43,7 +43,7 @@ Slice 4 implemented the first active DPM source-data product in `lotus-core`:
 
 ## Validation Evidence
 
-Commands run from `C:\Users\Sandeep\projects\lotus-core`:
+Commands run from the `lotus-core` repository root:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/test_domain_data_product_contracts.py tests/unit/services/ingestion_service/test_reference_data_dto.py tests/unit/services/ingestion_service/test_reference_data_ingestion_service.py tests/unit/services/query_service/repositories/test_reference_data_repository.py tests/unit/services/query_service/services/test_integration_service.py tests/unit/services/query_control_plane_service/routers/test_integration_router.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`
    - Result: `181 passed`.

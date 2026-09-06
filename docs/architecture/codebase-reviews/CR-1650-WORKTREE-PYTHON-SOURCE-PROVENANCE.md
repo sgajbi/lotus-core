@@ -84,7 +84,7 @@ dynamic reproduction before a coordinated issue or fix; no speculative duplicate
 - The critical-path coverage subprocess passes with Python safe-path mode enabled and an explicit
   temporary source root, closing the exact Linux warning-gate failure from run `29978007138`.
 - Windows local proof resolved
-  `C:\Users\Sandeep\projects\lotus-core-demo-pack-wt\src\libs\portfolio-common\portfolio_common\__init__.py`.
+  `src/libs/portfolio-common/portfolio_common/__init__.py` in the checkout under validation.
 - `make quality-workflow-governance-gate`, `make transaction-capability-catalog-guard`, and
   `make api-vocabulary-gate` passed through the launcher.
 - The complete strict `make architecture-guard` chain passed through the launcher.

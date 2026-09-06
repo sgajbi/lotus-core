@@ -46,10 +46,10 @@ Local evidence before commit:
 - `python scripts\analytics_input_consumer_contract_guard.py` passed.
 - `make domain-product-validate` passed, validating 1 producer declaration and 0 consumer declarations.
 - `make quality-wiki-docs-gate` passed.
-- `python C:\Users\Sandeep\projects\lotus-platform\codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki` passed.
+- `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki` passed.
 - Scoped `ruff check` and `ruff format --check` passed for the edited docs test.
 - `git diff --check` passed.
-- `powershell -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core` reported expected pre-publication drift for `Mesh-Data-Products.md` and `Operations-Runbook.md`, plus pre-existing `Outbox-Events.md` drift.
+- `powershell -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core` reported expected pre-publication drift for `Mesh-Data-Products.md` and `Operations-Runbook.md`, plus pre-existing `Outbox-Events.md` drift.
 - Stranded-truth reconciliation found only active Dependabot branches:
   `origin/dependabot/github_actions/github-actions-02325a8da5` and
   `origin/dependabot/pip/python-runtime-b808a9fc65`.

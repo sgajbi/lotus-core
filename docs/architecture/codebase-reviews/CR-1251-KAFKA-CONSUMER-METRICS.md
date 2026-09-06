@@ -45,10 +45,10 @@ Prometheus labels.
 - `make lint` -> passed, including `metric-vocabulary-guard`.
 - `make typecheck` -> passed.
 - `make quality-wiki-docs-gate` -> passed.
-- `python C:\Users\Sandeep\projects\lotus-platform\codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki`
+- `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki`
   -> passed.
 - `git diff --check` -> passed.
-- `powershell -ExecutionPolicy Bypass -File C:\Users\Sandeep\projects\lotus-platform\automation\Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
+- `powershell -ExecutionPolicy Bypass -File ../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
   -> failed with published-wiki drift on `Operations-Runbook.md` and pre-existing
   `Outbox-Events.md`; wiki publication remains post-merge.
 - Stranded-truth reconciliation: `git fetch origin --prune` and

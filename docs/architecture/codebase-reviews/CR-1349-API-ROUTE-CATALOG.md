@@ -59,7 +59,7 @@ Focused validation before commit:
 - `python -m ruff format --check scripts/generators/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
 - `make docs-evidence-pack`
 - `make quality-wiki-docs-gate`
-- `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki --changed-page API-Surface.md`
+- `python ../lotus-platform/codex/skills/lotus-readme-wiki-governance/scripts/audit_wiki_quality.py --wiki-dir wiki --changed-page API-Surface.md`
 - `git diff --check`
 
 `Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core` reported expected pre-merge publication
