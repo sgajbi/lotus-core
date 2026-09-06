@@ -6,6 +6,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _LINE_FEED = 0x0A
 _CARRIAGE_RETURN = 0x0D
+_HORIZONTAL_TAB = 0x09
 
 
 def tracked_markdown_paths(*, repo_root: Path = REPO_ROOT) -> tuple[Path, ...]:
@@ -31,13 +32,16 @@ def find_forbidden_control_bytes(
     for path in paths:
         content = path.read_bytes()
         for offset, value in enumerate(content):
+            is_horizontal_tab = value == _HORIZONTAL_TAB
             is_line_feed = value == _LINE_FEED
             is_crlf_carriage_return = (
                 value == _CARRIAGE_RETURN
                 and offset + 1 < len(content)
                 and content[offset + 1] == _LINE_FEED
             )
-            if (value < 0x20 and not (is_line_feed or is_crlf_carriage_return)) or value == 0x7F:
+            if (
+                value < 0x20 and not (is_horizontal_tab or is_line_feed or is_crlf_carriage_return)
+            ) or value == 0x7F:
                 relative_path = path.relative_to(repo_root).as_posix()
                 violations.append(f"{relative_path}: offset {offset}: 0x{value:02x}")
     return violations
@@ -48,6 +52,10 @@ def main() -> int:
         paths = tracked_markdown_paths()
     except subprocess.CalledProcessError as error:
         print(f"Documentation text integrity failed: git ls-files exited {error.returncode}.")
+        return 1
+
+    if not paths:
+        print("Documentation text integrity failed: no tracked Markdown files were found.")
         return 1
 
     violations = find_forbidden_control_bytes(paths)
