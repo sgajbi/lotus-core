@@ -2738,6 +2738,16 @@ def _front_office_readiness_blockers(
         blockers.append("positions_data_quality_not_complete")
     if observation.get("cash_data_quality_status") != "COMPLETE":
         blockers.append("cash_data_quality_not_complete")
+    if observation.get("core_snapshot_reconciliation_status") != "COMPLETE":
+        blockers.append("core_snapshot_reconciliation_not_complete")
+    if observation.get("core_snapshot_data_quality_status") != "COMPLETE":
+        blockers.append("core_snapshot_data_quality_not_complete")
+    if observation.get("core_snapshot_source_evidence_current") is not True:
+        blockers.append("core_snapshot_source_evidence_not_current")
+    if observation.get("core_snapshot_freshness_status") != "CURRENT":
+        blockers.append("core_snapshot_freshness_not_current")
+    if observation.get("core_snapshot_valuation_supportability") != "READY":
+        blockers.append("core_snapshot_valuation_not_ready")
 
     for field_name in (
         "pending_valuation_jobs",
@@ -3391,6 +3401,19 @@ def _verify_front_office_portfolio(
                 f"{query_control_plane_base_url}/support/portfolios/"
                 f"{expected.portfolio_id}/overview?as_of_date={as_of_date}",
             )
+            _, core_snapshot = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/portfolios/"
+                f"{expected.portfolio_id}/core-snapshot",
+                payload={
+                    "as_of_date": as_of_date,
+                    "snapshot_mode": "BASELINE",
+                    "reporting_currency": "SGD",
+                    "sections": ["portfolio_state", "portfolio_totals"],
+                    "consumer_system": "lotus-advise",
+                    "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+                },
+            )
             _, cashflow_projection = _request_json(
                 "GET",
                 f"{query_base_url}/portfolios/{expected.portfolio_id}/cashflow-projection"
@@ -3459,6 +3482,13 @@ def _verify_front_office_portfolio(
             "has_non_zero_projection": has_non_zero_projection,
             "positions_data_quality_status": positions_payload.get("data_quality_status"),
             "cash_data_quality_status": cash_payload.get("data_quality_status"),
+            "core_snapshot_reconciliation_status": core_snapshot.get("reconciliation_status"),
+            "core_snapshot_data_quality_status": core_snapshot.get("data_quality_status"),
+            "core_snapshot_source_evidence_current": core_snapshot.get("source_evidence_current"),
+            "core_snapshot_freshness_status": core_snapshot.get("freshness_status"),
+            "core_snapshot_valuation_supportability": (
+                core_snapshot.get("valuation_context") or {}
+            ).get("supportability"),
             "pending_valuation_jobs": support_overview.get("pending_valuation_jobs"),
             "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
             "stale_processing_valuation_jobs": support_overview.get(
@@ -3498,6 +3528,11 @@ def _verify_front_office_portfolio(
             and has_non_zero_projection
             and positions_payload.get("data_quality_status") == "COMPLETE"
             and cash_payload.get("data_quality_status") == "COMPLETE"
+            and core_snapshot.get("reconciliation_status") == "COMPLETE"
+            and core_snapshot.get("data_quality_status") == "COMPLETE"
+            and core_snapshot.get("source_evidence_current") is True
+            and core_snapshot.get("freshness_status") == "CURRENT"
+            and (core_snapshot.get("valuation_context") or {}).get("supportability") == "READY"
             and int(support_overview.get("pending_valuation_jobs") or 0) == 0
             and int(support_overview.get("processing_valuation_jobs") or 0) == 0
             and int(support_overview.get("stale_processing_valuation_jobs") or 0) == 0
@@ -3545,6 +3580,15 @@ def _verify_front_office_portfolio(
                 "failed_aggregation_jobs": support_overview.get("failed_aggregation_jobs"),
                 "positions_data_quality_status": positions_payload.get("data_quality_status"),
                 "cash_data_quality_status": cash_payload.get("data_quality_status"),
+                "core_snapshot_reconciliation_status": core_snapshot.get("reconciliation_status"),
+                "core_snapshot_data_quality_status": core_snapshot.get("data_quality_status"),
+                "core_snapshot_source_evidence_current": core_snapshot.get(
+                    "source_evidence_current"
+                ),
+                "core_snapshot_freshness_status": core_snapshot.get("freshness_status"),
+                "core_snapshot_valuation_supportability": (
+                    core_snapshot.get("valuation_context") or {}
+                ).get("supportability"),
                 "benchmark_code": performance_summary.get("benchmark_code"),
                 "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
                 "performance_report_end_date": performance_summary.get("report_end_date"),
