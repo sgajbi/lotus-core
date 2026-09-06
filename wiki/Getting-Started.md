@@ -100,6 +100,11 @@ make install
 Copy-Item .env.example .env
 ```
 
+If Python 3.12 is managed by `uv` rather than registered with the Windows launcher, replace only
+the first command with `uv venv --python 3.12 .venv`; activation and every subsequent command stay
+the same. This is an optional interpreter-management path, not a reason to install into a global
+environment.
+
 `python --version` must report `3.12.x` before installation. A global interpreter, an already
 populated environment, or packages inherited through `PYTHONPATH` are not valid bootstrap proof.
 
