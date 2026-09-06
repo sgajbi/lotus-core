@@ -102,7 +102,11 @@ def merge_replay_sibling_evidence(
             ),
             None,
         )
-        if lineage_sibling is None and identity.correlation_id is None:
+        if (
+            lineage_sibling is None
+            and identity.correlation_id is None
+            and earliest_boundary < owned_boundary
+        ):
             lineage_sibling = earliest_sibling
         if lineage_sibling is not None:
             retained_correlation_id = normalize_lineage_value(lineage_sibling.correlation_id)

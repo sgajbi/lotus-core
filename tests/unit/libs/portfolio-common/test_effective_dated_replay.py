@@ -10,14 +10,22 @@ from portfolio_common.reprocessing_payload_integrity import (
 )
 
 
-def _identity(job_type: str, payload: dict, *, attempt_count: int, correlation_id: str | None):
+def _identity(
+    job_type: str,
+    payload: dict,
+    *,
+    attempt_count: int,
+    correlation_id: str | None,
+    correlation_missing_reason: str | None = None,
+    alternate_lookup_key: str | None = None,
+):
     return validated_effective_dated_replay_identity(
         job_type=job_type,
         payload=payload,
         attempt_count=attempt_count,
         correlation_id=correlation_id,
-        correlation_missing_reason=None,
-        alternate_lookup_key=None,
+        correlation_missing_reason=correlation_missing_reason,
+        alternate_lookup_key=alternate_lookup_key,
     )
 
 
@@ -26,6 +34,8 @@ def _sibling(
     *,
     attempt_count: int,
     correlation_id: str | None,
+    correlation_missing_reason: str | None = None,
+    alternate_lookup_key: str | None = None,
 ) -> RetainedReplaySibling:
     return RetainedReplaySibling(
         id=12,
@@ -33,8 +43,8 @@ def _sibling(
         earliest_impacted_date=date.fromisoformat(payload["earliest_impacted_date"]),
         attempt_count=attempt_count,
         correlation_id=correlation_id,
-        correlation_missing_reason=None,
-        alternate_lookup_key=None,
+        correlation_missing_reason=correlation_missing_reason,
+        alternate_lookup_key=alternate_lookup_key,
     )
 
 
@@ -279,6 +289,35 @@ def test_reset_sibling_merge_keeps_owned_lineage_when_earlier_sibling_lacks_it()
     assert merged.correlation_id == "corr-owned"
     assert merged.correlation_missing_reason is None
     assert merged.alternate_lookup_key is None
+
+
+def test_reset_sibling_merge_keeps_owned_diagnostics_when_owned_boundary_is_earlier() -> None:
+    owned = _identity(
+        "RESET_WATERMARKS",
+        {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-03"},
+        attempt_count=2,
+        correlation_id=None,
+        correlation_missing_reason="owned_source_missing",
+        alternate_lookup_key="source-event:owned-001",
+    )
+    sibling = _sibling(
+        {"security_id": "BOND-1", "earliest_impacted_date": "2025-01-07"},
+        attempt_count=3,
+        correlation_id=None,
+        correlation_missing_reason="later_sibling_missing",
+        alternate_lookup_key="source-event:sibling-002",
+    )
+
+    merged = merge_replay_sibling_evidence(
+        owned,
+        PendingReplaySiblingEvidence((sibling,)),
+    )
+
+    assert merged.payload["earliest_impacted_date"] == "2025-01-03"
+    assert merged.attempt_count == 3
+    assert merged.correlation_id is None
+    assert merged.correlation_missing_reason == "owned_source_missing"
+    assert merged.alternate_lookup_key == "source-event:owned-001"
 
 
 def test_reset_sibling_merge_treats_blank_and_sentinel_lineage_as_missing() -> None:
