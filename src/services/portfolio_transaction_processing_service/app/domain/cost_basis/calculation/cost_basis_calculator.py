@@ -1524,7 +1524,7 @@ def _transaction_cost_input(transaction: CostBasisTransaction) -> dict[str, obje
                 "calculation_lineage",
                 "allocated_cost_basis_base",
                 "allocated_cost_basis_local",
-                # Persistence assigns these operational fields after calculation.
+                "tenant_id",  # Portfolio-owned processing scope, not an economic input.
                 "created_at",
                 "epoch",
                 # Settlement owns these generated linkage outputs. They may be persisted only
