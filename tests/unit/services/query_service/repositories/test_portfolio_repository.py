@@ -1,11 +1,14 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.portfolio_repository import PortfolioRepository
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
+TEST_TENANT = TenantId(TEST_TENANT_ID)
 
 
 @pytest.fixture
@@ -28,6 +31,7 @@ async def test_search_portfolio_lookup_ids_filters_searches_and_limits(
     mock_result.scalars.return_value.all.return_value = ["PF_1"]
 
     portfolio_ids = await repository.search_portfolio_lookup_ids(
+        tenant_id=TEST_TENANT,
         client_id="CIF-1",
         booking_center_code="SG",
         q="pf",
@@ -39,11 +43,33 @@ async def test_search_portfolio_lookup_ids_filters_searches_and_limits(
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "SELECT portfolios.portfolio_id" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "portfolios.client_id = 'CIF-1'" in compiled_query
     assert "portfolios.booking_center_code = 'SG'" in compiled_query
     assert "upper(portfolios.portfolio_id) LIKE '%PF%'" in compiled_query
     assert "ORDER BY portfolios.portfolio_id ASC" in compiled_query
     assert "LIMIT 5" in compiled_query
+
+
+async def test_search_portfolio_lookup_ids_requires_tenant_without_optional_filters(
+    repository: PortfolioRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = mock_db_session.execute.return_value
+    mock_result.scalars.return_value.all.return_value = ["PF_1"]
+
+    portfolio_ids = await repository.search_portfolio_lookup_ids(
+        tenant_id=TEST_TENANT,
+        limit=5,
+    )
+
+    assert portfolio_ids == ["PF_1"]
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "WHERE portfolios.tenant_id = 'tenant-test'" in compiled_query
+    assert "portfolios.client_id" not in compiled_query
+    assert "portfolios.booking_center_code" not in compiled_query
+    assert "upper(portfolios.portfolio_id) LIKE" not in compiled_query
 
 
 async def test_list_portfolio_currency_lookup_codes_uses_distinct_limit(
@@ -53,7 +79,11 @@ async def test_list_portfolio_currency_lookup_codes_uses_distinct_limit(
     mock_result = mock_db_session.execute.return_value
     mock_result.scalars.return_value.all.return_value = ["USD"]
 
-    codes = await repository.list_currency_lookup_codes(q="us", limit=3)
+    codes = await repository.list_currency_lookup_codes(
+        tenant_id=TEST_TENANT,
+        q="us",
+        limit=3,
+    )
 
     assert codes == ["USD"]
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -61,7 +91,27 @@ async def test_list_portfolio_currency_lookup_codes_uses_distinct_limit(
 
     assert "SELECT DISTINCT upper(trim(portfolios.base_currency))" in compiled_query
     assert "portfolios.base_currency IS NOT NULL" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "trim(portfolios.base_currency) != ''" in compiled_query
     assert "upper(trim(portfolios.base_currency)) LIKE '%US%'" in compiled_query
     assert "ORDER BY upper(trim(portfolios.base_currency)) ASC" in compiled_query
     assert "LIMIT 3" in compiled_query
+
+
+async def test_list_portfolio_currency_lookup_codes_requires_tenant_without_search(
+    repository: PortfolioRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = mock_db_session.execute.return_value
+    mock_result.scalars.return_value.all.return_value = ["USD"]
+
+    codes = await repository.list_currency_lookup_codes(
+        tenant_id=TEST_TENANT,
+        limit=3,
+    )
+
+    assert codes == ["USD"]
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
+    assert "upper(trim(portfolios.base_currency)) LIKE" not in compiled_query

@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-23 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-09-07 |
 | Owners | `query-service` lookup contracts |
 | Depends On | RFC 039 lookup baseline, RFC 041 lookup invariant gate |
 | Scope | Filtering, ordering, and payload controls for lookup catalogs |
@@ -30,9 +30,9 @@ Original RFC 040 requested:
 ## Current Implementation Reality
 
 Implemented:
-1. `/lookups/portfolios` supports `client_id`, `booking_center_code`, `q`, and `limit`.
+1. `/lookups/portfolios` requires admitted tenant authority, applies it at the repository boundary, and supports `client_id`, `booking_center_code`, `q`, and `limit` within that tenant.
 2. `/lookups/instruments` supports `product_type`, `q`, and `limit`.
-3. `/lookups/currencies` supports `source` (`ALL|PORTFOLIOS|INSTRUMENTS`), `q`, `limit`, and `instrument_page_limit`.
+3. `/lookups/currencies` supports `source` (`ALL|PORTFOLIOS|INSTRUMENTS`), `q`, `limit`, and `instrument_page_limit`; portfolio-derived codes are tenant-scoped while instrument reference codes are shared.
 4. Shared filter helper enforces:
    - case-insensitive matching on `id` and `label`,
    - deterministic sorting by `id`,
@@ -92,7 +92,9 @@ Aligned:
 
 ## Rollout and Backward Compatibility
 
-No runtime change introduced by this documentation retrofit.
+The existing filter and response contracts remain stable. Tenant scoping intentionally removes
+foreign portfolio IDs and portfolio-derived currencies from results; this is a security correction,
+not an optional compatibility mode.
 
 ## Open Questions
 

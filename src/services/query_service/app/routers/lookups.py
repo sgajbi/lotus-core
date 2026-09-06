@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from ..application.lookup_catalog import (
     CurrencyLookupQuery,
@@ -18,12 +18,14 @@ router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
     response_model=LookupResponse,
     summary="Get portfolio selector catalog",
     description=(
-        "Returns portfolio selector options for lotus-gateway and UI portfolio selection "
-        "workflows. Use this route for thin selector catalogs only; do not use it as a substitute "
-        "for canonical portfolio detail or broader portfolio-state reads."
+        "Returns only portfolio selector options owned by the admitted X-Tenant-Id for "
+        "lotus-gateway and UI portfolio selection workflows. Use this route for thin selector "
+        "catalogs only; do not use it as a substitute for canonical portfolio detail or broader "
+        "portfolio-state reads."
     ),
 )
 async def get_portfolio_lookups(
+    request: Request,
     client_id: str | None = Query(
         default=None,
         description="Optional CIF filter for tenant/client scoping.",
@@ -54,7 +56,8 @@ async def get_portfolio_lookups(
             booking_center_code=booking_center_code,
             q=q,
             limit=limit,
-        )
+        ),
+        tenant_context=request.state.tenant_context,
     )
     return lookup_response_from_result(result)
 
@@ -103,11 +106,13 @@ async def get_instrument_lookups(
     summary="Get currency selector catalog",
     description=(
         "Returns distinct currency selector options derived from portfolio base currencies "
-        "and instrument currencies. Use this route for selector population only; do not use it as "
-        "a substitute for FX-rate history or broader market-data contracts."
+        "owned by the admitted X-Tenant-Id and from shared instrument reference currencies. Use "
+        "this route for selector population only; do not use it as a substitute for FX-rate "
+        "history or broader market-data contracts."
     ),
 )
 async def get_currency_lookups(
+    request: Request,
     instrument_page_limit: int = Query(
         default=500,
         ge=50,
@@ -143,6 +148,7 @@ async def get_currency_lookups(
 
     return lookup_response_from_result(
         await service.list_currency_lookup_items(
-            CurrencyLookupQuery(source=source, q=q, limit=limit)
+            CurrencyLookupQuery(source=source, q=q, limit=limit),
+            tenant_context=request.state.tenant_context,
         )
     )

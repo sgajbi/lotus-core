@@ -66,13 +66,14 @@ class PortfolioRepository:
     async def search_portfolio_lookup_ids(
         self,
         *,
+        tenant_id: TenantId,
         client_id: str | None = None,
         booking_center_code: str | None = None,
         q: str | None = None,
         limit: int,
     ) -> list[str]:
         """Return bounded portfolio IDs for selector workflows."""
-        stmt = select(Portfolio.portfolio_id)
+        stmt = select(Portfolio.portfolio_id).where(Portfolio.tenant_id == tenant_id.value)
 
         if client_id:
             stmt = stmt.where(Portfolio.client_id == client_id)
@@ -89,6 +90,7 @@ class PortfolioRepository:
     async def list_currency_lookup_codes(
         self,
         *,
+        tenant_id: TenantId,
         q: str | None = None,
         limit: int,
     ) -> list[str]:
@@ -97,6 +99,7 @@ class PortfolioRepository:
         stmt = (
             select(currency_code)
             .distinct()
+            .where(Portfolio.tenant_id == tenant_id.value)
             .where(Portfolio.base_currency.is_not(None))
             .where(func.trim(Portfolio.base_currency) != "")
         )
