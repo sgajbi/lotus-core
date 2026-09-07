@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     CorporateActionArrivalDisposition,
@@ -152,6 +152,35 @@ async def test_consumer_rejects_tenant_that_conflicts_with_portfolio_authority()
             tenant_authority=authority,
         ).process_message(_message())
 
+    route.execute.assert_not_awaited()
+    use_case.execute.assert_not_awaited()
+
+
+async def test_consumer_retries_tenant_authority_database_failure_before_processing() -> None:
+    use_case = AsyncMock()
+    route = _ordinary_arrival()
+    authority = AsyncMock()
+    authority.resolve.side_effect = DBAPIError(
+        "SELECT portfolios.tenant_id",
+        {},
+        RuntimeError("database unavailable"),
+        False,
+    )
+
+    with pytest.raises(
+        RetryableConsumerError,
+        match="tenant authority database dependency unavailable",
+    ):
+        await _consumer(
+            use_case,
+            route_corporate_action_child=route,
+            tenant_authority=authority,
+        ).process_message(_message())
+
+    authority.resolve.assert_awaited_once_with(
+        portfolio_id="PB-001",
+        asserted_tenant_id="tenant-test",
+    )
     route.execute.assert_not_awaited()
     use_case.execute.assert_not_awaited()
 
