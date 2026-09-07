@@ -34,6 +34,7 @@ async def test_reader_applies_effective_date_and_deterministic_tie_breaking() ->
         session
     ).resolve(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id="tenant-sg",
         as_of_date=date(2026, 4, 10),
     )
 
@@ -41,6 +42,8 @@ async def test_reader_applies_effective_date_and_deterministic_tie_breaking() ->
     assert evidence.assignment_version == 3
     sql = str(session.execute.await_args.args[0])
     assert "portfolio_benchmark_assignments.effective_from <=" in sql
+    assert "JOIN portfolios" in sql
+    assert "portfolios.tenant_id =" in sql
     assert "portfolio_benchmark_assignments.effective_to IS NULL" in sql
     assert "portfolio_benchmark_assignments.assignment_recorded_at DESC" in sql
     assert "portfolio_benchmark_assignments.assignment_version DESC" in sql
