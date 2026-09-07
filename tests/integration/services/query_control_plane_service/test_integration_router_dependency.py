@@ -186,6 +186,7 @@ async def async_test_client():
             "contract_version": "rfc_062_v1",
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
+                tenant_id=TEST_TENANT_ID,
                 data_quality_status="COMPLETE",
                 generated_at=datetime(2026, 1, 31, 9, 15, 0, tzinfo=UTC),
             ),
@@ -1397,10 +1398,12 @@ async def test_benchmark_assignment_success(async_test_client):
     assert body["product_version"] == "v1"
     assert body["as_of_date"] == "2026-01-31"
     assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert body["tenant_id"] == TEST_TENANT_ID
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "COMPLETE"
     mock_integration_service.resolve.assert_awaited_once()
     assert mock_integration_service.resolve.await_args.kwargs["portfolio_id"] == "PORT-INT-001"
+    assert mock_integration_service.resolve.await_args.kwargs["tenant_id"] == TEST_TENANT_ID
     assert mock_integration_service.resolve.await_args.kwargs["request"].as_of_date == date(
         2026, 1, 31
     )
@@ -1426,6 +1429,45 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
         "portfolio_id": "PORT-INT-001",
         "reason": "not_found",
     }
+
+
+async def test_benchmark_assignment_rejects_mismatched_tenant_before_resolution(
+    async_test_client,
+):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/benchmark-assignment",
+        json={
+            "as_of_date": "2026-01-31",
+            "policy_context": {"tenant_id": "tenant-other"},
+        },
+    )
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_integration_service.resolve.assert_not_awaited()
+
+
+async def test_benchmark_assignment_rejects_blank_tenant_before_resolution(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/benchmark-assignment",
+        json={"as_of_date": "2026-01-31", "policy_context": {"tenant_id": " "}},
+    )
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_integration_service.resolve.assert_not_awaited()
 
 
 async def test_model_portfolio_targets_success(async_test_client):

@@ -49,6 +49,7 @@ def test_response_exposes_current_deterministic_source_proof() -> None:
     response = build_benchmark_assignment_response(
         evidence=_evidence(),
         request=_request(),
+        tenant_id="tenant-sg",
         generated_at=GENERATED_AT,
     )
 
@@ -67,16 +68,37 @@ def test_response_exposes_current_deterministic_source_proof() -> None:
 
 def test_content_hash_excludes_generated_at() -> None:
     first = build_benchmark_assignment_response(
-        evidence=_evidence(), request=_request(), generated_at=GENERATED_AT
+        evidence=_evidence(),
+        request=_request(),
+        tenant_id="tenant-sg",
+        generated_at=GENERATED_AT,
     )
     second = build_benchmark_assignment_response(
         evidence=_evidence(),
         request=_request(),
+        tenant_id="tenant-sg",
         generated_at=datetime(2026, 4, 10, 13, tzinfo=UTC),
     )
 
     assert first.generated_at != second.generated_at
     assert first.content_hash == second.content_hash
+
+
+def test_content_hash_binds_admitted_tenant_authority() -> None:
+    tenant_a = build_benchmark_assignment_response(
+        evidence=_evidence(),
+        request=_request(),
+        tenant_id="tenant-a",
+        generated_at=GENERATED_AT,
+    )
+    tenant_b = build_benchmark_assignment_response(
+        evidence=_evidence(),
+        request=_request(),
+        tenant_id="tenant-b",
+        generated_at=GENERATED_AT,
+    )
+
+    assert tenant_a.content_hash != tenant_b.content_hash
 
 
 @pytest.mark.asyncio
@@ -90,10 +112,15 @@ async def test_service_resolves_via_port_and_preserves_request_scope() -> None:
     response = await BenchmarkAssignmentService(
         reader=reader,  # type: ignore[arg-type]
         clock=lambda: GENERATED_AT,
-    ).resolve(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+    ).resolve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id="tenant-sg",
+        request=_request(),
+    )
 
     assert reader.kwargs == {
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "tenant_id": "tenant-sg",
         "as_of_date": date(2026, 4, 10),
     }
     assert response is not None

@@ -48,6 +48,8 @@ SUITES: dict[str, list[str]] = {
         "test_instrument_reprocessing_conversion.py",
         "tests/integration/services/query_control_plane_service/"
         "test_dpm_reference_data_sources_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_benchmark_assignment_tenant_postgresql.py",
         "tests/integration/services/financial_reconciliation_service/"
         "test_int_reconciliation_repository.py",
     ],

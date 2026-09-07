@@ -1948,7 +1948,10 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert "lotus-performance benchmark-aware analytics" in benchmark_assignment["description"]
     assert "lotus-gateway workspace composition flows" in benchmark_assignment["description"]
     assert "reporting workflows" in benchmark_assignment["description"]
-    assert "portfolio_id and as_of_date" in benchmark_assignment["description"]
+    assert "portfolio as-of a point-in-time date" in benchmark_assignment["description"]
+    assert "within the admitted tenant" in benchmark_assignment["description"]
+    assert "Foreign portfolios are returned as not found" in benchmark_assignment["description"]
+    assert "403" in benchmark_assignment["responses"]
 
     assignment_not_found = benchmark_assignment["responses"]["404"]["content"][
         "application/problem+json"
@@ -2178,8 +2181,17 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         in (benchmark_assignment_request["properties"]["reporting_currency"]["description"])
     )
     assert (
-        "current implementation still resolves the effective assignment"
+        "must match admitted authority"
         in (benchmark_assignment_request["properties"]["policy_context"]["description"])
+    )
+    assert (
+        "tenant-, portfolio-, and as-of scoped"
+        in (benchmark_assignment_request["properties"]["policy_context"]["description"])
+    )
+    policy_context_schema = components["BenchmarkAssignmentPolicyContext"]
+    assert (
+        "does not change assignment selection"
+        in policy_context_schema["properties"]["policy_pack_id"]["description"]
     )
     assert benchmark_assignment_response["properties"]["assignment_recorded_at"]["examples"] == [
         "2026-01-31T09:15:00Z"
