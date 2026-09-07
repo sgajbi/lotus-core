@@ -88,6 +88,10 @@ class TransactionProcessingConsumer(BaseConsumer):
                 )
             except TransactionTenantAuthorityUnavailable as exc:
                 raise RetryableConsumerError(str(exc)) from exc
+            except DBAPIError as exc:
+                raise RetryableConsumerError(
+                    "Transaction tenant authority database dependency unavailable"
+                ) from exc
             event = event.model_copy(update={"tenant_id": tenant_id})
             processing_intent = _message_processing_intent(msg)
             command = map_transaction_event(
