@@ -10,5 +10,5 @@ class BenchmarkAssignmentReader(Protocol):
     """Resolve assignment evidence without exposing persistence models."""
 
     async def resolve(
-        self, *, portfolio_id: str, as_of_date: date
+        self, *, portfolio_id: str, tenant_id: str, as_of_date: date
     ) -> BenchmarkAssignmentEvidence | None: ...

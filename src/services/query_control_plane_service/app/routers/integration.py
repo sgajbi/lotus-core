@@ -1441,6 +1441,10 @@ async def get_dpm_source_readiness(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: problem_response(
+            "Requested tenant does not match admitted tenant authority.",
+            TENANT_SCOPE_FORBIDDEN_EXAMPLE,
+        ),
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective benchmark assignment found.",
             BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE,
@@ -1450,9 +1454,10 @@ async def get_dpm_source_readiness(
     description=(
         "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
         "How: Applies effective-dating and assignment version ordering to return "
-        "deterministic match. Resolution is keyed by portfolio_id and as_of_date; "
-        "request reporting_currency and policy_context are caller-context fields and do "
-        "not change assignment selection in the current implementation.\n"
+        "deterministic match within the admitted tenant. An optional policy_context tenant "
+        "is an assertion that must match admitted authority; reporting_currency and policy "
+        "pack context do not change assignment selection. Foreign portfolios are returned "
+        "as not found.\n"
         "When: Used by lotus-performance benchmark-aware analytics, lotus-gateway workspace "
         "composition flows, and reporting workflows that need governed benchmark context "
         "before downstream benchmark math or evidence generation."
@@ -1461,6 +1466,7 @@ async def get_dpm_source_readiness(
 )
 async def resolve_portfolio_benchmark_assignment(
     request: BenchmarkAssignmentRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose effective benchmark assignment is requested.",
@@ -1470,8 +1476,18 @@ async def resolve_portfolio_benchmark_assignment(
         get_benchmark_assignment_service
     ),
 ) -> BenchmarkAssignmentResponse:
+    supplied_tenant_id = (
+        request.policy_context.tenant_id
+        if request.policy_context is not None and request.policy_context.tenant_id is not None
+        else str(http_request.state.tenant_context.tenant_id)
+    )
+    admitted_tenant_id = require_matching_tenant_authority(
+        supplied_tenant_id=supplied_tenant_id,
+        tenant_context=http_request.state.tenant_context,
+    )
     response = await benchmark_assignment_service.resolve(
         portfolio_id=portfolio_id,
+        tenant_id=admitted_tenant_id,
         request=request,
     )
     if response is None:
