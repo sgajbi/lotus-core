@@ -150,7 +150,7 @@ These are valid analytics-input contracts, but they are closest to the query/con
 
 | Route | Family | Consumers | Assessment | Notes |
 | --- | --- | --- | --- | --- |
-| `POST /integration/portfolios/{portfolio_id}/benchmark-assignment` | Analytics Input | `lotus-performance`, `lotus-risk`, `lotus-manage` | Correct | Effective portfolio-to-benchmark assignment; Manage consumption is bounded to mandate-health benchmark identity lineage and does not transfer benchmark analytics methodology. |
+| `POST /integration/portfolios/{portfolio_id}/benchmark-assignment` | Analytics Input | `lotus-performance`, `lotus-risk`, `lotus-manage` | Correct | Effective portfolio-to-benchmark assignment selected within the admitted, source-owned portfolio tenant. Optional request tenant context is a matching assertion only; foreign and absent portfolios share the not-found contract. Manage consumption is bounded to mandate-health benchmark identity lineage and does not transfer benchmark analytics methodology. |
 | `POST /integration/benchmarks/{benchmark_id}/composition-window` | Analytics Input | `lotus-performance`, `lotus-risk` | Correct | Windowed benchmark composition contract. |
 | `POST /integration/benchmarks/{benchmark_id}/definition` | Analytics Input | `lotus-performance`, `lotus-risk` | Borderline but acceptable | Reference-data query shape; acceptable because it is a governed downstream contract. |
 | `POST /integration/benchmarks/catalog` | Analytics Input | `lotus-performance`, `lotus-risk`, support | Borderline | Catalog discovery can resemble plain read-model access. Keep explicit downstream-contract framing. |

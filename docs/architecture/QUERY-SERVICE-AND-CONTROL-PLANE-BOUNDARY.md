@@ -216,6 +216,9 @@ Reason:
 
 - downstream-facing contract, not raw reference lookup
 - deterministic effective-date resolution for external consumers
+- selection is constrained by the admitted tenant and the source-owned portfolio root
+- an optional request tenant is only a matching assertion; foreign and absent portfolios share
+  the same not-found contract
 
 #### `POST /integration/benchmarks/{benchmark_id}/composition-window`
 
