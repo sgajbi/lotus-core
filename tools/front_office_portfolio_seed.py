@@ -45,7 +45,7 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
 )
 DEFAULT_DPM_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
 DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
-FRONT_OFFICE_VALUATION_TENANT_ID = "LOTUS_PB_SG"
+FRONT_OFFICE_PORTFOLIO_TENANT_ID = "tenant-sg"
 FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID = "SG_PRIVATE_BANK_BOOK"
 FRONT_OFFICE_VALUATION_SOURCE_SYSTEM = "LOTUS_FRONT_OFFICE_SEED"
 FRONT_OFFICE_PERCENT_QUOTE_DENOMINATOR = Decimal("100")
@@ -63,7 +63,7 @@ def _request_json(
         url,
         payload,
         headers,
-        tenant_id=FRONT_OFFICE_VALUATION_TENANT_ID,
+        tenant_id=FRONT_OFFICE_PORTFOLIO_TENANT_ID,
     )
 
 
@@ -156,7 +156,7 @@ DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
 FRONT_OFFICE_GATEWAY_CALLER_HEADERS = {
     "X-Actor-Id": FRONT_OFFICE_SEED_CONTRACT.portfolio_manager_id,
     "X-Caller-Application": "lotus-workbench",
-    "X-Tenant-Id": "tenant-sg",
+    "X-Tenant-Id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
     "X-Region": "APAC",
     "X-Booking-Center-Code": "Singapore",
     "X-Role": "ADVISOR",
@@ -530,11 +530,11 @@ def _build_market_price_source_fact(
         "source_record_id": source_record_id,
         "source_revision": "v1",
         "source_system": FRONT_OFFICE_VALUATION_SOURCE_SYSTEM,
-        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
         **normalization_evidence,
     }
     return {
-        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
         "security_id": security_id,
         "price_date": price_date,
@@ -560,7 +560,7 @@ def _build_valuation_policy_assignment(
     policy_id, _ = _valuation_policy_for_instrument(instrument)
     security_id = str(instrument["security_id"])
     return {
-        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
         "security_id": security_id,
         "policy_id": policy_id,
@@ -887,7 +887,7 @@ def build_front_office_portfolio_bundle(
     portfolios = [
         {
             "portfolio_id": portfolio_id,
-            "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
             "base_currency": "USD",
             "open_date": "2025-01-06",
@@ -906,7 +906,7 @@ def build_front_office_portfolio_bundle(
     portfolios.extend(
         {
             "portfolio_id": row["portfolio_id"],
-            "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
             "base_currency": "USD",
             "open_date": "2025-01-06",
@@ -2565,7 +2565,7 @@ def _validate_front_office_valuation_authority_for_reuse(
         portfolio_id=portfolio_id,
     )
     expected_scope = {
-        "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+        "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
         "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
     }
     existing_scope = _read_portfolio_valuation_scope(
@@ -3017,7 +3017,7 @@ def _wait_for_portfolio_valuation_scope(
             portfolio_id=portfolio_id,
         )
         if scope == {
-            "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
         }:
             return
@@ -3109,7 +3109,7 @@ select json_build_object(
           order by assignment_version desc
         ) as source_rank
         from instrument_valuation_policy_assignments
-        where tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+        where tenant_id = '{FRONT_OFFICE_PORTFOLIO_TENANT_ID}'
           and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
           and source_system = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}'
           and source_record_id like 'front-office-valuation-policy:%'
@@ -3145,7 +3145,7 @@ select json_build_object(
           and source_record_id like 'front-office-price:%'
       ) latest_facts
       where source_rank = 1
-        and tenant_id = '{FRONT_OFFICE_VALUATION_TENANT_ID}'
+        and tenant_id = '{FRONT_OFFICE_PORTFOLIO_TENANT_ID}'
         and legal_book_id = '{FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID}'
     ), '[]'::json
   )
@@ -3411,7 +3411,7 @@ def _verify_front_office_portfolio(
                     "reporting_currency": "SGD",
                     "sections": ["portfolio_state", "portfolio_totals"],
                     "consumer_system": "lotus-advise",
-                    "tenant_id": FRONT_OFFICE_VALUATION_TENANT_ID,
+                    "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
                 },
             )
             _, cashflow_projection = _request_json(
