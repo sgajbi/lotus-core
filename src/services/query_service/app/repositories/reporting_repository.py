@@ -19,6 +19,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -144,19 +145,41 @@ class ReportingRepository:
         )
         return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
-    async def get_portfolio_by_id(self, portfolio_id: str) -> Portfolio | None:
-        stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
+    async def get_portfolio_by_id(
+        self, portfolio_id: str, *, tenant_id: TenantId
+    ) -> Portfolio | None:
+        """Retrieve a portfolio only when it belongs to the admitted tenant.
+
+        The predicate is required rather than optional: this method previously
+        selected on portfolio id alone, so every reporting route served any
+        portfolio to any admitted tenant. A default would have preserved that
+        behaviour at every call site that was not updated.
+        """
+        stmt = select(Portfolio).where(
+            Portfolio.portfolio_id == portfolio_id,
+            Portfolio.tenant_id == tenant_id.value,
+        )
         return cast(Portfolio | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def list_portfolios(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str | None = None,
         portfolio_ids: list[str] | None = None,
         client_id: str | None = None,
         booking_center_code: str | None = None,
     ) -> list[Portfolio]:
-        stmt = select(Portfolio)
+        """List portfolios owned by the admitted tenant.
+
+        The `booking_center_code` filter is why this predicate is not optional.
+        A business-unit query selects every portfolio in a booking centre, and
+        assets-under-management and asset-allocation aggregate that selection
+        into a single published figure. Without the tenant predicate the total
+        is not merely readable by the wrong caller, it is wrong: computed over
+        portfolios that caller does not own.
+        """
+        stmt = select(Portfolio).where(Portfolio.tenant_id == tenant_id.value)
         if portfolio_id:
             stmt = stmt.where(Portfolio.portfolio_id == portfolio_id)
         if portfolio_ids:
