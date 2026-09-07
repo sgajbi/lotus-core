@@ -482,7 +482,8 @@ future cash legs enter the same exact-scope valuation queue. A canonical authori
 cash facts at the reporting date is incomplete even when current positions already show 11-of-11
 valued.
 
-The canonical portfolio owns valuation scope `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK`. If only bond
+The canonical portfolio and its governed Gateway verifier use source-owned tenant `tenant-sg`; its
+valuation legal-book scope is `SG_PRIVATE_BANK_BOOK`. If only bond
 positions remain unvalued and valuation jobs report
 `bond valuation requires explicit quote-convention authority`, repair the missing same-scope Core
 assignment/source evidence. If they instead report missing `signed_face_amount`, verify that the

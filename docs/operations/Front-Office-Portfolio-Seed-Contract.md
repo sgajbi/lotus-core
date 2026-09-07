@@ -54,6 +54,7 @@ Use one discretionary multi-asset relationship-book portfolio with:
 Recommended example:
 
 - portfolio id: `PB_SG_GLOBAL_BAL_001`
+- source-owned tenant id: `tenant-sg`
 - client id: `CIF_SG_000184`
 - portfolio display name: `Global Balanced Mandate`
 - client display name: `SYNTH_CLIENT_GLOBAL_BALANCED`
