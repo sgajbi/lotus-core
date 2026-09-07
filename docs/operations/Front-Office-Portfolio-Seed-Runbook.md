@@ -35,7 +35,7 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 ## Seeded Portfolio
 
 - portfolio id: `PB_SG_GLOBAL_BAL_001`
-- valuation tenant id: `LOTUS_PB_SG`
+- source-owned portfolio tenant id: `tenant-sg` (also used by the governed Gateway verifier)
 - valuation legal book id: `SG_PRIVATE_BANK_BOOK`
 - client id: `CIF_SG_000184` (cataloged synthetic seed identifier)
 - booking centre: `Singapore`
@@ -204,7 +204,7 @@ explicit full local-state reset.
 
 `--skip-cleanup` preserves transaction history but is not an authority-upgrade mechanism. For an
 existing seed it first requires all canonical seeded valuation work to be quiescent and requires
-the exact durable `LOTUS_PB_SG` / `SG_PRIVATE_BANK_BOOK` portfolio scope before reading dependent
+the exact durable `tenant-sg` / `SG_PRIVATE_BANK_BOOK` portfolio scope before reading dependent
 sources. It then waits for existing instruments, requires the complete matching canonical
 raw-price window, and verifies the exact durable valuation assignments/source facts. Wrong scope,
 absent authority, missing observations, or price/currency conflicts fail closed before core seed
