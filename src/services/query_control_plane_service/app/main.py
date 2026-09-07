@@ -17,6 +17,7 @@ from .exception_mappers import register_query_control_plane_exception_handlers
 from .routers import (
     advisory_simulation,
     analytics_inputs,
+    benchmark_assignment,
     capabilities,
     corporate_action_support,
     integration,
@@ -68,6 +69,7 @@ include_routers(
     operations.router,
     security_audit.router,
     corporate_action_support.router,
+    benchmark_assignment.router,
     integration.router,
     advisory_simulation.router,
     analytics_inputs.router,

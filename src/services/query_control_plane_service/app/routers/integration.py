@@ -5,7 +5,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
-from ..application.benchmark_assignment import BenchmarkAssignmentService
 from ..application.benchmark_catalog import BenchmarkCatalogService
 from ..application.benchmark_composition import BenchmarkCompositionService
 from ..application.benchmark_definition import BenchmarkDefinitionService
@@ -35,10 +34,6 @@ from ..application.reference_coverage import ReferenceCoverageService
 from ..application.risk_free_series import RiskFreeSeriesService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..application.transaction_economics.service import TransactionEconomicsService
-from ..contracts.benchmark_assignment import (
-    BenchmarkAssignmentRequest,
-    BenchmarkAssignmentResponse,
-)
 from ..contracts.benchmark_catalog import BenchmarkCatalogRequest, BenchmarkCatalogResponse
 from ..contracts.benchmark_composition import (
     BenchmarkCompositionWindowRequest,
@@ -159,7 +154,6 @@ from ..contracts.transaction_cost_curve import (
     TransactionCostCurveResponse,
 )
 from ..dependencies import (
-    get_benchmark_assignment_service,
     get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
@@ -325,14 +319,6 @@ INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = problem_example(
         "source_product": "InstrumentReferenceBundle",
         "reason": "CoreSnapshotBadRequestError",
     },
-)
-BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL = (
-    "No effective benchmark assignment found for portfolio and as_of_date."
-)
-BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
-    source_product="BenchmarkAssignment",
-    detail=BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL,
-    metadata={"portfolio_id": "PORT-INT-001", "reason": "not_found"},
 )
 MODEL_PORTFOLIO_TARGET_NOT_FOUND_DETAIL = (
     "No approved model portfolio target found for model_portfolio_id and as_of_date."
@@ -1435,71 +1421,6 @@ async def get_dpm_source_readiness(
         portfolio_id=portfolio_id,
         request=request,
     )
-
-
-@router.post(
-    "/portfolios/{portfolio_id}/benchmark-assignment",
-    response_model=BenchmarkAssignmentResponse,
-    responses={
-        status.HTTP_403_FORBIDDEN: problem_response(
-            "Requested tenant does not match admitted tenant authority.",
-            TENANT_SCOPE_FORBIDDEN_EXAMPLE,
-        ),
-        status.HTTP_404_NOT_FOUND: problem_response(
-            "No effective benchmark assignment found.",
-            BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE,
-        ),
-    },
-    summary="Resolve effective portfolio benchmark assignment",
-    description=(
-        "What: Resolve benchmark assignment for a portfolio as-of a point-in-time date.\n"
-        "How: Applies effective-dating and assignment version ordering to return "
-        "deterministic match within the admitted tenant. An optional policy_context tenant "
-        "is an assertion that must match admitted authority; reporting_currency and policy "
-        "pack context do not change assignment selection. Foreign portfolios are returned "
-        "as not found.\n"
-        "When: Used by lotus-performance benchmark-aware analytics, lotus-gateway workspace "
-        "composition flows, and reporting workflows that need governed benchmark context "
-        "before downstream benchmark math or evidence generation."
-    ),
-    openapi_extra=source_data_product_openapi_extra("BenchmarkAssignment"),
-)
-async def resolve_portfolio_benchmark_assignment(
-    request: BenchmarkAssignmentRequest,
-    http_request: Request,
-    portfolio_id: str = Path(
-        ...,
-        description="Portfolio identifier whose effective benchmark assignment is requested.",
-        examples=["PORT-INT-001"],
-    ),
-    benchmark_assignment_service: BenchmarkAssignmentService = Depends(
-        get_benchmark_assignment_service
-    ),
-) -> BenchmarkAssignmentResponse:
-    supplied_tenant_id = (
-        request.policy_context.tenant_id
-        if request.policy_context is not None and request.policy_context.tenant_id is not None
-        else str(http_request.state.tenant_context.tenant_id)
-    )
-    admitted_tenant_id = require_matching_tenant_authority(
-        supplied_tenant_id=supplied_tenant_id,
-        tenant_context=http_request.state.tenant_context,
-    )
-    response = await benchmark_assignment_service.resolve(
-        portfolio_id=portfolio_id,
-        tenant_id=admitted_tenant_id,
-        request=request,
-    )
-    if response is None:
-        _raise_integration_source_not_found(
-            source_product="BenchmarkAssignment",
-            detail=BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL,
-            metadata={
-                "portfolio_id": portfolio_id,
-                "reason": "not_found",
-            },
-        )
-    return cast(BenchmarkAssignmentResponse, response)
 
 
 @router.post(
