@@ -514,6 +514,7 @@ def test_api_observation_counts_governed_future_transactions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     requested_urls: list[str] = []
+    requested_headers: list[dict[str, str]] = []
     queue_fields = (
         "pending_valuation_jobs",
         "processing_valuation_jobs",
@@ -544,8 +545,9 @@ def test_api_observation_counts_governed_future_transactions(
         ]
     )
 
-    def capture_request(method, url, payload=None):
+    def capture_request(method, url, payload=None, *, headers=None):
         requested_urls.append(url)
+        requested_headers.append(dict(headers or {}))
         return next(responses)
 
     monkeypatch.setattr(proof, "_request_json", capture_request)
@@ -561,6 +563,7 @@ def test_api_observation_counts_governed_future_transactions(
     assert requested_urls[1] == (
         "http://query/portfolios/portfolio/transactions?limit=300&include_projected=true"
     )
+    assert requested_headers == [{"X-Tenant-Id": "tenant-sg"}] * 6
 
 
 def test_stable_observations_ignore_transient_contention(
