@@ -23,9 +23,9 @@ from tools.front_office_portfolio_seed import (
     DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS,
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
+    FRONT_OFFICE_PORTFOLIO_TENANT_ID,
     FRONT_OFFICE_SEED_CONTRACT,
     FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID,
-    FRONT_OFFICE_VALUATION_TENANT_ID,
     _cleanup_existing_front_office_seed,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
@@ -312,7 +312,7 @@ def test_front_office_bundle_uses_real_business_names_and_context():
     assert portfolio["advisor_id"] == FRONT_OFFICE_SEED_CONTRACT.advisor_id
     assert portfolio["portfolio_type"] == "discretionary"
     assert portfolio["booking_center_code"] == "Singapore"
-    assert portfolio["tenant_id"] == "LOTUS_PB_SG"
+    assert portfolio["tenant_id"] == FRONT_OFFICE_PORTFOLIO_TENANT_ID
     assert portfolio["legal_book_id"] == "SG_PRIVATE_BANK_BOOK"
 
     instrument_names = {instrument["name"] for instrument in bundle["instruments"]}
@@ -335,7 +335,7 @@ def test_front_office_bundle_carries_complete_deterministic_valuation_authority(
     assert assignments == replay["valuation_policy_assignments"]
     assert len(facts) == len(bundle["market_prices"])
     assert {row["security_id"] for row in assignments} == set(instruments)
-    assert all(row["tenant_id"] == "LOTUS_PB_SG" for row in facts)
+    assert all(row["tenant_id"] == FRONT_OFFICE_PORTFOLIO_TENANT_ID for row in facts)
     assert all(row["legal_book_id"] == "SG_PRIVATE_BANK_BOOK" for row in facts)
     assert all(len(row["source_content_hash"]) == 64 for row in facts)
 
@@ -542,14 +542,14 @@ def test_front_office_bundle_includes_source_only_dpm_candidate_portfolios():
         portfolios
     )
     assert {portfolio["tenant_id"] for portfolio in portfolios.values()} == {
-        FRONT_OFFICE_VALUATION_TENANT_ID
+        FRONT_OFFICE_PORTFOLIO_TENANT_ID
     }
     assert {portfolio["legal_book_id"] for portfolio in portfolios.values()} == {
         FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID
     }
     for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS:
         portfolio = portfolios[row["portfolio_id"]]
-        assert portfolio["tenant_id"] == FRONT_OFFICE_VALUATION_TENANT_ID
+        assert portfolio["tenant_id"] == FRONT_OFFICE_PORTFOLIO_TENANT_ID
         assert portfolio["legal_book_id"] == FRONT_OFFICE_VALUATION_LEGAL_BOOK_ID
         assert portfolio["portfolio_type"] == "discretionary"
         assert portfolio["booking_center_code"] == "Singapore"
@@ -558,6 +558,8 @@ def test_front_office_bundle_includes_source_only_dpm_candidate_portfolios():
 
 
 def test_front_office_http_requests_use_canonical_portfolio_tenant(monkeypatch):
+    assert FRONT_OFFICE_PORTFOLIO_TENANT_ID == "tenant-sg"
+
     observed = {}
 
     def capture_request(method, url, payload, headers, *, tenant_id):
@@ -579,7 +581,7 @@ def test_front_office_http_requests_use_canonical_portfolio_tenant(monkeypatch):
     )
 
     assert response == (202, {"accepted": True})
-    assert observed["tenant_id"] == FRONT_OFFICE_VALUATION_TENANT_ID
+    assert observed["tenant_id"] == FRONT_OFFICE_PORTFOLIO_TENANT_ID
 
 
 def test_front_office_gateway_requests_use_governed_caller_tenant(monkeypatch):
@@ -597,7 +599,8 @@ def test_front_office_gateway_requests_use_governed_caller_tenant(monkeypatch):
 
     assert response == (200, {"status": "ready"})
     assert observed["headers"] == FRONT_OFFICE_GATEWAY_CALLER_HEADERS
-    assert observed["tenant_id"] == FRONT_OFFICE_GATEWAY_CALLER_HEADERS["X-Tenant-Id"]
+    assert observed["tenant_id"] == FRONT_OFFICE_PORTFOLIO_TENANT_ID
+    assert FRONT_OFFICE_GATEWAY_CALLER_HEADERS["X-Tenant-Id"] == FRONT_OFFICE_PORTFOLIO_TENANT_ID
 
 
 def test_front_office_bundle_carries_meaningful_classification_metadata():
@@ -2048,7 +2051,7 @@ def test_existing_seed_reuse_validates_complete_scope_and_authority_without_writ
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
@@ -2103,7 +2106,7 @@ def test_current_seed_reuse_does_not_republish_unchanged_source_parents(monkeypa
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
@@ -2211,7 +2214,7 @@ def test_existing_seed_reuse_rechecks_terminal_failures_after_durable_authority(
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
@@ -2252,7 +2255,7 @@ def test_existing_seed_reuse_validates_raw_prices_before_any_write(monkeypatch):
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
@@ -2295,7 +2298,7 @@ def test_existing_seed_reuse_rejects_missing_prices_before_any_write(monkeypatch
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
@@ -2334,7 +2337,7 @@ def test_existing_seed_reuse_rejects_absent_authority_without_core_writes(monkey
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
@@ -2383,7 +2386,7 @@ def test_existing_seed_reuse_fences_deferred_reprocessing_before_authority(monke
         front_office_seed_module,
         "_read_portfolio_valuation_scope",
         lambda **_kwargs: {
-            "tenant_id": "LOTUS_PB_SG",
+            "tenant_id": FRONT_OFFICE_PORTFOLIO_TENANT_ID,
             "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         },
     )
