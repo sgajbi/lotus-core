@@ -34,6 +34,11 @@ _TENANT_PHYSICAL_UNIQUE = "uq_processed_events_tenant_event_service"
 _GLOBAL_PHYSICAL_UNIQUE = "uq_processed_events_global_event_service"
 _TENANT_SEMANTIC_UNIQUE = "uq_processed_events_tenant_service_semantic_key"
 _GLOBAL_SEMANTIC_UNIQUE = "uq_processed_events_global_service_semantic_key"
+_LEGACY_WRITER_IDENTITIES = (
+    "persistence-service",
+    "portfolio-transaction-processing",
+)
+_LEGACY_WRITER_SQL = ", ".join(f"'{value}'" for value in _LEGACY_WRITER_IDENTITIES)
 _TENANT_AUTHORITY_SQL = (
     f"(service_name NOT IN ({_SERVICE_SQL}) OR tenant_id IS NOT NULL) "
     "AND (tenant_id IS NULL OR (tenant_id = btrim(tenant_id) "
@@ -44,6 +49,45 @@ _TENANT_AUTHORITY_SQL = (
 def upgrade() -> None:
     """Attribute retained transaction fences before changing natural keys."""
 
+    op.execute(
+        sa.text(
+            f"""
+            DO $$
+            DECLARE
+                active_writer_count bigint;
+                active_writer_samples text;
+            BEGIN
+                SELECT count(*), string_agg(application_name, ', ' ORDER BY application_name)
+                INTO active_writer_count, active_writer_samples
+                FROM (
+                    SELECT application_name
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                      AND pid <> pg_backend_pid()
+                      AND application_name IN ({_LEGACY_WRITER_SQL})
+                    ORDER BY application_name
+                    LIMIT 20
+                ) AS active_writers;
+
+                IF active_writer_count > 0 THEN
+                    RAISE EXCEPTION USING
+                        MESSAGE = format(
+                            'transaction event-fence tenant cutover requires quiesced writers; '
+                            'found %s active session(s): %s',
+                            active_writer_count,
+                            coalesce(active_writer_samples, '<none>')
+                        ),
+                        HINT = (
+                            'scale persistence-service and portfolio-transaction-processing '
+                            'workers to zero, confirm their database sessions have closed, '
+                            'then retry the migration before deploying the new writer set'
+                        );
+                END IF;
+            END
+            $$
+            """
+        )
+    )
     op.add_column(_TABLE, sa.Column("tenant_id", sa.String(length=128), nullable=True))
     op.execute(
         sa.text(

@@ -916,6 +916,22 @@ never repair payloads or reactivate rows directly. Recreate required work throug
 source command after correcting authoritative input. Downgrade removes the new-write constraint
 but deliberately does not reactivate poisoned historical work.
 
+### Transaction event-fence tenant cutover
+
+Migration `c167b2c3d52e` is a quiesced writer cutover, not a mixed-version rolling migration. Before
+upgrade, stop both `persistence-service` and `portfolio-transaction-processing`, wait for their
+database sessions to close, and retain the consumer offsets and lag snapshot. The migration checks
+`pg_stat_activity` and fails before changing the schema while either governed writer identity is
+connected. Do not bypass that preflight: old binaries omit tenant authority when inserting
+transaction fences and are incompatible with the new constraint.
+
+Apply `c167`, deploy the complete new persistence and transaction-processing writer set, and only
+then resume consumption. Confirm that no transaction-owned `processed_events` row has a null tenant
+and that the consumer groups drain from their retained offsets. For rollback, stop both new writer
+sets first; downgrade fails closed if cross-tenant physical or semantic keys would collapse into the
+legacy global key. Reconcile such collisions from authoritative source evidence or retain the new
+revision—never delete fences or invent tenant ownership to force rollback.
+
 The reprocessing-job support listing projects this same `lease_expires_at` authority: a
 `PROCESSING` row is `STALE_PROCESSING` only when its database-clock lease has expired. The caller's
 `stale_threshold_minutes` never marks a live leased claim stale and remains applicable only to

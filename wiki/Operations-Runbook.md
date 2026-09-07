@@ -381,6 +381,16 @@ both boundaries, coalesces duplicate pair work by the governed earliest-date rul
 the original failed evidence. Downgrade fails closed while active work uses a timestamp form that
 the predecessor constraint cannot represent.
 
+Migration `c167b2c3d52e` requires a quiesced persistence and transaction-processing writer cutover.
+Stop `persistence-service` and `portfolio-transaction-processing`, retain their consumer-offset and
+lag evidence, and wait for their database sessions to close before upgrade. The migration inspects
+`pg_stat_activity` and stops before any schema change while either writer identity remains
+connected. Apply the migration, deploy the complete new writer set, and only then resume consumers;
+mixed old/new writer operation is unsupported because old binaries omit tenant fence authority.
+Before rollback, stop both new writer sets. The downgrade refuses cross-tenant physical or semantic
+key collisions; reconcile from authoritative source evidence or retain the revision rather than
+deleting fences or inventing ownership.
+
 For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
 `execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply
 the same tenant in `X-Tenant-Id` and the query, plus `core.support.read`. This is privileged
