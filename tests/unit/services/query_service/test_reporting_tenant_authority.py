@@ -19,12 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.repositories.reporting_repository import (
     ReportingRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 QUERY_SERVICE_APP = (
     Path(__file__).resolve().parents[4] / "src" / "services" / "query_service" / "app"
 )
-TENANT = TenantContext(tenant_id=TenantId("tenant-sg"))
-FOREIGN = TenantContext(tenant_id=TenantId("tenant-hk"))
+# The admitted tenant is the repository's shared fixture, so these tests and the
+# router tests speak about the same identity. FOREIGN is deliberately a value no
+# fixture seeds, so a leak cannot be masked by a coincidental match.
+TENANT = TEST_TENANT_CONTEXT
+FOREIGN = TenantContext(tenant_id=TenantId("tenant-foreign"))
 
 # The two reporting repository reads that resolve a portfolio. Everything the
 # reporting surface serves is reached through one of them, which is why the
@@ -63,7 +67,7 @@ async def test_reporting_detail_read_carries_the_tenant_predicate() -> None:
 
     await repo.get_portfolio_by_id("PB_SG_GLOBAL_BAL_001", tenant_id=TENANT.tenant_id)
 
-    assert "portfolios.tenant_id = 'tenant-sg'" in _compiled(db)
+    assert "portfolios.tenant_id = 'tenant-test'" in _compiled(db)
 
 
 @pytest.mark.asyncio
@@ -79,7 +83,7 @@ async def test_a_foreign_tenant_selects_no_row_rather_than_a_narrowed_one() -> N
     result = await repo.get_portfolio_by_id("PB_SG_GLOBAL_BAL_001", tenant_id=FOREIGN.tenant_id)
 
     assert result is None
-    assert "portfolios.tenant_id = 'tenant-hk'" in _compiled(db)
+    assert "portfolios.tenant_id = 'tenant-foreign'" in _compiled(db)
 
 
 @pytest.mark.asyncio

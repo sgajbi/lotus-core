@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
@@ -14,7 +14,7 @@ from src.services.query_service.app.main import app
 from src.services.query_service.app.services.liquidity_ladder_service import (
     PortfolioLiquidityLadderService,
 )
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 BOUNDARY_NOTE = (
@@ -78,11 +78,14 @@ async def test_get_liquidity_ladder(async_test_client):
     assert response.status_code == 200
     assert response.json()["product_name"] == "PortfolioLiquidityLadder"
     mock_service.get_liquidity_ladder.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=date(2026, 3, 27),
         horizon_days=30,
         include_projected=True,
     )
+    forwarded = mock_service.get_liquidity_ladder.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_liquidity_ladder_defaults_optional_query_params(async_test_client):
@@ -110,11 +113,14 @@ async def test_get_liquidity_ladder_defaults_optional_query_params(async_test_cl
 
     assert response.status_code == 200
     mock_service.get_liquidity_ladder.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=None,
         horizon_days=30,
         include_projected=True,
     )
+    forwarded = mock_service.get_liquidity_ladder.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_liquidity_ladder_maps_missing_portfolio_to_404(async_test_client):

@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
@@ -12,7 +12,7 @@ from portfolio_common.source_data_product_metadata import (
 from src.services.query_service.app.dependencies import get_cash_balance_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.cash_balance_service import CashBalanceService
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -69,10 +69,13 @@ async def test_get_cash_balances(async_test_client):
     assert response.status_code == 200
     assert response.json()["product_name"] == "HoldingsAsOf"
     mock_service.get_cash_balances.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=date(2026, 3, 27),
         reporting_currency="SGD",
     )
+    forwarded = mock_service.get_cash_balances.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_cash_balances_defaults_optional_query_params(async_test_client):
@@ -98,10 +101,13 @@ async def test_get_cash_balances_defaults_optional_query_params(async_test_clien
 
     assert response.status_code == 200
     mock_service.get_cash_balances.assert_awaited_once_with(
+        tenant_context=ANY,
         portfolio_id="P1",
         as_of_date=None,
         reporting_currency=None,
     )
+    forwarded = mock_service.get_cash_balances.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_cash_balances_maps_missing_portfolio_to_404(async_test_client):

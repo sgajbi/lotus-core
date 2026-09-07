@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import CashflowSeriesEvidence
@@ -13,10 +12,7 @@ from src.services.query_service.app.services.liquidity_ladder_service import (
     MAX_HORIZON_DAYS,
     PortfolioLiquidityLadderService,
 )
-
-# The admitted tenant these tests run as; the ladder resolves its portfolio
-# through the same tenant-scoped repository read the reporting routes use.
-TEST_TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-sg"))
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
