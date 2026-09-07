@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
@@ -11,6 +12,10 @@ from src.services.query_service.app.services.cash_balance_service import (
     CashBalanceResolver,
     CashBalanceService,
 )
+
+# The admitted tenant these tests run as; cash balances resolve their
+# portfolio through the same tenant-scoped reporting repository read.
+TEST_TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-sg"))
 
 pytestmark = pytest.mark.asyncio
 
@@ -99,6 +104,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
         response = await service.get_cash_balances(
             portfolio_id="P1",
             reporting_currency=" sgd ",
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.portfolio_id == "P1"
@@ -183,7 +189,9 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(portfolio_id="P1")
+        response = await service.get_cash_balances(
+            portfolio_id="P1", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert [record.cash_account_id for record in response.cash_accounts] == [
         "CASH-ACC-SGD-001",
@@ -237,7 +245,9 @@ async def test_get_cash_balances_queries_fallback_account_ids_only_for_unmatched
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(portfolio_id="P1")
+        response = await service.get_cash_balances(
+            portfolio_id="P1", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert [record.cash_account_id for record in response.cash_accounts] == [
         "CASH-ACC-EUR-LEGACY",
@@ -279,7 +289,9 @@ async def test_get_cash_balances_marks_unknown_cash_account_fallback_partial() -
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(portfolio_id="P1")
+        response = await service.get_cash_balances(
+            portfolio_id="P1", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.cash_accounts[0].cash_account_id == "CASH_EUR"
     assert response.cash_accounts[0].cash_account_id_source == "cash_security_fallback"
@@ -387,7 +399,9 @@ async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() 
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(portfolio_id="P1")
+        response = await service.get_cash_balances(
+            portfolio_id="P1", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
     assert response.cash_accounts[0].cash_account_id_source == "cash_account_master"
@@ -404,7 +418,7 @@ async def test_get_cash_balances_reads_portfolio_and_default_date_sequentially()
     repo.list_latest_snapshot_rows.return_value = []
     repo.list_cash_account_masters.return_value = []
 
-    async def get_portfolio_by_id(portfolio_id: str):
+    async def get_portfolio_by_id(portfolio_id: str, *, tenant_id: object = None):
         call_order.append("portfolio")
         assert portfolio_id == "P1"
         return _portfolio("P1", base_currency="USD")
@@ -421,7 +435,9 @@ async def test_get_cash_balances_reads_portfolio_and_default_date_sequentially()
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cash_balances(portfolio_id="P1")
+        response = await service.get_cash_balances(
+            portfolio_id="P1", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.resolved_as_of_date == date(2026, 3, 27)
     assert call_order == ["portfolio", "date"]
@@ -442,6 +458,7 @@ async def test_get_cash_balances_explicit_date_skips_default_date_lookup() -> No
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 26),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.resolved_as_of_date == date(2026, 3, 26)
@@ -463,6 +480,7 @@ async def test_get_cash_balances_returns_null_cash_weight_when_denominator_missi
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 27),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.totals.total_balance_portfolio_currency == Decimal("0")
@@ -497,6 +515,7 @@ async def test_get_cash_balances_returns_null_cash_weight_when_denominator_zero(
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 27),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.totals.source_reported_cash_weight is None
@@ -532,6 +551,7 @@ async def test_get_cash_balances_blocks_cash_weight_when_denominator_market_valu
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 27),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.totals.source_reported_cash_weight is None
@@ -564,6 +584,7 @@ async def test_get_cash_balances_blocks_cash_weight_when_open_holding_snapshot_m
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 27),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.totals.source_reported_cash_weight is None
@@ -603,6 +624,7 @@ async def test_get_cash_balances_returns_null_cash_weight_when_denominator_stale
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 27),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
@@ -638,6 +660,7 @@ async def test_get_cash_balances_preserves_decimal_precision_for_source_cash_wei
         response = await service.get_cash_balances(
             portfolio_id="P1",
             as_of_date=date(2026, 3, 27),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.totals.source_reported_cash_weight == Decimal("1") / Decimal("3")
@@ -728,7 +751,7 @@ async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
-            await service.get_cash_balances(portfolio_id="P404")
+            await service.get_cash_balances(portfolio_id="P404", tenant_context=TEST_TENANT_CONTEXT)
 
 
 async def test_cash_balance_service_normalizes_fx_cache_and_identity_checks() -> None:

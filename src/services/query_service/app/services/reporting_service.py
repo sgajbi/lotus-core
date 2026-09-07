@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.portfolio_allocation import (
     AllocationContributorInput,
     AllocationContributorResult,
@@ -398,11 +399,15 @@ class ReportingService:
         )
 
     async def get_assets_under_management(
-        self, request: AssetsUnderManagementQueryRequest
+        self,
+        request: AssetsUnderManagementQueryRequest,
+        *,
+        tenant_context: TenantContext,
     ) -> AssetsUnderManagementResponse:
         portfolios, resolved_as_of_date = await self._resolve_scope_portfolios_and_date(
             request.scope,
             request.as_of_date,
+            tenant_context=tenant_context,
         )
         reporting_currency = await self._resolve_reporting_currency(
             scope=request.scope,
@@ -492,11 +497,15 @@ class ReportingService:
         )
 
     async def get_asset_allocation(
-        self, request: AssetAllocationQueryRequest
+        self,
+        request: AssetAllocationQueryRequest,
+        *,
+        tenant_context: TenantContext,
     ) -> AssetAllocationResponse:
         portfolios, resolved_as_of_date = await self._resolve_scope_portfolios_and_date(
             request.scope,
             request.as_of_date,
+            tenant_context=tenant_context,
         )
         reporting_currency = await self._resolve_reporting_currency(
             scope=request.scope,
@@ -570,9 +579,14 @@ class ReportingService:
         )
 
     async def get_portfolio_summary(
-        self, request: PortfolioSummaryQueryRequest
+        self,
+        request: PortfolioSummaryQueryRequest,
+        *,
+        tenant_context: TenantContext,
     ) -> PortfolioSummaryResponse:
-        portfolio = await self._get_required_portfolio(request.portfolio_id)
+        portfolio = await self._get_required_portfolio(
+            request.portfolio_id, tenant_context=tenant_context
+        )
         resolved_as_of_date = await self._resolve_portfolio_summary_date(request.as_of_date)
         portfolio_currency, reporting_currency = _portfolio_summary_currencies(
             portfolio=portfolio,
@@ -620,16 +634,22 @@ class ReportingService:
         )
 
     async def get_bulk_portfolio_summary(
-        self, request: BulkPortfolioSummaryQueryRequest
+        self,
+        request: BulkPortfolioSummaryQueryRequest,
+        *,
+        tenant_context: TenantContext,
     ) -> BulkPortfolioSummaryResponse:
         """Resolve a bounded cohort from one source snapshot read.
 
-        The caller supplies already-authorized identifiers. Missing members and source/FX
-        failures remain explicit result items so a partial cohort can never be mistaken for a
-        complete aggregate.
+        Identifiers the admitted tenant does not own resolve to missing members
+        rather than to rows, so a foreign portfolio is reported exactly as an
+        absent one. The caller cannot tell the two apart, and the cohort total is
+        computed only over portfolios that tenant owns.
         """
         resolved_as_of_date = await self._resolve_portfolio_summary_date(request.as_of_date)
-        portfolios = await self.repo.list_portfolios(portfolio_ids=request.portfolio_ids)
+        portfolios = await self.repo.list_portfolios(
+            tenant_id=tenant_context.tenant_id, portfolio_ids=request.portfolio_ids
+        )
         portfolios_by_id = {str(portfolio.portfolio_id): portfolio for portfolio in portfolios}
         found_ids = [
             portfolio_id
@@ -825,8 +845,16 @@ class ReportingService:
             totals,
         )
 
-    async def _get_required_portfolio(self, portfolio_id: str):
-        portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
+    async def _get_required_portfolio(self, portfolio_id: str, *, tenant_context: TenantContext):
+        """Resolve a portfolio the admitted tenant owns, or report it absent.
+
+        The message is deliberately identical for a portfolio that does not
+        exist and one owned by another tenant; a distinguishable refusal would
+        confirm the existence of a resource the caller cannot read.
+        """
+        portfolio = await self.repo.get_portfolio_by_id(
+            portfolio_id, tenant_id=tenant_context.tenant_id
+        )
         if portfolio is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         return portfolio
@@ -1023,6 +1051,8 @@ class ReportingService:
         self,
         scope: ReportingScope,
         requested_as_of_date: date | None,
+        *,
+        tenant_context: TenantContext,
     ) -> tuple[list, date]:
         if requested_as_of_date is None:
             resolved_as_of_date = await self.repo.get_latest_business_date()
@@ -1033,6 +1063,7 @@ class ReportingService:
             raise ValueError("No business date is available for reporting queries.")
 
         portfolios = await self.repo.list_portfolios(
+            tenant_id=tenant_context.tenant_id,
             portfolio_id=scope.portfolio_id,
             portfolio_ids=scope.portfolio_ids or None,
             booking_center_code=scope.booking_center_code,

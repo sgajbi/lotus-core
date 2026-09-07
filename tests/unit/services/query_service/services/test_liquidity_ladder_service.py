@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import CashflowSeriesEvidence
@@ -12,6 +13,10 @@ from src.services.query_service.app.services.liquidity_ladder_service import (
     MAX_HORIZON_DAYS,
     PortfolioLiquidityLadderService,
 )
+
+# The admitted tenant these tests run as; the ladder resolves its portfolio
+# through the same tenant-scoped repository read the reporting routes use.
+TEST_TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-sg"))
 
 pytestmark = pytest.mark.asyncio
 
@@ -102,7 +107,9 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
         ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
-        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=8)
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1", horizon_days=8, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.product_name == "PortfolioLiquidityLadder"
     assert response.product_version == "v1"
@@ -164,6 +171,7 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
             portfolio_id="P1",
             horizon_days=1,
             include_projected=False,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
@@ -224,7 +232,9 @@ async def test_liquidity_ladder_runs_booked_and_projected_reads_sequentially() -
         ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
-        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1", horizon_days=0, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.buckets[0].net_cashflow_portfolio_currency == Decimal("-150")
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, tzinfo=UTC)
@@ -300,7 +310,9 @@ async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_sequentiall
         ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
-        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1", horizon_days=0, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.buckets[0].net_cashflow_portfolio_currency == Decimal("-150")
     assert call_order == ["snapshot", "booked", "projected"]
@@ -319,7 +331,7 @@ async def test_liquidity_ladder_reads_portfolio_and_default_date_sequentially() 
         CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
     )
 
-    async def get_portfolio_by_id(portfolio_id: str):
+    async def get_portfolio_by_id(portfolio_id: str, *, tenant_id: object = None):
         call_order.append("portfolio")
         assert portfolio_id == "P1"
         return _portfolio("P1")
@@ -342,7 +354,9 @@ async def test_liquidity_ladder_reads_portfolio_and_default_date_sequentially() 
         ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
-        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1", horizon_days=0, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.resolved_as_of_date == date(2026, 3, 27)
     assert call_order == ["portfolio", "date"]
@@ -376,6 +390,7 @@ async def test_liquidity_ladder_explicit_date_skips_default_date_lookup() -> Non
             portfolio_id="P1",
             as_of_date=date(2026, 3, 26),
             horizon_days=0,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.resolved_as_of_date == date(2026, 3, 26)
@@ -392,7 +407,9 @@ async def test_liquidity_ladder_raises_when_portfolio_missing() -> None:
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
-            await service.get_liquidity_ladder(portfolio_id="P404")
+            await service.get_liquidity_ladder(
+                portfolio_id="P404", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_liquidity_ladder_rejects_invalid_horizon_before_database_access() -> None:
@@ -405,6 +422,7 @@ async def test_liquidity_ladder_rejects_invalid_horizon_before_database_access()
         await service.get_liquidity_ladder(
             portfolio_id="P1",
             horizon_days=MAX_HORIZON_DAYS + 1,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
 
@@ -422,7 +440,9 @@ async def test_liquidity_ladder_raises_when_business_date_missing() -> None:
             ValueError,
             match="No business date is available for liquidity ladder queries.",
         ):
-            await service.get_liquidity_ladder(portfolio_id="P1")
+            await service.get_liquidity_ladder(
+                portfolio_id="P1", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_liquidity_ladder_returns_unknown_quality_for_empty_source_rows() -> None:
@@ -450,7 +470,9 @@ async def test_liquidity_ladder_returns_unknown_quality_for_empty_source_rows() 
         ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
-        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1", horizon_days=0, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.data_quality_status == "UNKNOWN"
     assert response.latest_evidence_timestamp is None
@@ -495,7 +517,9 @@ async def test_liquidity_ladder_classifies_unavailable_tier_and_missing_market_v
         ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
-        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1", horizon_days=0, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.asset_liquidity_tiers[0].liquidity_tier == "UNCLASSIFIED"
     assert response.asset_liquidity_tiers[0].market_value_portfolio_currency == Decimal("0")

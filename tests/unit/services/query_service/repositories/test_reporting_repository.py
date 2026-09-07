@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.reporting_repository import (
@@ -40,6 +41,7 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
     repo = ReportingRepository(db)
 
     rows = await repo.list_portfolios(
+        tenant_id=TenantId("tenant-sg"),
         portfolio_ids=["P1", "P2"],
         booking_center_code="SGPB",
     )
@@ -50,6 +52,10 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
     assert "portfolios.portfolio_id IN ('P1', 'P2')" in compiled
     assert "portfolios.booking_center_code = 'SGPB'" in compiled
     assert "ORDER BY portfolios.portfolio_id ASC" in compiled
+    # A business-unit selection without this predicate returns every tenant's
+    # portfolios in the booking centre, and the caller aggregates them into one
+    # published total.
+    assert "portfolios.tenant_id = 'tenant-sg'" in compiled
 
 
 @pytest.mark.asyncio
@@ -58,12 +64,15 @@ async def test_reporting_repository_lists_portfolios_with_portfolio_and_client_f
     db.execute.return_value = _FakeExecuteResult([SimpleNamespace(portfolio_id="P1")])
     repo = ReportingRepository(db)
 
-    rows = await repo.list_portfolios(portfolio_id="P1", client_id="CIF-1")
+    rows = await repo.list_portfolios(
+        tenant_id=TenantId("tenant-sg"), portfolio_id="P1", client_id="CIF-1"
+    )
 
     assert [row.portfolio_id for row in rows] == ["P1"]
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolios.portfolio_id = 'P1'" in compiled
+    assert "portfolios.tenant_id = 'tenant-sg'" in compiled
     assert "portfolios.client_id = 'CIF-1'" in compiled
 
 

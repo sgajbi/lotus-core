@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any, Awaitable, Callable, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.reconstruction_identity import (
     CURRENT_RESTATEMENT_VERSION,
@@ -655,10 +656,13 @@ class CashBalanceService:
         self,
         *,
         portfolio_id: str,
+        tenant_context: TenantContext,
         as_of_date: date | None = None,
         reporting_currency: str | None = None,
     ) -> CashBalancesResponse:
-        portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
+        portfolio = await self.repo.get_portfolio_by_id(
+            portfolio_id, tenant_id=tenant_context.tenant_id
+        )
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
         resolved_as_of_date = (

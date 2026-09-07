@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from ..dependencies import get_reporting_service
 from ..dtos.reporting_dto import (
@@ -39,11 +39,14 @@ PORTFOLIO_SUMMARY_INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
     ),
 )
 async def query_assets_under_management(
+    http_request: Request,
     request: AssetsUnderManagementQueryRequest,
     service: ReportingService = Depends(get_reporting_service),
 ):
     try:
-        return await service.get_assets_under_management(request)
+        return await service.get_assets_under_management(
+            request, tenant_context=http_request.state.tenant_context
+        )
     except ValueError as exc:
         raise value_error_to_http(exc) from exc
 
@@ -65,11 +68,14 @@ async def query_assets_under_management(
     ),
 )
 async def query_asset_allocation(
+    http_request: Request,
     request: AssetAllocationQueryRequest,
     service: ReportingService = Depends(get_reporting_service),
 ):
     try:
-        return await service.get_asset_allocation(request)
+        return await service.get_asset_allocation(
+            request, tenant_context=http_request.state.tenant_context
+        )
     except ValueError as exc:
         raise value_error_to_http(exc) from exc
 
@@ -111,11 +117,14 @@ async def query_asset_allocation(
     ),
 )
 async def query_portfolio_summary(
+    http_request: Request,
     request: PortfolioSummaryQueryRequest,
     service: ReportingService = Depends(get_reporting_service),
 ):
     try:
-        return await service.get_portfolio_summary(request)
+        return await service.get_portfolio_summary(
+            request, tenant_context=http_request.state.tenant_context
+        )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
     except ValueError as exc:
@@ -139,10 +148,13 @@ async def query_portfolio_summary(
     ),
 )
 async def query_bulk_portfolio_summary(
+    http_request: Request,
     request: BulkPortfolioSummaryQueryRequest,
     service: ReportingService = Depends(get_reporting_service),
 ):
     try:
-        return await service.get_bulk_portfolio_summary(request)
+        return await service.get_bulk_portfolio_summary(
+            request, tenant_context=http_request.state.tenant_context
+        )
     except ValueError as exc:
         raise value_error_to_http(exc) from exc
