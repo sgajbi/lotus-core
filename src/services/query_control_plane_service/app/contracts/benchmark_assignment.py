@@ -12,16 +12,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class BenchmarkAssignmentPolicyContext(BaseModel):
-    """Optional caller context retained for contract compatibility and lineage."""
+    """Optional caller assertions used for governed assignment resolution."""
 
     tenant_id: str | None = Field(
         None,
-        description="Tenant identifier for policy-scoped data resolution.",
+        description=(
+            "Optional tenant assertion. When supplied it must match the admitted tenant; "
+            "the response tenant always comes from server-verified authority."
+        ),
         examples=["tenant_sg_pb"],
     )
     policy_pack_id: str | None = Field(
         None,
-        description="Policy pack identifier used for deterministic assignment resolution.",
+        description=(
+            "Optional caller policy-pack context retained for contract symmetry and lineage; "
+            "it does not change assignment selection."
+        ),
         examples=["policy_pack_wm_v1"],
     )
 
@@ -47,9 +53,8 @@ class BenchmarkAssignmentRequest(BaseModel):
     policy_context: BenchmarkAssignmentPolicyContext | None = Field(
         None,
         description=(
-            "Optional tenant/policy context reserved for governance metadata and future "
-            "policy-bound resolution. The current implementation still resolves the "
-            "effective assignment by portfolio_id and as_of_date."
+            "Optional policy context. Tenant scope, when supplied, must match admitted "
+            "authority; assignment resolution is tenant-, portfolio-, and as-of scoped."
         ),
     )
 

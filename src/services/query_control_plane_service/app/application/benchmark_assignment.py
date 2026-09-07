@@ -32,10 +32,12 @@ class BenchmarkAssignmentService:
         self,
         *,
         portfolio_id: str,
+        tenant_id: str,
         request: BenchmarkAssignmentRequest,
     ) -> BenchmarkAssignmentResponse | None:
         evidence = await self._reader.resolve(
             portfolio_id=portfolio_id,
+            tenant_id=tenant_id,
             as_of_date=request.as_of_date,
         )
         if evidence is None:
@@ -43,6 +45,7 @@ class BenchmarkAssignmentService:
         return build_benchmark_assignment_response(
             evidence=evidence,
             request=request,
+            tenant_id=tenant_id,
             generated_at=self._clock(),
         )
 
@@ -51,6 +54,7 @@ def build_benchmark_assignment_response(
     *,
     evidence: BenchmarkAssignmentEvidence,
     request: BenchmarkAssignmentRequest,
+    tenant_id: str,
     generated_at: datetime,
 ) -> BenchmarkAssignmentResponse:
     """Build deterministic source proof while excluding response-generation time from identity."""
@@ -68,6 +72,7 @@ def build_benchmark_assignment_response(
         {
             "product_name": "BenchmarkAssignment",
             "product_version": "v1",
+            "tenant_id": tenant_id,
             "portfolio_id": evidence.portfolio_id,
             "benchmark_id": evidence.benchmark_id,
             "as_of_date": request.as_of_date,
@@ -85,7 +90,7 @@ def build_benchmark_assignment_response(
     metadata = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.as_of_date,
-        tenant_id=request.policy_context.tenant_id if request.policy_context else None,
+        tenant_id=tenant_id,
         data_quality_status="COMPLETE",
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
