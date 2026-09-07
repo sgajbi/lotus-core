@@ -60,13 +60,37 @@ def test_transaction_fence_cutover_fails_closed_and_scopes_collisions_by_tenant(
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
+    with (
+        db_engine.connect() as legacy_persistence_writer,
+        db_engine.connect() as legacy_processing_writer,
+    ):
+        legacy_persistence_writer.execute(text("SET application_name = 'persistence-service'"))
+        legacy_persistence_writer.commit()
+        legacy_processing_writer.execute(
+            text("SET application_name = 'portfolio-transaction-processing'")
+        )
+        legacy_processing_writer.commit()
+
+        with db_engine.begin() as connection:
+            _bind_operations(migration, connection)
+            if "tenant_id" in {
+                column["name"] for column in inspect(connection).get_columns("processed_events")
+            }:
+                migration["downgrade"]()
+
+            blocked_cutover = connection.begin_nested()
+            with pytest.raises(
+                DBAPIError,
+                match=(
+                    "requires quiesced writers.*persistence-service.*"
+                    "portfolio-transaction-processing"
+                ),
+            ):
+                migration["upgrade"]()
+            blocked_cutover.rollback()
+
     with db_engine.begin() as connection:
         _bind_operations(migration, connection)
-        if "tenant_id" in {
-            column["name"] for column in inspect(connection).get_columns("processed_events")
-        }:
-            migration["downgrade"]()
-
         for tenant, portfolio, client in (
             ("tenant-a", "PORT-FENCE-A", "CLIENT-A"),
             ("tenant-b", "PORT-FENCE-B", "CLIENT-B"),
