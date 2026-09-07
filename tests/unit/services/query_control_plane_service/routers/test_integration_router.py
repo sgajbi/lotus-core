@@ -200,6 +200,9 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
 )
+from src.services.query_control_plane_service.app.routers.benchmark_assignment import (
+    resolve_portfolio_benchmark_assignment,
+)
 from src.services.query_control_plane_service.app.routers.integration import (
     create_core_snapshot,
     fetch_benchmark_catalog,
@@ -239,7 +242,6 @@ from src.services.query_control_plane_service.app.routers.integration import (
     resolve_dpm_portfolio_universe_candidates,
     resolve_instrument_eligibility_bulk,
     resolve_model_portfolio_targets,
-    resolve_portfolio_benchmark_assignment,
     resolve_portfolio_manager_book_membership,
 )
 from src.services.query_control_plane_service.app.routers.response_helpers import (
