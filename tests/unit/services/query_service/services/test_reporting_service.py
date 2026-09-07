@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reporting_dto import (
@@ -23,10 +22,7 @@ from src.services.query_service.app.services.reporting_service import (
     ReportingService,
     _aum_coverage_state,
 )
-
-# The admitted tenant these tests run as. Reporting reads are scoped by it,
-# so passing it explicitly keeps each service call shaped like its route's.
-TEST_TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-sg"))
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 

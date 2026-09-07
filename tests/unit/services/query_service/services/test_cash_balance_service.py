@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
@@ -12,10 +11,7 @@ from src.services.query_service.app.services.cash_balance_service import (
     CashBalanceResolver,
     CashBalanceService,
 )
-
-# The admitted tenant these tests run as; cash balances resolve their
-# portfolio through the same tenant-scoped reporting repository read.
-TEST_TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-sg"))
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
