@@ -45,6 +45,7 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
     prepare_managed_compose_run,
 )
 from tools.front_office_portfolio_seed import (  # noqa: E402
+    FRONT_OFFICE_PORTFOLIO_TENANT_ID,
     build_front_office_portfolio_bundle,
 )
 from tools.front_office_seed_contract import (  # noqa: E402
@@ -1010,8 +1011,14 @@ def _assert_canonical_config(
         raise ProofFailure(f"Canonical certification configuration was weakened: {mismatches}")
 
 
-def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    response = requests.request(method, url, json=payload, timeout=20)
+def _request_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    response = requests.request(method, url, json=payload, headers=headers, timeout=20)
     if not 200 <= response.status_code < 300:
         raise ProofFailure(f"Core API {method} {url} returned HTTP {response.status_code}.")
     try:
@@ -1031,23 +1038,38 @@ def _required_int(value: Mapping[str, Any], field: str) -> int:
 
 
 def _api_observation(query: str, control: str, portfolio: str, as_of: str) -> dict[str, Any]:
-    positions = _request_json("GET", f"{query}/portfolios/{portfolio}/positions?as_of_date={as_of}")
-    transactions = _request_json(
-        "GET", f"{query}/portfolios/{portfolio}/transactions?limit=300&include_projected=true"
+    tenant_headers = {"X-Tenant-Id": FRONT_OFFICE_PORTFOLIO_TENANT_ID}
+    positions = _request_json(
+        "GET",
+        f"{query}/portfolios/{portfolio}/positions?as_of_date={as_of}",
+        headers=tenant_headers,
     )
-    support = _request_json("GET", f"{control}/support/portfolios/{portfolio}/overview")
+    transactions = _request_json(
+        "GET",
+        f"{query}/portfolios/{portfolio}/transactions?limit=300&include_projected=true",
+        headers=tenant_headers,
+    )
+    support = _request_json(
+        "GET",
+        f"{control}/support/portfolios/{portfolio}/overview",
+        headers=tenant_headers,
+    )
     readiness = _request_json(
-        "GET", f"{control}/support/portfolios/{portfolio}/readiness?as_of_date={as_of}"
+        "GET",
+        f"{control}/support/portfolios/{portfolio}/readiness?as_of_date={as_of}",
+        headers=tenant_headers,
     )
     benchmark = _request_json(
         "POST",
         f"{control}/integration/portfolios/{portfolio}/benchmark-assignment",
         {"as_of_date": as_of, "consumer_system": "lotus-performance"},
+        headers=tenant_headers,
     )
     analytics = _request_json(
         "POST",
         f"{control}/integration/portfolios/{portfolio}/analytics/reference",
         {"as_of_date": as_of, "consumer_system": "lotus-performance"},
+        headers=tenant_headers,
     )
     rows = positions.get("positions")
     if not isinstance(rows, list):
