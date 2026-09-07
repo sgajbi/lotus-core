@@ -134,6 +134,10 @@ This certification pass covers the strategic benchmark-resolution contract:
 This is the correct benchmark-assignment route for downstream consumers that need effective
 portfolio-to-benchmark mapping before benchmark-aware analytics or workspace composition.
 
+Resolution is constrained by the server-admitted tenant and the source-owned portfolio root.
+Optional request tenant context is only a matching assertion. A mismatch fails before source I/O,
+and a foreign portfolio is indistinguishable from an absent portfolio.
+
 The contract is intentionally assignment-resolution only. It does not replace:
 
 1. benchmark definition contracts,
@@ -176,7 +180,8 @@ For this endpoint, Swagger now makes the following explicit:
 Automated proof now includes a benchmark-assignment schema-family completeness assertion in
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
-The dependency lane now also exercises the ASGI surface for benchmark-assignment and adjacent
+The dependency lane now also exercises the ASGI surface for benchmark-assignment, including
+admitted-tenant propagation and fail-closed mismatch handling, and adjacent
 shared reference-source routes used by `lotus-performance` and `lotus-risk`, including raw
 risk-free series, risk-free coverage, and classification taxonomy. That closes the previous gap
 where these contracts had router-function and OpenAPI proof but lighter HTTP-level dependency
