@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -633,7 +634,17 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
     makefile_path = root / "Makefile"
     makefile = makefile_path.read_text(encoding="utf-8")
     for line in _make_logical_lines(makefile):
-        if line.startswith("\t") or not line.strip() or line.lstrip().startswith("#"):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if re.search(r"\$[({]\s*eval(?:\s|[)}])", line):
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(makefile_path, root),
+                    "Makefile eval is not permitted at the local image build boundary",
+                )
+            )
+            break
+        if line.startswith("\t"):
             continue
         directive = line.lstrip().split(maxsplit=1)[0]
         if directive in {"include", "-include", "sinclude"}:
