@@ -325,8 +325,7 @@ def test_image_provenance_guard_rejects_multi_target_override(tmp_path: Path) ->
     _write_dockerfile(tmp_path, _complete_dockerfile())
     makefile = tmp_path / "Makefile"
     makefile.write_text(
-        makefile.read_text(encoding="utf-8")
-        + "\ndocker-build docker-up:\n"
+        makefile.read_text(encoding="utf-8") + "\ndocker-build docker-up:\n"
         "\tdocker build -t portfolio-analytics-query-service:ci .\n",
         encoding="utf-8",
     )
