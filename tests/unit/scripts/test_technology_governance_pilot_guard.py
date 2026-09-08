@@ -190,7 +190,7 @@ def test_github_run_evidence_is_numeric_and_bound_to_inspected_commit() -> None:
     errors = guard.validate_manifest(manifest)
 
     assert any("invalid Core GitHub run URL" in error for error in errors)
-    assert any("must match inspected_core_commit" in error for error in errors)
+    assert any("must resolve to a Core commit" in error for error in errors)
 
 
 def test_github_run_evidence_requires_governed_main_receipt_identity() -> None:
@@ -212,8 +212,7 @@ def test_github_run_evidence_requires_governed_main_receipt_identity() -> None:
         "artifact_digest must be a SHA-256 artifact digest",
         "workflow_id must identify Main Releasability Gate",
         "workflow_path must identify Main Releasability Gate",
-        "GitHub run event must be push",
-        "GitHub run head_branch must be main",
+        "GitHub run must be historical push/main or exact-SHA workflow_dispatch",
     ):
         assert any(expected in error for error in errors)
 
@@ -343,8 +342,8 @@ def test_online_receipt_verification_rejects_missing_artifact(
             "head_sha": manifest["inspected_core_commit"],
             "workflow_id": guard.RECEIPT_WORKFLOW_ID,
             "path": guard.RECEIPT_WORKFLOW_PATH,
-            "event": guard.RECEIPT_EVENT,
-            "head_branch": guard.RECEIPT_BRANCH,
+            "event": guard.HISTORICAL_RECEIPT_EVENT,
+            "head_branch": guard.HISTORICAL_RECEIPT_BRANCH,
             "status": "completed",
             "conclusion": "success",
         }
@@ -362,9 +361,253 @@ def _receipt_artifacts(manifest: dict[str, object]) -> list[dict[str, object]]:
             "name": evidence["artifact"],
             "digest": evidence["artifact_digest"],
             "expired": False,
+            "expires_at": "2099-01-01T00:00:00Z",
         }
         for _, evidence in guard._github_run_refs(manifest)
     ]
+
+
+def _renewable_receipt(source_commit: str = "f" * 40) -> dict[str, object]:
+    return {
+        "kind": "github_run",
+        "url": "https://github.com/sgajbi/lotus-core/actions/runs/1234",
+        "artifact": "main-releasability-docker-build-evidence",
+        "artifact_digest": "sha256:" + "a" * 64,
+        "source_commit": source_commit,
+        "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+        "workflow_path": guard.RECEIPT_WORKFLOW_PATH,
+        "event": guard.RENEWABLE_RECEIPT_EVENT,
+        "head_branch": f"{guard.RENEWABLE_RECEIPT_BRANCH_PREFIX}{source_commit}",
+    }
+
+
+def _renewable_run_payload(receipt: dict[str, object]) -> dict[str, object]:
+    return {
+        "head_sha": receipt["source_commit"],
+        "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+        "path": guard.RECEIPT_WORKFLOW_PATH,
+        "event": guard.RENEWABLE_RECEIPT_EVENT,
+        "head_branch": receipt["head_branch"],
+        "status": "completed",
+        "conclusion": "success",
+    }
+
+
+def test_local_receipt_identity_accepts_exact_sha_dispatch_descendant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = _renewable_receipt()
+    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_on_main", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_ancestor", lambda *_args: True)
+    errors: list[str] = []
+
+    guard._validate_github_run_evidence(
+        receipt,
+        root=guard.REPO_ROOT,
+        location="receipt",
+        inspected_commit="e" * 40,
+        errors=errors,
+    )
+
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    ("event", "head_branch"),
+    [
+        ("workflow_dispatch", "main"),
+        ("workflow_dispatch", "main-releasability-wrong-sha"),
+        ("pull_request", "main"),
+    ],
+)
+def test_local_receipt_identity_rejects_untrusted_trigger_or_ref(
+    event: str,
+    head_branch: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = _renewable_receipt()
+    receipt.update({"event": event, "head_branch": head_branch})
+    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_on_main", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_ancestor", lambda *_args: True)
+    errors: list[str] = []
+
+    guard._validate_github_run_evidence(
+        receipt,
+        root=guard.REPO_ROOT,
+        location="receipt",
+        inspected_commit="e" * 40,
+        errors=errors,
+    )
+
+    assert any("historical push/main or exact-SHA" in error for error in errors)
+
+
+def test_local_receipt_identity_rejects_source_outside_assessment_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = _renewable_receipt()
+    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_on_main", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_ancestor", lambda *_args: False)
+    errors: list[str] = []
+
+    guard._validate_github_run_evidence(
+        receipt,
+        root=guard.REPO_ROOT,
+        location="receipt",
+        inspected_commit="e" * 40,
+        errors=errors,
+    )
+
+    assert any("must descend from inspected_core_commit" in error for error in errors)
+
+
+def test_online_receipt_verification_accepts_successful_exact_sha_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = _renewable_receipt()
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if "/artifacts?" in endpoint:
+            return {
+                "artifacts": [
+                    {
+                        "name": receipt["artifact"],
+                        "digest": receipt["artifact_digest"],
+                        "expired": False,
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        if "/jobs?" in endpoint:
+            return {
+                "jobs": [
+                    {
+                        "name": guard.EXACT_REVISION_ASSERTION_JOB,
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            }
+        return _renewable_run_payload(receipt)
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+    errors: list[str] = []
+
+    guard._validate_github_receipt(receipt, location="receipt", errors=errors)
+
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    "jobs",
+    [
+        [],
+        [
+            {
+                "name": guard.EXACT_REVISION_ASSERTION_JOB,
+                "status": "completed",
+                "conclusion": "failure",
+            }
+        ],
+    ],
+)
+def test_online_receipt_verification_rejects_missing_or_failed_revision_assertion(
+    jobs: list[dict[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = _renewable_receipt()
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if "/artifacts?" in endpoint:
+            return {"artifacts": []}
+        if "/jobs?" in endpoint:
+            return {"jobs": jobs}
+        return _renewable_run_payload(receipt)
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+    errors: list[str] = []
+
+    guard._validate_github_receipt(receipt, location="receipt", errors=errors)
+
+    expected = "does not exist" if not jobs else "did not succeed"
+    assert any(expected in error for error in errors)
+
+
+@pytest.mark.parametrize("expires_at", [None, "not-a-timestamp"])
+def test_online_receipt_verification_rejects_missing_or_invalid_expiry(
+    expires_at: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+    _, receipt = next(guard._github_run_refs(manifest))
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if "/artifacts?" in endpoint:
+            return {
+                "artifacts": [
+                    {
+                        "name": receipt["artifact"],
+                        "digest": receipt["artifact_digest"],
+                        "expired": False,
+                        "expires_at": expires_at,
+                    }
+                ]
+            }
+        return {
+            "head_sha": receipt["source_commit"],
+            "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+            "path": guard.RECEIPT_WORKFLOW_PATH,
+            "event": guard.HISTORICAL_RECEIPT_EVENT,
+            "head_branch": guard.HISTORICAL_RECEIPT_BRANCH,
+            "status": "completed",
+            "conclusion": "success",
+        }
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+    errors: list[str] = []
+
+    guard._validate_github_receipt(receipt, location="receipt", errors=errors)
+
+    assert any("GitHub artifact expiry is missing or invalid" in error for error in errors)
+
+
+def test_online_receipt_verification_rejects_elapsed_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+    _, receipt = next(guard._github_run_refs(manifest))
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if "/artifacts?" in endpoint:
+            return {
+                "artifacts": [
+                    {
+                        "name": receipt["artifact"],
+                        "digest": receipt["artifact_digest"],
+                        "expired": False,
+                        "expires_at": "2000-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        return {
+            "head_sha": receipt["source_commit"],
+            "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+            "path": guard.RECEIPT_WORKFLOW_PATH,
+            "event": guard.HISTORICAL_RECEIPT_EVENT,
+            "head_branch": guard.HISTORICAL_RECEIPT_BRANCH,
+            "status": "completed",
+            "conclusion": "success",
+        }
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+    errors: list[str] = []
+
+    guard._validate_github_receipt(receipt, location="receipt", errors=errors)
+
+    assert any("GitHub artifact is expired" in error for error in errors)
 
 
 def test_online_receipt_verification_binds_main_run_and_artifact_digest(
@@ -384,7 +627,7 @@ def test_online_receipt_verification_binds_main_run_and_artifact_digest(
             "head_sha": manifest["inspected_core_commit"],
             "workflow_id": guard.RECEIPT_WORKFLOW_ID,
             "path": guard.RECEIPT_WORKFLOW_PATH,
-            "event": guard.RECEIPT_EVENT,
+            "event": guard.HISTORICAL_RECEIPT_EVENT,
             "head_branch": "feature/unrelated",
             "status": "completed",
             "conclusion": "success",
@@ -410,8 +653,8 @@ def test_online_receipt_verification_accepts_exact_main_receipts(
             "head_sha": manifest["inspected_core_commit"],
             "workflow_id": guard.RECEIPT_WORKFLOW_ID,
             "path": guard.RECEIPT_WORKFLOW_PATH,
-            "event": guard.RECEIPT_EVENT,
-            "head_branch": guard.RECEIPT_BRANCH,
+            "event": guard.HISTORICAL_RECEIPT_EVENT,
+            "head_branch": guard.HISTORICAL_RECEIPT_BRANCH,
             "status": "completed",
             "conclusion": "success",
         }

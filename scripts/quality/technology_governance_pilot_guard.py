@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 import subprocess
-from datetime import date
+from datetime import UTC, date, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator
@@ -31,8 +31,11 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 ARTIFACT_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 RECEIPT_WORKFLOW_ID = 259248882
 RECEIPT_WORKFLOW_PATH = ".github/workflows/main-releasability.yml"
-RECEIPT_EVENT = "push"
-RECEIPT_BRANCH = "main"
+HISTORICAL_RECEIPT_EVENT = "push"
+HISTORICAL_RECEIPT_BRANCH = "main"
+RENEWABLE_RECEIPT_EVENT = "workflow_dispatch"
+RENEWABLE_RECEIPT_BRANCH_PREFIX = "main-releasability-"
+EXACT_REVISION_ASSERTION_JOB = "Main Releasability / Exact Revision Assertion"
 EPHEMERAL_RECEIPT_ARTIFACTS = {"main-runtime-image-set"}
 EXPECTED_POLICY_REF = {
     "repository": "sgajbi/lotus-platform",
@@ -165,6 +168,7 @@ def _validate_evidence_refs(
         elif kind == "github_run":
             _validate_github_run_evidence(
                 evidence,
+                root=root,
                 location=ref_location,
                 inspected_commit=inspected_commit,
                 errors=errors,
@@ -176,6 +180,7 @@ def _validate_evidence_refs(
 def _validate_github_run_evidence(
     evidence: dict[str, Any],
     *,
+    root: Path,
     location: str,
     inspected_commit: str,
     errors: list[str],
@@ -188,8 +193,12 @@ def _validate_github_run_evidence(
         errors.append(f"{location}: invalid Core GitHub run URL")
     if not isinstance(source_commit, str) or not FULL_SHA_PATTERN.fullmatch(source_commit):
         errors.append(f"{location}: source_commit must be a full Git SHA")
-    elif source_commit != inspected_commit:
-        errors.append(f"{location}: source_commit must match inspected_core_commit")
+    elif not _git_commit_resolves(root, source_commit):
+        errors.append(f"{location}: source_commit must resolve to a Core commit")
+    elif not _git_commit_is_on_main(root, source_commit):
+        errors.append(f"{location}: source_commit must be an ancestor of the governed main ref")
+    elif not _git_commit_is_ancestor(root, inspected_commit, source_commit):
+        errors.append(f"{location}: source_commit must descend from inspected_core_commit")
     if not isinstance(artifact, str) or not artifact:
         errors.append(f"{location}: GitHub run evidence requires artifact")
     elif artifact in EPHEMERAL_RECEIPT_ARTIFACTS:
@@ -202,10 +211,19 @@ def _validate_github_run_evidence(
         errors.append(f"{location}: workflow_id must identify Main Releasability Gate")
     if evidence.get("workflow_path") != RECEIPT_WORKFLOW_PATH:
         errors.append(f"{location}: workflow_path must identify Main Releasability Gate")
-    if evidence.get("event") != RECEIPT_EVENT:
-        errors.append(f"{location}: GitHub run event must be push")
-    if evidence.get("head_branch") != RECEIPT_BRANCH:
-        errors.append(f"{location}: GitHub run head_branch must be main")
+    event = evidence.get("event")
+    branch = evidence.get("head_branch")
+    historical = event == HISTORICAL_RECEIPT_EVENT and branch == HISTORICAL_RECEIPT_BRANCH
+    renewable = (
+        event == RENEWABLE_RECEIPT_EVENT
+        and isinstance(source_commit, str)
+        and branch == f"{RENEWABLE_RECEIPT_BRANCH_PREFIX}{source_commit}"
+    )
+    if not historical and not renewable:
+        errors.append(
+            f"{location}: GitHub run must be historical push/main or exact-SHA "
+            "workflow_dispatch on main-releasability-<source_commit>"
+        )
 
 
 def _validate_mapping(
@@ -359,6 +377,7 @@ def _validate_manifest_identity(manifest: dict[str, Any], *, root: Path, errors:
     return inspected_commit
 
 
+@lru_cache(maxsize=None)
 def _git_commit_resolves(root: Path, commit: str) -> bool:
     result = subprocess.run(
         ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
@@ -369,12 +388,18 @@ def _git_commit_resolves(root: Path, commit: str) -> bool:
     return result.returncode == 0
 
 
+@lru_cache(maxsize=None)
 def _git_commit_is_on_main(root: Path, commit: str) -> bool:
     main_ref = _resolve_main_ref(root)
     if main_ref is None:
         return False
+    return _git_commit_is_ancestor(root, commit, main_ref)
+
+
+@lru_cache(maxsize=None)
+def _git_commit_is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
     result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", commit, main_ref],
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
         cwd=root,
         check=False,
         capture_output=True,
@@ -382,6 +407,7 @@ def _git_commit_is_on_main(root: Path, commit: str) -> bool:
     return result.returncode == 0
 
 
+@lru_cache(maxsize=None)
 def _resolve_main_ref(root: Path) -> str | None:
     for candidate in ("refs/remotes/origin/main", "refs/heads/main"):
         result = subprocess.run(
@@ -513,6 +539,13 @@ def _validate_github_receipt(evidence: dict[str, Any], *, location: str, errors:
         artifacts_payload = _github_api_payload(
             f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}/artifacts?per_page=100"
         )
+        jobs_payload = (
+            _github_api_payload(
+                f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100"
+            )
+            if evidence.get("event") == RENEWABLE_RECEIPT_EVENT
+            else None
+        )
     except ValueError as exc:
         errors.append(f"{location}: GitHub receipt lookup failed: {exc}")
         return
@@ -528,6 +561,20 @@ def _validate_github_receipt(evidence: dict[str, Any], *, location: str, errors:
         errors.append(f"{location}: GitHub run head branch does not match evidence")
     if run.get("status") != "completed" or run.get("conclusion") != "success":
         errors.append(f"{location}: GitHub run is not completed successfully")
+    if jobs_payload is not None:
+        jobs = jobs_payload.get("jobs")
+        assertion_jobs = (
+            [job for job in jobs if job.get("name") == EXACT_REVISION_ASSERTION_JOB]
+            if isinstance(jobs, list)
+            else []
+        )
+        if not assertion_jobs:
+            errors.append(f"{location}: exact revision assertion job does not exist")
+        elif not any(
+            job.get("status") == "completed" and job.get("conclusion") == "success"
+            for job in assertion_jobs
+        ):
+            errors.append(f"{location}: exact revision assertion job did not succeed")
     artifacts = artifacts_payload.get("artifacts")
     if not isinstance(artifacts, list):
         errors.append(f"{location}: GitHub artifact response is malformed")
@@ -536,14 +583,36 @@ def _validate_github_receipt(evidence: dict[str, Any], *, location: str, errors:
     matches = [artifact for artifact in artifacts if artifact.get("name") == artifact_name]
     if not matches:
         errors.append(f"{location}: GitHub artifact does not exist: {artifact_name}")
-    elif all(bool(artifact.get("expired")) for artifact in matches):
+        return
+    usable_expiries = [expiry for artifact in matches if (expiry := _artifact_expiry(artifact))]
+    if not usable_expiries:
+        errors.append(f"{location}: GitHub artifact expiry is missing or invalid: {artifact_name}")
+        return
+    current_matches = [artifact for artifact in matches if _artifact_is_current(artifact)]
+    if not current_matches:
         errors.append(f"{location}: GitHub artifact is expired: {artifact_name}")
     elif not any(
-        not bool(artifact.get("expired"))
-        and artifact.get("digest") == evidence.get("artifact_digest")
-        for artifact in matches
+        artifact.get("digest") == evidence.get("artifact_digest") for artifact in current_matches
     ):
         errors.append(f"{location}: GitHub artifact digest does not match evidence")
+
+
+def _artifact_is_current(artifact: dict[str, Any]) -> bool:
+    if bool(artifact.get("expired")):
+        return False
+    expiry = _artifact_expiry(artifact)
+    return expiry is not None and expiry > datetime.now(UTC)
+
+
+def _artifact_expiry(artifact: dict[str, Any]) -> datetime | None:
+    expires_at = artifact.get("expires_at")
+    if not isinstance(expires_at, str):
+        return None
+    try:
+        expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return expiry if expiry.tzinfo is not None else None
 
 
 def _validate_github_receipts(manifest: dict[str, Any], errors: list[str]) -> None:
