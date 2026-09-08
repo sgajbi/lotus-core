@@ -124,7 +124,7 @@ def _make_target_recipe(makefile: str, target: str) -> str:
                 if executable:
                     recipe.append(executable)
                 continue
-            if not candidate.strip():
+            if not candidate.strip() or candidate.lstrip().startswith("#"):
                 continue
             break
         return "\n".join(recipe)
