@@ -23,7 +23,7 @@ from src.services.query_service.app.services.transaction_records import (
     transaction_ledger_reconstruction_evidence,
 )
 from src.services.query_service.app.services.transaction_service import TransactionService
-from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -598,6 +598,7 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
             limit=10,
             as_of_date=date(2026, 1, 31),
             reporting_currency="SGD",
+            tenant_context=TEST_TENANT_CONTEXT,
         )
     finally:
         event.remove(sync_engine, "after_cursor_execute", commit_correction_after_evidence)
@@ -616,6 +617,7 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
         limit=10,
         as_of_date=date(2026, 1, 31),
         reporting_currency="SGD",
+        tenant_context=TEST_TENANT_CONTEXT,
     )
 
     assert corrected_response.transactions[0].price == Decimal("200")
