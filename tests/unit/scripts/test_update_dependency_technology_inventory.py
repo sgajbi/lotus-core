@@ -1,8 +1,28 @@
 import json
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
 from scripts.development import update_dependency_technology_inventory as inventory
+
+
+def test_default_review_date_uses_utc_calendar_day() -> None:
+    singapore = timezone(timedelta(hours=8))
+
+    reviewed_on = inventory._resolve_review_date(
+        now=datetime(2026, 9, 9, 5, 30, tzinfo=singapore),
+        override=None,
+    )
+
+    assert reviewed_on == date(2026, 9, 8)
+
+
+def test_review_date_override_remains_explicit() -> None:
+    reviewed_on = inventory._resolve_review_date(
+        now=datetime(2026, 9, 8, 21, 30, tzinfo=UTC),
+        override="2026-09-07",
+    )
+
+    assert reviewed_on == date(2026, 9, 7)
 
 
 def _policy() -> dict[str, object]:

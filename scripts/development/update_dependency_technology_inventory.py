@@ -34,6 +34,14 @@ class InventoryRefreshError(RuntimeError):
     """Raised when authoritative package metadata cannot be refreshed safely."""
 
 
+def _resolve_review_date(*, now: datetime, override: str | None) -> date:
+    if override:
+        return date.fromisoformat(override)
+    if now.tzinfo is None:
+        raise InventoryRefreshError("inventory refresh clock must be timezone-aware")
+    return now.astimezone(UTC).date()
+
+
 def _canonical_name(value: str) -> str:
     return re.sub(r"[-_.]+", "-", value).lower()
 
@@ -292,8 +300,9 @@ def build_inventory(*, reviewed_on: date) -> dict[str, Any]:
 
 
 def main() -> int:
-    reviewed_on = date.fromisoformat(
-        os.getenv("LOTUS_INVENTORY_REVIEW_DATE", date.today().isoformat())
+    reviewed_on = _resolve_review_date(
+        now=datetime.now(UTC),
+        override=os.getenv("LOTUS_INVENTORY_REVIEW_DATE"),
     )
     inventory = build_inventory(reviewed_on=reviewed_on)
     INVENTORY_FILE.write_text(
