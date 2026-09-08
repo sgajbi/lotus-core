@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
@@ -1297,6 +1298,54 @@ async def test_transaction_cost_curve_bad_request_maps_to_problem_details(async_
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
         "reason": "ValueError",
     }
+    assert mock_integration_service.get_transaction_cost_curve.await_args.kwargs[
+        "tenant_id"
+    ] == TenantId(TEST_TENANT_ID)
+
+
+@pytest.mark.parametrize("tenant_assertion", ["tenant-other", " "])
+@pytest.mark.parametrize(
+    ("route", "payload", "service_method"),
+    [
+        (
+            "/integration/portfolios/PB_SG_GLOBAL_BAL_001/transaction-cost-curve",
+            {
+                "as_of_date": "2026-05-03",
+                "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
+            },
+            "get_transaction_cost_curve",
+        ),
+        (
+            "/integration/portfolios/PB_SG_GLOBAL_BAL_001/performance-component-economics",
+            {
+                "as_of_date": "2026-05-10",
+                "window": {"start_date": "2026-05-01", "end_date": "2026-05-10"},
+            },
+            "get_performance_component_economics",
+        ),
+    ],
+)
+async def test_transaction_economics_rejects_unadmitted_body_scope_before_service_io(
+    async_test_client,
+    tenant_assertion: str,
+    route: str,
+    payload: dict[str, object],
+    service_method: str,
+):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    guarded_service_method = AsyncMock()
+    setattr(mock_integration_service, service_method, guarded_service_method)
+    body = {**payload, "tenant_id": tenant_assertion}
+
+    response = await client.post(route, json=body)
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    guarded_service_method.assert_not_awaited()
 
 
 async def test_performance_component_economics_not_found_maps_to_problem_details(
@@ -1326,6 +1375,9 @@ async def test_performance_component_economics_not_found_maps_to_problem_details
         "portfolio_id": "PB_MISSING",
         "reason": "LookupError",
     }
+    assert mock_integration_service.get_performance_component_economics.await_args.kwargs[
+        "tenant_id"
+    ] == TenantId(TEST_TENANT_ID)
 
 
 async def test_performance_component_economics_authoritative_empty_is_ready(

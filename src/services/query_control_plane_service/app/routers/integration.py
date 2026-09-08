@@ -3,6 +3,7 @@ from typing import NoReturn, cast
 from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.benchmark_catalog import BenchmarkCatalogService
@@ -1055,11 +1056,13 @@ async def get_portfolio_tax_lot_window(
         "How: Reads booked transaction fees and fee components from lotus-core transactions, "
         "groups them by security, transaction type, and currency, and publishes observed "
         "basis-point cost points with lineage. The response is evidence from booked data, not "
-        "a predictive market-impact quote or execution promise.\n"
+        "a predictive market-impact quote or execution promise. Reads are scoped to the admitted "
+        "tenant; a foreign portfolio is indistinguishable from absence.\n"
         "When: Use this endpoint when lotus-manage needs to distinguish source-backed transaction "
         "cost evidence from local estimated construction cost in DPM proof packs."
     ),
     responses={
+        403: problem_response("Tenant scope forbidden", TENANT_SCOPE_FORBIDDEN_EXAMPLE),
         404: problem_response(
             "Portfolio not found",
             TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE,
@@ -1081,6 +1084,7 @@ async def get_portfolio_tax_lot_window(
     openapi_extra=source_data_product_openapi_extra("TransactionCostCurve"),
 )
 async def get_transaction_cost_curve(
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose observed transaction-cost evidence is requested.",
@@ -1091,9 +1095,14 @@ async def get_transaction_cost_curve(
         get_transaction_economics_service
     ),
 ) -> TransactionCostCurveResponse:
+    admitted_tenant_id = require_matching_tenant_authority(
+        supplied_tenant_id=request.tenant_id,
+        tenant_context=http_request.state.tenant_context,
+    )
     try:
         return await transaction_economics_service.get_transaction_cost_curve(
             portfolio_id=portfolio_id,
+            tenant_id=TenantId(admitted_tenant_id),
             request=request,
         )
     except LookupError as exc:
@@ -1116,6 +1125,7 @@ async def get_transaction_cost_curve(
     summary="Resolve performance component economics source evidence",
     description=PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION,
     responses={
+        403: problem_response("Tenant scope forbidden", TENANT_SCOPE_FORBIDDEN_EXAMPLE),
         404: problem_response(
             "Portfolio not found",
             PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE,
@@ -1129,6 +1139,7 @@ async def get_transaction_cost_curve(
 )
 async def get_performance_component_economics(
     request: PerformanceComponentEconomicsRequest,
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier whose component economics evidence should be returned.",
@@ -1138,9 +1149,14 @@ async def get_performance_component_economics(
         get_transaction_economics_service
     ),
 ) -> PerformanceComponentEconomicsResponse:
+    admitted_tenant_id = require_matching_tenant_authority(
+        supplied_tenant_id=request.tenant_id,
+        tenant_context=http_request.state.tenant_context,
+    )
     try:
         return await transaction_economics_service.get_performance_component_economics(
             portfolio_id=portfolio_id,
+            tenant_id=TenantId(admitted_tenant_id),
             request=request,
         )
     except LookupError as exc:

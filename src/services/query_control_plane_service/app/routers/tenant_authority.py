@@ -19,7 +19,7 @@ TENANT_SCOPE_FORBIDDEN_EXAMPLE = problem_example(
 
 def require_matching_tenant_authority(
     *,
-    supplied_tenant_id: str,
+    supplied_tenant_id: str | None,
     tenant_context: TenantContext,
 ) -> str:
     """Return canonical admitted scope after rejecting caller-controlled mismatch."""

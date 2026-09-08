@@ -1567,6 +1567,7 @@ async def test_get_transaction_cost_curve_success_path() -> None:
     )
 
     response = await get_transaction_cost_curve(
+        http_request=_tenant_request("tenant-sg"),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         transaction_economics_service=mock_service,
@@ -1575,6 +1576,7 @@ async def test_get_transaction_cost_curve_success_path() -> None:
     assert response["product_name"] == "TransactionCostCurve"
     mock_service.get_transaction_cost_curve.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id=TenantId("tenant-sg"),
         request=request,
     )
 
@@ -1619,6 +1621,7 @@ async def test_get_performance_component_economics_success_path() -> None:
     )
 
     response = await get_performance_component_economics(
+        http_request=_tenant_request("tenant-sg"),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         transaction_economics_service=mock_service,
@@ -1627,6 +1630,7 @@ async def test_get_performance_component_economics_success_path() -> None:
     assert response["product_name"] == "PerformanceComponentEconomics"
     mock_service.get_performance_component_economics.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id=TenantId("tenant-sg"),
         request=request,
     )
 
@@ -1640,6 +1644,7 @@ async def test_get_performance_component_economics_maps_missing_portfolio_to_404
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_performance_component_economics(
+            http_request=_tenant_request("tenant-sg"),
             portfolio_id="PB_MISSING",
             request=PerformanceComponentEconomicsRequest(
                 as_of_date="2026-05-10",
@@ -1670,6 +1675,7 @@ async def test_get_performance_component_economics_maps_bad_token_to_400() -> No
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_performance_component_economics(
+            http_request=_tenant_request("tenant-sg"),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PerformanceComponentEconomicsRequest(
                 as_of_date="2026-05-10",
@@ -1698,6 +1704,7 @@ async def test_get_transaction_cost_curve_maps_missing_portfolio_to_404() -> Non
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_transaction_cost_curve(
+            http_request=_tenant_request("tenant-sg"),
             portfolio_id="PB_MISSING",
             request=TransactionCostCurveRequest(
                 as_of_date="2026-05-03",
@@ -1726,6 +1733,7 @@ async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_transaction_cost_curve(
+            http_request=_tenant_request("tenant-sg"),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=TransactionCostCurveRequest(
                 as_of_date="2026-05-03",

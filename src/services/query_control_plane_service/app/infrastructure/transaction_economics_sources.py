@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timedelta
 from typing import cast
 
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction, TransactionCost
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.transaction_cost_snapshot import (
     TransactionCostSnapshot,
@@ -153,13 +154,27 @@ class SqlAlchemyTransactionEconomicsReader:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+    async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+        stmt = (
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
+            )
+            .limit(1)
+        )
         return (await self._session.execute(stmt)).scalar_one_or_none() is not None
 
-    async def get_portfolio_base_currency(self, portfolio_id: str) -> str | None:
+    async def get_portfolio_base_currency(
+        self, portfolio_id: str, *, tenant_id: TenantId
+    ) -> str | None:
         stmt = (
-            select(Portfolio.base_currency).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio.base_currency)
+            .where(
+                Portfolio.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
+            )
+            .limit(1)
         )
         return cast(str | None, (await self._session.execute(stmt)).scalar_one_or_none())
 
@@ -167,6 +182,7 @@ class SqlAlchemyTransactionEconomicsReader:
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -183,8 +199,10 @@ class SqlAlchemyTransactionEconomicsReader:
                 cost_snapshot.c.cost_currencies,
                 cost_snapshot.c.cost_updated_ats,
             )
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .join(cost_snapshot, true())
             .where(
+                Portfolio.tenant_id == tenant_id.value,
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_date >= _start_of_day(start_date),
                 Transaction.transaction_date < _start_of_next_day(end_date),
@@ -241,6 +259,7 @@ class SqlAlchemyTransactionEconomicsReader:
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -259,7 +278,9 @@ class SqlAlchemyTransactionEconomicsReader:
                 transaction_type_expr.label("transaction_type"),
                 currency_expr.label("currency"),
             )
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
+                Portfolio.tenant_id == tenant_id.value,
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_date >= _start_of_day(start_date),
                 Transaction.transaction_date < _start_of_next_day(end_date),
@@ -306,6 +327,7 @@ class SqlAlchemyTransactionEconomicsReader:
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -318,7 +340,9 @@ class SqlAlchemyTransactionEconomicsReader:
         )
         eligible_groups = (
             select(security_expr.label("security_id"))
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
+                Portfolio.tenant_id == tenant_id.value,
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_date >= _start_of_day(start_date),
                 Transaction.transaction_date < _start_of_next_day(end_date),
@@ -363,6 +387,7 @@ class SqlAlchemyTransactionEconomicsReader:
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -374,11 +399,16 @@ class SqlAlchemyTransactionEconomicsReader:
         security_order = func.trim(Transaction.security_id).asc()
         transaction_date_order = func.date(Transaction.transaction_date).asc()
         transaction_id_order = Transaction.transaction_id.asc()
-        page = select(Transaction.id.label("transaction_pk")).where(
-            Transaction.portfolio_id == portfolio_id,
-            Transaction.transaction_date >= _start_of_day(start_date),
-            Transaction.transaction_date < _start_of_next_day(end_date),
-            Transaction.transaction_date < _start_of_next_day(as_of_date),
+        page = (
+            select(Transaction.id.label("transaction_pk"))
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id.value,
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_date >= _start_of_day(start_date),
+                Transaction.transaction_date < _start_of_next_day(end_date),
+                Transaction.transaction_date < _start_of_next_day(as_of_date),
+            )
         )
         if security_ids:
             normalized_security_ids = [

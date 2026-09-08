@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantId
 
 from ...contracts.performance_component_economics import (
     PerformanceComponentEconomicsRequest,
@@ -111,15 +112,18 @@ async def resolve_performance_component_economics_response(
     *,
     repository: TransactionEconomicsReader,
     portfolio_id: str,
+    tenant_id: TenantId,
     request: PerformanceComponentEconomicsRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
     encode_page_token: Callable[[dict[str, Any]], str],
     clock: Callable[[], datetime],
 ) -> PerformanceComponentEconomicsResponse:
-    if not await repository.portfolio_exists(portfolio_id):
+    if not await repository.portfolio_exists(portfolio_id, tenant_id=tenant_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-    portfolio_base_currency = await repository.get_portfolio_base_currency(portfolio_id)
+    portfolio_base_currency = await repository.get_portfolio_base_currency(
+        portfolio_id, tenant_id=tenant_id
+    )
     if portfolio_base_currency is None:
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
     normalized_portfolio_base_currency = normalize_currency_code(portfolio_base_currency)
@@ -130,6 +134,7 @@ async def resolve_performance_component_economics_response(
     )
     transactions = await repository.list_performance_component_economics_evidence(
         portfolio_id=portfolio_id,
+        tenant_id=tenant_id,
         start_date=request.window.start_date,
         end_date=request.window.end_date,
         as_of_date=request.as_of_date,

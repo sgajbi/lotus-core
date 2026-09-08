@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.query_control_plane_service.app.application.transaction_economics.performance import (  # noqa: E501
     build_performance_component_economics_rows,
@@ -594,12 +595,21 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
         calls: list[tuple[str, dict[str, object]]] = []
 
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
-                calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
+            async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+                calls.append(
+                    ("portfolio_exists", {"portfolio_id": portfolio_id, "tenant_id": tenant_id})
+                )
                 return True
 
-            async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
-                calls.append(("get_portfolio_base_currency", {"portfolio_id": portfolio_id}))
+            async def get_portfolio_base_currency(
+                self, portfolio_id: str, *, tenant_id: TenantId
+            ) -> str:
+                calls.append(
+                    (
+                        "get_portfolio_base_currency",
+                        {"portfolio_id": portfolio_id, "tenant_id": tenant_id},
+                    )
+                )
                 return "USD"
 
             async def list_performance_component_economics_evidence(
@@ -620,6 +630,7 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
         response = await resolve_performance_component_economics_response(
             repository=Repository(),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
+            tenant_id=TenantId("tenant-sg"),
             request=PerformanceComponentEconomicsRequest(
                 as_of_date=date(2026, 5, 10),
                 window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
@@ -648,6 +659,7 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
     ]
     assert calls[2][1]["transaction_types"] == ["DIVIDEND"]
     assert calls[2][1]["security_ids"] == ["EQ_US_AAPL"]
+    assert calls[2][1]["tenant_id"] == TenantId("tenant-sg")
     assert calls[2][1]["after_key"] == ()
     assert calls[2][1]["limit"] == 2
     assert encoded_payloads == [
@@ -664,10 +676,12 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     events: list[str] = []
 
     class Repository:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
             return True
 
-        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+        async def get_portfolio_base_currency(
+            self, portfolio_id: str, *, tenant_id: TenantId
+        ) -> str:
             return "USD"
 
         async def list_performance_component_economics_evidence(
@@ -684,6 +698,7 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     response = await resolve_performance_component_economics_response(
         repository=Repository(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id=TenantId("tenant-sg"),
         request=PerformanceComponentEconomicsRequest(
             as_of_date=date(2026, 4, 10),
             window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
@@ -712,10 +727,12 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
 @pytest.mark.asyncio
 async def test_resolve_performance_component_economics_empty_continuation_is_unavailable() -> None:
     class Repository:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
             return True
 
-        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+        async def get_portfolio_base_currency(
+            self, portfolio_id: str, *, tenant_id: TenantId
+        ) -> str:
             return "USD"
 
         async def list_performance_component_economics_evidence(
@@ -731,6 +748,7 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
     response = await resolve_performance_component_economics_response(
         repository=Repository(),
         portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tenant_id=TenantId("tenant-sg"),
         request=PerformanceComponentEconomicsRequest(
             as_of_date=date(2026, 4, 10),
             window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
@@ -775,10 +793,12 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
 @pytest.mark.asyncio
 async def test_component_economics_query_failure_does_not_become_ready_empty() -> None:
     class Repository:
-        async def portfolio_exists(self, portfolio_id: str) -> bool:
+        async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
             return True
 
-        async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+        async def get_portfolio_base_currency(
+            self, portfolio_id: str, *, tenant_id: TenantId
+        ) -> str:
             return "USD"
 
         async def list_performance_component_economics_evidence(
@@ -790,6 +810,7 @@ async def test_component_economics_query_failure_does_not_become_ready_empty() -
         await resolve_performance_component_economics_response(
             repository=Repository(),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
+            tenant_id=TenantId("tenant-sg"),
             request=PerformanceComponentEconomicsRequest(
                 as_of_date=date(2026, 4, 10),
                 window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
@@ -816,6 +837,27 @@ def test_performance_component_economics_page_scope_rejects_scope_mismatch() -> 
         assert "component economics page token does not match request scope" in str(exc)
     else:
         raise AssertionError("Expected performance component economics page token scope mismatch")
+
+
+def test_performance_component_page_token_cannot_cross_admitted_tenants() -> None:
+    tenant_a_request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+        tenant_id="tenant-a",
+    )
+    tenant_a_scope = performance_component_economics_page_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=tenant_a_request,
+        cursor={},
+    )
+    tenant_b_request = tenant_a_request.model_copy(update={"tenant_id": "tenant-b"})
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        performance_component_economics_page_scope(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=tenant_b_request,
+            cursor={"scope_fingerprint": tenant_a_scope.request_fingerprint},
+        )
 
 
 def test_performance_component_economics_page_scope_rejects_malformed_row_key() -> None:
