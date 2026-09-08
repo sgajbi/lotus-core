@@ -1,3 +1,4 @@
+from portfolio_common.domain.tenant import TenantContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.buy_state_dto import (
@@ -16,8 +17,14 @@ class BuyStateService:
     def __init__(self, db: AsyncSession):
         self.repo = BuyStateRepository(db)
 
-    async def get_position_lots(self, portfolio_id: str, security_id: str) -> PositionLotsResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+    async def get_position_lots(
+        self, portfolio_id: str, security_id: str, *, tenant_context: TenantContext
+    ) -> PositionLotsResponse:
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         security_id = normalize_security_id(security_id)
         lots = await self.repo.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
         if not lots:
@@ -31,9 +38,13 @@ class BuyStateService:
         )
 
     async def get_accrued_offsets(
-        self, portfolio_id: str, security_id: str
+        self, portfolio_id: str, security_id: str, *, tenant_context: TenantContext
     ) -> AccruedIncomeOffsetsResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         security_id = normalize_security_id(security_id)
         offsets = await self.repo.get_accrued_offsets(
             portfolio_id=portfolio_id,
@@ -50,9 +61,13 @@ class BuyStateService:
         )
 
     async def get_buy_cash_linkage(
-        self, portfolio_id: str, transaction_id: str
+        self, portfolio_id: str, transaction_id: str, *, tenant_context: TenantContext
     ) -> BuyCashLinkageResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         row = await self.repo.get_buy_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )

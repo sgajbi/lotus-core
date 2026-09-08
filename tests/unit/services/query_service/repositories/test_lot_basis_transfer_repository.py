@@ -33,6 +33,7 @@ from src.services.query_service.app.repositories.lot_basis_transfer_repository i
     _verify_lifecycle,
     _verify_receipt_integrity,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 
 def test_shared_cost_basis_payload_canonicalizes_set_members() -> None:
@@ -175,8 +176,11 @@ async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
     session.scalars = AsyncMock(return_value=empty_scalar_result)
     repository = LotBasisTransferRepository(session)
 
-    assert await repository.portfolio_exists("P1") is True
-    assert await repository.portfolio_exists("MISSING") is False
+    assert await repository.portfolio_exists("P1", tenant_id=TEST_TENANT_CONTEXT.tenant_id) is True
+    assert (
+        await repository.portfolio_exists("MISSING", tenant_id=TEST_TENANT_CONTEXT.tenant_id)
+        is False
+    )
     assert (
         await repository.get_latest_receipt(
             portfolio_id="P1",

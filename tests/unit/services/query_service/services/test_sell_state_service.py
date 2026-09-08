@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.services.query_service.app.services.sell_state_service import SellStateService
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -59,7 +60,9 @@ async def test_get_sell_disposals_maps_deterministic_fields(mock_sell_state_repo
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        response = await service.get_sell_disposals("PORT-1", " US0378331005 ")
+        response = await service.get_sell_disposals(
+            "PORT-1", " US0378331005 ", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert len(response.sell_disposals) == 1
     assert response.security_id == "US0378331005"
@@ -90,11 +93,14 @@ async def test_get_sell_disposals_uses_shared_portfolio_validation(
         ) as ensure_portfolio_exists,
     ):
         service = SellStateService(AsyncMock())
-        await service.get_sell_disposals("PORT-1", " US0378331005 ")
+        await service.get_sell_disposals(
+            "PORT-1", " US0378331005 ", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     ensure_portfolio_exists.assert_awaited_once_with(
         repository=mock_sell_state_repo,
         portfolio_id="PORT-1",
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
 
 
@@ -104,7 +110,9 @@ async def test_get_sell_cash_linkage_returns_sell_mapping(mock_sell_state_repo: 
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        response = await service.get_sell_cash_linkage("PORT-1", "TXN-SELL-1")
+        response = await service.get_sell_cash_linkage(
+            "PORT-1", "TXN-SELL-1", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.transaction_type == "SELL"
     assert response.cashflow_amount == Decimal("4250")
@@ -122,7 +130,9 @@ async def test_get_sell_cash_linkage_raises_when_not_found(mock_sell_state_repo:
             LookupError,
             match="SELL cash linkage not found for portfolio PORT-1 and transaction TX404",
         ):
-            await service.get_sell_cash_linkage("PORT-1", "TX404")
+            await service.get_sell_cash_linkage(
+                "PORT-1", "TX404", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_get_sell_disposals_raises_when_portfolio_missing(mock_sell_state_repo: AsyncMock):
@@ -133,7 +143,9 @@ async def test_get_sell_disposals_raises_when_portfolio_missing(mock_sell_state_
     ):
         service = SellStateService(AsyncMock())
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_sell_disposals("P404", "US0378331005")
+            await service.get_sell_disposals(
+                "P404", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_get_sell_cash_linkage_raises_when_portfolio_missing(
@@ -146,7 +158,9 @@ async def test_get_sell_cash_linkage_raises_when_portfolio_missing(
     ):
         service = SellStateService(AsyncMock())
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_sell_cash_linkage("P404", "TXN-SELL-1")
+            await service.get_sell_cash_linkage(
+                "P404", "TXN-SELL-1", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_get_sell_disposals_maps_none_paths(mock_sell_state_repo: AsyncMock):
@@ -173,7 +187,9 @@ async def test_get_sell_disposals_maps_none_paths(mock_sell_state_repo: AsyncMoc
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        response = await service.get_sell_disposals("PORT-1", "US0378331005")
+        response = await service.get_sell_disposals(
+            "PORT-1", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     record = response.sell_disposals[0]
     assert record.disposal_cost_basis_base is None
@@ -193,7 +209,9 @@ async def test_get_sell_disposals_raises_when_security_has_no_sell_state(
             LookupError,
             match="SELL state not found for portfolio PORT-1 and security US0378331005",
         ):
-            await service.get_sell_disposals("PORT-1", "US0378331005")
+            await service.get_sell_disposals(
+                "PORT-1", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_get_sell_disposals_preserves_independent_base_and_local_disposal_arithmetic(
@@ -222,7 +240,9 @@ async def test_get_sell_disposals_preserves_independent_base_and_local_disposal_
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        response = await service.get_sell_disposals("PORT-1", "XS0000000001")
+        response = await service.get_sell_disposals(
+            "PORT-1", "XS0000000001", tenant_context=TEST_TENANT_CONTEXT
+        )
 
     record = response.sell_disposals[0]
     assert record.quantity_disposed == Decimal("10")

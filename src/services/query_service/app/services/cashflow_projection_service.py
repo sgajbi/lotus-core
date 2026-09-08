@@ -4,6 +4,7 @@ from decimal import Decimal, localcontext
 from typing import Optional
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -38,12 +39,15 @@ class CashflowProjectionService:
         horizon_days: int = DEFAULT_HORIZON_DAYS,
         as_of_date: Optional[date] = None,
         include_projected: bool = True,
-        tenant_id: str | None = None,
+        *,
+        tenant_context: TenantContext,
     ) -> CashflowProjectionResponse:
         if horizon_days < 1 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 1 and {MAX_HORIZON_DAYS}.")
 
-        portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
+        portfolio_currency = await self.repo.get_portfolio_currency(
+            portfolio_id, tenant_id=tenant_context.tenant_id
+        )
         if portfolio_currency is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
         default_as_of_date = (
@@ -91,7 +95,11 @@ class CashflowProjectionService:
                 )
                 cursor += timedelta(days=1)
 
-        normalized_tenant_id = tenant_id.strip() if tenant_id and tenant_id.strip() else None
+        # The recorded tenant is the one admission verified, not a value the
+        # caller supplied. It previously reached the calculation lineage, the
+        # content hash and the published runtime metadata unverified, which
+        # made an asserted header read as provenance.
+        normalized_tenant_id = tenant_context.tenant_id.value
         source_row_count = (
             cashflow_evidence.booked_source_row_count + cashflow_evidence.projected_source_row_count
         )

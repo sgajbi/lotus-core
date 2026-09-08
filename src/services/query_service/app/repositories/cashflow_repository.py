@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction.type_registry import INCOME_RECOGNITION_TRANSACTION_TYPES
 from portfolio_common.utils import async_timed
 from sqlalchemy import and_, case, func, select
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
+from .portfolio_existence import portfolio_exists_for_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +73,28 @@ class CashflowRepository:
             .subquery()
         )
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
+    async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+        """Whether the admitted tenant owns this portfolio.
 
-    async def get_portfolio_currency(self, portfolio_id: str) -> str | None:
+        Delegates so the predicate lives in one place; see
+        :mod:`portfolio_existence`.
+        """
+        return await portfolio_exists_for_tenant(self.db, portfolio_id, tenant_id=tenant_id)
+
+    async def get_portfolio_currency(self, portfolio_id: str, *, tenant_id: TenantId) -> str | None:
+        """The base currency of a portfolio the admitted tenant owns.
+
+        Scoped for the same reason as the existence gate: this is the first read
+        on the cash-movement and cashflow-projection paths, and an unscoped
+        answer here lets the rest of the request proceed on a foreign portfolio.
+        """
         stmt = (
-            select(Portfolio.base_currency).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio.base_currency)
+            .where(
+                Portfolio.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
+            )
+            .limit(1)
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 

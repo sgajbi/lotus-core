@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import (
@@ -13,6 +14,12 @@ from src.services.query_service.app.services.cashflow_projection_service import 
     MAX_HORIZON_DAYS,
     CashflowProjectionService,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+# A second admitted tenant. The receipt must distinguish them, and the value
+# it records is the one admission verified -- the route no longer accepts a
+# tenant header of its own.
+OTHER_TENANT_CONTEXT = TenantContext(tenant_id=TenantId("tenant-other"))
 
 pytestmark = pytest.mark.asyncio
 
@@ -57,7 +64,9 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         return_value=mock_repo,
     ):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cashflow_projection(portfolio_id="P1", horizon_days=10)
+        response = await service.get_cashflow_projection(
+            portfolio_id="P1", horizon_days=10, tenant_context=TEST_TENANT_CONTEXT
+        )
 
         mock_repo.get_portfolio_cashflow_series_with_evidence.assert_awaited_once_with(
             portfolio_id="P1",
@@ -119,7 +128,9 @@ async def test_projection_reads_currency_and_default_date_sequentially(
 ) -> None:
     call_order: list[str] = []
 
-    async def get_portfolio_currency(portfolio_id: str) -> str:
+    async def get_portfolio_currency(
+        portfolio_id: str, tenant_id=TEST_TENANT_CONTEXT.tenant_id
+    ) -> str:
         call_order.append("currency")
         assert portfolio_id == "P1"
         return "USD"
@@ -136,7 +147,9 @@ async def test_projection_reads_currency_and_default_date_sequentially(
         return_value=mock_repo,
     ):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
-        response = await service.get_cashflow_projection(portfolio_id="P1", horizon_days=1)
+        response = await service.get_cashflow_projection(
+            portfolio_id="P1", horizon_days=1, tenant_context=TEST_TENANT_CONTEXT
+        )
 
     assert response.range_start_date == date(2026, 3, 1)
     assert call_order == ["currency", "date"]
@@ -153,6 +166,7 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
             horizon_days=10,
             as_of_date=date(2026, 3, 2),
             include_projected=False,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
         mock_repo.get_portfolio_cashflow_series_with_evidence.assert_awaited_once_with(
@@ -178,7 +192,9 @@ async def test_projection_raises_when_portfolio_missing(mock_repo: AsyncMock):
         mock_repo.get_portfolio_currency.return_value = None
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
-            await service.get_cashflow_projection(portfolio_id="P404")
+            await service.get_cashflow_projection(
+                portfolio_id="P404", tenant_context=TEST_TENANT_CONTEXT
+            )
 
 
 async def test_projection_rejects_unbounded_horizon_before_database_access(
@@ -197,6 +213,7 @@ async def test_projection_rejects_unbounded_horizon_before_database_access(
             await service.get_cashflow_projection(
                 portfolio_id="P1",
                 horizon_days=MAX_HORIZON_DAYS + 1,
+                tenant_context=TEST_TENANT_CONTEXT,
             )
 
     mock_repo.get_portfolio_currency.assert_not_awaited()
@@ -222,6 +239,7 @@ async def test_projection_includes_future_settlement_dated_external_flows(mock_r
             horizon_days=4,
             as_of_date=date(2026, 3, 1),
             include_projected=True,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
         points = {point.projection_date: point for point in response.points}
@@ -267,6 +285,7 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
             horizon_days=2,
             as_of_date=date(2026, 3, 1),
             include_projected=True,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
         points = {point.projection_date: point for point in response.points}
@@ -329,6 +348,7 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
             horizon_days=1,
             as_of_date=date(2026, 3, 1),
             include_projected=True,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.total_net_cashflow == Decimal("8")
@@ -369,6 +389,7 @@ async def test_projection_fails_closed_when_source_total_does_not_reconcile(
             portfolio_id="P1",
             horizon_days=1,
             as_of_date=date(2026, 3, 1),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert response.reconciliation_status == "BLOCKED"
@@ -386,13 +407,18 @@ async def test_projection_binds_tenant_to_input_calculation_and_output_identity(
     ):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
         tenant_a = await service.get_cashflow_projection(
-            portfolio_id="P1", horizon_days=1, tenant_id=" tenant-a "
+            portfolio_id="P1",
+            horizon_days=1,
+            tenant_context=TEST_TENANT_CONTEXT,
         )
         tenant_b = await service.get_cashflow_projection(
-            portfolio_id="P1", horizon_days=1, tenant_id="tenant-b"
+            portfolio_id="P1",
+            horizon_days=1,
+            tenant_context=OTHER_TENANT_CONTEXT,
         )
 
-    assert tenant_a.tenant_id == "tenant-a"
+    assert tenant_a.tenant_id == TEST_TENANT_CONTEXT.tenant_id.value
+    assert tenant_b.tenant_id == OTHER_TENANT_CONTEXT.tenant_id.value
     assert tenant_a.calculation_lineage.input_content_hash != (
         tenant_b.calculation_lineage.input_content_hash
     )

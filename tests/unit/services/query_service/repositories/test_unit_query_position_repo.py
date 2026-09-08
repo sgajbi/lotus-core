@@ -11,6 +11,7 @@ from src.services.query_service.app.application.holdings_reconciliation import (
     HoldingsReconciliationScope,
 )
 from src.services.query_service.app.repositories.position_repository import PositionRepository
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -363,7 +364,7 @@ async def test_portfolio_exists_true(repository: PositionRepository, mock_db_ses
     mock_result.scalar_one_or_none.return_value = "P1"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P1")
+    exists = await repository.portfolio_exists("P1", tenant_id=TEST_TENANT_CONTEXT.tenant_id)
 
     assert exists is True
 
@@ -373,7 +374,7 @@ async def test_portfolio_exists_false(repository: PositionRepository, mock_db_se
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P404")
+    exists = await repository.portfolio_exists("P404", tenant_id=TEST_TENANT_CONTEXT.tenant_id)
 
     assert exists is False
 

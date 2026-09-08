@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -12,6 +13,18 @@ from src.services.query_service.app.routers.cash_movements import (
     get_cash_movement_summary,
 )
 from src.services.query_service.app.services.cash_movement_service import CashMovementService
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+
+def _request_with_admitted_tenant() -> SimpleNamespace:
+    """A request carrying the tenant admission already resolved.
+
+    The handler reads `request.state.tenant_context`, which the admission
+    middleware sets and refuses the request without. Building it here keeps the
+    unit test honest about where the tenant comes from: not from a parameter the
+    caller chose.
+    """
+    return SimpleNamespace(state=SimpleNamespace(tenant_context=TEST_TENANT_CONTEXT))
 
 
 @pytest.mark.asyncio
@@ -51,10 +64,10 @@ async def test_get_cash_movement_summary_success() -> None:
     )
 
     response = await get_cash_movement_summary(
+        http_request=_request_with_admitted_tenant(),
         portfolio_id="P1",
         start_date=date(2026, 3, 1),
         end_date=date(2026, 3, 31),
-        x_tenant_id="tenant-a",
         service=service,
     )
 
@@ -63,7 +76,7 @@ async def test_get_cash_movement_summary_success() -> None:
         portfolio_id="P1",
         start_date=date(2026, 3, 1),
         end_date=date(2026, 3, 31),
-        tenant_id="tenant-a",
+        tenant_context=TEST_TENANT_CONTEXT,
     )
 
 
@@ -76,10 +89,10 @@ async def test_get_cash_movement_summary_maps_excessive_window_to_400() -> None:
 
     with pytest.raises(HTTPException) as exc_info:
         await get_cash_movement_summary(
+            http_request=_request_with_admitted_tenant(),
             portfolio_id="P1",
             start_date=date(2026, 1, 1),
             end_date=date(2027, 1, 2),
-            x_tenant_id=None,
             service=service,
         )
 
@@ -96,10 +109,10 @@ async def test_get_cash_movement_summary_maps_missing_portfolio_to_404() -> None
 
     with pytest.raises(HTTPException) as exc_info:
         await get_cash_movement_summary(
+            http_request=_request_with_admitted_tenant(),
             portfolio_id="P404",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
-            x_tenant_id=None,
             service=service,
         )
 

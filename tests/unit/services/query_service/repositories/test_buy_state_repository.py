@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.services.query_service.app.repositories.buy_state_repository import BuyStateRepository
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -46,7 +47,7 @@ async def test_portfolio_exists_true():
     db = AsyncMock()
     db.execute.return_value = _mock_result(scalar_one_or_none="PORT-1")
     repo = BuyStateRepository(db)
-    assert await repo.portfolio_exists("PORT-1") is True
+    assert await repo.portfolio_exists("PORT-1", tenant_id=TEST_TENANT_CONTEXT.tenant_id) is True
 
 
 async def test_get_position_lots_returns_rows():

@@ -3,23 +3,28 @@ from typing import cast
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Cashflow,
-    Portfolio,
     PositionLotState,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .identifier_normalization import normalize_security_id
+from .portfolio_existence import portfolio_exists_for_tenant
 
 
 class BuyStateRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
+    async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+        """Whether the admitted tenant owns this portfolio.
+
+        Delegates so the predicate lives in one place; see
+        :mod:`portfolio_existence`.
+        """
+        return await portfolio_exists_for_tenant(self.db, portfolio_id, tenant_id=tenant_id)
 
     async def get_position_lots(
         self, portfolio_id: str, security_id: str

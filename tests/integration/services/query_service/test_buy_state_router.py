@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -14,7 +14,7 @@ from src.services.query_service.app.dtos.buy_state_dto import (
     PositionLotsResponse,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -94,8 +94,12 @@ async def test_get_position_lots_success(async_test_client):
     assert payload["portfolio_id"] == "PORT-1"
     assert payload["lots"][0]["lot_id"] == "LOT-TXN-1"
     mock_service.get_position_lots.assert_awaited_once_with(
-        portfolio_id="PORT-1", security_id="US0378331005"
+        portfolio_id="PORT-1",
+        security_id="US0378331005",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_position_lots.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_accrued_offsets_success(async_test_client):
@@ -105,8 +109,12 @@ async def test_get_accrued_offsets_success(async_test_client):
     payload = response.json()
     assert payload["offsets"][0]["offset_id"] == "AIO-TXN-1"
     mock_service.get_accrued_offsets.assert_awaited_once_with(
-        portfolio_id="PORT-1", security_id="US0378331005"
+        portfolio_id="PORT-1",
+        security_id="US0378331005",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_accrued_offsets.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_cash_linkage_not_found(async_test_client):
@@ -130,8 +138,10 @@ async def test_get_cash_linkage_success(async_test_client):
     assert payload["calculation_policy_id"] == "BUY_DEFAULT_POLICY"
     assert payload["cashflow_classification"] == "INVESTMENT_OUTFLOW"
     mock_service.get_buy_cash_linkage.assert_awaited_with(
-        portfolio_id="PORT-1", transaction_id="TXN-1"
+        portfolio_id="PORT-1", transaction_id="TXN-1", tenant_context=ANY
     )
+    forwarded = mock_service.get_buy_cash_linkage.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_position_lots_not_found(async_test_client):

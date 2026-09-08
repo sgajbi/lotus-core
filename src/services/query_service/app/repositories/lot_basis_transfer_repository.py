@@ -5,7 +5,6 @@ from collections import defaultdict
 from portfolio_common.database_models import (
     LotBasisTransferAllocationRecord,
     LotBasisTransferReceiptRecord,
-    Portfolio,
 )
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -23,6 +22,7 @@ from portfolio_common.domain.cost_basis_receipt_integrity import (
     receipt_version_content_hash,
     verify_cost_basis_receipt_version_chain,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,17 +31,20 @@ from .lot_basis_transfer_records import (
     LotBasisTransferAllocationReadRecord,
     LotBasisTransferReceiptReadRecord,
 )
+from .portfolio_existence import portfolio_exists_for_tenant
 
 
 class LotBasisTransferRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        statement = (
-            select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        )
-        return (await self.db.execute(statement)).scalar_one_or_none() is not None
+    async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+        """Whether the admitted tenant owns this portfolio.
+
+        Delegates so the predicate lives in one place; see
+        :mod:`portfolio_existence`.
+        """
+        return await portfolio_exists_for_tenant(self.db, portfolio_id, tenant_id=tenant_id)
 
     async def get_latest_receipt(
         self,

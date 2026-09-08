@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -13,7 +13,7 @@ from src.services.query_service.app.dtos.sell_state_dto import (
     SellDisposalsResponse,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -83,8 +83,12 @@ async def test_get_sell_disposals_success(async_test_client):
     payload = response.json()
     assert payload["sell_disposals"][0]["transaction_id"] == "TXN-SELL-1"
     mock_service.get_sell_disposals.assert_awaited_once_with(
-        portfolio_id="PORT-1", security_id="US0378331005"
+        portfolio_id="PORT-1",
+        security_id="US0378331005",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_sell_disposals.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_sell_cash_linkage_success(async_test_client):
@@ -96,8 +100,12 @@ async def test_get_sell_cash_linkage_success(async_test_client):
     payload = response.json()
     assert payload["cashflow_classification"] == "INVESTMENT_INFLOW"
     mock_service.get_sell_cash_linkage.assert_awaited_once_with(
-        portfolio_id="PORT-1", transaction_id="TXN-SELL-1"
+        portfolio_id="PORT-1",
+        transaction_id="TXN-SELL-1",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_sell_cash_linkage.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_sell_cash_linkage_not_found(async_test_client):

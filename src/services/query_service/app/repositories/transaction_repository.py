@@ -16,6 +16,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.infrastructure.transaction_cost_snapshot import (
     TransactionCostSnapshot,
     transaction_cost_snapshot_lateral,
@@ -35,6 +36,7 @@ from ..application.transaction_query import (
 from .currency_query_expressions import currency_code_sql_expr
 from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
+from .portfolio_existence import portfolio_exists_for_tenant
 from .transaction_ledger_input_evidence import transaction_ledger_input_evidence_statement
 
 logger = logging.getLogger(__name__)
@@ -172,13 +174,29 @@ class TransactionRepository:
             Transaction.other_interest_deductions_amount.is_not(None)
         )
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
+    async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+        """Whether the admitted tenant owns this portfolio.
 
-    async def get_portfolio_base_currency(self, portfolio_id: str) -> Optional[str]:
+        Delegates so the predicate lives in one place; see
+        :mod:`portfolio_existence`.
+        """
+        return await portfolio_exists_for_tenant(self.db, portfolio_id, tenant_id=tenant_id)
+
+    async def get_portfolio_base_currency(
+        self, portfolio_id: str, *, tenant_id: TenantId
+    ) -> Optional[str]:
+        """The base currency of a portfolio the admitted tenant owns.
+
+        Reached by the realized-tax route, which does not pass through the
+        existence gate, so this read is the only tenant check on that path.
+        """
         stmt = (
-            select(Portfolio.base_currency).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio.base_currency)
+            .where(
+                Portfolio.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
+            )
+            .limit(1)
         )
         return cast(Optional[str], (await self.db.execute(stmt)).scalar_one_or_none())
 

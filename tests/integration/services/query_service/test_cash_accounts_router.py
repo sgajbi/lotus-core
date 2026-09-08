@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
@@ -8,7 +8,7 @@ import pytest_asyncio
 from src.services.query_service.app.dependencies import get_cash_account_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.cash_account_service import CashAccountService
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -52,7 +52,11 @@ async def test_get_cash_accounts(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["cash_accounts"][0]["cash_account_id"] == "CASH-ACC-USD-001"
-    mock_service.get_cash_accounts.assert_awaited_once_with("P1", as_of_date=date(2026, 3, 27))
+    mock_service.get_cash_accounts.assert_awaited_once_with(
+        "P1", as_of_date=date(2026, 3, 27), tenant_context=ANY
+    )
+    forwarded = mock_service.get_cash_accounts.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_cash_accounts_without_as_of_date_forwards_none(async_test_client):
@@ -67,7 +71,11 @@ async def test_get_cash_accounts_without_as_of_date_forwards_none(async_test_cli
 
     assert response.status_code == 200
     assert response.json()["resolved_as_of_date"] is None
-    mock_service.get_cash_accounts.assert_awaited_once_with("P1", as_of_date=None)
+    mock_service.get_cash_accounts.assert_awaited_once_with(
+        "P1", as_of_date=None, tenant_context=ANY
+    )
+    forwarded = mock_service.get_cash_accounts.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_cash_accounts_maps_missing_portfolio_to_404(async_test_client):

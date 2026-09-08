@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +37,8 @@ class PositionService:
         security_id: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
+        *,
+        tenant_context: TenantContext,
     ) -> PortfolioPositionHistoryResponse:
         """
         Retrieves and formats the position history for a given security.
@@ -57,7 +60,11 @@ class PositionService:
             ),
         )
 
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
 
         return await position_history_response(
             repository=self.repo,
@@ -72,6 +79,8 @@ class PositionService:
         portfolio_id: str,
         as_of_date: Optional[date] = None,
         include_projected: bool = False,
+        *,
+        tenant_context: TenantContext,
     ) -> PortfolioPositionsResponse:
         """
         Retrieves and formats the latest positions for a given portfolio.
@@ -88,7 +97,11 @@ class PositionService:
             ),
         )
 
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         effective_as_of_date = await effective_holdings_read_as_of_date(
             repository=self.repo,
             requested_as_of_date=as_of_date,
@@ -107,7 +120,8 @@ class PositionService:
         as_of_date: Optional[date] = None,
         horizon_days: int = 90,
         include_projected: bool = False,
-        tenant_id: str | None = None,
+        *,
+        tenant_context: TenantContext,
     ) -> PortfolioMaturitySummaryResponse:
         """
         Retrieves the Core-owned maturity summary for a portfolio holdings window.
@@ -131,11 +145,12 @@ class PositionService:
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             include_projected=include_projected,
+            tenant_context=tenant_context,
         )
         return portfolio_maturity_summary_response(
             portfolio_id=portfolio_id,
             holdings=holdings,
             horizon_days=horizon_days,
             include_projected=include_projected,
-            tenant_id=tenant_id,
+            tenant_id=tenant_context.tenant_id.value,
         )

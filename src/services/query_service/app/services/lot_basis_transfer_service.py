@@ -1,5 +1,6 @@
 """Serve source-to-target basis-transfer lineage without disposal aliases."""
 
+from portfolio_common.domain.tenant import TenantContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.lot_basis_transfer_dto import (
@@ -19,8 +20,13 @@ class LotBasisTransferService:
         *,
         portfolio_id: str,
         source_transaction_id: str,
+        tenant_context: TenantContext,
     ) -> LotBasisTransferReceiptResponse:
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         result = await self.repo.get_latest_receipt(
             portfolio_id=portfolio_id,
             source_transaction_id=source_transaction_id,

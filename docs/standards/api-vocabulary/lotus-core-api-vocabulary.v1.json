@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-06T16:05:17.547085+00:00",
+  "generatedAt": "2026-09-08T00:12:30.580633+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -11134,7 +11134,6 @@
         "header"
       ],
       "observedTypes": [
-        "object",
         "string"
       ]
     }
@@ -11444,15 +11443,15 @@
       "semanticId": "lotus.include_projected"
     },
     {
-      "name": "x-tenant-id",
+      "name": "X-Tenant-Id",
       "kind": "request_option",
       "location": "header",
-      "type": "object",
-      "required": false,
+      "type": "string",
+      "required": true,
       "default": "",
       "allowedValues": [],
-      "description": "Tenant scope bound into runtime receipt metadata when supplied by the caller.",
-      "example": "default",
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
       "behaviorImpact": "Affects get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
@@ -11774,15 +11773,15 @@
       "semanticId": "lotus.end_date"
     },
     {
-      "name": "x-tenant-id",
+      "name": "X-Tenant-Id",
       "kind": "request_option",
       "location": "header",
-      "type": "object",
-      "required": false,
+      "type": "string",
+      "required": true,
       "default": "",
       "allowedValues": [],
-      "description": "Tenant or book-of-record scope carried into the runtime trust receipt.",
-      "example": "X_TENANT_001",
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
       "behaviorImpact": "Affects get_cash_movement_summary_portfolios__portfolio_id__cash_movement_summary_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
@@ -12563,15 +12562,15 @@
       "semanticId": "lotus.include_projected"
     },
     {
-      "name": "x-tenant-id",
+      "name": "X-Tenant-Id",
       "kind": "request_option",
       "location": "header",
-      "type": "object",
-      "required": false,
+      "type": "string",
+      "required": true,
       "default": "",
       "allowedValues": [],
-      "description": "Tenant or book-of-record scope carried into the runtime trust receipt.",
-      "example": "X_TENANT_001",
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
       "behaviorImpact": "Affects get_cashflow_projection_portfolios__portfolio_id__cashflow_projection_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
@@ -15621,10 +15620,10 @@
             "attributeRef": "lotus.include_projected"
           },
           {
-            "name": "x-tenant-id",
+            "name": "X-Tenant-Id",
             "location": "header",
-            "required": false,
-            "type": "object",
+            "required": true,
+            "type": "string",
             "semanticId": "lotus.x_tenant_id",
             "attributeRef": "lotus.x_tenant_id"
           }
@@ -18408,10 +18407,10 @@
             "attributeRef": "lotus.end_date"
           },
           {
-            "name": "x-tenant-id",
+            "name": "X-Tenant-Id",
             "location": "header",
-            "required": false,
-            "type": "object",
+            "required": true,
+            "type": "string",
             "semanticId": "lotus.x_tenant_id",
             "attributeRef": "lotus.x_tenant_id"
           }
@@ -23583,10 +23582,10 @@
             "attributeRef": "lotus.include_projected"
           },
           {
-            "name": "x-tenant-id",
+            "name": "X-Tenant-Id",
             "location": "header",
-            "required": false,
-            "type": "object",
+            "required": true,
+            "type": "string",
             "semanticId": "lotus.x_tenant_id",
             "attributeRef": "lotus.x_tenant_id"
           }
