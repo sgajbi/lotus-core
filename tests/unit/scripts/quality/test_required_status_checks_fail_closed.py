@@ -311,7 +311,7 @@ def test_cli_prints_atomic_payload_and_fails_for_missing_manifest(
     payload = json.loads(capsys.readouterr().out)
     assert payload["strict"] is True
     assert payload["contexts"] == []
-    assert len(payload["checks"]) == 37
+    assert len(payload["checks"]) == 38
 
     assert cli.main(["--manifest", str(tmp_path / "missing.json")]) == 1
     assert "unable to load required-check manifest" in capsys.readouterr().out
