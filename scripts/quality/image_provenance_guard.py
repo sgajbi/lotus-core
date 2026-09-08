@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -153,6 +154,43 @@ def _make_target_recipes(makefile: str, target: str) -> list[str]:
     return recipes
 
 
+def _dockerfile_instructions(content: str) -> list[tuple[str, str]]:
+    instructions: list[tuple[str, str]] = []
+    logical_line = ""
+    for physical_line in content.splitlines():
+        stripped = physical_line.strip()
+        if not logical_line and (not stripped or stripped.startswith("#")):
+            continue
+        continued = stripped.endswith("\\")
+        fragment = stripped[:-1].rstrip() if continued else stripped
+        logical_line = f"{logical_line} {fragment}".strip()
+        if continued:
+            continue
+        instruction, separator, arguments = logical_line.partition(" ")
+        instructions.append((instruction.upper(), arguments if separator else ""))
+        logical_line = ""
+    if logical_line:
+        instruction, separator, arguments = logical_line.partition(" ")
+        instructions.append((instruction.upper(), arguments if separator else ""))
+    return instructions
+
+
+def _effective_assignments(content: str, instruction_name: str) -> dict[str, str]:
+    effective: dict[str, str] = {}
+    for instruction, arguments in _dockerfile_instructions(content):
+        if instruction != instruction_name:
+            continue
+        tokens = shlex.split(arguments, posix=True)
+        if tokens and "=" not in tokens[0]:
+            effective[tokens[0]] = " ".join(tokens[1:])
+            continue
+        for token in tokens:
+            key, separator, value = token.partition("=")
+            if separator:
+                effective[key] = value
+    return effective
+
+
 def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
@@ -165,6 +203,8 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                 from_offsets.append(offset)
             offset += len(physical_line)
         final_stage = content[from_offsets[-1] :] if from_offsets else ""
+        effective_labels = _effective_assignments(final_stage, "LABEL")
+        effective_environment = _effective_assignments(final_stage, "ENV")
         stage_offset = 0
         stage_run_offsets: list[int] = []
         for physical_line in final_stage.splitlines(keepends=True):
@@ -208,19 +248,19 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                         f"volatile build arg {arg_name} must follow dependency-install RUN layers",
                     )
                 )
-            if f"{arg_name}=${{{arg_name}}}" not in final_stage:
+            if effective_environment.get(arg_name) != f"${{{arg_name}}}":
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"missing final-stage runtime env {arg_name}",
+                        f"missing or incorrect effective final-stage runtime env {arg_name}",
                     )
                 )
         for label_name, arg_name in REQUIRED_OCI_LABELS.items():
-            if f"{label_name}=${{{arg_name}}}" not in final_stage:
+            if effective_labels.get(label_name) != f"${{{arg_name}}}":
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"missing final-stage OCI label {label_name}",
+                        f"missing or incorrect effective final-stage OCI label {label_name}",
                     )
                 )
         if final_stage.rfind("\nLABEL org.opencontainers.image.revision=") < last_stage_run:
