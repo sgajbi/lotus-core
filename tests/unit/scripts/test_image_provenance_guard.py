@@ -431,6 +431,24 @@ def test_image_provenance_guard_rejects_included_makefile_override(tmp_path: Pat
     assert any("Makefile includes are not permitted" in f.detail for f in findings)
 
 
+def test_image_provenance_guard_rejects_evaluated_makefile_include(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    (tmp_path / "override.mk").write_text(
+        "docker-build:\n\tdocker build -t portfolio-analytics-query-service:ci .\n",
+        encoding="utf-8",
+    )
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        makefile.read_text(encoding="utf-8") + "\n$(eval include override.mk)\n",
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("Makefile eval is not permitted" in finding.detail for finding in findings)
+
+
 def test_image_provenance_guard_rejects_coupled_scan_policy_exit(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
