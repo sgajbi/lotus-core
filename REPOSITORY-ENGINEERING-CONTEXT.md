@@ -218,6 +218,11 @@ schema, machine-readable contracts, or executable evidence.
   or obsolete paths rather than preserving them by habit.
 - Repository docs must distinguish implemented capability, local validation, mesh certification,
   release evidence, and production availability.
+- Report-only technology-governance evidence is renewed only from an exact-main releasability
+  dispatch with `make refresh-technology-governance-receipts RUN_ID=<run-id>`; the command verifies
+  the source revision, governed workflow identity, exact-revision assertion, artifact identity,
+  digest and expiry without changing the original assessment or claim boundary. See
+  [Validation and CI](wiki/Validation-and-CI.md#renewing-report-only-technology-governance-receipts).
 - Active source-product declaration, local implementation proof, live validator proof, repo-owned
   telemetry, and mesh certification are distinct states; trust telemetry proof currently covers
   exactly `PortfolioStateSnapshot:v1` and `DpmSourceReadiness:v1`; it is not blanket certification.

@@ -1119,6 +1119,16 @@ governance (#928). This is governance evidence only: no API, OpenAPI, database, 
 auth, dependency, runtime behavior, supported-feature, or release claim changed. No wiki source
 change is required because no operator workflow or public contract changed.
 
+CR-1681 renewable evidence addendum (2026-09-09): issue #1110 replaces manual historical receipt
+swaps with one governed renewal command. The original assessment date, inspected Core revision,
+technology findings and non-certifying claim boundary remain immutable. A replacement receipt must
+come from a successful exact-main `Main Releasability Gate` dispatch, bind its exact source SHA and
+workflow identity, include a successful exact-revision assertion, and match every named unexpired
+artifact by GitHub digest. Missing, expired, wrong-trigger, wrong-ref, wrong-revision and
+wrong-digest evidence fail closed. Historical push/main receipts remain valid until renewed so this
+control correction does not rewrite provenance. No API, financial behavior, runtime topology,
+dependency decision or release claim changes.
+
 CR-1680 domain-product request-scope correction (2026-08-09): issue #885 found that
 `HoldingsAsOf:v1` advertised ingestion-job/non-bulk scope and `IngestionEvidenceBundle:v1`
 advertised portfolio/bulk scope, contradicting their route and response grains. The same-pattern

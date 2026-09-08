@@ -170,6 +170,24 @@ Report-only validation never emits release authority without that online revalid
 release existence is not a support policy or vulnerability-disclosure channel. Upstream metadata
 and popularity never create an implied support or legal approval.
 
+### Renewing report-only technology-governance receipts
+
+The technology-governance pilot retains its original assessment date, inspected revision and
+non-certifying claim boundary. Its GitHub evidence may be renewed from a completed exact-main
+`Main Releasability Gate` dispatch:
+
+```powershell
+make refresh-technology-governance-receipts RUN_ID=<run-id>
+make technology-governance-pilot-receipt-guard
+```
+
+Renewal accepts only a successful `workflow_dispatch` run whose branch is
+`main-releasability-<source-sha>`, whose head is that exact SHA on Core main, and whose exact
+revision assertion job succeeded. Every required artifact must be present, unexpired and matched
+by its GitHub digest. Missing, expired or mismatched evidence fails closed. The command replaces
+only the renewable GitHub receipt references; it does not revise the historical assessment or
+promote its report-only claims.
+
 ## Runtime Image Evidence
 
 PR Merge Gate and Main Releasability each use one exact-source runtime image set. The required
