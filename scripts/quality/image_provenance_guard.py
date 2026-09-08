@@ -157,7 +157,14 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
-        last_run = content.rfind("\nRUN ")
+        offset = 0
+        run_offsets: list[int] = []
+        for physical_line in content.splitlines(keepends=True):
+            tokens = physical_line.lstrip().split(maxsplit=1)
+            if tokens and tokens[0].upper() == "RUN":
+                run_offsets.append(offset)
+            offset += len(physical_line)
+        last_run = max(run_offsets, default=-1)
         for line_number, line in enumerate(content.splitlines(), start=1):
             stripped = line.strip()
             if not (stripped.startswith("ARG ") or stripped.startswith("ENV ")):
@@ -577,6 +584,18 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
 
     makefile_path = root / "Makefile"
     makefile = makefile_path.read_text(encoding="utf-8")
+    for line in _make_logical_lines(makefile):
+        if line.startswith("\t") or not line.strip() or line.lstrip().startswith("#"):
+            continue
+        directive = line.lstrip().split(maxsplit=1)[0]
+        if directive in {"include", "-include", "sinclude"}:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(makefile_path, root),
+                    "Makefile includes are not permitted at the local image build boundary",
+                )
+            )
+            break
     for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
         expected = f"$(REPOSITORY_PYTHON) scripts/release/local_image_build.py {operation}"
         if _make_target_recipes(makefile, target) != [expected]:
