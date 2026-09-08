@@ -97,9 +97,9 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
     )
     root.joinpath("Makefile").write_text(
         """docker-build:
-\tpython scripts/release/local_image_build.py docker-build
+\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build
 docker-up:
-\tpython scripts/release/local_image_build.py compose-up
+\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py compose-up
 """,
         encoding="utf-8",
     )
@@ -219,9 +219,11 @@ def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "python scripts/release/local_image_build.py docker-build", "docker build ."
+            "$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
+            "docker build .",
         )
-        + "\nunused-helper:\n\tpython scripts/release/local_image_build.py docker-build\n",
+        + "\nunused-helper:\n"
+        "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build\n",
         encoding="utf-8",
     )
 
@@ -236,8 +238,27 @@ def test_image_provenance_guard_rejects_commented_make_wrapper(tmp_path: Path) -
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "\tpython scripts/release/local_image_build.py docker-build",
-            "\tdocker build . # python scripts/release/local_image_build.py docker-build",
+            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
+            "\tdocker build . # $(REPOSITORY_PYTHON) "
+            "scripts/release/local_image_build.py docker-build",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("docker-build must route through" in f.detail for f in findings)
+
+
+def test_image_provenance_guard_rejects_echoed_make_wrapper(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        makefile.read_text(encoding="utf-8").replace(
+            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
+            "\t@echo $(REPOSITORY_PYTHON) "
+            "scripts/release/local_image_build.py docker-build\n\tdocker build .",
         ),
         encoding="utf-8",
     )
