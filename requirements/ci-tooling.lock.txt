@@ -5,6 +5,7 @@ anyio==4.12.1
     # via
     #   -c requirements/shared-runtime.lock.txt
     #   httpx
+    #   httpx2
 ast-serialize==0.11.0
     # via mypy
 asyncpg==0.31.0
@@ -63,14 +64,19 @@ h11==0.16.0
     # via
     #   -c requirements/shared-runtime.lock.txt
     #   httpcore
+    #   httpcore2
 httpcore==1.0.9
     # via
     #   -c requirements/shared-runtime.lock.txt
     #   httpx
+httpcore2==2.12.0
+    # via httpx2
 httpx==0.28.1
     # via
     #   -c requirements/shared-runtime.lock.txt
     #   -r tests/requirements.txt
+httpx2==2.12.0
+    # via -r tests/requirements.txt
 hypothesis==6.155.7
     # via -r tests/requirements.txt
 idna==3.18
@@ -78,6 +84,7 @@ idna==3.18
     #   -c requirements/shared-runtime.lock.txt
     #   anyio
     #   httpx
+    #   httpx2
     #   requests
 import-linter==2.12
     # via -r requirements/ci-tooling.in
@@ -206,6 +213,10 @@ tomli==2.4.1
     #   pip-audit
 tomli-w==1.2.0
     # via pip-audit
+truststore==0.10.4
+    # via
+    #   httpcore2
+    #   httpx2
 types-python-dateutil==2.9.0.20260518
     # via -r requirements/ci-tooling.in
 typing-extensions==4.15.0
@@ -213,6 +224,7 @@ typing-extensions==4.15.0
     #   -c requirements/shared-runtime.lock.txt
     #   anyio
     #   cyclonedx-python-lib
+    #   httpx2
     #   import-linter
     #   mypy
     #   pytest-asyncio
