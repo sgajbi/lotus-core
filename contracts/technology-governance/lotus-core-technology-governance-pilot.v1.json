@@ -3,7 +3,7 @@
   "pilot_id": "lotus-core-technology-governance-pilot",
   "governed_by_issue": "https://github.com/sgajbi/lotus-core/issues/917",
   "assessment_date": "2026-08-09",
-  "inspected_core_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3",
+  "inspected_core_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c",
   "policy_ref": {
     "repository": "sgajbi/lotus-platform",
     "commit": "c3af9ace58f54fb070db32d2b428ff79c852d818",
@@ -64,7 +64,7 @@
       "rationale": "Exact-main CI generated a CycloneDX runtime-lock SBOM. This does not satisfy image_sbom.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/release/generate_runtime_sbom.py", "anchors": ["cyclonedx-json", "RUNTIME_LOCK_FILE"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:518fa37d379ac98c06e2e2a517dc5f5009cf784c9a01025daf55694fbce7aff7", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:90313524d136113a7380abe66a61daa45e97432b157cabf62312047d3521da29", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     },
     {
@@ -80,7 +80,7 @@
       "rationale": "Exact-main dependency health ran pip-audit in a content-addressed constrained environment with no ignored vulnerabilities.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/validation/dependency_health_check.py", "anchors": ["PIP_AUDIT_IGNORED_VULNERABILITIES", "audit_executed"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-dependency-health-31296298515", "artifact_digest": "sha256:f81474a173a0aa125d494cf996ddf2d7cfaafcea69f8ba5492f21cf5b995ec4d", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-dependency-health-31551900460", "artifact_digest": "sha256:013cfcb1d4dcd193b1d0f8ab404943f3868c3932e6bad79ec28628c337a6d875", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     },
     {
@@ -115,7 +115,7 @@
       "rationale": "Exact-main runtime image-set evidence binds all local runtime images to the inspected Git SHA.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/release/runtime_image_set.py", "anchors": ["source_commit_sha"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:518fa37d379ac98c06e2e2a517dc5f5009cf784c9a01025daf55694fbce7aff7", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:90313524d136113a7380abe66a61daa45e97432b157cabf62312047d3521da29", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     },
     {
@@ -151,7 +151,7 @@
       "rationale": "All deployable Dockerfiles carry guarded OCI source/build labels and exact-main runtime image-set verification passed.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/quality/image_provenance_guard.py", "anchors": ["REQUIRED_OCI_LABELS", "_dockerfile_findings"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:518fa37d379ac98c06e2e2a517dc5f5009cf784c9a01025daf55694fbce7aff7", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:90313524d136113a7380abe66a61daa45e97432b157cabf62312047d3521da29", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     },
     {
@@ -195,7 +195,7 @@
       "rationale": "Exact-main Docker smoke passed after the governed runtime image-set build and verification.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/validation/docker_endpoint_smoke.py", "anchors": ["def main"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-docker-smoke-artifacts", "artifact_digest": "sha256:095fc5c9475ff7839fd243bde83e1ca3786e0331b19b699b5f025ed49e2a17a4", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-smoke-artifacts", "artifact_digest": "sha256:c0603d7f236aa023a8507bfeb97d0561cd26c051d7e887a33fe92c35dc2f7ead", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     }
   ],
