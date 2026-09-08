@@ -50,6 +50,23 @@ def test_metadata_matches_real_git_head_and_dirty_state(tmp_path: Path) -> None:
     assert dirty_metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+def test_metadata_detects_untracked_files_when_git_config_hides_them(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", "pyproject.toml")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    _run_git(tmp_path, "config", "status.showUntrackedFiles", "no")
+    tmp_path.joinpath("untracked-source.py").write_text("value = 1\n", encoding="utf-8")
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
 def test_discovers_exact_clean_checkout_provenance(tmp_path: Path) -> None:
     _write_project(tmp_path)
     outputs = iter(
