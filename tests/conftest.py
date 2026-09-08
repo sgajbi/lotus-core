@@ -91,6 +91,7 @@ DB_ONLY_SCOPES = {
     "critical-lifecycle-db",
     "integration-lite",
     "ops-contract",
+    "query-authority-db-contract",
     "transaction-buy-contract",
     "transaction-sell-contract",
     "transaction-dividend-contract",
