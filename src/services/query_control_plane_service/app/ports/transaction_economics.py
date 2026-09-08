@@ -3,6 +3,8 @@
 from datetime import date
 from typing import Any, Protocol
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.transaction_economics import BookedTransactionEconomics
 
 TransactionCostCurveKey = tuple[str, str, str]
@@ -12,14 +14,17 @@ TransactionEconomicsPageKey = tuple[str, str, str]
 class TransactionEconomicsReader(Protocol):
     """Read source-authored transaction economics without exposing persistence models."""
 
-    async def portfolio_exists(self, portfolio_id: str) -> bool: ...
+    async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool: ...
 
-    async def get_portfolio_base_currency(self, portfolio_id: str) -> str | None: ...
+    async def get_portfolio_base_currency(
+        self, portfolio_id: str, *, tenant_id: TenantId
+    ) -> str | None: ...
 
     async def list_transaction_cost_curve_keys(
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -34,6 +39,7 @@ class TransactionEconomicsReader(Protocol):
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -46,6 +52,7 @@ class TransactionEconomicsReader(Protocol):
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,
@@ -58,6 +65,7 @@ class TransactionEconomicsReader(Protocol):
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         start_date: date,
         end_date: date,
         as_of_date: date,

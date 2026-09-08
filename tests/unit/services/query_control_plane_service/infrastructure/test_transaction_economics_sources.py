@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import Cashflow, Transaction, TransactionCost
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.infrastructure.transaction_economics_sources import (  # noqa: E501
@@ -13,6 +14,7 @@ from src.services.query_control_plane_service.app.infrastructure.transaction_eco
 )
 
 pytestmark = pytest.mark.asyncio
+TEST_TENANT_ID = TenantId("tenant-test")
 
 
 @pytest.fixture
@@ -108,9 +110,13 @@ async def test_portfolio_exists_true(
     mock_result.scalar_one_or_none.return_value = "P1"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P1")
+    exists = await repository.portfolio_exists("P1", tenant_id=TEST_TENANT_ID)
 
     assert exists is True
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
 
 
 async def test_portfolio_exists_false(
@@ -120,7 +126,7 @@ async def test_portfolio_exists_false(
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("P404")
+    exists = await repository.portfolio_exists("P404", tenant_id=TEST_TENANT_ID)
 
     assert exists is False
 
@@ -133,13 +139,14 @@ async def test_get_portfolio_base_currency(
     mock_result.scalar_one_or_none.return_value = "USD"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    base_currency = await repository.get_portfolio_base_currency("P1")
+    base_currency = await repository.get_portfolio_base_currency("P1", tenant_id=TEST_TENANT_ID)
 
     assert base_currency == "USD"
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolios.base_currency" in compiled_query
     assert "portfolios.portfolio_id = 'P1'" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
 
 
 async def test_list_transaction_cost_evidence_filters_scope_before_loading_costs(
@@ -153,6 +160,7 @@ async def test_list_transaction_cost_evidence_filters_scope_before_loading_costs
 
     rows = await repository.list_transaction_cost_evidence(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),
@@ -164,6 +172,10 @@ async def test_list_transaction_cost_evidence_filters_scope_before_loading_costs
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert (
+        "JOIN portfolios ON portfolios.portfolio_id = transactions.portfolio_id" in compiled_query
+    )
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
@@ -191,6 +203,7 @@ async def test_list_transaction_cost_evidence_filters_to_bounded_curve_keys(
 
     rows = await repository.list_transaction_cost_evidence(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),
@@ -212,6 +225,7 @@ async def test_list_transaction_cost_evidence_skips_read_when_curve_key_scope_em
 ):
     rows = await repository.list_transaction_cost_evidence(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),
@@ -231,6 +245,7 @@ async def test_list_transaction_cost_curve_keys_uses_grouped_keyset_limit(
 
     keys = await repository.list_transaction_cost_curve_keys(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),
@@ -245,6 +260,7 @@ async def test_list_transaction_cost_curve_keys_uses_grouped_keyset_limit(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "SELECT trim(transactions.security_id) AS security_id" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "upper(trim(transactions.transaction_type)) AS transaction_type" in compiled_query
     assert "upper(trim(transactions.currency)) AS currency" in compiled_query
     assert "trim(transactions.security_id) IN ('EQ_US_AAPL', 'EQ_US_MSFT')" in compiled_query
@@ -267,6 +283,7 @@ async def test_list_transaction_cost_curve_available_security_ids_uses_grouped_s
 
     security_ids = await repository.list_transaction_cost_curve_available_security_ids(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),
@@ -279,6 +296,7 @@ async def test_list_transaction_cost_curve_available_security_ids_uses_grouped_s
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "SELECT DISTINCT anon_1.security_id" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "GROUP BY trim(transactions.security_id)" in compiled_query
     assert "HAVING count(transactions.id) >= 2" in compiled_query
     assert "trim(transactions.security_id) IN ('EQ_US_AAPL', 'EQ_US_MSFT')" in compiled_query
@@ -296,6 +314,7 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
 
     rows = await repository.list_performance_component_economics_evidence(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),
@@ -319,6 +338,7 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "row_number() OVER" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "PARTITION BY cashflows.transaction_id" in compiled_query
     assert "ORDER BY cashflows.epoch DESC, cashflows.id DESC" in compiled_query
     assert "anon_1.transaction_id = transactions.transaction_id" in compiled_query
@@ -345,6 +365,7 @@ async def test_list_performance_component_economics_evidence_applies_cursor_and_
 
     rows = await repository.list_performance_component_economics_evidence(
         portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 30),
         as_of_date=date(2026, 5, 3),

@@ -6,6 +6,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_control_plane_service.app.application.transaction_economics.cost_curve import (  # noqa: E501
@@ -250,6 +251,27 @@ def test_transaction_cost_curve_request_scope_rejects_token_scope_mismatch() -> 
         raise AssertionError("Expected transaction cost curve page token scope mismatch")
 
 
+def test_transaction_cost_curve_page_token_cannot_cross_admitted_tenants() -> None:
+    tenant_a_request = TransactionCostCurveRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+        tenant_id="tenant-a",
+    )
+    tenant_a_scope = transaction_cost_curve_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=tenant_a_request,
+        cursor={},
+    )
+    tenant_b_request = tenant_a_request.model_copy(update={"tenant_id": "tenant-b"})
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        transaction_cost_curve_request_scope(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=tenant_b_request,
+            cursor={"scope_fingerprint": tenant_a_scope.request_fingerprint},
+        )
+
+
 def test_transaction_cost_curve_next_page_token_payload_uses_last_curve_point() -> None:
     request = TransactionCostCurveRequest(
         as_of_date=date(2026, 4, 10),
@@ -373,8 +395,10 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
         encoded_payloads: list[dict[str, object]] = []
 
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
-                calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
+            async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
+                calls.append(
+                    ("portfolio_exists", {"portfolio_id": portfolio_id, "tenant_id": tenant_id})
+                )
                 return True
 
             async def list_transaction_cost_curve_keys(
@@ -408,6 +432,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
         response = await resolve_transaction_cost_curve_response(
             repository=Repository(),
             portfolio_id="PB_SG_GLOBAL_BAL_001",
+            tenant_id=TenantId("tenant-sg"),
             request=TransactionCostCurveRequest(
                 as_of_date=date(2026, 4, 10),
                 window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
@@ -437,6 +462,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
         "transaction_cost_curve_keys",
         {
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "tenant_id": TenantId("tenant-sg"),
             "start_date": date(2026, 4, 1),
             "end_date": date(2026, 4, 10),
             "as_of_date": date(2026, 4, 10),
@@ -451,6 +477,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
         "transaction_cost_curve_available_security_ids",
         {
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "tenant_id": TenantId("tenant-sg"),
             "start_date": date(2026, 4, 1),
             "end_date": date(2026, 4, 10),
             "as_of_date": date(2026, 4, 10),
@@ -463,6 +490,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
         "transaction_cost_evidence",
         {
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "tenant_id": TenantId("tenant-sg"),
             "start_date": date(2026, 4, 1),
             "end_date": date(2026, 4, 10),
             "as_of_date": date(2026, 4, 10),
@@ -486,7 +514,7 @@ async def test_resolve_transaction_cost_curve_response_orchestrates_repository_r
 async def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -> None:
     async def run_case() -> None:
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
+            async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
                 return False
 
             async def list_transaction_cost_curve_keys(self, **_: object) -> list[object]:
@@ -503,6 +531,7 @@ async def test_resolve_transaction_cost_curve_response_requires_existing_portfol
         await resolve_transaction_cost_curve_response(
             repository=Repository(),
             portfolio_id="PB_UNKNOWN",
+            tenant_id=TenantId("tenant-sg"),
             request=TransactionCostCurveRequest(
                 as_of_date=date(2026, 4, 10),
                 window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
@@ -522,7 +551,7 @@ async def test_resolve_transaction_cost_curve_response_skips_evidence_read_witho
 ):
     async def run_case() -> object:
         class Repository:
-            async def portfolio_exists(self, portfolio_id: str) -> bool:
+            async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
                 return True
 
             async def list_transaction_cost_curve_keys(self, **_: object) -> list[object]:
@@ -534,6 +563,7 @@ async def test_resolve_transaction_cost_curve_response_skips_evidence_read_witho
         return await resolve_transaction_cost_curve_response(
             repository=Repository(),
             portfolio_id="PB_EMPTY",
+            tenant_id=TenantId("tenant-sg"),
             request=TransactionCostCurveRequest(
                 as_of_date=date(2026, 4, 10),
                 window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},

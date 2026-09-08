@@ -2377,6 +2377,16 @@ async def test_openapi_describes_portfolio_source_evidence_problem_details(
         assert invalid_request["error_code"] == "QCP_SOURCE_EVIDENCE_INVALID_REQUEST"
         assert invalid_request["metadata"]["source_product"] == source_product
 
+    tenant_scoped_routes = (
+        "/integration/portfolios/{portfolio_id}/transaction-cost-curve",
+        "/integration/portfolios/{portfolio_id}/performance-component-economics",
+    )
+    for route_path in tenant_scoped_routes:
+        operation = schema["paths"][route_path]["post"]
+        forbidden = operation["responses"]["403"]["content"]["application/problem+json"]["example"]
+        assert forbidden["error_code"] == "QCP_TENANT_SCOPE_FORBIDDEN"
+        assert "admitted tenant" in operation["description"]
+
 
 async def test_openapi_describes_integration_source_problem_details(
     async_test_client,
@@ -2474,6 +2484,11 @@ async def test_openapi_fully_documents_dpm_transaction_cost_curve_schema_family(
         schema,
         DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS,
     )
+    request_schema = schema["components"]["schemas"]["TransactionCostCurveRequest"]
+    assert (
+        "must match admitted tenant authority"
+        in request_schema["properties"]["tenant_id"]["description"]
+    )
 
 
 async def test_openapi_fully_documents_performance_component_economics_schema_family(
@@ -2504,6 +2519,11 @@ async def test_openapi_fully_documents_performance_component_economics_schema_fa
     )
     assert "persistence failures remain fail-closed transport errors" in route_description
     assert "empty continuation page is UNAVAILABLE" in route_description
+    request_schema = schema["components"]["schemas"]["PerformanceComponentEconomicsRequest"]
+    assert (
+        "must match admitted tenant authority"
+        in request_schema["properties"]["tenant_id"]["description"]
+    )
 
 
 async def test_openapi_fully_documents_dpm_market_data_coverage_schema_family(

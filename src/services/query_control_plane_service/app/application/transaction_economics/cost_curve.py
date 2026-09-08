@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
@@ -116,12 +117,13 @@ async def resolve_transaction_cost_curve_response(
     *,
     repository: TransactionEconomicsReader,
     portfolio_id: str,
+    tenant_id: TenantId,
     request: TransactionCostCurveRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
     encode_page_token: Callable[[dict[str, Any]], str],
     generated_at: datetime,
 ) -> TransactionCostCurveResponse:
-    if not await repository.portfolio_exists(portfolio_id):
+    if not await repository.portfolio_exists(portfolio_id, tenant_id=tenant_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
     request_scope = transaction_cost_curve_request_scope(
@@ -131,6 +133,7 @@ async def resolve_transaction_cost_curve_response(
     )
     curve_keys = await repository.list_transaction_cost_curve_keys(
         portfolio_id=portfolio_id,
+        tenant_id=tenant_id,
         start_date=request.window.start_date,
         end_date=request.window.end_date,
         as_of_date=request.as_of_date,
@@ -143,6 +146,7 @@ async def resolve_transaction_cost_curve_response(
     available_security_ids = (
         await repository.list_transaction_cost_curve_available_security_ids(
             portfolio_id=portfolio_id,
+            tenant_id=tenant_id,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
             as_of_date=request.as_of_date,
@@ -156,6 +160,7 @@ async def resolve_transaction_cost_curve_response(
     transactions = (
         await repository.list_transaction_cost_evidence(
             portfolio_id=portfolio_id,
+            tenant_id=tenant_id,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
             as_of_date=request.as_of_date,

@@ -1,5 +1,6 @@
 """Application service for transaction-cost and performance-economics products."""
 
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.runtime_providers import Clock
 
 from ...contracts.performance_component_economics import (
@@ -36,12 +37,15 @@ class TransactionEconomicsService:
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         request: TransactionCostCurveRequest,
     ) -> TransactionCostCurveResponse:
+        effective_request = request.model_copy(update={"tenant_id": tenant_id.value})
         return await resolve_transaction_cost_curve_response(
             repository=self._reader,
             portfolio_id=portfolio_id,
-            request=request,
+            tenant_id=tenant_id,
+            request=effective_request,
             decode_page_token=self._page_tokens.decode,
             encode_page_token=self._page_tokens.encode,
             generated_at=self._clock.utc_now(),
@@ -51,12 +55,15 @@ class TransactionEconomicsService:
         self,
         *,
         portfolio_id: str,
+        tenant_id: TenantId,
         request: PerformanceComponentEconomicsRequest,
     ) -> PerformanceComponentEconomicsResponse:
+        effective_request = request.model_copy(update={"tenant_id": tenant_id.value})
         return await resolve_performance_component_economics_response(
             repository=self._reader,
             portfolio_id=portfolio_id,
-            request=request,
+            tenant_id=tenant_id,
+            request=effective_request,
             decode_page_token=self._page_tokens.decode,
             encode_page_token=self._page_tokens.encode,
             clock=self._clock.utc_now,

@@ -95,7 +95,9 @@ class TransactionCostCurveRequest(BaseModel):
     tenant_id: str | None = Field(
         None,
         description=(
-            "Tenant scope for future policy enforcement. Null until tenant partitioning is active."
+            "Optional tenant assertion. When supplied it must match admitted tenant authority; "
+            "omission uses the admitted tenant. Returned lineage always uses that verified "
+            "scope."
         ),
         examples=["tenant_sg_pb"],
     )

@@ -39,7 +39,8 @@ PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION = (
     "zero rows, and no missing component families. Missing portfolios, invalid scopes, and "
     "persistence failures remain fail-closed transport errors and are never converted to empty "
     "READY evidence. An empty continuation page is UNAVAILABLE because it cannot prove that the "
-    "complete window had no activity.\n"
+    "complete window had no activity. Reads are scoped to the admitted tenant; a foreign "
+    "portfolio is indistinguishable from absence.\n"
     "When: Used by lotus-performance to replace local or inferred component economics in stateful "
     "contribution analytics. This route does not calculate contribution, attribution, performance "
     "returns, tax advice, execution quality, best execution, or OMS acknowledgement; "
@@ -88,7 +89,9 @@ class PerformanceComponentEconomicsRequest(BaseModel):
     tenant_id: str | None = Field(
         None,
         description=(
-            "Tenant scope for future policy enforcement. Null until tenant partitioning is active."
+            "Optional tenant assertion. When supplied it must match admitted tenant authority; "
+            "omission uses the admitted tenant. Returned lineage always uses that verified "
+            "scope."
         ),
         examples=["tenant_sg_pb"],
     )
