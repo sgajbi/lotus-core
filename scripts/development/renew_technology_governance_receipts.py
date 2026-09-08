@@ -7,6 +7,7 @@ import copy
 import json
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -126,6 +127,7 @@ def _render_renewed_manifest(original_text: str, renewed: dict[str, Any]) -> str
 def _write_manifest_atomically(path: Path, content: str) -> None:
     manifest_path = path.resolve()
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    original_mode = stat.S_IMODE(manifest_path.stat().st_mode)
     file_descriptor, temporary_name = tempfile.mkstemp(
         dir=manifest_path.parent,
         prefix=f".{manifest_path.name}.",
@@ -136,6 +138,7 @@ def _write_manifest_atomically(path: Path, content: str) -> None:
             temporary_file.write(content)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
+        os.chmod(temporary_name, original_mode)
         os.replace(temporary_name, manifest_path)
     except BaseException:
         Path(temporary_name).unlink(missing_ok=True)
