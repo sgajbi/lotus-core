@@ -9,6 +9,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_WORKFLOW = Path(".github/workflows/image-release.yml")
+LOCAL_BUILD_SCRIPT = Path("scripts/release/local_image_build.py")
 
 REQUIRED_METADATA_ARGS = (
     "LOTUS_GIT_COMMIT_SHA",
@@ -454,12 +455,83 @@ def _source_contract_findings(root: Path) -> list[ImageProvenanceFinding]:
     return findings
 
 
+def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
+    findings: list[ImageProvenanceFinding] = []
+    compose_path = root / "docker-compose.yml"
+    try:
+        compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+        services = compose["services"]
+    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        return [
+            ImageProvenanceFinding(
+                _relative(compose_path, root),
+                f"cannot inspect local Compose build provenance: {exc}",
+            )
+        ]
+
+    for service_name, service in services.items():
+        build = service.get("build") if isinstance(service, dict) else None
+        if not isinstance(build, dict):
+            continue
+        args = build.get("args")
+        for arg_name in REQUIRED_METADATA_ARGS:
+            if not isinstance(args, dict) or arg_name not in args:
+                findings.append(
+                    ImageProvenanceFinding(
+                        _relative(compose_path, root),
+                        f"Compose build {service_name} does not receive {arg_name}",
+                    )
+                )
+
+    makefile_path = root / "Makefile"
+    makefile = makefile_path.read_text(encoding="utf-8")
+    for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
+        expected = f"scripts/release/local_image_build.py {operation}"
+        if f"{target}:" not in makefile or expected not in makefile:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(makefile_path, root),
+                    f"{target} must route through the source-derived local image build boundary",
+                )
+            )
+
+    build_script = root / LOCAL_BUILD_SCRIPT
+    if not build_script.exists():
+        findings.append(
+            ImageProvenanceFinding(LOCAL_BUILD_SCRIPT, "missing local image build boundary")
+        )
+        return findings
+    script_content = build_script.read_text(encoding="utf-8")
+    for required in (
+        "git_commit_sha",
+        '"status", "--porcelain"',
+        "unavailable-before-push",
+        "unavailable-local-build",
+    ):
+        if required not in script_content:
+            findings.append(
+                ImageProvenanceFinding(
+                    LOCAL_BUILD_SCRIPT,
+                    f"local image build boundary omits {required}",
+                )
+            )
+    if "shell=True" in script_content:
+        findings.append(
+            ImageProvenanceFinding(
+                LOCAL_BUILD_SCRIPT,
+                "local Git-derived values must not pass through a shell",
+            )
+        )
+    return findings
+
+
 def find_image_provenance_findings(root: Path = REPO_ROOT) -> list[ImageProvenanceFinding]:
     return [
         *_dockerfile_findings(root),
         *_release_workflow_findings(root),
         *_kubernetes_digest_findings(root),
         *_source_contract_findings(root),
+        *_local_build_path_findings(root),
     ]
 
 
