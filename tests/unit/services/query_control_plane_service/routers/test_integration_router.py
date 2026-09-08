@@ -231,12 +231,10 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_instrument_enrichment_bulk,
     get_liquidity_reserve_requirement,
     get_market_data_coverage,
-    get_performance_component_economics,
     get_planned_withdrawal_schedule,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
     get_sustainability_preference_profile,
-    get_transaction_cost_curve,
     resolve_cio_model_change_affected_cohort,
     resolve_discretionary_mandate_binding,
     resolve_dpm_portfolio_universe_candidates,
@@ -246,6 +244,10 @@ from src.services.query_control_plane_service.app.routers.integration import (
 )
 from src.services.query_control_plane_service.app.routers.response_helpers import (
     QueryControlPlaneProblem,
+)
+from src.services.query_control_plane_service.app.routers.transaction_economics import (
+    get_performance_component_economics,
+    get_transaction_cost_curve,
 )
 
 SustainabilityPreferenceProfileService = (
