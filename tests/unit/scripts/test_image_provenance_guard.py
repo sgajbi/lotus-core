@@ -159,6 +159,20 @@ def test_image_provenance_guard_accepts_complete_contract(tmp_path: Path) -> Non
     assert find_image_provenance_findings(tmp_path) == []
 
 
+def test_image_provenance_guard_requires_metadata_in_final_stage(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + '\nFROM python:3.11 AS final\nCMD ["python"]\n',
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("missing final-stage build arg" in finding.detail for finding in findings)
+    assert any("missing final-stage OCI label" in finding.detail for finding in findings)
+    assert any("missing final-stage runtime env" in finding.detail for finding in findings)
+
+
 def test_image_provenance_guard_rejects_compose_build_without_metadata_args(
     tmp_path: Path,
 ) -> None:
@@ -467,7 +481,10 @@ def test_image_provenance_guard_reports_missing_digest_label(tmp_path: Path) -> 
 
     findings = find_image_provenance_findings(tmp_path)
 
-    assert any("missing OCI label org.opencontainers.image.digest" in f.detail for f in findings)
+    assert any(
+        "missing final-stage OCI label org.opencontainers.image.digest" in f.detail
+        for f in findings
+    )
 
 
 def test_image_provenance_guard_rejects_volatile_metadata_before_build_layers(

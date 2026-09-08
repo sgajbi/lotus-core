@@ -19,6 +19,8 @@ def _write_project(root: Path) -> None:
     root.joinpath("pyproject.toml").write_text(
         '[project]\nname = "lotus-core"\nversion = "0.1.0"\n', encoding="utf-8"
     )
+    root.joinpath(".dockerignore").write_text(".cache\n", encoding="utf-8")
+    root.joinpath(".gitignore").write_text(".cache\n", encoding="utf-8")
 
 
 def _run_git(root: Path, *arguments: str) -> str:
@@ -36,7 +38,7 @@ def test_metadata_matches_real_git_head_and_dirty_state(tmp_path: Path) -> None:
     _run_git(tmp_path, "init", "--initial-branch", "main")
     _run_git(tmp_path, "config", "user.name", "Local Build Test")
     _run_git(tmp_path, "config", "user.email", "local-build@example.test")
-    _run_git(tmp_path, "add", "pyproject.toml")
+    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore")
     _run_git(tmp_path, "commit", "-m", "test fixture")
     expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
 
@@ -55,7 +57,7 @@ def test_metadata_detects_untracked_files_when_git_config_hides_them(tmp_path: P
     _run_git(tmp_path, "init", "--initial-branch", "main")
     _run_git(tmp_path, "config", "user.name", "Local Build Test")
     _run_git(tmp_path, "config", "user.email", "local-build@example.test")
-    _run_git(tmp_path, "add", "pyproject.toml")
+    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore")
     _run_git(tmp_path, "commit", "-m", "test fixture")
     expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
     _run_git(tmp_path, "config", "status.showUntrackedFiles", "no")
@@ -67,12 +69,49 @@ def test_metadata_detects_untracked_files_when_git_config_hides_them(tmp_path: P
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+def test_metadata_detects_ignored_files_in_docker_context(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    tmp_path.joinpath(".git", "info", "exclude").write_text("ignored-source.py\n", encoding="utf-8")
+    tmp_path.joinpath("ignored-source.py").write_text("value = 1\n", encoding="utf-8")
+
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
+def test_metadata_ignores_local_artifacts_excluded_from_docker_context(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    cache = tmp_path / ".cache"
+    cache.mkdir()
+    cache.joinpath("state.json").write_text("{}\n", encoding="utf-8")
+
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == expected_head
+
+
 def test_discovers_exact_clean_checkout_provenance(tmp_path: Path) -> None:
     _write_project(tmp_path)
     outputs = iter(
         (
             "a" * 40 + "\n",
             "fix/1107-local-image-provenance\n",
+            "",
+            "",
             "",
         )
     )
@@ -135,6 +174,8 @@ def test_runs_compose_with_metadata_in_environment_and_without_shell() -> None:
     assert captured["command"] == [
         "docker",
         "compose",
+        "-f",
+        "docker-compose.yml",
         "up",
         "--detach",
         "--build",
