@@ -21,6 +21,16 @@ REQUIRED_METADATA_ARGS = (
     "LOTUS_CI_RUN_ID",
 )
 
+EXPECTED_COMPOSE_ARGS = {
+    "LOTUS_GIT_COMMIT_SHA": "${LOTUS_GIT_COMMIT_SHA:-unknown}",
+    "LOTUS_GIT_BRANCH": "${LOTUS_GIT_BRANCH:-unknown}",
+    "LOTUS_BUILD_TIMESTAMP": "${LOTUS_BUILD_TIMESTAMP:-unknown}",
+    "LOTUS_REPO_URL": "${LOTUS_REPO_URL:-unknown}",
+    "LOTUS_IMAGE_VERSION": "${LOTUS_IMAGE_VERSION:-unknown}",
+    "LOTUS_IMAGE_DIGEST": "${LOTUS_IMAGE_DIGEST:-unavailable-before-push}",
+    "LOTUS_CI_RUN_ID": "${LOTUS_CI_RUN_ID:-unavailable-local-build}",
+}
+
 REQUIRED_OCI_LABELS = {
     "org.opencontainers.image.revision": "LOTUS_GIT_COMMIT_SHA",
     "org.opencontainers.image.ref.name": "LOTUS_GIT_BRANCH",
@@ -518,6 +528,14 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                     ImageProvenanceFinding(
                         _relative(compose_path, root),
                         f"Compose build {service_name} does not receive {arg_name}",
+                    )
+                )
+            elif args[arg_name] != EXPECTED_COMPOSE_ARGS[arg_name]:
+                findings.append(
+                    ImageProvenanceFinding(
+                        _relative(compose_path, root),
+                        f"Compose build {service_name} does not bind "
+                        f"{arg_name} to its source value",
                     )
                 )
 
