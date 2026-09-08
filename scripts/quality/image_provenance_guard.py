@@ -158,13 +158,21 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
         offset = 0
-        run_offsets: list[int] = []
+        from_offsets: list[int] = []
         for physical_line in content.splitlines(keepends=True):
             tokens = physical_line.lstrip().split(maxsplit=1)
-            if tokens and tokens[0].upper() == "RUN":
-                run_offsets.append(offset)
+            if tokens and tokens[0].upper() == "FROM":
+                from_offsets.append(offset)
             offset += len(physical_line)
-        last_run = max(run_offsets, default=-1)
+        final_stage = content[from_offsets[-1] :] if from_offsets else ""
+        stage_offset = 0
+        stage_run_offsets: list[int] = []
+        for physical_line in final_stage.splitlines(keepends=True):
+            tokens = physical_line.lstrip().split(maxsplit=1)
+            if tokens and tokens[0].upper() == "RUN":
+                stage_run_offsets.append(stage_offset)
+            stage_offset += len(physical_line)
+        last_stage_run = max(stage_run_offsets, default=-1)
         for line_number, line in enumerate(content.splitlines(), start=1):
             stripped = line.strip()
             if not (stripped.startswith("ARG ") or stripped.startswith("ENV ")):
@@ -186,43 +194,43 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                     )
                 )
             stage_declaration = f"\nARG {arg_name}\n"
-            if content.count(stage_declaration) != 1:
+            if final_stage.count(stage_declaration) != 1:
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"missing stage build arg {arg_name}",
+                        f"missing final-stage build arg {arg_name}",
                     )
                 )
-            elif content.find(stage_declaration) < last_run:
+            elif final_stage.find(stage_declaration) < last_stage_run:
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
                         f"volatile build arg {arg_name} must follow dependency-install RUN layers",
                     )
                 )
-            if f"{arg_name}=${{{arg_name}}}" not in content:
+            if f"{arg_name}=${{{arg_name}}}" not in final_stage:
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"missing runtime env {arg_name}",
+                        f"missing final-stage runtime env {arg_name}",
                     )
                 )
         for label_name, arg_name in REQUIRED_OCI_LABELS.items():
-            if f"{label_name}=${{{arg_name}}}" not in content:
+            if f"{label_name}=${{{arg_name}}}" not in final_stage:
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"missing OCI label {label_name}",
+                        f"missing final-stage OCI label {label_name}",
                     )
                 )
-        if content.rfind("\nLABEL org.opencontainers.image.revision=") < last_run:
+        if final_stage.rfind("\nLABEL org.opencontainers.image.revision=") < last_stage_run:
             findings.append(
                 ImageProvenanceFinding(
                     _relative(dockerfile, root),
                     "volatile OCI provenance labels must follow dependency-install RUN layers",
                 )
             )
-        if content.rfind("\nENV LOTUS_GIT_COMMIT_SHA=") < last_run:
+        if final_stage.rfind("\nENV LOTUS_GIT_COMMIT_SHA=") < last_stage_run:
             findings.append(
                 ImageProvenanceFinding(
                     _relative(dockerfile, root),

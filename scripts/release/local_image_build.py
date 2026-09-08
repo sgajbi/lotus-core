@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_URL = "https://github.com/sgajbi/lotus-core"
 LOCAL_IMAGE_DIGEST = "unavailable-before-push"
 LOCAL_CI_RUN_ID = "unavailable-local-build"
+LOCAL_COMPOSE_FILE = "docker-compose.yml"
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -60,6 +61,28 @@ def discover_local_build_metadata(
     commit = _git(root, "rev-parse", "--verify", "HEAD", runner=runner)
     branch = _git(root, "branch", "--show-current", runner=runner) or "detached-head"
     dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=all", runner=runner))
+    if not dirty:
+        git_ignored = set(
+            _git(
+                root,
+                "ls-files",
+                "--others",
+                "--ignored",
+                "--exclude-standard",
+                runner=runner,
+            ).splitlines()
+        )
+        docker_ignored = set(
+            _git(
+                root,
+                "ls-files",
+                "--others",
+                "--ignored",
+                f"--exclude-from={root / '.dockerignore'}",
+                runner=runner,
+            ).splitlines()
+        )
+        dirty = bool(git_ignored - docker_ignored)
     with (root / "pyproject.toml").open("rb") as handle:
         project_version = str(tomllib.load(handle)["project"]["version"])
     return LocalBuildMetadata(
@@ -86,7 +109,15 @@ def docker_build_command(metadata: LocalBuildMetadata) -> list[str]:
 
 
 def compose_up_command(services: Sequence[str], *, no_deps: bool) -> list[str]:
-    command = ["docker", "compose", "up", "--detach", "--build"]
+    command = [
+        "docker",
+        "compose",
+        "-f",
+        LOCAL_COMPOSE_FILE,
+        "up",
+        "--detach",
+        "--build",
+    ]
     if no_deps:
         command.append("--no-deps")
     return [*command, *services]

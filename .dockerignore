@@ -1,6 +1,13 @@
 .git
 .github
 .venv
+.cache
+.env
+.idea
+.vscode
+.hypothesis
+.tox
+.nox
 .pytest_cache
 .ruff_cache
 .mypy_cache
