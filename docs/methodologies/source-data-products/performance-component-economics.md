@@ -8,10 +8,13 @@
 - Primary consumer: `lotus-performance`
 - Boundary: source-authored economics evidence only. `lotus-performance` owns contribution,
   attribution, and return methodology.
+- Authority: the admitted tenant scopes every portfolio and transaction read. An optional body
+  `tenant_id` is an assertion only and must match that authority.
 
 ## Inputs
 
-The product reads `transactions` for the requested `portfolio_id`, inclusive transaction-date
+The product first resolves the requested portfolio within the admitted tenant, then reads
+`transactions` for that portfolio, inclusive transaction-date
 window, and `as_of_date` bound. Optional `security_ids` and `transaction_types` narrow the source
 rows. The inclusive transaction-date window remains capped at 366 days. It joins
 `transaction_costs` and the latest `cashflows` epoch for each transaction. The row-level evidence
@@ -21,12 +24,13 @@ read is cursor-paged with `page.page_size + 1` source-row budgeting.
 
 Rows are selected when:
 
-1. `transactions.portfolio_id` equals the requested portfolio,
-2. `transaction_date >= window.start_date`,
-3. `transaction_date <= window.end_date`,
-4. `transaction_date <= as_of_date`,
-5. the inclusive request window is 366 days or less,
-6. optional security and transaction-type filters match after canonical normalization.
+1. the joined `portfolios.tenant_id` equals the admitted tenant,
+2. `transactions.portfolio_id` equals the requested portfolio,
+3. `transaction_date >= window.start_date`,
+4. `transaction_date <= window.end_date`,
+5. `transaction_date <= as_of_date`,
+6. the inclusive request window is 366 days or less,
+7. optional security and transaction-type filters match after canonical normalization.
 
 Rows are ordered by normalized `security_id`, transaction date, and `transaction_id`. Linked
 cashflows are selected deterministically by highest `cashflows.epoch`, then highest `cashflows.id`.
@@ -35,8 +39,8 @@ cashflows are selected deterministically by highest `cashflows.epoch`, then high
 
 The request accepts optional cursor paging controls through `page.page_size` and
 `page.page_token`. Page tokens are scoped to the full request fingerprint, including portfolio,
-window, `as_of_date`, filters, and tenant. Tokens from another request scope are rejected with HTTP
-400 by the query control plane.
+window, `as_of_date`, filters, and the admitted tenant. Tokens from another tenant or request scope
+are rejected with HTTP 400 by the query control plane.
 
 Repository reads request `page_size + 1` ordered rows to determine `has_more` without materializing
 the full transaction window. Response `page.sort_key` is
@@ -133,9 +137,11 @@ An unexpectedly empty continuation page is `UNAVAILABLE` with reason
 `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED`, `data_quality_status=UNKNOWN`, and all
 supported families missing. A continuation can prove only the suffix after its cursor, not that the
 complete bounded request scope had no activity; concurrent source changes therefore fail closed.
-Missing portfolios and invalid request or cursor scopes fail closed through the documented HTTP
-problem contract. Persistence/query failures remain errors; Core does not convert an unproved scope
-into `READY / PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`.
+Missing and foreign portfolios share the same not-found response. Missing admission fails at shared
+ingress; a blank or mismatched body tenant assertion returns HTTP 403 before service or database
+work. Invalid request or cursor scopes fail closed through the documented HTTP problem contract.
+Persistence/query failures remain errors; Core does not convert an unproved scope into
+`READY / PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY`.
 
 For non-empty pages, `observed_component_families` and `missing_component_families` describe
 coverage for the returned rows; downstream consumers must decide which families are required for a

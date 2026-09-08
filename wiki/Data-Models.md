@@ -92,7 +92,9 @@ duplicate booked-fee evidence from inflating source-data products such as
 
 The QCP transaction-economics adapter reads these tables with bounded keyset queries and maps ORM
 rows into frozen booked-transaction, linked-cashflow, and cost-component evidence before application
-policy executes. API/application code must not consume SQLAlchemy models directly.
+policy executes. Every portfolio and transaction-evidence query joins to the persisted
+`portfolios.tenant_id` using admitted `TenantId`; an optional body tenant is never treated as
+authority. API/application code must not consume SQLAlchemy models directly.
 
 ### Position and valuation state
 

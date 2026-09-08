@@ -293,6 +293,8 @@ explicit `transaction_costs` rows when present, falls back to `trade_fee` only w
 rows are absent, enforces one normalized component per `(transaction_id, fee_type, currency)`,
 filters unusable zero-fee or zero-notional observations, and computes total cost, total absolute
 notional, notional-weighted average cost bps, min cost bps, and max cost bps for each group. It is
+scoped to the admitted tenant at portfolio and transaction-read boundaries; an optional body tenant
+is only a matching assertion, and a foreign portfolio is indistinguishable from absence. It is
 not an execution-quality, market-impact, venue-routing, best-execution, OMS
 acknowledgement, or minimum-cost execution methodology.
 
@@ -316,6 +318,9 @@ leaving `latest_evidence_timestamp` null because no source row exists; `generate
 post-query proof time. An unexpectedly empty continuation page is `UNAVAILABLE` because it cannot
 prove that the complete window had no activity. Missing portfolios, invalid scopes, and persistence
 failures remain fail-closed errors and are never converted to ready-empty evidence. Its
+portfolio and transaction reads are scoped to the admitted tenant, the admitted tenant is bound
+into continuation identity and runtime lineage, and a foreign portfolio is indistinguishable from
+absence. Its
 implementation-backed methodology is documented in
 `docs/methodologies/source-data-products/performance-component-economics.md`. It is not
 contribution analytics, attribution analytics, a return calculator, tax advice, execution-quality
