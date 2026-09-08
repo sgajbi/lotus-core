@@ -100,6 +100,22 @@ def _relative(path: Path, root: Path) -> Path:
         return path
 
 
+def _make_target_recipe(makefile: str, target: str) -> str:
+    lines = makefile.splitlines()
+    target_prefix = f"{target}:"
+    for offset, line in enumerate(lines):
+        if not line.startswith(target_prefix):
+            continue
+        recipe: list[str] = []
+        for candidate in lines[offset + 1 :]:
+            if candidate.startswith("\t") or not candidate.strip():
+                recipe.append(candidate)
+                continue
+            break
+        return "\n".join(recipe)
+    return ""
+
+
 def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
@@ -146,6 +162,21 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                         f"missing OCI label {label_name}",
                     )
                 )
+        last_run = content.rfind("\nRUN ")
+        if content.rfind("\nLABEL org.opencontainers.image.revision=") < last_run:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(dockerfile, root),
+                    "volatile OCI provenance labels must follow dependency-install RUN layers",
+                )
+            )
+        if content.rfind("\nENV LOTUS_GIT_COMMIT_SHA=") < last_run:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(dockerfile, root),
+                    "volatile runtime provenance must follow dependency-install RUN layers",
+                )
+            )
     return findings
 
 
@@ -487,7 +518,7 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
     makefile = makefile_path.read_text(encoding="utf-8")
     for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
         expected = f"scripts/release/local_image_build.py {operation}"
-        if f"{target}:" not in makefile or expected not in makefile:
+        if expected not in _make_target_recipe(makefile, target):
             findings.append(
                 ImageProvenanceFinding(
                     _relative(makefile_path, root),

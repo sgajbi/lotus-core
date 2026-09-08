@@ -20,26 +20,11 @@ ARG LOTUS_IMAGE_VERSION
 ARG LOTUS_IMAGE_DIGEST
 ARG LOTUS_CI_RUN_ID
 
-LABEL org.opencontainers.image.revision=${LOTUS_GIT_COMMIT_SHA} \
-    org.opencontainers.image.ref.name=${LOTUS_GIT_BRANCH} \
-    org.opencontainers.image.created=${LOTUS_BUILD_TIMESTAMP} \
-    org.opencontainers.image.source=${LOTUS_REPO_URL} \
-    org.opencontainers.image.version=${LOTUS_IMAGE_VERSION} \
-    org.opencontainers.image.digest=${LOTUS_IMAGE_DIGEST} \
-    org.opencontainers.image.ci.run_id=${LOTUS_CI_RUN_ID}
-
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_CONSTRAINT=/app/requirements/shared-runtime.lock.txt \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH" \
-    LOTUS_GIT_COMMIT_SHA=${LOTUS_GIT_COMMIT_SHA} \
-    LOTUS_GIT_BRANCH=${LOTUS_GIT_BRANCH} \
-    LOTUS_BUILD_TIMESTAMP=${LOTUS_BUILD_TIMESTAMP} \
-    LOTUS_REPO_URL=${LOTUS_REPO_URL} \
-    LOTUS_IMAGE_VERSION=${LOTUS_IMAGE_VERSION} \
-    LOTUS_IMAGE_DIGEST=${LOTUS_IMAGE_DIGEST} \
-    LOTUS_CI_RUN_ID=${LOTUS_CI_RUN_ID}
+    PATH="/opt/venv/bin:$PATH"
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
@@ -86,6 +71,30 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
     chown -R appuser:appuser /opt/venv /app
+
+ARG LOTUS_GIT_COMMIT_SHA
+ARG LOTUS_GIT_BRANCH
+ARG LOTUS_BUILD_TIMESTAMP
+ARG LOTUS_REPO_URL
+ARG LOTUS_IMAGE_VERSION
+ARG LOTUS_IMAGE_DIGEST
+ARG LOTUS_CI_RUN_ID
+
+LABEL org.opencontainers.image.revision=${LOTUS_GIT_COMMIT_SHA} \
+    org.opencontainers.image.ref.name=${LOTUS_GIT_BRANCH} \
+    org.opencontainers.image.created=${LOTUS_BUILD_TIMESTAMP} \
+    org.opencontainers.image.source=${LOTUS_REPO_URL} \
+    org.opencontainers.image.version=${LOTUS_IMAGE_VERSION} \
+    org.opencontainers.image.digest=${LOTUS_IMAGE_DIGEST} \
+    org.opencontainers.image.ci.run_id=${LOTUS_CI_RUN_ID}
+
+ENV LOTUS_GIT_COMMIT_SHA=${LOTUS_GIT_COMMIT_SHA} \
+    LOTUS_GIT_BRANCH=${LOTUS_GIT_BRANCH} \
+    LOTUS_BUILD_TIMESTAMP=${LOTUS_BUILD_TIMESTAMP} \
+    LOTUS_REPO_URL=${LOTUS_REPO_URL} \
+    LOTUS_IMAGE_VERSION=${LOTUS_IMAGE_VERSION} \
+    LOTUS_IMAGE_DIGEST=${LOTUS_IMAGE_DIGEST} \
+    LOTUS_CI_RUN_ID=${LOTUS_CI_RUN_ID}
 
 USER appuser
 EXPOSE 8080

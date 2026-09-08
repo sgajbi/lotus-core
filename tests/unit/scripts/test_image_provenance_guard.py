@@ -134,6 +134,7 @@ ARG LOTUS_REPO_URL
 ARG LOTUS_IMAGE_VERSION
 ARG LOTUS_IMAGE_DIGEST
 ARG LOTUS_CI_RUN_ID
+RUN install-dependencies
 LABEL org.opencontainers.image.revision=${LOTUS_GIT_COMMIT_SHA} \\
     org.opencontainers.image.ref.name=${LOTUS_GIT_BRANCH} \\
     org.opencontainers.image.created=${LOTUS_BUILD_TIMESTAMP} \\
@@ -183,7 +184,8 @@ def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
             "python scripts/release/local_image_build.py docker-build", "docker build ."
-        ),
+        )
+        + "\nunused-helper:\n\tpython scripts/release/local_image_build.py docker-build\n",
         encoding="utf-8",
     )
 
@@ -276,6 +278,24 @@ def test_image_provenance_guard_reports_missing_digest_label(tmp_path: Path) -> 
     findings = find_image_provenance_findings(tmp_path)
 
     assert any("missing OCI label org.opencontainers.image.digest" in f.detail for f in findings)
+
+
+def test_image_provenance_guard_rejects_volatile_metadata_before_build_layers(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile().replace("RUN install-dependencies\n", "")
+        + "\nRUN install-dependencies\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("labels must follow dependency-install RUN layers" in f.detail for f in findings)
+    assert any(
+        "runtime provenance must follow dependency-install RUN layers" in f.detail for f in findings
+    )
 
 
 def test_image_provenance_guard_requires_standard_version_endpoint(tmp_path: Path) -> None:
