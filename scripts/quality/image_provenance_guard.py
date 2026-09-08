@@ -147,6 +147,13 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                         f"missing stage build arg {arg_name}",
                     )
                 )
+            if content.count(f"ARG {arg_name}") > 2:
+                findings.append(
+                    ImageProvenanceFinding(
+                        _relative(dockerfile, root),
+                        f"volatile build arg {arg_name} is declared before final image assembly",
+                    )
+                )
             if f"{arg_name}=${{{arg_name}}}" not in content:
                 findings.append(
                     ImageProvenanceFinding(

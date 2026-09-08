@@ -127,6 +127,7 @@ ARG LOTUS_IMAGE_VERSION=unknown
 ARG LOTUS_IMAGE_DIGEST=unknown
 ARG LOTUS_CI_RUN_ID=unknown
 FROM python:3.11 AS runtime-base
+RUN install-dependencies
 ARG LOTUS_GIT_COMMIT_SHA
 ARG LOTUS_GIT_BRANCH
 ARG LOTUS_BUILD_TIMESTAMP
@@ -134,7 +135,6 @@ ARG LOTUS_REPO_URL
 ARG LOTUS_IMAGE_VERSION
 ARG LOTUS_IMAGE_DIGEST
 ARG LOTUS_CI_RUN_ID
-RUN install-dependencies
 LABEL org.opencontainers.image.revision=${LOTUS_GIT_COMMIT_SHA} \\
     org.opencontainers.image.ref.name=${LOTUS_GIT_BRANCH} \\
     org.opencontainers.image.created=${LOTUS_BUILD_TIMESTAMP} \\
@@ -295,6 +295,26 @@ def test_image_provenance_guard_rejects_volatile_metadata_before_build_layers(
     assert any("labels must follow dependency-install RUN layers" in f.detail for f in findings)
     assert any(
         "runtime provenance must follow dependency-install RUN layers" in f.detail for f in findings
+    )
+
+
+def test_image_provenance_guard_rejects_volatile_arg_before_build_layers(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile().replace(
+            "FROM python:3.11 AS runtime-base\n",
+            "FROM python:3.11 AS runtime-base\nARG LOTUS_BUILD_TIMESTAMP\n",
+        ),
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(
+        "LOTUS_BUILD_TIMESTAMP is declared before final image assembly" in f.detail
+        for f in findings
     )
 
 
