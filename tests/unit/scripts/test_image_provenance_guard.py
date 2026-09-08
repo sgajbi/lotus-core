@@ -230,6 +230,23 @@ def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -
     assert any("docker-build must route through" in f.detail for f in findings)
 
 
+def test_image_provenance_guard_rejects_commented_make_wrapper(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        makefile.read_text(encoding="utf-8").replace(
+            "\tpython scripts/release/local_image_build.py docker-build",
+            "\tdocker build . # python scripts/release/local_image_build.py docker-build",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("docker-build must route through" in f.detail for f in findings)
+
+
 def test_image_provenance_guard_rejects_coupled_scan_policy_exit(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
