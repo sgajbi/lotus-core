@@ -645,16 +645,27 @@ def test_online_receipt_verification_accepts_exact_main_receipts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manifest = _manifest()
+    _, receipt = next(guard._github_run_refs(manifest))
 
     def github_payload(endpoint: str) -> dict[str, object]:
         if endpoint.endswith("artifacts?per_page=100"):
             return {"artifacts": _receipt_artifacts(manifest)}
+        if endpoint.endswith("jobs?per_page=100"):
+            return {
+                "jobs": [
+                    {
+                        "name": guard.EXACT_REVISION_ASSERTION_JOB,
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ]
+            }
         return {
-            "head_sha": manifest["inspected_core_commit"],
-            "workflow_id": guard.RECEIPT_WORKFLOW_ID,
-            "path": guard.RECEIPT_WORKFLOW_PATH,
-            "event": guard.HISTORICAL_RECEIPT_EVENT,
-            "head_branch": guard.HISTORICAL_RECEIPT_BRANCH,
+            "head_sha": receipt["source_commit"],
+            "workflow_id": receipt["workflow_id"],
+            "path": receipt["workflow_path"],
+            "event": receipt["event"],
+            "head_branch": receipt["head_branch"],
             "status": "completed",
             "conclusion": "success",
         }
