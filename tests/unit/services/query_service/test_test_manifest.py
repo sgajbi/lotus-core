@@ -65,12 +65,27 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
     assert "test-critical-lifecycle-db:" in Path("Makefile").read_text(encoding="utf-8")
 
 
+def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
+    assert get_suite("query-authority-db-contract") == [
+        "tests/integration/services/query_control_plane_service/"
+        "test_transaction_economics_tenant_postgresql.py",
+        "tests/integration/services/query_service/test_transaction_repository_paging.py::"
+        "test_transaction_ledger_page_and_identity_share_one_repeatable_snapshot",
+    ]
+    assert SUITE_ENV_PROFILE["query-authority-db-contract"] == "integration"
+    assert SUITE_RUNTIME_MODE["query-authority-db-contract"] == "db_direct"
+    assert "test-query-authority-db-contract:" in Path("Makefile").read_text(encoding="utf-8")
+
+
 def test_local_pr_aggregate_runs_critical_lifecycle_suite() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
     recipe = makefile.split("test-pr-suites:", 1)[1].split("test-pr-runtime-gates:", 1)[0]
 
     assert recipe.index("$(MAKE) test-unit-db") < recipe.index("$(MAKE) test-critical-lifecycle-db")
     assert recipe.index("$(MAKE) test-critical-lifecycle-db") < recipe.index(
+        "$(MAKE) test-query-authority-db-contract"
+    )
+    assert recipe.index("$(MAKE) test-query-authority-db-contract") < recipe.index(
         "$(MAKE) test-integration-lite"
     )
 

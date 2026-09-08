@@ -63,6 +63,10 @@
       "app_id": 15368
     },
     {
+      "context": "PR Merge Gate / Tests (query-authority-db-contract)",
+      "app_id": 15368
+    },
+    {
       "context": "PR Merge Gate / Tests (transaction-buy-contract)",
       "app_id": 15368
     },

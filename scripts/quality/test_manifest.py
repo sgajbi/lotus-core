@@ -54,6 +54,12 @@ SUITES: dict[str, list[str]] = {
         "test_int_reconciliation_repository.py",
     ],
     "critical-lifecycle-db": ["tests/integration"],
+    "query-authority-db-contract": [
+        "tests/integration/services/query_control_plane_service/"
+        "test_transaction_economics_tenant_postgresql.py",
+        "tests/integration/services/query_service/test_transaction_repository_paging.py::"
+        "test_transaction_ledger_page_and_identity_share_one_repeatable_snapshot",
+    ],
     "integration-lite": _discover_integration_lite(),
     "integration-all": ["tests/integration"],
     "ops-contract": [
@@ -195,6 +201,7 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "unit-db": "unit",
     "critical-db-coverage": "integration",
     "critical-lifecycle-db": "integration",
+    "query-authority-db-contract": "integration",
     "integration-lite": "integration",
     "integration-all": "integration",
     "ops-contract": "integration",
@@ -216,6 +223,7 @@ SUITE_RUNTIME_MODE: dict[str, str] = {
     "unit-db": "db_direct",
     "critical-db-coverage": "db_direct",
     "critical-lifecycle-db": "db_direct",
+    "query-authority-db-contract": "db_direct",
     "integration-lite": "db_direct",
     "integration-all": "db_direct",
     "ops-contract": "db_direct",
