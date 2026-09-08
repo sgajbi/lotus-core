@@ -24,6 +24,7 @@ from .routers import (
     operations,
     security_audit,
     simulation,
+    transaction_economics,
 )
 
 SERVICE_PREFIX = "QCP"
@@ -71,6 +72,7 @@ include_routers(
     corporate_action_support.router,
     benchmark_assignment.router,
     integration.router,
+    transaction_economics.router,
     advisory_simulation.router,
     analytics_inputs.router,
     capabilities.router,

@@ -7330,6 +7330,11 @@
           "description": "Invalid performance component economics request"
         },
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Tenant scope forbidden"
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Portfolio not found"
@@ -7542,6 +7547,11 @@
           "status_code": "400",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Invalid transaction-cost curve request"
+        },
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Tenant scope forbidden"
         },
         {
           "status_code": "404",

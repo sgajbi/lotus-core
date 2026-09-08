@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, NoReturn, cast
 
+from fastapi import status
 from pydantic import BaseModel, Field
 
 QUERY_CONTROL_PLANE_PROBLEM_TYPE_PREFIX = "https://lotus-platform.dev/problems/query-control-plane"
@@ -129,6 +130,63 @@ def raise_problem(
         detail=detail,
         error_code=error_code,
         metadata=metadata,
+    )
+
+
+def raise_source_evidence_not_found(
+    *,
+    source_product: str,
+    portfolio_id: str,
+    exc: Exception,
+) -> NoReturn:
+    _raise_source_evidence_problem(
+        status_code=status.HTTP_404_NOT_FOUND,
+        title="Portfolio source evidence not found",
+        detail="Requested portfolio source evidence was not found.",
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        source_product=source_product,
+        portfolio_id=portfolio_id,
+        reason=exc.__class__.__name__,
+    )
+
+
+def raise_source_evidence_invalid_request(
+    *,
+    source_product: str,
+    portfolio_id: str,
+    exc: Exception,
+) -> NoReturn:
+    _raise_source_evidence_problem(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Portfolio source evidence request is invalid",
+        detail="Portfolio source evidence request is invalid.",
+        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+        source_product=source_product,
+        portfolio_id=portfolio_id,
+        reason=exc.__class__.__name__,
+    )
+
+
+def _raise_source_evidence_problem(
+    *,
+    status_code: int,
+    title: str,
+    detail: str,
+    error_code: str,
+    source_product: str,
+    portfolio_id: str,
+    reason: str,
+) -> NoReturn:
+    raise_problem(
+        status_code=status_code,
+        title=title,
+        detail=detail,
+        error_code=error_code,
+        metadata={
+            "source_product": source_product,
+            "portfolio_id": portfolio_id,
+            "reason": reason,
+        },
     )
 
 
