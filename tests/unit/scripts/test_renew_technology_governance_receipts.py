@@ -77,6 +77,17 @@ def _install_github_payloads(
     monkeypatch.setattr(guard, "_github_api_payload", github_payload)
 
 
+def _text_outside_github_receipts(content: str) -> str:
+    decoder = json.JSONDecoder()
+    cursor = 0
+    retained: list[str] = []
+    for match in renewal.GITHUB_RECEIPT_START.finditer(content):
+        retained.append(content[cursor : match.start()])
+        _, cursor = decoder.raw_decode(content, match.start())
+    retained.append(content[cursor:])
+    return "".join(retained)
+
+
 def test_renewal_updates_only_receipts_and_preserves_assessment_truth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -152,9 +163,10 @@ def test_cli_writes_a_valid_renewed_manifest_atomically(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    original_text = guard.MANIFEST_PATH.read_text(encoding="utf-8")
     manifest = guard.load_manifest()
     manifest_path = tmp_path / "pilot.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_path.write_text(original_text, encoding="utf-8")
     _install_github_payloads(monkeypatch, manifest)
 
     assert renewal.main(["--run-id", str(RUN_ID), "--manifest", str(manifest_path)]) == 0
@@ -164,4 +176,8 @@ def test_cli_writes_a_valid_renewed_manifest_atomically(
     assert {receipt["event"] for _, receipt in guard._github_run_refs(persisted)} == {
         guard.RENEWABLE_RECEIPT_EVENT
     }
+    persisted_text = manifest_path.read_text(encoding="utf-8")
+    assert _text_outside_github_receipts(persisted_text) == _text_outside_github_receipts(
+        original_text
+    )
     assert not list(tmp_path.glob(".pilot.json.*.tmp"))
