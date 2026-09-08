@@ -10,6 +10,7 @@ import pytest
 from src.services.query_service.app.services.lot_basis_transfer_service import (
     LotBasisTransferService,
 )
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 
 def _receipt() -> SimpleNamespace:
@@ -72,6 +73,7 @@ async def test_latest_receipt_maps_target_and_conserved_source_lot_economics() -
         result = await LotBasisTransferService(MagicMock()).get_latest_receipt(
             portfolio_id="P1",
             source_transaction_id="DEMERGER-OUT-001",
+            tenant_context=TEST_TENANT_CONTEXT,
         )
 
     assert result.target_transaction_id == "DEMERGER-IN-001"
@@ -96,4 +98,5 @@ async def test_latest_receipt_raises_when_source_transaction_has_no_receipt() ->
             await LotBasisTransferService(MagicMock()).get_latest_receipt(
                 portfolio_id="P1",
                 source_transaction_id="DEMERGER-OUT-404",
+                tenant_context=TEST_TENANT_CONTEXT,
             )

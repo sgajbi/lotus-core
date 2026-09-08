@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal, localcontext
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -31,7 +32,8 @@ class CashMovementService:
         portfolio_id: str,
         start_date: date,
         end_date: date,
-        tenant_id: str | None = None,
+        *,
+        tenant_context: TenantContext,
     ) -> PortfolioCashMovementSummaryResponse:
         if start_date > end_date:
             raise ValueError("start_date must be on or before end_date")
@@ -42,7 +44,9 @@ class CashMovementService:
                 f"{MAX_CASH_MOVEMENT_WINDOW_DAYS} days or less"
             )
 
-        portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
+        portfolio_currency = await self.repo.get_portfolio_currency(
+            portfolio_id, tenant_id=tenant_context.tenant_id
+        )
         if portfolio_currency is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
@@ -102,7 +106,11 @@ class CashMovementService:
             (row[7] for row in rows if row[7] is not None),
             default=None,
         )
-        normalized_tenant_id = tenant_id.strip() if tenant_id and tenant_id.strip() else None
+        # The recorded tenant is the one admission verified, not a value the
+        # caller supplied. It previously reached the calculation lineage, the
+        # content hash and the published runtime metadata unverified, which
+        # made an asserted header read as provenance.
+        normalized_tenant_id = tenant_context.tenant_id.value
         source_window_trust = reconcile_cashflow_window(
             source_row_count=evidence.source_row_count,
             calculated_source_row_count=cashflow_count,

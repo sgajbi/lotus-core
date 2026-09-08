@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -22,7 +22,7 @@ from src.services.query_service.app.dtos.transaction_dto import (
     TransactionRecordResponse,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -174,7 +174,10 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
         limit=20,
         sort_by="transaction_date",
         sort_order="asc",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_transactions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_transaction_record_returns_exact_source_product(async_test_client):
@@ -317,7 +320,10 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
         limit=100,
         sort_by=None,
         sort_order="desc",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_transactions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_transactions_for_security_drill_down_defaults_to_latest_first(
@@ -348,7 +354,10 @@ async def test_get_transactions_for_security_drill_down_defaults_to_latest_first
         limit=100,
         sort_by=None,
         sort_order="desc",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_transactions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_transactions_forwards_fx_filters(async_test_client):
@@ -388,7 +397,10 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
         swap_event_id="FXSWAP-LTG-FX-2026-0001",
         near_leg_group_id="FXSWAP-LTG-FX-2026-0001-NEAR",
         far_leg_group_id="FXSWAP-LTG-FX-2026-0001-FAR",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_transactions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_transactions_forwards_reporting_currency(async_test_client):
@@ -417,7 +429,10 @@ async def test_get_transactions_forwards_reporting_currency(async_test_client):
         limit=100,
         sort_by=None,
         sort_order="desc",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_transactions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_transactions_preserves_settlement_date_for_trade_cash_and_income_shapes(
@@ -505,7 +520,10 @@ async def test_get_realized_tax_summary_returns_source_product(async_test_client
         end_date=datetime(2025, 8, 31, 0, 0).date(),
         as_of_date=datetime(2025, 8, 31, 0, 0).date(),
         reporting_currency="SGD",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_realized_tax_summary.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_realized_tax_summary_maps_not_found_and_validation_errors(async_test_client):

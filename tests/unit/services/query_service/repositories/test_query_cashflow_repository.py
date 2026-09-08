@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -58,7 +59,7 @@ async def test_cashflow_repository_portfolio_exists_uses_limit_one(
     mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: "P1")
     repository = CashflowRepository(mock_db_session)
 
-    exists = await repository.portfolio_exists("P1")
+    exists = await repository.portfolio_exists("P1", tenant_id=TEST_TENANT_CONTEXT.tenant_id)
 
     assert exists is True
     stmt = mock_db_session.execute.call_args[0][0]
@@ -73,7 +74,9 @@ async def test_cashflow_repository_portfolio_currency_uses_base_currency(
     mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: "USD")
     repository = CashflowRepository(mock_db_session)
 
-    portfolio_currency = await repository.get_portfolio_currency("P1")
+    portfolio_currency = await repository.get_portfolio_currency(
+        "P1", tenant_id=TEST_TENANT_CONTEXT.tenant_id
+    )
 
     assert portfolio_currency == "USD"
     stmt = mock_db_session.execute.call_args[0][0]

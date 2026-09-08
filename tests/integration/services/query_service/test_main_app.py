@@ -853,13 +853,15 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     )
     assert maturity_projection["schema"]["const"] is False
     assert "projected holdings are intentionally excluded" in maturity_projection["description"]
-    maturity_tenant = next(
-        parameter
-        for parameter in maturity_summary["parameters"]
-        if parameter["name"] == "x-tenant-id"
+    # Tenancy is an admission concern applied to every route, not a parameter
+    # a route accepts. Only three of thirty-two routes ever declared this
+    # header, and on those three the value was recorded into lineage, content
+    # hashes and published runtime metadata without ever being enforced -- an
+    # asserted header reading as provenance. The route no longer offers it;
+    # admission still requires X-Tenant-Id and refuses the request without it.
+    assert not any(
+        parameter["name"] == "x-tenant-id" for parameter in maturity_summary["parameters"]
     )
-    assert maturity_tenant["in"] == "header"
-    assert "bound into runtime receipt metadata" in maturity_tenant["description"]
     assert (
         maturity_summary_response["properties"]["product_name"]["default"]
         == "PortfolioMaturitySummary"
@@ -948,7 +950,13 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     )
     assert "calculation_lineage" in projection_response["properties"]
     assert "source_window_trust" in projection_response["properties"]
-    assert any(parameter["name"] == "x-tenant-id" for parameter in projection["parameters"])
+    # Tenancy is an admission concern applied to every route, not a parameter
+    # a route accepts. Only three of thirty-two routes ever declared this
+    # header, and on those three the value was recorded into lineage, content
+    # hashes and published runtime metadata without ever being enforced -- an
+    # asserted header reading as provenance. The route no longer offers it;
+    # admission still requires X-Tenant-Id and refuses the request without it.
+    assert not any(parameter["name"] == "x-tenant-id" for parameter in projection["parameters"])
     point_schema = schema["components"]["schemas"]["CashflowProjectionPoint"]
     assert (
         "booked_net_cashflow plus projected_settlement_cashflow"
@@ -990,7 +998,13 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     )
     assert "calculation_lineage" in summary_response["properties"]
     assert "source_window_trust" in summary_response["properties"]
-    assert any(parameter["name"] == "x-tenant-id" for parameter in summary["parameters"])
+    # Tenancy is an admission concern applied to every route, not a parameter
+    # a route accepts. Only three of thirty-two routes ever declared this
+    # header, and on those three the value was recorded into lineage, content
+    # hashes and published runtime metadata without ever being enforced -- an
+    # asserted header reading as provenance. The route no longer offers it;
+    # admission still requires X-Tenant-Id and refuses the request without it.
+    assert not any(parameter["name"] == "x-tenant-id" for parameter in summary["parameters"])
     bucket_schema = schema["components"]["schemas"]["CashMovementBucket"]
     assert bucket_schema["properties"]["movement_direction"]["description"] == (
         "Direction derived from the sign of total_amount only."

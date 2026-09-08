@@ -1,9 +1,10 @@
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dependencies import get_position_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.position_service import PositionService
-from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -143,7 +144,10 @@ async def test_get_latest_positions_success(async_test_client):
         portfolio_id="P1",
         as_of_date=None,
         include_projected=False,
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_portfolio_positions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_latest_positions_unexpected_maps_to_500(async_test_client):
@@ -225,7 +229,10 @@ async def test_get_latest_positions_forwards_as_of_and_include_projected(async_t
         portfolio_id="P1",
         as_of_date=date(2026, 2, 28),
         include_projected=True,
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_portfolio_positions.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_get_portfolio_maturity_summary_success(async_test_client):
@@ -273,8 +280,10 @@ async def test_get_portfolio_maturity_summary_success(async_test_client):
         as_of_date=None,
         horizon_days=90,
         include_projected=False,
-        tenant_id="TENANT-PB",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_portfolio_maturity_summary.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TenantId("TENANT-PB")
 
 
 async def test_get_portfolio_maturity_summary_rejects_projected_state(async_test_client):
@@ -304,8 +313,10 @@ async def test_get_portfolio_maturity_summary_accepts_explicit_booked_state(asyn
         as_of_date=date(2026, 2, 28),
         horizon_days=60,
         include_projected=False,
-        tenant_id=TEST_TENANT_ID,
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_portfolio_maturity_summary.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 @pytest.mark.parametrize("horizon_days", [0, 3661])

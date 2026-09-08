@@ -2,7 +2,7 @@
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -14,7 +14,7 @@ from src.services.query_service.app.dtos.lot_disposal_dto import (
     LotDisposalReceiptResponse,
 )
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -98,7 +98,10 @@ async def test_get_latest_lot_disposal_receipt(client_and_service) -> None:
     service.get_latest_receipt.assert_awaited_once_with(
         portfolio_id="P1",
         transaction_id="RED-001",
+        tenant_context=ANY,
     )
+    forwarded = service.get_latest_receipt.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_lot_disposal_receipt_not_found_maps_to_404(client_and_service) -> None:

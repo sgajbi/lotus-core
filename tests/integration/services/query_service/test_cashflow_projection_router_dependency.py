@@ -1,16 +1,17 @@
 from datetime import UTC, date, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
 
 from src.services.query_service.app.dependencies import get_cashflow_projection_service
 from src.services.query_service.app.main import app
-from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
 
@@ -89,8 +90,10 @@ async def test_cashflow_projection_success(async_test_client):
         horizon_days=10,
         as_of_date=None,
         include_projected=True,
-        tenant_id=TEST_TENANT_ID,
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_cashflow_projection.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
 
 
 async def test_cashflow_projection_forwards_params(async_test_client):
@@ -123,8 +126,10 @@ async def test_cashflow_projection_forwards_params(async_test_client):
         horizon_days=5,
         as_of_date=date(2026, 3, 1),
         include_projected=False,
-        tenant_id="tenant-a",
+        tenant_context=ANY,
     )
+    forwarded = mock_service.get_cashflow_projection.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TenantId("tenant-a")
 
 
 async def test_cashflow_projection_not_found_maps_to_404(async_test_client):

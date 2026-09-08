@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import NoReturn, Optional, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,6 +95,8 @@ class TransactionService:
         as_of_date: Optional[date] = None,
         include_projected: bool = False,
         reporting_currency: Optional[str] = None,
+        *,
+        tenant_context: TenantContext,
     ) -> PaginatedTransactionResponse:
         """
         Retrieves a paginated and filtered list of transactions for a portfolio.
@@ -118,7 +121,11 @@ class TransactionService:
         )
 
         await self.repo.establish_transaction_ledger_read_snapshot()
-        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        await ensure_portfolio_exists(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_context.tenant_id,
+        )
         effective_as_of_date = await transaction_ledger_effective_as_of_date(
             repository=self.repo,
             as_of_date=as_of_date,
@@ -281,6 +288,7 @@ class TransactionService:
         end_date: Optional[date] = None,
         as_of_date: Optional[date] = None,
         reporting_currency: Optional[str] = None,
+        tenant_context: TenantContext,
     ) -> PortfolioRealizedTaxSummaryResponse:
         logger.info(
             "Realized tax summary query requested.",
@@ -296,7 +304,9 @@ class TransactionService:
             ),
         )
 
-        base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
+        base_currency = await self.repo.get_portfolio_base_currency(
+            portfolio_id, tenant_id=tenant_context.tenant_id
+        )
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         effective_as_of_date = await realized_tax_effective_as_of_date(

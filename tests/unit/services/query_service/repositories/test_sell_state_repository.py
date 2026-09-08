@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.sell_state_repository import SellStateRepository
+from tests.test_support.tenant import TEST_TENANT_CONTEXT
 
 pytestmark = pytest.mark.asyncio
 
@@ -74,7 +75,7 @@ async def test_portfolio_exists_true(repository: SellStateRepository, mock_db_se
     mock_result.scalar_one_or_none.return_value = "PORT-1"
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("PORT-1")
+    exists = await repository.portfolio_exists("PORT-1", tenant_id=TEST_TENANT_CONTEXT.tenant_id)
 
     assert exists is True
 
@@ -84,6 +85,6 @@ async def test_portfolio_exists_false(repository: SellStateRepository, mock_db_s
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    exists = await repository.portfolio_exists("PORT-404")
+    exists = await repository.portfolio_exists("PORT-404", tenant_id=TEST_TENANT_CONTEXT.tenant_id)
 
     assert exists is False

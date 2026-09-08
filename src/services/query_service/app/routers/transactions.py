@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.transaction_query import TransactionRecordUnavailableError
@@ -66,6 +66,7 @@ EXACT_TRANSACTION_SOURCE_UNAVAILABLE_RESPONSE_EXAMPLE = {
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def get_transactions(
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -176,6 +177,7 @@ async def get_transactions(
             reporting_currency=reporting_currency,
             **pagination,
             **sorting,
+            tenant_context=http_request.state.tenant_context,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
@@ -318,6 +320,7 @@ async def get_transaction_record(
     openapi_extra=source_data_product_openapi_extra("PortfolioRealizedTaxSummary"),
 )
 async def get_realized_tax_summary(
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -355,6 +358,7 @@ async def get_realized_tax_summary(
             end_date=end_date,
             as_of_date=as_of_date,
             reporting_currency=reporting_currency,
+            tenant_context=http_request.state.tenant_context,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
