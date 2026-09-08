@@ -64,7 +64,7 @@
       "rationale": "Exact-main CI generated a CycloneDX runtime-lock SBOM. This does not satisfy image_sbom.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/release/generate_runtime_sbom.py", "anchors": ["cyclonedx-json", "RUNTIME_LOCK_FILE"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:90313524d136113a7380abe66a61daa45e97432b157cabf62312047d3521da29", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/34244464394", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:2ea1f118682418b7ffb02ee5b8717d48e3234549953acc3d9955ba87c03513c1", "source_commit": "022f63c0dccf5e082e3422f20eaa6cf45086c5f2", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "workflow_dispatch", "head_branch": "main-releasability-022f63c0dccf5e082e3422f20eaa6cf45086c5f2"}
       ]
     },
     {
@@ -80,7 +80,7 @@
       "rationale": "Exact-main dependency health ran pip-audit in a content-addressed constrained environment with no ignored vulnerabilities.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/validation/dependency_health_check.py", "anchors": ["PIP_AUDIT_IGNORED_VULNERABILITIES", "audit_executed"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-dependency-health-31551900460", "artifact_digest": "sha256:013cfcb1d4dcd193b1d0f8ab404943f3868c3932e6bad79ec28628c337a6d875", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/34244464394", "artifact": "main-releasability-dependency-health-34244464394", "artifact_digest": "sha256:b5ac5a9960f252c67e588328008cb4db864c73291777514173f0c69bd4d1453d", "source_commit": "022f63c0dccf5e082e3422f20eaa6cf45086c5f2", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "workflow_dispatch", "head_branch": "main-releasability-022f63c0dccf5e082e3422f20eaa6cf45086c5f2"}
       ]
     },
     {
@@ -115,7 +115,7 @@
       "rationale": "Exact-main runtime image-set evidence binds all local runtime images to the inspected Git SHA.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/release/runtime_image_set.py", "anchors": ["source_commit_sha"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:90313524d136113a7380abe66a61daa45e97432b157cabf62312047d3521da29", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/34244464394", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:2ea1f118682418b7ffb02ee5b8717d48e3234549953acc3d9955ba87c03513c1", "source_commit": "022f63c0dccf5e082e3422f20eaa6cf45086c5f2", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "workflow_dispatch", "head_branch": "main-releasability-022f63c0dccf5e082e3422f20eaa6cf45086c5f2"}
       ]
     },
     {
@@ -151,7 +151,7 @@
       "rationale": "All deployable Dockerfiles carry guarded OCI source/build labels and exact-main runtime image-set verification passed.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/quality/image_provenance_guard.py", "anchors": ["REQUIRED_OCI_LABELS", "_dockerfile_findings"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:90313524d136113a7380abe66a61daa45e97432b157cabf62312047d3521da29", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/34244464394", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:2ea1f118682418b7ffb02ee5b8717d48e3234549953acc3d9955ba87c03513c1", "source_commit": "022f63c0dccf5e082e3422f20eaa6cf45086c5f2", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "workflow_dispatch", "head_branch": "main-releasability-022f63c0dccf5e082e3422f20eaa6cf45086c5f2"}
       ]
     },
     {
@@ -195,7 +195,7 @@
       "rationale": "Exact-main Docker smoke passed after the governed runtime image-set build and verification.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/validation/docker_endpoint_smoke.py", "anchors": ["def main"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31551900460", "artifact": "main-releasability-docker-smoke-artifacts", "artifact_digest": "sha256:c0603d7f236aa023a8507bfeb97d0561cd26c051d7e887a33fe92c35dc2f7ead", "source_commit": "e0aa085b9c5b57e7a48906e602d98ff4135d3f4c", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/34244464394", "artifact": "main-releasability-docker-smoke-artifacts", "artifact_digest": "sha256:497438b37101dcead24dd78539bdab03132c00d58c478ea6f55ba62b31282bf2", "source_commit": "022f63c0dccf5e082e3422f20eaa6cf45086c5f2", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "workflow_dispatch", "head_branch": "main-releasability-022f63c0dccf5e082e3422f20eaa6cf45086c5f2"}
       ]
     }
   ],
