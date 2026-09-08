@@ -123,6 +123,9 @@ structure and event-flow detail.
    missing evidence or broaden tenant scope.
 5. Local Compose is isolated Core development. Shared infrastructure belongs to Platform; the
    populated integrated front-office runtime belongs to Workbench.
+   Use `make docker-up` for a source-attributed local build. It derives checkout provenance once
+   and supplies it to every Compose-built service; direct `docker compose up --build` cannot
+   authoritatively derive Git or dirty-tree state.
 6. Promoted runtime claims require exact image, deployment, dependency, migration, observability,
    IAM, and operational evidence. Local green tests are not that certification.
 

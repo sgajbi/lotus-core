@@ -136,8 +136,14 @@ as a readiness claim.
 Use this path for isolated backend work after activating the environment created above:
 
 ```bash
-docker compose up -d --build
+make docker-up
 ```
+
+The Make target derives the exact Git revision, branch, dirty-tree state, build time, repository,
+and local image version once, then supplies that metadata to every Compose-built Core image. Local
+builds report `unavailable-before-push` for image digest and `unavailable-local-build` for CI run
+identity because neither value exists before publication; they are never fabricated. Git-derived
+values are passed as subprocess data rather than shell syntax.
 
 Compose owns the startup ordering. `kafka-topic-creator` provisions the required topics through
 `python -m tools.kafka_setup`; `migration-runner` applies `alembic upgrade head`; dependent services
@@ -153,9 +159,13 @@ docker compose logs --tail=200 kafka-topic-creator
 curl --fail http://localhost:8200/health/ready
 curl --fail http://localhost:8201/health/ready
 curl --fail http://localhost:8202/health/ready
+curl --fail http://localhost:8202/version
 ```
 
 The two one-shot containers must show exit code `0`; each readiness request must return HTTP `200`.
+For a clean checkout, `/version.git_commit_sha` must equal `git rev-parse HEAD`; a modified checkout
+must append `-dirty`. Direct `docker compose up --build` is not the supported source-attributed build
+path because it cannot derive Git state by itself.
 Use `make test-docker-smoke` when the task requires the broader Docker contract rather than initial
 setup proof.
 
