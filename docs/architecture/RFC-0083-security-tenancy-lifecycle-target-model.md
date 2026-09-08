@@ -185,6 +185,14 @@ entries such as `GET /integration/portfolios`, but source-data products already 
 catalog-derived defaults. This is service-policy support; full production entitlement closure still
 requires gateway/platform ingress policy proof and affected-consumer validation.
 
+Portfolio-owned QCP transaction-economics products now enforce tenant authority beyond capability
+metadata. `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1` bind an optional body
+tenant assertion to admitted `TenantContext`, carry typed `TenantId` through their application
+port, and join transaction evidence to the tenant-owned portfolio in SQL. Foreign portfolios are
+indistinguishable from absence, and continuation fingerprints use the admitted tenant. This is a
+bounded runtime slice; it does not certify the remaining QCP, durable job, outbox, replay, or
+operator surfaces tracked by #798.
+
 The service identity and capability context must be verified before it is trusted. The shared
 enterprise middleware accepts capabilities only from the signed internal auth-context contract:
 `X-Enterprise-Auth-Key-Id`, `X-Enterprise-Auth-Timestamp`, and

@@ -16,6 +16,8 @@ assessment, OMS acknowledgement, or minimum-cost execution optimizer.
 | Request shape | Implemented behavior |
 | --- | --- |
 | `portfolio_id` path parameter | Selects the portfolio whose booked transaction-cost evidence is requested. |
+| admitted tenant | Required request authority. Core verifies portfolio ownership at persistence; a foreign portfolio is returned as not found. |
+| optional body `tenant_id` | Caller assertion only. When present it must match admitted authority; omission uses the admitted tenant. |
 | `as_of_date` | Bounds the request scope and product runtime metadata. |
 | `window.start_date` / `window.end_date` | Inclusive transaction-date window used for observed evidence. |
 | optional `security_ids` | Restricts evidence to requested securities and reports missing requested securities as supportability gaps. |
@@ -31,6 +33,8 @@ switch into simulated, quoted, venue, broker, or expected-cost modes.
 | Input | Source | Required | Meaning |
 | --- | --- | --- | --- |
 | `portfolio_id` | Path parameter | Yes | Portfolio whose evidence is returned. |
+| admitted tenant | Verified request context | Yes | Source-owned tenant used for portfolio and transaction-evidence reads. |
+| `tenant_id` | Request body | No | Optional assertion that must match admitted tenant authority. It never widens scope. |
 | `as_of_date` | Request body | Yes | Business date for request identity and metadata. |
 | `window.start_date`, `window.end_date` | Request body | Yes | Inclusive transaction-date evidence window. |
 | `security_ids` | Request body | No | Optional security filter and supportability coverage expectation. |
@@ -41,8 +45,8 @@ switch into simulated, quoted, venue, broker, or expected-cost modes.
 
 | Source | Used fields | Inclusion rule |
 | --- | --- | --- |
-| `portfolios` | `portfolio_id` | Portfolio must exist. |
-| `transactions` | `transaction_id`, `security_id`, `transaction_type`, `currency`, `transaction_date`, `gross_transaction_amount`, `trade_fee`, `updated_at` | Transaction must match the portfolio, requested filters, as-of scope, and requested transaction-date window. Gross transaction amount must be non-zero after absolute-value normalization. |
+| `portfolios` | `portfolio_id`, `tenant_id` | Portfolio must exist within the admitted tenant. |
+| `transactions` | `transaction_id`, `security_id`, `transaction_type`, `currency`, `transaction_date`, `gross_transaction_amount`, `trade_fee`, `updated_at` | Transaction must join to the admitted tenant's portfolio and match the requested filters, as-of scope, and transaction-date window. Gross transaction amount must be non-zero after absolute-value normalization. |
 | `transaction_costs` | `fee_type`, `amount`, `currency` | If explicit transaction-cost rows exist, one row per normalized `(transaction_id, fee_type, currency)` component is summed and used as the fee amount. If no explicit cost rows exist, the transaction `trade_fee` field is used. |
 
 Transactions with zero or missing fee evidence, or zero gross notional, do not contribute to a curve
@@ -103,9 +107,11 @@ For each qualifying group `G`:
 
 ## Step-by-Step Computation
 
-1. Verify that the requested portfolio exists.
+1. Bind the optional body tenant assertion to admitted authority, reject blank or mismatched
+   assertions before application or database work, and verify that the requested portfolio exists
+   for that tenant.
 2. Build a request-scope fingerprint from portfolio id, as-of date, window, filters, minimum
-   observation count, and tenant scope.
+   observation count, and the admitted tenant.
 3. Decode and validate the optional page token against the request-scope fingerprint.
 4. Query eligible curve keys for the portfolio, as-of date, requested transaction-date window, and
    optional filters using the normalized `(security_id, transaction_type, currency)` sort key, the
@@ -135,7 +141,9 @@ For each qualifying group `G`:
 
 | Condition | Behavior |
 | --- | --- |
-| Portfolio id does not exist | Service raises `LookupError`; the API maps it to HTTP `404`. |
+| Missing admitted tenant authority | Shared ingress rejects the request before route execution. |
+| Blank or mismatched body `tenant_id` | API returns HTTP `403`; no service or database read occurs. |
+| Portfolio id is absent or belongs to another tenant | Service raises `LookupError`; the API maps it to the same HTTP `404`. |
 | `window.end_date < window.start_date` | Request validation rejects the request. |
 | Blank or duplicate `security_ids` | Request validation rejects the request. |
 | Blank or duplicate `transaction_types` | Request validation rejects the request after upper-case normalization. |
@@ -190,6 +198,7 @@ Request:
 
 ```json
 {
+  "tenant_id": "tenant-sg",
   "as_of_date": "2026-05-03",
   "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
   "security_ids": ["EQ_US_AAPL"],

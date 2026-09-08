@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1722 QCP transaction-economics tenant authority (2026-09-08, fixed-local candidate): #798
+showed that `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1` recorded an optional
+caller tenant in continuation/content identity and runtime lineage while their SQL adapter selected
+portfolio-owned facts by globally unique portfolio id alone. The two routes now bind that field as
+an assertion against admitted `TenantContext`; application and port boundaries carry typed
+`TenantId`; and every portfolio/transaction evidence selector applies the persisted tenant scope.
+Foreign portfolios are indistinguishable from absence, cross-tenant page scope is refused, and the
+economic/as-of contracts are unchanged. Global instrument, price and FX reference products remain
+deliberately global; other QCP and durable replay boundaries remain separate #798 work. Evidence:
+[CR-1722-QCP-TRANSACTION-ECONOMICS-TENANT-AUTHORITY.md](./codebase-reviews/CR-1722-QCP-TRANSACTION-ECONOMICS-TENANT-AUTHORITY.md).
+
 CR-1721 Tenant-scoped transaction event fences (2026-09-07, fixed-local candidate): #798 tranche B
 showed that admitted tenant authority was dropped before Kafka publication and `processed_events`
 enforced transaction physical and semantic keys globally. Updated consumers now derive tenant from
