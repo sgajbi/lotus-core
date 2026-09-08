@@ -557,7 +557,7 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
     makefile = makefile_path.read_text(encoding="utf-8")
     for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
         expected = f"$(REPOSITORY_PYTHON) scripts/release/local_image_build.py {operation}"
-        if expected not in _make_target_recipe(makefile, target).splitlines():
+        if _make_target_recipe(makefile, target).splitlines() != [expected]:
             findings.append(
                 ImageProvenanceFinding(
                     _relative(makefile_path, root),
