@@ -340,16 +340,18 @@ def test_image_provenance_guard_rejects_volatile_arg_before_build_layers(
     _write_required_sources(tmp_path)
     _write_dockerfile(
         tmp_path,
-        _complete_dockerfile().replace(
-            "FROM python:3.11 AS runtime-base\n",
-            "FROM python:3.11 AS runtime-base\nARG LOTUS_BUILD_TIMESTAMP\n",
+        _complete_dockerfile()
+        .replace("RUN install-dependencies\n", "")
+        .replace(
+            "ARG LOTUS_BUILD_TIMESTAMP\n",
+            "ARG LOTUS_BUILD_TIMESTAMP\nRUN install-dependencies\n",
         ),
     )
 
     findings = find_image_provenance_findings(tmp_path)
 
     assert any(
-        "LOTUS_BUILD_TIMESTAMP is declared before final image assembly" in f.detail
+        "LOTUS_BUILD_TIMESTAMP must follow dependency-install RUN layers" in f.detail
         for f in findings
     )
 
