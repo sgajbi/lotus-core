@@ -15,7 +15,7 @@ CI_IS_TRUE := $(filter $(CI_TRUTHY_VALUES),$(strip $(CI)))
 LOCAL_CERTIFICATION_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--runtime-build)
 LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--build)
 OPENAPI_ARTIFACT_DIR ?= output/openapi
-REPOSITORY_PYTHON := python scripts/development/repository_python.py
+override REPOSITORY_PYTHON := python scripts/development/repository_python.py
 TRANSACTION_RELEASE_OUTPUT ?= output/task-runs/transaction-processing-release-rehearsal.json
 TRANSACTION_RELEASE_PULL_IMAGES ?= false
 
@@ -681,10 +681,10 @@ ci-main: verify-dependencies-clean $(CI_GATES) test-release-gates
 ci-local: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate test-unit-db coverage-gate
 
 docker-build:
-	python scripts/development/repository_python.py scripts/release/local_image_build.py docker-build
+	$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build
 
 docker-up:
-	python scripts/development/repository_python.py scripts/release/local_image_build.py compose-up
+	$(REPOSITORY_PYTHON) scripts/release/local_image_build.py compose-up
 
 docker-prebuild-ci:
 	$(REPOSITORY_PYTHON) scripts/release/prebuild_ci_images.py

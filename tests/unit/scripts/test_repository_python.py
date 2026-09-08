@@ -212,6 +212,9 @@ def test_repository_launcher_requires_a_command() -> None:
 def test_make_python_recipes_use_repository_launcher() -> None:
     makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
 
-    assert "REPOSITORY_PYTHON := python scripts/development/repository_python.py" in makefile_lines
+    assert (
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py"
+        in makefile_lines
+    )
     assert not [line for line in makefile_lines if line.startswith("\tpython ")]
     assert [line for line in makefile_lines if line.startswith("\t$(REPOSITORY_PYTHON) ")]
