@@ -41,6 +41,15 @@ x-shared-python-env: &shared_python_env
 
 x-outbox-stop-grace-period: &outbox_stop_grace_period ${OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS:-150}s
 
+x-local-build-args: &local_build_args
+  LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
+  LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
+  LOTUS_BUILD_TIMESTAMP: ${LOTUS_BUILD_TIMESTAMP:-unknown}
+  LOTUS_REPO_URL: ${LOTUS_REPO_URL:-unknown}
+  LOTUS_IMAGE_VERSION: ${LOTUS_IMAGE_VERSION:-unknown}
+  LOTUS_IMAGE_DIGEST: ${LOTUS_IMAGE_DIGEST:-unavailable-before-push}
+  LOTUS_CI_RUN_ID: ${LOTUS_CI_RUN_ID:-unavailable-local-build}
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -99,6 +108,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/kafka-topic-creator:local
     hostname: kafka-topic-creator
     depends_on:
@@ -136,6 +146,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/migration-runner:local
     hostname: migration-runner
     environment:
@@ -157,6 +168,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/ingestion_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/ingestion-service:local
     hostname: ingestion_service
     ports:
@@ -201,6 +213,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/query_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/query-service:local
     hostname: query_service
     ports:
@@ -230,6 +243,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/query_control_plane_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/query-control-plane-service:local
     hostname: query_control_plane_service
     ports:
@@ -259,6 +273,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/event_replay_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/event-replay-service:local
     hostname: event_replay_service
     ports:
@@ -292,6 +307,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/financial_reconciliation_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/financial-reconciliation-service:local
     hostname: financial_reconciliation_service
     ports:
@@ -325,6 +341,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/persistence-service:local
     hostname: persistence_service
     ports:
@@ -358,14 +375,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/portfolio_transaction_processing_service/Dockerfile
-      args:
-        LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
-        LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
-        LOTUS_BUILD_TIMESTAMP: ${LOTUS_BUILD_TIMESTAMP:-unknown}
-        LOTUS_REPO_URL: ${LOTUS_REPO_URL:-unknown}
-        LOTUS_IMAGE_VERSION: ${LOTUS_IMAGE_VERSION:-unknown}
-        LOTUS_IMAGE_DIGEST: ${LOTUS_IMAGE_DIGEST:-unknown}
-        LOTUS_CI_RUN_ID: ${LOTUS_CI_RUN_ID:-unknown}
+      args: *local_build_args
     image: ${LOTUS_PORTFOLIO_TRANSACTION_PROCESSING_IMAGE:-lotus-core/portfolio-transaction-processing-service:local}
     hostname: portfolio_transaction_processing_service
     ports:
@@ -403,6 +413,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/valuation_orchestrator_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/valuation-orchestrator-service:local
     hostname: valuation_orchestrator_service
     ports:
@@ -442,6 +453,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/calculators/position_valuation_calculator/Dockerfile
+      args: *local_build_args
     image: lotus-core/position-valuation-calculator:local
     hostname: position_valuation_calculator
     ports:
@@ -478,6 +490,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/portfolio_derived_state_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/portfolio-derived-state-service:local
     hostname: portfolio_derived_state_service
     ports:
@@ -515,6 +528,7 @@ services:
     build:
       context: .
       dockerfile: ./src/services/persistence_service/Dockerfile
+      args: *local_build_args
     image: lotus-core/demo-data-loader:local
     hostname: demo_data_loader
     environment:

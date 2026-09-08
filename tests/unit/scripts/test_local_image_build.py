@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
+
+from scripts.release.local_image_build import (
+    LOCAL_CI_RUN_ID,
+    LOCAL_IMAGE_DIGEST,
+    LocalBuildMetadata,
+    compose_up_command,
+    discover_local_build_metadata,
+    docker_build_command,
+    run_local_build,
+)
+
+
+def _write_project(root: Path) -> None:
+    root.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "lotus-core"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+
+
+def test_discovers_exact_clean_checkout_provenance(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    outputs = iter(
+        (
+            "a" * 40 + "\n",
+            "fix/1107-local-image-provenance\n",
+            "",
+        )
+    )
+
+    def runner(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 0, stdout=next(outputs), stderr="")
+
+    metadata = discover_local_build_metadata(
+        tmp_path,
+        runner=runner,
+        now=lambda: datetime(2026, 9, 9, 1, 2, 3, tzinfo=UTC),
+    )
+
+    assert metadata.git_commit_sha == "a" * 40
+    assert metadata.git_branch == "fix/1107-local-image-provenance"
+    assert metadata.build_timestamp == "2026-09-09T01:02:03Z"
+    assert metadata.repo_url == "https://github.com/sgajbi/lotus-core"
+    assert metadata.image_version == "0.1.0-local.aaaaaaaaaaaa"
+    assert metadata.image_digest == LOCAL_IMAGE_DIGEST
+    assert metadata.ci_run_id == LOCAL_CI_RUN_ID
+
+
+def test_marks_modified_checkout_without_reinterpreting_branch_text(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    hostile_branch = "fix/quoted-'; echo not-code; '$value"
+    outputs = iter(("b" * 40, hostile_branch, " M Makefile"))
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout=next(outputs), stderr="")
+
+    metadata = discover_local_build_metadata(tmp_path, runner=runner)
+    command = docker_build_command(metadata)
+
+    assert metadata.git_commit_sha == f"{'b' * 40}-dirty"
+    assert metadata.git_branch == hostile_branch
+    assert f"LOTUS_GIT_BRANCH={hostile_branch}" in command
+    assert all(isinstance(command, list) for command in commands)
+
+
+def test_runs_compose_with_metadata_in_environment_and_without_shell() -> None:
+    captured: dict[str, object] = {}
+
+    def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["command"] = command
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0)
+
+    build_metadata = LocalBuildMetadata(
+        git_commit_sha="sha",
+        git_branch="branch",
+        build_timestamp="timestamp",
+        repo_url="repo",
+        image_version="version",
+    )
+    command = compose_up_command(("query_control_plane_service",), no_deps=True)
+    run_local_build(command, build_metadata, runner=runner)
+
+    assert captured["command"] == [
+        "docker",
+        "compose",
+        "up",
+        "--detach",
+        "--build",
+        "--no-deps",
+        "query_control_plane_service",
+    ]
+    assert captured["check"] is True
+    assert captured["env"]["LOTUS_GIT_COMMIT_SHA"] == "sha"  # type: ignore[index]
+    assert "shell" not in captured
