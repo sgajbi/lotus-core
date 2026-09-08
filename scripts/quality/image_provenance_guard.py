@@ -112,10 +112,12 @@ def _relative(path: Path, root: Path) -> Path:
 
 def _make_target_recipes(makefile: str, target: str) -> list[str]:
     lines = makefile.splitlines()
-    target_prefix = f"{target}:"
     recipes: list[str] = []
     for offset, line in enumerate(lines):
-        if not line.startswith(target_prefix):
+        if not line or line[0].isspace() or ":" not in line:
+            continue
+        rule_targets = line.partition(":")[0].split()
+        if target not in rule_targets:
             continue
         recipe: list[str] = []
         for candidate in lines[offset + 1 :]:
