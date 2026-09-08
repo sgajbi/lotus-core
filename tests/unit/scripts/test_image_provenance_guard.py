@@ -79,6 +79,36 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
     workflow = root / ".github" / "workflows" / "image-release.yml"
     workflow.parent.mkdir(parents=True, exist_ok=True)
     workflow.write_text(SOURCE_WORKFLOW.read_text(encoding="utf-8"), encoding="utf-8")
+    root.joinpath("docker-compose.yml").write_text(
+        """services:
+  query_service:
+    build:
+      context: .
+      args:
+        LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
+        LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
+        LOTUS_BUILD_TIMESTAMP: ${LOTUS_BUILD_TIMESTAMP:-unknown}
+        LOTUS_REPO_URL: ${LOTUS_REPO_URL:-unknown}
+        LOTUS_IMAGE_VERSION: ${LOTUS_IMAGE_VERSION:-unknown}
+        LOTUS_IMAGE_DIGEST: ${LOTUS_IMAGE_DIGEST:-unavailable-before-push}
+        LOTUS_CI_RUN_ID: ${LOTUS_CI_RUN_ID:-unavailable-local-build}
+""",
+        encoding="utf-8",
+    )
+    root.joinpath("Makefile").write_text(
+        """docker-build:
+\tpython scripts/release/local_image_build.py docker-build
+docker-up:
+\tpython scripts/release/local_image_build.py compose-up
+""",
+        encoding="utf-8",
+    )
+    local_build = root / "scripts" / "release" / "local_image_build.py"
+    local_build.write_text(
+        'git_commit_sha\n"status", "--porcelain"\nunavailable-before-push\n'
+        "unavailable-local-build\n",
+        encoding="utf-8",
+    )
 
 
 def _write_dockerfile(root: Path, content: str) -> None:
@@ -126,6 +156,40 @@ def test_image_provenance_guard_accepts_complete_contract(tmp_path: Path) -> Non
     _write_dockerfile(tmp_path, _complete_dockerfile())
 
     assert find_image_provenance_findings(tmp_path) == []
+
+
+def test_image_provenance_guard_rejects_compose_build_without_metadata_args(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "        LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}\n", ""
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("query_service does not receive LOTUS_GIT_COMMIT_SHA" in f.detail for f in findings)
+
+
+def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        makefile.read_text(encoding="utf-8").replace(
+            "python scripts/release/local_image_build.py docker-build", "docker build ."
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("docker-build must route through" in f.detail for f in findings)
 
 
 def test_image_provenance_guard_rejects_coupled_scan_policy_exit(tmp_path: Path) -> None:
