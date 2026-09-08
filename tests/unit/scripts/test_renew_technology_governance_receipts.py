@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import stat
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ RUN_ID = 123456
 
 
 def _source_commit() -> str:
-    return guard._git_value(guard.REPO_ROOT, "rev-parse", "origin/main")
+    return "f" * 40
 
 
 def _run_payload(*, branch: str | None = None) -> dict[str, object]:
@@ -67,6 +68,10 @@ def _install_github_payloads(
     jobs: dict[str, object] | None = None,
     artifacts: dict[str, object] | None = None,
 ) -> None:
+    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_on_main", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_ancestor", lambda *_args: True)
+
     def github_payload(endpoint: str) -> dict[str, object]:
         if "/artifacts?" in endpoint:
             return artifacts if artifacts is not None else _artifacts_payload(manifest)
@@ -167,6 +172,7 @@ def test_cli_writes_a_valid_renewed_manifest_atomically(
     manifest = guard.load_manifest()
     manifest_path = tmp_path / "pilot.json"
     manifest_path.write_text(original_text, encoding="utf-8")
+    original_mode = stat.S_IMODE(manifest_path.stat().st_mode)
     _install_github_payloads(monkeypatch, manifest)
 
     assert renewal.main(["--run-id", str(RUN_ID), "--manifest", str(manifest_path)]) == 0
@@ -180,4 +186,5 @@ def test_cli_writes_a_valid_renewed_manifest_atomically(
     assert _text_outside_github_receipts(persisted_text) == _text_outside_github_receipts(
         original_text
     )
+    assert stat.S_IMODE(manifest_path.stat().st_mode) == original_mode
     assert not list(tmp_path.glob(".pilot.json.*.tmp"))
