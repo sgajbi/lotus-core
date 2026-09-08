@@ -130,6 +130,7 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
+        last_run = content.rfind("\nRUN ")
         for line_number, line in enumerate(content.splitlines(), start=1):
             stripped = line.strip()
             if not (stripped.startswith("ARG ") or stripped.startswith("ENV ")):
@@ -150,18 +151,19 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                         f"missing default build arg {arg_name}",
                     )
                 )
-            if content.count(f"ARG {arg_name}") < 2:
+            stage_declaration = f"\nARG {arg_name}\n"
+            if content.count(stage_declaration) != 1:
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
                         f"missing stage build arg {arg_name}",
                     )
                 )
-            if content.count(f"ARG {arg_name}") > 2:
+            elif content.find(stage_declaration) < last_run:
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"volatile build arg {arg_name} is declared before final image assembly",
+                        f"volatile build arg {arg_name} must follow dependency-install RUN layers",
                     )
                 )
             if f"{arg_name}=${{{arg_name}}}" not in content:
@@ -179,7 +181,6 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                         f"missing OCI label {label_name}",
                     )
                 )
-        last_run = content.rfind("\nRUN ")
         if content.rfind("\nLABEL org.opencontainers.image.revision=") < last_run:
             findings.append(
                 ImageProvenanceFinding(
