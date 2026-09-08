@@ -59,7 +59,7 @@ def discover_local_build_metadata(
 ) -> LocalBuildMetadata:
     commit = _git(root, "rev-parse", "--verify", "HEAD", runner=runner)
     branch = _git(root, "branch", "--show-current", runner=runner) or "detached-head"
-    dirty = bool(_git(root, "status", "--porcelain", runner=runner))
+    dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=all", runner=runner))
     with (root / "pyproject.toml").open("rb") as handle:
         project_version = str(tomllib.load(handle)["project"]["version"])
     return LocalBuildMetadata(
