@@ -59,7 +59,7 @@ source .venv/bin/activate
 python --version
 make install
 cp .env.example .env
-docker compose up -d --build
+make docker-up
 docker compose ps --all
 curl --fail http://localhost:8201/health/ready
 ```

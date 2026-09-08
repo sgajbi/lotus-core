@@ -190,6 +190,14 @@ promote its report-only claims.
 
 ## Runtime Image Evidence
 
+Supported app-local builds use `make docker-up`. The target derives the exact checkout revision,
+branch, dirty-tree marker, UTC build time, repository URL, and local image version without shell
+evaluation, then supplies one shared argument map to all 13 Compose build entries. A local build
+truthfully records `unavailable-before-push` for registry digest and `unavailable-local-build` for
+CI identity. `make image-provenance-guard` rejects a new Compose build that omits any field or a
+Make build path that bypasses this source-derived boundary. Promoted-image provenance remains owned
+by the release workflow below.
+
 PR Merge Gate and Main Releasability each use one exact-source runtime image set. The required
 `Validate Docker Build` job builds the workflow's service union once, records build timings, and
 uploads a one-day transport bundle. Docker smoke, E2E, latency, load, validation, recovery, and
