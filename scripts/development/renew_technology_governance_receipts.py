@@ -14,6 +14,7 @@ from typing import Any
 from scripts.quality import technology_governance_pilot_guard as guard
 
 DEPENDENCY_HEALTH_ARTIFACT = re.compile(r"^main-releasability-dependency-health-\d+$")
+GITHUB_RECEIPT_START = re.compile(r'\{\s*"kind"\s*:\s*"github_run"')
 
 
 def _renewed_artifact_name(current_name: str, run_id: int) -> str:
@@ -102,7 +103,27 @@ def renew_manifest(manifest: dict[str, Any], *, run_id: int) -> dict[str, Any]:
     return renewed
 
 
-def _write_manifest_atomically(path: Path, manifest: dict[str, Any]) -> None:
+def _render_renewed_manifest(original_text: str, renewed: dict[str, Any]) -> str:
+    renewed_receipts = [receipt for _, receipt in guard._github_run_refs(renewed)]
+    spans: list[tuple[int, int]] = []
+    decoder = json.JSONDecoder()
+    for match in GITHUB_RECEIPT_START.finditer(original_text):
+        decoded, end = decoder.raw_decode(original_text, match.start())
+        if isinstance(decoded, dict) and decoded.get("kind") == "github_run":
+            spans.append((match.start(), end))
+    if len(spans) != len(renewed_receipts):
+        raise ValueError(
+            "manifest text does not contain the expected number of renewable GitHub receipts"
+        )
+    rendered = original_text
+    for (start, end), receipt in reversed(list(zip(spans, renewed_receipts, strict=True))):
+        rendered = rendered[:start] + json.dumps(receipt) + rendered[end:]
+    if json.loads(rendered) != renewed:
+        raise ValueError("format-preserving receipt renewal changed non-receipt manifest content")
+    return rendered
+
+
+def _write_manifest_atomically(path: Path, content: str) -> None:
     manifest_path = path.resolve()
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     file_descriptor, temporary_name = tempfile.mkstemp(
@@ -112,7 +133,7 @@ def _write_manifest_atomically(path: Path, manifest: dict[str, Any]) -> None:
     )
     try:
         with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="\n") as temporary_file:
-            temporary_file.write(json.dumps(manifest, indent=2) + "\n")
+            temporary_file.write(content)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
         os.replace(temporary_name, manifest_path)
@@ -127,9 +148,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, default=guard.MANIFEST_PATH)
     args = parser.parse_args(argv)
     try:
-        manifest = guard.load_manifest(args.manifest)
+        original_text = args.manifest.read_text(encoding="utf-8")
+        manifest = json.loads(original_text)
+        if not isinstance(manifest, dict):
+            raise ValueError("manifest root must be an object")
         renewed = renew_manifest(manifest, run_id=args.run_id)
-        _write_manifest_atomically(args.manifest, renewed)
+        rendered = _render_renewed_manifest(original_text, renewed)
+        _write_manifest_atomically(args.manifest, rendered)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"Technology-governance receipt renewal failed: {exc}")
         return 1
