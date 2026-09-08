@@ -590,6 +590,9 @@ def _source_contract_findings(root: Path) -> list[ImageProvenanceFinding]:
 def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     compose_path = root / "docker-compose.yml"
+    inspected_dockerfiles = {
+        dockerfile.resolve() for dockerfile in (root / "src" / "services").rglob("Dockerfile")
+    }
     try:
         compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
         services = compose["services"]
@@ -613,6 +616,35 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                 )
             )
             continue
+        if build.get("context") != ".":
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must use the governed repository context",
+                )
+            )
+        selected_dockerfile = build.get("dockerfile")
+        if not isinstance(selected_dockerfile, str):
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must select an inspected Dockerfile",
+                )
+            )
+        elif (root / selected_dockerfile).resolve() not in inspected_dockerfiles:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} selects an uninspected Dockerfile",
+                )
+            )
+        if build.get("target") is not None:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must use the inspected final Docker stage",
+                )
+            )
         args = build.get("args")
         for arg_name in REQUIRED_METADATA_ARGS:
             if not isinstance(args, dict) or arg_name not in args:
@@ -656,7 +688,10 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
             )
             break
     for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
-        expected = f"$(REPOSITORY_PYTHON) scripts/release/local_image_build.py {operation}"
+        expected = (
+            "python scripts/development/repository_python.py "
+            f"scripts/release/local_image_build.py {operation}"
+        )
         if _make_target_recipes(makefile, target) != [expected]:
             findings.append(
                 ImageProvenanceFinding(

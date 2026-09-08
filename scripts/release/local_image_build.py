@@ -52,6 +52,11 @@ def _git(root: Path, *arguments: str, runner: Runner) -> str:
     return result.stdout.strip()
 
 
+def _has_hidden_index_flags(root: Path, *, runner: Runner) -> bool:
+    entries = _git(root, "ls-files", "-v", "-z", runner=runner).split("\0")
+    return any(entry and (entry[0].islower() or entry[0] == "S") for entry in entries)
+
+
 def discover_local_build_metadata(
     root: Path = REPO_ROOT,
     *,
@@ -61,6 +66,10 @@ def discover_local_build_metadata(
     commit = _git(root, "rev-parse", "--verify", "HEAD", runner=runner)
     branch = _git(root, "branch", "--show-current", runner=runner) or "detached-head"
     dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=all", runner=runner))
+    if not dirty:
+        # Git hides assume-unchanged and skip-worktree paths from ordinary
+        # status even though Docker still reads their working-tree content.
+        dirty = _has_hidden_index_flags(root, runner=runner)
     if not dirty:
         git_ignored = set(
             _git(
