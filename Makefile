@@ -681,10 +681,10 @@ ci-main: verify-dependencies-clean $(CI_GATES) test-release-gates
 ci-local: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate test-unit-db coverage-gate
 
 docker-build:
-	$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build
+	python scripts/development/repository_python.py scripts/release/local_image_build.py docker-build
 
 docker-up:
-	$(REPOSITORY_PYTHON) scripts/release/local_image_build.py compose-up
+	python scripts/development/repository_python.py scripts/release/local_image_build.py compose-up
 
 docker-prebuild-ci:
 	$(REPOSITORY_PYTHON) scripts/release/prebuild_ci_images.py

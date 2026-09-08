@@ -4,6 +4,8 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from scripts.release.local_image_build import (
     LOCAL_CI_RUN_ID,
     LOCAL_IMAGE_DIGEST,
@@ -69,6 +71,26 @@ def test_metadata_detects_untracked_files_when_git_config_hides_them(tmp_path: P
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+@pytest.mark.parametrize("index_flag", ("--assume-unchanged", "--skip-worktree"))
+def test_metadata_fails_closed_for_hidden_index_flags(tmp_path: Path, index_flag: str) -> None:
+    _write_project(tmp_path)
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    _run_git(tmp_path, "update-index", index_flag, "pyproject.toml")
+    tmp_path.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "lotus-core"\nversion = "0.1.1"\n', encoding="utf-8"
+    )
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
 def test_metadata_detects_ignored_files_in_docker_context(tmp_path: Path) -> None:
     _write_project(tmp_path)
     _run_git(tmp_path, "init", "--initial-branch", "main")
@@ -110,6 +132,7 @@ def test_discovers_exact_clean_checkout_provenance(tmp_path: Path) -> None:
         (
             "a" * 40 + "\n",
             "fix/1107-local-image-provenance\n",
+            "",
             "",
             "",
             "",

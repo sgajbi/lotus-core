@@ -84,6 +84,7 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
   query_service:
     build:
       context: .
+      dockerfile: ./src/services/query_service/Dockerfile
       args:
         LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
         LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
@@ -97,9 +98,9 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
     )
     root.joinpath("Makefile").write_text(
         """docker-build:
-\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build
+\tpython scripts/development/repository_python.py scripts/release/local_image_build.py docker-build
 docker-up:
-\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py compose-up
+\tpython scripts/development/repository_python.py scripts/release/local_image_build.py compose-up
 """,
         encoding="utf-8",
     )
@@ -249,7 +250,8 @@ def test_image_provenance_guard_rejects_shorthand_compose_build(tmp_path: Path) 
     compose = tmp_path / "docker-compose.yml"
     compose.write_text(
         compose.read_text(encoding="utf-8").replace(
-            "    build:\n      context: .\n      args:\n",
+            "    build:\n      context: .\n"
+            "      dockerfile: ./src/services/query_service/Dockerfile\n      args:\n",
             "    build: .\n    ignored-args:\n",
         ),
         encoding="utf-8",
@@ -266,11 +268,13 @@ def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
+            "python scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build",
             "docker build .",
         )
         + "\nunused-helper:\n"
-        "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build\n",
+        "\tpython scripts/development/repository_python.py "
+        "scripts/release/local_image_build.py docker-build\n",
         encoding="utf-8",
     )
 
@@ -285,8 +289,9 @@ def test_image_provenance_guard_rejects_commented_make_wrapper(tmp_path: Path) -
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
-            "\tdocker build . # $(REPOSITORY_PYTHON) "
+            "\tpython scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build",
+            "\tdocker build . # python scripts/development/repository_python.py "
             "scripts/release/local_image_build.py docker-build",
         ),
         encoding="utf-8",
@@ -303,8 +308,9 @@ def test_image_provenance_guard_rejects_echoed_make_wrapper(tmp_path: Path) -> N
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
-            "\t@echo $(REPOSITORY_PYTHON) "
+            "\tpython scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build",
+            "\t@echo python scripts/development/repository_python.py "
             "scripts/release/local_image_build.py docker-build\n\tdocker build .",
         ),
         encoding="utf-8",
@@ -321,8 +327,10 @@ def test_image_provenance_guard_rejects_additional_make_build_command(tmp_path: 
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
-            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build\n"
+            "\tpython scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build",
+            "\tpython scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build\n"
             "\tdocker build -t portfolio-analytics-query-service:ci .",
         ),
         encoding="utf-8",
@@ -339,8 +347,10 @@ def test_image_provenance_guard_continues_past_makefile_comment(tmp_path: Path) 
     makefile = tmp_path / "Makefile"
     makefile.write_text(
         makefile.read_text(encoding="utf-8").replace(
-            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build",
-            "\t$(REPOSITORY_PYTHON) scripts/release/local_image_build.py docker-build\n"
+            "\tpython scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build",
+            "\tpython scripts/development/repository_python.py "
+            "scripts/release/local_image_build.py docker-build\n"
             "# This comment does not end the recipe.\n"
             "\tdocker build -t portfolio-analytics-query-service:ci .",
         ),
@@ -447,6 +457,61 @@ def test_image_provenance_guard_rejects_evaluated_makefile_include(tmp_path: Pat
     findings = find_image_provenance_findings(tmp_path)
 
     assert any("Makefile eval is not permitted" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_reassigned_make_wrapper(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        "REPOSITORY_PYTHON := docker build -t bypass . ; true\n"
+        + makefile.read_text(encoding="utf-8").replace(
+            "python scripts/development/repository_python.py", "$(REPOSITORY_PYTHON)"
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("must route through" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_compose_build_target(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "      dockerfile: ./src/services/query_service/Dockerfile\n",
+            "      dockerfile: ./src/services/query_service/Dockerfile\n"
+            "      target: runtime-base\n",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("inspected final Docker stage" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_uninspected_compose_dockerfile(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    alternate = tmp_path / "uninspected.Dockerfile"
+    alternate.write_text("FROM python:3.11\n", encoding="utf-8")
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "./src/services/query_service/Dockerfile", "./uninspected.Dockerfile"
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("selects an uninspected Dockerfile" in finding.detail for finding in findings)
 
 
 def test_image_provenance_guard_rejects_coupled_scan_policy_exit(tmp_path: Path) -> None:
