@@ -196,6 +196,23 @@ def test_image_provenance_guard_rejects_compose_build_with_constant_metadata(
     assert any("query_service does not bind LOTUS_GIT_COMMIT_SHA" in f.detail for f in findings)
 
 
+def test_image_provenance_guard_rejects_shorthand_compose_build(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "    build:\n      context: .\n      args:\n",
+            "    build: .\n    ignored-args:\n",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("query_service must use mapping form" in f.detail for f in findings)
+
+
 def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     _write_dockerfile(tmp_path, _complete_dockerfile())
