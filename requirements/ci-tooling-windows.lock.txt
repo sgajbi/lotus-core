@@ -5,8 +5,7 @@ anyio==4.12.1
     # via
     #   -c requirements/shared-runtime-windows.lock.txt
     #   httpx
-    #   httpx2
-ast-serialize==0.8.0
+ast-serialize==0.11.0
     # via mypy
 asyncpg==0.31.0
     # via
@@ -61,27 +60,22 @@ et-xmlfile==2.0.0
     # via
     #   -c requirements/shared-runtime-windows.lock.txt
     #   openpyxl
-filelock==3.32.3
+filelock==3.32.5
     # via cachecontrol
-grimp==3.15
+grimp==3.17
     # via import-linter
 h11==0.16.0
     # via
     #   -c requirements/shared-runtime-windows.lock.txt
     #   httpcore
-    #   httpcore2
 httpcore==1.0.9
     # via
     #   -c requirements/shared-runtime-windows.lock.txt
     #   httpx
-httpcore2==2.4.0
-    # via httpx2
 httpx==0.28.1
     # via
     #   -c requirements/shared-runtime-windows.lock.txt
     #   -r tests/requirements.txt
-httpx2==2.4.0
-    # via -r tests/requirements.txt
 hypothesis==6.155.7
     # via -r tests/requirements.txt
 idna==3.18
@@ -89,7 +83,6 @@ idna==3.18
     #   -c requirements/shared-runtime-windows.lock.txt
     #   anyio
     #   httpx
-    #   httpx2
     #   requests
 import-linter==2.12
     # via -r requirements/ci-tooling.in
@@ -107,7 +100,7 @@ markdown-it-py==4.2.0
     # via rich
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.2.1
+msgpack==1.2.2
     # via cachecontrol
 mypy==2.1.0
     # via -r requirements/ci-tooling.in
@@ -128,7 +121,7 @@ packaging==26.3
     #   requirements-parser
 pathspec==1.1.1
     # via mypy
-pip-api==0.0.34
+pip-api==0.0.35
     # via pip-audit
 pip-audit==2.10.1
     # via -r requirements/ci-tooling.in
@@ -220,10 +213,6 @@ tomli==2.4.1
     #   pip-audit
 tomli-w==1.2.0
     # via pip-audit
-truststore==0.10.4
-    # via
-    #   httpcore2
-    #   httpx2
 types-python-dateutil==2.9.0.20260518
     # via -r requirements/ci-tooling.in
 typing-extensions==4.15.0
@@ -231,7 +220,6 @@ typing-extensions==4.15.0
     #   -c requirements/shared-runtime-windows.lock.txt
     #   anyio
     #   cyclonedx-python-lib
-    #   httpx2
     #   import-linter
     #   mypy
     #   pytest-asyncio
@@ -243,7 +231,7 @@ urllib3==2.7.0
     #   testcontainers
 vulture==2.16
     # via -r requirements/ci-tooling.in
-wrapt==2.3.0
+wrapt==2.4.0
     # via testcontainers
 xenon==0.9.3
     # via -r requirements/ci-tooling.in
