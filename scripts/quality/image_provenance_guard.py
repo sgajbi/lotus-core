@@ -110,8 +110,26 @@ def _relative(path: Path, root: Path) -> Path:
         return path
 
 
+def _make_logical_lines(makefile: str) -> list[str]:
+    lines: list[str] = []
+    continued = ""
+    for physical_line in makefile.splitlines():
+        if continued:
+            continued = f"{continued} {physical_line.lstrip()}"
+        else:
+            continued = physical_line
+        if continued and not continued[0].isspace() and continued.endswith("\\"):
+            continued = continued[:-1].rstrip()
+            continue
+        lines.append(continued)
+        continued = ""
+    if continued:
+        lines.append(continued)
+    return lines
+
+
 def _make_target_recipes(makefile: str, target: str) -> list[str]:
-    lines = makefile.splitlines()
+    lines = _make_logical_lines(makefile)
     recipes: list[str] = []
     for offset, line in enumerate(lines):
         if not line or line[0].isspace() or ":" not in line:
