@@ -341,6 +341,9 @@
     "test-performance-load-gate": [
       "$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --profile-tier fast --enforce"
     ],
+    "test-query-authority-db-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite query-authority-db-contract --quiet"
+    ],
     "test-transaction-buy-contract": [
       "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-buy-contract --quiet"
     ],

@@ -114,15 +114,22 @@ def test_runtime_workflows_use_current_action_pins_for_cache_artifacts_and_build
     ).read_text(encoding="utf-8")
 
 
-def test_critical_lifecycle_db_suite_is_protected_in_every_delivery_workflow() -> None:
-    expected = {
-        "suite": "critical-lifecycle-db",
-        "target": "test-critical-lifecycle-db",
-    }
+def test_critical_database_suites_are_protected_in_every_delivery_workflow() -> None:
+    expected = (
+        {
+            "suite": "critical-lifecycle-db",
+            "target": "test-critical-lifecycle-db",
+        },
+        {
+            "suite": "query-authority-db-contract",
+            "target": "test-query-authority-db-contract",
+        },
+    )
     for filename in ("feature-lane.yml", "pr-merge-gate.yml", "main-releasability.yml"):
         workflow = yaml.safe_load(Path(".github/workflows", filename).read_text(encoding="utf-8"))
         matrix = workflow["jobs"]["test-suites"]["strategy"]["matrix"]["include"]
-        assert expected in matrix, filename
+        for suite in expected:
+            assert suite in matrix, filename
 
 
 def test_dependency_health_cache_is_reused_only_before_merge() -> None:
