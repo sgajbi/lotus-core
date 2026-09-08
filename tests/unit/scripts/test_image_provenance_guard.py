@@ -169,8 +169,41 @@ def test_image_provenance_guard_requires_metadata_in_final_stage(tmp_path: Path)
     findings = find_image_provenance_findings(tmp_path)
 
     assert any("missing final-stage build arg" in finding.detail for finding in findings)
-    assert any("missing final-stage OCI label" in finding.detail for finding in findings)
-    assert any("missing final-stage runtime env" in finding.detail for finding in findings)
+    assert any("effective final-stage OCI label" in finding.detail for finding in findings)
+    assert any("effective final-stage runtime env" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_effective_label_override(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + "\nLABEL org.opencontainers.image.digest=bogus\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(
+        "incorrect effective final-stage OCI label org.opencontainers.image.digest"
+        in finding.detail
+        for finding in findings
+    )
+
+
+def test_image_provenance_guard_rejects_effective_environment_override(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + "\nENV LOTUS_GIT_COMMIT_SHA=bogus\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(
+        "incorrect effective final-stage runtime env LOTUS_GIT_COMMIT_SHA" in finding.detail
+        for finding in findings
+    )
 
 
 def test_image_provenance_guard_rejects_compose_build_without_metadata_args(
@@ -482,7 +515,7 @@ def test_image_provenance_guard_reports_missing_digest_label(tmp_path: Path) -> 
     findings = find_image_provenance_findings(tmp_path)
 
     assert any(
-        "missing final-stage OCI label org.opencontainers.image.digest" in f.detail
+        "effective final-stage OCI label org.opencontainers.image.digest" in f.detail
         for f in findings
     )
 
