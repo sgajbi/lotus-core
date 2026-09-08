@@ -1046,6 +1046,45 @@
     },
     {
       "license": {
+        "classification": "review_required",
+        "classification_reason": "ambiguous_classifier_with_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "httpcore2",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httpcore2/2.12.0/json",
+      "pypi_metadata_sha256": "445dba53aaf1008b8b3312a1c1fefb5adf280ee9c568127e623196f3d729f52d",
+      "pypi_release_url": "https://pypi.org/project/httpcore2/2.12.0/",
+      "release_uploaded_at": "2026-08-18T13:22:05.854488Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pydantic/httpx2/blob/main/src/httpcore2",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
+        "next_review_due": "2026-10-08",
+        "release_evidence_url": "https://pypi.org/project/httpcore2/2.12.0/",
+        "reviewed_on": "2026-09-08",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
+      },
+      "version": "2.12.0",
+      "yanked": false
+    },
+    {
+      "license": {
         "classification": "approved",
         "classification_reason": "approved_declared_expression",
         "classification_source": "pypi_license_expression",
@@ -1120,6 +1159,45 @@
         "vulnerability_disclosure_url": null
       },
       "version": "0.28.1",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "review_required",
+        "classification_reason": "ambiguous_classifier_with_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "declared_expression": "BSD-3-Clause",
+        "legacy_value": null,
+        "normalized_expression": "BSD-3-Clause"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "httpx2",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/httpx2/2.12.0/json",
+      "pypi_metadata_sha256": "26588666798756dcc631d3c2d556aca5d5f791687fcafb573c7f4b2ecce9f3c5",
+      "pypi_release_url": "https://pypi.org/project/httpx2/2.12.0/",
+      "release_uploaded_at": "2026-08-18T13:22:06.834669Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/pydantic/httpx2",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
+        "next_review_due": "2026-10-08",
+        "release_evidence_url": "https://pypi.org/project/httpx2/2.12.0/",
+        "reviewed_on": "2026-09-08",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
+      },
+      "version": "2.12.0",
       "yanked": false
     },
     {
@@ -2018,7 +2096,7 @@
       "name": "platformdirs",
       "prerelease": false,
       "pypi_json_url": "https://pypi.org/pypi/platformdirs/4.11.3/json",
-      "pypi_metadata_sha256": "d3842ba166792fe7a416f5244c6f9523453363f1767965f769f1ac1d69e97c40",
+      "pypi_metadata_sha256": "3367ff12f246b83eb21630ed0d3dfa0c7b2ab1b3ea1ce142d68299f5cddb9eba",
       "pypi_release_url": "https://pypi.org/project/platformdirs/4.11.3/",
       "release_uploaded_at": "2026-08-13T22:43:26.121545Z",
       "requires_python": ">=3.10",
@@ -3464,6 +3542,43 @@
         "classification_reason": "approved_declared_expression",
         "classification_source": "pypi_license_expression",
         "classifiers": [],
+        "declared_expression": "MIT",
+        "legacy_value": null,
+        "normalized_expression": "MIT"
+      },
+      "lock_membership": [
+        "ci_build_test:linux/amd64",
+        "ci_build_test:windows/amd64"
+      ],
+      "name": "truststore",
+      "prerelease": false,
+      "pypi_json_url": "https://pypi.org/pypi/truststore/0.10.4/json",
+      "pypi_metadata_sha256": "9673b3d881b2092f8e5696436b75c3c7d799bb68e41e9b0d077f6ce4d72a8514",
+      "pypi_release_url": "https://pypi.org/project/truststore/0.10.4/",
+      "release_uploaded_at": "2025-08-12T18:49:01.460601Z",
+      "requires_python": ">=3.10",
+      "source_repository_url": "https://github.com/sethmlarson/truststore",
+      "supportability": {
+        "approval_inference": "none",
+        "classification": "review_required",
+        "classification_reason": "upstream_support_evidence_not_governed",
+        "eol_evidence_url": null,
+        "next_review_due": "2026-10-08",
+        "release_evidence_url": "https://pypi.org/project/truststore/0.10.4/",
+        "reviewed_on": "2026-09-08",
+        "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
+        "upstream_support_policy_url": null,
+        "vulnerability_disclosure_url": null
+      },
+      "version": "0.10.4",
+      "yanked": false
+    },
+    {
+      "license": {
+        "classification": "approved",
+        "classification_reason": "approved_declared_expression",
+        "classification_source": "pypi_license_expression",
+        "classifiers": [],
         "declared_expression": "Apache-2.0",
         "legacy_value": null,
         "normalized_expression": "Apache-2.0"
@@ -3907,20 +4022,20 @@
       "path": "requirements/ci-tooling.lock.txt",
       "platform": "linux/amd64",
       "scope": "ci_build_test",
-      "sha256": "509c0bf240f3cbebecaf4651c258adea96d036ce29a07c1bb34568892f99a91e"
+      "sha256": "2ec0604ba79b557c23db7bed30553bafb9a8fc0bf81dea195c5351fea6352c54"
     },
     {
       "path": "requirements/ci-tooling-windows.lock.txt",
       "platform": "windows/amd64",
       "scope": "ci_build_test",
-      "sha256": "9f5e74c560bce0f61a335a471ea89839e548f5e6cdb92eff2aee2a26f3f77453"
+      "sha256": "6b8d28a0cd489feb00b000943b2da857d0a389edcdc30befac1b2003145d2257"
     }
   ],
   "summary": {
-    "approved_license_count": 87,
-    "blocked_or_review_required_count": 101,
+    "approved_license_count": 88,
+    "blocked_or_review_required_count": 104,
     "certification_decision": "blocked",
-    "component_count": 101
+    "component_count": 104
   },
   "support_model": {
     "owner": "Lotus Technology Risk and Open Source Governance",

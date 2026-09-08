@@ -12,6 +12,8 @@ pytest-asyncio==1.4.0
 # HTTP client for testing APIs
 requests==2.34.2
 httpx==0.28.1
+# Starlette 1.x TestClient prefers httpx2 and warns when it falls back to legacy httpx.
+httpx2==2.12.0
 
 # Database drivers (sync and async)
 psycopg2-binary==2.9.12
