@@ -110,9 +110,10 @@ def _relative(path: Path, root: Path) -> Path:
         return path
 
 
-def _make_target_recipe(makefile: str, target: str) -> str:
+def _make_target_recipes(makefile: str, target: str) -> list[str]:
     lines = makefile.splitlines()
     target_prefix = f"{target}:"
+    recipes: list[str] = []
     for offset, line in enumerate(lines):
         if not line.startswith(target_prefix):
             continue
@@ -127,8 +128,8 @@ def _make_target_recipe(makefile: str, target: str) -> str:
             if not candidate.strip() or candidate.lstrip().startswith("#"):
                 continue
             break
-        return "\n".join(recipe)
-    return ""
+        recipes.append("\n".join(recipe))
+    return recipes
 
 
 def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
@@ -557,7 +558,7 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
     makefile = makefile_path.read_text(encoding="utf-8")
     for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
         expected = f"$(REPOSITORY_PYTHON) scripts/release/local_image_build.py {operation}"
-        if _make_target_recipe(makefile, target).splitlines() != [expected]:
+        if _make_target_recipes(makefile, target) != [expected]:
             findings.append(
                 ImageProvenanceFinding(
                     _relative(makefile_path, root),

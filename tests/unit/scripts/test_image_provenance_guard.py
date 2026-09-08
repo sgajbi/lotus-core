@@ -305,6 +305,21 @@ def test_image_provenance_guard_continues_past_makefile_comment(tmp_path: Path) 
     assert any("docker-build must route through" in f.detail for f in findings)
 
 
+def test_image_provenance_guard_rejects_overridden_make_target(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        makefile.read_text(encoding="utf-8")
+        + "\ndocker-build:\n\tdocker build -t portfolio-analytics-query-service:ci .\n",
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("docker-build must route through" in f.detail for f in findings)
+
+
 def test_image_provenance_guard_rejects_coupled_scan_policy_exit(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
