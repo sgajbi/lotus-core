@@ -665,6 +665,20 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
 
     makefile_path = root / "Makefile"
     makefile = makefile_path.read_text(encoding="utf-8")
+    repository_python_bindings = [
+        line.strip()
+        for line in _make_logical_lines(makefile)
+        if re.match(r"^(?:override\s+)?REPOSITORY_PYTHON\s*[:+?]?=", line.strip())
+    ]
+    if repository_python_bindings != [
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py"
+    ]:
+        findings.append(
+            ImageProvenanceFinding(
+                _relative(makefile_path, root),
+                "REPOSITORY_PYTHON must have one non-overridable governed binding",
+            )
+        )
     for line in _make_logical_lines(makefile):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -688,10 +702,7 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
             )
             break
     for target, operation in (("docker-build", "docker-build"), ("docker-up", "compose-up")):
-        expected = (
-            "python scripts/development/repository_python.py "
-            f"scripts/release/local_image_build.py {operation}"
-        )
+        expected = f"$(REPOSITORY_PYTHON) scripts/release/local_image_build.py {operation}"
         if _make_target_recipes(makefile, target) != [expected]:
             findings.append(
                 ImageProvenanceFinding(
