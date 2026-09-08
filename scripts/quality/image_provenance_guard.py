@@ -135,7 +135,8 @@ def _make_target_recipes(makefile: str, target: str) -> list[str]:
         if not line or line[0].isspace() or ":" not in line:
             continue
         rule_targets = line.partition(":")[0].split()
-        if target not in rule_targets:
+        dynamic_target = any("$" in rule_target for rule_target in rule_targets)
+        if target not in rule_targets and not dynamic_target:
             continue
         recipe: list[str] = []
         for candidate in lines[offset + 1 :]:
