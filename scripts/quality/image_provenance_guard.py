@@ -118,8 +118,13 @@ def _make_target_recipe(makefile: str, target: str) -> str:
             continue
         recipe: list[str] = []
         for candidate in lines[offset + 1 :]:
-            if candidate.startswith("\t") or not candidate.strip():
-                recipe.append(candidate)
+            if candidate.startswith("\t"):
+                command = candidate[1:].lstrip().lstrip("@+-").lstrip()
+                executable = command.split("#", maxsplit=1)[0].rstrip()
+                if executable:
+                    recipe.append(executable)
+                continue
+            if not candidate.strip():
                 continue
             break
         return "\n".join(recipe)
