@@ -519,7 +519,15 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
 
     for service_name, service in services.items():
         build = service.get("build") if isinstance(service, dict) else None
+        if build is None:
+            continue
         if not isinstance(build, dict):
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must use mapping form with provenance args",
+                )
+            )
             continue
         args = build.get("args")
         for arg_name in REQUIRED_METADATA_ARGS:
