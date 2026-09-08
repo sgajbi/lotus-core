@@ -21,6 +21,35 @@ def _write_project(root: Path) -> None:
     )
 
 
+def _run_git(root: Path, *arguments: str) -> str:
+    result = subprocess.run(  # noqa: S603
+        ["git", "-C", str(root), *arguments],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def test_metadata_matches_real_git_head_and_dirty_state(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", "pyproject.toml")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+
+    clean_metadata = discover_local_build_metadata(tmp_path)
+
+    assert clean_metadata.git_commit_sha == expected_head
+    tmp_path.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "lotus-core"\nversion = "0.1.1"\n', encoding="utf-8"
+    )
+    dirty_metadata = discover_local_build_metadata(tmp_path)
+    assert dirty_metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
 def test_discovers_exact_clean_checkout_provenance(tmp_path: Path) -> None:
     _write_project(tmp_path)
     outputs = iter(
