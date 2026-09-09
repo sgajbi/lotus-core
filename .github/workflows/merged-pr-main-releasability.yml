@@ -113,18 +113,8 @@ jobs:
               exit 1
             fi
           else
-            existing_baseline_sha=""
-          fi
-          if [ -z "$existing_baseline_sha" ]; then
-            if ! gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$baseline_ref" \
-              -f sha="$baseline_sha" >/dev/null; then
-              existing_baseline_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$baseline_ref" --jq .object.sha)"
-              if [ "$existing_baseline_sha" != "$baseline_sha" ]; then
-                echo "::error::Concurrent baseline creation resolved to $existing_baseline_sha, expected $baseline_sha"
-                exit 1
-              fi
-            fi
+            echo "::error::Coverage baseline $baseline_ref must be provisioned at anchored SHA $baseline_sha by an authorized repository owner"
+            exit 1
           fi
 
           mkdir -p output/release-evidence
