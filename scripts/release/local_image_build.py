@@ -10,6 +10,7 @@ import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import chain
 from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -102,11 +103,12 @@ def _copied_source_directories(root: Path) -> set[Path]:
 def _has_untracked_empty_context_directory(root: Path) -> bool:
     patterns = _dockerignore_patterns(root)
     return any(
-        directory.is_dir()
+        True
+        for source_root in _copied_source_directories(root)
+        for directory in chain((source_root,), source_root.rglob("*"))
+        if directory.is_dir()
         and not any(directory.iterdir())
         and not _is_docker_ignored(directory, root=root, patterns=patterns)
-        for source_root in _copied_source_directories(root)
-        for directory in source_root.rglob("*")
     )
 
 
