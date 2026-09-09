@@ -60,6 +60,8 @@ def _has_hidden_index_flags(root: Path, *, runner: Runner) -> bool:
 
 
 def _dockerignore_patterns(root: Path) -> tuple[str, ...]:
+    if any((root / "src" / "services").rglob("Dockerfile.dockerignore")):
+        raise ValueError("Dockerfile-specific ignore files are not supported")
     patterns: list[str] = []
     for line in (root / ".dockerignore").read_text(encoding="utf-8").splitlines():
         pattern = line.strip()
@@ -131,6 +133,11 @@ def _copied_source_paths(root: Path) -> set[Path]:
             if len(arguments) < 2:
                 raise ValueError(f"Dockerfile COPY instruction lacks a destination: {line}")
             for source in arguments[:-1]:
+                source_path = PurePosixPath(source.replace("\\", "/"))
+                if source.startswith(("/", "\\")) or ".." in source_path.parts:
+                    raise ValueError(
+                        f"Dockerfile absolute or parent COPY sources are not supported: {line}"
+                    )
                 if "$" in source or any(character in source for character in "*?["):
                     raise ValueError(
                         f"Dockerfile dynamic or wildcard COPY sources are not supported: {line}"
