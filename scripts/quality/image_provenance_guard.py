@@ -204,7 +204,15 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                     "Dockerfile ADD is not permitted at the local provenance boundary",
                 )
             )
+        stage_names: set[str] = set()
+        current_stage_index = -1
         for instruction, arguments in instructions:
+            if instruction == "FROM":
+                current_stage_index += 1
+                tokens = arguments.split()
+                if len(tokens) >= 3 and tokens[-2].upper() == "AS":
+                    stage_names.add(tokens[-1])
+                continue
             if instruction != "RUN":
                 continue
             for token in shlex.split(arguments):
@@ -214,7 +222,14 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                     option.partition("=")[::2]
                     for option in token.removeprefix("--mount=").split(",")
                 )
-                if mount_options.get("type", "bind") == "bind":
+                mount_from = mount_options.get("from")
+                numeric_local_stage = (
+                    mount_from is not None
+                    and mount_from.isdigit()
+                    and int(mount_from) < current_stage_index
+                )
+                local_stage = mount_from in stage_names or numeric_local_stage
+                if mount_options.get("type", "bind") == "bind" and not local_stage:
                     findings.append(
                         ImageProvenanceFinding(
                             _relative(dockerfile, root),
