@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess  # nosec B404 - fixed executable arguments, never a shell
 import tomllib
@@ -74,11 +75,19 @@ def _dockerignore_patterns(root: Path) -> tuple[str, ...]:
 
 
 def _dockerfile_logical_lines(content: str) -> tuple[str, ...]:
+    for physical_line in content.splitlines():
+        directive = re.match(r"^\s*#\s*escape\s*=\s*(\S+)", physical_line, re.IGNORECASE)
+        if directive and directive.group(1) != "\\":
+            raise ValueError("non-default Dockerfile escape directives are not supported")
     lines: list[str] = []
     current = ""
     for physical_line in content.splitlines():
         fragment = physical_line.strip()
-        if not current and "<<" in fragment:
+        if (
+            not current
+            and not fragment.startswith("#")
+            and re.search(r"(?:^|\s)<<-?['\"]?[A-Za-z0-9_]", fragment)
+        ):
             raise ValueError("Dockerfile heredoc instructions are not supported")
         current = f"{current} {fragment}".strip()
         if current.endswith("\\"):

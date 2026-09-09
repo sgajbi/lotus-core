@@ -196,7 +196,20 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
-        if any("<<" in line for line in content.splitlines()):
+        escape_directives = re.findall(
+            r"^\s*#\s*escape\s*=\s*(\S+)", content, re.IGNORECASE | re.MULTILINE
+        )
+        if any(directive != "\\" for directive in escape_directives):
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(dockerfile, root),
+                    "non-default Dockerfile escape directives are not permitted",
+                )
+            )
+        if any(
+            not line.strip().startswith("#") and re.search(r"(?:^|\s)<<-?['\"]?[A-Za-z0-9_]", line)
+            for line in content.splitlines()
+        ):
             findings.append(
                 ImageProvenanceFinding(
                     _relative(dockerfile, root),

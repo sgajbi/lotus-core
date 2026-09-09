@@ -518,6 +518,44 @@ def test_metadata_rejects_dockerfile_heredoc(tmp_path: Path) -> None:
         discover_local_build_metadata(tmp_path)
 
 
+def test_metadata_accepts_harmless_double_angle_text(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\n# explain <<EOF without opening it\nRUN printf '%s' '<<'\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == expected_head
+
+
+def test_metadata_rejects_nondefault_dockerfile_escape(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "# escape=`\nFROM scratch\nCOPY src/data `\n  src/more /app\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="non-default Dockerfile escape directives"):
+        discover_local_build_metadata(tmp_path)
+
+
 def test_metadata_rejects_negated_dockerignore_pattern(tmp_path: Path) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
