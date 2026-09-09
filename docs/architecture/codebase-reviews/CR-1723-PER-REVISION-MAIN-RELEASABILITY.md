@@ -19,7 +19,8 @@ not prove rollback or bisect targets.
 - dispatch one immutable tag per revision and retain the dispatch manifest;
 - disable cancellation for Main Releasability while preserving PR-lane cancellation;
 - anchor immutable `main-gate-coverage-enforcement-v1` to the fixing PR's exact parent so
-  concurrent dispatcher ordering cannot exempt an earlier revision;
+  concurrent dispatcher ordering cannot exempt an earlier revision; provision it once through an
+  authorized repository-owner path, then make dispatchers verify rather than mutate it;
 - run a scheduled/manual audit through `make main-gate-coverage-audit` and retain its JSON report.
 
 The baseline is prospective control truth, not a claim that historical ungated revisions passed.

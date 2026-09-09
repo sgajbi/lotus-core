@@ -45,7 +45,9 @@ Per-revision evidence cannot be cancelled by a later dispatch.
 
 `make main-gate-coverage-audit` audits every revision after the immutable, versioned
 `main-gate-coverage-enforcement-v1` baseline anchored to the fixing PR's exact parent. Concurrent
-dispatcher ordering cannot move that baseline or exempt an earlier revision. The scheduled `Main Gate Coverage Audit` retains its
+dispatcher ordering cannot move that baseline or exempt an earlier revision. An authorized
+repository owner provisions the baseline once; dispatchers verify the exact immutable identity and
+fail closed if it is absent or different. The scheduled `Main Gate Coverage Audit` retains its
 machine-readable report and fails closed on missing, unreadable, cancelled-only or nonterminal
 evidence, an absent baseline, an empty post-baseline set, or a truncated window. Failures remain
 historical verdicts rather than coverage gaps; reruns and duplicate run identities remain visible.

@@ -85,6 +85,7 @@ def _run_dispatch(
     base_sha: str,
     merge_sha: str,
     commit_count: int,
+    baseline_available: bool = True,
 ) -> tuple[int, str, list[str]]:
     assert BASH is not None
     bin_dir = tmp_path / "bin"
@@ -95,7 +96,11 @@ def _run_dispatch(
     gh.write_text(
         "#!/bin/sh\n"
         f'echo "$@" >> "{calls.as_posix()}"\n'
-        'case "$*" in *git/ref/tags/*) exit 1;; *) exit 0;; esac\n',
+        'case "$*" in '
+        "*git/ref/tags/main-gate-coverage-enforcement-v1*) "
+        '[ "$TEST_BASELINE_AVAILABLE" = "true" ] || exit 1; '
+        'printf "%s\\n" "$COVERAGE_BASELINE_SHA"; exit 0;; '
+        "*git/ref/tags/*) exit 1;; *) exit 0;; esac\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -117,6 +122,7 @@ def _run_dispatch(
             "MERGE_COMMIT_SHA": merge_sha,
             "COMMIT_COUNT": str(commit_count),
             "PR_NUMBER": PR_NUMBER,
+            "TEST_BASELINE_AVAILABLE": str(baseline_available).lower(),
         }
     )
     completed = subprocess.run(
@@ -154,6 +160,30 @@ def test_dispatches_every_rebased_revision_in_ancestry_order(tmp_path: Path) -> 
 
     assert code == 0, output
     assert dispatched == revisions
+
+
+def test_refuses_dispatch_when_the_owner_provisioned_baseline_is_missing(
+    tmp_path: Path,
+) -> None:
+    repo, base = _repo(tmp_path)
+    _git(repo, "switch", "--quiet", "-c", "feature")
+    feature = _commit(repo, "feature")
+    _git(repo, "update-ref", f"refs/pull/{PR_NUMBER}/head", feature)
+    _git(repo, "switch", "--quiet", "main")
+    _git(repo, "cherry-pick", feature)
+
+    code, output, dispatched = _run_dispatch(
+        repo,
+        tmp_path,
+        base_sha=base,
+        merge_sha=_git(repo, "rev-parse", "HEAD"),
+        commit_count=1,
+        baseline_available=False,
+    )
+
+    assert code != 0
+    assert dispatched == []
+    assert "must be provisioned" in output
 
 
 def test_refuses_a_window_that_does_not_match_the_pr_commit_count(tmp_path: Path) -> None:

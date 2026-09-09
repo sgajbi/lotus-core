@@ -406,7 +406,8 @@ def test_merged_pr_dispatcher_targets_immutable_merge_revision() -> None:
     assert 'baseline_ref="main-gate-coverage-enforcement-v1"' in command
     assert workflow["env"]["COVERAGE_BASELINE_SHA"] == ("866507fc1c72d1bfcbf9265beee403dddd3dba62")
     assert 'baseline_sha="$COVERAGE_BASELINE_SHA"' in command
-    assert '-f sha="$baseline_sha"' in command
+    assert "must be provisioned at anchored SHA $baseline_sha" in command
+    assert '-f sha="$baseline_sha"' not in command
     assert "expected anchored SHA $baseline_sha" in command
     assert any(step.get("uses") == "actions/upload-artifact@v7" for step in job["steps"])
 
