@@ -1,9 +1,19 @@
+import re
+import tomllib
 from pathlib import Path
 
 import yaml
 
 from scripts.release.prebuild_ci_images import SERVICE_BUILDS
 from scripts.release.write_image_build_matrix import build_matrix
+
+GOVERNED_PYTHON_WORKFLOWS = (
+    Path(".github/workflows/feature-lane.yml"),
+    Path(".github/workflows/image-release.yml"),
+    Path(".github/workflows/main-releasability.yml"),
+    Path(".github/workflows/pr-merge-gate.yml"),
+    Path(".github/workflows/quality-baseline.yml"),
+)
 
 GOVERNED_RUNTIME_WORKFLOWS = (
     Path(".github/workflows/pr-merge-gate.yml"),
@@ -71,6 +81,40 @@ APPROVED_REPORT_ONLY_STEPS = {
         "Docstring baseline",
     ),
 }
+
+
+def test_shipped_python_version_is_the_governed_validation_authority() -> None:
+    runtime_version = Path(".python-version").read_text(encoding="utf-8").strip()
+    assert re.fullmatch(r"\d+\.\d+", runtime_version)
+
+    for workflow_path in GOVERNED_PYTHON_WORKFLOWS:
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        assert workflow["env"]["PYTHON_VERSION"] == runtime_version, workflow_path
+
+    for workflow_path in (
+        Path(".github/workflows/feature-lane.yml"),
+        Path(".github/workflows/main-releasability.yml"),
+        Path(".github/workflows/pr-merge-gate.yml"),
+    ):
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        steps = workflow["jobs"]["windows-lock-closures"]["steps"]
+        setup_python = next(step for step in steps if step.get("uses") == "actions/setup-python@v6")
+        assert setup_python["with"]["python-version"] == runtime_version
+
+    dockerfile_paths = sorted({Path(dockerfile) for _, dockerfile in SERVICE_BUILDS.values()})
+    image_versions: set[str] = set()
+    for dockerfile_path in dockerfile_paths:
+        dockerfile_text = dockerfile_path.read_text(encoding="utf-8")
+        match = re.search(r"^ARG PYTHON_IMAGE=python:(\d+\.\d+)-", dockerfile_text, re.MULTILINE)
+        assert match is not None, dockerfile_path
+        image_versions.add(match.group(1))
+    assert image_versions == {runtime_version}
+
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["requires-python"] == f">={runtime_version}"
+    assert pyproject["tool"]["ruff"]["target-version"] == f"py{runtime_version.replace('.', '')}"
+    assert pyproject["tool"]["mypy"]["python_version"] == runtime_version
+
 
 NODE20_DEPRECATED_ACTION_PINS = (
     "actions/cache@v4",
