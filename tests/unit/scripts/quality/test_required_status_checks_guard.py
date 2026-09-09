@@ -277,7 +277,7 @@ def test_manifest_validation_rejects_target_specific_variable_on_real_phony_targ
     tmp_path: Path,
 ) -> None:
     tmp_path.joinpath("Makefile").write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         "security-audit: MODE = strict\n"
         "security-audit:\n"
@@ -321,7 +321,7 @@ def test_manifest_validation_rejects_an_empty_non_enforcement_make_step(
     tmp_path: Path,
 ) -> None:
     tmp_path.joinpath("Makefile").write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit warning-gate\n"
         "security-audit:\n"
         "warning-gate:\n"
@@ -607,7 +607,7 @@ def test_make_authority_accepts_the_static_repository_command_variable(
     recipe = '$(REPOSITORY_PYTHON) -c "raise SystemExit(1)"'
     rule = f"security-audit: ; {recipe}" if inline else f"security-audit:\n\t{recipe}"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         f".PHONY: security-audit\n{rule}\n",
         encoding="utf-8",
     )
@@ -720,7 +720,7 @@ def test_make_authority_rejects_repeated_double_colon_target_records(
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         f"security-audit::\n\t{recipes[0]}\n"
         f"security-audit::\n\t{recipes[1]}\n",
@@ -754,7 +754,7 @@ def test_governed_make_authority_rejects_shell_composition_and_dynamic_commands(
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         "security-audit:\n"
         f"\t{recipe}\n",
@@ -822,7 +822,7 @@ def test_blocking_make_authority_rejects_nested_interpreters(
     target_rule = "security-audit: implementation\n" if delegated else "security-audit:\n"
     implementation_rule = f"implementation:\n\t{recipe}\n" if delegated else f"\t{recipe}\n"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         f".PHONY: security-audit implementation\n{target_rule}{implementation_rule}",
         encoding="utf-8",
     )
@@ -898,7 +898,7 @@ def test_blocking_make_authority_traverses_prerequisites_when_parent_has_a_recip
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         f".PHONY: blocking-target {prerequisite}\n"
         f"blocking-target: {prerequisite}\n"
         "\t$(REPOSITORY_PYTHON) parent-control.py\n"
@@ -927,7 +927,7 @@ def test_governed_make_authority_rejects_control_syntax_from_a_make_expansion(
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         "security-audit:\n"
         "\t$(REPOSITORY_PYTHON) missing-control.py $(MASK)\n",
@@ -968,7 +968,7 @@ def test_governed_make_authority_rejects_a_target_without_a_control(tmp_path: Pa
 def test_governed_make_authority_accepts_a_validated_prerequisite_chain(tmp_path: Path) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit control\n"
         "security-audit: control\n"
         "control:\n"
@@ -1043,7 +1043,7 @@ def test_blocking_make_authority_rejects_command_substitution_split_in_effective
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         "security-audit:\n"
         "\t$(REPOSITORY_PYTHON) control.py $$\\\n"
@@ -1306,7 +1306,7 @@ def test_blocking_make_authority_accepts_canonical_command_identities(
 ) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit control\n"
         "security-audit:\n"
         f"\t{recipe}\n"
@@ -1349,7 +1349,7 @@ def test_make_authority_rejects_a_stored_recursive_make_command(tmp_path: Path) 
 def test_make_authority_accepts_escaped_shell_command_substitution(tmp_path: Path) -> None:
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         "security-audit:\n"
         '\t@value="$$( $(REPOSITORY_PYTHON) --version)"; printf \'%s\\n\' "$$value"\n',

@@ -65,7 +65,19 @@ def discover_local_build_metadata(
 ) -> LocalBuildMetadata:
     commit = _git(root, "rev-parse", "--verify", "HEAD", runner=runner)
     branch = _git(root, "branch", "--show-current", runner=runner) or "detached-head"
-    dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=all", runner=runner))
+    # The build context observes executable-bit changes even when a developer's
+    # local Git configuration asks status to ignore them.
+    dirty = bool(
+        _git(
+            root,
+            "-c",
+            "core.fileMode=true",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            runner=runner,
+        )
+    )
     if not dirty:
         # Git hides assume-unchanged and skip-worktree paths from ordinary
         # status even though Docker still reads their working-tree content.
