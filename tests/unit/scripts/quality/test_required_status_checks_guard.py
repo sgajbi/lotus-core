@@ -106,7 +106,7 @@ def _write_make_command_contract(
 
 def _write_fixture_makefile(repository_root: Path) -> None:
     repository_root.joinpath("Makefile").write_text(
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py\n"
         ".PHONY: security-audit\n"
         "security-audit:\n"
         "\t$(REPOSITORY_PYTHON) control.py\n",
