@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_URL = "https://github.com/sgajbi/lotus-core"
 LOCAL_IMAGE_DIGEST = "unavailable-before-push"
@@ -83,11 +85,7 @@ def _dockerfile_logical_lines(content: str) -> tuple[str, ...]:
     current = ""
     for physical_line in content.splitlines():
         fragment = physical_line.strip()
-        if (
-            not current
-            and not fragment.startswith("#")
-            and re.search(r"(?:^|\s)<<-?['\"]?[A-Za-z0-9_]", fragment)
-        ):
+        if not current and not fragment.startswith("#") and re.search(r"(?:^|\s)<<-?\S", fragment):
             raise ValueError("Dockerfile heredoc instructions are not supported")
         current = f"{current} {fragment}".strip()
         if current.endswith("\\"):
@@ -204,16 +202,51 @@ def _copied_source_paths(root: Path) -> set[Path]:
     }
 
 
-def _has_untracked_empty_context_directory(
+def _compose_bind_source_paths(root: Path) -> set[Path]:
+    compose = yaml.safe_load((root / LOCAL_COMPOSE_FILE).read_text(encoding="utf-8"))
+    services = compose.get("services") if isinstance(compose, dict) else None
+    if not isinstance(services, dict):
+        raise ValueError("local Compose services are not parseable")
+    lexical_root = Path(os.path.abspath(root))
+    paths: set[Path] = set()
+    for service in services.values():
+        if not isinstance(service, dict):
+            continue
+        volumes = service.get("volumes", ())
+        if not isinstance(volumes, list):
+            raise ValueError("local Compose volumes must use list form")
+        for volume in volumes:
+            if isinstance(volume, str):
+                source, separator, _ = volume.partition(":")
+                if not separator or not source.startswith((".", "/", "\\")):
+                    continue
+            elif isinstance(volume, dict) and volume.get("type") == "bind":
+                bind_source = volume.get("source")
+                if not isinstance(bind_source, str):
+                    raise ValueError("local Compose bind sources must be literal paths")
+                source = bind_source
+            else:
+                continue
+            if "$" in source:
+                raise ValueError("dynamic local Compose bind sources are not supported")
+            candidate = Path(source)
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            candidate = Path(os.path.abspath(candidate))
+            if not candidate.is_relative_to(lexical_root) or not candidate.exists():
+                raise ValueError("local Compose bind sources must exist within the repository")
+            paths.add(candidate)
+    return paths
+
+
+def _has_untracked_empty_directory(
     root: Path,
     *,
+    source_paths: set[Path],
+    patterns: Sequence[str],
     runner: Runner,
 ) -> bool:
-    patterns = _dockerignore_patterns(root)
-    copied_sources = _copied_source_paths(root)
-    copied_pathspecs = tuple(
-        source.relative_to(root).as_posix() for source in sorted(copied_sources)
-    )
+    copied_pathspecs = tuple(source.relative_to(root).as_posix() for source in sorted(source_paths))
     tracked_paths = {
         Path(path)
         for path in _git(
@@ -226,7 +259,7 @@ def _has_untracked_empty_context_directory(
         ).split("\0")
         if path
     }
-    for source_root in copied_sources:
+    for source_root in source_paths:
         if source_root.is_symlink() or not source_root.is_dir():
             continue
         for current, directory_names, file_names in os.walk(source_root, topdown=True):
@@ -262,6 +295,7 @@ def _is_within_copied_source(path: Path, *, root: Path, copied_sources: set[Path
 def discover_local_build_metadata(
     root: Path = REPO_ROOT,
     *,
+    include_compose_bind_mounts: bool = False,
     runner: Runner = subprocess.run,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> LocalBuildMetadata:
@@ -286,8 +320,10 @@ def discover_local_build_metadata(
         dirty = _has_hidden_index_flags(root, runner=runner)
     if not dirty:
         copied_sources = _copied_source_paths(root)
+        bind_sources = _compose_bind_source_paths(root) if include_compose_bind_mounts else set()
+        observed_sources = copied_sources | bind_sources
         copied_pathspecs = tuple(
-            source.relative_to(root).as_posix() for source in sorted(copied_sources)
+            source.relative_to(root).as_posix() for source in sorted(observed_sources)
         )
         if copied_pathspecs:
             git_ignored = {
@@ -321,11 +357,35 @@ def discover_local_build_metadata(
                 if relative
             }
             dirty = any(
-                _is_within_copied_source(root / relative, root=root, copied_sources=copied_sources)
-                for relative in git_ignored - docker_ignored
+                (
+                    _is_within_copied_source(
+                        root / relative,
+                        root=root,
+                        copied_sources=copied_sources,
+                    )
+                    and relative not in docker_ignored
+                )
+                or _is_within_copied_source(
+                    root / relative,
+                    root=root,
+                    copied_sources=bind_sources,
+                )
+                for relative in git_ignored
             )
-    if not dirty:
-        dirty = _has_untracked_empty_context_directory(root, runner=runner)
+        if not dirty:
+            dirty = _has_untracked_empty_directory(
+                root,
+                source_paths=copied_sources,
+                patterns=_dockerignore_patterns(root),
+                runner=runner,
+            )
+        if not dirty and bind_sources:
+            dirty = _has_untracked_empty_directory(
+                root,
+                source_paths=bind_sources,
+                patterns=(),
+                runner=runner,
+            )
     with (root / "pyproject.toml").open("rb") as handle:
         project_version = str(tomllib.load(handle)["project"]["version"])
     return LocalBuildMetadata(
@@ -391,7 +451,9 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    metadata = discover_local_build_metadata()
+    metadata = discover_local_build_metadata(
+        include_compose_bind_mounts=args.operation == "compose-up"
+    )
     if args.operation == "docker-build":
         command = docker_build_command(metadata)
     else:

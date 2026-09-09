@@ -207,7 +207,7 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                 )
             )
         if any(
-            not line.strip().startswith("#") and re.search(r"(?:^|\s)<<-?['\"]?[A-Za-z0-9_]", line)
+            not line.strip().startswith("#") and re.search(r"(?:^|\s)<<-?\S", line)
             for line in content.splitlines()
         ):
             findings.append(

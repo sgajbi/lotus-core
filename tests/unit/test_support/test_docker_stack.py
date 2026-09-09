@@ -272,7 +272,11 @@ def test_compose_up_builds_with_source_provenance_then_starts_without_build(
     )
     monkeypatch.setattr(
         "tests.test_support.docker_stack.discover_local_build_metadata",
-        lambda: metadata,
+        lambda **kwargs: (
+            metadata
+            if kwargs == {"include_compose_bind_mounts": True}
+            else pytest.fail("managed Compose builds must include bind-mounted inputs")
+        ),
     )
 
     def runner(args, **kwargs):  # noqa: ANN001, ARG001

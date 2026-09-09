@@ -440,7 +440,9 @@ def compose_up(
         build_environment = (
             dict(compose_environment) if compose_environment is not None else os.environ.copy()
         )
-        build_environment.update(discover_local_build_metadata().environment())
+        build_environment.update(
+            discover_local_build_metadata(include_compose_bind_mounts=True).environment()
+        )
     compose_args = _compose_base_args(compose_file, project_name=project_name)
     ensure_docker_engine_available(runner, deadline=deadline)
     ensure_required_images_available(
