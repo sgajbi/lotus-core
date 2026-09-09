@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import PortfolioTimeseries
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +44,7 @@ def repository(mock_db_session: AsyncMock) -> PortfolioAggregationRepository:
 
 
 LEASE_EXPIRES_AT = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
+TEST_TENANT = TenantId("tenant-test")
 
 
 def _lease() -> AggregationJobLeaseClaim:
@@ -56,26 +58,28 @@ def _lease() -> AggregationJobLeaseClaim:
 async def test_get_portfolio_trims_portfolio_id(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
-    row = MagicMock(portfolio_id="P1", base_currency="SGD")
+    row = MagicMock(tenant_id=TEST_TENANT.value, portfolio_id="P1", base_currency="SGD")
     mock_db_session.execute.return_value.scalars.return_value.first.return_value = row
 
-    await repository.get_portfolio(" P1 ")
+    await repository.get_portfolio(" P1 ", tenant_id=TEST_TENANT)
     compiled = str(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "WHERE trim(portfolios.portfolio_id) = 'P1'" in compiled
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled
 
 
 async def test_get_portfolio_returns_immutable_aggregation_scope(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
-    row = MagicMock(portfolio_id="P1", base_currency="SGD")
+    row = MagicMock(tenant_id=TEST_TENANT.value, portfolio_id="P1", base_currency="SGD")
     mock_db_session.execute.return_value.scalars.return_value.first.return_value = row
 
-    portfolio = await repository.get_portfolio("P1")
+    portfolio = await repository.get_portfolio("P1", tenant_id=TEST_TENANT)
 
     assert portfolio is not None
     assert portfolio.portfolio_id == "P1"
+    assert portfolio.tenant_id == TEST_TENANT
     assert portfolio.base_currency == "SGD"
     assert portfolio is not row
 
@@ -343,6 +347,7 @@ async def test_complete_or_requeue_job_requeues_late_material_input(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -370,6 +375,7 @@ async def test_complete_or_requeue_job_completes_owned_job(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -399,6 +405,7 @@ async def test_complete_or_requeue_job_reports_lost_ownership(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -419,6 +426,7 @@ async def test_complete_or_requeue_job_rechecks_supersession_after_terminal_race
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -436,6 +444,7 @@ async def test_fail_or_requeue_job_fails_only_current_owned_processing_job(
     disposition = await repository.fail_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -462,6 +471,7 @@ async def test_fail_or_requeue_job_requeues_superseded_source_identity(
     disposition = await repository.fail_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -494,6 +504,7 @@ async def test_fail_or_requeue_job_rechecks_supersession_after_terminal_race(
     disposition = await repository.fail_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -561,6 +572,7 @@ async def test_complete_or_requeue_claim_fences_terminal_write_and_clears_lease(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -593,6 +605,7 @@ async def test_complete_or_requeue_claim_reports_lost_ownership_after_reclaim(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="expired-lease-token",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )
@@ -618,6 +631,7 @@ async def test_fail_current_claim_fences_terminal_write_and_clears_lease(
     disposition = await repository.fail_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        tenant_id=TEST_TENANT,
         target_epoch=4,
         source_revision=5,
     )

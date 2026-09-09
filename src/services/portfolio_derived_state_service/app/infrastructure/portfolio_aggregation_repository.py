@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
 )
 from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.statement_batching import (
     StatementBatchOperation,
@@ -79,6 +80,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> AggregationJobCompletionDisposition:
@@ -87,13 +89,18 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         if await self._requeue_superseded_claim(
             job_id=job_id,
             lease_token=lease_token,
+            tenant_id=tenant_id,
             target_epoch=target_epoch,
             source_revision=source_revision,
         ):
             return AggregationJobCompletionDisposition.REQUEUED
 
         complete_result = await self.db.execute(
-            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            _owned_claim_update(
+                job_id=job_id,
+                lease_token=lease_token,
+                tenant_id=tenant_id,
+            )
             .where(
                 PortfolioAggregationJob.target_epoch == target_epoch,
                 PortfolioAggregationJob.source_revision == source_revision,
@@ -111,6 +118,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         if await self._requeue_superseded_claim(
             job_id=job_id,
             lease_token=lease_token,
+            tenant_id=tenant_id,
             target_epoch=target_epoch,
             source_revision=source_revision,
         ):
@@ -122,6 +130,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> AggregationJobFailureDisposition:
@@ -130,13 +139,18 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         if await self._requeue_superseded_claim(
             job_id=job_id,
             lease_token=lease_token,
+            tenant_id=tenant_id,
             target_epoch=target_epoch,
             source_revision=source_revision,
         ):
             return AggregationJobFailureDisposition.REQUEUED
 
         result = await self.db.execute(
-            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            _owned_claim_update(
+                job_id=job_id,
+                lease_token=lease_token,
+                tenant_id=tenant_id,
+            )
             .where(
                 PortfolioAggregationJob.target_epoch == target_epoch,
                 PortfolioAggregationJob.source_revision == source_revision,
@@ -154,6 +168,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         if await self._requeue_superseded_claim(
             job_id=job_id,
             lease_token=lease_token,
+            tenant_id=tenant_id,
             target_epoch=target_epoch,
             source_revision=source_revision,
         ):
@@ -165,11 +180,16 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> bool:
         result = await self.db.execute(
-            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            _owned_claim_update(
+                job_id=job_id,
+                lease_token=lease_token,
+                tenant_id=tenant_id,
+            )
             .where(
                 or_(
                     PortfolioAggregationJob.target_epoch != target_epoch,
@@ -188,10 +208,18 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         return int(result.rowcount or 0) == 1
 
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
-    async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None:
+    async def get_portfolio(
+        self,
+        portfolio_id: str,
+        *,
+        tenant_id: TenantId,
+    ) -> PortfolioAggregationScope | None:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         result = await self.db.execute(
-            select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
+            select(Portfolio).where(
+                func.trim(Portfolio.portfolio_id) == normalized_portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
+            )
         )
         row = result.scalars().first()
         return _portfolio_aggregation_scope(row) if row is not None else None
@@ -468,6 +496,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
 
 def _portfolio_aggregation_scope(row: Portfolio) -> PortfolioAggregationScope:
     return PortfolioAggregationScope(
+        tenant_id=TenantId(str(row.tenant_id)),
         portfolio_id=str(row.portfolio_id),
         base_currency=str(row.base_currency),
     )
@@ -498,6 +527,7 @@ def _claimed_aggregation_job(row: PortfolioAggregationJob) -> ClaimedAggregation
         raise ValueError("Claimed aggregation job is missing durable lease identity.")
     return ClaimedAggregationJob(
         id=int(row.id),
+        tenant_id=TenantId(str(row.tenant_id)),
         portfolio_id=str(row.portfolio_id),
         aggregation_date=cast(date, row.aggregation_date),
         aggregation_revision=int(row.attempt_count),
@@ -652,9 +682,10 @@ def _expired_job_leases_update(job_ids: list[int]):
     )
 
 
-def _owned_claim_update(*, job_id: int, lease_token: str):
+def _owned_claim_update(*, job_id: int, lease_token: str, tenant_id: TenantId):
     return update(PortfolioAggregationJob).where(
         PortfolioAggregationJob.id == job_id,
+        PortfolioAggregationJob.tenant_id == tenant_id.value,
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.lease_token == lease_token,
         PortfolioAggregationJob.lease_expires_at > func.clock_timestamp(),

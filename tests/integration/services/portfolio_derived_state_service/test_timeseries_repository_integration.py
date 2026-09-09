@@ -275,6 +275,7 @@ async def test_newer_snapshot_refreshes_evidence_and_rearms_portfolio_day_once(
         carry_forward_date = valuation_date + timedelta(days=1)
         session.add(
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 aggregation_date=carry_forward_date,
                 status="COMPLETE",
@@ -324,6 +325,7 @@ async def test_newer_snapshot_refreshes_evidence_and_rearms_portfolio_day_once(
     )
     first_lineage = refreshed_series.calculation_lineage
     assert aggregation_job.status == "PENDING"
+    assert aggregation_job.tenant_id == TEST_TENANT_ID
     carry_forward_job = await async_db_session.scalar(
         select(PortfolioAggregationJob).where(
             PortfolioAggregationJob.portfolio_id == portfolio_id,
@@ -331,6 +333,7 @@ async def test_newer_snapshot_refreshes_evidence_and_rearms_portfolio_day_once(
         )
     )
     assert carry_forward_job is not None
+    assert carry_forward_job.tenant_id == TEST_TENANT_ID
     assert carry_forward_job.status == "PENDING"
     assert carry_forward_job.target_epoch == 0
     assert carry_forward_job.source_revision == 3
@@ -357,6 +360,7 @@ async def test_newer_snapshot_refreshes_evidence_and_rearms_portfolio_day_once(
         )
     )
     assert duplicate_carry_forward_job is not None
+    assert duplicate_carry_forward_job.tenant_id == TEST_TENANT_ID
     assert duplicate_carry_forward_job.source_revision == 3
 
 
@@ -425,6 +429,7 @@ async def test_unavailable_valuation_invalidates_stale_carry_forward_portfolio_r
         session.add_all(
             [
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=a_date,
                     status="COMPLETE",
@@ -574,6 +579,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
         session.add_all(
             [
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=changed_day,
                     status="COMPLETE",
@@ -581,6 +587,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
                     source_revision=1,
                 ),
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=complete_carry_day,
                     status="COMPLETE",
@@ -588,6 +595,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
                     source_revision=3,
                 ),
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=failed_carry_day,
                     status="FAILED",
@@ -596,6 +604,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
                     source_revision=4,
                 ),
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=pending_carry_day,
                     status="PENDING",
@@ -603,6 +612,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
                     source_revision=5,
                 ),
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=processing_carry_day,
                     status="PROCESSING",
@@ -613,6 +623,7 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
                     lease_expires_at=lease_expiry,
                 ),
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=convergence_day,
                     status="COMPLETE",
@@ -621,12 +632,29 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
                 ),
             ]
         )
+        noise_portfolio_id = "TERMINAL_CARRY_FORWARD_PLAN_NOISE"
+        session.add(
+            Portfolio(
+                tenant_id=TEST_TENANT_ID,
+                portfolio_id=noise_portfolio_id,
+                base_currency="USD",
+                open_date=date(2018, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="noise",
+                status="ACTIVE",
+            )
+        )
+        session.flush()
         noise_start = date(2018, 1, 1)
         session.execute(
             PortfolioAggregationJob.__table__.insert(),
             [
                 {
-                    "portfolio_id": "TERMINAL_CARRY_FORWARD_PLAN_NOISE",
+                    "tenant_id": TEST_TENANT_ID,
+                    "portfolio_id": noise_portfolio_id,
                     "aggregation_date": noise_start + timedelta(days=offset),
                     "status": "COMPLETE",
                     "target_epoch": 0,
@@ -771,10 +799,16 @@ def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
         session.add_all(
             [
                 PortfolioAggregationJob(
-                    portfolio_id=portfolio_id, aggregation_date=day1, status="PENDING"
+                    tenant_id=TEST_TENANT_ID,
+                    portfolio_id=portfolio_id,
+                    aggregation_date=day1,
+                    status="PENDING",
                 ),
                 PortfolioAggregationJob(
-                    portfolio_id=portfolio_id, aggregation_date=day2, status="PENDING"
+                    tenant_id=TEST_TENANT_ID,
+                    portfolio_id=portfolio_id,
+                    aggregation_date=day2,
+                    status="PENDING",
                 ),
             ]
         )
@@ -879,6 +913,7 @@ async def test_claim_eligible_jobs_claims_first_day_without_portfolio_history(
         )
         session.add(
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 aggregation_date=first_day,
                 status="PENDING",
@@ -958,6 +993,7 @@ async def test_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
         )
         session.add(
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 aggregation_date=a_date,
                 status="PENDING",
@@ -1041,11 +1077,13 @@ async def test_claim_eligible_jobs_claims_all_complete_days_without_history_depe
         session.add_all(
             [
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=early_day,
                     status="PENDING",
                 ),
                 PortfolioAggregationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=portfolio_id,
                     aggregation_date=later_day,
                     status="PENDING",
@@ -1141,6 +1179,7 @@ async def test_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_ha
         )
         session.add(
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=portfolio_id,
                 aggregation_date=target_day,
                 status="PENDING",

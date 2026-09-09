@@ -128,6 +128,11 @@ class Portfolio(Base):
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",
+            "portfolio_id",
+            name="uq_portfolios_tenant_portfolio_id",
+        ),
+        UniqueConstraint(
+            "tenant_id",
             "legal_book_id",
             "portfolio_id",
             name="uq_portfolios_book_scope_identity",
@@ -4564,6 +4569,7 @@ class PortfolioAggregationJob(Base):
     __tablename__ = "portfolio_aggregation_jobs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(128), nullable=False)
     portfolio_id = Column(String, nullable=False, index=True)
     aggregation_date = Column(Date, nullable=False, index=True)
     status = Column(String, nullable=False, default="PENDING", index=True)
@@ -4583,7 +4589,22 @@ class PortfolioAggregationJob(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("portfolio_id", "aggregation_date", name="_portfolio_date_uc"),
+        UniqueConstraint(
+            "tenant_id",
+            "portfolio_id",
+            "aggregation_date",
+            name="uq_portfolio_aggregation_jobs_tenant_portfolio_date",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "portfolio_id"],
+            ["portfolios.tenant_id", "portfolios.portfolio_id"],
+            name="fk_portfolio_aggregation_jobs_tenant_portfolio",
+        ),
+        CheckConstraint(
+            f"tenant_id = btrim(tenant_id, {PYTHON_STRIP_BOUNDARY_SQL}) "
+            "AND tenant_id <> '' AND char_length(tenant_id) <= 128",
+            name="ck_portfolio_aggregation_jobs_tenant_normalized",
+        ),
         CheckConstraint(
             "(lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL) OR "
             "(lease_owner IS NOT NULL AND lease_token IS NOT NULL AND "
@@ -4642,6 +4663,13 @@ class PortfolioAggregationJob(Base):
             "updated_at",
             "id",
             postgresql_where=correlation_id.is_not(None),
+        ),
+        Index(
+            "ix_portfolio_aggregation_jobs_tenant_portfolio_status_date",
+            "tenant_id",
+            "portfolio_id",
+            "status",
+            "aggregation_date",
         ),
         Index("ix_portfolio_aggregation_jobs_alternate_lookup_key", "alternate_lookup_key"),
     )

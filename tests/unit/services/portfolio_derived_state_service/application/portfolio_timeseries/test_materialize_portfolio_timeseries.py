@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import TypeVar
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_derived_state_service.app.application.portfolio_timeseries import (
     MaterializePortfolioTimeseries,
@@ -35,6 +36,7 @@ from src.services.portfolio_derived_state_service.app.ports.portfolio_timeseries
 pytestmark = pytest.mark.asyncio
 
 T = TypeVar("T")
+TEST_TENANT = TenantId("tenant-test")
 
 
 class InMemoryPortfolioTimeseriesRepository:
@@ -42,18 +44,27 @@ class InMemoryPortfolioTimeseriesRepository:
 
     def __init__(self) -> None:
         self.portfolio: PortfolioAggregationScope | None = PortfolioAggregationScope(
+            tenant_id=TEST_TENANT,
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             base_currency="SGD",
         )
         self.positions: list[PositionTimeseriesRecord] = []
         self.disposition = AggregationJobCompletionDisposition.COMPLETE
         self.upserted: list[PortfolioTimeseriesRecord] = []
-        self.completed_claims: list[tuple[int, str, int, int]] = []
-        self.failed_jobs: list[tuple[int, str, int, int]] = []
+        self.completed_claims: list[tuple[int, str, TenantId, int, int]] = []
+        self.failed_jobs: list[tuple[int, str, TenantId, int, int]] = []
         self.failure_disposition = AggregationJobFailureDisposition.FAILED
 
-    async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None:
-        del portfolio_id
+    async def get_portfolio(
+        self,
+        portfolio_id: str,
+        *,
+        tenant_id: TenantId,
+    ) -> PortfolioAggregationScope | None:
+        if self.portfolio is None:
+            return None
+        if (self.portfolio.portfolio_id, self.portfolio.tenant_id) != (portfolio_id, tenant_id):
+            return None
         return self.portfolio
 
     async def get_all_position_timeseries_for_date(
@@ -73,10 +84,13 @@ class InMemoryPortfolioTimeseriesRepository:
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> AggregationJobCompletionDisposition:
-        self.completed_claims.append((job_id, lease_token, target_epoch, source_revision))
+        self.completed_claims.append(
+            (job_id, lease_token, tenant_id, target_epoch, source_revision)
+        )
         return self.disposition
 
     async def fail_or_requeue_job(
@@ -84,10 +98,11 @@ class InMemoryPortfolioTimeseriesRepository:
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> AggregationJobFailureDisposition:
-        self.failed_jobs.append((job_id, lease_token, target_epoch, source_revision))
+        self.failed_jobs.append((job_id, lease_token, tenant_id, target_epoch, source_revision))
         return self.failure_disposition
 
 
@@ -164,6 +179,7 @@ def _command() -> MaterializePortfolioTimeseriesCommand:
     return MaterializePortfolioTimeseriesCommand(
         job_id=71,
         lease_token="lease-token-71",
+        tenant_id=TEST_TENANT,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         aggregation_date=date(2026, 4, 10),
         aggregation_revision=7,
@@ -212,7 +228,7 @@ async def test_materialization_persists_aggregate_and_stages_completion_atomical
         )
     ]
     assert repository.failed_jobs == []
-    assert repository.completed_claims == [(71, "lease-token-71", 4, 9)]
+    assert repository.completed_claims == [(71, "lease-token-71", TEST_TENANT, 4, 9)]
     assert provider.transaction_count == 1
 
 
@@ -259,7 +275,7 @@ async def test_materialization_marks_missing_portfolio_job_failed() -> None:
     assert result.target_epoch is None
     assert repository.upserted == []
     assert event_stager.calls == []
-    assert repository.failed_jobs == [(71, "lease-token-71", 4, 9)]
+    assert repository.failed_jobs == [(71, "lease-token-71", TEST_TENANT, 4, 9)]
     assert provider.transaction_count == 2
 
 
@@ -276,7 +292,7 @@ async def test_materialization_rolls_back_calculation_failure_then_marks_job_fai
     assert result.status is PortfolioTimeseriesMaterializationStatus.FAILED
     assert repository.upserted == []
     assert event_stager.calls == []
-    assert repository.failed_jobs == [(71, "lease-token-71", 4, 9)]
+    assert repository.failed_jobs == [(71, "lease-token-71", TEST_TENANT, 4, 9)]
     assert provider.transaction_count == 2
 
 
@@ -291,7 +307,7 @@ async def test_materialization_reports_lost_ownership_when_failure_write_is_fenc
 
     assert result.status is PortfolioTimeseriesMaterializationStatus.LOST_OWNERSHIP
     assert result.failure_recorded is False
-    assert repository.failed_jobs == [(71, "lease-token-71", 4, 9)]
+    assert repository.failed_jobs == [(71, "lease-token-71", TEST_TENANT, 4, 9)]
     assert provider.transaction_count == 2
 
 
@@ -306,5 +322,5 @@ async def test_materialization_requeues_failure_when_newer_source_superseded_cla
 
     assert result.status is PortfolioTimeseriesMaterializationStatus.REQUEUED
     assert result.failure_recorded is False
-    assert repository.failed_jobs == [(71, "lease-token-71", 4, 9)]
+    assert repository.failed_jobs == [(71, "lease-token-71", TEST_TENANT, 4, 9)]
     assert provider.transaction_count == 2

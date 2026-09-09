@@ -65,6 +65,7 @@ class ProcessClaimedAggregationJobs:
                         MaterializePortfolioTimeseriesCommand(
                             job_id=job.id,
                             lease_token=job.lease.token,
+                            tenant_id=job.tenant_id,
                             portfolio_id=job.portfolio_id,
                             aggregation_date=job.aggregation_date,
                             aggregation_revision=job.aggregation_revision,

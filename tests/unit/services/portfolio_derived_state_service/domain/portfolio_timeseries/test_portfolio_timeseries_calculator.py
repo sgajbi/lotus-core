@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.domain.market_data.timeseries import TimeseriesFxRate
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_derived_state_service.app.domain.portfolio_timeseries import (
     DuplicatePortfolioPositionContribution,
@@ -53,7 +54,11 @@ def _position(
 
 
 def _scope() -> PortfolioAggregationScope:
-    return PortfolioAggregationScope(portfolio_id="PORT-AGG", base_currency="USD")
+    return PortfolioAggregationScope(
+        tenant_id=TenantId("tenant-test"),
+        portfolio_id="PORT-AGG",
+        base_currency="USD",
+    )
 
 
 def _fx_rate(
@@ -355,7 +360,11 @@ def test_calculator_rejects_future_contribution_outside_target_window(
 def test_calculator_rejects_missing_portfolio_identity() -> None:
     with pytest.raises(InvalidPortfolioAggregationScope):
         calculate_portfolio_timeseries(
-            portfolio=PortfolioAggregationScope(portfolio_id=" ", base_currency="USD"),
+            portfolio=PortfolioAggregationScope(
+                tenant_id=TenantId("tenant-test"),
+                portfolio_id=" ",
+                base_currency="USD",
+            ),
             aggregation_date=date(2026, 3, 8),
             epoch=2,
             contributions=[],

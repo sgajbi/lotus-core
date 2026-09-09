@@ -10,11 +10,13 @@ from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
     DailyPositionValuationReceiptRecord,
+    Portfolio,
     PortfolioAggregationJob,
     PortfolioTimeseries,
     PositionTimeseries,
 )
 from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.timeseries_market_data_reader import (
@@ -402,18 +404,21 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             return
         if target_epoch < 0:
             raise ValueError("Aggregation target epoch cannot be negative.")
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        tenant_id = await self._required_portfolio_tenant_id(normalized_portfolio_id)
 
         insert_values = []
         for aggregation_date in normalized_dates:
             diagnostics = durable_correlation_diagnostics(
                 correlation_id=correlation_id,
                 record_family="aggregation_job",
-                portfolio_id=portfolio_id,
+                portfolio_id=normalized_portfolio_id,
                 aggregation_date=aggregation_date,
             )
             insert_values.append(
                 {
-                    "portfolio_id": portfolio_id,
+                    "tenant_id": tenant_id.value,
+                    "portfolio_id": normalized_portfolio_id,
                     "aggregation_date": aggregation_date,
                     "status": "PENDING",
                     "target_epoch": target_epoch,
@@ -428,7 +433,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         insert_statement = pg_insert(PortfolioAggregationJob).values(insert_values)
         result = await self.db.execute(
             insert_statement.on_conflict_do_update(
-                index_elements=["portfolio_id", "aggregation_date"],
+                index_elements=["tenant_id", "portfolio_id", "aggregation_date"],
                 set_={
                     "target_epoch": func.greatest(
                         PortfolioAggregationJob.target_epoch,
@@ -477,7 +482,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             "Staged portfolio aggregation jobs.",
             extra={
                 "aggregation_job_count": len(normalized_dates),
-                "portfolio_id": portfolio_id,
+                "portfolio_id": normalized_portfolio_id,
                 "aggregation_date_from": normalized_dates[0].isoformat(),
                 "aggregation_date_to": normalized_dates[-1].isoformat(),
                 "target_epoch": target_epoch,
@@ -498,15 +503,18 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
 
         if target_epoch < 0:
             raise ValueError("Aggregation target epoch cannot be negative.")
+        if end_date_exclusive is not None and end_date_exclusive <= start_date:
+            return 0
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        tenant_id = await self._required_portfolio_tenant_id(normalized_portfolio_id)
         normalized_excluded_dates = sorted(set(excluded_dates))
         predicates = [
-            PortfolioAggregationJob.portfolio_id == portfolio_id,
+            PortfolioAggregationJob.tenant_id == tenant_id.value,
+            PortfolioAggregationJob.portfolio_id == normalized_portfolio_id,
             PortfolioAggregationJob.aggregation_date >= start_date,
             PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING", "COMPLETE", "FAILED")),
         ]
         if end_date_exclusive is not None:
-            if end_date_exclusive <= start_date:
-                return 0
             predicates.append(PortfolioAggregationJob.aggregation_date < end_date_exclusive)
         if normalized_excluded_dates:
             predicates.append(
@@ -516,7 +524,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         interval_correlation = durable_correlation_diagnostics(
             correlation_id=correlation_id,
             record_family="aggregation_carry_forward_interval",
-            portfolio_id=portfolio_id,
+            portfolio_id=normalized_portfolio_id,
             start_date=start_date,
             end_date_exclusive=end_date_exclusive,
         ).correlation_id
@@ -564,7 +572,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         logger.debug(
             "Restaged portfolio aggregation jobs in a carry-forward interval.",
             extra={
-                "portfolio_id": portfolio_id,
+                "portfolio_id": normalized_portfolio_id,
                 "aggregation_date_from": start_date.isoformat(),
                 "aggregation_date_to_exclusive": (
                     end_date_exclusive.isoformat() if end_date_exclusive else None
@@ -575,6 +583,22 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             },
         )
         return restaged_count
+
+    async def _required_portfolio_tenant_id(self, portfolio_id: str) -> TenantId:
+        """Resolve the durable source tenant before staging portfolio-owned work."""
+
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        result = await self.db.execute(
+            select(Portfolio.tenant_id).where(
+                func.trim(Portfolio.portfolio_id) == normalized_portfolio_id
+            )
+        )
+        source_tenant_id = result.scalar_one_or_none()
+        if source_tenant_id is None:
+            raise LookupError(
+                f"Portfolio {normalized_portfolio_id!r} has no durable tenant authority."
+            )
+        return TenantId(str(source_tenant_id))
 
 
 def _observe_aggregation_staging_outcomes(

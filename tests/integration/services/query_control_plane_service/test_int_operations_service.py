@@ -337,6 +337,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
                 updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 aggregation_date=date(2025, 8, 21),
                 status="PROCESSING",
@@ -348,6 +349,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
                 updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
             ),
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 aggregation_date=date(2025, 8, 31),
                 status="FAILED",
@@ -1810,6 +1812,7 @@ async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
     async_db_session.add_all(
         [
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P10",
                 aggregation_date=date(2025, 8, 20),
                 status="PROCESSING",
@@ -1822,6 +1825,7 @@ async def test_aggregation_jobs_return_coherent_snapshot_under_job_churn(
                 updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
             ),
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P10",
                 aggregation_date=date(2025, 8, 31),
                 status="FAILED",
@@ -2192,6 +2196,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
                 updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
             ),
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 aggregation_date=date(2026, 4, 17),
                 status="PENDING",

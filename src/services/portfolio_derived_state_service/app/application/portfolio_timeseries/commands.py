@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
+from portfolio_common.domain.tenant import TenantId
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MaterializePortfolioTimeseriesCommand:
@@ -11,6 +13,7 @@ class MaterializePortfolioTimeseriesCommand:
 
     job_id: int
     lease_token: str
+    tenant_id: TenantId
     portfolio_id: str
     aggregation_date: date
     aggregation_revision: int
