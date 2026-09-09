@@ -129,9 +129,7 @@ def _has_untracked_empty_context_directory(root: Path) -> bool:
     )
 
 
-def _is_within_copied_source(
-    path: Path, *, root: Path, copied_sources: set[Path]
-) -> bool:
+def _is_within_copied_source(path: Path, *, root: Path, copied_sources: set[Path]) -> bool:
     repository_relative = path.absolute().relative_to(root.absolute())
     return any(
         repository_relative.is_relative_to(source.relative_to(root.resolve()))
@@ -195,9 +193,7 @@ def discover_local_build_metadata(
                 ).splitlines()
             )
             dirty = any(
-                _is_within_copied_source(
-                    root / relative, root=root, copied_sources=copied_sources
-                )
+                _is_within_copied_source(root / relative, root=root, copied_sources=copied_sources)
                 for relative in git_ignored - docker_ignored
             )
     if not dirty:
