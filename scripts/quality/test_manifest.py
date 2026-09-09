@@ -38,6 +38,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py",
         "tests/integration/test_valuation_job_hot_path_migration.py",
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
+        "tests/integration/test_aggregation_job_tenant_migration.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
@@ -52,6 +53,12 @@ SUITES: dict[str, list[str]] = {
         "test_benchmark_assignment_tenant_postgresql.py",
         "tests/integration/services/financial_reconciliation_service/"
         "test_int_reconciliation_repository.py",
+        "tests/integration/services/portfolio_derived_state_service/"
+        "test_portfolio_aggregation_repository.py::"
+        "test_claim_eligible_jobs_does_not_double_claim_under_concurrency",
+        "tests/integration/services/portfolio_derived_state_service/"
+        "test_portfolio_aggregation_repository.py::"
+        "test_recover_expired_job_leases_requeues_retryable_claim",
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
