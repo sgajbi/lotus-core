@@ -17,6 +17,8 @@ runtime, but unit, integration, coverage, lint, and type analysis did not.
 - align all workflow host interpreters, Ruff, mypy, and the required-check environment policy;
 - enforce parity across the five workflows, every Compose service Dockerfile, the package floor,
   Ruff, mypy, and Windows lock replay in the workflow-governance suite; and
+- bank the Python 3.11 Radon measurement where its AST produces a small maintainability
+  improvement, preserving the zero-headroom ratchet; and
 - publish one local setup and troubleshooting story for Python 3.11.
 
 The production images, dependency locks, package floor, API, financial behavior, schema, and
