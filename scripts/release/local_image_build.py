@@ -105,6 +105,7 @@ def _is_docker_ignored(path: Path, *, root: Path, patterns: Sequence[str]) -> bo
 
 def _copied_source_paths(root: Path) -> set[Path]:
     paths: set[Path] = set()
+    lexical_root = Path(os.path.abspath(root))
     for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
         for line in _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8")):
             if not line.lstrip().upper().startswith("COPY "):
@@ -127,8 +128,8 @@ def _copied_source_paths(root: Path) -> set[Path]:
             if len(arguments) < 2:
                 raise ValueError(f"Dockerfile COPY instruction lacks a destination: {line}")
             for source in arguments[:-1]:
-                candidate = (root / source).resolve()
-                if candidate.exists() and candidate.is_relative_to(root.resolve()):
+                candidate = Path(os.path.abspath(root / source))
+                if candidate.exists() and candidate.is_relative_to(lexical_root):
                     paths.add(candidate)
     return paths
 
@@ -139,16 +140,18 @@ def _has_untracked_empty_context_directory(root: Path) -> bool:
         True
         for source_root in _copied_source_paths(root)
         for directory in chain((source_root,), source_root.rglob("*"))
-        if directory.is_dir()
+        if not directory.is_symlink()
+        and directory.is_dir()
         and not any(directory.iterdir())
         and not _is_docker_ignored(directory, root=root, patterns=patterns)
     )
 
 
 def _is_within_copied_source(path: Path, *, root: Path, copied_sources: set[Path]) -> bool:
-    repository_relative = path.absolute().relative_to(root.absolute())
+    lexical_root = Path(os.path.abspath(root))
+    repository_relative = Path(os.path.abspath(path)).relative_to(lexical_root)
     return any(
-        repository_relative.is_relative_to(source.relative_to(root.resolve()))
+        repository_relative.is_relative_to(source.relative_to(lexical_root))
         for source in copied_sources
     )
 
