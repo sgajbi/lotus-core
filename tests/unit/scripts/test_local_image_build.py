@@ -314,6 +314,32 @@ def test_metadata_detects_ignored_directly_copied_file(tmp_path: Path) -> None:
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows symlink creation is privilege-dependent")
+def test_metadata_detects_ignored_directly_copied_symlink(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        'FROM scratch\nCOPY ["src/local-link", "/app/local-link"]\n',
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    external = tmp_path.parent / f"{tmp_path.name}-direct-external.txt"
+    external.write_text("external\n", encoding="utf-8")
+    tmp_path.joinpath(".git", "info", "exclude").write_text("src/local-link\n", encoding="utf-8")
+    tmp_path.joinpath("src", "local-link").symlink_to(external)
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
 def test_metadata_ignores_empty_directory_excluded_from_docker_context(tmp_path: Path) -> None:
     _write_project(tmp_path)
     app = tmp_path / "src" / "services" / "query_service" / "app"
