@@ -1,3 +1,4 @@
+import configparser
 import re
 import tomllib
 from pathlib import Path
@@ -113,7 +114,11 @@ def test_shipped_python_version_is_the_governed_validation_authority() -> None:
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     assert pyproject["project"]["requires-python"] == f">={runtime_version}"
     assert pyproject["tool"]["ruff"]["target-version"] == f"py{runtime_version.replace('.', '')}"
-    assert pyproject["tool"]["mypy"]["python_version"] == runtime_version
+    assert "mypy" not in pyproject["tool"]
+
+    mypy_config = configparser.ConfigParser()
+    assert mypy_config.read("mypy.ini", encoding="utf-8") == ["mypy.ini"]
+    assert mypy_config["mypy"]["python_version"] == runtime_version
 
 
 NODE20_DEPRECATED_ACTION_PINS = (

@@ -104,15 +104,6 @@ omit = [
 show_missing = true
 skip_covered = false
 
-[tool.mypy]
-python_version = "3.11"
-ignore_missing_imports = true
-warn_unused_configs = true
-no_implicit_optional = true
-exclude = [
-    "src/services/query_service/build/",
-]
-
 [tool.interrogate]
 ignore-init-method = true
 ignore-init-module = true
