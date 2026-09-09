@@ -14,7 +14,8 @@ runtime, but unit, integration, coverage, lint, and type analysis did not.
 ## Correction
 
 - record Python 3.11 in the standard root `.python-version` authority;
-- align all workflow host interpreters, Ruff, mypy, and the required-check environment policy;
+- align all workflow host interpreters, Ruff, the active `mypy.ini`, and the required-check
+  environment policy, removing the ignored duplicate pyproject mypy section;
 - enforce parity across the five workflows, every Compose service Dockerfile, the package floor,
   Ruff, mypy, and Windows lock replay in the workflow-governance suite; and
 - bank the Python 3.11 Radon measurement where its AST produces a small maintainability
