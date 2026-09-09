@@ -4094,6 +4094,26 @@ def test_required_local_gates_are_reachable_from_lint_and_workflow_governance() 
     assert "--cov-branch --cov-report=term-missing --cov-fail-under=90" in makefile_text
 
 
+@pytest.mark.parametrize(
+    "workflow_path",
+    (
+        Path(".github/workflows/pr-merge-gate.yml"),
+        Path(".github/workflows/feature-lane.yml"),
+        Path(".github/workflows/main-releasability.yml"),
+    ),
+)
+def test_primary_workflows_validate_make_before_trusting_recipes(workflow_path: Path) -> None:
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+    run_commands = [step["run"] for step in steps if "run" in step]
+
+    assert run_commands[:2] == [
+        "python scripts/development/repository_python.py scripts/development/bootstrap_dev.py",
+        "python scripts/development/repository_python.py "
+        "scripts/quality/required_status_checks_guard.py",
+    ]
+
+
 def test_main_releasability_verifies_live_protection_read_only() -> None:
     workflow = yaml.safe_load(
         Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")

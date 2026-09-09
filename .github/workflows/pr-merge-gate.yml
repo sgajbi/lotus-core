@@ -68,7 +68,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
       - name: Install
-        run: make install-ci
+        run: python scripts/development/repository_python.py scripts/development/bootstrap_dev.py
+      - name: Verify Make execution authority
+        run: python scripts/development/repository_python.py scripts/quality/required_status_checks_guard.py
       - name: Resolve dependency health cache key
         id: dependency-health-cache-key
         run: make dependency-health-cache-key
