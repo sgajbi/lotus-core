@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import subprocess  # nosec B404 - fixed executable arguments, never a shell
@@ -108,8 +109,23 @@ def _copied_source_directories(root: Path) -> set[Path]:
         for line in _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8")):
             if not line.lstrip().upper().startswith("COPY "):
                 continue
-            tokens = shlex.split(line, posix=True)
-            arguments = [token for token in tokens[1:] if not token.startswith("--")]
+            raw_arguments = line.split(maxsplit=1)[1].lstrip()
+            while raw_arguments.startswith("--"):
+                flag, separator, raw_arguments = raw_arguments.partition(" ")
+                if not separator or "=" not in flag:
+                    raise ValueError(f"unsupported Dockerfile COPY flag syntax: {line}")
+                raw_arguments = raw_arguments.lstrip()
+            if raw_arguments.startswith("["):
+                parsed = json.loads(raw_arguments)
+                if not isinstance(parsed, list) or not all(
+                    isinstance(value, str) for value in parsed
+                ):
+                    raise ValueError(f"invalid Dockerfile JSON COPY instruction: {line}")
+                arguments = parsed
+            else:
+                arguments = shlex.split(raw_arguments, posix=True)
+            if len(arguments) < 2:
+                raise ValueError(f"Dockerfile COPY instruction lacks a destination: {line}")
             for source in arguments[:-1]:
                 candidate = (root / source).resolve()
                 if candidate.is_dir() and candidate.is_relative_to(root.resolve()):
