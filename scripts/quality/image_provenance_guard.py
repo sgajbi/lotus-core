@@ -604,6 +604,14 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
             )
         ]
 
+    if compose.get("include") is not None:
+        findings.append(
+            ImageProvenanceFinding(
+                _relative(compose_path, root),
+                "Compose include is not permitted at the local image build boundary",
+            )
+        )
+
     for service_name, service in services.items():
         if isinstance(service, dict) and service.get("extends") is not None:
             findings.append(
