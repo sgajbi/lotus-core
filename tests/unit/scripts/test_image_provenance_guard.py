@@ -175,6 +175,19 @@ def test_image_provenance_guard_rejects_add_instruction(tmp_path: Path) -> None:
     assert any("Dockerfile ADD is not permitted" in finding.detail for finding in findings)
 
 
+def test_image_provenance_guard_rejects_context_bind_mount(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile()
+        + "\nRUN --mount=source=run-input,target=/input cp /input/local.txt /persisted.txt\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("context bind mounts are not permitted" in finding.detail for finding in findings)
+
+
 @pytest.mark.parametrize("instruction", ("arg", "Arg", "env", "EnV"))
 def test_image_provenance_guard_rejects_case_insensitive_secret_instruction(
     tmp_path: Path, instruction: str
