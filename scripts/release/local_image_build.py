@@ -110,6 +110,11 @@ def _has_untracked_empty_context_directory(root: Path) -> bool:
     )
 
 
+def _is_within_copied_source(path: Path, *, copied_sources: set[Path]) -> bool:
+    resolved = path.resolve()
+    return any(resolved.is_relative_to(source) for source in copied_sources)
+
+
 def discover_local_build_metadata(
     root: Path = REPO_ROOT,
     *,
@@ -156,7 +161,11 @@ def discover_local_build_metadata(
                 runner=runner,
             ).splitlines()
         )
-        dirty = bool(git_ignored - docker_ignored)
+        copied_sources = _copied_source_directories(root)
+        dirty = any(
+            _is_within_copied_source(root / relative, copied_sources=copied_sources)
+            for relative in git_ignored - docker_ignored
+        )
     if not dirty:
         dirty = _has_untracked_empty_context_directory(root)
     with (root / "pyproject.toml").open("rb") as handle:
