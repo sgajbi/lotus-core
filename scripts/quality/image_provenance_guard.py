@@ -196,13 +196,31 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
-        if any(instruction == "ADD" for instruction, _ in _dockerfile_instructions(content)):
+        instructions = _dockerfile_instructions(content)
+        if any(instruction == "ADD" for instruction, _ in instructions):
             findings.append(
                 ImageProvenanceFinding(
                     _relative(dockerfile, root),
                     "Dockerfile ADD is not permitted at the local provenance boundary",
                 )
             )
+        for instruction, arguments in instructions:
+            if instruction != "RUN":
+                continue
+            for token in shlex.split(arguments):
+                if not token.startswith("--mount="):
+                    continue
+                mount_options = dict(
+                    option.partition("=")[::2]
+                    for option in token.removeprefix("--mount=").split(",")
+                )
+                if mount_options.get("type", "bind") == "bind":
+                    findings.append(
+                        ImageProvenanceFinding(
+                            _relative(dockerfile, root),
+                            "Dockerfile context bind mounts are not permitted",
+                        )
+                    )
         offset = 0
         from_offsets: list[int] = []
         for physical_line in content.splitlines(keepends=True):

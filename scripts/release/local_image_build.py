@@ -113,18 +113,29 @@ def _copied_source_paths(root: Path) -> set[Path]:
     lexical_root = Path(os.path.abspath(root))
     for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
         lines = _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8"))
-        stage_names = {
-            tokens[-1]
-            for line in lines
-            if (tokens := line.split())
-            and tokens[0].upper() == "FROM"
-            and len(tokens) >= 3
-            and tokens[-2].upper() == "AS"
-        }
+        stage_names: set[str] = set()
+        current_stage_index = -1
         for line in lines:
-            instruction = line.lstrip().split(maxsplit=1)[0].upper()
+            tokens = line.lstrip().split()
+            instruction = tokens[0].upper()
+            if instruction == "FROM":
+                current_stage_index += 1
+                if len(tokens) >= 3 and tokens[-2].upper() == "AS":
+                    stage_names.add(tokens[-1])
+                continue
             if instruction == "ADD":
                 raise ValueError("Dockerfile ADD instructions are not supported")
+            if instruction == "RUN":
+                for token in shlex.split(line)[1:]:
+                    if not token.startswith("--mount="):
+                        continue
+                    mount_options = dict(
+                        option.partition("=")[::2]
+                        for option in token.removeprefix("--mount=").split(",")
+                    )
+                    if mount_options.get("type", "bind") == "bind":
+                        raise ValueError("Dockerfile context bind mounts are not supported")
+                continue
             if instruction != "COPY":
                 continue
             raw_arguments = line.split(maxsplit=1)[1].lstrip()
@@ -138,7 +149,8 @@ def _copied_source_paths(root: Path) -> set[Path]:
                     copy_from = flag_value
                 raw_arguments = raw_arguments.lstrip()
             if copy_from is not None:
-                if copy_from not in stage_names:
+                numeric_local_stage = copy_from.isdigit() and int(copy_from) < current_stage_index
+                if copy_from not in stage_names and not numeric_local_stage:
                     raise ValueError(f"Dockerfile external COPY sources are not supported: {line}")
                 continue
             if raw_arguments.startswith("["):

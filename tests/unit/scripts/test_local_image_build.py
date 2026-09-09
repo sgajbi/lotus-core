@@ -412,7 +412,8 @@ def test_metadata_rejects_add_instruction(tmp_path: Path) -> None:
         discover_local_build_metadata(tmp_path)
 
 
-def test_metadata_accepts_named_stage_copy_source(tmp_path: Path) -> None:
+@pytest.mark.parametrize("stage_reference", ["wheel-builder", "0"])
+def test_metadata_accepts_local_stage_copy_source(tmp_path: Path, stage_reference: str) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
     service.mkdir(parents=True)
@@ -420,7 +421,7 @@ def test_metadata_accepts_named_stage_copy_source(tmp_path: Path) -> None:
         "FROM scratch AS wheel-builder\n"
         "RUN touch /wheels\n"
         "FROM scratch\n"
-        "COPY --from=wheel-builder /wheels /wheels\n",
+        f"COPY --from={stage_reference} /wheels /wheels\n",
         encoding="utf-8",
     )
     _run_git(tmp_path, "init", "--initial-branch", "main")
@@ -435,12 +436,13 @@ def test_metadata_accepts_named_stage_copy_source(tmp_path: Path) -> None:
     assert metadata.git_commit_sha == expected_head
 
 
-def test_metadata_rejects_external_stage_copy_source(tmp_path: Path) -> None:
+@pytest.mark.parametrize("stage_reference", ["external", "2"])
+def test_metadata_rejects_external_stage_copy_source(tmp_path: Path, stage_reference: str) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
     service.mkdir(parents=True)
     service.joinpath("Dockerfile").write_text(
-        "FROM scratch\nCOPY --from=external /artifact /app/artifact\n",
+        f"FROM scratch\nCOPY --from={stage_reference} /artifact /app/artifact\n",
         encoding="utf-8",
     )
     _run_git(tmp_path, "init", "--initial-branch", "main")
@@ -450,6 +452,25 @@ def test_metadata_rejects_external_stage_copy_source(tmp_path: Path) -> None:
     _run_git(tmp_path, "commit", "-m", "test fixture")
 
     with pytest.raises(ValueError, match="external COPY sources are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
+def test_metadata_rejects_context_bind_mount(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\n"
+        "RUN --mount=source=run-input,target=/input cp /input/local.txt /persisted.txt\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="context bind mounts are not supported"):
         discover_local_build_metadata(tmp_path)
 
 
