@@ -309,8 +309,9 @@ def test_app_local_stack_uses_one_atomic_transaction_processing_runtime() -> Non
         "LOTUS_BUILD_TIMESTAMP": "${LOTUS_BUILD_TIMESTAMP:-unknown}",
         "LOTUS_REPO_URL": "${LOTUS_REPO_URL:-unknown}",
         "LOTUS_IMAGE_VERSION": "${LOTUS_IMAGE_VERSION:-unknown}",
-        "LOTUS_IMAGE_DIGEST": "${LOTUS_IMAGE_DIGEST:-unknown}",
-        "LOTUS_CI_RUN_ID": "${LOTUS_CI_RUN_ID:-unknown}",
+        "LOTUS_IMAGE_DIGEST": "${LOTUS_IMAGE_DIGEST:-unavailable-before-push}",
+        "LOTUS_CI_RUN_ID": "${LOTUS_CI_RUN_ID:-unavailable-local-build}",
     }
     for env_name, expected_value in expected_release_metadata.items():
-        assert target["environment"][env_name] == expected_value
+        assert target["build"]["args"][env_name] == expected_value
+        assert env_name not in target["environment"]
