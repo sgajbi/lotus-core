@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobLease,
@@ -77,6 +78,7 @@ def test_claimed_aggregation_job_rejects_invalid_source_identity(
     with pytest.raises(ValueError, match=message):
         ClaimedAggregationJob(
             id=1,
+            tenant_id=TenantId("tenant-test"),
             portfolio_id="P1",
             aggregation_date=datetime.now(timezone.utc).date(),
             aggregation_revision=1,

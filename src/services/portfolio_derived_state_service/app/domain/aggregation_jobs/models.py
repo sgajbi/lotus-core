@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
+from portfolio_common.domain.tenant import TenantId
+
 
 class AggregationJobCompletionDisposition(StrEnum):
     """Describe the durable result of releasing one claimed aggregation job."""
@@ -76,6 +78,7 @@ class ClaimedAggregationJob:
     """Aggregation work paired with the lease required for terminal writes."""
 
     id: int
+    tenant_id: TenantId
     portfolio_id: str
     aggregation_date: date
     aggregation_revision: int

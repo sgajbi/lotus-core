@@ -54,6 +54,7 @@ def mock_db_session() -> AsyncMock:
         {"id": 1, "portfolio_id": "P1", "aggregation_date": date(2025, 1, 1)}
     ]
     mock_result.scalar.return_value = True
+    mock_result.scalar_one_or_none.return_value = "tenant-test"
     mock_result.fetchall.return_value = []
     mock_result.rowcount = 1
 
@@ -544,6 +545,7 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     compiled_values = set(compiled.params.values())
 
     assert "DO UPDATE SET status" in compiled_stmt
+    assert "tenant-test" in compiled_stmt
     assert "target_epoch" in compiled_stmt
     assert "source_revision" in compiled_stmt
     assert "greatest(portfolio_aggregation_jobs.target_epoch" in compiled_stmt
@@ -553,6 +555,34 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     assert "portfolio_aggregation_jobs.target_epoch =" not in compiled_stmt
     assert "portfolio_aggregation_jobs.target_epoch != excluded.target_epoch" in compiled_stmt
     assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
+
+
+async def test_stage_aggregation_jobs_refuses_missing_source_tenant(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value.scalar_one_or_none.return_value = None
+
+    with pytest.raises(
+        LookupError,
+        match="Portfolio 'PORT_TS_POS_01' has no durable tenant authority",
+    ):
+        await repository.stage_aggregation_jobs(
+            " PORT_TS_POS_01 ",
+            [date(2025, 8, 12)],
+            4,
+            "corr-missing-owner",
+        )
+
+    assert mock_db_session.execute.await_count == 1
+    source_query = mock_db_session.execute.await_args.args[0]
+    compiled_source_query = str(
+        source_query.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "trim(portfolios.portfolio_id) = 'PORT_TS_POS_01'" in compiled_source_query
 
 
 async def test_portfolio_aggregation_mutation_fence_uses_stable_transaction_lock(
@@ -607,6 +637,7 @@ async def test_carry_forward_restage_is_bounded_and_preserves_active_work(
     assert count == 2
     assert "UPDATE portfolio_aggregation_jobs SET" in compiled_stmt
     assert "portfolio_aggregation_jobs.portfolio_id = 'PORT_TS_POS_01'" in compiled_stmt
+    assert "portfolio_aggregation_jobs.tenant_id = 'tenant-test'" in compiled_stmt
     assert "portfolio_aggregation_jobs.aggregation_date >= '2025-08-12'" in compiled_stmt
     assert "portfolio_aggregation_jobs.aggregation_date < '2025-08-16'" in compiled_stmt
     assert "portfolio_aggregation_jobs.status IN" in compiled_stmt
@@ -684,6 +715,7 @@ async def test_stage_aggregation_jobs_deduplicates_and_orders_dates(
 
     assert compiled_stmt.count("'2025-08-13'") == 1
     assert compiled_stmt.count("'2025-08-14'") == 1
+    assert "tenant-test" in compiled_stmt
     assert compiled_stmt.index("'2025-08-13'") < compiled_stmt.index("'2025-08-14'")
 
 

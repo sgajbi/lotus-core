@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     PortfolioAggregationJob,
     PositionTimeseries,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -61,6 +62,7 @@ async def _seed_expired_aggregation_jobs(
     await session.flush()
     jobs = [
         PortfolioAggregationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio.portfolio_id,
             aggregation_date=date(2026, 4, 10),
             status="PROCESSING",
@@ -110,6 +112,7 @@ async def _seed_aggregation_fence_scope(
     await session.flush()
     session.add(
         PortfolioAggregationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             aggregation_date=aggregation_date,
             status="PENDING",
@@ -254,6 +257,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
 
         jobs = [
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P1_STALE",
                 aggregation_date=date(2025, 8, 1),
                 status="PROCESSING",
@@ -263,6 +267,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
                 lease_expires_at=expired_at,
             ),
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2_RECENT",
                 aggregation_date=date(2025, 8, 1),
                 status="PROCESSING",
@@ -272,6 +277,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
                 lease_expires_at=current_expiry,
             ),
             PortfolioAggregationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P3_PENDING",
                 aggregation_date=date(2025, 8, 1),
                 status="PENDING",
@@ -526,6 +532,7 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     await async_db_session.flush()
     async_db_session.add(
         PortfolioAggregationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-AGG-CLAIM",
             aggregation_date=date(2025, 8, 15),
             status="PENDING",
@@ -583,6 +590,8 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
 
     assert len(all_claimed) == 1
     assert len({job.id for job in all_claimed}) == 1
+    claimed_job = all_claimed[0]
+    assert claimed_job.tenant_id == TenantId(TEST_TENANT_ID)
 
     async with session_factory() as verification_session:
         jobs = (
@@ -616,6 +625,26 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     assert lease_expiry is not None
     assert 295 <= (lease_expiry - database_now).total_seconds() <= 305
     assert recovery == ExpiredAggregationJobRecovery(requeued_count=0, failed_count=0)
+
+    terminal_repository = PortfolioAggregationRepository(async_db_session)
+    wrong_tenant_disposition = await terminal_repository.complete_or_requeue_job(
+        job_id=claimed_job.id,
+        lease_token=claimed_job.lease.token,
+        tenant_id=TenantId("tenant-foreign"),
+        target_epoch=claimed_job.target_epoch,
+        source_revision=claimed_job.source_revision,
+    )
+    assert wrong_tenant_disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
+
+    correct_tenant_disposition = await terminal_repository.complete_or_requeue_job(
+        job_id=claimed_job.id,
+        lease_token=claimed_job.lease.token,
+        tenant_id=claimed_job.tenant_id,
+        target_epoch=claimed_job.target_epoch,
+        source_revision=claimed_job.source_revision,
+    )
+    await async_db_session.commit()
+    assert correct_tenant_disposition is AggregationJobCompletionDisposition.COMPLETE
 
 
 @pytest.mark.lifecycle
@@ -667,6 +696,7 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     disposition = await repository.complete_or_requeue_job(
         job_id=first_claim.id,
         lease_token=first_claim.lease.token,
+        tenant_id=first_claim.tenant_id,
         target_epoch=first_claim.target_epoch,
         source_revision=first_claim.source_revision,
     )
@@ -733,6 +763,7 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     delayed_lower_epoch_disposition = await repository.complete_or_requeue_job(
         job_id=second_claim.id,
         lease_token=second_claim.lease.token,
+        tenant_id=second_claim.tenant_id,
         target_epoch=second_claim.target_epoch,
         source_revision=second_claim.source_revision,
     )
@@ -798,6 +829,7 @@ async def test_claim_promotes_carry_forward_day_to_authoritative_portfolio_epoch
     disposition = await repository.complete_or_requeue_job(
         job_id=claim.id,
         lease_token=claim.lease.token,
+        tenant_id=claim.tenant_id,
         target_epoch=claim.target_epoch,
         source_revision=claim.source_revision,
     )
@@ -855,6 +887,7 @@ async def test_claimed_target_is_fenced_when_source_advances_between_claim_state
         disposition = await repository.complete_or_requeue_job(
             job_id=first_claim.id,
             lease_token=first_lease.token,
+            tenant_id=TenantId(first_claim.tenant_id),
             target_epoch=first_claim.target_epoch,
             source_revision=first_claim.source_revision,
         )
@@ -920,6 +953,7 @@ async def test_aggregation_terminal_fence_uses_statement_time_after_transaction_
     disposition = await repository.complete_or_requeue_job(
         job_id=claim.id,
         lease_token=claim.lease.token,
+        tenant_id=claim.tenant_id,
         target_epoch=claim.target_epoch,
         source_revision=claim.source_revision,
     )
@@ -972,6 +1006,7 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
     completion = await repository.complete_or_requeue_job(
         job_id=first_claim.id,
         lease_token=first_claim.lease.token,
+        tenant_id=first_claim.tenant_id,
         target_epoch=first_claim.target_epoch,
         source_revision=first_claim.source_revision,
     )
@@ -1024,6 +1059,7 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
     failure = await repository.fail_or_requeue_job(
         job_id=second_claim.id,
         lease_token=second_claim.lease.token,
+        tenant_id=second_claim.tenant_id,
         target_epoch=second_claim.target_epoch,
         source_revision=second_claim.source_revision,
     )
@@ -1063,6 +1099,7 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
     final_completion = await repository.complete_or_requeue_job(
         job_id=final_claim.id,
         lease_token=final_claim.lease.token,
+        tenant_id=final_claim.tenant_id,
         target_epoch=final_claim.target_epoch,
         source_revision=final_claim.source_revision,
     )
@@ -1077,7 +1114,23 @@ async def test_expired_superseded_revision_requeues_after_prior_attempt_exhausti
     """Do not fail a source revision that has never received its own attempt."""
 
     now = datetime.now(UTC)
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            portfolio_id="P-AGG-SUPERSEDED-RECOVERY",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="balanced",
+            investment_time_horizon="long_term",
+            portfolio_type="discretionary",
+            booking_center_code="SG",
+            client_id="CLIENT-SUPERSEDED-RECOVERY",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
     job = PortfolioAggregationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="P-AGG-SUPERSEDED-RECOVERY",
         aggregation_date=date(2025, 8, 17),
         status="PROCESSING",

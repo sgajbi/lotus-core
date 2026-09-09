@@ -4,6 +4,7 @@ import asyncio
 from datetime import date, datetime, timezone
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_derived_state_service.app.application.aggregation_jobs import (
     ProcessClaimedAggregationJobs,
@@ -23,6 +24,7 @@ pytestmark = pytest.mark.asyncio
 def _job(job_id: int) -> ClaimedAggregationJob:
     return ClaimedAggregationJob(
         id=job_id,
+        tenant_id=TenantId("tenant-test"),
         portfolio_id=f"PORT-{job_id}",
         aggregation_date=date(2026, 7, 15),
         aggregation_revision=job_id + 10,
@@ -84,6 +86,7 @@ async def test_processor_bounds_concurrency_and_preserves_lease_commands() -> No
         15,
     ]
     assert [command.target_epoch for command in materializer.commands] == [3] * 5
+    assert [command.tenant_id for command in materializer.commands] == [TenantId("tenant-test")] * 5
     assert [command.source_revision for command in materializer.commands] == [
         21,
         22,

@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     PortfolioTimeseries,
 )
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -46,6 +47,7 @@ async def test_owned_lease_persists_portfolio_output_lineage_atomically(
     aggregation_date = date(2025, 8, 22)
     lease_token = "lineage-lease-token"
     job = PortfolioAggregationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id=portfolio_id,
         aggregation_date=aggregation_date,
         status="PROCESSING",
@@ -124,6 +126,7 @@ async def test_owned_lease_persists_portfolio_output_lineage_atomically(
             MaterializePortfolioTimeseriesCommand(
                 job_id=job_id,
                 lease_token=lease_token,
+                tenant_id=TenantId(TEST_TENANT_ID),
                 portfolio_id=portfolio_id,
                 aggregation_date=aggregation_date,
                 aggregation_revision=1,
@@ -159,6 +162,7 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
     async_db_session: AsyncSession,
 ) -> None:
     job = PortfolioAggregationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT-AGG-INT-01",
         aggregation_date=date(2025, 8, 21),
         status="PROCESSING",
@@ -225,6 +229,7 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
             MaterializePortfolioTimeseriesCommand(
                 job_id=job_id,
                 lease_token="expired-lease-token",
+                tenant_id=TenantId(TEST_TENANT_ID),
                 portfolio_id=portfolio_id,
                 aggregation_date=aggregation_date,
                 aggregation_revision=1,

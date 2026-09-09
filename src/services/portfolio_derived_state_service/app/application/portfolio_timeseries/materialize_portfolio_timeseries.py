@@ -70,6 +70,7 @@ class MaterializePortfolioTimeseries:
                 return await repository.fail_or_requeue_job(
                     job_id=command.job_id,
                     lease_token=command.lease_token,
+                    tenant_id=command.tenant_id,
                     target_epoch=command.target_epoch,
                     source_revision=command.source_revision,
                 )
@@ -86,7 +87,10 @@ class MaterializePortfolioTimeseries:
         event_stager: AggregationCompletionEventStager,
         command: MaterializePortfolioTimeseriesCommand,
     ) -> PortfolioTimeseriesMaterializationResult:
-        portfolio = await repository.get_portfolio(command.portfolio_id)
+        portfolio = await repository.get_portfolio(
+            command.portfolio_id,
+            tenant_id=command.tenant_id,
+        )
         if portfolio is None:
             raise PortfolioAggregationSourceMissing(
                 "Authoritative portfolio scope was not found for aggregation."
@@ -107,6 +111,7 @@ class MaterializePortfolioTimeseries:
         disposition = await repository.complete_or_requeue_job(
             job_id=command.job_id,
             lease_token=command.lease_token,
+            tenant_id=command.tenant_id,
             target_epoch=command.target_epoch,
             source_revision=command.source_revision,
         )

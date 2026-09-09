@@ -1581,14 +1581,20 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
     claim_order = indexes["ix_portfolio_aggregation_jobs_claim_order"]
     correlation_support = indexes["ix_agg_jobs_port_corr_date_updated_id"]
     lease_expiry = indexes["ix_portfolio_aggregation_jobs_status_lease_expiry"]
+    tenant_status = indexes["ix_portfolio_aggregation_jobs_tenant_portfolio_status_date"]
 
     assert columns["lease_owner"].type.length == 128
+    assert columns["tenant_id"].type.length == 128
+    assert columns["tenant_id"].nullable is False
     assert columns["lease_token"].type.length == 64
     assert columns["lease_expires_at"].type.timezone is True
     assert columns["lease_owner"].nullable is True
     assert columns["lease_token"].nullable is True
     assert columns["lease_expires_at"].nullable is True
     assert "ck_portfolio_aggregation_jobs_lease_complete" in constraint_names
+    assert "ck_portfolio_aggregation_jobs_tenant_normalized" in constraint_names
+    assert "uq_portfolio_aggregation_jobs_tenant_portfolio_date" in constraint_names
+    assert "fk_portfolio_aggregation_jobs_tenant_portfolio" in constraint_names
     assert columns["target_epoch"].nullable is False
     assert columns["source_revision"].nullable is False
     assert "ck_portfolio_aggregation_jobs_target_epoch_nonnegative" in constraint_names
@@ -1622,6 +1628,12 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
     assert [column.name for column in lease_expiry.columns] == [
         "status",
         "lease_expires_at",
+    ]
+    assert [column.name for column in tenant_status.columns] == [
+        "tenant_id",
+        "portfolio_id",
+        "status",
+        "aggregation_date",
     ]
     assert (
         str(correlation_support.dialect_options["postgresql"]["where"])

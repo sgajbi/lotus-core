@@ -6,6 +6,8 @@ from collections.abc import Awaitable, Callable
 from datetime import date
 from typing import Protocol, TypeVar
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.aggregation_jobs.models import (
     AggregationJobCompletionDisposition,
     AggregationJobFailureDisposition,
@@ -24,7 +26,12 @@ T = TypeVar("T")
 class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
     """Expose aggregation sources and durable effects without framework objects."""
 
-    async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None: ...
+    async def get_portfolio(
+        self,
+        portfolio_id: str,
+        *,
+        tenant_id: TenantId,
+    ) -> PortfolioAggregationScope | None: ...
 
     async def get_all_position_timeseries_for_date(
         self,
@@ -40,6 +47,7 @@ class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> AggregationJobCompletionDisposition: ...
@@ -49,6 +57,7 @@ class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
         *,
         job_id: int,
         lease_token: str,
+        tenant_id: TenantId,
         target_epoch: int,
         source_revision: int,
     ) -> AggregationJobFailureDisposition: ...

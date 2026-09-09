@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.domain.market_data.timeseries import TimeseriesFxRate
+from portfolio_common.domain.tenant import TenantId
 
 from ..position_timeseries.models import PositionTimeseriesRecord
 from .errors import InvalidPortfolioPositionContribution
@@ -15,6 +16,7 @@ from .errors import InvalidPortfolioPositionContribution
 class PortfolioAggregationScope:
     """Portfolio identity and reporting currency required for aggregation."""
 
+    tenant_id: TenantId
     portfolio_id: str
     base_currency: str
 

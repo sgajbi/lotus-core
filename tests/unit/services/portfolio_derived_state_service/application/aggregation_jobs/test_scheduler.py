@@ -4,6 +4,7 @@ import asyncio
 from datetime import date, datetime, timezone
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_derived_state_service.app.application.aggregation_jobs import (
     AggregationScheduler,
@@ -101,6 +102,7 @@ class FixedTokenGenerator:
 def _claimed_job() -> ClaimedAggregationJob:
     return ClaimedAggregationJob(
         id=7,
+        tenant_id=TenantId("tenant-test"),
         portfolio_id="PORT-7",
         aggregation_date=date(2026, 7, 15),
         aggregation_revision=3,
