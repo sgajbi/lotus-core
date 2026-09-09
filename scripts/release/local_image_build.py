@@ -60,11 +60,15 @@ def _has_hidden_index_flags(root: Path, *, runner: Runner) -> bool:
 
 
 def _dockerignore_patterns(root: Path) -> tuple[str, ...]:
-    return tuple(
-        line.strip()
-        for line in (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    )
+    patterns: list[str] = []
+    for line in (root / ".dockerignore").read_text(encoding="utf-8").splitlines():
+        pattern = line.strip()
+        if not pattern or pattern.startswith("#"):
+            continue
+        if pattern.startswith("!"):
+            raise ValueError("negated Dockerignore patterns are not supported")
+        patterns.append(pattern)
+    return tuple(patterns)
 
 
 def _dockerfile_logical_lines(content: str) -> tuple[str, ...]:
@@ -127,8 +131,10 @@ def _copied_source_paths(root: Path) -> set[Path]:
             if len(arguments) < 2:
                 raise ValueError(f"Dockerfile COPY instruction lacks a destination: {line}")
             for source in arguments[:-1]:
-                if any(character in source for character in "*?["):
-                    raise ValueError(f"Dockerfile wildcard COPY sources are not supported: {line}")
+                if "$" in source or any(character in source for character in "*?["):
+                    raise ValueError(
+                        f"Dockerfile dynamic or wildcard COPY sources are not supported: {line}"
+                    )
                 candidate = Path(os.path.abspath(root / source))
                 if candidate.exists() and candidate.is_relative_to(lexical_root):
                     paths.add(candidate)

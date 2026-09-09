@@ -661,6 +661,23 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                     f"Compose build {service_name} must use the inspected final Docker stage",
                 )
             )
+        environment = service.get("environment")
+        if isinstance(environment, dict):
+            runtime_overrides = set(environment)
+        elif isinstance(environment, list):
+            runtime_overrides = {
+                item.partition("=")[0] for item in environment if isinstance(item, str)
+            }
+        else:
+            runtime_overrides = set()
+        for arg_name in REQUIRED_METADATA_ARGS:
+            if arg_name in runtime_overrides:
+                findings.append(
+                    ImageProvenanceFinding(
+                        _relative(compose_path, root),
+                        f"Compose build {service_name} overrides runtime provenance {arg_name}",
+                    )
+                )
         args = build.get("args")
         for arg_name in REQUIRED_METADATA_ARGS:
             if not isinstance(args, dict) or arg_name not in args:

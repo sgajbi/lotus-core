@@ -340,12 +340,13 @@ def test_metadata_detects_ignored_directly_copied_symlink(tmp_path: Path) -> Non
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
-def test_metadata_rejects_wildcard_copy_source(tmp_path: Path) -> None:
+@pytest.mark.parametrize("source", ["src/data/*.json", "$SOURCE"])
+def test_metadata_rejects_dynamic_or_wildcard_copy_source(tmp_path: Path, source: str) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
     service.mkdir(parents=True)
     service.joinpath("Dockerfile").write_text(
-        "FROM scratch\nCOPY src/data/*.json /app/\n",
+        f"FROM scratch\nCOPY {source} /app/\n",
         encoding="utf-8",
     )
     _run_git(tmp_path, "init", "--initial-branch", "main")
@@ -354,7 +355,26 @@ def test_metadata_rejects_wildcard_copy_source(tmp_path: Path) -> None:
     _run_git(tmp_path, "add", ".")
     _run_git(tmp_path, "commit", "-m", "test fixture")
 
-    with pytest.raises(ValueError, match="wildcard COPY sources are not supported"):
+    with pytest.raises(ValueError, match="dynamic or wildcard COPY sources are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
+def test_metadata_rejects_negated_dockerignore_pattern(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text("FROM scratch\nCOPY . /app\n", encoding="utf-8")
+    tmp_path.joinpath(".dockerignore").write_text("parent\n!parent/reincluded\n", encoding="utf-8")
+    tmp_path.joinpath(".gitignore").write_text("parent\n", encoding="utf-8")
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    tmp_path.joinpath("parent", "reincluded").mkdir(parents=True)
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    with pytest.raises(ValueError, match="negated Dockerignore patterns are not supported"):
         discover_local_build_metadata(tmp_path)
 
 
