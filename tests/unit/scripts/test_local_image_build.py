@@ -724,6 +724,8 @@ def test_compose_metadata_detects_dockerignored_bind_mounted_bytecode(tmp_path: 
     )
     tmp_path.joinpath("docker-compose.yml").write_text(
         "services:\n"
+        "  postgres:\n"
+        "    image: postgres:16\n"
         "  query_service:\n"
         "    volumes:\n"
         "      - ./src/services/query_service/app:/app/app\n",

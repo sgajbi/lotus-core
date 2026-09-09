@@ -212,7 +212,9 @@ def _compose_bind_source_paths(root: Path) -> set[Path]:
     for service in services.values():
         if not isinstance(service, dict):
             continue
-        volumes = service.get("volumes", ())
+        volumes = service.get("volumes")
+        if volumes is None:
+            continue
         if not isinstance(volumes, list):
             raise ValueError("local Compose volumes must use list form")
         for volume in volumes:
