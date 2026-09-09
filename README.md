@@ -47,14 +47,14 @@ certified for shared multi-tenant deployment.
 
 Prerequisites:
 
-- Python 3.12 for the host-side development and validation gates;
+- Python 3.11 for development, validation, and the shipped runtime;
 - GNU Make;
 - Docker with Compose for the isolated PostgreSQL and Kafka-backed runtime.
 
 From the repository root on Linux or macOS, create the isolated environment before installing:
 
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 python --version
 make install
@@ -64,7 +64,7 @@ docker compose ps --all
 curl --fail http://localhost:8201/health/ready
 ```
 
-Expected result: Python reports `3.12.x`; Kafka topic provisioning and the migration runner exit
+Expected result: Python reports `3.11.x`; Kafka topic provisioning and the migration runner exit
 successfully; the query-service readiness request returns HTTP `200`. Windows commands, the full
 readiness set, and clean-checkout proof are in [Getting Started](wiki/Getting-Started.md).
 `.env.example` is local-only; do not reuse its plaintext or development settings in a promoted

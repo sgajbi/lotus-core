@@ -149,9 +149,8 @@ test source file therefore cannot reduce closure blockers.
 Dependency consistency and vulnerability audit use one content-addressed environment contract:
 
 - runtime dependencies use distinct Python 3.11 Linux/amd64 production and Windows/amd64
-  engineering closures; Linux compiles inside the exact governed production base, while
-  Python 3.12 GitHub execution proves forward compatibility against the Linux authority rather
-  than resolving a second mutable graph;
+  engineering closures; Linux compiles inside the exact governed production base, while GitHub
+  in-process execution uses the same Python minor version and authoritative Linux closure;
 - CI/build/test dependencies come from `requirements/ci-tooling.in`, compiled with pinned
   `pip==26.2.1`, `pip-tools==7.6.1`, and Python 3.11 into platform-specific Linux/amd64 and
   Windows/amd64 locks;
