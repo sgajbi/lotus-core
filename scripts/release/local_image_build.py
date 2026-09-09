@@ -11,7 +11,6 @@ import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from itertools import chain
 from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -133,23 +132,35 @@ def _copied_source_paths(root: Path) -> set[Path]:
                 candidate = Path(os.path.abspath(root / source))
                 if candidate.exists() and candidate.is_relative_to(lexical_root):
                     paths.add(candidate)
-    return paths
+    return {
+        path
+        for path in paths
+        if not any(path != other and path.is_relative_to(other) for other in paths)
+    }
 
 
 def _has_untracked_empty_context_directory(root: Path) -> bool:
     patterns = _dockerignore_patterns(root)
-    return any(
-        True
-        for source_root in _copied_source_paths(root)
-        for directory in chain((source_root,), source_root.rglob("*"))
-        if not directory.is_symlink()
-        and directory.is_dir()
-        and not _is_docker_ignored(directory, root=root, patterns=patterns)
-        and not any(
-            not _is_docker_ignored(child, root=root, patterns=patterns)
-            for child in directory.iterdir()
-        )
-    )
+    for source_root in _copied_source_paths(root):
+        if source_root.is_symlink() or not source_root.is_dir():
+            continue
+        for current, directory_names, file_names in os.walk(source_root, topdown=True):
+            directory = Path(current)
+            if _is_docker_ignored(directory, root=root, patterns=patterns):
+                directory_names.clear()
+                continue
+            directory_names[:] = [
+                name
+                for name in directory_names
+                if not _is_docker_ignored(directory / name, root=root, patterns=patterns)
+            ]
+            visible_files = any(
+                not _is_docker_ignored(directory / name, root=root, patterns=patterns)
+                for name in file_names
+            )
+            if not directory_names and not visible_files:
+                return True
+    return False
 
 
 def _is_within_copied_source(path: Path, *, root: Path, copied_sources: set[Path]) -> bool:
