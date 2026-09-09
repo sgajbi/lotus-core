@@ -133,7 +133,14 @@ def _copied_source_paths(root: Path) -> set[Path]:
                         option.partition("=")[::2]
                         for option in token.removeprefix("--mount=").split(",")
                     )
-                    if mount_options.get("type", "bind") == "bind":
+                    mount_from = mount_options.get("from")
+                    numeric_local_stage = (
+                        mount_from is not None
+                        and mount_from.isdigit()
+                        and int(mount_from) < current_stage_index
+                    )
+                    local_stage = mount_from in stage_names or numeric_local_stage
+                    if mount_options.get("type", "bind") == "bind" and not local_stage:
                         raise ValueError("Dockerfile context bind mounts are not supported")
                 continue
             if instruction != "COPY":

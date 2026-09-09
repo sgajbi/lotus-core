@@ -188,6 +188,29 @@ def test_image_provenance_guard_rejects_context_bind_mount(tmp_path: Path) -> No
     assert any("context bind mounts are not permitted" in finding.detail for finding in findings)
 
 
+@pytest.mark.parametrize("stage_reference", ["builder", "0"])
+def test_image_provenance_guard_accepts_local_stage_bind_mount(
+    tmp_path: Path, stage_reference: str
+) -> None:
+    _write_required_sources(tmp_path)
+    dockerfile = _complete_dockerfile().replace(
+        "FROM python:3.11 AS runtime-base",
+        "FROM scratch AS builder\nRUN touch /artifact\nFROM python:3.11 AS runtime-base",
+    )
+    _write_dockerfile(
+        tmp_path,
+        dockerfile
+        + f"\nRUN --mount=type=bind,from={stage_reference},source=/artifact,target=/input "
+        "cp /input /persisted\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert not any(
+        "context bind mounts are not permitted" in finding.detail for finding in findings
+    )
+
+
 @pytest.mark.parametrize("instruction", ("arg", "Arg", "env", "EnV"))
 def test_image_provenance_guard_rejects_case_insensitive_secret_instruction(
     tmp_path: Path, instruction: str
