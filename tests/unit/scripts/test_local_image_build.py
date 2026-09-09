@@ -541,6 +541,24 @@ def test_metadata_rejects_dockerfile_heredoc(tmp_path: Path) -> None:
         discover_local_build_metadata(tmp_path)
 
 
+def test_metadata_rejects_punctuation_prefixed_heredoc_delimiter(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\nRUN <<'@EOF'\nFROM scratch AS injected\n@EOF\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="Dockerfile heredoc instructions are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
 def test_metadata_accepts_harmless_double_angle_text(tmp_path: Path) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
@@ -694,6 +712,41 @@ def test_metadata_accepts_directory_emptied_by_tracked_dockerignored_file(
     metadata = discover_local_build_metadata(tmp_path)
 
     assert metadata.git_commit_sha == expected_head
+
+
+def test_compose_metadata_detects_dockerignored_bind_mounted_bytecode(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    app = tmp_path / "src" / "services" / "query_service" / "app"
+    app.mkdir(parents=True)
+    app.joinpath("main.py").write_text("value = 1\n", encoding="utf-8")
+    app.parent.joinpath("Dockerfile").write_text(
+        "FROM scratch\nCOPY src/services/query_service/app /app\n", encoding="utf-8"
+    )
+    tmp_path.joinpath("docker-compose.yml").write_text(
+        "services:\n"
+        "  query_service:\n"
+        "    volumes:\n"
+        "      - ./src/services/query_service/app:/app/app\n",
+        encoding="utf-8",
+    )
+    tmp_path.joinpath(".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+    tmp_path.joinpath(".dockerignore").write_text(
+        ".git\n**/__pycache__\n**/*.pyc\n", encoding="utf-8"
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    bytecode = app / "__pycache__" / "main.cpython-311.pyc"
+    bytecode.parent.mkdir()
+    bytecode.write_bytes(b"runtime override")
+
+    assert discover_local_build_metadata(tmp_path).git_commit_sha == expected_head
+    compose_metadata = discover_local_build_metadata(tmp_path, include_compose_bind_mounts=True)
+
+    assert compose_metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
 def test_metadata_ignores_local_artifacts_excluded_from_docker_context(

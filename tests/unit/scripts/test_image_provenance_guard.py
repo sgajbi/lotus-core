@@ -200,6 +200,20 @@ def test_image_provenance_guard_rejects_dockerfile_heredoc(tmp_path: Path) -> No
     assert any("Dockerfile heredocs are not permitted" in finding.detail for finding in findings)
 
 
+def test_image_provenance_guard_rejects_punctuation_prefixed_heredoc_delimiter(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + "\nRUN <<'@EOF'\nFROM scratch AS injected\n@EOF\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("Dockerfile heredocs are not permitted" in finding.detail for finding in findings)
+
+
 def test_image_provenance_guard_accepts_harmless_double_angle_text(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     _write_dockerfile(
