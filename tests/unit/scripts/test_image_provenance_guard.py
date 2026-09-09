@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from scripts.quality.image_provenance_guard import find_image_provenance_findings
 
 SOURCE_WORKFLOW = (
@@ -159,6 +161,21 @@ def test_image_provenance_guard_accepts_complete_contract(tmp_path: Path) -> Non
     _write_dockerfile(tmp_path, _complete_dockerfile())
 
     assert find_image_provenance_findings(tmp_path) == []
+
+
+@pytest.mark.parametrize("instruction", ("arg", "Arg", "env", "EnV"))
+def test_image_provenance_guard_rejects_case_insensitive_secret_instruction(
+    tmp_path: Path, instruction: str
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + f"\n{instruction} API_TOKEN=not-a-real-secret\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("secret-like build ARG/ENV" in finding.detail for finding in findings)
 
 
 def test_image_provenance_guard_requires_metadata_in_final_stage(tmp_path: Path) -> None:

@@ -216,7 +216,8 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
         last_stage_run = max(stage_run_offsets, default=-1)
         for line_number, line in enumerate(content.splitlines(), start=1):
             stripped = line.strip()
-            if not (stripped.startswith("ARG ") or stripped.startswith("ENV ")):
+            tokens = stripped.split(maxsplit=1)
+            if len(tokens) < 2 or tokens[0].upper() not in {"ARG", "ENV"}:
                 continue
             upper_line = stripped.upper()
             if any(token in upper_line for token in SECRET_LIKE_TOKENS):
