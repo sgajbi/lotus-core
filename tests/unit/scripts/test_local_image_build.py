@@ -137,6 +137,29 @@ def test_metadata_detects_ignored_files_in_docker_context(tmp_path: Path) -> Non
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+def test_metadata_detects_git_quoted_ignored_path_in_docker_context(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    app = tmp_path / "src" / "services" / "query_service" / "app"
+    app.mkdir(parents=True)
+    app.joinpath("main.py").write_text("value = 1\n", encoding="utf-8")
+    app.parent.joinpath("Dockerfile").write_text(
+        "FROM scratch\nCOPY src/services/query_service/app /app\n", encoding="utf-8"
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    tmp_path.joinpath(".git", "info", "exclude").write_text("*.ignored\n", encoding="utf-8")
+    app.joinpath("local-é.ignored").write_text("value = 1\n", encoding="utf-8")
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
 @pytest.mark.skipif(os.name == "nt", reason="Windows symlink creation is privilege-dependent")
 def test_metadata_detects_ignored_symlink_lexically_within_copied_source(
     tmp_path: Path,
@@ -647,6 +670,30 @@ def test_metadata_detects_directory_emptied_by_dockerignore(tmp_path: Path) -> N
     metadata = discover_local_build_metadata(tmp_path)
 
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
+def test_metadata_accepts_directory_emptied_by_tracked_dockerignored_file(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+    app = tmp_path / "src" / "services" / "query_service" / "app"
+    tracked_directory = app / "cache"
+    tracked_directory.mkdir(parents=True)
+    tracked_directory.joinpath(".keep").write_text("tracked\n", encoding="utf-8")
+    app.parent.joinpath("Dockerfile").write_text(
+        "FROM scratch\nCOPY src/services/query_service/app /app\n", encoding="utf-8"
+    )
+    tmp_path.joinpath(".dockerignore").write_text(".git\n**/.keep\n", encoding="utf-8")
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == expected_head
 
 
 def test_metadata_ignores_local_artifacts_excluded_from_docker_context(

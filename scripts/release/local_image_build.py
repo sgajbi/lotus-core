@@ -204,9 +204,29 @@ def _copied_source_paths(root: Path) -> set[Path]:
     }
 
 
-def _has_untracked_empty_context_directory(root: Path) -> bool:
+def _has_untracked_empty_context_directory(
+    root: Path,
+    *,
+    runner: Runner,
+) -> bool:
     patterns = _dockerignore_patterns(root)
-    for source_root in _copied_source_paths(root):
+    copied_sources = _copied_source_paths(root)
+    copied_pathspecs = tuple(
+        source.relative_to(root).as_posix() for source in sorted(copied_sources)
+    )
+    tracked_paths = {
+        Path(path)
+        for path in _git(
+            root,
+            "ls-files",
+            "-z",
+            "--",
+            *copied_pathspecs,
+            runner=runner,
+        ).split("\0")
+        if path
+    }
+    for source_root in copied_sources:
         if source_root.is_symlink() or not source_root.is_dir():
             continue
         for current, directory_names, file_names in os.walk(source_root, topdown=True):
@@ -224,7 +244,9 @@ def _has_untracked_empty_context_directory(root: Path) -> bool:
                 for name in file_names
             )
             if not directory_names and not visible_files:
-                return True
+                repository_relative = directory.relative_to(root)
+                if not any(path.is_relative_to(repository_relative) for path in tracked_paths):
+                    return True
     return False
 
 
@@ -268,36 +290,42 @@ def discover_local_build_metadata(
             source.relative_to(root).as_posix() for source in sorted(copied_sources)
         )
         if copied_pathspecs:
-            git_ignored = set(
-                _git(
+            git_ignored = {
+                relative
+                for relative in _git(
                     root,
                     "ls-files",
                     "--others",
                     "--ignored",
                     "--exclude-standard",
+                    "-z",
                     "--",
                     *copied_pathspecs,
                     runner=runner,
-                ).splitlines()
-            )
-            docker_ignored = set(
-                _git(
+                ).split("\0")
+                if relative
+            }
+            docker_ignored = {
+                relative
+                for relative in _git(
                     root,
                     "ls-files",
                     "--others",
                     "--ignored",
                     f"--exclude-from={root / '.dockerignore'}",
+                    "-z",
                     "--",
                     *copied_pathspecs,
                     runner=runner,
-                ).splitlines()
-            )
+                ).split("\0")
+                if relative
+            }
             dirty = any(
                 _is_within_copied_source(root / relative, root=root, copied_sources=copied_sources)
                 for relative in git_ignored - docker_ignored
             )
     if not dirty:
-        dirty = _has_untracked_empty_context_directory(root)
+        dirty = _has_untracked_empty_context_directory(root, runner=runner)
     with (root / "pyproject.toml").open("rb") as handle:
         project_version = str(tomllib.load(handle)["project"]["version"])
     return LocalBuildMetadata(

@@ -18,6 +18,7 @@ import yaml
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
 
+from scripts.release.local_image_build import discover_local_build_metadata
 from tests.test_support.runtime_env import PreparedTestRuntime
 
 RUNTIME_IMAGE_SET_VERIFICATION_RECEIPT = Path("output/runtime-image-set/verified-source-sha")
@@ -434,6 +435,12 @@ def compose_up(
     deadline = _LifecycleDeadline.start(timeout_seconds, clock=clock)
     project_name = runtime.endpoints.compose_project_name if runtime is not None else None
     compose_environment = runtime.values if runtime is not None else None
+    build_environment: dict[str, str] | None = None
+    if build:
+        build_environment = (
+            dict(compose_environment) if compose_environment is not None else os.environ.copy()
+        )
+        build_environment.update(discover_local_build_metadata().environment())
     compose_args = _compose_base_args(compose_file, project_name=project_name)
     ensure_docker_engine_available(runner, deadline=deadline)
     ensure_required_images_available(
@@ -474,7 +481,7 @@ def compose_up(
                 operation="Compose image build",
                 check=True,
                 capture_output=True,
-                env=compose_environment,
+                env=build_environment,
             )
         except subprocess.CalledProcessError as exc:
             if runtime is not None:
@@ -482,8 +489,7 @@ def compose_up(
             details = _process_error_text(exc).strip()
             raise DockerStackError(f"docker compose build failed: {details}") from exc
 
-    args = [*compose_args, "up"]
-    args.append("-d")
+    args = [*compose_args, "up", "-d", "--no-build"]
     if services:
         args.extend(services)
 

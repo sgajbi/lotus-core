@@ -261,6 +261,20 @@ def test_image_provenance_guard_rejects_case_insensitive_secret_instruction(
     assert any("secret-like build ARG/ENV" in finding.detail for finding in findings)
 
 
+def test_image_provenance_guard_rejects_secret_in_continued_env_instruction(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + "\nENV NORMAL=value \\\n    API_TOKEN=not-a-real-secret\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("secret-like build ARG/ENV" in finding.detail for finding in findings)
+
+
 def test_image_provenance_guard_requires_metadata_in_final_stage(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     _write_dockerfile(
