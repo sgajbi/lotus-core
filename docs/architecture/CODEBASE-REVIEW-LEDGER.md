@@ -1,5 +1,14 @@
 # Codebase Review Ledger
 
+CR-1724 Shipped Python runtime parity (2026-09-09, fixed-local candidate): issue #1046 showed that
+all service images and Windows dependency replay used Python 3.11 while the five GitHub workflows,
+Ruff, and mypy used Python 3.12. The repository now records 3.11 in `.python-version`, aligns the
+dense in-process validation and language tooling to the shipped runtime, and enforces workflow,
+Dockerfile, project-floor, Ruff, mypy, and Windows replay parity in the workflow-governance suite.
+No image digest, dependency closure, package floor, application, API, schema, financial behavior,
+or runtime topology changes. Evidence:
+[CR-1724-SHIPPED-PYTHON-RUNTIME-PARITY.md](./codebase-reviews/CR-1724-SHIPPED-PYTHON-RUNTIME-PARITY.md).
+
 CR-1723 Per-revision main releasability evidence (2026-09-09, fixed-local candidate): issue #1077
 showed that a multi-commit rebase merge dispatched Main Releasability only for its final revision;
 the newest ten main revisions contained nine with no verdict. The dispatcher now proves the exact
@@ -692,9 +701,9 @@ The same-pattern runtime audit also removed workstation Python 3.13 provenance f
 lock. The exact Python 3.11 Linux base now resolves the runtime closure with pinned pip/pip-tools,
 adding the Linux `uvloop` extra selected by `uvicorn[standard]` and removing Windows-only
 `colorama`. A distinct Windows/amd64 closure preserves `colorama` while excluding `uvloop`, and
-bootstrap/dependency health select the matching authority. Python 3.12 remains the
-forward-compatibility CI execution lane over the Linux production closure; it is not a competing
-lock authority.
+bootstrap/dependency health select the matching authority. Python 3.11 is now the shared
+in-process CI and production-runtime authority; platform-specific locks remain distinct where
+their resolved dependency sets genuinely differ.
 
 CR-1684 image-scan failure-evidence addendum (2026-08-12): issue #928's hosted Image Release
 failure correctly blocked all 13 service images on HIGH/CRITICAL findings but retained zero scan

@@ -37,53 +37,34 @@ blocker state in GitHub rather than adding it to durable repository context.
 
 ## Prerequisites
 
-- Python 3.12 for local work — see the version note below,
+- Python 3.11 for local work and runtime parity,
 - Docker and Docker Compose,
 - GNU Make or an equivalent shell that can run the repo `Makefile`,
 - a sibling `lotus-platform` checkout when running platform-backed validators or wiki sync checks.
 
-**Python version, precisely.** Three different values are in play and the difference matters:
+**Python version, precisely.** Python 3.11 is the repository's validation and runtime authority:
 
-| Setting | Value | Where |
+| Setting | Value | Authority |
 | --- | --- | --- |
-| Declared floor | `>=3.11` | `pyproject.toml` |
-| Behavioural and lint gates | `3.12` | `PYTHON_VERSION` in all five workflows; ruff `target-version = "py312"` |
-| Windows lock-closure replay | `3.11` | the `windows-lock-closures` job in `feature-lane`, `pr-merge-gate`, `main-releasability` |
-| Runtime images | `3.11` | all ten service `Dockerfile`s, digest-pinned |
+| Repository runtime | `3.11` | `.python-version` |
+| Package floor | `>=3.11` | `pyproject.toml` |
+| In-process gates, Ruff, and mypy | `3.11` | Governed against `.python-version` |
+| Windows lock-closure replay | `3.11` | Governed against `.python-version` |
+| Runtime images | `3.11` | Digest-pinned service `Dockerfile`s, governed against `.python-version` |
 
-Use **3.12 locally** for ordinary work: it is the interpreter for the **in-process** gates — unit and
-integration suites, coverage, lint, typecheck — so it is what reproduces those results.
-
-Which interpreter actually runs your code depends on the gate:
-
-| Gate style | Host interpreter | Code under test runs on |
-| --- | --- | --- |
-| In-process (`test-suites`, `coverage-gate`, quality gates) | 3.12 | **3.12** |
-| Container (`docker-smoke-contract`, `e2e-smoke`, latency and performance gates) | 3.12 | **3.11**, inside the built runtime images |
-| `windows-lock-closures` | 3.11 | dependency resolution only |
-
-Two consequences worth knowing before you debug a failure:
-
-- **A container-only failure will not reproduce under host 3.12.** Those lanes boot the real Compose
-  stack from the 3.11 Dockerfiles, so 3.12 is only the orchestrator there. Reproduce them with the
-  containers, not the host interpreter.
-- **Reproducing the Windows dependency gate requires 3.11.** `windows-lock-closures` pins it
-  deliberately so the closure it replays matches the runtime; replaying under 3.12 can resolve a
-  *different* closure and disagree with the gate.
-
-The in-process suites therefore run on an interpreter the runtime images do not use. That gap is
-tracked as [#1046](https://github.com/sgajbi/lotus-core/issues/1046); it is not a setting to change
-here.
+The workflow-governance suite fails when these values diverge. Container-only failures still need
+container reproduction because their dependencies and operating environment differ from the host,
+even though the Python minor version is the same.
 
 ## First Local Setup
 
-Create an isolated Python 3.12 environment before `make install`. The bootstrap installs into the
+Create an isolated Python 3.11 environment before `make install`. The bootstrap installs into the
 interpreter that invokes it; it does not create or select a virtual environment for you.
 
 Linux and macOS:
 
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 python --version
 make install
@@ -93,19 +74,19 @@ cp .env.example .env
 Windows PowerShell:
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.11 -m venv .venv
 .venv\Scripts\Activate.ps1
 python --version
 make install
 Copy-Item .env.example .env
 ```
 
-If Python 3.12 is managed by `uv` rather than registered with the Windows launcher, replace only
-the first command with `uv venv --seed --python 3.12 .venv`. `--seed` is required because
+If Python 3.11 is managed by `uv` rather than registered with the Windows launcher, replace only
+the first command with `uv venv --seed --python 3.11 .venv`. `--seed` is required because
 `make install` invokes `python -m pip`; activation and every subsequent command stay the same. This
 is an optional interpreter-management path, not a reason to install into a global environment.
 
-`python --version` must report `3.12.x` before installation. A global interpreter, an already
+`python --version` must report `3.11.x` before installation. A global interpreter, an already
 populated environment, or packages inherited through `PYTHONPATH` are not valid bootstrap proof.
 
 Then run the fastest repo-native confidence check:

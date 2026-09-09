@@ -170,6 +170,10 @@ interpreter, dependency, database, Compose, coverage, or failure-propagation bou
 Core uses Remote Feature Lane, Pull Request Merge Gate, and Main Releasability Gate. The applicable
 lane must pass against the exact implementation SHA.
 
+Python 3.11 is the shipped runtime and validation authority recorded in `.python-version`.
+Workflow, Dockerfile, package-floor, Ruff, mypy, and Windows lock-replay parity is enforced by the
+workflow-governance suite; do not change one surface independently.
+
 Rebase merges dispatch Main Releasability independently for every landed revision. The dispatcher
 proves the exact base-to-merge range and PR patch identity, while `make main-gate-coverage-audit`
 fails closed on any post-enforcement revision without a verdict-bearing run. Release-evidence runs
