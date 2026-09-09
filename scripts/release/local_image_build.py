@@ -78,6 +78,8 @@ def _dockerfile_logical_lines(content: str) -> tuple[str, ...]:
     current = ""
     for physical_line in content.splitlines():
         fragment = physical_line.strip()
+        if not current and "<<" in fragment:
+            raise ValueError("Dockerfile heredoc instructions are not supported")
         current = f"{current} {fragment}".strip()
         if current.endswith("\\"):
             current = current[:-1].rstrip()
@@ -101,6 +103,8 @@ def _is_docker_ignored(path: Path, *, root: Path, patterns: Sequence[str]) -> bo
         if not pattern:
             continue
         matched = candidate.match(pattern)
+        if pattern.startswith("**/"):
+            matched = matched or candidate.match(pattern.removeprefix("**/"))
         if "/" not in pattern:
             matched = matched or pattern in candidate.parts
         if matched:

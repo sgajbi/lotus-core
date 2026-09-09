@@ -196,6 +196,13 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
+        if any("<<" in line for line in content.splitlines()):
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(dockerfile, root),
+                    "Dockerfile heredocs are not permitted at the local provenance boundary",
+                )
+            )
         instructions = _dockerfile_instructions(content)
         if any(instruction == "ADD" for instruction, _ in instructions):
             findings.append(

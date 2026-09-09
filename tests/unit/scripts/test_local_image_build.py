@@ -499,6 +499,25 @@ def test_metadata_accepts_local_stage_bind_mount(tmp_path: Path, stage_reference
     assert metadata.git_commit_sha == expected_head
 
 
+def test_metadata_rejects_dockerfile_heredoc(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\nRUN <<EOF\nFROM scratch AS injected\nEOF\n"
+        "RUN --mount=type=bind,from=injected,target=/input true\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="Dockerfile heredoc instructions are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
 def test_metadata_rejects_negated_dockerignore_pattern(tmp_path: Path) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
@@ -536,6 +555,29 @@ def test_metadata_ignores_empty_directory_excluded_from_docker_context(tmp_path:
     expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
     app.joinpath("empty-cache").mkdir()
 
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == expected_head
+
+
+def test_metadata_ignores_top_level_empty_directory_excluded_by_double_star(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text("FROM scratch\nCOPY . /app\n", encoding="utf-8")
+    tmp_path.joinpath(".dockerignore").write_text(".git\n**/build\n", encoding="utf-8")
+    tmp_path.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    tmp_path.joinpath("build").mkdir()
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
     metadata = discover_local_build_metadata(tmp_path)
 
     assert metadata.git_commit_sha == expected_head
