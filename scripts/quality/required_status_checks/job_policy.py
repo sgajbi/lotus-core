@@ -83,6 +83,8 @@ _MATRIX_MAKE_COMMAND = re.compile(
 _BARE_RUN_COMMAND = re.compile(
     rf"^(?:make[ \t]+(?:{_MAKE_TARGET_TEXT}|"
     r"\$\{\{[ \t]*matrix\.[A-Za-z_][A-Za-z0-9_]*[ \t]*\}\})|"
+    r"python[ \t]+scripts/development/repository_python\.py[ \t]+"
+    r"scripts/(?:development/bootstrap_dev|quality/required_status_checks_guard)\.py|"
     r"python[ \t]+scripts/development/update_(?:ci_tooling|shared_runtime)_lock\.py"
     r"[ \t]+--check[ \t]+--platform[ \t]+windows)$"
 )

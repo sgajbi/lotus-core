@@ -272,6 +272,28 @@ def _workflow_jobs(workflow: Mapping[str, Any], *, path: Path) -> Mapping[str, A
     return jobs
 
 
+def _validate_make_authority_bootstrap(workflow: Mapping[str, Any], *, path: Path) -> None:
+    """Require the merge gate to validate Make before trusting any Make recipe."""
+
+    job = _workflow_jobs(workflow, path=path).get("lint-typecheck-contracts-security")
+    if not isinstance(job, dict) or not isinstance(job.get("steps"), list):
+        raise RequiredStatusChecksError(f"workflow lacks Make authority bootstrap job: {path}")
+    run_commands = [
+        step.get("run")
+        for step in job["steps"]
+        if isinstance(step, dict) and isinstance(step.get("run"), str)
+    ]
+    expected_prefix = [
+        "python scripts/development/repository_python.py scripts/development/bootstrap_dev.py",
+        "python scripts/development/repository_python.py "
+        "scripts/quality/required_status_checks_guard.py",
+    ]
+    if run_commands[:2] != expected_prefix:
+        raise RequiredStatusChecksError(
+            f"workflow must validate Make authority before invoking Make: {path}"
+        )
+
+
 def _governed_contexts(
     manifest: RequiredChecksManifest,
     *,
@@ -288,6 +310,8 @@ def _governed_contexts(
     for policy in manifest.workflow_policies:
         workflow = workflows[policy.path]
         _validate_workflow_triggers(workflow, path=policy.path)
+        if policy.path == Path(".github/workflows/pr-merge-gate.yml"):
+            _validate_make_authority_bootstrap(workflow, path=policy.path)
         jobs = _workflow_jobs(workflow, path=policy.path)
         for job_id, job in jobs.items():
             if not isinstance(job, dict):
