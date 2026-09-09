@@ -72,7 +72,7 @@ _BLOCKING_ENVIRONMENT_VALUES = {
     "NODE_VERSION": frozenset({"22"}),
     "PIP_DISABLE_PIP_VERSION_CHECK": frozenset({"1"}),
     "PYTHONUNBUFFERED": frozenset({"1"}),
-    "PYTHON_VERSION": frozenset({"3.12"}),
+    "PYTHON_VERSION": frozenset({"3.11"}),
 }
 _MAKE_TARGET_TEXT = r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
 _MAKE_TARGET = re.compile(rf"^{_MAKE_TARGET_TEXT}$")
