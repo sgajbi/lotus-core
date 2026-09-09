@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess  # nosec B404 - fixed executable arguments, never a shell
 import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_URL = "https://github.com/sgajbi/lotus-core"
@@ -55,6 +56,58 @@ def _git(root: Path, *arguments: str, runner: Runner) -> str:
 def _has_hidden_index_flags(root: Path, *, runner: Runner) -> bool:
     entries = _git(root, "ls-files", "-v", "-z", runner=runner).split("\0")
     return any(entry and (entry[0].islower() or entry[0] == "S") for entry in entries)
+
+
+def _dockerignore_patterns(root: Path) -> tuple[str, ...]:
+    return tuple(
+        line.strip()
+        for line in (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+
+
+def _is_docker_ignored(path: Path, *, root: Path, patterns: Sequence[str]) -> bool:
+    relative = path.relative_to(root).as_posix()
+    candidate = PurePosixPath(relative)
+    ignored = False
+    for raw_pattern in patterns:
+        negated = raw_pattern.startswith("!")
+        pattern = raw_pattern[1:] if negated else raw_pattern
+        pattern = pattern.strip("/")
+        if not pattern:
+            continue
+        matched = candidate.match(pattern)
+        if "/" not in pattern:
+            matched = matched or pattern in candidate.parts
+        if matched:
+            ignored = not negated
+    return ignored
+
+
+def _copied_source_directories(root: Path) -> set[Path]:
+    directories: set[Path] = set()
+    for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
+        for line in dockerfile.read_text(encoding="utf-8").splitlines():
+            if not line.lstrip().upper().startswith("COPY "):
+                continue
+            tokens = shlex.split(line, posix=True)
+            arguments = [token for token in tokens[1:] if not token.startswith("--")]
+            for source in arguments[:-1]:
+                candidate = (root / source).resolve()
+                if candidate.is_dir() and candidate.is_relative_to(root.resolve()):
+                    directories.add(candidate)
+    return directories
+
+
+def _has_untracked_empty_context_directory(root: Path) -> bool:
+    patterns = _dockerignore_patterns(root)
+    return any(
+        directory.is_dir()
+        and not any(directory.iterdir())
+        and not _is_docker_ignored(directory, root=root, patterns=patterns)
+        for source_root in _copied_source_directories(root)
+        for directory in source_root.rglob("*")
+    )
 
 
 def discover_local_build_metadata(
@@ -104,6 +157,8 @@ def discover_local_build_metadata(
             ).splitlines()
         )
         dirty = bool(git_ignored - docker_ignored)
+    if not dirty:
+        dirty = _has_untracked_empty_context_directory(root)
     with (root / "pyproject.toml").open("rb") as handle:
         project_version = str(tomllib.load(handle)["project"]["version"])
     return LocalBuildMetadata(
