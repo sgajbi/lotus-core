@@ -217,9 +217,10 @@ schema, machine-readable contracts, or executable evidence.
 - Some external treasury and OMS source products intentionally remain unavailable until bank-owned
   integration evidence is certified; do not fabricate substitutes.
 - Production security and audit defaults do not replace platform ingress, IAM, or deployment proof.
-- Tenant S1, transaction event/idempotency fences, query-service portfolio/reporting reads, and QCP
-  transaction-economics reads are tenant-bound. #798 S2-S6 remain open: do not claim estate-wide
-  isolation until outbox ownership, remaining stateful fences, ledger and derived records, other
+- Tenant S1, transaction event/idempotency fences, query-service portfolio/reporting reads, QCP
+  transaction-economics reads, and portfolio-aggregation job ownership are tenant-bound. #798
+  S2-S6 remain open: do not claim estate-wide isolation until outbox ownership, remaining stateful
+  fences, ledger and derived records, other
   portfolio-owned query paths, replay, and operations are tenant-bound and exact-main proven.
   Global reference and market-data products remain explicitly global.
 - App-local Compose and CI use checkout-specific ownership. Never disturb the shared canonical

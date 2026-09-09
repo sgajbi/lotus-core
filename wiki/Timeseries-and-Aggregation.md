@@ -25,7 +25,8 @@ cluster topology, disaster recovery, or downstream front-office readiness.
 2. The position delivery adapter maps that event into `MaterializePositionTimeseries`.
 3. The use case writes current and materially dependent future `position_timeseries` rows and
    idempotently stages affected `portfolio_aggregation_jobs` in the same transaction, carrying the
-   authoritative target epoch and material-source revision.
+   source portfolio's non-null tenant authority, authoritative target epoch, and material-source
+   revision. Staging fails closed when durable portfolio ownership cannot be resolved.
 4. The aggregation scheduler recovers expired claims and leases eligible jobs in deterministic
    portfolio/date order using `FOR UPDATE SKIP LOCKED`.
    Expired recovery is separately bounded to 1,000 jobs ordered by lease expiry and durable job id;
@@ -55,6 +56,13 @@ so same-epoch valuation corrections are fenced as well as higher-epoch restateme
 then recheck supersession after a concurrent zero-row write. This fence is distinct from
 `aggregation_revision`: source revision protects calculation input identity, while aggregation
 revision is the positive claim sequence published to reconciliation.
+
+The claimed tenant is rehydrated as Core's source-owned `TenantId`. Portfolio lookup and terminal
+success/failure transitions require that same authority, so a valid job ID and lease token cannot
+cross a tenant boundary. The database enforces the job-to-portfolio ownership relationship and
+includes tenant in the portfolio/date job identity. Instruments, prices, FX rates, and governed
+business calendars remain deliberately global reference data; this boundary does not assign them
+synthetic portfolio tenancy.
 
 Upstream valuation claims also retain the maximum committed transactional-outbox ID for the exact
 portfolio/security/date/epoch readiness scope. A delayed readiness delivery can rearm completed
