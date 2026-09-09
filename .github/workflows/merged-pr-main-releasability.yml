@@ -10,6 +10,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  COVERAGE_BASELINE_SHA: 866507fc1c72d1bfcbf9265beee403dddd3dba62
 
 jobs:
   dispatch-main-releasability:
@@ -20,36 +21,159 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Dispatch main releasability gate
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Dispatch every merged revision
         env:
           GH_TOKEN: ${{ github.token }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          COMMIT_COUNT: ${{ github.event.pull_request.commits }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          if [ -z "$MERGE_COMMIT_SHA" ]; then
-            echo "::error::pull_request.merge_commit_sha is required for exact-main releasability dispatch"
+          if [ -z "$MERGE_COMMIT_SHA" ] || [ -z "$BASE_SHA" ]; then
+            echo "::error::pull_request base and merge SHAs are required"
+            exit 1
+          fi
+          if ! [[ "$COMMIT_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pull_request.commits must be a positive integer, got '$COMMIT_COUNT'"
             exit 1
           fi
 
-          dispatch_ref="main-releasability-${MERGE_COMMIT_SHA}"
-          existing_ref_sha=""
-          if existing_ref_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$dispatch_ref" --jq .object.sha 2>/dev/null)"; then
-            if [ "$existing_ref_sha" != "$MERGE_COMMIT_SHA" ]; then
-              echo "::error::Dispatch ref $dispatch_ref points to $existing_ref_sha, expected $MERGE_COMMIT_SHA"
+          git fetch origin main --quiet
+          git checkout --quiet --detach FETCH_HEAD
+          if ! git merge-base --is-ancestor "$MERGE_COMMIT_SHA" HEAD; then
+            echo "::error::$MERGE_COMMIT_SHA is not on the freshly fetched main branch"
+            exit 1
+          fi
+
+          merge_parent_fields="$(git rev-list --parents -n 1 "$MERGE_COMMIT_SHA" | wc -w)"
+          if [ "$merge_parent_fields" -ne 2 ]; then
+            echo "::error::$MERGE_COMMIT_SHA is not a single-parent rebase-merge revision"
+            exit 1
+          fi
+
+          revisions="$(git rev-list --reverse "$BASE_SHA..$MERGE_COMMIT_SHA")"
+          enumerated_count="$(printf '%s\n' "$revisions" | grep -c .)"
+          if [ -z "$revisions" ] || [ "$enumerated_count" -ne "$COMMIT_COUNT" ]; then
+            echo "::error::Expected $COMMIT_COUNT revisions for PR #$PR_NUMBER, resolved $enumerated_count from $BASE_SHA..$MERGE_COMMIT_SHA"
+            exit 1
+          fi
+
+          previous="$BASE_SHA"
+          for candidate in $revisions; do
+            candidate_parent="$(git rev-parse "${candidate}^")"
+            if [ "$candidate_parent" != "$previous" ]; then
+              echo "::error::$candidate has parent $candidate_parent, expected $previous"
+              exit 1
+            fi
+            previous="$candidate"
+          done
+          if [ "$previous" != "$MERGE_COMMIT_SHA" ]; then
+            echo "::error::Enumerated range does not end at $MERGE_COMMIT_SHA"
+            exit 1
+          fi
+
+          if ! git fetch origin "refs/pull/$PR_NUMBER/head" --quiet; then
+            echo "::error::Cannot fetch PR #$PR_NUMBER head to attribute landed changes"
+            exit 1
+          fi
+          pr_head="$(git rev-parse FETCH_HEAD)"
+          pr_patch_ids="$(git rev-list --reverse "$BASE_SHA..$pr_head" | while read -r commit; do
+            git show -U0 "$commit" | git patch-id --stable | cut -d' ' -f1
+          done)"
+          if [ -z "$pr_patch_ids" ]; then
+            echo "::error::PR #$PR_NUMBER has no attributable patch identities"
+            exit 1
+          fi
+          unclaimed_patch_ids="$pr_patch_ids"
+          for candidate in $revisions; do
+            candidate_patch_id="$(git show -U0 "$candidate" | git patch-id --stable | cut -d' ' -f1)"
+            claimed_line="$(printf '%s\n' "$unclaimed_patch_ids" | awk -v id="$candidate_patch_id" '$0 == id { print NR; exit }')"
+            if [ -z "$claimed_line" ]; then
+              echo "::error::$candidate cannot be attributed to PR #$PR_NUMBER by patch identity"
+              exit 1
+            fi
+            unclaimed_patch_ids="$(printf '%s\n' "$unclaimed_patch_ids" | awk -v line="$claimed_line" 'NR != line')"
+          done
+
+          baseline_ref="main-gate-coverage-enforcement-v1"
+          baseline_sha="$COVERAGE_BASELINE_SHA"
+          if ! git merge-base --is-ancestor "$baseline_sha" "$BASE_SHA"; then
+            echo "::error::Anchored coverage baseline $baseline_sha is not an ancestor of $BASE_SHA"
+            exit 1
+          fi
+          existing_baseline_sha=""
+          if existing_baseline_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$baseline_ref" --jq .object.sha 2>/dev/null)"; then
+            if [ "$existing_baseline_sha" != "$baseline_sha" ]; then
+              echo "::error::Coverage baseline $baseline_ref points to $existing_baseline_sha, expected anchored SHA $baseline_sha"
               exit 1
             fi
           else
+            existing_baseline_sha=""
+          fi
+          if [ -z "$existing_baseline_sha" ]; then
+            if ! gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$baseline_ref" \
+              -f sha="$baseline_sha" >/dev/null; then
+              existing_baseline_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$baseline_ref" --jq .object.sha)"
+              if [ "$existing_baseline_sha" != "$baseline_sha" ]; then
+                echo "::error::Concurrent baseline creation resolved to $existing_baseline_sha, expected $baseline_sha"
+                exit 1
+              fi
+            fi
+          fi
+
+          mkdir -p output/release-evidence
+          jq -n \
+            --arg schema_version "lotus.main-gate-dispatch.v1" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --argjson pull_request "$PR_NUMBER" \
+            --arg base_sha "$BASE_SHA" \
+            --arg merge_sha "$MERGE_COMMIT_SHA" \
+            --arg baseline_sha "$baseline_sha" \
+            --arg revisions "$revisions" \
+            '{schema_version:$schema_version,repository:$repository,pull_request:$pull_request,base_sha:$base_sha,merge_sha:$merge_sha,baseline_sha:$baseline_sha,revisions:($revisions|split("\n"))}' \
+            > output/release-evidence/main-gate-dispatch.json
+
+          echo "Enumerated $enumerated_count revision(s) for PR #$PR_NUMBER"
+          for revision in $revisions; do
+            if ! git merge-base --is-ancestor "$revision" HEAD; then
+              echo "::error::$revision is not an ancestor of fetched main"
+              exit 1
+            fi
+            dispatch_ref="main-releasability-${revision}"
             existing_ref_sha=""
-          fi
-          if [ -z "$existing_ref_sha" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$dispatch_ref" \
-              -f sha="$MERGE_COMMIT_SHA" >/dev/null
-          fi
-          gh workflow run main-releasability.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref "$dispatch_ref" \
-            -f expected_sha="$MERGE_COMMIT_SHA" \
-            -f triggering_pr="$PR_NUMBER" \
-            -f source_branch="main"
+            if existing_ref_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$dispatch_ref" --jq .object.sha 2>/dev/null)"; then
+              if [ "$existing_ref_sha" != "$revision" ]; then
+                echo "::error::$dispatch_ref points to $existing_ref_sha, expected $revision"
+                exit 1
+              fi
+            else
+              existing_ref_sha=""
+            fi
+            if [ -z "$existing_ref_sha" ]; then
+              gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+                -f ref="refs/tags/$dispatch_ref" \
+                -f sha="$revision" >/dev/null
+            fi
+            gh workflow run main-releasability.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$dispatch_ref" \
+              -f expected_sha="$revision" \
+              -f triggering_pr="$PR_NUMBER" \
+              -f source_branch="main"
+            echo "Dispatched main releasability for $revision (PR #$PR_NUMBER)"
+          done
+
+      - name: Retain dispatch manifest
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-gate-dispatch-${{ github.run_id }}
+          path: output/release-evidence/main-gate-dispatch.json
+          if-no-files-found: error
+          retention-days: 90

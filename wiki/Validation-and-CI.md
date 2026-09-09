@@ -35,12 +35,22 @@ full-gate behavior; broader same-head evidence reuse is outside this bounded con
 uses the explicit `LOTUS_AUTOMERGE_TOKEN` under read-only workflow permissions and safely stops when
 the secret is absent. It never falls back to `github.token`.
 
-Every merged PR is handed to a separate dispatcher. The dispatcher creates or verifies an immutable
-`main-releasability-<merge_sha>` tag, passes that SHA to Main Releasability, and records the PR
-number. Main Releasability checks out the tag, rejects a different SHA, proves that the revision is
-reachable from `main`, and only then releases the remaining jobs. This keeps one post-merge evidence
-run bound to one authoritative main revision. An operator may dispatch the same workflow without an
-expected SHA for deliberate manual validation; the run identifies itself as operator-dispatched.
+Every rebase-merged PR is handed to a separate dispatcher. It derives the exact ordered
+`base_sha..merge_sha` range, verifies its count, linear ancestry and patch identity against the PR,
+then creates or verifies one immutable `main-releasability-<revision_sha>` tag and dispatches Main
+Releasability for every landed revision. Dispatch evidence includes repository, PR, base, merge,
+baseline and revision identities. Main Releasability checks out each tag, rejects a different SHA,
+proves that the revision is reachable from `main`, and only then releases the remaining jobs.
+Per-revision evidence cannot be cancelled by a later dispatch.
+
+`make main-gate-coverage-audit` audits every revision after the immutable, versioned
+`main-gate-coverage-enforcement-v1` baseline anchored to the fixing PR's exact parent. Concurrent
+dispatcher ordering cannot move that baseline or exempt an earlier revision. The scheduled `Main Gate Coverage Audit` retains its
+machine-readable report and fails closed on missing, unreadable, cancelled-only or nonterminal
+evidence, an absent baseline, an empty post-baseline set, or a truncated window. Failures remain
+historical verdicts rather than coverage gaps; reruns and duplicate run identities remain visible.
+An operator may dispatch Main Releasability without an expected SHA for deliberate manual
+validation; that run identifies itself as operator-dispatched.
 
 ### Required Check Authority
 

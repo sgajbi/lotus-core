@@ -1,0 +1,38 @@
+name: Main Gate Coverage Audit
+
+on:
+  schedule:
+    - cron: "20 3 * * *"
+  workflow_dispatch: {}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    name: Audit / Every Main Commit Has A Gate Verdict
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Audit post-enforcement main gate coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags --quiet
+          make main-gate-coverage-audit
+      - name: Retain coverage audit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-gate-coverage-${{ github.run_id }}
+          path: output/release-evidence/main-gate-coverage.json
+          if-no-files-found: error
+          retention-days: 90

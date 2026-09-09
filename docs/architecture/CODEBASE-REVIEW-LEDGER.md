@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1723 Per-revision main releasability evidence (2026-09-09, fixed-local candidate): issue #1077
+showed that a multi-commit rebase merge dispatched Main Releasability only for its final revision;
+the newest ten main revisions contained nine with no verdict. The dispatcher now proves the exact
+base-to-merge range, count, linear ancestry and PR patch identity before issuing one immutable-tag
+dispatch per landed revision. Independent SHA concurrency prevents later work cancelling earlier
+evidence. A versioned pre-enforcement baseline avoids rewriting 131 historical gaps, while a
+scheduled, artifact-backed audit fails closed on missing, unreadable, cancelled-only, nonterminal,
+empty or truncated evidence and reports exact run identities, duplicates, failures and recovery.
+This changes CI evidence only: no financial, API, schema, application, runtime-topology or market-
+data ownership contract changes. Evidence:
+[CR-1723-PER-REVISION-MAIN-RELEASABILITY.md](./codebase-reviews/CR-1723-PER-REVISION-MAIN-RELEASABILITY.md).
+
 CR-1722 QCP transaction-economics tenant authority (2026-09-08, fixed-local candidate): #798
 showed that `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1` recorded an optional
 caller tenant in continuation/content identity and runtime lineage while their SQL adapter selected

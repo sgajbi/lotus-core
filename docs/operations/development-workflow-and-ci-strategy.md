@@ -34,9 +34,13 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
 7. PR Auto Merge uses the repository-scoped `LOTUS_AUTOMERGE_TOKEN` under read-only workflow
    permissions. When that credential is absent, the workflow warns and stops; it never falls back
    to `github.token`, whose merges can suppress the post-merge evidence workflow.
-8. Every merged PR dispatches Main Releasability through an immutable
-   `main-releasability-<merge_sha>` tag. The main workflow validates that exact SHA and proves it is
-   reachable from `main` before any release gate can run.
+8. Every rebase-merged PR dispatches Main Releasability once per landed revision through immutable
+   `main-releasability-<revision_sha>` tags. Exact range, count, ancestry and PR patch identity fail
+   closed before dispatch. The main workflow validates each exact SHA, proves it is reachable from
+   `main`, and never cancels another revision's evidence run.
+9. `make main-gate-coverage-audit` is the scheduled/manual backstop. It audits the complete
+   post-enforcement range, retains exact run identities and terminal outcomes, and fails on missing
+   or unverifiable coverage rather than treating a cancelled or pending run as a verdict.
 
 ## CI Gate Tiers
 

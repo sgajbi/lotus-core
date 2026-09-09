@@ -170,6 +170,11 @@ interpreter, dependency, database, Compose, coverage, or failure-propagation bou
 Core uses Remote Feature Lane, Pull Request Merge Gate, and Main Releasability Gate. The applicable
 lane must pass against the exact implementation SHA.
 
+Rebase merges dispatch Main Releasability independently for every landed revision. The dispatcher
+proves the exact base-to-merge range and PR patch identity, while `make main-gate-coverage-audit`
+fails closed on any post-enforcement revision without a verdict-bearing run. Release-evidence runs
+are non-cancellable; duplicate, cancelled, pending and historical failing attempts remain visible.
+
 Tests must prove the economic invariant, edge/failure behavior, replay or idempotency semantics,
 and contract meaning—not merely execute lines. Use real PostgreSQL when correctness depends on its
 SQL, types, constraints, locks, transactions, or persistence behavior. Concurrency proof must force
