@@ -143,31 +143,39 @@ def discover_local_build_metadata(
         # status even though Docker still reads their working-tree content.
         dirty = _has_hidden_index_flags(root, runner=runner)
     if not dirty:
-        git_ignored = set(
-            _git(
-                root,
-                "ls-files",
-                "--others",
-                "--ignored",
-                "--exclude-standard",
-                runner=runner,
-            ).splitlines()
-        )
-        docker_ignored = set(
-            _git(
-                root,
-                "ls-files",
-                "--others",
-                "--ignored",
-                f"--exclude-from={root / '.dockerignore'}",
-                runner=runner,
-            ).splitlines()
-        )
         copied_sources = _copied_source_directories(root)
-        dirty = any(
-            _is_within_copied_source(root / relative, copied_sources=copied_sources)
-            for relative in git_ignored - docker_ignored
+        copied_pathspecs = tuple(
+            source.relative_to(root).as_posix() for source in sorted(copied_sources)
         )
+        if copied_pathspecs:
+            git_ignored = set(
+                _git(
+                    root,
+                    "ls-files",
+                    "--others",
+                    "--ignored",
+                    "--exclude-standard",
+                    "--",
+                    *copied_pathspecs,
+                    runner=runner,
+                ).splitlines()
+            )
+            docker_ignored = set(
+                _git(
+                    root,
+                    "ls-files",
+                    "--others",
+                    "--ignored",
+                    f"--exclude-from={root / '.dockerignore'}",
+                    "--",
+                    *copied_pathspecs,
+                    runner=runner,
+                ).splitlines()
+            )
+            dirty = any(
+                _is_within_copied_source(root / relative, copied_sources=copied_sources)
+                for relative in git_ignored - docker_ignored
+            )
     if not dirty:
         dirty = _has_untracked_empty_context_directory(root)
     with (root / "pyproject.toml").open("rb") as handle:
