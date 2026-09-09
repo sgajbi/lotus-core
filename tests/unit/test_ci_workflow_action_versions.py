@@ -388,14 +388,55 @@ def test_merged_pr_dispatcher_targets_immutable_merge_revision() -> None:
     assert workflow["permissions"] == {"actions": "write", "contents": "write"}
     job = workflow["jobs"]["dispatch-main-releasability"]
     assert "github.event.pull_request.merged == true" in job["if"]
-    command = job["steps"][0]["run"]
-    assert 'dispatch_ref="main-releasability-${MERGE_COMMIT_SHA}"' in command
-    assert 'if [ "$existing_ref_sha" != "$MERGE_COMMIT_SHA" ]' in command
+    command = next(step["run"] for step in job["steps"] if "run" in step)
+    assert 'revisions="$(git rev-list --reverse "$BASE_SHA..$MERGE_COMMIT_SHA")"' in command
+    assert "COMMIT_COUNT: ${{ github.event.pull_request.commits }}" in workflow_path.read_text(
+        encoding="utf-8"
+    )
+    assert "BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow_path.read_text(
+        encoding="utf-8"
+    )
+    assert 'dispatch_ref="main-releasability-${revision}"' in command
+    assert 'if [ "$existing_ref_sha" != "$revision" ]' in command
     assert "gh workflow run main-releasability.yml" in command
     assert '--ref "$dispatch_ref"' in command
-    assert '-f expected_sha="$MERGE_COMMIT_SHA"' in command
+    assert '-f expected_sha="$revision"' in command
     assert '-f triggering_pr="$PR_NUMBER"' in command
     assert '-f source_branch="main"' in command
+    assert 'baseline_ref="main-gate-coverage-enforcement-v1"' in command
+    assert workflow["env"]["COVERAGE_BASELINE_SHA"] == ("866507fc1c72d1bfcbf9265beee403dddd3dba62")
+    assert 'baseline_sha="$COVERAGE_BASELINE_SHA"' in command
+    assert '-f sha="$baseline_sha"' in command
+    assert "expected anchored SHA $baseline_sha" in command
+    assert any(step.get("uses") == "actions/upload-artifact@v7" for step in job["steps"])
+
+
+def test_main_releasability_evidence_runs_cannot_cancel_each_other() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")
+    )
+
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+
+def test_scheduled_main_gate_coverage_audit_is_fail_closed_and_retained() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/main-gate-coverage-audit.yml").read_text(encoding="utf-8")
+    )
+    trigger = workflow[True]
+    assert "schedule" in trigger
+    assert "workflow_dispatch" in trigger
+    steps = workflow["jobs"]["audit"]["steps"]
+    command = next(
+        step["run"] for step in steps if "main-gate-coverage-audit" in step.get("run", "")
+    )
+    assert "make main-gate-coverage-audit" in command
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+    assert "--baseline-ref refs/tags/main-gate-coverage-enforcement-v1" in makefile
+    assert "--fail-on-gap" in makefile
+    upload = next(step for step in steps if step.get("uses") == "actions/upload-artifact@v7")
+    assert upload["if"] == "always()"
+    assert upload["with"]["if-no-files-found"] == "error"
 
 
 def test_automerge_label_event_does_not_restart_the_full_pr_merge_gate() -> None:

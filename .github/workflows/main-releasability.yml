@@ -23,7 +23,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.expected_sha || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   actions: read
