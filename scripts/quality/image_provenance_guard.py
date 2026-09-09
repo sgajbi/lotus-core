@@ -274,17 +274,14 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
                 stage_run_offsets.append(stage_offset)
             stage_offset += len(physical_line)
         last_stage_run = max(stage_run_offsets, default=-1)
-        for line_number, line in enumerate(content.splitlines(), start=1):
-            stripped = line.strip()
-            tokens = stripped.split(maxsplit=1)
-            if len(tokens) < 2 or tokens[0].upper() not in {"ARG", "ENV"}:
+        for instruction, arguments in instructions:
+            if instruction not in {"ARG", "ENV"}:
                 continue
-            upper_line = stripped.upper()
-            if any(token in upper_line for token in SECRET_LIKE_TOKENS):
+            if any(token in arguments.upper() for token in SECRET_LIKE_TOKENS):
                 findings.append(
                     ImageProvenanceFinding(
                         _relative(dockerfile, root),
-                        f"secret-like build ARG/ENV at line {line_number}",
+                        "secret-like build ARG/ENV instruction",
                     )
                 )
         for arg_name in REQUIRED_METADATA_ARGS:

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 import requests
 
+from scripts.release.local_image_build import LocalBuildMetadata
 from tests.test_support.docker_stack import (
     DockerImagePullFailureClass,
     DockerImagePullPolicy,
@@ -110,7 +111,7 @@ def test_compose_up_retries_on_existing_image_conflict() -> None:
         calls.append(list(args))
         if args[0:3] == ["docker", "image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
-        if args[-2:] == ["up", "-d"] and len([c for c in calls if c[-2:] == ["up", "-d"]]) == 1:
+        if "up" in args and len([call for call in calls if "up" in call]) == 1:
             raise subprocess.CalledProcessError(
                 returncode=1,
                 cmd=args,
@@ -129,13 +130,14 @@ def test_compose_up_retries_on_existing_image_conflict() -> None:
     image_inspects = [call for call in calls if call[0:3] == ["docker", "image", "inspect"]]
     ps_calls = [call for call in calls if call[0:4] == ["docker", "ps", "-aq", "--filter"]]
     down_calls = [call for call in calls if call[-2:] == ["down", "--remove-orphans"]]
-    up_calls = [call for call in calls if call[-2:] == ["up", "-d"]]
+    up_calls = [call for call in calls if "up" in call]
 
     assert calls[0][0:2] == ["docker", "info"]
     assert len(image_inspects) >= 2
     assert len(ps_calls) == 1
     assert len(down_calls) == 2
     assert len(up_calls) == 2
+    assert all("--no-build" in call for call in up_calls)
 
 
 def test_compose_up_retries_on_migration_runner_exit() -> None:
@@ -145,7 +147,7 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
         calls.append(list(args))
         if args[0:3] == ["docker", "image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
-        if args[-2:] == ["up", "-d"] and len([c for c in calls if c[-2:] == ["up", "-d"]]) == 1:
+        if "up" in args and len([call for call in calls if "up" in call]) == 1:
             raise subprocess.CalledProcessError(
                 returncode=1,
                 cmd=args,
@@ -164,13 +166,14 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
     image_inspects = [call for call in calls if call[0:3] == ["docker", "image", "inspect"]]
     ps_calls = [call for call in calls if call[0:4] == ["docker", "ps", "-aq", "--filter"]]
     down_calls = [call for call in calls if call[-2:] == ["down", "--remove-orphans"]]
-    up_calls = [call for call in calls if call[-2:] == ["up", "-d"]]
+    up_calls = [call for call in calls if "up" in call]
 
     assert calls[0][0:2] == ["docker", "info"]
     assert len(image_inspects) >= 2
     assert len(ps_calls) == 1
     assert len(down_calls) == 2
     assert len(up_calls) == 2
+    assert all("--no-build" in call for call in up_calls)
 
 
 def test_compose_up_reallocates_reserved_ports_after_bind_race() -> None:
@@ -248,7 +251,9 @@ def test_compose_up_reports_exhausted_host_port_reallocation() -> None:
     runtime.port_reservation.release()
 
 
-def test_compose_up_builds_while_ports_are_reserved_then_starts_without_build() -> None:
+def test_compose_up_builds_with_source_provenance_then_starts_without_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     runtime = prepare_test_runtime(
         profile="integration",
         scope="build-before-bind",
@@ -257,6 +262,18 @@ def test_compose_up_builds_while_ports_are_reserved_then_starts_without_build() 
         inherit_process_environment=False,
     )
     commands: list[list[str]] = []
+    build_environment: dict[str, str] = {}
+    metadata = LocalBuildMetadata(
+        git_commit_sha="a" * 40,
+        git_branch="feature/provenance",
+        build_timestamp="2026-09-09T00:00:00Z",
+        repo_url="https://github.com/sgajbi/lotus-core",
+        image_version="0.1.0-local.aaaaaaaaaaaa",
+    )
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack.discover_local_build_metadata",
+        lambda: metadata,
+    )
 
     def runner(args, **kwargs):  # noqa: ANN001, ARG001
         commands.append(list(args))
@@ -264,6 +281,7 @@ def test_compose_up_builds_while_ports_are_reserved_then_starts_without_build() 
             return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
         if "build" in args:
             assert runtime.port_reservation.reserved_port_keys
+            build_environment.update(kwargs["env"])
         if "up" in args:
             assert runtime.port_reservation.reserved_port_keys == ()
         return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
@@ -280,8 +298,11 @@ def test_compose_up_builds_while_ports_are_reserved_then_starts_without_build() 
     compose_build = next(command for command in commands if "build" in command)
     compose_start = next(command for command in commands if "up" in command)
     assert compose_build[-2:] == ["build", "query_service"]
-    assert compose_start[-3:] == ["up", "-d", "query_service"]
+    assert compose_start[-4:] == ["up", "-d", "--no-build", "query_service"]
     assert "--build" not in compose_start
+    assert {name: build_environment[name] for name in metadata.environment()} == (
+        metadata.environment()
+    )
 
 
 def test_compose_up_releases_reserved_ports_when_prebuild_fails() -> None:
