@@ -113,7 +113,10 @@ def _copied_source_paths(root: Path) -> set[Path]:
     lexical_root = Path(os.path.abspath(root))
     for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
         for line in _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8")):
-            if not line.lstrip().upper().startswith("COPY "):
+            instruction = line.lstrip().split(maxsplit=1)[0].upper()
+            if instruction == "ADD":
+                raise ValueError("Dockerfile ADD instructions are not supported")
+            if instruction != "COPY":
                 continue
             raw_arguments = line.split(maxsplit=1)[1].lstrip()
             while raw_arguments.startswith("--"):

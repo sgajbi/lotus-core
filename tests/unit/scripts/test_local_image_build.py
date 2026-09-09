@@ -394,6 +394,24 @@ def test_metadata_rejects_dockerfile_specific_ignore_file(tmp_path: Path) -> Non
         discover_local_build_metadata(tmp_path)
 
 
+def test_metadata_rejects_add_instruction(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\nADD https://example.test/archive.tar /app/\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="Dockerfile ADD instructions are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
 def test_metadata_rejects_negated_dockerignore_pattern(tmp_path: Path) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"

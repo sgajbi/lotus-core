@@ -196,6 +196,13 @@ def _dockerfile_findings(root: Path) -> list[ImageProvenanceFinding]:
     findings: list[ImageProvenanceFinding] = []
     for dockerfile in sorted((root / "src" / "services").rglob("Dockerfile")):
         content = dockerfile.read_text(encoding="utf-8")
+        if any(instruction == "ADD" for instruction, _ in _dockerfile_instructions(content)):
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(dockerfile, root),
+                    "Dockerfile ADD is not permitted at the local provenance boundary",
+                )
+            )
         offset = 0
         from_offsets: list[int] = []
         for physical_line in content.splitlines(keepends=True):
@@ -652,6 +659,23 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                     ImageProvenanceFinding(
                         _relative(compose_path, root),
                         f"Compose build {service_name} must not use external {external_input}",
+                    )
+                )
+        build_labels = build.get("labels")
+        if isinstance(build_labels, dict):
+            overridden_labels = set(build_labels)
+        elif isinstance(build_labels, list):
+            overridden_labels = {
+                item.partition("=")[0] for item in build_labels if isinstance(item, str)
+            }
+        else:
+            overridden_labels = set()
+        for label_name in REQUIRED_OCI_LABELS:
+            if label_name in overridden_labels:
+                findings.append(
+                    ImageProvenanceFinding(
+                        _relative(compose_path, root),
+                        f"Compose build {service_name} overrides provenance label {label_name}",
                     )
                 )
         selected_dockerfile = build.get("dockerfile")
