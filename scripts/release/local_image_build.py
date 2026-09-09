@@ -103,8 +103,8 @@ def _is_docker_ignored(path: Path, *, root: Path, patterns: Sequence[str]) -> bo
     return ignored
 
 
-def _copied_source_directories(root: Path) -> set[Path]:
-    directories: set[Path] = set()
+def _copied_source_paths(root: Path) -> set[Path]:
+    paths: set[Path] = set()
     for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
         for line in _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8")):
             if not line.lstrip().upper().startswith("COPY "):
@@ -128,16 +128,16 @@ def _copied_source_directories(root: Path) -> set[Path]:
                 raise ValueError(f"Dockerfile COPY instruction lacks a destination: {line}")
             for source in arguments[:-1]:
                 candidate = (root / source).resolve()
-                if candidate.is_dir() and candidate.is_relative_to(root.resolve()):
-                    directories.add(candidate)
-    return directories
+                if candidate.exists() and candidate.is_relative_to(root.resolve()):
+                    paths.add(candidate)
+    return paths
 
 
 def _has_untracked_empty_context_directory(root: Path) -> bool:
     patterns = _dockerignore_patterns(root)
     return any(
         True
-        for source_root in _copied_source_directories(root)
+        for source_root in _copied_source_paths(root)
         for directory in chain((source_root,), source_root.rglob("*"))
         if directory.is_dir()
         and not any(directory.iterdir())
@@ -179,7 +179,7 @@ def discover_local_build_metadata(
         # status even though Docker still reads their working-tree content.
         dirty = _has_hidden_index_flags(root, runner=runner)
     if not dirty:
-        copied_sources = _copied_source_directories(root)
+        copied_sources = _copied_source_paths(root)
         copied_pathspecs = tuple(
             source.relative_to(root).as_posix() for source in sorted(copied_sources)
         )
