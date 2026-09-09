@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,6 +65,26 @@ def test_metadata_detects_untracked_files_when_git_config_hides_them(tmp_path: P
     expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
     _run_git(tmp_path, "config", "status.showUntrackedFiles", "no")
     tmp_path.joinpath("untracked-source.py").write_text("value = 1\n", encoding="utf-8")
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows worktrees do not expose POSIX mode changes")
+def test_metadata_detects_mode_change_when_git_config_hides_it(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    source = tmp_path / "source.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore", "source.py")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    _run_git(tmp_path, "config", "core.fileMode", "false")
+    source.chmod(source.stat().st_mode | 0o111)
 
     assert _run_git(tmp_path, "status", "--porcelain") == ""
     metadata = discover_local_build_metadata(tmp_path)

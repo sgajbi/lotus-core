@@ -605,6 +605,13 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
         ]
 
     for service_name, service in services.items():
+        if isinstance(service, dict) and service.get("extends") is not None:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must not inherit an uninspected configuration",
+                )
+            )
         build = service.get("build") if isinstance(service, dict) else None
         if build is None:
             continue
@@ -720,7 +727,8 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
     script_content = build_script.read_text(encoding="utf-8")
     for required in (
         "git_commit_sha",
-        '"status", "--porcelain"',
+        '"core.fileMode=true"',
+        '"status",',
         "unavailable-before-push",
         "unavailable-local-build",
     ):

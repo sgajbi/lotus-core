@@ -24,7 +24,6 @@ _GOVERNED_ASSIGNMENT_DECLARATIONS = frozenset(
         "LOCAL_CERTIFICATION_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--runtime-build)",
         "LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--build)",
         "OPENAPI_ARTIFACT_DIR ?= output/openapi",
-        "REPOSITORY_PYTHON := python scripts/development/repository_python.py",
         "override REPOSITORY_PYTHON := python scripts/development/repository_python.py",
         "TRANSACTION_RELEASE_OUTPUT ?= "
         "output/task-runs/transaction-processing-release-rehearsal.json",
@@ -68,7 +67,6 @@ _SAFE_RECIPE_PRECONDITION = re.compile(
     r"\$\(error [^)]*\)\)$"
 )
 _REPOSITORY_PYTHON_DECLARATIONS = (
-    "REPOSITORY_PYTHON := python scripts/development/repository_python.py",
     "override REPOSITORY_PYTHON := python scripts/development/repository_python.py",
 )
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")

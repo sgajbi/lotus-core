@@ -107,7 +107,7 @@ docker-up:
     )
     local_build = root / "scripts" / "release" / "local_image_build.py"
     local_build.write_text(
-        'git_commit_sha\n"status", "--porcelain"\nunavailable-before-push\n'
+        'git_commit_sha\n"core.fileMode=true"\n"status",\nunavailable-before-push\n'
         "unavailable-local-build\n",
         encoding="utf-8",
     )
@@ -261,6 +261,24 @@ def test_image_provenance_guard_rejects_shorthand_compose_build(tmp_path: Path) 
     findings = find_image_provenance_findings(tmp_path)
 
     assert any("query_service must use mapping form" in f.detail for f in findings)
+
+
+def test_image_provenance_guard_rejects_inherited_compose_build(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "  query_service:\n    build:\n",
+            "  query_service:\n    extends:\n      file: compose-base.yml\n"
+            "      service: ungoverned-query-service\n    build:\n",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("must not inherit an uninspected configuration" in f.detail for f in findings)
 
 
 def test_image_provenance_guard_rejects_make_build_path_bypass(tmp_path: Path) -> None:
