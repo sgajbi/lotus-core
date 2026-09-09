@@ -25,6 +25,7 @@ _GOVERNED_ASSIGNMENT_DECLARATIONS = frozenset(
         "LOCAL_RUNTIME_BUILD_ARGUMENT = $(if $(CI_IS_TRUE),,--build)",
         "OPENAPI_ARTIFACT_DIR ?= output/openapi",
         "REPOSITORY_PYTHON := python scripts/development/repository_python.py",
+        "override REPOSITORY_PYTHON := python scripts/development/repository_python.py",
         "TRANSACTION_RELEASE_OUTPUT ?= "
         "output/task-runs/transaction-processing-release-rehearsal.json",
         "TRANSACTION_RELEASE_PULL_IMAGES ?= false",
@@ -66,8 +67,9 @@ _SAFE_RECIPE_PRECONDITION = re.compile(
     r"^\$\(if \$\(strip \$\([A-Za-z0-9_.-]+\)\),,"
     r"\$\(error [^)]*\)\)$"
 )
-_REPOSITORY_PYTHON_DECLARATION = (
-    "REPOSITORY_PYTHON := python scripts/development/repository_python.py"
+_REPOSITORY_PYTHON_DECLARATIONS = (
+    "REPOSITORY_PYTHON := python scripts/development/repository_python.py",
+    "override REPOSITORY_PYTHON := python scripts/development/repository_python.py",
 )
 _ASSIGNMENT_OPERATORS = ("::=", ":=", "+=", "?=", "!=", "=")
 
@@ -156,7 +158,7 @@ def static_recipe_command_variables(lines: list[str]) -> frozenset[str]:
     """Return the exact static variables admitted as recipe command identities."""
 
     variables = {"MAKE"}
-    if lines.count(_REPOSITORY_PYTHON_DECLARATION) == 1:
+    if sum(lines.count(declaration) for declaration in _REPOSITORY_PYTHON_DECLARATIONS) == 1:
         variables.add("REPOSITORY_PYTHON")
     return frozenset(variables)
 
