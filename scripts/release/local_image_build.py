@@ -128,6 +128,8 @@ def _copied_source_paths(root: Path) -> set[Path]:
             if len(arguments) < 2:
                 raise ValueError(f"Dockerfile COPY instruction lacks a destination: {line}")
             for source in arguments[:-1]:
+                if any(character in source for character in "*?["):
+                    raise ValueError(f"Dockerfile wildcard COPY sources are not supported: {line}")
                 candidate = Path(os.path.abspath(root / source))
                 if candidate.exists() and candidate.is_relative_to(lexical_root):
                     paths.add(candidate)
@@ -142,8 +144,11 @@ def _has_untracked_empty_context_directory(root: Path) -> bool:
         for directory in chain((source_root,), source_root.rglob("*"))
         if not directory.is_symlink()
         and directory.is_dir()
-        and not any(directory.iterdir())
         and not _is_docker_ignored(directory, root=root, patterns=patterns)
+        and not any(
+            not _is_docker_ignored(child, root=root, patterns=patterns)
+            for child in directory.iterdir()
+        )
     )
 
 

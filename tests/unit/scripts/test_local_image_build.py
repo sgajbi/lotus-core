@@ -340,6 +340,24 @@ def test_metadata_detects_ignored_directly_copied_symlink(tmp_path: Path) -> Non
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+def test_metadata_rejects_wildcard_copy_source(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\nCOPY src/data/*.json /app/\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="wildcard COPY sources are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
 def test_metadata_ignores_empty_directory_excluded_from_docker_context(tmp_path: Path) -> None:
     _write_project(tmp_path)
     app = tmp_path / "src" / "services" / "query_service" / "app"
@@ -361,6 +379,34 @@ def test_metadata_ignores_empty_directory_excluded_from_docker_context(tmp_path:
     metadata = discover_local_build_metadata(tmp_path)
 
     assert metadata.git_commit_sha == expected_head
+
+
+def test_metadata_detects_directory_emptied_by_dockerignore(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\nCOPY src/services/query_service/app /app\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    tmp_path.joinpath(".dockerignore").write_text(".cache\n", encoding="utf-8")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    local_directory = tmp_path / "src" / "services" / "query_service" / "app" / "local-dir"
+    local_directory.mkdir(parents=True)
+    local_directory.joinpath(".cache").write_text("ignored\n", encoding="utf-8")
+    tmp_path.joinpath(".git", "info", "exclude").write_text(
+        "src/services/query_service/app/local-dir/\n", encoding="utf-8"
+    )
+
+    assert _run_git(tmp_path, "status", "--porcelain") == ""
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
 def test_metadata_ignores_local_artifacts_excluded_from_docker_context(
