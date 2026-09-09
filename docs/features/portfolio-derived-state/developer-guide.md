@@ -12,15 +12,19 @@ One deployable contains two explicit module flows.
       `valuation.snapshot.persisted` events.
     * `MaterializePositionTimeseries` loads immutable source records through a repository port,
       invokes `calculate_position_timeseries`, and performs bounded backdated propagation.
-    * Its SQLAlchemy adapter atomically persists `position_timeseries` rows and idempotently stages a portfolio aggregation job for each affected portfolio date.
+    * Its SQLAlchemy adapter atomically persists `position_timeseries` rows and idempotently stages
+      a portfolio aggregation job for each affected portfolio date. Staging resolves the job's
+      non-null tenant from the source `Portfolio`; callers do not supply or infer it.
 
 2.  **Stage 2: Portfolio Time-Series Aggregation**
     * `AggregationScheduler` polls `portfolio_aggregation_jobs` for eligible work.
-    * It has special logic to only claim a job for a given day `D` if the portfolio time-series for day `D-1` already exists, ensuring sequential processing.
-    * A claim records owner, token, and UTC expiry. Bounded workers invoke
+    * Complete portfolio days may be claimed in parallel; readiness is proven from the latest
+      position snapshot and matching position-timeseries evidence rather than a preceding
+      portfolio row.
+    * A claim records source tenant, owner, token, and UTC expiry. Bounded workers invoke
       `MaterializePortfolioTimeseries` directly through framework-neutral commands.
-    * Terminal writes require the same job ID, lease token, and `PROCESSING` state. The unit of work
-      atomically writes output and stages completion/reconciliation events.
+    * Terminal writes require the same tenant, job ID, lease token, and `PROCESSING` state. The unit
+      of work atomically writes output and stages completion/reconciliation events.
 
 ## 2. Adding a New Field to the Time-Series
 
@@ -50,5 +54,9 @@ To run the unit tests specifically for the time-series logic, use the following 
 python -m pytest tests/unit/services/portfolio_derived_state_service -q
 
 # PostgreSQL repository and lease-fencing behavior
-python -m pytest tests/integration/services/portfolio_derived_state_service -q
+LOTUS_TESTS_DOCKER_BUILD=true python -m pytest \
+  tests/integration/services/portfolio_derived_state_service -q
 ```
+
+The explicit build flag makes local PostgreSQL proof use the current checkout's migration image.
+CI uses the governed exact-source runtime image set instead.

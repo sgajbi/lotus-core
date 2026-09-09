@@ -47,6 +47,13 @@ After position materialization, the service idempotently stages one
 jobs directly from PostgreSQL and bounded workers invoke the portfolio-timeseries use case. The
 queue is the durable internal command boundary; there is no private aggregation Kafka topic.
 
+Each job stores the non-null tenant authority resolved from its source `portfolios` row. The
+tenant participates in the durable job identity and its composite foreign key, is rehydrated as a
+typed `TenantId` on claim, and is required by portfolio lookup and terminal lease transitions.
+Staging fails closed when the portfolio has no durable owner; a foreign tenant cannot complete or
+fail another tenant's claimed job. Market prices, FX rates, instruments, and governed calendars
+remain explicitly global reference-data products and do not acquire synthetic portfolio tenancy.
+
 The preserved consumer group is `timeseries_generator_group_positions`. Keeping this identifier is
 an intentional offset-compatibility decision, not a surviving legacy service.
 
