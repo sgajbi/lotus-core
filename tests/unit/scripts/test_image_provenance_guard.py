@@ -200,6 +200,29 @@ def test_image_provenance_guard_rejects_dockerfile_heredoc(tmp_path: Path) -> No
     assert any("Dockerfile heredocs are not permitted" in finding.detail for finding in findings)
 
 
+def test_image_provenance_guard_accepts_harmless_double_angle_text(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(
+        tmp_path,
+        _complete_dockerfile() + "\n# explain <<EOF\nRUN printf '%s' '<<'\n",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert not any(
+        "Dockerfile heredocs are not permitted" in finding.detail for finding in findings
+    )
+
+
+def test_image_provenance_guard_rejects_nondefault_escape_directive(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, "# escape=`\n" + _complete_dockerfile())
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("non-default Dockerfile escape directives" in finding.detail for finding in findings)
+
+
 @pytest.mark.parametrize("stage_reference", ["builder", "0"])
 def test_image_provenance_guard_accepts_local_stage_bind_mount(
     tmp_path: Path, stage_reference: str
