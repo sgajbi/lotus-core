@@ -112,18 +112,35 @@ def _copied_source_paths(root: Path) -> set[Path]:
     paths: set[Path] = set()
     lexical_root = Path(os.path.abspath(root))
     for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
-        for line in _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8")):
+        lines = _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8"))
+        stage_names = {
+            tokens[-1]
+            for line in lines
+            if (tokens := line.split())
+            and tokens[0].upper() == "FROM"
+            and len(tokens) >= 3
+            and tokens[-2].upper() == "AS"
+        }
+        for line in lines:
             instruction = line.lstrip().split(maxsplit=1)[0].upper()
             if instruction == "ADD":
                 raise ValueError("Dockerfile ADD instructions are not supported")
             if instruction != "COPY":
                 continue
             raw_arguments = line.split(maxsplit=1)[1].lstrip()
+            copy_from: str | None = None
             while raw_arguments.startswith("--"):
                 flag, separator, raw_arguments = raw_arguments.partition(" ")
                 if not separator or "=" not in flag:
                     raise ValueError(f"unsupported Dockerfile COPY flag syntax: {line}")
+                flag_name, _, flag_value = flag.partition("=")
+                if flag_name == "--from":
+                    copy_from = flag_value
                 raw_arguments = raw_arguments.lstrip()
+            if copy_from is not None:
+                if copy_from not in stage_names:
+                    raise ValueError(f"Dockerfile external COPY sources are not supported: {line}")
+                continue
             if raw_arguments.startswith("["):
                 parsed = json.loads(raw_arguments)
                 if not isinstance(parsed, list) or not all(
