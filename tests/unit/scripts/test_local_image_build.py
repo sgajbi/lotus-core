@@ -114,18 +114,52 @@ def test_metadata_fails_closed_for_hidden_index_flags(tmp_path: Path, index_flag
 
 def test_metadata_detects_ignored_files_in_docker_context(tmp_path: Path) -> None:
     _write_project(tmp_path)
+    app = tmp_path / "src" / "services" / "query_service" / "app"
+    app.mkdir(parents=True)
+    app.joinpath("main.py").write_text("value = 1\n", encoding="utf-8")
+    dockerfile = app.parent / "Dockerfile"
+    dockerfile.write_text(
+        "FROM scratch\nCOPY src/services/query_service/app /app\n", encoding="utf-8"
+    )
     _run_git(tmp_path, "init", "--initial-branch", "main")
     _run_git(tmp_path, "config", "user.name", "Local Build Test")
     _run_git(tmp_path, "config", "user.email", "local-build@example.test")
-    _run_git(tmp_path, "add", "pyproject.toml", ".dockerignore", ".gitignore")
+    _run_git(tmp_path, "add", ".")
     _run_git(tmp_path, "commit", "-m", "test fixture")
     expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
-    tmp_path.joinpath(".git", "info", "exclude").write_text("ignored-source.py\n", encoding="utf-8")
-    tmp_path.joinpath("ignored-source.py").write_text("value = 1\n", encoding="utf-8")
+    tmp_path.joinpath(".git", "info", "exclude").write_text(
+        "src/services/query_service/app/ignored-source.py\n", encoding="utf-8"
+    )
+    app.joinpath("ignored-source.py").write_text("value = 1\n", encoding="utf-8")
 
     metadata = discover_local_build_metadata(tmp_path)
 
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
+
+
+def test_metadata_ignores_ignored_file_outside_copied_sources(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    app = tmp_path / "src" / "services" / "query_service" / "app"
+    app.mkdir(parents=True)
+    app.joinpath("main.py").write_text("value = 1\n", encoding="utf-8")
+    dockerfile = app.parent / "Dockerfile"
+    dockerfile.write_text(
+        "FROM scratch\nCOPY src/services/query_service/app /app\n", encoding="utf-8"
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+    tmp_path.joinpath(".git", "info", "exclude").write_text(
+        ".import_linter_cache\n", encoding="utf-8"
+    )
+    tmp_path.joinpath(".import_linter_cache").write_text("local\n", encoding="utf-8")
+
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == expected_head
 
 
 def test_metadata_detects_untracked_empty_directory_in_copied_source(tmp_path: Path) -> None:
