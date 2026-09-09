@@ -67,6 +67,23 @@ def _dockerignore_patterns(root: Path) -> tuple[str, ...]:
     )
 
 
+def _dockerfile_logical_lines(content: str) -> tuple[str, ...]:
+    lines: list[str] = []
+    current = ""
+    for physical_line in content.splitlines():
+        fragment = physical_line.strip()
+        current = f"{current} {fragment}".strip()
+        if current.endswith("\\"):
+            current = current[:-1].rstrip()
+            continue
+        if current:
+            lines.append(current)
+        current = ""
+    if current:
+        lines.append(current)
+    return tuple(lines)
+
+
 def _is_docker_ignored(path: Path, *, root: Path, patterns: Sequence[str]) -> bool:
     relative = path.relative_to(root).as_posix()
     candidate = PurePosixPath(relative)
@@ -88,7 +105,7 @@ def _is_docker_ignored(path: Path, *, root: Path, patterns: Sequence[str]) -> bo
 def _copied_source_directories(root: Path) -> set[Path]:
     directories: set[Path] = set()
     for dockerfile in (root / "src" / "services").rglob("Dockerfile"):
-        for line in dockerfile.read_text(encoding="utf-8").splitlines():
+        for line in _dockerfile_logical_lines(dockerfile.read_text(encoding="utf-8")):
             if not line.lstrip().upper().startswith("COPY "):
                 continue
             tokens = shlex.split(line, posix=True)

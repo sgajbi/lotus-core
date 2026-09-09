@@ -238,6 +238,32 @@ def test_metadata_detects_untracked_empty_copied_source_root(tmp_path: Path) -> 
     assert metadata.git_commit_sha == f"{expected_head}-dirty"
 
 
+def test_metadata_accepts_continued_multi_source_copy(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    first = tmp_path / "src" / "one"
+    second = tmp_path / "src" / "two"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    first.joinpath("one.py").write_text("one = 1\n", encoding="utf-8")
+    second.joinpath("two.py").write_text("two = 2\n", encoding="utf-8")
+    service.joinpath("Dockerfile").write_text(
+        "FROM scratch\nCOPY src/one \\\n  src/two /build/\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+    expected_head = _run_git(tmp_path, "rev-parse", "HEAD")
+
+    metadata = discover_local_build_metadata(tmp_path)
+
+    assert metadata.git_commit_sha == expected_head
+
+
 def test_metadata_ignores_empty_directory_excluded_from_docker_context(tmp_path: Path) -> None:
     _write_project(tmp_path)
     app = tmp_path / "src" / "services" / "query_service" / "app"
