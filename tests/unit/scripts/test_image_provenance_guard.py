@@ -306,6 +306,26 @@ def test_image_provenance_guard_rejects_compose_additional_build_context(
     assert any("must not use additional build contexts" in finding.detail for finding in findings)
 
 
+@pytest.mark.parametrize("external_input", ["secrets", "ssh"])
+def test_image_provenance_guard_rejects_compose_external_build_input(
+    tmp_path: Path, external_input: str
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "      context: .\n",
+            f"      context: .\n      {external_input}:\n        - external-input\n",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(f"must not use external {external_input}" in finding.detail for finding in findings)
+
+
 def test_image_provenance_guard_rejects_compose_env_file(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     _write_dockerfile(tmp_path, _complete_dockerfile())

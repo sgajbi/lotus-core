@@ -646,6 +646,14 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                     f"Compose build {service_name} must not use additional build contexts",
                 )
             )
+        for external_input in ("secrets", "ssh"):
+            if build.get(external_input) is not None:
+                findings.append(
+                    ImageProvenanceFinding(
+                        _relative(compose_path, root),
+                        f"Compose build {service_name} must not use external {external_input}",
+                    )
+                )
         selected_dockerfile = build.get("dockerfile")
         if not isinstance(selected_dockerfile, str):
             findings.append(

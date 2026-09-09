@@ -359,6 +359,41 @@ def test_metadata_rejects_dynamic_or_wildcard_copy_source(tmp_path: Path, source
         discover_local_build_metadata(tmp_path)
 
 
+@pytest.mark.parametrize("source", ["/src/data", "../external", "src/../external"])
+def test_metadata_rejects_absolute_or_parent_copy_source(tmp_path: Path, source: str) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text(
+        f"FROM scratch\nCOPY {source} /app/\n",
+        encoding="utf-8",
+    )
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="absolute or parent COPY sources are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
+def test_metadata_rejects_dockerfile_specific_ignore_file(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    service = tmp_path / "src" / "services" / "query_service"
+    service.mkdir(parents=True)
+    service.joinpath("Dockerfile").write_text("FROM scratch\nCOPY . /app\n", encoding="utf-8")
+    service.joinpath("Dockerfile.dockerignore").write_text("", encoding="utf-8")
+    _run_git(tmp_path, "init", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.name", "Local Build Test")
+    _run_git(tmp_path, "config", "user.email", "local-build@example.test")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "-m", "test fixture")
+
+    with pytest.raises(ValueError, match="Dockerfile-specific ignore files are not supported"):
+        discover_local_build_metadata(tmp_path)
+
+
 def test_metadata_rejects_negated_dockerignore_pattern(tmp_path: Path) -> None:
     _write_project(tmp_path)
     service = tmp_path / "src" / "services" / "query_service"
