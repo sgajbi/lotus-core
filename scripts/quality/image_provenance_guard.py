@@ -639,6 +639,13 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                     f"Compose build {service_name} must use the governed repository context",
                 )
             )
+        if build.get("additional_contexts") is not None:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must not use additional build contexts",
+                )
+            )
         selected_dockerfile = build.get("dockerfile")
         if not isinstance(selected_dockerfile, str):
             findings.append(
@@ -678,6 +685,13 @@ def _local_build_path_findings(root: Path) -> list[ImageProvenanceFinding]:
                         f"Compose build {service_name} overrides runtime provenance {arg_name}",
                     )
                 )
+        if service.get("env_file") is not None:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(compose_path, root),
+                    f"Compose build {service_name} must not use an uninspected env_file",
+                )
+            )
         args = build.get("args")
         for arg_name in REQUIRED_METADATA_ARGS:
             if not isinstance(args, dict) or arg_name not in args:

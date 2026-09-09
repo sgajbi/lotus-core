@@ -287,6 +287,42 @@ def test_image_provenance_guard_rejects_compose_runtime_metadata_override(
     )
 
 
+def test_image_provenance_guard_rejects_compose_additional_build_context(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "      context: .\n",
+            "      context: .\n      additional_contexts:\n        external: ../external\n",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("must not use additional build contexts" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_compose_env_file(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "  query_service:\n    build:\n",
+            "  query_service:\n    env_file: .env\n    build:\n",
+        ),
+        encoding="utf-8",
+    )
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("must not use an uninspected env_file" in finding.detail for finding in findings)
+
+
 def test_image_provenance_guard_rejects_shorthand_compose_build(tmp_path: Path) -> None:
     _write_required_sources(tmp_path)
     _write_dockerfile(tmp_path, _complete_dockerfile())
