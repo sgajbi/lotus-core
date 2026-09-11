@@ -76,6 +76,12 @@ AGGREGATION_JOB_TENANT_MIGRATION = (
     / "versions"
     / "c168b2c3d52f_feat_add_aggregation_job_tenant.py"
 )
+REQUIRED_PORTFOLIO_TENANT_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c165b2c3d52c_fix_require_portfolio_tenant.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -129,6 +135,15 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
         _bind_operations(aggregation_job_tenant_migration, connection)
         aggregation_job_tenant_migration["downgrade"]()
         dependent_migrations.append(aggregation_job_tenant_migration)
+    if "tenant_id" in {
+        column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
+    }:
+        required_portfolio_tenant_migration: dict[str, Any] = runpy.run_path(
+            str(REQUIRED_PORTFOLIO_TENANT_MIGRATION)
+        )
+        _bind_operations(required_portfolio_tenant_migration, connection)
+        required_portfolio_tenant_migration["downgrade"]()
+        dependent_migrations.append(required_portfolio_tenant_migration)
     for migration_path, revision_is_present in (
         (
             CORPORATE_ACTION_DEPENDENT_MIGRATIONS[0],
@@ -302,6 +317,11 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             },
         )
 
+        # The historical c118 contract permits a fully unscoped row. Current
+        # c165 correctly refuses that ambiguity, so do not carry the deliberate
+        # rollback fixture into the restored head schema.
+        connection.execute(text("DELETE FROM portfolios WHERE portfolio_id = 'LEGACY-UNSCOPED'"))
+
         for dependent_migration in reversed(dependent_migrations):
             dependent_migration["upgrade"]()
         if dependent_migrations:
@@ -333,3 +353,12 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
                     for foreign_key in inspector.get_foreign_keys("portfolio_aggregation_jobs")
                 }
                 assert "fk_portfolio_aggregation_jobs_tenant_portfolio" in foreign_keys
+            if any(migration["revision"] == "c165b2c3d52c" for migration in dependent_migrations):
+                connection.execute(
+                    PORTFOLIO_INSERT,
+                    {
+                        "portfolio_id": "HEAD-TENANT-WITHOUT-BOOK",
+                        "tenant_id": "TENANT-SG",
+                        "legal_book_id": None,
+                    },
+                )
