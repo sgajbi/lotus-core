@@ -70,6 +70,12 @@ CORPORATE_ACTION_DEPENDENT_MIGRATIONS = tuple(
         "c153b2c3d520_feat_add_corporate_action_execution_releases.py",
     )
 )
+AGGREGATION_JOB_TENANT_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c168b2c3d52f_feat_add_aggregation_job_tenant.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -114,6 +120,16 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
     dependent_migrations: list[dict[str, Any]] = []
+    if "tenant_id" in {
+        column["name"]
+        for column in inspect(connection).get_columns("portfolio_aggregation_jobs")
+    }:
+        aggregation_job_tenant_migration: dict[str, Any] = runpy.run_path(
+            str(AGGREGATION_JOB_TENANT_MIGRATION)
+        )
+        _bind_operations(aggregation_job_tenant_migration, connection)
+        aggregation_job_tenant_migration["downgrade"]()
+        dependent_migrations.append(aggregation_job_tenant_migration)
     for migration_path, revision_is_present in (
         (
             CORPORATE_ACTION_DEPENDENT_MIGRATIONS[0],
@@ -309,3 +325,13 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             if any(migration["revision"] == "c146b2c3d513" for migration in dependent_migrations):
                 assert inspector.has_table("lot_basis_transfer_receipts")
                 assert inspector.has_table("lot_basis_transfer_allocations")
+            if any(migration["revision"] == "c168b2c3d52f" for migration in dependent_migrations):
+                assert "tenant_id" in {
+                    column["name"]
+                    for column in inspector.get_columns("portfolio_aggregation_jobs")
+                }
+                foreign_keys = {
+                    foreign_key["name"]
+                    for foreign_key in inspector.get_foreign_keys("portfolio_aggregation_jobs")
+                }
+                assert "fk_portfolio_aggregation_jobs_tenant_portfolio" in foreign_keys
