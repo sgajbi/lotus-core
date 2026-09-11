@@ -405,20 +405,22 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         if target_epoch < 0:
             raise ValueError("Aggregation target epoch cannot be negative.")
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        tenant_id = await self._required_portfolio_tenant_id(normalized_portfolio_id)
+        source_portfolio_id, tenant_id = await self._required_portfolio_authority(
+            normalized_portfolio_id
+        )
 
         insert_values = []
         for aggregation_date in normalized_dates:
             diagnostics = durable_correlation_diagnostics(
                 correlation_id=correlation_id,
                 record_family="aggregation_job",
-                portfolio_id=normalized_portfolio_id,
+                portfolio_id=source_portfolio_id,
                 aggregation_date=aggregation_date,
             )
             insert_values.append(
                 {
                     "tenant_id": tenant_id.value,
-                    "portfolio_id": normalized_portfolio_id,
+                    "portfolio_id": source_portfolio_id,
                     "aggregation_date": aggregation_date,
                     "status": "PENDING",
                     "target_epoch": target_epoch,
@@ -506,11 +508,13 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         if end_date_exclusive is not None and end_date_exclusive <= start_date:
             return 0
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        tenant_id = await self._required_portfolio_tenant_id(normalized_portfolio_id)
+        source_portfolio_id, tenant_id = await self._required_portfolio_authority(
+            normalized_portfolio_id
+        )
         normalized_excluded_dates = sorted(set(excluded_dates))
         predicates = [
             PortfolioAggregationJob.tenant_id == tenant_id.value,
-            PortfolioAggregationJob.portfolio_id == normalized_portfolio_id,
+            PortfolioAggregationJob.portfolio_id == source_portfolio_id,
             PortfolioAggregationJob.aggregation_date >= start_date,
             PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING", "COMPLETE", "FAILED")),
         ]
@@ -524,7 +528,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         interval_correlation = durable_correlation_diagnostics(
             correlation_id=correlation_id,
             record_family="aggregation_carry_forward_interval",
-            portfolio_id=normalized_portfolio_id,
+            portfolio_id=source_portfolio_id,
             start_date=start_date,
             end_date_exclusive=end_date_exclusive,
         ).correlation_id
@@ -584,21 +588,22 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         )
         return restaged_count
 
-    async def _required_portfolio_tenant_id(self, portfolio_id: str) -> TenantId:
-        """Resolve the durable source tenant before staging portfolio-owned work."""
+    async def _required_portfolio_authority(self, portfolio_id: str) -> tuple[str, TenantId]:
+        """Resolve the durable portfolio identity and tenant before staging owned work."""
 
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         result = await self.db.execute(
-            select(Portfolio.tenant_id).where(
+            select(Portfolio.portfolio_id, Portfolio.tenant_id).where(
                 func.trim(Portfolio.portfolio_id) == normalized_portfolio_id
             )
         )
-        source_tenant_id = result.scalar_one_or_none()
-        if source_tenant_id is None:
+        source_authority = result.one_or_none()
+        if source_authority is None:
             raise LookupError(
                 f"Portfolio {normalized_portfolio_id!r} has no durable tenant authority."
             )
-        return TenantId(str(source_tenant_id))
+        source_portfolio_id, source_tenant_id = source_authority
+        return str(source_portfolio_id), TenantId(str(source_tenant_id))
 
 
 def _observe_aggregation_staging_outcomes(

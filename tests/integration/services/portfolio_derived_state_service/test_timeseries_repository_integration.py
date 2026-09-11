@@ -80,6 +80,74 @@ def _lease(identity: str) -> AggregationJobLeaseClaim:
 
 
 @pytest.mark.lifecycle
+async def test_aggregation_staging_preserves_authoritative_legacy_portfolio_identity(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    stored_portfolio_id = " PORT-AGG-LEGACY-ID "
+    aggregation_date = date(2026, 9, 11)
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            portfolio_id=stored_portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="balanced",
+            investment_time_horizon="long_term",
+            portfolio_type="discretionary",
+            booking_center_code="SG_BOOKING",
+            client_id="CLIENT-AGG-LEGACY-ID",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.flush()
+    repository = TimeseriesGenerationRepository(async_db_session)
+
+    await repository.stage_aggregation_jobs(
+        stored_portfolio_id.strip(),
+        [aggregation_date],
+        3,
+        "corr-aggregation-legacy-id",
+    )
+    await async_db_session.commit()
+
+    staged_job = await async_db_session.scalar(
+        select(PortfolioAggregationJob).where(
+            PortfolioAggregationJob.tenant_id == TEST_TENANT_ID,
+            PortfolioAggregationJob.portfolio_id == stored_portfolio_id,
+            PortfolioAggregationJob.aggregation_date == aggregation_date,
+        )
+    )
+    assert staged_job is not None
+    assert staged_job.source_revision == 1
+    staged_job.status = "COMPLETE"
+    await async_db_session.commit()
+
+    restaged_count = await repository.restage_aggregation_jobs_in_carry_forward_interval(
+        stored_portfolio_id.strip(),
+        start_date=aggregation_date,
+        end_date_exclusive=aggregation_date + timedelta(days=1),
+        excluded_dates=[],
+        target_epoch=4,
+        correlation_id="corr-aggregation-legacy-id-restage",
+    )
+    await async_db_session.commit()
+
+    restaged_job = await async_db_session.scalar(
+        select(PortfolioAggregationJob).where(
+            PortfolioAggregationJob.tenant_id == TEST_TENANT_ID,
+            PortfolioAggregationJob.portfolio_id == stored_portfolio_id,
+            PortfolioAggregationJob.aggregation_date == aggregation_date,
+        )
+    )
+    assert restaged_count == 1
+    assert restaged_job is not None
+    assert restaged_job.status == "PENDING"
+    assert restaged_job.target_epoch == 4
+    assert restaged_job.source_revision == 2
+
+
+@pytest.mark.lifecycle
 async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
     clean_db,
     async_db_session: AsyncSession,

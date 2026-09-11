@@ -54,7 +54,7 @@ def mock_db_session() -> AsyncMock:
         {"id": 1, "portfolio_id": "P1", "aggregation_date": date(2025, 1, 1)}
     ]
     mock_result.scalar.return_value = True
-    mock_result.scalar_one_or_none.return_value = "tenant-test"
+    mock_result.one_or_none.return_value = ("PORT_TS_POS_01", "tenant-test")
     mock_result.fetchall.return_value = []
     mock_result.rowcount = 1
 
@@ -561,7 +561,7 @@ async def test_stage_aggregation_jobs_refuses_missing_source_tenant(
     repository: TimeseriesGenerationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_db_session.execute.return_value.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value.one_or_none.return_value = None
 
     with pytest.raises(
         LookupError,
@@ -583,6 +583,32 @@ async def test_stage_aggregation_jobs_refuses_missing_source_tenant(
         )
     )
     assert "trim(portfolios.portfolio_id) = 'PORT_TS_POS_01'" in compiled_source_query
+
+
+async def test_stage_aggregation_jobs_preserves_authoritative_portfolio_id(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value.one_or_none.return_value = (
+        " PORT_TS_POS_01 ",
+        "tenant-test",
+    )
+
+    await repository.stage_aggregation_jobs(
+        "PORT_TS_POS_01",
+        [date(2025, 8, 12)],
+        4,
+        "corr-authoritative-identity",
+    )
+
+    staged_statement = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_statement = str(
+        staged_statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "' PORT_TS_POS_01 '" in compiled_statement
 
 
 async def test_portfolio_aggregation_mutation_fence_uses_stable_transaction_lock(
