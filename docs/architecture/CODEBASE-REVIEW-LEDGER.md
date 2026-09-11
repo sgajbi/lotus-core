@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1725 Portfolio aggregation job tenant authority (2026-09-11, fixed-local candidate): #798
+showed that durable aggregation work retained portfolio/date lineage and lease fencing but omitted
+the source portfolio tenant. Staging now resolves tenant only from durable portfolio ownership;
+claims carry typed `TenantId`; source reads and terminal transitions require the same tenant; and
+migration c168 backfills from portfolios while refusing unattributable rows. PostgreSQL proof covers
+backfill, tenant-positive completion, foreign-tenant refusal, repeated staging, recovery and
+concurrent claiming. The aggregate's schema contract moved from the legacy ORM monolith into its
+own schema module, ratcheting `database_models.py` from 5,566 to 5,511 lines. Global instrument,
+price, FX and business-calendar authority remains unchanged. Other durable tenant boundaries remain
+separate #798 tranches. Evidence:
+[CR-1725-PORTFOLIO-AGGREGATION-TENANT-AUTHORITY.md](./codebase-reviews/CR-1725-PORTFOLIO-AGGREGATION-TENANT-AUTHORITY.md).
+
 CR-1724 Shipped Python runtime parity (2026-09-09, fixed-local candidate): issue #1046 showed that
 all service images and Windows dependency replay used Python 3.11 while the five GitHub workflows,
 Ruff, and mypy used Python 3.12. The repository now records 3.11 in `.python-version`, aligns the
