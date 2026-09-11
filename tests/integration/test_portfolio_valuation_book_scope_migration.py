@@ -121,8 +121,7 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
 
     dependent_migrations: list[dict[str, Any]] = []
     if "tenant_id" in {
-        column["name"]
-        for column in inspect(connection).get_columns("portfolio_aggregation_jobs")
+        column["name"] for column in inspect(connection).get_columns("portfolio_aggregation_jobs")
     }:
         aggregation_job_tenant_migration: dict[str, Any] = runpy.run_path(
             str(AGGREGATION_JOB_TENANT_MIGRATION)
@@ -327,8 +326,7 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
                 assert inspector.has_table("lot_basis_transfer_allocations")
             if any(migration["revision"] == "c168b2c3d52f" for migration in dependent_migrations):
                 assert "tenant_id" in {
-                    column["name"]
-                    for column in inspector.get_columns("portfolio_aggregation_jobs")
+                    column["name"] for column in inspector.get_columns("portfolio_aggregation_jobs")
                 }
                 foreign_keys = {
                     foreign_key["name"]
