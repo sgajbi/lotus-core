@@ -9,9 +9,9 @@
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5566,
+      "lines": 5511,
       "owner": "lotus-core maintainers",
-      "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Ingestion-job constraints and indexes now live in the owning schema module, and this lower ceiling prevents the extracted surface returning to the monolith.",
+      "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Ingestion-job and portfolio-aggregation-job constraints and indexes now live in owning schema modules, and this lower ceiling prevents extracted surfaces returning to the monolith.",
       "issue": "#462",
       "expires_on": "2027-02-28"
     },
