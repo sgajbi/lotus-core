@@ -48,12 +48,21 @@ If a new metric needs to be added to the `portfolio_timeseries` table (e.g., `to
 
 ## 3. Testing
 
-To run the unit tests specifically for the time-series logic, use the following commands from the project root:
-```bash
-# Position and portfolio application/domain/adapters plus runtime supervision
-python -m pytest tests/unit/services/portfolio_derived_state_service -q
+Run the focused proof from the `lotus-core` repository root. Build the PostgreSQL fixture from the
+current checkout so its schema includes the migration under test.
 
-# PostgreSQL repository and lease-fencing behavior
+PowerShell:
+
+```powershell
+python -m pytest tests/unit/services/portfolio_derived_state_service -q
+$env:LOTUS_TESTS_DOCKER_BUILD = "true"
+python -m pytest tests/integration/services/portfolio_derived_state_service -q
+```
+
+POSIX shell:
+
+```bash
+python -m pytest tests/unit/services/portfolio_derived_state_service -q
 LOTUS_TESTS_DOCKER_BUILD=true python -m pytest \
   tests/integration/services/portfolio_derived_state_service -q
 ```
