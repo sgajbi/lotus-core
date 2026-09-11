@@ -881,13 +881,14 @@ async def test_claimed_target_is_fenced_when_source_advances_between_claim_state
             )
         )[0]
         await claim_session.commit()
+        assert isinstance(first_claim, PortfolioAggregationJob)
         assert first_claim.target_epoch == 0
         assert first_claim.source_revision == 1
 
         disposition = await repository.complete_or_requeue_job(
             job_id=first_claim.id,
             lease_token=first_lease.token,
-            tenant_id=first_claim.tenant_id,
+            tenant_id=TenantId(first_claim.tenant_id),
             target_epoch=first_claim.target_epoch,
             source_revision=first_claim.source_revision,
         )
