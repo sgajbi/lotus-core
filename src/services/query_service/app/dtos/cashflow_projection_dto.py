@@ -54,14 +54,21 @@ class CashflowProjectionResponse(SourceDataProductRuntimeMetadata):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     as_of_date: date = Field(
         ...,
-        description="Business date anchor used for projection baseline.",
+        description=(
+            "Business-date anchor used for the projection baseline; UTC governs "
+            "timestamp-window interpretation, not this business-date identity."
+        ),
         examples=["2026-03-01"],
     )
     range_start_date: date = Field(
-        ..., description="Start date of projection range.", examples=["2026-03-01"]
+        ...,
+        description="Inclusive cashflow-date start of the projection range.",
+        examples=["2026-03-01"],
     )
     range_end_date: date = Field(
-        ..., description="End date of projection range.", examples=["2026-03-11"]
+        ...,
+        description="Inclusive cashflow-date end of the projection range.",
+        examples=["2026-03-11"],
     )
     include_projected: bool = Field(
         ...,

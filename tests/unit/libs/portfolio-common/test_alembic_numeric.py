@@ -134,7 +134,9 @@ def test_alembic_environment_wires_renderer_for_online_migrations(
     assert engine_from_config.call_args.kwargs["connect_args"] == {
         "application_name": "migration-runner",
         "connect_timeout": 60,
-        "options": "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0",
+        "options": (
+            "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0 -c TimeZone=UTC"
+        ),
     }
     assert "pool_size" not in engine_from_config.call_args.kwargs
     assert "pool_timeout" not in engine_from_config.call_args.kwargs

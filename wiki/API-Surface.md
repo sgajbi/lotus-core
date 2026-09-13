@@ -165,6 +165,11 @@ and calculation lineage together. The shared lineage contract includes an option
 `numeric_output_policy` identity when a calculation executes a governed owner-defined output
 boundary; its absence does not imply a default or inferred rounding policy.
 
+Transaction and settlement request dates are governed UTC event-date windows: Core uses aware
+half-open `[00:00Z, next 00:00Z)` boundaries and buckets projected settlements by their UTC date,
+independent of PostgreSQL session timezone. A booking-centre business date is separate authority
+and is not inferred from these transaction instants.
+
 Allocation analysis:
 
 ```text

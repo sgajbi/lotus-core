@@ -554,7 +554,7 @@ async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_s
     assert "upper(trim(transactions.trade_currency)) AS trade_currency" in aggregate_compiled
     assert "upper(trim(portfolios.base_currency)) AS portfolio_currency" in aggregate_compiled
     assert "transaction_date" in aggregate_compiled
-    assert "transactions.transaction_date < '2026-04-18 00:00:00'" in aggregate_compiled
+    assert "transactions.transaction_date < '2026-04-18 00:00:00+00:00'" in aggregate_compiled
     assert (
         "upper(trim(transactions.trade_currency)) != upper(trim(portfolios.base_currency))"
         in aggregate_compiled
@@ -793,7 +793,7 @@ async def test_get_latest_transaction_date_as_of(
     assert value == date(2025, 8, 15)
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "transactions.transaction_date < '2025-08-21 00:00:00'" in compiled
+    assert "transactions.transaction_date < '2025-08-21 00:00:00+00:00'" in compiled
     assert "transactions.created_at <= '2025-08-20 10:00:00+00:00'" in compiled
 
 

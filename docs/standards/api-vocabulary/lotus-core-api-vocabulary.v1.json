@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-13T09:08:41.374221+00:00",
+  "generatedAt": "2026-09-15T13:13:02.281339+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -6979,7 +6979,7 @@
       "semanticId": "lotus.range_end_date",
       "canonicalTerm": "range_end_date",
       "preferredName": "range_end_date",
-      "description": "End date of projection range.",
+      "description": "Inclusive cashflow-date end of the projection range.",
       "example": "2026-03-11",
       "type": "string",
       "locations": [
@@ -6993,7 +6993,7 @@
       "semanticId": "lotus.range_start_date",
       "canonicalTerm": "range_start_date",
       "preferredName": "range_start_date",
-      "description": "Start date of projection range.",
+      "description": "Inclusive cashflow-date start of the projection range.",
       "example": "2026-03-01",
       "type": "string",
       "locations": [

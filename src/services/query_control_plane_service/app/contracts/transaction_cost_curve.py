@@ -69,7 +69,9 @@ class TransactionCostCurveRequest(BaseModel):
     )
     window: IntegrationWindow = Field(
         ...,
-        description="Inclusive transaction-date window used to derive observed cost points.",
+        description=(
+            "Inclusive UTC calendar-date transaction window used to derive observed cost points."
+        ),
     )
     security_ids: list[str] | None = Field(
         None,

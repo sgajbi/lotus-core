@@ -331,7 +331,7 @@ async def test_load_replay_window_normalizes_key_and_orders_deterministically() 
     )
     assert "trim(transactions.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
-    assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2026-05-28 00:00:00+00:00'" in compiled_query
     assert "position_replay_anchor" in compiled_query
     assert "position_history.position_date < '2026-05-28'" in compiled_query
     assert "position_history.epoch = 42" in compiled_query

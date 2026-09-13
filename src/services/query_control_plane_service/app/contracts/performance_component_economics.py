@@ -74,7 +74,9 @@ class PerformanceComponentEconomicsRequest(BaseModel):
     )
     window: IntegrationWindow = Field(
         ...,
-        description="Inclusive transaction-date window used to source economics evidence.",
+        description=(
+            "Inclusive UTC calendar-date transaction window used to source economics evidence."
+        ),
     )
     security_ids: list[str] | None = Field(
         None,

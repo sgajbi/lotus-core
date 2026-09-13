@@ -344,8 +344,8 @@ async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "transactions.portfolio_id = 'P1'" in compiled_query
-    assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-29 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2026-05-28 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-29 00:00:00+00:00'" in compiled_query
     assert "date(transactions.transaction_date)" not in compiled_query.lower()
 
 

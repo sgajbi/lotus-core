@@ -419,6 +419,67 @@ async def test_cash_movement_summary_returns_exact_source_controls(
     )
 
 
+@pytest.mark.lifecycle
+async def test_projected_settlement_window_and_utc_bucket_ignore_session_timezone(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    """PostgreSQL proof of UTC event-date membership and bucket semantics."""
+    portfolio_id = "UTC-WINDOW-PORTFOLIO"
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2026, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="SG",
+            client_id="utc-window-client",
+            status="active",
+        )
+    )
+    boundary_rows = (
+        ("UTC-WINDOW-BEFORE", datetime(2026, 2, 28, 23, 59, 59, tzinfo=UTC), "10"),
+        ("UTC-WINDOW-IN", datetime(2026, 3, 1, 0, 0, tzinfo=UTC), "20"),
+        ("UTC-WINDOW-EXCLUSIVE", datetime(2026, 3, 2, 0, 0, tzinfo=UTC), "30"),
+    )
+    for transaction_id, settlement_date, amount in boundary_rows:
+        async_db_session.add(
+            Transaction(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                instrument_id=transaction_id,
+                security_id=transaction_id,
+                transaction_type="DEPOSIT",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=Decimal(amount),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 2, 28, 12, tzinfo=UTC),
+                settlement_date=settlement_date,
+            )
+        )
+    await async_db_session.commit()
+
+    repository = CashflowRepository(async_db_session)
+    for session_timezone in ("UTC", "Asia/Singapore", "America/New_York"):
+        await async_db_session.execute(
+            sa.text("SELECT set_config('TimeZone', :session_timezone, true)"),
+            {"session_timezone": session_timezone},
+        )
+        evidence = await repository.get_projected_settlement_cashflow_series_with_evidence(
+            portfolio_id=portfolio_id,
+            start_date=date(2026, 3, 1),
+            end_date=date(2026, 3, 1),
+            tenant_id=TenantId(TEST_TENANT_ID),
+        )
+        assert evidence.rows == [(date(2026, 3, 1), Decimal("20"))]
+        assert evidence.source_row_count == 1
+        assert evidence.source_total == Decimal("20")
+
+
 async def test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant(
     setup_cashflow_data, async_db_session: AsyncSession
 ) -> None:

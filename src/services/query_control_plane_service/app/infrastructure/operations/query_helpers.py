@@ -1,6 +1,6 @@
 """SQL normalization and date-boundary helpers for operations queries."""
 
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from portfolio_common.domain.currency import normalize_currency_code
@@ -14,9 +14,9 @@ def currency_code_sql_expr(currency_code_column: Any) -> Any:
 
 
 def start_of_next_day(value: date) -> datetime:
-    """Return the exclusive UTC-naive SQL boundary after a business date."""
+    """Return the exclusive UTC instant following a business-date window."""
 
-    return datetime.combine(value + timedelta(days=1), time.min)
+    return datetime.combine(value + timedelta(days=1), time.min, tzinfo=UTC)
 
 
 __all__ = ["currency_code_sql_expr", "normalize_currency_code", "start_of_next_day"]
