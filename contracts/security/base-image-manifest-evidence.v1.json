@@ -20,7 +20,7 @@
     "parent_reference": "python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6",
     "tool": "docker buildx imagetools inspect --raw"
   },
-  "observed_on": "2026-08-12",
+  "observed_on": "2026-09-13",
   "runtime_manifest": {
     "config_digest": "sha256:afcbc49bd73e29b90c28a62348f6962b5164f147eb3ae178979b390cc9f46ebf",
     "digest": "sha256:8404ed8464ae7275b5c13a00c6edd2e027c6560a1f74bd4c7dee39f5d00f9352",
