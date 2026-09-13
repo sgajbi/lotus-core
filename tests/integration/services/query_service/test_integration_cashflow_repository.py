@@ -1,5 +1,5 @@
 # tests/integration/services/query_service/test_cashflow_repository.py
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -10,10 +10,15 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
+from src.services.query_service.app.services.cash_movement_service import CashMovementService
+from src.services.query_service.app.services.cashflow_projection_service import (
+    CashflowProjectionService,
+)
 from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
@@ -381,7 +386,10 @@ async def test_get_portfolio_cashflow_series_uses_latest_cashflow_epoch(
 
     repo = CashflowRepository(async_db_session)
     evidence = await repo.get_portfolio_cashflow_series_with_evidence(
-        portfolio_id, date(2025, 2, 1), date(2025, 2, 1)
+        portfolio_id,
+        date(2025, 2, 1),
+        date(2025, 2, 1),
+        tenant_id=TenantId(TEST_TENANT_ID),
     )
 
     assert evidence.rows == [(date(2025, 2, 1), Decimal("-50"))]
@@ -399,6 +407,7 @@ async def test_cash_movement_summary_returns_exact_source_controls(
         portfolio_id="MWR_TEST_PORT_01",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
+        tenant_id=TenantId(TEST_TENANT_ID),
     )
 
     assert evidence.source_row_count == 3
@@ -408,6 +417,133 @@ async def test_cash_movement_summary_returns_exact_source_controls(
         sum((row[6] for row in evidence.rows), start=Decimal("0"))
         == (evidence.source_currency_totals["USD"])
     )
+
+
+async def test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant(
+    setup_cashflow_data, async_db_session: AsyncSession
+) -> None:
+    """PostgreSQL proof that the common cut is admitted and replay-stable."""
+    tenant_context = TenantContext(tenant_id=TenantId(TEST_TENANT_ID))
+    foreign_tenant = TenantId("tenant-foreign")
+    repo = CashflowRepository(async_db_session)
+
+    source_evidence = await repo.get_cashflow_source_cut_evidence(
+        portfolio_id="MWR_TEST_PORT_01",
+        as_of_date=date(2025, 1, 31),
+        tenant_id=tenant_context.tenant_id,
+    )
+    with pytest.raises(ValueError, match="not found"):
+        await repo.get_cashflow_source_cut_evidence(
+            portfolio_id="MWR_TEST_PORT_01",
+            as_of_date=date(2025, 1, 31),
+            tenant_id=foreign_tenant,
+        )
+    foreign_series = await repo.get_portfolio_cashflow_series_with_evidence(
+        "MWR_TEST_PORT_01",
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+        tenant_id=foreign_tenant,
+    )
+    foreign_summary = await repo.get_portfolio_cash_movement_summary(
+        "MWR_TEST_PORT_01",
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+        tenant_id=foreign_tenant,
+    )
+    await async_db_session.rollback()
+
+    movement_service = CashMovementService(async_db_session)
+    projection_service = CashflowProjectionService(async_db_session)
+    movement_first = await movement_service.get_cash_movement_summary(
+        portfolio_id="MWR_TEST_PORT_01",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        tenant_context=tenant_context,
+    )
+    await async_db_session.rollback()
+    movement_replay = await movement_service.get_cash_movement_summary(
+        portfolio_id="MWR_TEST_PORT_01",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        tenant_context=tenant_context,
+    )
+    await async_db_session.rollback()
+    projection = await projection_service.get_cashflow_projection(
+        portfolio_id="MWR_TEST_PORT_01",
+        horizon_days=1,
+        as_of_date=date(2025, 1, 31),
+        tenant_context=tenant_context,
+    )
+    await async_db_session.rollback()
+    assert source_evidence.materialized_at is not None
+    assert source_evidence.cashflow_revision_count == 5
+    assert source_evidence.cashflow_revision_digest is not None
+    assert source_evidence.settlement_revision_count == 2
+    assert source_evidence.settlement_revision_digest is not None
+    assert foreign_series.rows == []
+    assert foreign_series.source_row_count == 0
+    assert foreign_summary.rows == []
+    assert foreign_summary.source_row_count == 0
+    assert movement_first.source_cut_id == movement_replay.source_cut_id
+    assert movement_first.generated_at == movement_replay.generated_at
+    assert movement_first.source_cut_id == projection.source_cut_id
+    assert movement_first.generated_at == projection.generated_at
+    assert movement_first.latest_evidence_timestamp is not None
+
+    timestamp_only_at = datetime(2029, 1, 1, 12, tzinfo=UTC)
+    await async_db_session.execute(
+        sa.update(Cashflow)
+        .where(Cashflow.portfolio_id == "MWR_TEST_PORT_01", Cashflow.transaction_id == "T1")
+        .values(updated_at=timestamp_only_at)
+    )
+    await async_db_session.commit()
+    timestamp_only_movement = await movement_service.get_cash_movement_summary(
+        portfolio_id="MWR_TEST_PORT_01",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        tenant_context=tenant_context,
+    )
+    await async_db_session.rollback()
+    assert timestamp_only_movement.source_cut_id == movement_first.source_cut_id
+    assert timestamp_only_movement.generated_at == timestamp_only_at
+
+    restatement_at = datetime(2030, 1, 1, 12, tzinfo=UTC)
+    await async_db_session.execute(
+        sa.update(Cashflow)
+        .where(Cashflow.portfolio_id == "MWR_TEST_PORT_01", Cashflow.transaction_id == "T1")
+        .values(amount=Decimal("10001"), updated_at=restatement_at)
+    )
+    await async_db_session.commit()
+    restated_movement = await movement_service.get_cash_movement_summary(
+        portfolio_id="MWR_TEST_PORT_01",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        tenant_context=tenant_context,
+    )
+
+    assert restated_movement.source_cut_id != movement_first.source_cut_id
+    assert restated_movement.generated_at > timestamp_only_movement.generated_at
+
+    await async_db_session.rollback()
+    await async_db_session.execute(
+        sa.update(Cashflow)
+        .where(Cashflow.portfolio_id == "MWR_TEST_PORT_01", Cashflow.transaction_id == "T1")
+        .values(amount=Decimal("10002"))
+    )
+    pending_evidence = await repo.get_cashflow_source_cut_evidence(
+        portfolio_id="MWR_TEST_PORT_01",
+        as_of_date=date(2025, 1, 31),
+        tenant_id=tenant_context.tenant_id,
+    )
+    assert pending_evidence.cashflow_revision_digest != source_evidence.cashflow_revision_digest
+    await async_db_session.rollback()
+    rollback_replay = await movement_service.get_cash_movement_summary(
+        portfolio_id="MWR_TEST_PORT_01",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        tenant_context=tenant_context,
+    )
+    assert rollback_replay.source_cut_id == restated_movement.source_cut_id
 
 
 async def test_get_income_cashflows_is_epoch_aware(

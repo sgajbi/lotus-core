@@ -28,6 +28,7 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
         portfolio_id="P1",
         start_date=__import__("datetime").date(2026, 4, 18),
         end_date=__import__("datetime").date(2026, 4, 28),
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -38,6 +39,7 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
     assert "transactions.settlement_date < '2026-04-29 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-04-18 00:00:00'" in compiled_query
     assert "transactions.transaction_type = 'BUY'" not in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "max(transactions.updated_at)" in compiled_query.lower()
 
 
@@ -51,6 +53,15 @@ async def test_latest_cashflows_subquery_prefers_highest_epoch_per_transaction()
     assert "order by cashflows.epoch desc, cashflows.id desc" in compiled_query.lower()
     assert "cashflows.portfolio_id = 'P1'" in compiled_query
     assert "anon_2.rn = 1" in compiled_query.lower()
+
+
+async def test_latest_cashflows_subquery_can_be_reused_without_a_portfolio_filter() -> None:
+    subquery = CashflowRepository._latest_cashflows_subquery()
+
+    compiled_query = str(select(subquery).compile(compile_kwargs={"literal_binds": True}))
+
+    assert "row_number() over" in compiled_query.lower()
+    assert "cashflows.portfolio_id =" not in compiled_query
 
 
 async def test_cashflow_repository_portfolio_exists_uses_limit_one(
@@ -118,6 +129,7 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
         portfolio_id="P1",
         start_date=date(2026, 4, 18),
         end_date=date(2026, 4, 28),
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
 
     assert evidence.rows == [(date(2026, 4, 18), 10), (date(2026, 4, 19), -2)]
@@ -129,6 +141,7 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     assert "anon_1.portfolio_id = 'P1'" in compiled_query
     assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "sum(anon_1.amount)" in compiled_query.lower()
     assert "count(*)" in compiled_query.lower()
     assert "sum(sum(anon_1.amount)) OVER ()" in compiled_query
@@ -145,6 +158,7 @@ async def test_cashflow_repository_cash_movement_summary_groups_latest_cashflow_
         portfolio_id="P1",
         start_date=date(2026, 4, 18),
         end_date=date(2026, 4, 28),
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
 
     stmt = mock_db_session.execute.call_args[0][0]
@@ -156,6 +170,7 @@ async def test_cashflow_repository_cash_movement_summary_groups_latest_cashflow_
     assert "GROUP BY anon_1.classification, anon_1.timing, anon_1.currency" in compiled_query
     assert "anon_1.is_position_flow" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "sum(count(*)) OVER ()" in compiled_query
     assert "sum(sum(anon_1.amount)) OVER (PARTITION BY anon_1.currency)" in compiled_query
 
@@ -176,6 +191,7 @@ async def test_cashflow_repository_cash_movement_summary_returns_source_count(
         portfolio_id="P1",
         start_date=date(2026, 4, 18),
         end_date=date(2026, 4, 28),
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
 
     assert evidence.source_row_count == 3
@@ -184,6 +200,72 @@ async def test_cashflow_repository_cash_movement_summary_returns_source_count(
         ("CASHFLOW_IN", "SETTLED", "USD", False, True, 2, Decimal("10"), latest_timestamp),
         ("CASHFLOW_OUT", "SETTLED", "USD", False, True, 1, Decimal("-2"), latest_timestamp),
     ]
+
+
+async def test_cashflow_source_cut_evidence_is_tenant_scoped_and_epoch_aware(
+    mock_db_session: AsyncMock,
+) -> None:
+    materialized_at = datetime(2026, 4, 20, 11, tzinfo=UTC)
+    mock_db_session.execute.return_value = MagicMock(
+        one_or_none=lambda: (
+            "USD",
+            1,
+            "cashflow-source-revision-digest",
+            1,
+            "settlement-source-revision-digest",
+            materialized_at,
+        )
+    )
+    repository = CashflowRepository(mock_db_session)
+
+    evidence = await repository.get_cashflow_source_cut_evidence(
+        portfolio_id="P1",
+        as_of_date=date(2026, 4, 20),
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
+    )
+
+    assert evidence.cashflow_revision_count == 1
+    assert evidence.portfolio_base_currency == "USD"
+    assert evidence.cashflow_revision_digest == "cashflow-source-revision-digest"
+    assert evidence.settlement_revision_count == 1
+    assert evidence.settlement_revision_digest == "settlement-source-revision-digest"
+    assert evidence.materialized_at == materialized_at
+    statement = mock_db_session.execute.call_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled
+    assert "portfolio_cashflow_source_cuts" in compiled
+    assert "cashflows" not in compiled
+    assert "transactions" not in compiled
+
+
+async def test_cashflow_source_cut_evidence_rejects_an_unavailable_admitted_portfolio(
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(one_or_none=lambda: None)
+    repository = CashflowRepository(mock_db_session)
+
+    with pytest.raises(ValueError, match="Portfolio with id P1 not found"):
+        await repository.get_cashflow_source_cut_evidence(
+            portfolio_id="P1",
+            as_of_date=date(2026, 4, 20),
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
+        )
+
+
+async def test_cashflow_source_snapshot_requires_the_first_database_read(
+    mock_db_session: AsyncMock,
+) -> None:
+    repository = CashflowRepository(mock_db_session)
+    mock_db_session.in_transaction.return_value = False
+
+    await repository.establish_cashflow_source_read_snapshot()
+
+    statement = mock_db_session.execute.call_args.args[0]
+    assert "REPEATABLE READ, READ ONLY" in str(statement)
+
+    mock_db_session.in_transaction.return_value = True
+    with pytest.raises(RuntimeError, match="before the first database read"):
+        await repository.establish_cashflow_source_read_snapshot()
 
 
 async def test_cashflow_repository_external_flows_limits_to_investor_movements(

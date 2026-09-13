@@ -13,6 +13,7 @@ from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.cash_movement_dto import CashMovementBucket, PortfolioCashMovementSummaryResponse
 from ..repositories.cashflow_repository import CashflowRepository
 from .cashflow_product_trust import reconcile_cashflow_window
+from .cashflow_source_cut import build_cashflow_source_cut
 
 MAX_CASH_MOVEMENT_WINDOW_DAYS = 366
 CASH_MOVEMENT_ALGORITHM_ID = "PORTFOLIO_CASH_MOVEMENT_SUMMARY"
@@ -44,6 +45,8 @@ class CashMovementService:
                 f"{MAX_CASH_MOVEMENT_WINDOW_DAYS} days or less"
             )
 
+        await self.repo.establish_cashflow_source_read_snapshot()
+
         portfolio_currency = await self.repo.get_portfolio_currency(
             portfolio_id, tenant_id=tenant_context.tenant_id
         )
@@ -54,6 +57,17 @@ class CashMovementService:
             portfolio_id=portfolio_id,
             start_date=start_date,
             end_date=end_date,
+            tenant_id=tenant_context.tenant_id,
+        )
+        source_cut = build_cashflow_source_cut(
+            tenant_id=tenant_context.tenant_id.value,
+            portfolio_id=portfolio_id,
+            as_of_date=end_date.isoformat(),
+            evidence=await self.repo.get_cashflow_source_cut_evidence(
+                portfolio_id=portfolio_id,
+                as_of_date=end_date,
+                tenant_id=tenant_context.tenant_id,
+            ),
         )
         rows = evidence.rows
         buckets: list[CashMovementBucket] = []
@@ -153,6 +167,12 @@ class CashMovementService:
                 "tenant_id": normalized_tenant_id,
                 "request_fingerprint": request_fingerprint,
                 "response_values": response_values,
+                "source_cut_id": source_cut.source_cut_id,
+                # This is the durable cut chronology, not the volatile time at
+                # which this handler happened to serve the response.  A source
+                # mutation can leave the economic cut identity unchanged while
+                # still publishing a newer proof envelope.
+                "source_materialized_at": source_cut.materialized_at,
                 "calculation_lineage": calculation_lineage.lineage_payload(),
                 "latest_evidence_timestamp": latest_evidence_timestamp,
             }
@@ -175,10 +195,12 @@ class CashMovementService:
             ),
             **source_data_product_runtime_metadata(
                 as_of_date=end_date,
+                generated_at=source_cut.materialized_at,
                 tenant_id=normalized_tenant_id,
                 reconciliation_status=source_window_trust.reconciliation_status,
                 data_quality_status=source_window_trust.data_quality_status,
                 latest_evidence_timestamp=latest_evidence_timestamp,
+                source_cut_id=source_cut.source_cut_id,
                 snapshot_id=(
                     f"cash_movement_summary:{calculation_lineage.output_content_hash[:24]}"
                 ),
@@ -192,6 +214,7 @@ class CashMovementService:
                     "source_owner": "lotus-core",
                     "source_product": "PortfolioCashMovementSummary",
                     "portfolio_id": portfolio_id,
+                    "source_cut_id": source_cut.source_cut_id,
                     "input_content_hash": calculation_lineage.input_content_hash,
                     "calculation_content_hash": calculation_lineage.calculation_content_hash,
                     "output_content_hash": calculation_lineage.output_content_hash,

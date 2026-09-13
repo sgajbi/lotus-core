@@ -146,12 +146,20 @@ reconciliation can produce `SUPPORTED`; missing, incomplete, stale, failed, repl
 unknown evidence fails closed. The route rejects `include_projected=true` and does not infer callable, putable, amortizing,
 structured-note, lockup, expiry, reinvestment, suitability, risk, or execution methodology.
 
-`PortfolioCashflowProjection:v1` and `PortfolioCashMovementSummary:v1` publish tenant-bound
-request/snapshot/content identity plus separate normalized-input, algorithm/version/precision, and
-output hashes. Projection reconciles booked/projected source totals to its daily calculation;
+`PortfolioCashflowProjection:v1` and `PortfolioCashMovementSummary:v1` publish admitted-tenant
+request/snapshot/content identity, a common `source_cut_id` for the same admitted portfolio/as-of
+cashflow evidence set, and a source-cut materialization `generated_at` rather than serving time.
+PostgreSQL refreshes the fixed-width source projection transactionally with cashflow and settlement
+mutations; transaction-processing work coalesces repeated source-row changes to one refresh per
+affected portfolio before commit. Logical cut identity binds the consumed portfolio base currency
+but excludes generated identifiers and timestamps, while
+`generated_at` preserves durable source-materialization chronology and advances transactionally for
+business-fact or currency changes even where an upsert leaves source `updated_at` unchanged. They also publish separate normalized-input,
+algorithm/version/precision, and output hashes. Projection reconciles booked/projected source totals to its daily calculation;
 movement summary reconciles source-row count and per-currency totals to returned buckets without
 netting currencies. A zero-row window is explicit supported `EMPTY_SOURCE_WINDOW` evidence with a
-null evidence timestamp. Count, total, or populated-timestamp contradictions fail closed as
+null event timestamp; its source cut may use the admitted portfolio source projection and never invents an
+event time. Count, total, or populated-timestamp contradictions fail closed as
 `BLOCKED`/`UNAVAILABLE`; consumers must accept the scope, digest, reconciliation, supportability,
 and calculation lineage together. The shared lineage contract includes an optional typed
 `numeric_output_policy` identity when a calculation executes a governed owner-defined output

@@ -7,6 +7,7 @@ from portfolio_common.database_models import CashAccountMaster, Portfolio, Trans
 from portfolio_common.database_models import Instrument as DBInstrument
 from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,10 +22,83 @@ from src.services.persistence_service.app.repositories.portfolio_repository impo
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )
+from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
+from src.services.query_service.app.services.cashflow_source_cut import build_cashflow_source_cut
 from tests.test_support.tenant import TEST_TENANT_ID
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.integration_db
+@pytest.mark.db_direct
+@pytest.mark.lifecycle
+async def test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """The portfolio ingestion persistence path must recut economic context."""
+    portfolio_id = "PORT_CASHFLOW_CUT_CURRENCY_01"
+    repository = PortfolioRepository(async_db_session)
+
+    def event(base_currency: str) -> PortfolioEvent:
+        return PortfolioEvent(
+            portfolio_id=portfolio_id,
+            tenant_id=TEST_TENANT_ID,
+            base_currency=base_currency,
+            open_date=date(2025, 1, 1),
+            client_id="CIF_CASHFLOW_CUT_01",
+            status="ACTIVE",
+            risk_exposure="Moderate",
+            investment_time_horizon="Long",
+            portfolio_type="Advisory",
+            booking_center_code="SG",
+        )
+
+    await repository.create_or_update_portfolio(event("USD"))
+    await async_db_session.commit()
+    source_repository = CashflowRepository(async_db_session)
+    original_evidence = await source_repository.get_cashflow_source_cut_evidence(
+        portfolio_id=portfolio_id,
+        as_of_date=date(2026, 9, 13),
+        tenant_id=TenantId(TEST_TENANT_ID),
+    )
+    original_cut = build_cashflow_source_cut(
+        tenant_id=TEST_TENANT_ID,
+        portfolio_id=portfolio_id,
+        as_of_date="2026-09-13",
+        evidence=original_evidence,
+    )
+    replay_evidence = await source_repository.get_cashflow_source_cut_evidence(
+        portfolio_id=portfolio_id,
+        as_of_date=date(2026, 9, 13),
+        tenant_id=TenantId(TEST_TENANT_ID),
+    )
+    assert replay_evidence == original_evidence
+
+    await repository.create_or_update_portfolio(event("EUR"))
+    await async_db_session.commit()
+    recast_evidence = await source_repository.get_cashflow_source_cut_evidence(
+        portfolio_id=portfolio_id,
+        as_of_date=date(2026, 9, 13),
+        tenant_id=TenantId(TEST_TENANT_ID),
+    )
+    recast_cut = build_cashflow_source_cut(
+        tenant_id=TEST_TENANT_ID,
+        portfolio_id=portfolio_id,
+        as_of_date="2026-09-13",
+        evidence=recast_evidence,
+    )
+
+    assert original_evidence.portfolio_base_currency == "USD"
+    assert recast_evidence.portfolio_base_currency == "EUR"
+    assert recast_cut.source_cut_id != original_cut.source_cut_id
+    with pytest.raises(ValueError, match="not found"):
+        await source_repository.get_cashflow_source_cut_evidence(
+            portfolio_id=portfolio_id,
+            as_of_date=date(2026, 9, 13),
+            tenant_id=TenantId("tenant-foreign"),
+        )
 
 
 async def test_transaction_reference_availability_resolves_governed_state(

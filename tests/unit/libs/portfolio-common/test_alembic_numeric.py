@@ -104,6 +104,10 @@ def test_alembic_environment_wires_renderer_for_offline_migrations(
     assert options["url"] == "postgresql://lotus:secret@postgres/lotus"
     assert options["render_item"] is render_financial_numeric
     assert options["literal_binds"] is True
+    assert {
+        "portfolio_cashflow_source_cuts",
+        "portfolio_cashflow_source_cut_refresh_queue",
+    } <= set(options["target_metadata"].tables)
     run_migrations.assert_called_once_with()
 
 

@@ -28,13 +28,13 @@ business calendar. If no business date is available, it falls back to the curren
 | `horizon_days` | Query parameter | No, default `10` | Calendar-day projection horizon from `as_of_date`; constrained by the API and service to `1..366`. |
 | `as_of_date` | Query parameter | No | Business-date anchor for the projection baseline. |
 | `include_projected` | Query parameter | No, default `true` | Whether to include settlement-dated future external cash movements in addition to booked cashflow rows. |
-| `X-Tenant-Id` | Request header | No | Tenant or book-of-record scope bound to the deterministic trust receipt when supplied. |
+| admitted tenant context | Request admission | Yes | Tenant or book-of-record scope verified at the request boundary and applied to every portfolio, cashflow, transaction, and source-cut selection; callers cannot supply a replacement scope. |
 
 ## Upstream Data Sources
 
 | Source | Used fields | Inclusion rule |
 | --- | --- | --- |
-| `portfolios` | `portfolio_id`, `base_currency` | Portfolio must exist and provide the currency used for all monetary output fields. |
+| `portfolios` | `portfolio_id`, `tenant_id`, `base_currency`, `updated_at` | The admitted tenant must own the portfolio. It provides the currency and the root revision for common-cut materialization. |
 | latest `cashflows` per transaction | `portfolio_id`, `cashflow_date`, `amount`, `is_portfolio_flow`, `epoch`, `updated_at` | Latest cashflow row per transaction is selected by highest `epoch`, then highest row id; rows must match the portfolio, be marked `is_portfolio_flow`, and fall inside the query window. |
 | `transactions` | `portfolio_id`, `transaction_type`, `transaction_date`, `settlement_date`, `gross_transaction_amount`, `updated_at` | Projected mode includes only `DEPOSIT` and `WITHDRAWAL` transactions with non-null settlement dates in the query window and transaction dates before the projection start date. |
 | `business_dates` | `date`, `calendar_code` | Supplies the default `as_of_date` when the caller omits it. |
@@ -44,6 +44,25 @@ product reads them. Settlement-dated cash movements, dividend/interest cash effe
 settlement legs, and synthetic flows therefore enter the booked component on their resolved
 cashflow date instead of always on transaction date. Projected mode continues to read future
 external `DEPOSIT` and `WITHDRAWAL` transactions directly by `settlement_date`.
+
+## Common Source Cut and Replay
+
+Core publishes `source_cut_id` when it can prove the admitted portfolio's cashflow evidence set as
+of `as_of_date`. The cut is a deterministic digest of the admitted tenant, portfolio, as-of date,
+and fixed-width cashflow and `DEPOSIT`/`WITHDRAWAL` settlement revision digests. PostgreSQL
+maintains that projection in the same transaction as its source mutations. It intentionally
+excludes generated row identifiers, timestamps, product name, and output horizon, so this product
+and `PortfolioCashMovementSummary:v1` publish the same cut for the same admitted source state and
+as-of date.
+
+`generated_at` is the durable source-projection materialization chronology, not response-serving time. An
+empty returned window keeps `latest_evidence_timestamp=null`; the cut may still be materialized
+from the admitted portfolio source state and does not fabricate an event timestamp. Its logical
+identity binds the authoritative consumed `base_currency` as well as admitted tenant, portfolio,
+as-of date, and source revisions. A business-fact or base-currency restatement produces a new
+`source_cut_id`; a timestamp-only change updates chronology without changing logical identity. A
+business-fact or currency change advances the durable materialization chronology transactionally,
+even when a source upsert leaves its model-managed `updated_at` unchanged.
 
 ## Unit Conventions
 
@@ -119,8 +138,14 @@ metadata and is intentionally excluded from these financial identities.
     totals; bind source-row count and returned point count in `source_window_trust`.
 11. Build normalized-input, calculation-policy, and returned-output lineage hashes plus deterministic
     request and snapshot identities.
-12. Return tenant/correlation, reconciliation, supportability, freshness, content digest, source
-    references, policy version, and calculation lineage in the runtime receipt.
+12. Read the common source cut from the admitted portfolio's fixed-width, PostgreSQL-maintained
+    source projection. The projection refreshes in the same transaction as cashflow and settlement
+    source mutations. Transaction-processing units defer repeated source-row refreshes and flush
+    each affected portfolio root once before the same commit. Its logical digest binds the consumed
+    base currency but excludes generated row identifiers and timestamps, while
+    its materialization timestamp remains separate chronology evidence. Return its `source_cut_id`
+    and source materialization timestamp with tenant/correlation, reconciliation, supportability,
+    freshness, content digest, source references, policy version, and calculation lineage.
 
 ## Validation and Failure Behavior
 
@@ -162,6 +187,7 @@ tax, execution, or performance certification.
 | `total_net_cashflow` | `T`. |
 | `notes` | Projected mode or booked-only mode explanation. |
 | `source_window_trust` | Source/calculated row counts, output point count, component totals, window state, supportability, and reason codes. |
+| `source_cut_id`, `generated_at` | Comparable admitted cashflow source cut and source-projection materialization time; not transport-serving time. Logical identity excludes generated identifiers and timestamps. |
 | `request_fingerprint`, `snapshot_id`, `policy_version` | Deterministic request/output identities and `cashflow-projection-v1` policy. |
 | `calculation_lineage` | Normalized-input, algorithm/version/precision, and returned-output SHA-256 hashes. |
 | `source_batch_fingerprint`, `content_hash`, `source_digest` | Same deterministic content digest for downstream proof validation. |

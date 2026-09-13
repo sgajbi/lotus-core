@@ -40,6 +40,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_portfolio_valuation_book_scope_migration.py",
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
         "tests/integration/test_aggregation_job_tenant_migration.py",
+        "tests/integration/test_portfolio_cashflow_source_cut_migration.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
@@ -69,6 +70,10 @@ SUITES: dict[str, list[str]] = {
         "test_transaction_economics_tenant_postgresql.py",
         "tests/integration/services/query_service/test_transaction_repository_paging.py::"
         "test_transaction_ledger_page_and_identity_share_one_repeatable_snapshot",
+        "tests/integration/services/query_service/test_integration_cashflow_repository.py::"
+        "test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant",
+        "tests/integration/services/persistence_service/repositories/test_repositories.py::"
+        "test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency",
     ],
     "integration-lite": _discover_integration_lite(),
     "integration-all": ["tests/integration"],

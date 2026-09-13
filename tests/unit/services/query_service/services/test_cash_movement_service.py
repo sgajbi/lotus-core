@@ -1,4 +1,5 @@
-from datetime import UTC, date, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import (
     CashflowRepository,
+    CashflowSourceCutEvidence,
     CashMovementSummaryEvidence,
 )
 from src.services.query_service.app.services.cash_movement_service import CashMovementService
@@ -61,6 +63,14 @@ def mock_repo() -> AsyncMock:
         source_row_count=3,
         source_currency_totals={"USD": Decimal("9000.00")},
     )
+    repo.get_cashflow_source_cut_evidence.return_value = CashflowSourceCutEvidence(
+        portfolio_base_currency="USD",
+        cashflow_revision_count=1,
+        cashflow_revision_digest="cashflow-source-revision-digest",
+        settlement_revision_count=0,
+        settlement_revision_digest="empty-settlement-source-revision-digest",
+        materialized_at=datetime(2026, 3, 6, 9, 15, tzinfo=UTC),
+    )
     return repo
 
 
@@ -81,6 +91,7 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
         portfolio_id="P1",
         start_date=date(2026, 3, 1),
         end_date=date(2026, 3, 31),
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
     assert response.product_name == "PortfolioCashMovementSummary"
     assert response.product_version == "v1"
@@ -89,6 +100,8 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
     assert response.data_quality_status == "COMPLETE"
     assert response.cashflow_count == 3
     assert response.latest_evidence_timestamp == datetime(2026, 3, 6, 9, 15, tzinfo=UTC)
+    assert response.source_cut_id.startswith("cashflow-source-cut:")
+    assert response.generated_at == datetime(2026, 3, 6, 9, 15, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.freshness_status == "CURRENT"
     assert response.reconciliation_status == "COMPLETE"
@@ -103,6 +116,52 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
     assert response.buckets[1].movement_direction == "OUTFLOW"
     assert response.buckets[1].is_position_flow is True
     assert "not a forecast" in response.notes
+
+
+async def test_cash_movement_content_hash_binds_the_common_source_cut(
+    mock_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.cash_movement_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashMovementService(AsyncMock(spec=AsyncSession))
+        first = await service.get_cash_movement_summary(
+            portfolio_id="P1",
+            start_date=date(2026, 3, 1),
+            end_date=date(2026, 3, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+        mock_repo.get_cashflow_source_cut_evidence.return_value = replace(
+            mock_repo.get_cashflow_source_cut_evidence.return_value,
+            cashflow_revision_digest="restated-source-revision-digest",
+        )
+        restated = await service.get_cash_movement_summary(
+            portfolio_id="P1",
+            start_date=date(2026, 3, 1),
+            end_date=date(2026, 3, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+
+    assert restated.buckets == first.buckets
+    assert restated.source_cut_id != first.source_cut_id
+    assert restated.content_hash != first.content_hash
+
+    mock_repo.get_cashflow_source_cut_evidence.return_value = replace(
+        mock_repo.get_cashflow_source_cut_evidence.return_value,
+        materialized_at=mock_repo.get_cashflow_source_cut_evidence.return_value.materialized_at
+        + timedelta(seconds=1),
+    )
+    refreshed = await service.get_cash_movement_summary(
+        portfolio_id="P1",
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 3, 31),
+        tenant_context=TEST_TENANT_CONTEXT,
+    )
+
+    assert refreshed.source_cut_id == restated.source_cut_id
+    assert refreshed.generated_at != restated.generated_at
+    assert refreshed.content_hash != restated.content_hash
 
 
 async def test_cash_movement_summary_converts_bucket_amount_once(mock_repo: AsyncMock) -> None:
@@ -145,6 +204,14 @@ async def test_cash_movement_summary_marks_empty_window_current(mock_repo: Async
     mock_repo.get_portfolio_cash_movement_summary.return_value = CashMovementSummaryEvidence(
         rows=[], source_row_count=0, source_currency_totals={}
     )
+    mock_repo.get_cashflow_source_cut_evidence.return_value = CashflowSourceCutEvidence(
+        portfolio_base_currency="USD",
+        cashflow_revision_count=0,
+        cashflow_revision_digest="empty-cashflow-source-revision-digest",
+        settlement_revision_count=0,
+        settlement_revision_digest="empty-settlement-source-revision-digest",
+        materialized_at=datetime(2026, 3, 1, 8, tzinfo=UTC),
+    )
 
     with patch(
         "src.services.query_service.app.services.cash_movement_service.CashflowRepository",
@@ -162,6 +229,8 @@ async def test_cash_movement_summary_marks_empty_window_current(mock_repo: Async
     assert response.cashflow_count == 0
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp is None
+    assert response.generated_at == datetime(2026, 3, 1, 8, tzinfo=UTC)
+    assert response.source_cut_id.startswith("cashflow-source-cut:")
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
     assert response.source_window_trust.window_status == "EMPTY"

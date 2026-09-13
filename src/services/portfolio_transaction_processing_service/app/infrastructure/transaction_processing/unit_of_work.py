@@ -10,6 +10,7 @@ from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from ...application.cashflow_processing import ProcessTransactionCashflowUseCase
@@ -113,6 +114,12 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         try:
             await transaction.start()
             self._transaction = transaction
+            # Cashflow source-cut triggers collect affected portfolio roots while
+            # this aggregate rebuild runs.  The flush below refreshes each root
+            # once at the same durable transaction boundary as the write.
+            await session.execute(
+                text("SELECT set_config('lotus.cashflow_source_cut_deferred', 'on', true)")
+            )
             self._build_adapters(session)
         except BaseException:
             if self._transaction is not None:
@@ -183,6 +190,9 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             raise RuntimeError("Transaction processing unit of work has not been entered")
         if self._committed:
             raise RuntimeError("Transaction processing unit of work was already committed")
+        if self._session is None:
+            raise RuntimeError("Transaction processing unit of work has no active session")
+        await self._session.execute(text("SELECT flush_deferred_portfolio_cashflow_source_cuts()"))
         await self._transaction.commit()
         self._committed = True
 
