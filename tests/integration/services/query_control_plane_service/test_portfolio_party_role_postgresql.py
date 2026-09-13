@@ -14,6 +14,7 @@ from portfolio_common.domain.portfolio_party_roles import (
     PortfolioPartyRoleScope,
     PortfolioPartyRoleType,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -146,6 +147,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
 
             book_reader = SqlAlchemyPortfolioManagerBookReader(session)
             quarantined_book = await book_reader.list_members(
+                tenant_id=TenantId(TEST_TENANT_ID),
                 portfolio_manager_id=PORTFOLIO_MANAGER,
                 as_of_date=date(2026, 7, 18),
                 booking_center_code=None,
@@ -159,6 +161,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                 [_assignment(version=2, quality_status="accepted")]
             )
             accepted_book = await book_reader.list_members(
+                tenant_id=TenantId(TEST_TENANT_ID),
                 portfolio_manager_id=PORTFOLIO_MANAGER,
                 as_of_date=date(2026, 7, 18),
                 booking_center_code=None,
