@@ -358,6 +358,7 @@ TABLES_TO_TRUNCATE = [
     "portfolio_valuation_jobs",
     "portfolio_aggregation_jobs",
     "transaction_costs",
+    "portfolio_cashflow_source_cuts",
     "cashflows",
     "position_history",
     "daily_position_snapshots",

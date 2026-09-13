@@ -26,7 +26,7 @@ execution-quality assessment, or OMS acknowledgement.
 | `portfolio_id` | Request path | Yes | Portfolio whose cashflow rows are summarized. |
 | `start_date` | Request query | Yes | Inclusive cashflow-date window start. |
 | `end_date` | Request query | Yes | Inclusive cashflow-date window end. The inclusive date window must be 366 days or less. |
-| `X-Tenant-Id` | Request header | No | Tenant or book-of-record scope bound to the deterministic trust receipt when supplied. |
+| admitted tenant context | Request admission | Yes | Tenant or book-of-record scope verified at the request boundary and applied to every portfolio, cashflow, transaction, and source-cut selection; callers cannot supply a replacement scope. |
 | `transaction_id` | `cashflows` | Yes | Transaction identity used for latest-row selection. |
 | `id` | `cashflows` | Yes | Tie-breaker for same-epoch cashflow restatements. |
 | `epoch` | `cashflows` | Yes | Cashflow restatement epoch. |
@@ -50,12 +50,28 @@ payment/value-date proxy for dividend, interest, and FX cash-settlement flows.
 
 | Source | Use |
 | --- | --- |
-| `portfolios` | Confirms the requested portfolio exists and supplies the portfolio authority boundary. |
+| `portfolios` | Confirms the requested portfolio belongs to the admitted tenant, supplies the authority boundary, and contributes the root revision for common-cut materialization. |
 | `cashflows` | Supplies latest source rows for cash movement grouping and totals. |
 
 Rows from `transactions`, `transaction_costs`, tax-lot tables, cash-account balance tables, and FX
 tables are not joined by this product. Currency conversion, tax interpretation, funding logic, and
 cash-account balance derivation stay outside this methodology.
+
+## Common Source Cut and Replay
+
+`source_cut_id` is the deterministic, source-owned identity of the admitted portfolio's cashflow
+evidence as of `end_date`: tenant, portfolio, as-of date, and fixed-width cashflow and settlement
+revision digests. PostgreSQL refreshes that projection in the same transaction as source changes;
+its logical digest excludes generated row identifiers and timestamps. It excludes this product's
+start date and bucket shape so it is comparable with
+`PortfolioCashflowProjection:v1` for the same admitted source state and as-of date.
+
+`generated_at` is the source-projection materialization timestamp for that cut, not response-serving
+time. A zero-row summary retains `latest_evidence_timestamp=null`; it may use the portfolio root
+revision to materialize the cut but never invents a cashflow event timestamp. A business-fact
+restatement or authoritative portfolio base-currency recast creates a new cut; a timestamp-only
+change updates chronology without changing it. The cut binds only the consumed base currency, not
+unrelated portfolio metadata or response-serving time.
 
 ## Unit Conventions
 
@@ -134,8 +150,9 @@ correlation is not part of those financial identities.
 10. Reconcile summed bucket counts to `SC` and per-currency bucket totals to every `SA_c`.
 11. Treat a zero-row window as explicit supported `EMPTY_SOURCE_WINDOW` evidence without inventing
     an evidence timestamp; fail closed on populated timestamp, count, or total contradictions.
-12. Build deterministic request, snapshot, content, source-digest, policy, and three-layer
-    calculation-lineage identities, then set `as_of_date=end_date`.
+12. Read the admitted common source cut from the fixed-width PostgreSQL source projection, then
+    build deterministic request, snapshot, content, source-digest, policy, and three-layer
+    calculation-lineage identities; set `as_of_date=end_date`.
 
 ## Validation and Failure Behavior
 
@@ -182,6 +199,7 @@ No runtime policy changes the computation. The caller controls only:
 | `cashflow_count` | Sum of all bucket counts. |
 | `data_quality_status`, `reconciliation_status` | `COMPLETE` only when source controls reconcile; otherwise fail-closed `BLOCKED`. |
 | `latest_evidence_timestamp` | `T_latest`. |
+| `source_cut_id`, `generated_at` | Comparable admitted cashflow source cut and source-projection materialization time; not transport-serving time. |
 | `source_window_trust` | Source/calculated row counts, output bucket count, per-currency controls, window state, supportability, and reasons. |
 | `request_fingerprint`, `snapshot_id`, `policy_version` | Deterministic request/output identities and `cash-movement-summary-v1` policy. |
 | `calculation_lineage` | Normalized-input, algorithm/version/precision, and returned-output SHA-256 hashes. |

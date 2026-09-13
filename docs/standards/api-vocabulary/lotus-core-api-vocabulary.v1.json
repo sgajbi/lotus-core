@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-08T00:12:30.580633+00:00",
+  "generatedAt": "2026-09-13T09:08:41.374221+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -3648,7 +3648,7 @@
       "semanticId": "lotus.generated_at",
       "canonicalTerm": "generated_at",
       "preferredName": "generated_at",
-      "description": "UTC timestamp when this source-data product response was generated.",
+      "description": "UTC source-product materialization timestamp. A product that can prove a stable source cut may publish that cut's latest source revision time instead of the transport-serving time; the product contract states which applies.",
       "example": "2026-04-15T01:30:00Z",
       "type": "string",
       "locations": [
@@ -8955,6 +8955,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_cut_id",
+      "canonicalTerm": "source_cut_id",
+      "preferredName": "source_cut_id",
+      "description": "Authoritative, comparable source-cut identity when the source owner can prove the portfolio and as-of evidence set used by this response. Null means the product does not claim cross-product cut coherence.",
+      "example": "cashflow-source-cut:0123456789abcdef01234567",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -15018,6 +15032,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -15127,6 +15142,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -15568,6 +15591,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -15688,6 +15712,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -16143,6 +16175,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -16256,6 +16289,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -16864,6 +16905,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -16981,6 +17023,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -18361,6 +18411,7 @@
           "source_as_of_date",
           "source_batch_fingerprint",
           "source_component_totals",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -18475,6 +18526,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -20014,6 +20073,7 @@
           "sort_order",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_instrument_id",
@@ -20280,6 +20340,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -21620,6 +21688,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_instrument_id",
@@ -21772,6 +21841,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -23004,6 +23081,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -23133,6 +23211,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",
@@ -23530,6 +23616,7 @@
           "source_as_of_date",
           "source_batch_fingerprint",
           "source_component_totals",
+          "source_cut_id",
           "source_digest",
           "source_evidence_current",
           "source_kind",
@@ -23650,6 +23737,14 @@
             "type": "object",
             "semanticId": "lotus.latest_evidence_timestamp",
             "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
           },
           {
             "name": "source_batch_fingerprint",

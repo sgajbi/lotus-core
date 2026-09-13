@@ -47,6 +47,11 @@ async def test_unit_of_work_builds_every_adapter_from_one_session_and_commits_on
 
     transaction.start.assert_awaited_once_with()
     transaction.commit.assert_awaited_once_with()
+    assert session.execute.await_count == 2
+    assert "cashflow_source_cut_deferred" in str(session.execute.await_args_list[0].args[0])
+    assert "flush_deferred_portfolio_cashflow_source_cuts" in str(
+        session.execute.await_args_list[1].args[0]
+    )
     transaction.rollback.assert_not_awaited()
     session.close.assert_awaited_once_with()
 
@@ -93,3 +98,66 @@ async def test_unit_of_work_rolls_back_when_adapter_construction_fails() -> None
 
     transaction.rollback.assert_awaited_once_with()
     session.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_unit_of_work_rejects_reuse_and_missing_adapters() -> None:
+    unit_of_work, _session, _transaction = _unit_of_work()
+
+    with pytest.raises(RuntimeError, match="idempotency adapter is not initialized"):
+        _ = unit_of_work.idempotency
+
+    async with unit_of_work:
+        with pytest.raises(RuntimeError, match="cannot be reused"):
+            await unit_of_work.__aenter__()
+
+
+@pytest.mark.asyncio
+async def test_unit_of_work_rejects_commit_without_an_active_transaction() -> None:
+    unit_of_work, _session, _transaction = _unit_of_work()
+
+    with pytest.raises(RuntimeError, match="has not been entered"):
+        await unit_of_work.commit()
+
+
+@pytest.mark.asyncio
+async def test_unit_of_work_rejects_duplicate_commit_after_durable_flush() -> None:
+    unit_of_work, _session, transaction = _unit_of_work()
+
+    async with unit_of_work:
+        await unit_of_work.commit()
+        with pytest.raises(RuntimeError, match="already committed"):
+            await unit_of_work.commit()
+
+    transaction.commit.assert_awaited_once_with()
+    transaction.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unit_of_work_does_not_commit_when_the_deferred_cut_flush_fails() -> None:
+    unit_of_work, session, transaction = _unit_of_work()
+    session.execute.side_effect = (None, RuntimeError("source-cut flush failed"))
+
+    with pytest.raises(RuntimeError, match="source-cut flush failed"):
+        async with unit_of_work:
+            await unit_of_work.commit()
+
+    transaction.commit.assert_not_awaited()
+    transaction.rollback.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_unit_of_work_rejects_commit_when_its_session_is_lost() -> None:
+    unit_of_work, _session, transaction = _unit_of_work()
+    unit_of_work._transaction = transaction
+    unit_of_work._session = None
+
+    with pytest.raises(RuntimeError, match="has no active session"):
+        await unit_of_work.commit()
+
+
+@pytest.mark.asyncio
+async def test_unit_of_work_exit_tolerates_a_partially_initialised_boundary() -> None:
+    unit_of_work, _session, _transaction = _unit_of_work()
+
+    await unit_of_work.__aexit__(None, None, None)

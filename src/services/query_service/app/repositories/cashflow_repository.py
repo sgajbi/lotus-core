@@ -5,6 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
+from portfolio_common.cashflow_source_cut_models import PortfolioCashflowSourceCut
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
@@ -16,7 +17,7 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction.type_registry import INCOME_RECOGNITION_TRANSACTION_TYPES
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .date_filters import start_of_day, start_of_next_day
@@ -44,6 +45,24 @@ class CashMovementSummaryEvidence:
     source_currency_totals: dict[str, Decimal]
 
 
+@dataclass(frozen=True)
+class CashflowSourceCutEvidence:
+    """Source-owned facts that identify one portfolio cashflow evidence cut.
+
+    The product-specific windows intentionally do not contribute to this identity.
+    A common cut instead names the admitted portfolio's source state as of one
+    governed business date, allowing two products with different output windows
+    to make a truthful coherence claim.
+    """
+
+    portfolio_base_currency: str
+    cashflow_revision_count: int
+    cashflow_revision_digest: str
+    settlement_revision_count: int
+    settlement_revision_digest: str
+    materialized_at: datetime
+
+
 class CashflowRepository:
     """
     Handles read-only database queries for cashflow data.
@@ -51,6 +70,14 @@ class CashflowRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def establish_cashflow_source_read_snapshot(self) -> None:
+        """Make response evidence and its source cut share one read-only snapshot."""
+        if self.db.in_transaction():
+            raise RuntimeError(
+                "Cashflow source snapshot must be established before the first database read."
+            )
+        await self.db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
 
     @staticmethod
     def _latest_cashflows_subquery(*, portfolio_id: str | None = None):
@@ -105,7 +132,7 @@ class CashflowRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_portfolio_cashflow_series_with_evidence(
-        self, portfolio_id: str, start_date: date, end_date: date
+        self, portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
     ) -> CashflowSeriesEvidence:
         """Return booked daily cashflows and latest evidence timestamp in one read."""
         latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
@@ -117,8 +144,10 @@ class CashflowRepository:
                 func.sum(func.sum(latest_cashflows.c.amount)).over().label("source_total"),
                 func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
             )
+            .join(Portfolio, Portfolio.portfolio_id == latest_cashflows.c.portfolio_id)
             .where(
                 latest_cashflows.c.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
                 latest_cashflows.c.cashflow_date.between(start_date, end_date),
                 latest_cashflows.c.is_portfolio_flow,
             )
@@ -151,6 +180,8 @@ class CashflowRepository:
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
         """Return projected settlement cashflows and latest evidence timestamp in one read."""
         settlement_date = func.date(Transaction.settlement_date)
@@ -173,8 +204,10 @@ class CashflowRepository:
                 func.sum(func.sum(signed_amount)).over().label("source_total"),
                 func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
             )
+            .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
                 Transaction.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
                 Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
                 Transaction.settlement_date.is_not(None),
                 Transaction.settlement_date >= start_of_day(start_date),
@@ -207,7 +240,7 @@ class CashflowRepository:
 
     @async_timed(repository="CashflowRepository", method="get_portfolio_cash_movement_summary")
     async def get_portfolio_cash_movement_summary(
-        self, portfolio_id: str, start_date: date, end_date: date
+        self, portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
     ) -> CashMovementSummaryEvidence:
         """Aggregate latest cashflow rows by source-owned cash movement classification."""
         latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
@@ -226,8 +259,10 @@ class CashflowRepository:
                 .over(partition_by=latest_cashflows.c.currency)
                 .label("source_currency_total"),
             )
+            .join(Portfolio, Portfolio.portfolio_id == latest_cashflows.c.portfolio_id)
             .where(
                 latest_cashflows.c.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == tenant_id.value,
                 latest_cashflows.c.cashflow_date.between(start_date, end_date),
             )
             .group_by(
@@ -262,6 +297,51 @@ class CashflowRepository:
             ],
             source_row_count=int(rows[0][8] or 0) if rows else 0,
             source_currency_totals={str(row[2]): Decimal(str(row[9] or 0)) for row in rows},
+        )
+
+    async def get_cashflow_source_cut_evidence(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: date,
+        tenant_id: TenantId,
+    ) -> CashflowSourceCutEvidence:
+        """Read the admitted portfolio's complete stable evidence state.
+
+        ``as_of_date`` is part of the public cut identity assembled by the caller,
+        not a source-membership filter: projections can include future booked or
+        settled cashflows that still need to change the same source cut.
+        """
+        del as_of_date
+        evidence = (
+            await self.db.execute(
+                select(
+                    PortfolioCashflowSourceCut.portfolio_base_currency,
+                    PortfolioCashflowSourceCut.cashflow_revision_count,
+                    PortfolioCashflowSourceCut.cashflow_revision_digest,
+                    PortfolioCashflowSourceCut.settlement_revision_count,
+                    PortfolioCashflowSourceCut.settlement_revision_digest,
+                    PortfolioCashflowSourceCut.materialized_at,
+                )
+                .join(
+                    Portfolio,
+                    Portfolio.portfolio_id == PortfolioCashflowSourceCut.portfolio_id,
+                )
+                .where(
+                    PortfolioCashflowSourceCut.portfolio_id == portfolio_id,
+                    Portfolio.tenant_id == tenant_id.value,
+                )
+            )
+        ).one_or_none()
+        if evidence is None:
+            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        return CashflowSourceCutEvidence(
+            portfolio_base_currency=str(evidence[0]),
+            cashflow_revision_count=int(evidence[1]),
+            cashflow_revision_digest=str(evidence[2]),
+            settlement_revision_count=int(evidence[3]),
+            settlement_revision_digest=str(evidence[4]),
+            materialized_at=evidence[5],
         )
 
     @async_timed(repository="CashflowRepository", method="get_external_flows")

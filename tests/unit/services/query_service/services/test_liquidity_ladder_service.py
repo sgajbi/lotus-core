@@ -194,6 +194,8 @@ async def test_liquidity_ladder_runs_booked_and_projected_reads_sequentially() -
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: object,
     ) -> CashflowSeriesEvidence:
         call_order.append("booked")
         return CashflowSeriesEvidence(
@@ -205,6 +207,8 @@ async def test_liquidity_ladder_runs_booked_and_projected_reads_sequentially() -
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: object,
     ) -> CashflowSeriesEvidence:
         call_order.append("projected")
         return CashflowSeriesEvidence(
@@ -265,6 +269,8 @@ async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_sequentiall
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: object,
     ) -> CashflowSeriesEvidence:
         call_order.append("booked")
         assert portfolio_id == "P1"
@@ -279,6 +285,8 @@ async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_sequentiall
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: object,
     ) -> CashflowSeriesEvidence:
         call_order.append("projected")
         assert portfolio_id == "P1"

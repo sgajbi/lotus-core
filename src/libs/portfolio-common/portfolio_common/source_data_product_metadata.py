@@ -114,7 +114,11 @@ class SourceDataProductRuntimeMetadata(BaseModel):
     )
     generated_at: datetime = Field(
         ...,
-        description="UTC timestamp when this source-data product response was generated.",
+        description=(
+            "UTC source-product materialization timestamp. A product that can prove a stable "
+            "source cut may publish that cut's latest source revision time instead of the "
+            "transport-serving time; the product contract states which applies."
+        ),
         examples=["2026-04-15T01:30:00Z"],
     )
     as_of_date: date = Field(
@@ -141,6 +145,15 @@ class SourceDataProductRuntimeMetadata(BaseModel):
         None,
         description="Latest linked evidence timestamp available for this product scope.",
         examples=["2026-04-15T01:29:59Z"],
+    )
+    source_cut_id: str | None = Field(
+        None,
+        description=(
+            "Authoritative, comparable source-cut identity when the source owner can prove "
+            "the portfolio and as-of evidence set used by this response. Null means the "
+            "product does not claim cross-product cut coherence."
+        ),
+        examples=["cashflow-source-cut:0123456789abcdef01234567"],
     )
     source_batch_fingerprint: str | None = Field(
         None,
@@ -225,6 +238,7 @@ def source_data_product_runtime_metadata(
     reconciliation_status: str = UNKNOWN,
     data_quality_status: str = UNKNOWN,
     latest_evidence_timestamp: datetime | None = None,
+    source_cut_id: str | None = None,
     source_batch_fingerprint: str | None = None,
     snapshot_id: str | None = None,
     policy_version: str | None = None,
@@ -264,6 +278,7 @@ def source_data_product_runtime_metadata(
         "reconciliation_status": reconciliation_status,
         "data_quality_status": data_quality_status,
         "latest_evidence_timestamp": latest_evidence_timestamp,
+        "source_cut_id": normalize_lineage_value(source_cut_id),
         "source_batch_fingerprint": normalized_source_batch_fingerprint,
         "snapshot_id": normalize_lineage_value(snapshot_id),
         "content_hash": resolved_content_hash,

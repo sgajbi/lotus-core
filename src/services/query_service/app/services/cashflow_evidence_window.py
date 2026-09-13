@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..repositories.cashflow_repository import CashflowRepository
 
 
@@ -23,17 +25,20 @@ async def read_cashflow_evidence_window(
     start_date: date,
     end_date: date,
     include_projected: bool,
+    tenant_id: TenantId,
 ) -> CashflowEvidenceWindow:
     booked_evidence = await repo.get_portfolio_cashflow_series_with_evidence(
         portfolio_id=portfolio_id,
         start_date=start_date,
         end_date=end_date,
+        tenant_id=tenant_id,
     )
     if include_projected:
         projected_evidence = await repo.get_projected_settlement_cashflow_series_with_evidence(
             portfolio_id=portfolio_id,
             start_date=start_date,
             end_date=end_date,
+            tenant_id=tenant_id,
         )
         projected_rows = projected_evidence.rows
         latest_projected_evidence = projected_evidence.latest_evidence_timestamp

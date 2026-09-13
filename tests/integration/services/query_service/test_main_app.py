@@ -950,6 +950,10 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     )
     assert "calculation_lineage" in projection_response["properties"]
     assert "source_window_trust" in projection_response["properties"]
+    assert (
+        "comparable source-cut identity"
+        in projection_response["properties"]["source_cut_id"]["description"]
+    )
     # Tenancy is an admission concern applied to every route, not a parameter
     # a route accepts. Only three of thirty-two routes ever declared this
     # header, and on those three the value was recorded into lineage, content
@@ -998,6 +1002,10 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     )
     assert "calculation_lineage" in summary_response["properties"]
     assert "source_window_trust" in summary_response["properties"]
+    assert (
+        "comparable source-cut identity"
+        in summary_response["properties"]["source_cut_id"]["description"]
+    )
     # Tenancy is an admission concern applied to every route, not a parameter
     # a route accepts. Only three of thirty-two routes ever declared this
     # header, and on those three the value was recorded into lineage, content

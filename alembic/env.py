@@ -35,6 +35,7 @@ if config.config_file_name:
 
 # Import the models module so SQLAlchemy model classes register with Base.metadata for Alembic.
 database_models = importlib.import_module("portfolio_common.database_models")
+importlib.import_module("portfolio_common.cashflow_source_cut_models")
 alembic_numeric = importlib.import_module("portfolio_common.alembic_numeric")
 database_runtime_profile = importlib.import_module("portfolio_common.database_runtime_profile")
 connection_security = importlib.import_module("portfolio_common.connection_security")

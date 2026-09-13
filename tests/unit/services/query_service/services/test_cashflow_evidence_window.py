@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.query_service.app.repositories.cashflow_repository import CashflowSeriesEvidence
 from src.services.query_service.app.services.cashflow_evidence_window import (
@@ -21,6 +22,7 @@ async def test_read_cashflow_evidence_window_reads_booked_and_projected_sequenti
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
         call_order.append("booked")
         assert portfolio_id == "P1"
@@ -36,6 +38,7 @@ async def test_read_cashflow_evidence_window_reads_booked_and_projected_sequenti
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
         call_order.append("projected")
         assert portfolio_id == "P1"
@@ -55,6 +58,7 @@ async def test_read_cashflow_evidence_window_reads_booked_and_projected_sequenti
         start_date=date(2026, 3, 27),
         end_date=date(2026, 4, 5),
         include_projected=True,
+        tenant_id=TenantId("tenant-test"),
     )
 
     assert window.booked_rows == [(date(2026, 3, 27), Decimal("10"))]
@@ -76,6 +80,7 @@ async def test_read_cashflow_evidence_window_skips_projected_read_for_booked_onl
         start_date=date(2026, 3, 27),
         end_date=date(2026, 3, 27),
         include_projected=False,
+        tenant_id=TenantId("tenant-test"),
     )
 
     repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()

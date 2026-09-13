@@ -16,6 +16,7 @@ from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProj
 from ..repositories.cashflow_repository import CashflowRepository
 from .cashflow_evidence_window import read_cashflow_evidence_window
 from .cashflow_product_trust import reconcile_cashflow_window
+from .cashflow_source_cut import build_cashflow_source_cut
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,8 @@ class CashflowProjectionService:
         if horizon_days < 1 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 1 and {MAX_HORIZON_DAYS}.")
 
+        await self.repo.establish_cashflow_source_read_snapshot()
+
         portfolio_currency = await self.repo.get_portfolio_currency(
             portfolio_id, tenant_id=tenant_context.tenant_id
         )
@@ -66,6 +69,17 @@ class CashflowProjectionService:
             start_date=range_start_date,
             end_date=query_end_date,
             include_projected=include_projected,
+            tenant_id=tenant_context.tenant_id,
+        )
+        source_cut = build_cashflow_source_cut(
+            tenant_id=tenant_context.tenant_id.value,
+            portfolio_id=portfolio_id,
+            as_of_date=effective_as_of_date.isoformat(),
+            evidence=await self.repo.get_cashflow_source_cut_evidence(
+                portfolio_id=portfolio_id,
+                as_of_date=effective_as_of_date,
+                tenant_id=tenant_context.tenant_id,
+            ),
         )
 
         with localcontext() as calculation_context:
@@ -171,6 +185,10 @@ class CashflowProjectionService:
                 "portfolio_currency": portfolio_currency,
                 "request_fingerprint": request_fingerprint,
                 "response_values": response_values,
+                "source_cut_id": source_cut.source_cut_id,
+                # Bind durable source chronology, rather than a volatile
+                # response-serving time, to the replayable proof hash.
+                "source_materialized_at": source_cut.materialized_at,
                 "calculation_lineage": calculation_lineage.lineage_payload(),
                 "latest_evidence_timestamp": cashflow_evidence.latest_evidence_timestamp,
             }
@@ -196,10 +214,12 @@ class CashflowProjectionService:
             ),
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date,
+                generated_at=source_cut.materialized_at,
                 tenant_id=normalized_tenant_id,
                 reconciliation_status=source_window_trust.reconciliation_status,
                 data_quality_status=source_window_trust.data_quality_status,
                 latest_evidence_timestamp=cashflow_evidence.latest_evidence_timestamp,
+                source_cut_id=source_cut.source_cut_id,
                 content_hash=content_hash,
                 snapshot_id=(f"cashflow_projection:{calculation_lineage.output_content_hash[:24]}"),
                 policy_version=CASHFLOW_PROJECTION_POLICY_VERSION,
@@ -208,6 +228,7 @@ class CashflowProjectionService:
                     "source_owner": "lotus-core",
                     "source_product": "PortfolioCashflowProjection",
                     "portfolio_id": portfolio_id,
+                    "source_cut_id": source_cut.source_cut_id,
                     "input_content_hash": calculation_lineage.input_content_hash,
                     "calculation_content_hash": calculation_lineage.calculation_content_hash,
                     "output_content_hash": calculation_lineage.output_content_hash,

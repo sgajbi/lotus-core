@@ -54,6 +54,12 @@ def test_critical_db_coverage_includes_financial_reconciliation_repository() -> 
     )
 
 
+def test_critical_db_coverage_includes_cashflow_source_cut_migration() -> None:
+    assert "tests/integration/test_portfolio_cashflow_source_cut_migration.py" in get_suite(
+        "critical-db-coverage"
+    )
+
+
 def test_critical_lifecycle_suite_is_marker_selected_and_db_direct() -> None:
     assert get_suite("critical-lifecycle-db") == ["tests/integration"]
     assert SUITE_PYTEST_ARGS["critical-lifecycle-db"] == ["-m", "lifecycle"]
@@ -73,6 +79,10 @@ def test_query_authority_db_contract_executes_tenant_and_service_regressions() -
         "test_transaction_economics_tenant_postgresql.py",
         "tests/integration/services/query_service/test_transaction_repository_paging.py::"
         "test_transaction_ledger_page_and_identity_share_one_repeatable_snapshot",
+        "tests/integration/services/query_service/test_integration_cashflow_repository.py::"
+        "test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant",
+        "tests/integration/services/persistence_service/repositories/test_repositories.py::"
+        "test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency",
     ]
     assert SUITE_ENV_PROFILE["query-authority-db-contract"] == "integration"
     assert SUITE_RUNTIME_MODE["query-authority-db-contract"] == "db_direct"

@@ -1,4 +1,5 @@
-from datetime import UTC, date, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.repositories.cashflow_repository import (
     CashflowRepository,
     CashflowSeriesEvidence,
+    CashflowSourceCutEvidence,
 )
 from src.services.query_service.app.services.cashflow_projection_service import (
     MAX_HORIZON_DAYS,
@@ -30,9 +32,17 @@ def mock_repo() -> AsyncMock:
     repo.portfolio_exists.return_value = True
     repo.get_portfolio_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2026, 3, 1)
+    repo.get_cashflow_source_cut_evidence.return_value = CashflowSourceCutEvidence(
+        portfolio_base_currency="USD",
+        cashflow_revision_count=1,
+        cashflow_revision_digest="cashflow-source-revision-digest",
+        settlement_revision_count=0,
+        settlement_revision_digest="empty-settlement-source-revision-digest",
+        materialized_at=datetime(2026, 3, 3, 12, 30, tzinfo=UTC),
+    )
 
     async def _series(
-        portfolio_id: str, start_date: date, end_date: date
+        portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
     ) -> list[tuple[date, Decimal]]:
         universe = {
             date(2026, 3, 1): Decimal("-1000"),
@@ -41,9 +51,9 @@ def mock_repo() -> AsyncMock:
         return [(d, amount) for d, amount in universe.items() if start_date <= d <= end_date]
 
     async def _series_with_evidence(
-        portfolio_id: str, start_date: date, end_date: date
+        portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
     ) -> CashflowSeriesEvidence:
-        rows = await _series(portfolio_id, start_date, end_date)
+        rows = await _series(portfolio_id, start_date, end_date, tenant_id=tenant_id)
         return CashflowSeriesEvidence(
             rows=rows,
             latest_evidence_timestamp=datetime(2026, 3, 3, 12, 30, tzinfo=UTC),
@@ -72,11 +82,13 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 11),
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         )
         mock_repo.get_projected_settlement_cashflow_series_with_evidence.assert_awaited_once_with(
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 11),
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         )
         assert response.total_net_cashflow == Decimal("-750")
         assert response.booked_total_net_cashflow == Decimal("-750")
@@ -86,6 +98,8 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert response.portfolio_currency == "USD"
         assert response.data_quality_status == "COMPLETE"
         assert response.latest_evidence_timestamp == datetime(2026, 3, 3, 12, 30, tzinfo=UTC)
+        assert response.source_cut_id.startswith("cashflow-source-cut:")
+        assert response.generated_at == datetime(2026, 3, 3, 12, 30, tzinfo=UTC)
         assert response.content_hash.startswith("sha256:")
         assert response.source_batch_fingerprint is None
         assert response.source_digest == response.content_hash
@@ -121,6 +135,41 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert response.points[1].projected_cumulative_cashflow == Decimal("-1000")
         assert response.points[2].projected_cumulative_cashflow == Decimal("-750")
         assert len(response.points) == 11
+
+
+async def test_projection_content_hash_binds_the_common_source_cut(mock_repo: AsyncMock) -> None:
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        first = await service.get_cashflow_projection(
+            portfolio_id="P1", horizon_days=10, tenant_context=TEST_TENANT_CONTEXT
+        )
+        mock_repo.get_cashflow_source_cut_evidence.return_value = replace(
+            mock_repo.get_cashflow_source_cut_evidence.return_value,
+            cashflow_revision_digest="restated-source-revision-digest",
+        )
+        restated = await service.get_cashflow_projection(
+            portfolio_id="P1", horizon_days=10, tenant_context=TEST_TENANT_CONTEXT
+        )
+
+    assert restated.points == first.points
+    assert restated.source_cut_id != first.source_cut_id
+    assert restated.content_hash != first.content_hash
+
+    mock_repo.get_cashflow_source_cut_evidence.return_value = replace(
+        mock_repo.get_cashflow_source_cut_evidence.return_value,
+        materialized_at=mock_repo.get_cashflow_source_cut_evidence.return_value.materialized_at
+        + timedelta(seconds=1),
+    )
+    refreshed = await service.get_cashflow_projection(
+        portfolio_id="P1", horizon_days=10, tenant_context=TEST_TENANT_CONTEXT
+    )
+
+    assert refreshed.source_cut_id == restated.source_cut_id
+    assert refreshed.generated_at != restated.generated_at
+    assert refreshed.content_hash != restated.content_hash
 
 
 async def test_projection_reads_currency_and_default_date_sequentially(
@@ -173,6 +222,7 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
             portfolio_id="P1",
             start_date=date(2026, 3, 2),
             end_date=date(2026, 3, 2),
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         )
         mock_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
         assert response.include_projected is False
@@ -311,6 +361,8 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
         call_order.append("booked")
         return CashflowSeriesEvidence(
@@ -324,6 +376,8 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
         portfolio_id: str,
         start_date: date,
         end_date: date,
+        *,
+        tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
         call_order.append("projected")
         return CashflowSeriesEvidence(

@@ -83,6 +83,7 @@ class PortfolioLiquidityLadderService:
             start_date=resolved_as_of_date,
             end_date=range_end_date,
             include_projected=include_projected,
+            tenant_id=tenant_context.tenant_id,
         )
 
         cash_rows, non_cash_rows = self._partition_cash_rows(rows)

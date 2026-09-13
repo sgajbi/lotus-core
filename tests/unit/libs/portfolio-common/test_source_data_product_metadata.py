@@ -84,6 +84,7 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
         "reconciliation_status": UNKNOWN,
         "data_quality_status": UNKNOWN,
         "latest_evidence_timestamp": None,
+        "source_cut_id": None,
         "source_batch_fingerprint": None,
         "snapshot_id": None,
         "content_hash": SOURCE_METADATA_UNAVAILABLE_HASH,
