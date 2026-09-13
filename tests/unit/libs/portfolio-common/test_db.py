@@ -89,7 +89,10 @@ def test_sessionlocal_creates_sync_engine_lazily(monkeypatch):
                 "connect_args": {
                     "application_name": "lotus-core-local",
                     "connect_timeout": 60,
-                    "options": ("-c statement_timeout=0 -c idle_in_transaction_session_timeout=0"),
+                    "options": (
+                        "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0 "
+                        "-c TimeZone=UTC"
+                    ),
                 },
                 "pool_pre_ping": True,
                 "pool_size": 5,
@@ -186,6 +189,7 @@ async def test_asyncsessionlocal_creates_async_engine_lazily(monkeypatch):
                         "application_name": "lotus-core-local",
                         "statement_timeout": "0ms",
                         "idle_in_transaction_session_timeout": "0ms",
+                        "TimeZone": "UTC",
                     },
                 },
                 "pool_pre_ping": True,
@@ -247,7 +251,10 @@ def test_standalone_sync_engine_uses_explicit_identity(monkeypatch):
                 "connect_args": {
                     "application_name": "offline-integrity-auditor",
                     "connect_timeout": 60,
-                    "options": ("-c statement_timeout=0 -c idle_in_transaction_session_timeout=0"),
+                    "options": (
+                        "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0 "
+                        "-c TimeZone=UTC"
+                    ),
                 },
                 "pool_pre_ping": True,
                 "pool_size": 5,
@@ -285,6 +292,7 @@ def test_standalone_async_engine_uses_explicit_identity(monkeypatch):
                         "application_name": "average-cost-reconciliation",
                         "statement_timeout": "0ms",
                         "idle_in_transaction_session_timeout": "0ms",
+                        "TimeZone": "UTC",
                     },
                 },
                 "pool_pre_ping": True,

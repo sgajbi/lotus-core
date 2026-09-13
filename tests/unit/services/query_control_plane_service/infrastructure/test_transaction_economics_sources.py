@@ -176,9 +176,9 @@ async def test_list_transaction_cost_evidence_filters_scope_before_loading_costs
         "JOIN portfolios ON portfolios.portfolio_id = transactions.portfolio_id" in compiled_query
     )
     assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
-    assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2026-04-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-04 00:00:00+00:00'" in compiled_query
     assert "abs(transactions.gross_transaction_amount) > 0" in compiled_query
     assert "transactions.trade_fee > 0" in compiled_query
     assert "EXISTS (SELECT 1" in compiled_query

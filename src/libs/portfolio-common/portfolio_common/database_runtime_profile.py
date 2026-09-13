@@ -207,7 +207,7 @@ def sync_database_engine_options(profile: DatabaseRuntimeProfile) -> dict[str, o
             "options": (
                 f"-c statement_timeout={profile.statement_timeout_ms} "
                 "-c idle_in_transaction_session_timeout="
-                f"{profile.idle_in_transaction_session_timeout_ms}"
+                f"{profile.idle_in_transaction_session_timeout_ms} -c TimeZone=UTC"
             ),
         }
     }
@@ -224,6 +224,7 @@ def async_database_engine_options(profile: DatabaseRuntimeProfile) -> dict[str, 
                 "idle_in_transaction_session_timeout": (
                     f"{profile.idle_in_transaction_session_timeout_ms}ms"
                 ),
+                "TimeZone": "UTC",
             },
         }
     }

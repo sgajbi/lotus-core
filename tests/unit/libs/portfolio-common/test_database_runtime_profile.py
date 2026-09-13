@@ -65,7 +65,9 @@ def test_driver_options_apply_equivalent_governed_settings(monkeypatch) -> None:
     assert sync_options["connect_args"] == {
         "application_name": "portfolio-derived-state",
         "connect_timeout": 60,
-        "options": "-c statement_timeout=2500 -c idle_in_transaction_session_timeout=5000",
+        "options": (
+            "-c statement_timeout=2500 -c idle_in_transaction_session_timeout=5000 -c TimeZone=UTC"
+        ),
     }
     assert async_options["connect_args"] == {
         "timeout": 60,
@@ -73,6 +75,7 @@ def test_driver_options_apply_equivalent_governed_settings(monkeypatch) -> None:
             "application_name": "portfolio-derived-state",
             "statement_timeout": "2500ms",
             "idle_in_transaction_session_timeout": "5000ms",
+            "TimeZone": "UTC",
         },
     }
     for key, expected in {
@@ -136,7 +139,9 @@ def test_nullpool_omits_queue_options(monkeypatch) -> None:
         "connect_args": {
             "application_name": "migration-runner",
             "connect_timeout": 60,
-            "options": "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0",
+            "options": (
+                "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0 -c TimeZone=UTC"
+            ),
         },
         "poolclass": NullPool,
     }

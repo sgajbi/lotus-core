@@ -35,9 +35,9 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "transactions.transaction_type IN ('DEPOSIT', 'WITHDRAWAL')" in compiled_query
-    assert "transactions.settlement_date >= '2026-04-18 00:00:00'" in compiled_query
-    assert "transactions.settlement_date < '2026-04-29 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-04-18 00:00:00'" in compiled_query
+    assert "transactions.settlement_date >= '2026-04-18 00:00:00+00:00'" in compiled_query
+    assert "transactions.settlement_date < '2026-04-29 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-04-18 00:00:00+00:00'" in compiled_query
     assert "transactions.transaction_type = 'BUY'" not in compiled_query
     assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "max(transactions.updated_at)" in compiled_query.lower()

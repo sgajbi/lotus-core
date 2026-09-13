@@ -184,7 +184,10 @@ class CashflowRepository:
         tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
         """Return projected settlement cashflows and latest evidence timestamp in one read."""
-        settlement_date = func.date(Transaction.settlement_date)
+        # `settlement_date` is an instant.  This product publishes UTC event-date
+        # buckets; booking-centre business dates require an explicit separate
+        # authority and must not follow the database session's TimeZone.
+        settlement_date = func.date(func.timezone("UTC", Transaction.settlement_date))
         signed_amount = case(
             (
                 Transaction.transaction_type == "DEPOSIT",

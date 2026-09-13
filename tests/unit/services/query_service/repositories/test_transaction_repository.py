@@ -154,8 +154,8 @@ async def test_get_transactions_with_all_filters(
 
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "trim(transactions.security_id) = 'S1'" in compiled_query
-    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00+00:00'" in compiled_query
 
 
 async def test_get_transactions_exact_identity_is_portfolio_scoped_and_reuses_unique_index(
@@ -227,7 +227,7 @@ async def test_get_transactions_with_as_of_date_filter(
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-01-16 00:00:00+00:00'" in compiled_query
 
 
 async def test_establish_transaction_ledger_read_snapshot_is_repeatable_and_read_only(
@@ -343,8 +343,8 @@ async def test_get_transactions_count_applies_identity_and_date_filters(
     assert "transactions.swap_event_id = 'SWAP-001'" in compiled_query
     assert "transactions.near_leg_group_id = 'NEAR-001'" in compiled_query
     assert "transactions.far_leg_group_id = 'FAR-001'" in compiled_query
-    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00+00:00'" in compiled_query
 
 
 async def test_get_transactions_count_with_date_filters(
@@ -364,8 +364,8 @@ async def test_get_transactions_count_with_date_filters(
     assert count == 2
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00+00:00'" in compiled_query
 
 
 async def test_get_transactions_count_with_as_of_date(
@@ -380,7 +380,7 @@ async def test_get_transactions_count_with_as_of_date(
     assert count == 3
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-01-16 00:00:00+00:00'" in compiled_query
 
 
 async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evidence(
@@ -404,9 +404,9 @@ async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evid
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "transactions.withholding_tax_amount IS NOT NULL" in compiled_query
     assert "transactions.other_interest_deductions_amount IS NOT NULL" in compiled_query
-    assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2026-04-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-04 00:00:00+00:00'" in compiled_query
     assert "ORDER BY transactions.currency ASC" in compiled_query
     assert "transactions.transaction_date ASC" in compiled_query
     assert "transactions.transaction_id ASC" in compiled_query
@@ -617,6 +617,6 @@ async def test_get_transaction_ledger_input_evidence_applies_complete_scope_filt
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "trim(transactions.security_id) = 'S1'" in compiled_query
     assert "transactions.transaction_type = 'FX_FORWARD'" in compiled_query
-    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00+00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-01-16 00:00:00+00:00'" in compiled_query

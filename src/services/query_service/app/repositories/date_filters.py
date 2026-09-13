@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 
 def start_of_day(value: date) -> datetime:
-    return datetime.combine(value, time.min)
+    """Return the governed UTC instant beginning an event-date window."""
+    return datetime.combine(value, time.min, tzinfo=UTC)
 
 
 def start_of_next_day(value: date) -> datetime:
-    return datetime.combine(value + timedelta(days=1), time.min)
+    """Return the exclusive UTC instant following an event-date window."""
+    return datetime.combine(value + timedelta(days=1), time.min, tzinfo=UTC)

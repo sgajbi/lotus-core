@@ -6,7 +6,7 @@ import hashlib
 import logging
 from collections.abc import Callable
 from dataclasses import MISSING, fields
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from time import monotonic
 from typing import Any, cast
@@ -195,7 +195,8 @@ class SqlAlchemyPositionHistoryRepository:
             .where(
                 func.trim(Transaction.portfolio_id) == normalized_portfolio_id,
                 func.trim(Transaction.security_id) == normalized_security_id,
-                Transaction.transaction_date >= datetime.combine(position_date, time.min),
+                Transaction.transaction_date
+                >= datetime.combine(position_date, time.min, tzinfo=UTC),
             )
             .order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
         )

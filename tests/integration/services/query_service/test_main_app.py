@@ -196,7 +196,8 @@ async def test_openapi_describes_transaction_date_as_event_timestamp(async_test_
     description = transaction_date["description"]
 
     assert description == (
-        "Current transaction event timestamp used for trade/event-date filtering and ordering."
+        "Current transaction event timestamp used for UTC calendar event-date filtering and "
+        "ordering."
     )
     assert "booking" not in description.lower()
 
@@ -941,6 +942,12 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     bad_request = projection["responses"]["400"]["content"]["application/json"]["example"]
     assert bad_request["detail"] == "horizon_days must be between 1 and 366."
     projection_response = schema["components"]["schemas"]["CashflowProjectionResponse"]
+    assert projection_response["properties"]["range_start_date"]["description"] == (
+        "Inclusive cashflow-date start of the projection range."
+    )
+    assert projection_response["properties"]["range_end_date"]["description"] == (
+        "Inclusive cashflow-date end of the projection range."
+    )
     assert projection_response["properties"]["portfolio_currency"]["description"] == (
         "ISO currency code for net_cashflow, projected_cumulative_cashflow, "
         "and total_net_cashflow. Sourced from the portfolio base currency."
@@ -999,6 +1006,11 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     )
     assert (
         "cashflow-date window start" in summary_response["properties"]["start_date"]["description"]
+    )
+    projection_response = schema["components"]["schemas"]["CashflowProjectionResponse"]
+    assert projection_response["properties"]["as_of_date"]["description"] == (
+        "Business-date anchor used for the projection baseline; UTC governs "
+        "timestamp-window interpretation, not this business-date identity."
     )
     assert "calculation_lineage" in summary_response["properties"]
     assert "source_window_trust" in summary_response["properties"]

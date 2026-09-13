@@ -36,7 +36,8 @@ class TransactionRecord(BaseModel):
     transaction_date: datetime = Field(
         ...,
         description=(
-            "Current transaction event timestamp used for trade/event-date filtering and ordering."
+            "Current transaction event timestamp used for UTC calendar event-date filtering and "
+            "ordering."
         ),
         examples=["2026-03-01T09:30:00Z"],
     )
@@ -734,12 +735,12 @@ class PortfolioRealizedTaxSummaryResponse(SourceDataProductRuntimeMetadata):
     )
     start_date: Optional[date] = Field(
         None,
-        description="Inclusive transaction-date lower bound used for the summary.",
+        description="Inclusive UTC calendar-date transaction lower bound used for the summary.",
         examples=["2026-01-01"],
     )
     end_date: Optional[date] = Field(
         None,
-        description="Inclusive transaction-date upper bound used for the summary.",
+        description="Inclusive UTC calendar-date transaction upper bound used for the summary.",
         examples=["2026-03-31"],
     )
     source_transaction_count: int = Field(

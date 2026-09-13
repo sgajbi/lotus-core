@@ -282,7 +282,7 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     assert (
         "trim(transactions.settlement_cash_instrument_id) IN ('CASH_USD', 'CASH_SGD')" in compiled
     )
-    assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
+    assert "transactions.transaction_date < '2026-03-28 00:00:00+00:00'" in compiled
     assert "transactions.settlement_cash_account_id IS NOT NULL" in compiled
     assert "JOIN cash_account_masters" in compiled
     assert (

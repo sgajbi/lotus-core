@@ -45,6 +45,15 @@ settlement legs, and synthetic flows therefore enter the booked component on the
 cashflow date instead of always on transaction date. Projected mode continues to read future
 external `DEPOSIT` and `WITHDRAWAL` transactions directly by `settlement_date`.
 
+## Event-Date Window Policy
+
+`transaction_date` and `settlement_date` are UTC-normalized instants. A request date `d` means the
+half-open UTC interval `[dT00:00:00Z, (d + 1)T00:00:00Z)`: projected settlement membership uses
+that interval and the returned settlement bucket is `date(timezone('UTC', settlement_date))`.
+The database runtime also pins `TimeZone=UTC`, but the predicates and bucket expression do not
+depend on that session setting. Booking-centre business dates are a separate, additive authority;
+Core does not infer them from an instant or a portfolio booking-centre code for this product.
+
 ## Common Source Cut and Replay
 
 Core publishes `source_cut_id` when it can prove the admitted portfolio's cashflow evidence set as

@@ -1,6 +1,6 @@
 """SQLAlchemy source adapter for transaction-economics evidence products."""
 
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction, TransactionCost
@@ -23,11 +23,11 @@ from ..domain.transaction_economics import (
 
 
 def _start_of_day(value: date) -> datetime:
-    return datetime.combine(value, time.min)
+    return datetime.combine(value, time.min, tzinfo=UTC)
 
 
 def _start_of_next_day(value: date) -> datetime:
-    return datetime.combine(value + timedelta(days=1), time.min)
+    return datetime.combine(value + timedelta(days=1), time.min, tzinfo=UTC)
 
 
 def _transaction_cost_curve_key_expressions():
