@@ -5,6 +5,7 @@ from typing import Literal
 
 import pytest
 from portfolio_common.domain.portfolio_party_roles import PortfolioPartyRoleType
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.query_control_plane_service.app.application.portfolio_manager_book import (
     PortfolioManagerBookService,
@@ -84,8 +85,12 @@ async def test_resolves_effective_membership_with_deterministic_source_evidence(
         portfolio_types=[" discretionary ", "", "advisory"],
     )
 
-    first = await service.resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
-    second = await service.resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    first = await service.resolve_membership(
+        tenant_id=TenantId("default"), portfolio_manager_id="PM_SG_DPM_001", request=request
+    )
+    second = await service.resolve_membership(
+        tenant_id=TenantId("default"), portfolio_manager_id="PM_SG_DPM_001", request=request
+    )
 
     assert first.members[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert first.members[0].source_record_id == "portfolio:PB_SG_GLOBAL_BAL_001"
@@ -97,6 +102,7 @@ async def test_resolves_effective_membership_with_deterministic_source_evidence(
     assert first.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
     assert first.snapshot_id == second.snapshot_id
     assert reader.calls[0] == {
+        "tenant_id": TenantId("default"),
         "portfolio_manager_id": "PM_SG_DPM_001",
         "as_of_date": date(2026, 5, 3),
         "booking_center_code": "Singapore",
@@ -110,6 +116,7 @@ async def test_empty_book_is_explicitly_incomplete_and_missing() -> None:
     service = PortfolioManagerBookService(reader=_Reader([]), clock=_Clock())
 
     response = await service.resolve_membership(
+        tenant_id=TenantId("default"),
         portfolio_manager_id="PM_EMPTY",
         request=PortfolioManagerBookMembershipRequest(
             as_of_date=date(2026, 5, 3), include_inactive=True, portfolio_types=[" "]
@@ -119,7 +126,11 @@ async def test_empty_book_is_explicitly_incomplete_and_missing() -> None:
     assert response.members == []
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "PM_BOOK_MEMBERSHIP_EMPTY"
-    assert response.supportability.filters_applied == ["portfolio_manager_id", "as_of_date"]
+    assert response.supportability.filters_applied == [
+        "tenant_id",
+        "portfolio_manager_id",
+        "as_of_date",
+    ]
     assert response.data_quality_status == "MISSING"
     assert response.latest_evidence_timestamp is None
     assert response.source_evidence_current is False
@@ -133,6 +144,7 @@ async def test_populated_book_without_timestamp_evidence_remains_fail_closed() -
     )
 
     response = await service.resolve_membership(
+        tenant_id=TenantId("default"),
         portfolio_manager_id="PM_SG_DPM_001",
         request=PortfolioManagerBookMembershipRequest(as_of_date=date(2026, 5, 3)),
     )
@@ -151,6 +163,7 @@ async def test_authoritative_assignment_replaces_legacy_lineage_without_changing
     )
 
     response = await service.resolve_membership(
+        tenant_id=TenantId("default"),
         portfolio_manager_id="PARTY_PM_SG_001",
         request=PortfolioManagerBookMembershipRequest(as_of_date=date(2026, 5, 3)),
     )
@@ -174,11 +187,15 @@ async def test_membership_identity_changes_when_authoritative_role_replaces_lega
     legacy = await PortfolioManagerBookService(
         reader=_Reader([_record(membership_source="legacy_advisor_projection")]),
         clock=_Clock(),
-    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    ).resolve_membership(
+        tenant_id=TenantId("default"), portfolio_manager_id="PM_SG_DPM_001", request=request
+    )
     authoritative = await PortfolioManagerBookService(
         reader=_Reader([_record(membership_source="party_role_assignment")]),
         clock=_Clock(),
-    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    ).resolve_membership(
+        tenant_id=TenantId("default"), portfolio_manager_id="PM_SG_DPM_001", request=request
+    )
 
     assert legacy.members[0].portfolio_id == authoritative.members[0].portfolio_id
     assert legacy.snapshot_id != authoritative.snapshot_id
@@ -194,11 +211,15 @@ async def test_membership_identity_changes_when_source_record_evidence_changes()
     first = await PortfolioManagerBookService(
         reader=_Reader([_record(source_record_id="coverage-v1")]),
         clock=_Clock(),
-    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    ).resolve_membership(
+        tenant_id=TenantId("default"), portfolio_manager_id="PM_SG_DPM_001", request=request
+    )
     corrected = await PortfolioManagerBookService(
         reader=_Reader([_record(source_record_id="coverage-v2")]),
         clock=_Clock(),
-    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    ).resolve_membership(
+        tenant_id=TenantId("default"), portfolio_manager_id="PM_SG_DPM_001", request=request
+    )
 
     assert first.members[0].portfolio_id == corrected.members[0].portfolio_id
     assert first.snapshot_id != corrected.snapshot_id

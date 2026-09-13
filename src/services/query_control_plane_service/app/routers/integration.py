@@ -168,6 +168,11 @@ from ..dependencies import (
     get_sustainability_preference_profile_service,
 )
 from .core_snapshot_http import core_snapshot_response_or_http_error
+from .integration_source_route_descriptions import (
+    CIO_MODEL_CHANGE_COHORT_DESCRIPTION,
+    DPM_PORTFOLIO_UNIVERSE_DESCRIPTION,
+    PORTFOLIO_MANAGER_BOOK_DESCRIPTION,
+)
 from .response_helpers import (
     problem_example,
     problem_or_validation_response,
@@ -178,6 +183,8 @@ from .response_helpers import (
 )
 from .tenant_authority import (
     TENANT_SCOPE_FORBIDDEN_EXAMPLE,
+    TENANT_SCOPE_FORBIDDEN_RESPONSE,
+    require_admitted_tenant_id,
     require_matching_tenant_authority,
 )
 
@@ -982,18 +989,9 @@ async def get_market_data_coverage(
     "/portfolio-manager-books/{portfolio_manager_id}/memberships",
     response_model=PortfolioManagerBookMembershipResponse,
     summary="Resolve portfolio-manager book membership",
-    description=(
-        "What: Return source-owned portfolio memberships for a portfolio-manager book.\n"
-        "How: Resolves effective accepted portfolio-manager role assignments first, then uses "
-        "`advisor_id` only for portfolios with no party-role history. It applies as-of lifecycle, "
-        "active-status, booking-center, and portfolio-type filters and returns deterministic "
-        "membership rows with supportability and lineage.\n"
-        "When: Use this endpoint when lotus-manage needs automatic PM-book cohort discovery for "
-        "DPM rebalance waves. Do not use it as a general staff hierarchy, entitlement, or "
-        "relationship-householding API; richer relationship-book ownership remains a separate "
-        "source product."
-    ),
+    description=PORTFOLIO_MANAGER_BOOK_DESCRIPTION,
     responses={
+        **TENANT_SCOPE_FORBIDDEN_RESPONSE,
         404: problem_response(
             "No portfolio memberships found.",
             PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE,
@@ -1002,6 +1000,7 @@ async def get_market_data_coverage(
     openapi_extra=source_data_product_openapi_extra("PortfolioManagerBookMembership"),
 )
 async def resolve_portfolio_manager_book_membership(
+    http_request: Request,
     request: PortfolioManagerBookMembershipRequest,
     portfolio_manager_id: str = Path(
         ...,
@@ -1015,9 +1014,13 @@ async def resolve_portfolio_manager_book_membership(
         get_portfolio_manager_book_service
     ),
 ) -> PortfolioManagerBookMembershipResponse:
+    tenant_id = require_admitted_tenant_id(
+        request=http_request, supplied_tenant_id=request.tenant_id
+    )
     response = await portfolio_manager_book_service.resolve_membership(
+        tenant_id=tenant_id,
         portfolio_manager_id=portfolio_manager_id,
-        request=request,
+        request=request.model_copy(update={"tenant_id": tenant_id.value}),
     )
     members = getattr(response, "members", None)
     if members is None and isinstance(response, dict):
@@ -1067,16 +1070,9 @@ async def resolve_portfolio_party_role_assignments(
     "/model-portfolios/{model_portfolio_id}/affected-mandates",
     response_model=CioModelChangeAffectedCohortResponse,
     summary="Resolve CIO model-change affected mandate cohort",
-    description=(
-        "What: Return source-owned affected discretionary mandates for an approved CIO model "
-        "portfolio version.\n"
-        "How: Resolves the approved model definition for the as-of date, then selects effective "
-        "portfolio mandate bindings for the model, preserving booking-center filters, active "
-        "discretionary authority, supportability, event identity, and source lineage.\n"
-        "When: Use this endpoint when lotus-manage needs automatic CIO_MODEL_CHANGE wave "
-        "discovery. Do not infer affected cohorts inside consumers from a model id alone."
-    ),
+    description=CIO_MODEL_CHANGE_COHORT_DESCRIPTION,
     responses={
+        **TENANT_SCOPE_FORBIDDEN_RESPONSE,
         404: problem_response(
             "No affected mandates found.",
             CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_EXAMPLE,
@@ -1085,6 +1081,7 @@ async def resolve_portfolio_party_role_assignments(
     openapi_extra=source_data_product_openapi_extra("CioModelChangeAffectedCohort"),
 )
 async def resolve_cio_model_change_affected_cohort(
+    http_request: Request,
     request: CioModelChangeAffectedCohortRequest,
     model_portfolio_id: str = Path(
         ...,
@@ -1095,9 +1092,13 @@ async def resolve_cio_model_change_affected_cohort(
         get_dpm_portfolio_population_service
     ),
 ) -> CioModelChangeAffectedCohortResponse:
+    tenant_id = require_admitted_tenant_id(
+        request=http_request, supplied_tenant_id=request.tenant_id
+    )
     response = await dpm_portfolio_population_service.resolve_cio_model_change_cohort(
+        tenant_id=tenant_id,
         model_portfolio_id=model_portfolio_id,
-        request=request,
+        request=request.model_copy(update={"tenant_id": tenant_id.value}),
     )
     if response is None:
         _raise_integration_source_not_found(
@@ -1127,17 +1128,9 @@ async def resolve_cio_model_change_affected_cohort(
     "/dpm/portfolio-universe/candidates",
     response_model=DpmPortfolioUniverseCandidateResponse,
     summary="Resolve DPM portfolio-universe candidates",
-    description=(
-        "What: Return source-owned DPM portfolio-universe candidates from effective "
-        "discretionary mandate bindings.\n"
-        "How: Applies as-of, booking-center, model-portfolio, active-authority, and deterministic "
-        "paging controls against Core-owned mandate binding records, then returns candidate rows "
-        "with supportability, continuation metadata, and lineage.\n"
-        "When: Use this endpoint when lotus-manage needs source-owned DPM universe discovery "
-        "before campaign or wave composition. Do not use it as a client householding, suitability, "
-        "portfolio-manager ranking, execution, or external workflow API."
-    ),
+    description=DPM_PORTFOLIO_UNIVERSE_DESCRIPTION,
     responses={
+        **TENANT_SCOPE_FORBIDDEN_RESPONSE,
         404: problem_response(
             "No DPM portfolio-universe candidates found.",
             DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE,
@@ -1150,14 +1143,19 @@ async def resolve_cio_model_change_affected_cohort(
     openapi_extra=source_data_product_openapi_extra("DpmPortfolioUniverseCandidate"),
 )
 async def resolve_dpm_portfolio_universe_candidates(
+    http_request: Request,
     request: DpmPortfolioUniverseCandidateRequest,
     dpm_portfolio_population_service: DpmPortfolioPopulationService = Depends(
         get_dpm_portfolio_population_service
     ),
 ) -> DpmPortfolioUniverseCandidateResponse:
+    tenant_id = require_admitted_tenant_id(
+        request=http_request, supplied_tenant_id=request.tenant_id
+    )
     try:
         response = await dpm_portfolio_population_service.resolve_universe_candidates(
-            request=request,
+            tenant_id=tenant_id,
+            request=request.model_copy(update={"tenant_id": tenant_id.value}),
         )
     except ValueError as exc:
         _raise_integration_source_invalid_request(

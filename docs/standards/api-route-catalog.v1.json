@@ -5641,6 +5641,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No DPM portfolio-universe candidates found."
@@ -6167,6 +6172,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "No affected mandates found."
@@ -6319,6 +6329,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",

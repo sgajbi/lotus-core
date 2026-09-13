@@ -15,6 +15,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class PortfolioManagerBookMembershipRequest(BaseModel):
     """Filters for resolving a portfolio manager's effective book."""
 
+    tenant_id: str | None = Field(
+        None,
+        description=(
+            "Optional tenant assertion. When supplied, it must match the tenant admitted at the "
+            "request boundary; the admitted tenant scopes every returned portfolio."
+        ),
+        examples=["tenant-sg"],
+    )
     as_of_date: date = Field(
         ...,
         description="Business date used to resolve active portfolio membership in the PM book.",

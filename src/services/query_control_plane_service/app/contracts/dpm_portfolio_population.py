@@ -20,7 +20,10 @@ class CioModelChangeAffectedCohortRequest(BaseModel):
     )
     tenant_id: str | None = Field(
         None,
-        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
+        description=(
+            "Optional tenant assertion. When supplied, it must match the tenant admitted at the "
+            "request boundary; that admitted tenant scopes every returned mandate."
+        ),
         examples=["default"],
     )
     booking_center_code: str | None = Field(
@@ -146,7 +149,10 @@ class DpmPortfolioUniverseCandidateRequest(BaseModel):
     )
     tenant_id: str | None = Field(
         None,
-        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
+        description=(
+            "Optional tenant assertion. When supplied, it must match the tenant admitted at the "
+            "request boundary; that admitted tenant scopes every returned candidate and page token."
+        ),
         examples=["default"],
     )
     booking_center_code: str | None = Field(

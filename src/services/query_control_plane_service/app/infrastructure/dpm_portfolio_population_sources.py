@@ -3,19 +3,24 @@
 from datetime import date
 from typing import Any
 
-from portfolio_common.database_models import ModelPortfolioDefinition, PortfolioMandateBinding
+from portfolio_common.database_models import (
+    ModelPortfolioDefinition,
+    Portfolio,
+    PortfolioMandateBinding,
+)
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.source_lifecycle_predicates import (
     DISCRETIONARY_MANDATE_TYPE,
     DPM_DISCRETIONARY_MANDATE_ACTIVE,
 )
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.dpm_portfolio_population import (
     ApprovedModelPortfolio,
     DiscretionaryMandatePopulationMember,
 )
-from .effective_profile_queries import effective_on, ranked_latest_ids
+from .effective_profile_queries import effective_on
 
 
 class SqlAlchemyDpmPortfolioPopulationReader:
@@ -52,6 +57,7 @@ class SqlAlchemyDpmPortfolioPopulationReader:
     async def list_affected_mandates(
         self,
         *,
+        tenant_id: TenantId,
         model_portfolio_id: str,
         as_of_date: date,
         booking_center_code: str | None,
@@ -63,12 +69,13 @@ class SqlAlchemyDpmPortfolioPopulationReader:
             model_portfolio_ids=(model_portfolio_id,),
             include_inactive_mandates=include_inactive_mandates,
         )
-        rows = await self._list_ranked_mandates(predicates=predicates)
+        rows = await self._list_ranked_mandates(predicates=predicates, tenant_id=tenant_id)
         return [_mandate_member(row) for row in rows]
 
     async def list_universe_candidates(
         self,
         *,
+        tenant_id: TenantId,
         as_of_date: date,
         booking_center_code: str | None,
         model_portfolio_ids: tuple[str, ...],
@@ -84,6 +91,7 @@ class SqlAlchemyDpmPortfolioPopulationReader:
         )
         rows = await self._list_ranked_mandates(
             predicates=predicates,
+            tenant_id=tenant_id,
             after_sort_key=after_sort_key,
             limit=limit,
         )
@@ -93,22 +101,33 @@ class SqlAlchemyDpmPortfolioPopulationReader:
         self,
         *,
         predicates: list[Any],
+        tenant_id: TenantId,
         after_sort_key: tuple[str, str] | None = None,
         limit: int | None = None,
     ) -> list[Any]:
-        ranked = ranked_latest_ids(
-            PortfolioMandateBinding,
-            PortfolioMandateBinding.portfolio_id,
-            PortfolioMandateBinding.mandate_id,
-            predicates=predicates,
-            order_by=(
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nullslast(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
-                PortfolioMandateBinding.created_at.desc(),
-                PortfolioMandateBinding.id.desc(),
-            ),
+        ranked = (
+            select(
+                PortfolioMandateBinding.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        PortfolioMandateBinding.portfolio_id,
+                        PortfolioMandateBinding.mandate_id,
+                    ),
+                    order_by=(
+                        PortfolioMandateBinding.effective_from.desc(),
+                        PortfolioMandateBinding.observed_at.desc().nullslast(),
+                        PortfolioMandateBinding.binding_version.desc(),
+                        PortfolioMandateBinding.updated_at.desc(),
+                        PortfolioMandateBinding.created_at.desc(),
+                        PortfolioMandateBinding.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .join(Portfolio, PortfolioMandateBinding.portfolio_id == Portfolio.portfolio_id)
+            .where(Portfolio.tenant_id == tenant_id.value, *predicates)
+            .subquery()
         )
         statement = (
             select(PortfolioMandateBinding)

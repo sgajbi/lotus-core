@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, Literal, cast
 
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.logging_utils import normalize_lineage_value
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint
@@ -61,6 +62,7 @@ class DpmPortfolioPopulationService:
     async def resolve_cio_model_change_cohort(
         self,
         *,
+        tenant_id: TenantId,
         model_portfolio_id: str,
         request: CioModelChangeAffectedCohortRequest,
     ) -> CioModelChangeAffectedCohortResponse | None:
@@ -71,6 +73,7 @@ class DpmPortfolioPopulationService:
         if model is None:
             return None
         mandates = await self._reader.list_affected_mandates(
+            tenant_id=tenant_id,
             model_portfolio_id=model_portfolio_id,
             as_of_date=request.as_of_date,
             booking_center_code=request.booking_center_code,
@@ -80,18 +83,20 @@ class DpmPortfolioPopulationService:
             model=model,
             mandates=mandates,
             request=request,
+            tenant_id=tenant_id,
             generated_at=self._clock.utc_now(),
         )
 
     async def resolve_universe_candidates(
-        self, *, request: DpmPortfolioUniverseCandidateRequest
+        self, *, tenant_id: TenantId, request: DpmPortfolioUniverseCandidateRequest
     ) -> DpmPortfolioUniverseCandidateResponse:
-        scope = _universe_scope(request)
+        scope = _universe_scope(request, tenant_id=tenant_id)
         after_sort_key = _after_sort_key(
             cursor=self._page_tokens.decode(request.page.page_token),
             scope_fingerprint=scope.fingerprint,
         )
         rows = await self._reader.list_universe_candidates(
+            tenant_id=tenant_id,
             as_of_date=request.as_of_date,
             booking_center_code=scope.booking_center_code,
             model_portfolio_ids=scope.model_portfolio_ids,
@@ -117,8 +122,10 @@ class DpmPortfolioPopulationService:
         )
 
 
-def _universe_scope(request: DpmPortfolioUniverseCandidateRequest) -> DpmPortfolioUniverseScope:
-    tenant_id = normalize_lineage_value(request.tenant_id)
+def _universe_scope(
+    request: DpmPortfolioUniverseCandidateRequest, *, tenant_id: TenantId
+) -> DpmPortfolioUniverseScope:
+    tenant_id_text = normalize_lineage_value(tenant_id.value)
     booking_center_code = (
         request.booking_center_code.strip() if request.booking_center_code else None
     )
@@ -133,10 +140,10 @@ def _universe_scope(request: DpmPortfolioUniverseCandidateRequest) -> DpmPortfol
             "booking_center_code": booking_center_code,
             "model_portfolio_ids": model_ids,
             "include_inactive_mandates": request.include_inactive_mandates,
-            "tenant_id": tenant_id,
+            "tenant_id": tenant_id_text,
         }
     )
-    return DpmPortfolioUniverseScope(tenant_id, booking_center_code, model_ids, fingerprint)
+    return DpmPortfolioUniverseScope(tenant_id_text, booking_center_code, model_ids, fingerprint)
 
 
 def _after_sort_key(*, cursor: dict[str, Any], scope_fingerprint: str) -> tuple[str, str] | None:
@@ -175,12 +182,13 @@ def _cio_cohort_response(
     model: ApprovedModelPortfolio,
     mandates: list[DiscretionaryMandatePopulationMember],
     request: CioModelChangeAffectedCohortRequest,
+    tenant_id: TenantId,
     generated_at: datetime,
 ) -> CioModelChangeAffectedCohortResponse:
     affected = [_affected_mandate(row) for row in mandates]
     state: Literal["READY", "INCOMPLETE"] = "READY" if affected else "INCOMPLETE"
     reason = "CIO_MODEL_CHANGE_COHORT_READY" if affected else "CIO_MODEL_CHANGE_COHORT_EMPTY"
-    filters = ["model_portfolio_id", "as_of_date"]
+    filters = ["tenant_id", "model_portfolio_id", "as_of_date"]
     if request.booking_center_code:
         filters.append("booking_center_code")
     if not request.include_inactive_mandates:
@@ -190,6 +198,7 @@ def _cio_cohort_response(
             "product_name": "CioModelChangeAffectedCohort",
             "model_portfolio_id": model.model_portfolio_id,
             "model_portfolio_version": model.model_portfolio_version,
+            "tenant_id": tenant_id.value,
             "as_of_date": request.as_of_date.isoformat(),
             "booking_center_code": request.booking_center_code,
             "include_inactive_mandates": request.include_inactive_mandates,
@@ -224,7 +233,7 @@ def _cio_cohort_response(
         **_metadata(
             as_of_date=request.as_of_date,
             generated_at=generated_at,
-            tenant_id=request.tenant_id,
+            tenant_id=tenant_id.value,
             quality="ACCEPTED" if affected else "MISSING",
             evidence=[model, *mandates],
             snapshot_id=f"cio_model_change_cohort:{fingerprint}",
@@ -243,7 +252,7 @@ def _universe_response(
     generated_at: datetime,
 ) -> DpmPortfolioUniverseCandidateResponse:
     candidates = [_universe_candidate(row) for row in rows]
-    filters = ["as_of_date"]
+    filters = ["tenant_id", "as_of_date"]
     if scope.booking_center_code:
         filters.append("booking_center_code")
     if scope.model_portfolio_ids:
@@ -292,6 +301,7 @@ def _universe_response(
             source_table="portfolio_mandate_bindings",
             included_when=[
                 "mandate_type=discretionary",
+                "portfolio.tenant_id=admitted_tenant",
                 "effective_from<=as_of_date",
                 "effective_to is null or effective_to>=as_of_date",
                 "active authority unless include_inactive_mandates=true",

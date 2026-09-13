@@ -971,6 +971,7 @@ async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
     request = PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03")
 
     response = await resolve_portfolio_manager_book_membership(
+        http_request=_tenant_request("tenant-sg"),
         portfolio_manager_id="PM_SG_DPM_001",
         request=request,
         portfolio_manager_book_service=mock_service,
@@ -979,8 +980,9 @@ async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
     assert response["product_name"] == "PortfolioManagerBookMembership"
     assert response["members"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
     mock_service.resolve_membership.assert_awaited_once_with(
+        tenant_id=TenantId("tenant-sg"),
         portfolio_manager_id="PM_SG_DPM_001",
-        request=request,
+        request=request.model_copy(update={"tenant_id": "tenant-sg"}),
     )
 
 
@@ -991,6 +993,7 @@ async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404(
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_portfolio_manager_book_membership(
+            http_request=_tenant_request("tenant-sg"),
             portfolio_manager_id="PM_EMPTY",
             request=PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03"),
             portfolio_manager_book_service=mock_service,
@@ -1007,6 +1010,30 @@ async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404(
             "reason": "empty_result",
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_pm_book_refuses_mismatched_tenant_before_read() -> None:
+    mock_service = MagicMock(spec=PortfolioManagerBookService)
+    mock_service.resolve_membership = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_portfolio_manager_book_membership(
+            http_request=_tenant_request("tenant-sg"),
+            portfolio_manager_id="PM_SG_DPM_001",
+            request=PortfolioManagerBookMembershipRequest(
+                as_of_date="2026-05-03", tenant_id="tenant-other"
+            ),
+            portfolio_manager_book_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_service.resolve_membership.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1052,6 +1079,7 @@ async def test_resolve_cio_model_change_affected_cohort_success_path() -> None:
     request = CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03")
 
     response = await resolve_cio_model_change_affected_cohort(
+        http_request=_tenant_request("tenant-sg"),
         model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
         request=request,
         dpm_portfolio_population_service=mock_service,
@@ -1060,8 +1088,9 @@ async def test_resolve_cio_model_change_affected_cohort_success_path() -> None:
     assert response["product_name"] == "CioModelChangeAffectedCohort"
     assert response["affected_mandates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
     mock_service.resolve_cio_model_change_cohort.assert_awaited_once_with(
+        tenant_id=TenantId("tenant-sg"),
         model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
-        request=request,
+        request=request.model_copy(update={"tenant_id": "tenant-sg"}),
     )
 
 
@@ -1072,6 +1101,7 @@ async def test_resolve_cio_model_change_affected_cohort_maps_missing_model_to_40
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_cio_model_change_affected_cohort(
+            http_request=_tenant_request("tenant-sg"),
             model_portfolio_id="MODEL_MISSING",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
             dpm_portfolio_population_service=mock_service,
@@ -1099,6 +1129,7 @@ async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_cio_model_change_affected_cohort(
+            http_request=_tenant_request("tenant-sg"),
             model_portfolio_id="MODEL_EMPTY",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
             dpm_portfolio_population_service=mock_service,
@@ -1115,6 +1146,32 @@ async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404
             "reason": "empty_result",
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_refuses_mismatched_tenant_before_read() -> (
+    None
+):
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_cio_model_change_cohort = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_cio_model_change_affected_cohort(
+            http_request=_tenant_request("tenant-sg"),
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            request=CioModelChangeAffectedCohortRequest(
+                as_of_date="2026-05-03", tenant_id="tenant-other"
+            ),
+            dpm_portfolio_population_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_service.resolve_cio_model_change_cohort.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1179,6 +1236,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
     request = DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03")
 
     response = await resolve_dpm_portfolio_universe_candidates(
+        http_request=_tenant_request("tenant-sg"),
         request=request,
         dpm_portfolio_population_service=mock_service,
     )
@@ -1187,7 +1245,8 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
     assert response["candidates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
     assert response["selection_basis"]["basis_type"] == ("EFFECTIVE_DISCRETIONARY_MANDATE_BINDING")
     mock_service.resolve_universe_candidates.assert_awaited_once_with(
-        request=request,
+        tenant_id=TenantId("tenant-sg"),
+        request=request.model_copy(update={"tenant_id": "tenant-sg"}),
     )
 
 
@@ -1198,6 +1257,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_dpm_portfolio_universe_candidates(
+            http_request=_tenant_request("tenant-sg"),
             request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
             dpm_portfolio_population_service=mock_service,
         )
@@ -1223,6 +1283,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_maps_bad_token_to_422()
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_dpm_portfolio_universe_candidates(
+            http_request=_tenant_request("tenant-sg"),
             request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
             dpm_portfolio_population_service=mock_service,
         )
@@ -1237,6 +1298,29 @@ async def test_resolve_dpm_portfolio_universe_candidates_maps_bad_token_to_422()
             "reason": "ValueError",
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_refuses_mismatched_tenant_before_read() -> None:
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_universe_candidates = AsyncMock()
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_dpm_portfolio_universe_candidates(
+            http_request=_tenant_request("tenant-sg"),
+            request=DpmPortfolioUniverseCandidateRequest(
+                as_of_date="2026-05-03", tenant_id="tenant-other"
+            ),
+            dpm_portfolio_population_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_service.resolve_universe_candidates.assert_not_awaited()
 
 
 @pytest.mark.asyncio

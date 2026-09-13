@@ -1,13 +1,14 @@
 """Bind Query Control Plane requests to admitted tenant authority."""
 
-from fastapi import status
+from fastapi import Request, status
 from portfolio_common.domain.tenant import (
     TenantAuthorityMismatchError,
     TenantContext,
+    TenantId,
     bind_tenant_authority,
 )
 
-from .response_helpers import problem_example, raise_problem
+from .response_helpers import problem_example, problem_response, raise_problem
 
 TENANT_SCOPE_FORBIDDEN_EXAMPLE = problem_example(
     status_code=status.HTTP_403_FORBIDDEN,
@@ -15,6 +16,12 @@ TENANT_SCOPE_FORBIDDEN_EXAMPLE = problem_example(
     detail="Requested tenant does not match admitted tenant authority.",
     error_code="QCP_TENANT_SCOPE_FORBIDDEN",
 )
+TENANT_SCOPE_FORBIDDEN_RESPONSE = {
+    status.HTTP_403_FORBIDDEN: problem_response(
+        "Requested tenant does not match admitted tenant authority.",
+        TENANT_SCOPE_FORBIDDEN_EXAMPLE,
+    )
+}
 
 
 def require_matching_tenant_authority(
@@ -33,3 +40,14 @@ def require_matching_tenant_authority(
             detail="Requested tenant does not match admitted tenant authority.",
             error_code="QCP_TENANT_SCOPE_FORBIDDEN",
         )
+
+
+def require_admitted_tenant_id(*, request: Request, supplied_tenant_id: str | None) -> TenantId:
+    """Return typed admitted authority after rejecting a caller-controlled mismatch."""
+
+    return TenantId(
+        require_matching_tenant_authority(
+            supplied_tenant_id=supplied_tenant_id,
+            tenant_context=request.state.tenant_context,
+        )
+    )

@@ -10,6 +10,7 @@ from portfolio_common.domain.portfolio_party_roles import (
     PortfolioPartyRoleScope,
     PortfolioPartyRoleType,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ class SqlAlchemyPortfolioManagerBookReader:
     async def list_members(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_manager_id: str,
         as_of_date: date,
         booking_center_code: str | None,
@@ -57,6 +59,7 @@ class SqlAlchemyPortfolioManagerBookReader:
             .join(ranked, PortfolioPartyRoleAssignment.id == ranked.c.assignment_id)
             .where(
                 ranked.c.source_rank == 1,
+                Portfolio.tenant_id == tenant_id.value,
                 PortfolioPartyRoleAssignment.party_id == portfolio_manager_id,
                 PortfolioPartyRoleAssignment.role_type.in_(PORTFOLIO_MANAGER_ROLE_TYPES),
                 PortfolioPartyRoleAssignment.role_scope
@@ -95,6 +98,7 @@ class SqlAlchemyPortfolioManagerBookReader:
             select(Portfolio)
             .where(
                 Portfolio.advisor_id == portfolio_manager_id,
+                Portfolio.tenant_id == tenant_id.value,
                 ~any_role_history,
                 *_portfolio_filters(
                     as_of_date=as_of_date,
