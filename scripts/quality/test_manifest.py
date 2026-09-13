@@ -64,6 +64,8 @@ SUITES: dict[str, list[str]] = {
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
         "tests/integration/services/query_control_plane_service/"
+        "test_dpm_population_tenant_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
         "test_transaction_economics_tenant_postgresql.py",
         "tests/integration/services/query_service/test_transaction_repository_paging.py::"
         "test_transaction_ledger_page_and_identity_share_one_repeatable_snapshot",

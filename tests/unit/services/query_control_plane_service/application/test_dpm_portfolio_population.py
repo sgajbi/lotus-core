@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.page_tokens import PageTokenCodec
 from portfolio_common.source_data_product_metadata import SOURCE_METADATA_UNAVAILABLE_HASH
 
@@ -115,10 +116,14 @@ async def test_resolves_ready_cio_cohort_with_deterministic_source_identity() ->
     )
 
     first = await _service(reader).resolve_cio_model_change_cohort(
-        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM", request=request
+        tenant_id=TenantId("default"),
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        request=request,
     )
     second = await _service(reader).resolve_cio_model_change_cohort(
-        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM", request=request
+        tenant_id=TenantId("default"),
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        request=request,
     )
 
     assert first is not None and second is not None
@@ -138,6 +143,7 @@ async def test_missing_model_stops_before_mandate_read() -> None:
 
     response = await _service(reader).resolve_cio_model_change_cohort(
         model_portfolio_id="MODEL_MISSING",
+        tenant_id=TenantId("default"),
         request=CioModelChangeAffectedCohortRequest(as_of_date=date(2026, 5, 3)),
     )
 
@@ -152,6 +158,7 @@ async def test_empty_affected_cohort_is_explicitly_incomplete() -> None:
 
     response = await _service(reader).resolve_cio_model_change_cohort(
         model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        tenant_id=TenantId("default"),
         request=CioModelChangeAffectedCohortRequest(as_of_date=date(2026, 5, 3)),
     )
 
@@ -173,7 +180,9 @@ async def test_universe_normalizes_scope_and_emits_bounded_continuation() -> Non
         page={"page_size": 1},
     )
 
-    response = await _service(reader, tokens).resolve_universe_candidates(request=request)
+    response = await _service(reader, tokens).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
 
     assert [row.portfolio_id for row in response.candidates] == ["PB_SG_GLOBAL_BAL_001"]
     assert response.supportability.state == "DEGRADED"
@@ -196,7 +205,8 @@ async def test_universe_accepts_matching_cursor_and_rejects_wrong_scope() -> Non
         as_of_date=date(2026, 5, 3), page={"page_token": "current"}
     )
     initial = await _service(reader).resolve_universe_candidates(
-        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+        tenant_id=TenantId("default"),
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3)),
     )
     tokens.cursor = {
         "scope_fingerprint": initial.page.request_scope_fingerprint,
@@ -204,12 +214,39 @@ async def test_universe_accepts_matching_cursor_and_rejects_wrong_scope() -> Non
         "last_mandate_id": "MANDATE_000",
     }
 
-    await _service(reader, tokens).resolve_universe_candidates(request=request)
+    await _service(reader, tokens).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
     assert reader.calls[-1][1]["after_sort_key"] == ("PB_000", "MANDATE_000")
 
     tokens.cursor["scope_fingerprint"] = "wrong"
     with pytest.raises(ValueError, match="does not match request scope"):
-        await _service(reader, tokens).resolve_universe_candidates(request=request)
+        await _service(reader, tokens).resolve_universe_candidates(
+            tenant_id=TenantId("default"), request=request
+        )
+
+
+@pytest.mark.asyncio
+async def test_universe_refuses_a_continuation_token_from_another_admitted_tenant() -> None:
+    reader = _Reader()
+    initial = await _service(reader).resolve_universe_candidates(
+        tenant_id=TenantId("tenant-a"),
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3)),
+    )
+    tokens = _PageTokens()
+    tokens.cursor = {
+        "scope_fingerprint": initial.page.request_scope_fingerprint,
+        "last_portfolio_id": "PB_000",
+        "last_mandate_id": "MANDATE_000",
+    }
+
+    with pytest.raises(ValueError, match="does not match request scope"):
+        await _service(reader, tokens).resolve_universe_candidates(
+            tenant_id=TenantId("tenant-b"),
+            request=DpmPortfolioUniverseCandidateRequest(
+                as_of_date=date(2026, 5, 3), page={"page_token": "tenant-a-token"}
+            ),
+        )
 
 
 @pytest.mark.asyncio
@@ -218,7 +255,8 @@ async def test_empty_universe_is_explicitly_incomplete() -> None:
     reader.universe = []
 
     response = await _service(reader).resolve_universe_candidates(
-        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+        tenant_id=TenantId("default"),
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3)),
     )
 
     assert response.candidates == []
@@ -242,7 +280,8 @@ async def test_universe_without_source_evidence_time_fails_closed() -> None:
     ]
 
     response = await _service(reader).resolve_universe_candidates(
-        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+        tenant_id=TenantId("default"),
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3)),
     )
 
     assert response.supportability.state == "DEGRADED"
@@ -263,8 +302,12 @@ async def test_ready_universe_publishes_stable_core_owned_content_identity() -> 
         page={"page_size": 500},
     )
 
-    first = await _service(_Reader()).resolve_universe_candidates(request=request)
-    replay = await _service(_Reader()).resolve_universe_candidates(request=request)
+    first = await _service(_Reader()).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
+    replay = await _service(_Reader()).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
 
     assert first.supportability.state == "READY"
     assert first.candidates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
@@ -282,14 +325,16 @@ async def test_ready_universe_publishes_stable_core_owned_content_identity() -> 
 async def test_ready_universe_normalizes_tenant_in_scope_and_content_identity() -> None:
     reader = _Reader()
     normalized = await _service(reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"),
         request=DpmPortfolioUniverseCandidateRequest(
             as_of_date=date(2026, 5, 3), tenant_id="default"
-        )
+        ),
     )
     whitespace_equivalent = await _service(reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"),
         request=DpmPortfolioUniverseCandidateRequest(
             as_of_date=date(2026, 5, 3), tenant_id=" default "
-        )
+        ),
     )
 
     assert normalized.tenant_id == whitespace_equivalent.tenant_id == "default"
@@ -317,9 +362,15 @@ async def test_ready_universe_content_identity_changes_with_source_evidence() ->
         _mandate(portfolio_id="PB_SG_GLOBAL_INC_002", mandate_id="MANDATE_002"),
     ]
 
-    baseline = await _service(baseline_reader).resolve_universe_candidates(request=request)
-    changed = await _service(changed_reader).resolve_universe_candidates(request=request)
-    expanded = await _service(expanded_reader).resolve_universe_candidates(request=request)
+    baseline = await _service(baseline_reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
+    changed = await _service(changed_reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
+    expanded = await _service(expanded_reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"), request=request
+    )
 
     assert changed.candidates == baseline.candidates
     assert changed.content_hash != baseline.content_hash
@@ -331,19 +382,22 @@ async def test_ready_universe_content_identity_changes_with_source_evidence() ->
 async def test_ready_universe_content_identity_changes_with_selection_and_page_scope() -> None:
     reader = _Reader()
     baseline = await _service(reader).resolve_universe_candidates(
-        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+        tenant_id=TenantId("default"),
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3)),
     )
     filtered = await _service(reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"),
         request=DpmPortfolioUniverseCandidateRequest(
             as_of_date=date(2026, 5, 3),
             booking_center_code="Singapore",
-        )
+        ),
     )
     resized = await _service(reader).resolve_universe_candidates(
+        tenant_id=TenantId("default"),
         request=DpmPortfolioUniverseCandidateRequest(
             as_of_date=date(2026, 5, 3),
             page={"page_size": 500},
-        )
+        ),
     )
 
     assert filtered.candidates == baseline.candidates
@@ -355,7 +409,8 @@ async def test_ready_universe_content_identity_changes_with_selection_and_page_s
 async def test_ready_universe_content_identity_uses_canonical_cursor_not_token_envelope() -> None:
     reader = _Reader()
     initial = await _service(reader).resolve_universe_candidates(
-        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+        tenant_id=TenantId("default"),
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3)),
     )
     cursor = {
         "scope_fingerprint": initial.page.request_scope_fingerprint,
@@ -367,14 +422,16 @@ async def test_ready_universe_content_identity_uses_canonical_cursor_not_token_e
     second_token = codec.encode(cursor, expires_at=datetime(2100, 1, 1, tzinfo=UTC))
 
     first = await _service(reader, codec).resolve_universe_candidates(
+        tenant_id=TenantId("default"),
         request=DpmPortfolioUniverseCandidateRequest(
             as_of_date=date(2026, 5, 3), page={"page_token": first_token}
-        )
+        ),
     )
     replay = await _service(reader, codec).resolve_universe_candidates(
+        tenant_id=TenantId("default"),
         request=DpmPortfolioUniverseCandidateRequest(
             as_of_date=date(2026, 5, 3), page={"page_token": second_token}
-        )
+        ),
     )
 
     assert first.content_hash == replay.content_hash

@@ -3,6 +3,8 @@
 from datetime import date
 from typing import Any, Protocol
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.dpm_portfolio_population import (
     ApprovedModelPortfolio,
     DiscretionaryMandatePopulationMember,
@@ -19,6 +21,7 @@ class DpmPortfolioPopulationReader(Protocol):
     async def list_affected_mandates(
         self,
         *,
+        tenant_id: TenantId,
         model_portfolio_id: str,
         as_of_date: date,
         booking_center_code: str | None,
@@ -28,6 +31,7 @@ class DpmPortfolioPopulationReader(Protocol):
     async def list_universe_candidates(
         self,
         *,
+        tenant_id: TenantId,
         as_of_date: date,
         booking_center_code: str | None,
         model_portfolio_ids: tuple[str, ...],

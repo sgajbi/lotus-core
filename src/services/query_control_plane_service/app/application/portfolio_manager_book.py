@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Literal, cast
 
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -29,11 +30,13 @@ class PortfolioManagerBookService:
     async def resolve_membership(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_manager_id: str,
         request: PortfolioManagerBookMembershipRequest,
     ) -> PortfolioManagerBookMembershipResponse:
         portfolio_types = _normalized_portfolio_types(request.portfolio_types)
         records = await self._reader.list_members(
+            tenant_id=tenant_id,
             portfolio_manager_id=portfolio_manager_id,
             as_of_date=request.as_of_date,
             booking_center_code=request.booking_center_code,
@@ -42,6 +45,7 @@ class PortfolioManagerBookService:
         )
         return _membership_response(
             portfolio_manager_id=portfolio_manager_id,
+            tenant_id=tenant_id,
             request=request,
             portfolio_types=portfolio_types,
             records=records,
@@ -56,13 +60,14 @@ def _normalized_portfolio_types(portfolio_types: list[str]) -> tuple[str, ...]:
 def _membership_response(
     *,
     portfolio_manager_id: str,
+    tenant_id: TenantId,
     request: PortfolioManagerBookMembershipRequest,
     portfolio_types: tuple[str, ...],
     records: list[PortfolioManagerBookRecord],
     generated_at: datetime,
 ) -> PortfolioManagerBookMembershipResponse:
     members = [_member(record) for record in records]
-    filters_applied = ["portfolio_manager_id", "as_of_date"]
+    filters_applied = ["tenant_id", "portfolio_manager_id", "as_of_date"]
     if request.booking_center_code:
         filters_applied.append("booking_center_code")
     if portfolio_types:
@@ -94,6 +99,7 @@ def _membership_response(
             "product_name": "PortfolioManagerBookMembership",
             "product_version": "v1",
             "portfolio_manager_id": portfolio_manager_id,
+            "tenant_id": tenant_id.value,
             "request": request.model_dump(mode="json"),
             "normalized_portfolio_types": portfolio_types,
             "members": [member.model_dump(mode="json") for member in members],
@@ -116,6 +122,7 @@ def _membership_response(
             source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
+                tenant_id=tenant_id.value,
                 data_quality_status=data_quality_status,
                 latest_evidence_timestamp=latest_evidence_timestamp,
                 source_evidence_current=source_evidence_current,

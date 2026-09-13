@@ -2088,7 +2088,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "intraday",
-        "max_allowed_age_description": "PM-book membership is resolved on demand from effective party-role assignments, with a bounded legacy projection for unmigrated portfolios."
+        "max_allowed_age_description": "PM-book membership is resolved on demand from effective party-role assignments rooted in the tenant admitted at the request boundary, with a bounded legacy projection for unmigrated portfolios."
       },
       "completeness_policy": {
         "default_status": "complete",
@@ -2220,7 +2220,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "intraday",
-        "max_allowed_age_description": "CIO model-change cohorts are resolved on demand from the approved model definition and effective discretionary mandate bindings for the requested as-of date."
+        "max_allowed_age_description": "CIO model-change cohorts are resolved on demand from the global approved model definition and effective discretionary mandate bindings rooted in the tenant admitted at the request boundary."
       },
       "completeness_policy": {
         "default_status": "complete",
@@ -2285,7 +2285,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "intraday",
-        "max_allowed_age_description": "DPM portfolio-universe candidates are resolved on demand from effective discretionary mandate bindings for the requested as-of date."
+        "max_allowed_age_description": "DPM portfolio-universe candidates are resolved on demand from effective discretionary mandate bindings rooted in the tenant admitted at the request boundary."
       },
       "completeness_policy": {
         "default_status": "partial",

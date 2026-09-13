@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.domain.portfolio_party_roles import PortfolioPartyRoleType
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.query_control_plane_service.app.infrastructure import (
     portfolio_manager_book_sources,
@@ -42,6 +43,7 @@ async def test_reader_prefers_effective_portfolio_manager_role_assignments() -> 
     records = await portfolio_manager_book_sources.SqlAlchemyPortfolioManagerBookReader(
         session
     ).list_members(
+        tenant_id=TenantId("tenant-sg"),
         portfolio_manager_id="PM_SG_DPM_001",
         as_of_date=date(2026, 5, 3),
         booking_center_code="Singapore",
@@ -61,9 +63,11 @@ async def test_reader_prefers_effective_portfolio_manager_role_assignments() -> 
     assert "portfolios.booking_center_code" in authoritative_sql
     assert "portfolios.portfolio_type IN" in authoritative_sql
     assert "portfolios.status IN" in authoritative_sql
+    assert "portfolios.tenant_id" in authoritative_sql
     legacy_sql = str(session.execute.await_args_list[1].args[0])
     assert "portfolios.advisor_id" in legacy_sql
     assert "NOT (EXISTS" in legacy_sql
+    assert "portfolios.tenant_id" in legacy_sql
 
 
 @pytest.mark.asyncio
@@ -90,6 +94,7 @@ async def test_reader_retains_advisor_projection_only_for_unmigrated_portfolios(
     records = await portfolio_manager_book_sources.SqlAlchemyPortfolioManagerBookReader(
         session
     ).list_members(
+        tenant_id=TenantId("tenant-sg"),
         portfolio_manager_id="LEGACY_ADVISOR_001",
         as_of_date=date(2026, 5, 3),
         booking_center_code=None,

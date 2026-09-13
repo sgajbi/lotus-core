@@ -44,6 +44,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_index_catalog_service,
     get_index_series_service,
     get_integration_policy_service,
+    get_portfolio_manager_book_service,
     get_reference_coverage_service,
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
@@ -1641,6 +1642,66 @@ async def test_dpm_portfolio_universe_bad_request_maps_to_problem_details(async_
         "source_product": "DpmPortfolioUniverseCandidate",
         "reason": "ValueError",
     }
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "service_method"),
+    [
+        (
+            "/integration/model-portfolios/MODEL_SHARED/affected-mandates",
+            {"as_of_date": "2026-05-03", "tenant_id": "tenant-b"},
+            "resolve_cio_model_change_cohort",
+        ),
+        (
+            "/integration/dpm/portfolio-universe/candidates",
+            {"as_of_date": "2026-05-03", "tenant_id": "tenant-b"},
+            "resolve_universe_candidates",
+        ),
+    ],
+)
+async def test_dpm_population_routes_reject_tenant_mismatch_before_service_io(
+    async_test_client,
+    path: str,
+    payload: dict[str, str],
+    service_method: str,
+) -> None:
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    service_call = AsyncMock()
+    setattr(mock_integration_service, service_method, service_call)
+
+    response = await client.post(path, headers={"X-Tenant-Id": "tenant-a"}, json=payload)
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    service_call.assert_not_awaited()
+
+
+async def test_pm_book_route_rejects_tenant_mismatch_before_service_io() -> None:
+    mock_service = MagicMock()
+    mock_service.resolve_membership = AsyncMock()
+    app.dependency_overrides[get_portfolio_manager_book_service] = lambda: mock_service
+    transport = httpx.ASGITransport(app=app)
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/integration/portfolio-manager-books/PM_SHARED/memberships",
+                headers={"X-Tenant-Id": "tenant-a"},
+                json={"as_of_date": "2026-05-03", "tenant_id": "tenant-b"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_portfolio_manager_book_service, None)
+
+    _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_TENANT_SCOPE_FORBIDDEN",
+        detail="Requested tenant does not match admitted tenant authority.",
+    )
+    mock_service.resolve_membership.assert_not_awaited()
 
 
 async def test_benchmark_definition_success(async_test_client):
