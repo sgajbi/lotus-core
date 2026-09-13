@@ -56,12 +56,12 @@ def _write_fixture(
     )
 
 
-def _details(root: Path, *, today: date = date(2026, 8, 12)) -> list[str]:
+def _details(root: Path, *, today: date = date(2026, 9, 13)) -> list[str]:
     return [finding.detail for finding in find_base_image_lifecycle_findings(root, today=today)]
 
 
 def test_repository_base_image_lifecycle_inventory_is_current() -> None:
-    assert find_base_image_lifecycle_findings(REPO_ROOT, today=date(2026, 8, 12)) == []
+    assert find_base_image_lifecycle_findings(REPO_ROOT, today=date(2026, 9, 13)) == []
 
 
 def test_guard_accepts_deterministic_replay(tmp_path: Path) -> None:
@@ -85,7 +85,7 @@ def test_guard_rejects_dockerfile_digest_drift(tmp_path: Path) -> None:
 
 
 def test_guard_rejects_missing_lifecycle_inventory(tmp_path: Path) -> None:
-    findings = find_base_image_lifecycle_findings(tmp_path, today=date(2026, 8, 12))
+    findings = find_base_image_lifecycle_findings(tmp_path, today=date(2026, 9, 13))
 
     assert [finding.detail for finding in findings] == ["missing lifecycle inventory"]
 
@@ -94,7 +94,7 @@ def test_guard_rejects_missing_manifest_evidence(tmp_path: Path) -> None:
     _write_fixture(tmp_path, _inventory())
     (tmp_path / MANIFEST_EVIDENCE_PATH).unlink()
 
-    findings = find_base_image_lifecycle_findings(tmp_path, today=date(2026, 8, 12))
+    findings = find_base_image_lifecycle_findings(tmp_path, today=date(2026, 9, 13))
 
     assert [finding.detail for finding in findings] == ["missing manifest evidence"]
 
@@ -264,7 +264,7 @@ def test_guard_rejects_self_consistent_unapproved_docker_hub_repository(
 
 def test_guard_rejects_stale_review(tmp_path: Path) -> None:
     inventory = _inventory()
-    inventory["base_images"][0]["next_review_on"] = "2026-08-11"  # type: ignore[index]
+    inventory["base_images"][0]["next_review_on"] = "2026-09-12"  # type: ignore[index]
     _write_fixture(tmp_path, inventory)
 
     assert "base-image lifecycle evidence is stale" in _details(tmp_path)
@@ -275,19 +275,18 @@ def test_guard_rejects_package_support_evidence_not_refreshed_with_review(
 ) -> None:
     inventory = _inventory()
     record = inventory["base_images"][0]  # type: ignore[index]
-    record["observed_on"] = "2026-08-13"
-    record["next_review_on"] = "2026-09-12"
+    record["distribution_package_support"]["verified_on"] = "2026-09-12"
     _write_fixture(tmp_path, inventory)
 
     assert "Debian package support evidence must be refreshed with observed_on" in _details(
-        tmp_path, today=date(2026, 8, 13)
+        tmp_path, today=date(2026, 9, 13)
     )
 
 
 def test_guard_rejects_future_dated_package_support_evidence(tmp_path: Path) -> None:
     inventory = _inventory()
     record = inventory["base_images"][0]  # type: ignore[index]
-    record["distribution_package_support"]["verified_on"] = "2026-08-13"
+    record["distribution_package_support"]["verified_on"] = "2026-09-14"
     _write_fixture(tmp_path, inventory)
 
     assert "Debian package support evidence cannot be future-dated" in _details(tmp_path)
@@ -298,20 +297,18 @@ def test_guard_rejects_official_image_identity_not_refreshed_with_review(
 ) -> None:
     inventory = _inventory()
     record = inventory["base_images"][0]  # type: ignore[index]
-    record["observed_on"] = "2026-08-13"
-    record["next_review_on"] = "2026-09-12"
-    record["distribution_package_support"]["verified_on"] = "2026-08-13"
+    record["identity_evidence"]["verified_on"] = "2026-09-12"
     _write_fixture(tmp_path, inventory)
 
     assert "Official Images identity evidence must be refreshed with observed_on" in _details(
-        tmp_path, today=date(2026, 8, 13)
+        tmp_path, today=date(2026, 9, 13)
     )
 
 
 def test_guard_rejects_future_dated_official_image_identity(tmp_path: Path) -> None:
     inventory = _inventory()
     record = inventory["base_images"][0]  # type: ignore[index]
-    record["identity_evidence"]["verified_on"] = "2026-08-13"
+    record["identity_evidence"]["verified_on"] = "2026-09-14"
     _write_fixture(tmp_path, inventory)
 
     assert "Official Images identity evidence cannot be future-dated" in _details(tmp_path)
