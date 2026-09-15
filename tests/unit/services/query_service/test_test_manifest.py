@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+
+from scripts.quality import test_manifest
 from scripts.quality.test_manifest import (
     SUITE_ENV_PROFILE,
     SUITE_PYTEST_ARGS,
@@ -58,6 +62,29 @@ def test_critical_db_coverage_includes_cashflow_source_cut_migration() -> None:
     assert "tests/integration/test_portfolio_cashflow_source_cut_migration.py" in get_suite(
         "critical-db-coverage"
     )
+
+
+def test_critical_db_coverage_includes_actual_ledger_seed_refresh_work() -> None:
+    assert (
+        "tests/integration/scripts/operations/database_evidence/test_transaction_ledger.py::"
+        "test_ledger_seed_refreshes_source_cut_once_per_portfolio_per_statement"
+    ) in get_suite("critical-db-coverage")
+
+
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_integration_all_streams_diagnostics_and_preserves_exit_code(
+    monkeypatch, exit_code
+) -> None:
+    def observed_run(command, *, check, env):
+        assert check is False
+        assert env["PYTHONUNBUFFERED"] == "1"
+        assert env["LOTUS_TEST_RUNTIME_MODE"] == "db_direct"
+        assert "-vv" in command
+        assert "faulthandler_timeout=120" in command
+        return SimpleNamespace(returncode=exit_code)
+
+    monkeypatch.setattr(test_manifest.subprocess, "run", observed_run)
+    assert test_manifest.run_suite("integration-all", quiet=True) == exit_code
 
 
 def test_critical_lifecycle_suite_is_marker_selected_and_db_direct() -> None:

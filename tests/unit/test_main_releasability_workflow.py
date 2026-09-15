@@ -2,6 +2,8 @@ from pathlib import Path
 
 import yaml
 
+from scripts.quality.test_manifest import suite_pytest_command
+
 WORKFLOW_PATH = Path(".github/workflows/main-releasability.yml")
 
 
@@ -14,6 +16,28 @@ def _needs(job: dict[str, object]) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
     return tuple(value)  # type: ignore[arg-type]
+
+
+def test_integration_full_retains_test_progress_and_bounded_wait_diagnostics() -> None:
+    job = _workflow()["jobs"]["integration-all"]
+    assert job["timeout-minutes"] == 90
+    run_step = next(
+        step for step in job["steps"] if step.get("name") == "Run full integration suite"
+    )
+    assert run_step["run"] == "make test-integration-all"
+    environment = run_step["env"]
+    options = suite_pytest_command("integration-all", quiet=True)
+    assert "-vv" in options
+    assert "faulthandler_timeout=120" in options
+    report_path = "output/integration-all/integration-all-results.xml"
+    assert f"--junitxml={report_path}" in options
+    upload_step = next(
+        step for step in job["steps"] if step.get("name") == "Upload integration diagnostics"
+    )
+    assert upload_step["if"] == "always()"
+    artifact_paths = upload_step["with"]["path"].splitlines()
+    assert report_path in artifact_paths
+    assert environment["LOTUS_TESTS_COMPOSE_LOG_FILE"] in artifact_paths
 
 
 def _depends_on_exact_revision(
