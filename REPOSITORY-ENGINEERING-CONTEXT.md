@@ -214,6 +214,13 @@ schema, machine-readable contracts, or executable evidence.
 
 ## Known Constraints And Implementation Notes
 
+- QCP snapshot freshness must reuse the already-computed governed collective reconciliation
+  scope. Per-security epochs record last mutation and may differ in a valid current portfolio;
+  do not introduce a second epoch resolver or default target. Empty/unscoped source evidence
+  remains unknown, and completed exact controls plus coherent current valuation evidence are
+  still required. Production-route PostgreSQL controls are selected by lifecycle and bounded
+  coverage suites; see [collective freshness review](docs/architecture/codebase-reviews/CR-1726-CORE-SNAPSHOT-COLLECTIVE-FRESHNESS.md).
+
 - Large cashflow evidence seeds must use physical multi-row SQL statements, not ORM
   `executemany` mappings that issue one statement per row. Source-cut maintenance is atomic and
   statement-scoped; preserve its durable locks rather than disabling maintenance to accelerate

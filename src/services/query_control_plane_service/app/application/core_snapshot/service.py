@@ -572,6 +572,7 @@ class CoreSnapshotService:
             positions=baseline,
             freshness=baseline_freshness_metadata(
                 rows=baseline_rows.rows,
+                reconciliation_scopes=scopes,
                 use_snapshot=baseline_rows.use_snapshot,
                 has_baseline=bool(baseline),
             ),

@@ -1,12 +1,22 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from decimal import Decimal
+
+import pytest
+from portfolio_common.domain.holdings_reconciliation import (
+    HoldingsReconciliationScope,
+    HoldingsReconciliationScopes,
+)
 
 from src.services.query_control_plane_service.app.application.core_snapshot.baseline_metadata import (  # noqa: E501
     baseline_freshness_metadata,
     baseline_snapshot_epoch,
     latest_snapshot_timestamp,
+)
+from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
+    core_snapshot_reconciliation_scopes,
 )
 from src.services.query_control_plane_service.app.domain.core_snapshot import (
     CoreSnapshotInstrument,
@@ -52,12 +62,14 @@ def _row_state(
             liquidity_tier=None,
         ),
         valuation_status="VALUED_CURRENT",
+        portfolio_business_date=date(2026, 2, 27),
     )
 
 
 def test_baseline_freshness_metadata_marks_history_fallback() -> None:
     freshness = baseline_freshness_metadata(
         rows=[],
+        reconciliation_scopes=core_snapshot_reconciliation_scopes([]),
         use_snapshot=False,
         has_baseline=False,
     )
@@ -70,15 +82,17 @@ def test_baseline_freshness_metadata_marks_history_fallback() -> None:
 
 
 def test_baseline_freshness_metadata_uses_snapshot_timestamp_and_epoch() -> None:
+    rows = [
+        _row_state(
+            row_created_at=datetime(2026, 2, 27, 9, 30, tzinfo=UTC),
+            row_updated_at=datetime(2026, 2, 27, 10, 0, tzinfo=UTC),
+            state_updated_at=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
+            epoch=7,
+        )
+    ]
     freshness = baseline_freshness_metadata(
-        rows=[
-            _row_state(
-                row_created_at=datetime(2026, 2, 27, 9, 30, tzinfo=UTC),
-                row_updated_at=datetime(2026, 2, 27, 10, 0, tzinfo=UTC),
-                state_updated_at=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
-                epoch=7,
-            )
-        ],
+        rows=rows,
+        reconciliation_scopes=core_snapshot_reconciliation_scopes(rows),
         use_snapshot=True,
         has_baseline=True,
     )
@@ -105,11 +119,62 @@ def test_latest_snapshot_timestamp_returns_latest_row_or_state_timestamp() -> No
 
 
 def test_baseline_snapshot_epoch_handles_empty_and_mixed_epochs() -> None:
-    assert baseline_snapshot_epoch(rows=[], has_baseline=False) is None
+    assert (
+        baseline_snapshot_epoch(scopes=core_snapshot_reconciliation_scopes([]), has_baseline=False)
+        is None
+    )
     assert (
         baseline_snapshot_epoch(
-            rows=[_row_state(epoch=7), _row_state(epoch=99)],
+            scopes=core_snapshot_reconciliation_scopes([_row_state(epoch=7), _row_state(epoch=99)]),
             has_baseline=True,
+        )
+        == 99
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_row",
+    [
+        replace(_row_state(epoch=1), state_epoch=2),
+        replace(_row_state(epoch=1), portfolio_business_date=None),
+        replace(_row_state(epoch=1), epoch=-1, state_epoch=-1),
+        replace(_row_state(epoch=1), epoch=True, state_epoch=True),
+    ],
+)
+def test_baseline_snapshot_epoch_refuses_any_unscoped_source(invalid_row) -> None:
+    rows = [_row_state(epoch=0), invalid_row]
+    scopes = core_snapshot_reconciliation_scopes(rows)
+    assert scopes.unscoped_source_row_count == 1
+    freshness = baseline_freshness_metadata(
+        rows=rows, reconciliation_scopes=scopes, use_snapshot=True, has_baseline=True
+    )
+    assert freshness.snapshot_epoch is None
+
+
+def test_baseline_snapshot_epoch_preserves_empty_filtered_baseline_truth() -> None:
+    assert (
+        baseline_snapshot_epoch(
+            scopes=core_snapshot_reconciliation_scopes([_row_state(epoch=7)]),
+            has_baseline=False,
         )
         is None
     )
+
+
+def test_baseline_snapshot_epoch_refuses_missing_or_conflicting_collective_targets() -> None:
+    assert (
+        baseline_snapshot_epoch(scopes=HoldingsReconciliationScopes(items=()), has_baseline=True)
+        is None
+    )
+    scopes = HoldingsReconciliationScopes(
+        items=tuple(
+            HoldingsReconciliationScope(
+                business_date=date(2026, 2, day),
+                epoch=epoch,
+                latest_evidence_timestamp=None,
+                source_row_count=1,
+            )
+            for day, epoch in [(26, 7), (27, 8)]
+        )
+    )
+    assert baseline_snapshot_epoch(scopes=scopes, has_baseline=True) is None
