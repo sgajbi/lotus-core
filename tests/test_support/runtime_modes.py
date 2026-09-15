@@ -4,7 +4,8 @@ from collections.abc import Iterable
 
 
 def classify_runtime_mode(nodeid: str, marker_names: Iterable[str] = ()) -> str | None:
-    normalized = nodeid.replace("\\", "/").lower()
+    # Parameter IDs can describe another lane's paths without using its runtime.
+    normalized = nodeid.split("::", maxsplit=1)[0].replace("\\", "/").lower()
     normalized_markers = {name.lower() for name in marker_names}
 
     if "tests/e2e/" in normalized:

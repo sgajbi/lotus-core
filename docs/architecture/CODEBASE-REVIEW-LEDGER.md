@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1727 Cashflow economic context and UTC calendar proof (2026-09-16, In Review):
+the currency-upsert regression did not compare both registered product responses, and the
+PostgreSQL settlement-window regression lacked the month/year/leap/DST cases required by #1041.
+PR #1125 strengthens tests and explicitly wires corrective product/work proof into bounded coverage.
+Actual PostgreSQL exposed rowwise bank-day fixture refreshes and a quadratic installed-refresh
+self-join: 2,012,026 tuples for 1,001 selected rows. Physical multi-row seeds and corrective migration
+c170 reduce that measured work to 7,023 while preserving economic identity and durable fences.
+Currency-only recuts, stable replay/chronology/empty truth, separate trade and settlement windows,
+real session timezone changes and independent financial expectations are covered. Final-head CI,
+exact merged-main including Integration Full and Idea's separate durable acceptance remain required.
+Evidence: [CR-1727-CASHFLOW-ECONOMIC-CALENDAR-PROOF.md](./codebase-reviews/CR-1727-CASHFLOW-ECONOMIC-CALENDAR-PROOF.md).
+
 CR-1726 Core snapshot collective freshness (2026-09-16, fixed-local candidate): the canonical
 seed had matched mixed per-security mutation epochs and complete collective reconciliation, but
 QCP freshness required uniform row epochs and reported null epoch/PARTIAL quality. Freshness now

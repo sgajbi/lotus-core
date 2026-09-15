@@ -34,6 +34,46 @@ per row, repeatedly refreshing the growing cashflow source cut. PostgreSQL work-
 exercise both a single batch and a batch boundary while retaining the real refresh function and
 transaction locks. The original 10,000-row ledger plan and cardinality expectations remain unchanged.
 
+The independent bank-day ledger test retains 100,000 transactions, costs and cashflows, with
+5,000-row commit batches and 1,000-row physical SQL statements. Its refresh-count controls preserve
+real maintenance and locks. A separate `EXPLAIN ANALYZE` guard executes the installed refresh
+statement and bounds actual tuple work; it protects against a quadratic selected-cashflow self-join
+without relying on timing or planner metadata alone.
+
+`make migration-smoke` checks one Alembic head and history, not migration execution. The native
+lifecycle database lane and bounded combined-coverage database suite execute cashflow backfill,
+nonempty corrective upgrade/downgrade, transactional DDL rollback, separate-session timezone
+stability and durable late-writer fencing. The bounded manifest also explicitly selects registered
+movement/projection cut equality, supported persistence currency recuts and physical refresh-work
+controls. Rebuild the owned migration image for local migration changes by setting
+`LOTUS_TESTS_DOCKER_BUILD=true`; stale cached image results are not current-source receipts.
+
+From the `lotus-core` repository root, rebuild for the local PostgreSQL lane:
+
+```powershell
+$env:LOTUS_TESTS_DOCKER_BUILD = 'true'
+make test-critical-lifecycle-db
+```
+
+```bash
+LOTUS_TESTS_DOCKER_BUILD=true make test-critical-lifecycle-db
+```
+
+From the `lotus-core` repository root, `make test-ops-contract` explicitly runs the QCP OpenAPI
+source-metadata regressions in premerge. They distinguish source materialization from serving time
+and a resolved collective epoch from completed/current reconciliation and valuation. The same
+registered `/openapi.json` guards accept the published schema and reject representative one-field
+description mutations without changing the shared schema cache or removing adjacent contract checks.
+These are API-schema tests, not PostgreSQL runtime or consumer acceptance receipts.
+
+Runtime-mode classification uses the test-file portion of pytest nodeids. Parameter IDs may contain
+example integration or E2E paths without requiring those runtimes. Actual integration/E2E files and
+explicit database markers retain their governed modes. Manifest membership and omission mutations
+must execute under the ordinary unit selector, not only an unfiltered focused invocation.
+Source-provenance fixtures prove an unguarded foreign import before requiring guarded rejection,
+including interpreters with automatic user-site discovery disabled. PostgreSQL refresh counters
+discard cached plans after installing their wrapper and exercise a deliberately warmed backend.
+
 ## Lane Model
 
 `lotus-core` uses:

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import runpy
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta
@@ -27,6 +30,198 @@ MIGRATION = (
 )
 PORTFOLIO_ID = "CASHFLOW-CUT-PORTFOLIO"
 MOVED_PORTFOLIO_ID = "CASHFLOW-CUT-PORTFOLIO-MOVED"
+CORRECTIVE_MIGRATION = MIGRATION.with_name(
+    "c170b2c3d531_fix_streamline_cashflow_source_cut_refresh.py"
+)
+
+
+@pytest.fixture(autouse=True)
+def restore_installed_refresh_function(db_engine):
+    """Historical migration tests must not leak old SQL into later head tests."""
+    with db_engine.connect() as connection:
+        original = connection.scalar(
+            text(
+                "SELECT pg_get_functiondef("
+                "'refresh_portfolio_cashflow_source_cut(text)'::regprocedure)"
+            )
+        )
+    try:
+        yield
+    finally:
+        with db_engine.begin() as connection:
+            connection.execute(text(original))
+
+
+def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls_back(
+    db_engine,
+    clean_db,
+) -> None:
+    """Execute Alembic version transitions, including nonempty downgrade and replay."""
+    with db_engine.begin() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c170b2c3d531"
+        _seed_legacy_source(connection)
+        connection.execute(
+            text("UPDATE portfolios SET base_currency = 'EUR' WHERE portfolio_id = :portfolio_id"),
+            {"portfolio_id": PORTFOLIO_ID},
+        )
+        connection.execute(
+            text("SELECT refresh_portfolio_cashflow_source_cut(:portfolio_id)"),
+            {"portfolio_id": PORTFOLIO_ID},
+        )
+        golden = _cut(connection)
+        assert golden[0] == golden[2] == 2
+        assert golden[5] == "EUR"
+        assert connection.scalar(text("SELECT sum(amount) FROM cashflows")) == 300
+        original_function = connection.scalar(
+            text(
+                "SELECT pg_get_functiondef("
+                "'refresh_portfolio_cashflow_source_cut(text)'::regprocedure)"
+            )
+        )
+        assert "LEFT JOIN cashflow_rows USING" not in original_function
+        original_oid = connection.scalar(
+            text("SELECT 'refresh_portfolio_cashflow_source_cut(text)'::regprocedure::oid")
+        )
+        original_triggers = connection.execute(
+            text("SELECT oid, tgname, tgtype FROM pg_trigger WHERE NOT tgisinternal ORDER BY oid")
+        ).all()
+
+    corrective: dict[str, Any] = runpy.run_path(str(CORRECTIVE_MIGRATION))
+    with db_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            _bind_operations(corrective, connection)
+            corrective["downgrade"]()
+            assert "LEFT JOIN cashflow_rows USING" in connection.scalar(
+                text(
+                    "SELECT pg_get_functiondef("
+                    "'refresh_portfolio_cashflow_source_cut(text)'::regprocedure)"
+                )
+            )
+            assert _cut(connection) == golden
+        finally:
+            transaction.rollback()
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT pg_get_functiondef("
+                    "'refresh_portfolio_cashflow_source_cut(text)'::regprocedure)"
+                )
+            )
+            == original_function
+        )
+
+    child_env = dict(os.environ)
+    child_env["HOST_DATABASE_URL"] = db_engine.url.render_as_string(hide_password=False)
+    try:
+        for direction, target, version in (
+            ("downgrade", "c169b2c3d530", "c169b2c3d530"),
+            ("upgrade", "c170b2c3d531", "c170b2c3d531"),
+            ("upgrade", "c170b2c3d531", "c170b2c3d531"),
+        ):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/development/repository_python.py",
+                    "-m",
+                    "alembic",
+                    direction,
+                    target,
+                ],
+                cwd=MIGRATION.parents[2],
+                env=child_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert completed.returncode == 0, (
+                f"alembic {direction} {target} exited {completed.returncode}"
+            )
+            for session_timezone in ("UTC", "Asia/Singapore", "America/New_York"):
+                with db_engine.begin() as connection:
+                    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                        version
+                    )
+                    connection.execute(
+                        text("SELECT set_config('TimeZone', :timezone, true)"),
+                        {"timezone": session_timezone},
+                    )
+                    connection.execute(
+                        text("SELECT refresh_portfolio_cashflow_source_cut(:portfolio_id)"),
+                        {"portfolio_id": PORTFOLIO_ID},
+                    )
+                    assert _cut(connection) == golden
+                    assert connection.scalar(text("SELECT sum(amount) FROM cashflows")) == 300
+                    assert (
+                        connection.scalar(
+                            text(
+                                "SELECT "
+                                "'refresh_portfolio_cashflow_source_cut(text)'::regprocedure::oid"
+                            )
+                        )
+                        == original_oid
+                    )
+                    assert (
+                        connection.execute(
+                            text(
+                                "SELECT oid, tgname, tgtype FROM pg_trigger "
+                                "WHERE NOT tgisinternal ORDER BY oid"
+                            )
+                        ).all()
+                        == original_triggers
+                    )
+                    definition = connection.scalar(
+                        text(
+                            "SELECT pg_get_functiondef("
+                            "'refresh_portfolio_cashflow_source_cut(text)'::regprocedure)"
+                        )
+                    )
+                    assert ("LEFT JOIN cashflow_rows USING" in definition) == (
+                        version == "c169b2c3d530"
+                    )
+    finally:
+        # An assertion after downgrade must not strand the next suite on legacy SQL.
+        restored = subprocess.run(
+            [
+                sys.executable,
+                "scripts/development/repository_python.py",
+                "-m",
+                "alembic",
+                "upgrade",
+                "c170b2c3d531",
+            ],
+            cwd=MIGRATION.parents[2],
+            env=child_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert restored.returncode == 0, f"Alembic head restoration exited {restored.returncode}"
+
+    # Historical backfill proof runs c169's function. Exercise the installed
+    # corrective function's durable boundary and affected roots independently.
+    _assert_late_writer_cannot_publish_a_stale_cut(db_engine)
+    _assert_fk_insert_refresh_uses_a_key_share_compatible_lock(db_engine)
+    with db_engine.begin() as connection:
+        _seed_empty_portfolio(connection, portfolio_id=MOVED_PORTFOLIO_ID)
+        connection.execute(
+            text(
+                "UPDATE cashflows SET portfolio_id = :moved_portfolio_id "
+                "WHERE transaction_id = 'CUT-T2'"
+            ),
+            {"moved_portfolio_id": MOVED_PORTFOLIO_ID},
+        )
+        assert _cut(connection)[0] == 1
+        assert _cut(connection, portfolio_id=MOVED_PORTFOLIO_ID)[0] == 1
+        assert dict(
+            connection.execute(
+                text("SELECT portfolio_id, sum(amount) FROM cashflows GROUP BY portfolio_id")
+            ).all()
+        ) == {PORTFOLIO_ID: 102, MOVED_PORTFOLIO_ID: 202}
+        connection.execute(text("DELETE FROM cashflows WHERE transaction_id = 'CUT-T2'"))
+        assert _cut(connection, portfolio_id=MOVED_PORTFOLIO_ID)[0] == 0
+        assert _cut(connection)[0] == 1
+    _assert_overlapping_bulk_refreshes_complete_in_portfolio_order(db_engine)
 
 
 def _bind_operations(migration: dict[str, Any], connection) -> None:
