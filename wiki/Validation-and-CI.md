@@ -19,6 +19,21 @@ smallest evidence command for a change, then cite generated artifacts from the r
 | Static application boundaries | `make typecheck` | Includes the complete QCP analytics application/domain/ports boundary and its SQL adapters. |
 | Documentation truth | `make docs-evidence-pack` | Captures README, wiki, API, RFC, supported-feature, and runbook checks in one manifest. |
 
+## Full integration diagnostics
+
+From the `lotus-core` repository root, `make test-integration-all` retains individual test progress,
+prints Python thread stacks after a test has run for 120 seconds, and writes completed test results
+to `output/integration-all/integration-all-results.xml`. The stack dump is diagnostic only: it does
+not interrupt execution, extend the governed job timeout, skip tests, or turn a failure into success.
+Main Releasability uploads the results alongside its Compose log when those files exist. A cancelled
+run may have no completed results file; its progress log is not a passing release receipt.
+
+The transaction-ledger evidence seed uses physical multi-row SQL statements within its existing
+1,000-row batches. Passing a mapping list to an async ORM insert can instead execute one statement
+per row, repeatedly refreshing the growing cashflow source cut. PostgreSQL work-count controls
+exercise both a single batch and a batch boundary while retaining the real refresh function and
+transaction locks. The original 10,000-row ledger plan and cardinality expectations remain unchanged.
+
 ## Lane Model
 
 `lotus-core` uses:

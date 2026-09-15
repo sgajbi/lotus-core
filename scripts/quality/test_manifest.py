@@ -41,6 +41,8 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
         "tests/integration/test_aggregation_job_tenant_migration.py",
         "tests/integration/test_portfolio_cashflow_source_cut_migration.py",
+        "tests/integration/scripts/operations/database_evidence/test_transaction_ledger.py::"
+        "test_ledger_seed_refreshes_source_cut_once_per_portfolio_per_statement",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
@@ -289,6 +291,15 @@ def suite_pytest_command(
     cmd = [sys.executable, "-m", "pytest", *get_suite(name), *SUITE_PYTEST_ARGS.get(name, [])]
     if collect_only:
         cmd.append("--collect-only")
+    elif name == "integration-all":
+        cmd.extend(
+            [
+                "-vv",
+                "-o",
+                "faulthandler_timeout=120",
+                "--junitxml=output/integration-all/integration-all-results.xml",
+            ]
+        )
     if quiet:
         cmd.append("-q")
     if with_coverage:
@@ -323,6 +334,8 @@ def run_suite(
     env.setdefault("LOTUS_TEST_SCOPE", name)
     env.setdefault("LOTUS_TEST_DYNAMIC_PORTS", "true")
     env["LOTUS_TEST_RUNTIME_MODE"] = SUITE_RUNTIME_MODE.get(name, "unit")
+    if name == "integration-all":
+        env["PYTHONUNBUFFERED"] = "1"
     if coverage_file:
         env["COVERAGE_FILE"] = coverage_file
 
