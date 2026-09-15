@@ -64,6 +64,13 @@ def test_critical_db_coverage_includes_cashflow_source_cut_migration() -> None:
     )
 
 
+def test_critical_db_coverage_executes_collective_snapshot_currentness() -> None:
+    assert (
+        "tests/integration/services/query_control_plane_service/"
+        "test_core_snapshot_collective_epoch_postgresql.py"
+    ) in get_suite("critical-db-coverage")
+
+
 def test_critical_db_coverage_includes_actual_ledger_seed_refresh_work() -> None:
     assert (
         "tests/integration/scripts/operations/database_evidence/test_transaction_ledger.py::"

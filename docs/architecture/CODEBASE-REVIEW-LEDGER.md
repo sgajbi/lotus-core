@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1726 Core snapshot collective freshness (2026-09-16, fixed-local candidate): the canonical
+seed had matched mixed per-security mutation epochs and complete collective reconciliation, but
+QCP freshness required uniform row epochs and reported null epoch/PARTIAL quality. Freshness now
+consumes the existing validated reconciliation scopes, preserving unknown/empty source truth and
+all durable-control/valuation fences. Production-route PostgreSQL proof covers same-day and
+carry-forward sources, repeated identities, independent values/weights and eight adverse controls.
+Final-head/mainline, qualified Core seed and independent downstream acceptance remain required;
+the broader #714 capacity/recovery/release issue stays open. Evidence:
+[CR-1726-CORE-SNAPSHOT-COLLECTIVE-FRESHNESS.md](./codebase-reviews/CR-1726-CORE-SNAPSHOT-COLLECTIVE-FRESHNESS.md).
+
 CR-1725 Portfolio aggregation job tenant authority (2026-09-11, fixed-local candidate): #798
 showed that durable aggregation work retained portfolio/date lineage and lease fencing but omitted
 the source portfolio tenant. Staging now resolves tenant only from durable portfolio ownership;

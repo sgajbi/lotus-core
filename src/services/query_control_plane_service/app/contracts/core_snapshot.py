@@ -387,7 +387,12 @@ class CoreSnapshotFreshnessMetadata(BaseModel):
     )
     snapshot_epoch: Optional[int] = Field(
         None,
-        description="Resolved baseline epoch when snapshot-backed state was used.",
+        description=(
+            "Collective target epoch from the governed financial reconciliation scope, not a "
+            "requirement that every security's last-mutation epoch be equal. Null for historical "
+            "fallback, an empty baseline, or any unscoped source row. A resolved epoch alone "
+            "does not establish completed reconciliation or current valuation evidence."
+        ),
         examples=[7],
     )
     fallback_reason: Optional[str] = Field(

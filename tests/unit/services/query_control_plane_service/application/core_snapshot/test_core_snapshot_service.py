@@ -1311,7 +1311,7 @@ async def test_latest_snapshot_timestamp_uses_latest_row_or_state_timestamp():
     assert latest == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
 
 
-async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_epochs(
+async def test_resolve_baseline_positions_reuses_collective_target_for_mixed_epochs(
     mock_dependencies,
 ):
     (position_repo, _, _, _, _, _) = mock_dependencies
@@ -1339,7 +1339,7 @@ async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_e
     )
 
     assert baseline.freshness.baseline_source == "position_state"
-    assert baseline.freshness.snapshot_epoch is None
+    assert baseline.freshness.snapshot_epoch == 8
 
 
 async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dependencies):

@@ -225,6 +225,10 @@ router inside the operational read plane.
   valid row epoch, read those exact financial-reconciliation controls in one set-based adapter
   query, and expose deterministic input/calculation/output lineage plus a source-bound snapshot id;
   per-security epochs are last-mutation versions, not separate portfolio-day control requirements
+- freshness `snapshot_epoch` must reuse that same validated collective target rather than require
+  uniform per-security epochs; any unscoped row, missing collective target, or empty baseline
+  leaves it null. A resolved epoch is not a readiness bypass: exact fresh completed controls,
+  coherent current valuation evidence, and source currentness remain independently required
 - `PortfolioStateSnapshot:v1` owns the typed portfolio and market-data `source_provenance` envelope.
   In current snapshot mode, the portfolio effective date is the selected daily valued-position
   snapshot date. Per-security position-history dates may differ because they record last mutation;
