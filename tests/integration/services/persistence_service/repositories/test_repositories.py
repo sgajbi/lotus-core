@@ -1,12 +1,16 @@
 # services/persistence_service/tests/integration/test_repositories.py
+from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 
+import httpx
 import pytest
 from portfolio_common.database_models import CashAccountMaster, Portfolio, TransactionCost
 from portfolio_common.database_models import Instrument as DBInstrument
 from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.db import get_async_db_session
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
 from sqlalchemy import func, select, text
@@ -22,9 +26,10 @@ from src.services.persistence_service.app.repositories.portfolio_repository impo
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )
+from src.services.query_service.app.main import app as query_app
 from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
 from src.services.query_service.app.services.cashflow_source_cut import build_cashflow_source_cut
-from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
@@ -36,10 +41,39 @@ pytestmark = pytest.mark.asyncio
 async def test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency(
     clean_db,
     async_db_session: AsyncSession,
+    monkeypatch,
 ) -> None:
-    """The portfolio ingestion persistence path must recut economic context."""
+    """Supported ingestion upserts recut both real SQL-backed product routes."""
     portfolio_id = "PORT_CASHFLOW_CUT_CURRENCY_01"
     repository = PortfolioRepository(async_db_session)
+
+    async def product_session() -> AsyncIterator[AsyncSession]:
+        # Each HTTP request owns a fresh session, not the ingestion writer's
+        # identity map or transaction. The injected database engine is borrowed.
+        async with AsyncSession(bind=async_db_session.bind) as session:
+            yield session
+
+    monkeypatch.setitem(query_app.dependency_overrides, get_async_db_session, product_session)
+
+    async def read_products() -> tuple[dict[str, Any], dict[str, Any]]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=query_app),
+            base_url="http://test",
+            # Explicit transport lineage makes full-response replay comparable;
+            # production still generates a fresh id when the caller omits it.
+            headers={**TEST_TENANT_HEADERS, "X-Correlation-ID": "currency-cut-replay-proof"},
+        ) as client:
+            movement = await client.get(
+                f"/portfolios/{portfolio_id}/cash-movement-summary",
+                params={"start_date": "2026-09-13", "end_date": "2026-09-13"},
+            )
+            projection = await client.get(
+                f"/portfolios/{portfolio_id}/cashflow-projection",
+                params={"as_of_date": "2026-09-13", "horizon_days": 1},
+            )
+        assert movement.status_code == 200, movement.text
+        assert projection.status_code == 200, projection.text
+        return movement.json(), projection.json()
 
     def event(base_currency: str) -> PortfolioEvent:
         return PortfolioEvent(
@@ -76,6 +110,13 @@ async def test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency(
     )
     assert replay_evidence == original_evidence
 
+    usd_products = await read_products()
+    usd_replay = await read_products()
+    assert usd_replay == usd_products, [
+        {key: (product[key], replay[key]) for key in product if product[key] != replay[key]}
+        for product, replay in zip(usd_products, usd_replay, strict=True)
+    ]
+
     await repository.create_or_update_portfolio(event("EUR"))
     await async_db_session.commit()
     recast_evidence = await source_repository.get_cashflow_source_cut_evidence(
@@ -93,6 +134,30 @@ async def test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency(
     assert original_evidence.portfolio_base_currency == "USD"
     assert recast_evidence.portfolio_base_currency == "EUR"
     assert recast_cut.source_cut_id != original_cut.source_cut_id
+    eur_products = await read_products()
+    assert await read_products() == eur_products
+    for products, currency, expected_cut in (
+        (usd_products, "USD", original_cut),
+        (eur_products, "EUR", recast_cut),
+    ):
+        movement, projection = products
+        assert movement["portfolio_currency"] == projection["portfolio_currency"] == currency
+        assert (
+            movement["source_cut_id"] == projection["source_cut_id"] == expected_cut.source_cut_id
+        )
+        assert movement["generated_at"] == projection["generated_at"]
+        assert datetime.fromisoformat(movement["generated_at"]) == expected_cut.materialized_at
+        assert movement["source_window_trust"]["window_status"] == "EMPTY"
+        assert projection["source_window_trust"]["window_status"] == "EMPTY"
+        assert movement["cashflow_count"] == 0
+        assert movement["buckets"] == []
+        assert projection["total_net_cashflow"] == "0"
+        assert movement["latest_evidence_timestamp"] is None
+        assert projection["latest_evidence_timestamp"] is None
+    for usd_product, eur_product in zip(usd_products, eur_products, strict=True):
+        assert usd_product["source_cut_id"] != eur_product["source_cut_id"]
+        assert usd_product["content_hash"] != eur_product["content_hash"]
+    assert recast_cut.materialized_at >= original_cut.materialized_at
     with pytest.raises(ValueError, match="not found"):
         await source_repository.get_cashflow_source_cut_evidence(
             portfolio_id=portfolio_id,

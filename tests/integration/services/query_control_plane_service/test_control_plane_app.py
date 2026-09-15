@@ -1,3 +1,4 @@
+from copy import deepcopy
 from unittest.mock import patch
 
 import httpx
@@ -43,6 +44,12 @@ from tests.integration.services.query_control_plane_service.openapi_schema_contr
 )
 
 pytestmark = pytest.mark.asyncio
+
+SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION = (
+    "UTC source-product materialization timestamp. A product that can prove a stable "
+    "source cut may publish that cut's latest source revision time instead of the "
+    "transport-serving time; the product contract states which applies."
+)
 
 SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
     "tenant_id",
@@ -774,8 +781,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert lineage_keys["properties"]["items"]["description"] == "Current lineage key states."
     assert lineage_keys["properties"]["product_name"]["default"] == "IngestionEvidenceBundle"
-    assert lineage_keys["properties"]["generated_at"]["description"] == (
-        "UTC timestamp when this source-data product response was generated."
+    assert (
+        lineage_keys["properties"]["generated_at"]["description"]
+        == SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION
     )
     assert lineage_keys["properties"]["as_of_date"]["description"] == (
         "Business as-of date used to resolve this source-data product."
@@ -787,8 +795,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "IngestionEvidenceBundle"
     )
     assert reprocessing_jobs_schema["properties"]["product_version"]["default"] == "v1"
-    assert reprocessing_jobs_schema["properties"]["generated_at"]["description"] == (
-        "UTC timestamp when this source-data product response was generated."
+    assert (
+        reprocessing_jobs_schema["properties"]["generated_at"]["description"]
+        == SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION
     )
     assert "product_name" not in support_jobs["properties"]
     assert support_jobs["properties"]["items"]["description"] == (
@@ -1322,8 +1331,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         "ReconciliationEvidenceBundle"
     )
     assert reconciliation_run_schema["properties"]["product_version"]["default"] == "v1"
-    assert reconciliation_run_schema["properties"]["generated_at"]["description"] == (
-        "UTC timestamp when this source-data product response was generated."
+    assert (
+        reconciliation_run_schema["properties"]["generated_at"]["description"]
+        == SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION
     )
     assert reconciliation_run_schema["properties"]["as_of_date"]["description"] == (
         "Business as-of date used to resolve this source-data product."
@@ -1361,8 +1371,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     assert reconciliation_finding_schema["properties"]["product_name"]["default"] == (
         "ReconciliationEvidenceBundle"
     )
-    assert reconciliation_finding_schema["properties"]["generated_at"]["description"] == (
-        "UTC timestamp when this source-data product response was generated."
+    assert (
+        reconciliation_finding_schema["properties"]["generated_at"]["description"]
+        == SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION
     )
     assert reconciliation_finding_schema["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this reconciliation-finding support snapshot was generated."
@@ -1407,8 +1418,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         "IngestionEvidenceBundle"
     )
     assert reprocessing_key_schema["properties"]["product_version"]["default"] == "v1"
-    assert reprocessing_key_schema["properties"]["generated_at"]["description"] == (
-        "UTC timestamp when this source-data product response was generated."
+    assert (
+        reprocessing_key_schema["properties"]["generated_at"]["description"]
+        == SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION
     )
     assert reprocessing_key_schema["properties"]["stale_threshold_minutes"]["description"] == (
         "Threshold in minutes used to classify stale support rows in this listing."
@@ -1845,7 +1857,10 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
         "UTC timestamp of the resolved baseline snapshot when one exists."
     )
     assert core_snapshot_freshness["properties"]["snapshot_epoch"]["description"] == (
-        "Resolved baseline epoch when snapshot-backed state was used."
+        "Collective target epoch from the governed financial reconciliation scope, not a "
+        "requirement that every security's last-mutation epoch be equal. Null for historical "
+        "fallback, an empty baseline, or any unscoped source row. A resolved epoch alone "
+        "does not establish completed reconciliation or current valuation evidence."
     )
     assert core_snapshot_freshness["properties"]["fallback_reason"]["description"] == (
         "Reason historical fallback was used instead of current snapshot-backed state."
@@ -2684,3 +2699,45 @@ async def test_openapi_fully_documents_capabilities_schema_family(async_test_cli
     schema = response.json()
 
     assert_schema_properties_are_documented_and_exampled(schema, CAPABILITIES_SCHEMA_ROOTS)
+
+
+@pytest.mark.parametrize(
+    "guard,schema_name,field_name,bad_description,error_match",
+    [
+        (
+            test_openapi_describes_operations_support_parameters,
+            "LineageKeyListResponse",
+            "generated_at",
+            "UTC timestamp when this source-data product response was generated.",
+            "UTC",
+        ),
+        (
+            test_openapi_describes_analytics_reference_contract,
+            "ReconciliationRunListResponse",
+            "generated_at",
+            "UTC timestamp when this source-data product response was generated.",
+            "UTC",
+        ),
+        (
+            test_openapi_describes_integration_policy_and_core_snapshot,
+            "CoreSnapshotFreshnessMetadata",
+            "snapshot_epoch",
+            "Resolved baseline epoch when snapshot-backed state was used.",
+            "Collective target epoch",
+        ),
+    ],
+    ids=["lineage-serving-time", "reconciliation-serving-time", "unscoped-epoch"],
+)
+async def test_openapi_metadata_guards_reject_wrong_source_semantics(
+    async_test_client, monkeypatch, guard, schema_name, field_name, bad_description, error_match
+):
+    await guard(async_test_client)
+    bad_schema = deepcopy(app.openapi())
+    bad_schema["components"]["schemas"][schema_name]["properties"][field_name]["description"] = (
+        bad_description
+    )
+    # Exercise the same registered /openapi.json route and guard, without
+    # mutating the shared cached schema or weakening any other contract check.
+    monkeypatch.setattr(app, "openapi", lambda: bad_schema)
+    with pytest.raises(AssertionError, match=error_match):
+        await guard(async_test_client)

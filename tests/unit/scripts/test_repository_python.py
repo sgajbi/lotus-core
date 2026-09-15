@@ -104,6 +104,21 @@ def test_repository_launcher_rejects_physical_foreign_app_from_user_site(
     foreign_app.mkdir(parents=True)
     (foreign_app / "__init__.py").write_text("SOURCE = 'foreign'\n", encoding="utf-8")
 
+    # Venv interpreters can disable automatic user-site discovery. Put the real
+    # physical package on the inherited search path and prove the attack is
+    # reachable before testing the unchanged repository startup guard.
+    environment["PYTHONPATH"] = str(user_site)
+    unguarded = subprocess.run(
+        [sys.executable, "-c", "import app; print(app.__file__)"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert unguarded.returncode == 0, unguarded.stderr
+    assert Path(unguarded.stdout.strip()).resolve() == (foreign_app / "__init__.py").resolve()
+
     completed = subprocess.run(
         [
             sys.executable,
@@ -114,7 +129,7 @@ def test_repository_launcher_rejects_physical_foreign_app_from_user_site(
         cwd=current,
         env={
             **environment,
-            "PYTHONPATH": str(current),
+            "PYTHONPATH": os.pathsep.join((str(current), str(user_site))),
         },
         check=False,
         capture_output=True,

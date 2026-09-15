@@ -224,10 +224,26 @@ schema, machine-readable contracts, or executable evidence.
 - Large cashflow evidence seeds must use physical multi-row SQL statements, not ORM
   `executemany` mappings that issue one statement per row. Source-cut maintenance is atomic and
   statement-scoped; preserve its durable locks rather than disabling maintenance to accelerate
-  fixtures. The ledger seed's PostgreSQL work-count controls cover single and cross-batch inserts.
+  fixtures. PostgreSQL work-count controls cover single and cross-batch inserts, including the
+  bank-day seed's 1,000-row physical statements inside unchanged 5,000-row commit batches.
+  Source-cut work proof executes the installed refresh statement with `EXPLAIN ANALYZE`, not a
+  copied query or trigger-metadata proxy. Rebuild the owned migration image when migrations change
+  (`LOTUS_TESTS_DOCKER_BUILD=true` for local test execution); a cached image is not current-head
+  migration proof. See the [migration contract](docs/standards/migration-contract.md).
 - The native full-integration target retains per-test progress, diagnostic thread stacks after
   120 seconds, and a completed JUnit results artifact. Missing results after cancellation are not
   passing release evidence; see [Validation and CI](wiki/Validation-and-CI.md#full-integration-diagnostics).
+- Shared source-product metadata changes must retain registered-route OpenAPI regression proof
+  in the premerge operations contract suite. Source materialization is not transport-serving
+  time, and a resolved collective snapshot epoch alone is not current reconciliation/valuation
+  readiness. Test exact contract descriptions and representative wrong served-schema mutations;
+  do not restore stale documentation or weaken adjacent authority/schema checks to pass tests.
+- Test runtime classification uses the pytest nodeid's test-file portion, not parameter IDs
+  containing example integration/E2E paths. Preserve actual file-path and explicit database-marker
+  admission; verify manifest membership and omission guards execute with the ordinary unit selector.
+- Source-provenance fixtures must prove foreign packages are reachable without the guard before
+  asserting rejection; pinned venvs can disable automatic user-site discovery. Refresh-count
+  wrappers must replan PostgreSQL expressions after function renaming, including warmed backends.
 
 - Some external treasury and OMS source products intentionally remain unavailable until bank-owned
   integration evidence is certified; do not fabricate substitutes.

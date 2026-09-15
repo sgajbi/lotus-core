@@ -78,6 +78,64 @@ def test_critical_db_coverage_includes_actual_ledger_seed_refresh_work() -> None
     ) in get_suite("critical-db-coverage")
 
 
+CASHFLOW_CRITICAL_PROOF_NODES = [
+    "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"
+    "test_bank_day_seed_refreshes_source_cut_per_physical_statement",
+    "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"
+    "test_source_cut_refresh_statement_has_bounded_actual_tuple_work",
+    "tests/integration/services/query_service/test_integration_cashflow_repository.py::"
+    "test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant",
+    "tests/integration/services/persistence_service/repositories/test_repositories.py::"
+    "test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency",
+]
+
+
+@pytest.mark.parametrize("node_id", CASHFLOW_CRITICAL_PROOF_NODES)
+def test_critical_db_coverage_executes_cashflow_corrective_product_and_work_proof(
+    node_id: str,
+) -> None:
+    assert node_id in get_suite("critical-db-coverage")
+
+
+@pytest.mark.parametrize("node_id", CASHFLOW_CRITICAL_PROOF_NODES)
+def test_cashflow_critical_manifest_guard_rejects_missing_proof(monkeypatch, node_id) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "critical-db-coverage",
+        [path for path in get_suite("critical-db-coverage") if path != node_id],
+    )
+    with pytest.raises(AssertionError):
+        test_critical_db_coverage_executes_cashflow_corrective_product_and_work_proof(node_id)
+
+
+QCP_METADATA_PREMERGE_NODES = [
+    "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+    "test_openapi_describes_operations_support_parameters",
+    "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+    "test_openapi_describes_analytics_reference_contract",
+    "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+    "test_openapi_describes_integration_policy_and_core_snapshot",
+    "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+    "test_openapi_metadata_guards_reject_wrong_source_semantics",
+]
+
+
+@pytest.mark.parametrize("node_id", QCP_METADATA_PREMERGE_NODES)
+def test_ops_contract_executes_source_metadata_guards(node_id: str) -> None:
+    assert node_id in get_suite("ops-contract")
+
+
+@pytest.mark.parametrize("node_id", QCP_METADATA_PREMERGE_NODES)
+def test_ops_metadata_manifest_guard_rejects_missing_proof(monkeypatch, node_id) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "ops-contract",
+        [path for path in get_suite("ops-contract") if path != node_id],
+    )
+    with pytest.raises(AssertionError):
+        test_ops_contract_executes_source_metadata_guards(node_id)
+
+
 @pytest.mark.parametrize("exit_code", [0, 7])
 def test_integration_all_streams_diagnostics_and_preserves_exit_code(
     monkeypatch, exit_code

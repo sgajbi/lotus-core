@@ -1,5 +1,5 @@
 # tests/integration/services/query_service/test_cashflow_repository.py
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -14,7 +14,12 @@ from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+    transaction_ledger_query_spec,
+)
 from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
+from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
 from src.services.query_service.app.services.cash_movement_service import CashMovementService
 from src.services.query_service.app.services.cashflow_projection_service import (
     CashflowProjectionService,
@@ -420,8 +425,53 @@ async def test_cash_movement_summary_returns_exact_source_controls(
 
 
 @pytest.mark.lifecycle
+@pytest.mark.parametrize(
+    "window_date,inclusive_start,exclusive_end,dst_offsets",
+    [
+        pytest.param(
+            date(2026, 3, 1),
+            datetime(2026, 3, 1, tzinfo=UTC),
+            datetime(2026, 3, 2, tzinfo=UTC),
+            None,
+            id="month-rollover",
+        ),
+        pytest.param(
+            date(2024, 2, 29),
+            datetime(2024, 2, 29, tzinfo=UTC),
+            datetime(2024, 3, 1, tzinfo=UTC),
+            None,
+            id="leap-day",
+        ),
+        pytest.param(
+            date(2025, 12, 31),
+            datetime(2025, 12, 31, tzinfo=UTC),
+            datetime(2026, 1, 1, tzinfo=UTC),
+            None,
+            id="year-rollover",
+        ),
+        pytest.param(
+            date(2026, 3, 8),
+            datetime(2026, 3, 8, tzinfo=UTC),
+            datetime(2026, 3, 9, tzinfo=UTC),
+            (-18000, -14400),
+            id="dst-spring",
+        ),
+        pytest.param(
+            date(2026, 11, 1),
+            datetime(2026, 11, 1, tzinfo=UTC),
+            datetime(2026, 11, 2, tzinfo=UTC),
+            (-14400, -18000),
+            id="dst-fall",
+        ),
+    ],
+)
 async def test_projected_settlement_window_and_utc_bucket_ignore_session_timezone(
-    clean_db, async_db_session: AsyncSession
+    clean_db,
+    async_db_session: AsyncSession,
+    window_date: date,
+    inclusive_start: datetime,
+    exclusive_end: datetime,
+    dst_offsets: tuple[int, int] | None,
 ) -> None:
     """PostgreSQL proof of UTC event-date membership and bucket semantics."""
     portfolio_id = "UTC-WINDOW-PORTFOLIO"
@@ -430,7 +480,7 @@ async def test_projected_settlement_window_and_utc_bucket_ignore_session_timezon
             tenant_id=TEST_TENANT_ID,
             portfolio_id=portfolio_id,
             base_currency="USD",
-            open_date=date(2026, 1, 1),
+            open_date=date(2024, 1, 1),
             risk_exposure="a",
             investment_time_horizon="b",
             portfolio_type="c",
@@ -440,9 +490,9 @@ async def test_projected_settlement_window_and_utc_bucket_ignore_session_timezon
         )
     )
     boundary_rows = (
-        ("UTC-WINDOW-BEFORE", datetime(2026, 2, 28, 23, 59, 59, tzinfo=UTC), "10"),
-        ("UTC-WINDOW-IN", datetime(2026, 3, 1, 0, 0, tzinfo=UTC), "20"),
-        ("UTC-WINDOW-EXCLUSIVE", datetime(2026, 3, 2, 0, 0, tzinfo=UTC), "30"),
+        ("UTC-WINDOW-BEFORE", inclusive_start - timedelta(seconds=1), "10"),
+        ("UTC-WINDOW-IN", inclusive_start, "20"),
+        ("UTC-WINDOW-EXCLUSIVE", exclusive_end, "30"),
     )
     for transaction_id, settlement_date, amount in boundary_rows:
         async_db_session.add(
@@ -457,27 +507,102 @@ async def test_projected_settlement_window_and_utc_bucket_ignore_session_timezon
                 gross_transaction_amount=Decimal(amount),
                 trade_currency="USD",
                 currency="USD",
-                transaction_date=datetime(2026, 2, 28, 12, tzinfo=UTC),
+                transaction_date=inclusive_start - timedelta(days=1),
                 settlement_date=settlement_date,
+            )
+        )
+    # Independent trade-instant controls settle after the reporting window.
+    # They must not become settlement cashflows in this window merely because
+    # their trade instant belongs to it.
+    for suffix, transaction_date, amount in boundary_rows:
+        async_db_session.add(
+            Transaction(
+                transaction_id=f"TRADE-{suffix}",
+                portfolio_id=portfolio_id,
+                instrument_id="UTC-TRADE-EDGE",
+                security_id="UTC-TRADE-EDGE",
+                transaction_type="DEPOSIT",
+                quantity=1,
+                price=1,
+                gross_transaction_amount=Decimal(amount),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=transaction_date,
+                settlement_date=exclusive_end + timedelta(days=1),
             )
         )
     await async_db_session.commit()
 
     repository = CashflowRepository(async_db_session)
+    transaction_repository = TransactionRepository(async_db_session)
+    assert await transaction_repository.portfolio_exists(
+        portfolio_id, tenant_id=TenantId(TEST_TENANT_ID)
+    )
     for session_timezone in ("UTC", "Asia/Singapore", "America/New_York"):
         await async_db_session.execute(
             sa.text("SELECT set_config('TimeZone', :session_timezone, true)"),
             {"session_timezone": session_timezone},
         )
+        if session_timezone == "America/New_York" and dst_offsets is not None:
+            # Verify that PostgreSQL's actual timezone data exercises a DST
+            # transition, not just a scenario label. These are session-chaos
+            # offsets, never authority for a booking-centre business date.
+            actual_offsets = (
+                await async_db_session.execute(
+                    sa.text(
+                        "SELECT EXTRACT(TIMEZONE FROM CAST(:start AS timestamptz)), "
+                        "EXTRACT(TIMEZONE FROM CAST(:end AS timestamptz))"
+                    ),
+                    {"start": inclusive_start, "end": exclusive_end},
+                )
+            ).one()
+            assert tuple(actual_offsets) == dst_offsets
         evidence = await repository.get_projected_settlement_cashflow_series_with_evidence(
             portfolio_id=portfolio_id,
-            start_date=date(2026, 3, 1),
-            end_date=date(2026, 3, 1),
+            start_date=window_date,
+            end_date=window_date,
             tenant_id=TenantId(TEST_TENANT_ID),
         )
-        assert evidence.rows == [(date(2026, 3, 1), Decimal("20"))]
+        assert evidence.rows == [(window_date, Decimal("20"))]
         assert evidence.source_row_count == 1
         assert evidence.source_total == Decimal("20")
+        for date_filters, expected_suffixes in (
+            ({"start_date": window_date}, ("IN", "EXCLUSIVE")),
+            ({"end_date": window_date}, ("BEFORE", "IN")),
+            ({"as_of_date": window_date}, ("BEFORE", "IN")),
+            (
+                {"start_date": window_date, "end_date": window_date},
+                ("IN",),
+            ),
+            (
+                {"start_date": window_date, "as_of_date": window_date},
+                ("IN",),
+            ),
+        ):
+            filters = TransactionLedgerFilters(
+                portfolio_id=portfolio_id,
+                instrument_id="UTC-TRADE-EDGE",
+                **date_filters,
+            )
+            rows = await transaction_repository.get_transactions(
+                query_spec=transaction_ledger_query_spec(
+                    filters=filters, sort_by="transaction_date", sort_order="asc"
+                ),
+                skip=0,
+                limit=10,
+            )
+            expected_ids = [f"TRADE-UTC-WINDOW-{suffix}" for suffix in expected_suffixes]
+            assert [row.transaction_id for row in rows] == expected_ids
+            assert await transaction_repository.get_transactions_count(filters=filters) == len(
+                expected_ids
+            )
+            expected_facts = {
+                f"TRADE-{transaction_id}": (transaction_date, Decimal(amount))
+                for transaction_id, transaction_date, amount in boundary_rows
+            }
+            assert [(row.transaction_date, row.gross_transaction_amount) for row in rows] == [
+                expected_facts[transaction_id] for transaction_id in expected_ids
+            ]
 
 
 async def test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant(

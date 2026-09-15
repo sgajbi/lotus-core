@@ -43,6 +43,14 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_portfolio_cashflow_source_cut_migration.py",
         "tests/integration/scripts/operations/database_evidence/test_transaction_ledger.py::"
         "test_ledger_seed_refreshes_source_cut_once_per_portfolio_per_statement",
+        "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"
+        "test_bank_day_seed_refreshes_source_cut_per_physical_statement",
+        "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"
+        "test_source_cut_refresh_statement_has_bounded_actual_tuple_work",
+        "tests/integration/services/query_service/test_integration_cashflow_repository.py::"
+        "test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant",
+        "tests/integration/services/persistence_service/repositories/test_repositories.py::"
+        "test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
@@ -85,6 +93,14 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
         "tests/integration/services/query_control_plane_service/"
         "test_operations_router_dependency.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+        "test_openapi_describes_operations_support_parameters",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+        "test_openapi_describes_analytics_reference_contract",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+        "test_openapi_describes_integration_policy_and_core_snapshot",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+        "test_openapi_metadata_guards_reject_wrong_source_semantics",
     ],
     "boundary-mapping-conformance": [
         "tests/unit/boundary_mapping",
