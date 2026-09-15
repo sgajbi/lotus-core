@@ -214,6 +214,14 @@ schema, machine-readable contracts, or executable evidence.
 
 ## Known Constraints And Implementation Notes
 
+- Large cashflow evidence seeds must use physical multi-row SQL statements, not ORM
+  `executemany` mappings that issue one statement per row. Source-cut maintenance is atomic and
+  statement-scoped; preserve its durable locks rather than disabling maintenance to accelerate
+  fixtures. The ledger seed's PostgreSQL work-count controls cover single and cross-batch inserts.
+- The native full-integration target retains per-test progress, diagnostic thread stacks after
+  120 seconds, and a completed JUnit results artifact. Missing results after cancellation are not
+  passing release evidence; see [Validation and CI](wiki/Validation-and-CI.md#full-integration-diagnostics).
+
 - Some external treasury and OMS source products intentionally remain unavailable until bank-owned
   integration evidence is certified; do not fabricate substitutes.
 - Production security and audit defaults do not replace platform ingress, IAM, or deployment proof.

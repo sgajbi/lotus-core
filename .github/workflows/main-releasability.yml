@@ -409,7 +409,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: main-releasability-integration-all-artifacts
-          path: output/integration-all/integration-all-compose.log
+          path: |
+            output/integration-all/integration-all-compose.log
+            output/integration-all/integration-all-results.xml
           if-no-files-found: warn
           retention-days: 30
 
