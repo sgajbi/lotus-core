@@ -2,6 +2,7 @@
 import re
 import time
 from typing import Any, Callable, Dict, List
+from urllib.parse import quote
 
 import pytest
 import requests
@@ -152,6 +153,31 @@ class E2EApiClient:
         pytest.fail(
             f"{fail_message} after {timeout} seconds for endpoint {endpoint}. "
             f"Last response: {last_response_data}. Last error: {last_error}"
+        )
+
+    def wait_for_admitted_portfolio(
+        self,
+        portfolio_id: str,
+        *,
+        timeout: int = 60,
+    ) -> Any:
+        """Wait until the tenant-scoped portfolio read admits the ingested portfolio."""
+        normalized_portfolio_id = portfolio_id.strip()
+        if not normalized_portfolio_id:
+            raise ValueError("E2E portfolio_id must be nonblank")
+
+        return self.poll_for_data(
+            f"/portfolios?portfolio_id={quote(normalized_portfolio_id, safe='')}",
+            lambda data: (
+                isinstance(data, dict)
+                and isinstance(portfolios := data.get("portfolios"), list)
+                and len(portfolios) == 1
+                and portfolios[0].get("portfolio_id") == normalized_portfolio_id
+            ),
+            timeout=timeout,
+            fail_message=(
+                "Tenant-owned portfolio did not materialize before transaction admission."
+            ),
         )
 
     def poll_for_post_query_data(

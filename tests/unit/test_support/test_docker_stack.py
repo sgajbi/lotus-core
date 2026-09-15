@@ -816,6 +816,29 @@ def test_wait_for_http_health_raises_after_timeout() -> None:
         )
 
 
+def test_wait_for_http_health_retries_transient_read_timeout() -> None:
+    responses = iter(
+        [
+            requests.ReadTimeout("query is still warming up"),
+            SimpleNamespace(status_code=200),
+        ]
+    )
+
+    def transient_get(url: str, timeout: int):  # noqa: ARG001
+        response = next(responses)
+        if isinstance(response, requests.RequestException):
+            raise response
+        return response
+
+    wait_for_http_health(
+        "query-service",
+        "http://localhost:8201/health/ready",
+        timeout_seconds=1,
+        poll_seconds=0,
+        get=transient_get,
+    )
+
+
 def test_wait_for_kafka_metadata_raises_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     class _AlwaysFailAdminClient:
         def __init__(self, conf):  # noqa: ANN001, ARG002

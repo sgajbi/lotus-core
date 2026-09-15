@@ -677,7 +677,7 @@ def wait_for_http_health(
             response = get(health_url, timeout=2)
             if response.status_code == 200:
                 return
-        except requests.ConnectionError:
+        except requests.RequestException:
             pass
         time.sleep(poll_seconds)
 
