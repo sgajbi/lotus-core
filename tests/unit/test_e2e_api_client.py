@@ -89,3 +89,35 @@ def test_poll_for_data_routes_control_plane_readiness_to_control_client(
 
     assert payload == {"publish_allowed": True, "controls_blocking": False}
     assert calls == ["/support/portfolios/P1/overview"]
+
+
+def test_wait_for_admitted_portfolio_uses_tenant_scoped_supported_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client()
+    expected = {"portfolios": [{"portfolio_id": "P /1"}]}
+
+    def poll_for_data(
+        endpoint: str,
+        validation_func,
+        timeout: int,
+        fail_message: str,
+    ):
+        assert endpoint == "/portfolios?portfolio_id=P%20%2F1"
+        assert timeout == 45
+        assert fail_message == (
+            "Tenant-owned portfolio did not materialize before transaction admission."
+        )
+        assert validation_func(expected)
+        assert not validation_func({"portfolios": []})
+        assert not validation_func({"portfolios": [{"portfolio_id": "other"}]})
+        return expected
+
+    monkeypatch.setattr(client, "poll_for_data", poll_for_data)
+
+    assert client.wait_for_admitted_portfolio("P /1", timeout=45) == expected
+
+
+def test_wait_for_admitted_portfolio_rejects_blank_identity() -> None:
+    with pytest.raises(ValueError, match="portfolio_id must be nonblank"):
+        _client().wait_for_admitted_portfolio("   ")

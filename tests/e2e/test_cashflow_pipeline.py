@@ -39,6 +39,7 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
             ]
         },
     )
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
     e2e_api_client.ingest(
         "/ingest/instruments",
         {

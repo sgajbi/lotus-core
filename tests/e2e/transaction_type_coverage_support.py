@@ -449,6 +449,7 @@ def setup_dual_leg_settlement_scenario(clean_db_module, e2e_api_client: E2EApiCl
             ]
         },
     )
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
     e2e_api_client.ingest(
         "/ingest/instruments",
         {
