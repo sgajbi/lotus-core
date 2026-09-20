@@ -155,7 +155,9 @@ def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
         "--trade-date",
         "2026-04-17",
     ]
-    assert _reconciliation_args(parsed_args=Args, scenario=scenario) == [
+    assert _reconciliation_args(
+        parsed_args=Args, scenario=scenario, endpoints=_fake_endpoints()
+    ) == [
         "--run-id",
         "20260419T120000Z",
         "--business-date",
@@ -166,6 +168,12 @@ def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
         "1000",
         "--output-dir",
         "output/task-runs",
+        "--query-base-url",
+        _fake_endpoints().e2e_query_url,
+        "--query-control-base-url",
+        _fake_endpoints().e2e_query_control_plane_url,
+        "--reconciliation-base-url",
+        _fake_endpoints().e2e_financial_reconciliation_url,
     ]
 
 
@@ -294,7 +302,14 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         "1000",
         "--output-dir",
         "output/task-runs",
+        "--query-base-url",
+        _fake_endpoints().e2e_query_url,
+        "--query-control-base-url",
+        _fake_endpoints().e2e_query_control_plane_url,
+        "--reconciliation-base-url",
+        _fake_endpoints().e2e_financial_reconciliation_url,
     ]
+    assert "--host-database-url" not in calls[2][1]
 
 
 def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
