@@ -3,15 +3,42 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import signal
 import subprocess
 import sys
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+INTEGRATION_ALL_OUTPUT_DIR = Path("output/integration-all")
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _child_signal(returncode: int) -> str | None:
+    if returncode >= 0:
+        return None
+    try:
+        return signal.Signals(-returncode).name
+    except ValueError:
+        return f"signal:{-returncode}"
+
+
+def _child_max_rss_kb() -> int | None:
+    if sys.platform != "linux":
+        return None
+    import resource
+
+    return int(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
 
 
 def _discover_integration_lite() -> list[str]:
@@ -315,6 +342,8 @@ def suite_pytest_command(
                 "-vv",
                 "-o",
                 "faulthandler_timeout=120",
+                "-p",
+                "scripts.quality.pytest_progress_journal",
                 "--junitxml=output/integration-all/integration-all-results.xml",
             ]
         )
@@ -352,12 +381,42 @@ def run_suite(
     env.setdefault("LOTUS_TEST_SCOPE", name)
     env.setdefault("LOTUS_TEST_DYNAMIC_PORTS", "true")
     env["LOTUS_TEST_RUNTIME_MODE"] = SUITE_RUNTIME_MODE.get(name, "unit")
+    diagnostic_path: Path | None = None
+    progress_path: Path | None = None
     if name == "integration-all":
         env["PYTHONUNBUFFERED"] = "1"
+        if not collect_only:
+            run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            run_id = f"{run_id}-{os.getpid()}"
+            INTEGRATION_ALL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            progress_path = INTEGRATION_ALL_OUTPUT_DIR / f"{run_id}-progress.jsonl"
+            diagnostic_path = INTEGRATION_ALL_OUTPUT_DIR / f"{run_id}-process.json"
+            env["LOTUS_INTEGRATION_ALL_PROGRESS_PATH"] = str(progress_path)
     if coverage_file:
         env["COVERAGE_FILE"] = coverage_file
 
-    return subprocess.run(cmd, check=False, env=env).returncode
+    started_at = _utc_now()
+    started = perf_counter()
+    returncode = subprocess.run(cmd, check=False, env=env).returncode
+    if diagnostic_path is not None and progress_path is not None:
+        evidence = {
+            "schema_version": "lotus.integration-all.process-diagnostics.v1",
+            "suite": name,
+            "started_at_utc": started_at,
+            "completed_at_utc": _utc_now(),
+            "elapsed_seconds": round(perf_counter() - started, 3),
+            "signed_child_exit_code": returncode,
+            "child_signal": _child_signal(returncode),
+            "child_max_rss_kb": _child_max_rss_kb(),
+            "progress_path": str(progress_path),
+        }
+        try:
+            diagnostic_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"Integration Full diagnostic write failed: {exc}", file=sys.stderr)
+        else:
+            print(f"Integration Full child exit: {returncode}; diagnostics: {diagnostic_path}")
+    return returncode
 
 
 def main() -> int:

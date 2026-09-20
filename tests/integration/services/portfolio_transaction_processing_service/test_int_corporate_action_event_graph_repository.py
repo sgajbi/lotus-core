@@ -25,6 +25,8 @@ from portfolio_common.database_models import (
     CorporateActionReadinessEvaluationRecord,
 )
 from portfolio_common.database_models import Transaction as TransactionRecord
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine
 from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     canonical_content_hash,
@@ -33,7 +35,7 @@ from portfolio_common.events import TransactionEvent
 from sqlalchemy import Engine, func, insert, inspect, select, text, update
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     ConflictingCorporateActionExecutionReleaseError,
@@ -1108,6 +1110,42 @@ async def test_ready_observation_rolls_back_when_release_authority_cannot_materi
     )
 
 
+def _release_worker_engine(session: AsyncSession) -> AsyncEngine:
+    bind = session.bind
+    assert bind is not None
+    return create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=bind.url.render_as_string(hide_password=False),
+        pool_mode=DatabasePoolMode.QUEUE,
+    )
+
+
+async def test_release_worker_reuses_postgres_connection_across_small_session_sequence(
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    """Keep the release worker on a bounded physical-connection path."""
+
+    worker_engine = _release_worker_engine(async_db_session)
+    physical_connections = 0
+
+    def record_connection(_dbapi_connection, _connection_record) -> None:
+        nonlocal physical_connections
+        physical_connections += 1
+
+    sqlalchemy_event.listen(worker_engine.sync_engine, "connect", record_connection)
+    sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+    try:
+        for _ in range(12):
+            async with sessions() as session:
+                assert await session.scalar(select(1)) == 1
+    finally:
+        sqlalchemy_event.remove(worker_engine.sync_engine, "connect", record_connection)
+        await worker_engine.dispose()
+
+    assert physical_connections == 1
+
+
 async def test_thousand_member_release_drains_with_bounded_progress_validation(
     clean_db,
     db_engine: Engine,
@@ -1174,9 +1212,15 @@ async def test_thousand_member_release_drains_with_bounded_progress_validation(
     ).materialize(_execution_plan(manifest, decision))
     await async_db_session.commit()
 
-    bind = async_db_session.bind
-    assert bind is not None
-    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+    worker_engine = _release_worker_engine(async_db_session)
+    session_factory = async_sessionmaker(worker_engine, expire_on_commit=False)
+    physical_connections = 0
+
+    def record_connection(_dbapi_connection, _connection_record) -> None:
+        nonlocal physical_connections
+        physical_connections += 1
+
+    sqlalchemy_event.listen(worker_engine.sync_engine, "connect", record_connection)
     process = AsyncMock()
     process.execute.return_value = ProcessTransactionResult(
         status=TransactionProcessingStatus.PROCESSED,
@@ -1202,18 +1246,39 @@ async def test_thousand_member_release_drains_with_bounded_progress_validation(
     ) -> None:
         statements.append(statement)
 
-    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", record_statement)
+    sqlalchemy_event.listen(worker_engine.sync_engine, "before_cursor_execute", record_statement)
     started = perf_counter()
     try:
+        async with session_factory() as probe:
+            assert (
+                await probe.scalar(
+                    select(CorporateActionExecutionReleaseRecord.status).where(
+                        CorporateActionExecutionReleaseRecord.id == release.release_id
+                    )
+                )
+                == "PENDING"
+            )
         result = await asyncio.wait_for(worker.execute(), timeout=600)
     finally:
         elapsed_seconds = perf_counter() - started
-        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", record_statement)
+        sqlalchemy_event.remove(worker_engine.sync_engine, "connect", record_connection)
+        sqlalchemy_event.remove(
+            worker_engine.sync_engine, "before_cursor_execute", record_statement
+        )
+        await worker_engine.dispose()
 
+    if result.status is CorporateActionReleaseWorkerStatus.IDLE:
+        observed_status = await async_db_session.scalar(
+            select(CorporateActionExecutionReleaseRecord.status).where(
+                CorporateActionExecutionReleaseRecord.id == release.release_id
+            )
+        )
+        pytest.fail(f"release became idle with persisted status {observed_status}")
     assert result.status is CorporateActionReleaseWorkerStatus.COMPLETE
     assert result.release_id == release.release_id
     assert result.processed_member_count == 1_000
     assert process.execute.await_count == 1_000
+    assert physical_connections <= 4
     assert len(statements) <= 7 * result.processed_member_count + 10
     readiness_authority_statement_count = sum(
         "corporate_action_readiness_evaluations" in statement for statement in statements

@@ -38,6 +38,8 @@ def test_integration_full_retains_test_progress_and_bounded_wait_diagnostics() -
     artifact_paths = upload_step["with"]["path"].splitlines()
     assert report_path in artifact_paths
     assert environment["LOTUS_TESTS_COMPOSE_LOG_FILE"] in artifact_paths
+    assert "output/integration-all/*-progress.jsonl" in artifact_paths
+    assert "output/integration-all/*-process.json" in artifact_paths
 
 
 def _depends_on_exact_revision(
