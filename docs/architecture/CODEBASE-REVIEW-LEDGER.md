@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1728 Derived-state workload runtime attribution (2026-09-16, In Review): the bank-day
+workload exercised four Core runtimes but collected database-operation evidence only from
+transaction processing, so missing valuation/derived-state samples could not identify an
+unfinished tail. The harness now assigns a closed runtime identity to existing database metrics,
+collects all four service endpoints, requires the valuation claim plus snapshot and timeseries
+write hot paths, and fails closed when a runtime sample is absent. Managed isolated execution
+propagates generated endpoints without persisting environment locations in the report. First-head
+CI exposed two AnyIO advisories; all four governed runtime/CI locks now select fixed 4.14.2 with
+unrelated pins preserved and no exception. This does not change scheduling, persistence, financial
+behavior, topology or the twelve-partition ceiling;
+#714 remains open for the full capacity/recovery and qualified-image campaign. Evidence:
+[CR-1728-DERIVED-STATE-WORKLOAD-RUNTIME-ATTRIBUTION.md](./codebase-reviews/CR-1728-DERIVED-STATE-WORKLOAD-RUNTIME-ATTRIBUTION.md).
+
 CR-1727 Cashflow economic context and UTC calendar proof (2026-09-16, In Review):
 the currency-upsert regression did not compare both registered product responses, and the
 PostgreSQL settlement-window regression lacked the month/year/leap/DST cases required by #1041.

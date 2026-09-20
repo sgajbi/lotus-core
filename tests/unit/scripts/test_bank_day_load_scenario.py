@@ -442,13 +442,118 @@ def test_database_operation_evidence_collection_fails_closed_on_empty_scrape(
     )
 
     assert evidence == []
-    assert failures == ["database operation metrics returned no bounded repository/method samples"]
+    assert failures == [
+        "portfolio-transaction-processing database operation metrics returned no bounded "
+        "repository/method samples"
+    ]
 
 
-def test_required_cost_database_operation_evidence_fails_closed_on_missing_sample() -> None:
+def test_database_operation_evidence_collection_attributes_every_runtime(
+    monkeypatch,
+) -> None:
+    transaction_sample = DatabaseOperationEvidence(
+        repository="CostRepository",
+        method="load",
+        observation_count=100,
+        total_duration_seconds=25.0,
+        average_duration_seconds=0.25,
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "database_operation_evidence",
+        lambda **_kwargs: [transaction_sample],
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "runtime_database_operation_evidence",
+        lambda *, runtime, metrics_base_url: [
+            DatabaseOperationEvidence(
+                repository="RuntimeRepository",
+                method="work",
+                observation_count=10,
+                total_duration_seconds=2.0,
+                average_duration_seconds=0.2,
+                runtime=runtime,
+            )
+        ],
+    )
+
+    evidence, failures = bank_day_load_scenario._safe_collect_database_operation_evidence(
+        transaction_processing_base_url="http://transaction",
+        position_valuation_base_url="http://valuation-calculator",
+        portfolio_derived_state_base_url="http://derived-state",
+        valuation_orchestrator_base_url="http://valuation-orchestrator",
+    )
+
+    assert failures == []
+    assert {item.runtime for item in evidence} == {
+        "portfolio-transaction-processing",
+        "position-valuation-calculator",
+        "portfolio-derived-state",
+        "valuation-orchestrator",
+    }
+
+
+def test_database_operation_evidence_collection_fails_closed_for_one_missing_runtime(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "database_operation_evidence",
+        lambda **_kwargs: [
+            DatabaseOperationEvidence(
+                repository="CostRepository",
+                method="load",
+                observation_count=1,
+                total_duration_seconds=0.1,
+                average_duration_seconds=0.1,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "runtime_database_operation_evidence",
+        lambda *, runtime, metrics_base_url: (
+            []
+            if runtime == "portfolio-derived-state"
+            else [
+                DatabaseOperationEvidence(
+                    repository="RuntimeRepository",
+                    method="work",
+                    observation_count=1,
+                    total_duration_seconds=0.1,
+                    average_duration_seconds=0.1,
+                    runtime=runtime,
+                )
+            ]
+        ),
+    )
+
+    _evidence, failures = bank_day_load_scenario._safe_collect_database_operation_evidence(
+        transaction_processing_base_url="http://transaction",
+        position_valuation_base_url="http://valuation-calculator",
+        portfolio_derived_state_base_url="http://derived-state",
+        valuation_orchestrator_base_url="http://valuation-orchestrator",
+    )
+
+    assert failures == [
+        "portfolio-derived-state database operation metrics returned no bounded repository/method "
+        "samples"
+    ]
+
+
+def test_required_database_operation_evidence_fails_closed_on_missing_runtime_sample() -> None:
     required = [
-        {"repository": "CostBasisTransactionRepository", "method": "get_transaction_history"},
-        {"repository": "CostBasisLotRepository", "method": "upsert_buy_lot_state"},
+        {
+            "runtime": "portfolio-transaction-processing",
+            "repository": "CostBasisTransactionRepository",
+            "method": "get_transaction_history",
+        },
+        {
+            "runtime": "portfolio-derived-state",
+            "repository": "TimeseriesRepository",
+            "method": "upsert_position_timeseries",
+        },
     ]
     observed = [
         DatabaseOperationEvidence(
@@ -463,34 +568,30 @@ def test_required_cost_database_operation_evidence_fails_closed_on_missing_sampl
     assert bank_day_load_scenario._missing_required_database_operations(
         required=required,
         observed=observed,
-    ) == [("CostBasisLotRepository", "upsert_buy_lot_state")]
+    ) == [("portfolio-derived-state", "TimeseriesRepository", "upsert_position_timeseries")]
 
 
-def test_required_cost_database_operations_track_current_hot_path() -> None:
+def test_required_database_operations_track_each_capacity_stage() -> None:
     assert (
+        "portfolio-transaction-processing",
         "CostBasisProcessingStateRepository",
         "get_cost_basis_processing_checkpoint",
-    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    ) in bank_day_load_scenario.REQUIRED_DATABASE_OPERATION_EVIDENCE
     assert (
-        "CostBasisTransactionRepository",
-        "get_transaction_history",
-    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+        "valuation-orchestrator",
+        "ValuationRepository",
+        "find_and_claim_eligible_jobs",
+    ) in bank_day_load_scenario.REQUIRED_DATABASE_OPERATION_EVIDENCE
     assert (
-        "InitialOpeningCostStateRepository",
-        "persist_initial_opening_cost_state",
-    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+        "position-valuation-calculator",
+        "ValuationRepository",
+        "upsert_daily_snapshot",
+    ) in bank_day_load_scenario.REQUIRED_DATABASE_OPERATION_EVIDENCE
     assert (
-        "CostBasisLotRepository",
-        "upsert_buy_lot_state",
-    ) not in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
-    assert (
-        "CostBasisProcessingStateRepository",
-        "upsert_cost_basis_processing_checkpoint",
-    ) not in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
-    assert all(
-        repository != "CostBasisCalculationContextRepository"
-        for repository, _method in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
-    )
+        "portfolio-derived-state",
+        "TimeseriesRepository",
+        "upsert_portfolio_timeseries",
+    ) in bank_day_load_scenario.REQUIRED_DATABASE_OPERATION_EVIDENCE
 
 
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:

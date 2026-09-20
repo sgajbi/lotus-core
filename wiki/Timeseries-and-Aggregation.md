@@ -146,6 +146,14 @@ replay, and whole-transaction contribution before proposing another hot-path cha
 security, account, or transaction identifier is retained. Missing stage evidence fails a certifying
 run; cumulative and mean durations are diagnostic attribution, not latency SLOs.
 
+Database-operation evidence is additionally scraped from transaction processing, valuation
+orchestration, position valuation, and portfolio derived-state. Every bounded repository/method
+sample carries its stable runtime identity, and the profile fails closed when any governed
+hot-path sample is absent. This separates transaction persistence, valuation fan-out, snapshot
+materialization, position continuity, and portfolio aggregation without retaining SQL or business
+identifiers. Counts, cumulative duration, and means guide a bounded follow-up; they do not prove
+saturation or certify the workload.
+
 Existing cost metrics are retained with the stage evidence: bounded execution mode/method counts,
 recalculation duration, recalculation depth, and restored-open-lot count/sum/mean. Use them to
 separate calculator work and replay depth from reference, lock, persistence, and effect-staging work

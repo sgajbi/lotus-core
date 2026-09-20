@@ -118,6 +118,12 @@ into an unbounded identifier dump. Use the single
 Use `make test-outbox-capacity-acceptance` for the contract-declared database rollback, duplicate,
 claim, acknowledgement, timeout, terminal-failure, and managed restart evidence.
 
+Terminal database-operation evidence is runtime-attributed. The workload scrapes transaction
+processing, valuation orchestration, position valuation, and portfolio derived-state metrics and
+requires the governed hot-path samples for all four runtimes. Missing one runtime or one required
+repository/method sample fails the profile. Use cumulative count, duration, and mean only to choose
+the next bounded investigation; they are not percentiles, saturation proof, or a capacity verdict.
+
 Do not poll certifying progress with external full-table SQL or run another Docker-heavy gate. The
 managed profile already owns bounded database and resource sampling; use its async task state,
 owned-container liveness, and terminal JSON/Markdown artifacts. Disclose any bounded read-only

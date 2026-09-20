@@ -20,6 +20,14 @@ _COST_RECALCULATION_DURATION_METRIC = "recalculation_duration_seconds"
 _COST_RECALCULATION_DEPTH_METRIC = "recalculation_depth"
 _COST_RESTORED_OPEN_LOTS_METRIC = "cost_processing_open_lots_restored"
 _DATABASE_OPERATION_LATENCY_METRIC = "db_operation_latency_seconds"
+DATABASE_OPERATION_RUNTIMES = frozenset(
+    {
+        "portfolio-transaction-processing",
+        "position-valuation-calculator",
+        "portfolio-derived-state",
+        "valuation-orchestrator",
+    }
+)
 LOAD_TENANT_ID = "tenant_performance_load"
 _LOAD_TENANT_HEADERS = {"X-Tenant-Id": LOAD_TENANT_ID}
 
@@ -78,6 +86,7 @@ class DatabaseOperationEvidence:
     observation_count: int
     total_duration_seconds: float
     average_duration_seconds: float | None
+    runtime: str = "portfolio-transaction-processing"
 
 
 def consumer_dlq_event_count(
@@ -534,10 +543,26 @@ def database_operation_evidence(
     *,
     transaction_processing_base_url: str,
 ) -> list[DatabaseOperationEvidence]:
-    """Collect existing low-cardinality repository/method duration evidence."""
+    """Collect transaction-runtime repository/method duration evidence."""
+
+    return runtime_database_operation_evidence(
+        runtime="portfolio-transaction-processing",
+        metrics_base_url=transaction_processing_base_url,
+    )
+
+
+def runtime_database_operation_evidence(
+    *,
+    runtime: str,
+    metrics_base_url: str,
+) -> list[DatabaseOperationEvidence]:
+    """Collect bounded repository timings from one named runtime metrics endpoint."""
+
+    if runtime not in DATABASE_OPERATION_RUNTIMES:
+        raise ValueError(f"Unsupported database-operation runtime: {runtime}")
 
     response = requests.get(
-        f"{transaction_processing_base_url}/metrics",
+        f"{metrics_base_url}/metrics",
         timeout=10,
     )
     response.raise_for_status()
@@ -575,6 +600,7 @@ def database_operation_evidence(
                 observation_count=count,
                 total_duration_seconds=round(total, 6),
                 average_duration_seconds=round(total / count, 9),
+                runtime=runtime,
             )
         )
     return evidence

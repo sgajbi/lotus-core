@@ -77,9 +77,14 @@ def test_prepare_test_runtime_assigns_dynamic_ports_and_endpoints() -> None:
             endpoints.e2e_transaction_processing_url
             == runtime_env["E2E_TRANSACTION_PROCESSING_URL"]
         )
+        assert endpoints.e2e_position_valuation_url == runtime_env["E2E_POSITION_VALUATION_URL"]
         assert (
             endpoints.e2e_portfolio_derived_state_url
             == runtime_env["E2E_PORTFOLIO_DERIVED_STATE_URL"]
+        )
+        assert (
+            endpoints.e2e_valuation_orchestrator_url
+            == runtime_env["E2E_VALUATION_ORCHESTRATOR_URL"]
         )
         assert (
             endpoints.e2e_financial_reconciliation_url

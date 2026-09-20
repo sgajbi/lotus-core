@@ -281,6 +281,11 @@ schema, machine-readable contracts, or executable evidence.
   `outbox-capacity-profile.v1.json` and
   `outbox-capacity-profile-guard` aligned so a bounded sample cannot be mistaken for total producer
   throughput.
+- The derived-state bank-day profiles scrape bounded database-operation histograms from transaction
+  processing, valuation orchestration, position valuation, and portfolio derived-state. Preserve
+  the stable runtime identity on every sample and fail closed when a required runtime hot path is
+  absent; cumulative duration and mean are attribution evidence, not percentile or saturation
+  proof.
 
 ## Context Maintenance Rule
 

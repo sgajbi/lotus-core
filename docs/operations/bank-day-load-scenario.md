@@ -267,7 +267,7 @@ process identities from the same bounded inventory. They must create engines thr
 created. Request, worker, pod, portfolio, security, transaction, correlation, and claim identifiers
 must never become PostgreSQL application names.
 
-Before the managed stack is torn down, the scenario also scrapes the combined transaction-runtime
+Before the managed stack is torn down, the scenario scrapes the combined transaction-runtime
 metrics endpoint once and records one bounded entry per `stage` and `outcome`. Each entry contains
 the operation counter, duration observation count, cumulative duration, and mean duration. This
 allows cost, position, cashflow, readiness, idempotency, commit, replay, and whole-transaction work
@@ -276,6 +276,14 @@ the scrape is unavailable or contains no bounded samples; an interrupted run sti
 failure beside all other partial evidence. Cumulative and mean durations are attribution evidence,
 not latency percentiles or service-level objectives.
 
+The same terminal collection scrapes bounded database-operation histograms from transaction
+processing, valuation orchestration, position valuation, and portfolio derived-state runtimes.
+Every retained repository/method sample carries its stable runtime identity. A certifying run fails
+closed when the required hot-path sample for any runtime is absent, so transaction persistence,
+valuation fan-out, snapshot materialization, position continuity, and portfolio aggregation cannot
+be conflated in one process-wide total. The evidence retains no SQL text, parameters, connection
+URLs, or business identifiers; it is causal profiling evidence, not a capacity pass by itself.
+
 The same runtime scrape retains existing cost-processing execution counts by bounded mode/method,
 plus recalculation duration, recalculation depth, and restored-open-lot histogram count/sum/mean.
 This separates pure calculation and replay depth from the wider cost stage before database,
@@ -283,13 +291,12 @@ persistence, or coordination changes are proposed. Complete certifying runs requ
 recalculation-duration, and recalculation-depth samples. An empty restored-lot set is valid for a
 workload containing only initial opening lots.
 
-The artifact also retains the runtime's existing `db_operation_latency_seconds` histogram as one
-deterministically sorted entry per bounded `repository` and `method`. Each entry contains an
-observation count, cumulative duration, and mean duration. Query text, SQL parameters, portfolio,
-security, account, and transaction identifiers are not collected. A certifying run fails when no
-complete positive-observation repository/method series exists. Use these totals to select a
-targeted persistence or coordination investigation; they span multiple transaction stages and must
-not be treated as a cost-only percentage, latency percentile, or SLO.
+The artifact retains each runtime's existing `db_operation_latency_seconds` histogram as one
+deterministically sorted entry per bounded `runtime`, `repository`, and `method`. Each entry
+contains an observation count, cumulative duration, and mean duration. Query text, SQL parameters,
+portfolio, security, account, and transaction identifiers are not collected. Use these totals to
+select a targeted persistence or coordination investigation; they must not be treated as a latency
+percentile, an SLO, or proof that a particular resource is saturated.
 
 The drain loop also fails fast on an atomicity contradiction instead of waiting for its full
 timeout. Once every expected transaction is durable, no valuation job remains pending or
