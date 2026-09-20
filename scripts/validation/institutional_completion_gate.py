@@ -27,6 +27,7 @@ from scripts.quality.ci_service_sets import (  # noqa: E402
 from tests.test_support.managed_compose_run import (  # noqa: E402
     prepare_managed_compose_run,
 )
+from tests.test_support.runtime_env import RuntimeEndpoints  # noqa: E402
 
 DEFAULT_OUTPUT_DIR = "output/task-runs"
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
@@ -117,8 +118,12 @@ def _load_scenario_metadata(path: Path) -> ScenarioArtifactMetadata:
     )
 
 
-def _scenario_args(parsed_args: argparse.Namespace) -> list[str]:
+def _scenario_args(parsed_args: argparse.Namespace, *, endpoints: RuntimeEndpoints) -> list[str]:
     return [
+        "--compose-file",
+        parsed_args.compose_file,
+        "--compose-project-name",
+        endpoints.compose_project_name,
         "--portfolio-count",
         str(parsed_args.portfolio_count),
         "--transactions-per-portfolio",
@@ -133,6 +138,24 @@ def _scenario_args(parsed_args: argparse.Namespace) -> list[str]:
         parsed_args.output_dir,
         "--trade-date",
         parsed_args.trade_date,
+        "--ingestion-base-url",
+        endpoints.e2e_ingestion_url,
+        "--query-base-url",
+        endpoints.e2e_query_url,
+        "--query-control-base-url",
+        endpoints.e2e_query_control_plane_url,
+        "--event-replay-base-url",
+        endpoints.e2e_event_replay_url,
+        "--reconciliation-base-url",
+        endpoints.e2e_financial_reconciliation_url,
+        "--transaction-processing-base-url",
+        endpoints.e2e_transaction_processing_url,
+        "--position-valuation-base-url",
+        endpoints.e2e_position_valuation_url,
+        "--portfolio-derived-state-base-url",
+        endpoints.e2e_portfolio_derived_state_url,
+        "--valuation-orchestrator-base-url",
+        endpoints.e2e_valuation_orchestrator_url,
     ]
 
 
@@ -201,7 +224,7 @@ def main() -> int:
         scenario_stdout = _run_python_script(
             repo_root=repo_root,
             script_relative_path="scripts/operations/bank_day_load_scenario.py",
-            args=_scenario_args(args),
+            args=_scenario_args(args, endpoints=managed_run.runtime.endpoints),
             environment=managed_run.runtime.values,
         )
         scenario_artifact = _reported_scenario_artifact_path(
