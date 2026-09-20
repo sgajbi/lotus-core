@@ -412,6 +412,8 @@ jobs:
           path: |
             output/integration-all/integration-all-compose.log
             output/integration-all/integration-all-results.xml
+            output/integration-all/*-progress.jsonl
+            output/integration-all/*-process.json
           if-no-files-found: warn
           retention-days: 30
 

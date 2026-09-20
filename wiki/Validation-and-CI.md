@@ -23,10 +23,20 @@ smallest evidence command for a change, then cite generated artifacts from the r
 
 From the `lotus-core` repository root, `make test-integration-all` retains individual test progress,
 prints Python thread stacks after a test has run for 120 seconds, and writes completed test results
-to `output/integration-all/integration-all-results.xml`. The stack dump is diagnostic only: it does
-not interrupt execution, extend the governed job timeout, skip tests, or turn a failure into success.
-Main Releasability uploads the results alongside its Compose log when those files exist. A cancelled
-run may have no completed results file; its progress log is not a passing release receipt.
+to `output/integration-all/integration-all-results.xml`. It also appends each started test and
+completed phase to a run-specific `*-progress.jsonl` journal and writes a `*-process.json` record
+with the signed pytest child exit code, signal (when applicable), elapsed time and peak child RSS
+on Linux. These files survive an abnormal pytest exit that prevents JUnit teardown. The stack dump
+is diagnostic only: it does not interrupt execution, extend the governed job timeout, skip tests,
+or turn a failure into success. Main Releasability uploads these diagnostics alongside JUnit and
+the Compose log when present. A process journal is not a passing release receipt; investigate its
+last unmatched `start` event and signed exit before attributing a cause.
+
+The 1,000-member corporate-action release test retains its full cohort and SQL-work ceiling. Its
+worker uses a dedicated governed queue-pooled PostgreSQL engine, matching the production worker
+connection lifecycle rather than the suite fixture's `NullPool`. A smaller real-PostgreSQL control
+checks physical connection reuse; neither that control nor a green retry erases a failed hosted
+Integration Full history.
 
 The transaction-ledger evidence seed uses physical multi-row SQL statements within its existing
 1,000-row batches. Passing a mapping list to an async ORM insert can instead execute one statement

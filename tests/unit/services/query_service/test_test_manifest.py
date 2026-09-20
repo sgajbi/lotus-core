@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -136,20 +138,68 @@ def test_ops_metadata_manifest_guard_rejects_missing_proof(monkeypatch, node_id)
         test_ops_contract_executes_source_metadata_guards(node_id)
 
 
-@pytest.mark.parametrize("exit_code", [0, 7])
+@pytest.mark.parametrize("exit_code", [0, 7, -11])
 def test_integration_all_streams_diagnostics_and_preserves_exit_code(
-    monkeypatch, exit_code
+    monkeypatch, tmp_path: Path, exit_code
 ) -> None:
+    monkeypatch.setattr(test_manifest, "INTEGRATION_ALL_OUTPUT_DIR", tmp_path)
+
     def observed_run(command, *, check, env):
         assert check is False
         assert env["PYTHONUNBUFFERED"] == "1"
         assert env["LOTUS_TEST_RUNTIME_MODE"] == "db_direct"
         assert "-vv" in command
         assert "faulthandler_timeout=120" in command
+        assert command[command.index("-p") + 1] == ("scripts.quality.pytest_progress_journal")
+        assert Path(env["LOTUS_INTEGRATION_ALL_PROGRESS_PATH"]).parent == tmp_path
         return SimpleNamespace(returncode=exit_code)
 
     monkeypatch.setattr(test_manifest.subprocess, "run", observed_run)
     assert test_manifest.run_suite("integration-all", quiet=True) == exit_code
+    diagnostics = list(tmp_path.glob("*-process.json"))
+    assert len(diagnostics) == 1
+    report = json.loads(diagnostics[0].read_text(encoding="utf-8"))
+    assert report["signed_child_exit_code"] == exit_code
+    assert report["child_signal"] == ("SIGSEGV" if exit_code == -11 else None)
+    assert Path(report["progress_path"]).parent == tmp_path
+    assert report["elapsed_seconds"] >= 0
+
+
+def test_integration_all_parent_retains_real_abrupt_child_exit(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(test_manifest, "INTEGRATION_ALL_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(
+        test_manifest,
+        "suite_pytest_command",
+        lambda _name, **_kwargs: [sys.executable, "-c", "import os; os._exit(93)"],
+    )
+
+    assert test_manifest.run_suite("integration-all") == 93
+
+    diagnostics = list(tmp_path.glob("*-process.json"))
+    assert len(diagnostics) == 1
+    report = json.loads(diagnostics[0].read_text(encoding="utf-8"))
+    assert report["signed_child_exit_code"] == 93
+    assert report["child_signal"] is None
+    assert report["child_max_rss_kb"] is None or report["child_max_rss_kb"] > 0
+
+
+def test_integration_all_diagnostic_write_failure_does_not_mask_child_failure(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    monkeypatch.setattr(test_manifest, "INTEGRATION_ALL_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(
+        test_manifest.subprocess,
+        "run",
+        lambda _command, **_kwargs: SimpleNamespace(returncode=37),
+    )
+
+    def fail_write(_path, _content, **_kwargs):
+        raise OSError("diagnostic volume full")
+
+    monkeypatch.setattr(Path, "write_text", fail_write)
+
+    assert test_manifest.run_suite("integration-all") == 37
+    assert "diagnostic volume full" in capsys.readouterr().err
 
 
 def test_critical_lifecycle_suite_is_marker_selected_and_db_direct() -> None:

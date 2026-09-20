@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1729 Integration Full abnormal-exit evidence (2026-09-21, In Review): Core #1129 records
+intermittent hosted process exit 245 during the unchanged 1,000-member corporate-action release
+test. The existing end-of-session JUnit and Compose teardown can leave no retained artifact after
+an abnormal child exit, so the failure is not yet attributable to database work, runner resources,
+or native process failure. This narrow test/CI slice adds a per-test progress journal,
+parent-owned signed exit/signal/RSS record, always-upload paths, and a pooled worker connection
+path for the existing 1,000-member PostgreSQL test without altering its count, SQL-work ceiling,
+120-second stack diagnostic, financial behavior, lease fences, or production runtime topology. A
+cheap actual abrupt-child test proves the journal survives missing pytest teardown; a small real
+PostgreSQL red/green control proves the old per-session connection churn. Root-cause stabilization
+and exact-main Integration Full remain open; this entry is not signed off. Evidence:
+[CR-1729-INTEGRATION-FULL-ABNORMAL-EXIT-EVIDENCE.md](./codebase-reviews/CR-1729-INTEGRATION-FULL-ABNORMAL-EXIT-EVIDENCE.md).
+
 CR-1728 Derived-state workload runtime attribution (2026-09-16, In Review): the bank-day
 workload exercised four Core runtimes but collected database-operation evidence only from
 transaction processing, so missing valuation/derived-state samples could not identify an
