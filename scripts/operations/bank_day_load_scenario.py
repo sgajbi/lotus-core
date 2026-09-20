@@ -62,6 +62,7 @@ from scripts.operations.transaction_processing_load_support import (
     TransactionProcessingOperationEvidence,
     cost_processing_runtime_evidence,
     database_operation_evidence,
+    runtime_database_operation_evidence,
     transaction_processing_operation_evidence,
 )
 from tests.test_support.runtime.compose_fault_recovery import (
@@ -75,6 +76,9 @@ DEFAULT_QUERY_CONTROL_BASE_URL = "http://localhost:8202"
 DEFAULT_EVENT_REPLAY_BASE_URL = "http://localhost:8209"
 DEFAULT_RECONCILIATION_BASE_URL = "http://localhost:8210"
 DEFAULT_TRANSACTION_PROCESSING_BASE_URL = "http://localhost:8090"
+DEFAULT_POSITION_VALUATION_BASE_URL = "http://localhost:8084"
+DEFAULT_PORTFOLIO_DERIVED_STATE_BASE_URL = "http://localhost:8085"
+DEFAULT_VALUATION_ORCHESTRATOR_BASE_URL = "http://localhost:8087"
 DEFAULT_OUTPUT_DIR = "output/task-runs"
 DEFAULT_OPS_TOKEN = os.getenv("LOTUS_CORE_INGEST_OPS_TOKEN", "lotus-core-ops-local")
 DEFAULT_HOST_DATABASE_URL = os.getenv(
@@ -102,14 +106,62 @@ LOG_SERVICE_NAMES = (
     "financial_reconciliation_service",
 )
 
-REQUIRED_COST_DATABASE_OPERATION_EVIDENCE = (
-    ("CostBasisReferenceDataRepository", "get_cost_basis_reference_data"),
-    ("CostBasisProcessingStateRepository", "acquire_cost_basis_processing_lock"),
-    ("CostBasisProcessingStateRepository", "get_cost_basis_processing_checkpoint"),
-    ("CostBasisTransactionRepository", "get_transaction_history"),
-    ("CostBasisTransactionRepository", "apply_transaction_costs_and_replace_breakdown"),
-    ("InitialOpeningCostStateRepository", "persist_initial_opening_cost_state"),
-    ("CostProcessingEffectStager", "stage_processed_transactions"),
+REQUIRED_DATABASE_OPERATION_EVIDENCE = (
+    (
+        "portfolio-transaction-processing",
+        "CostBasisReferenceDataRepository",
+        "get_cost_basis_reference_data",
+    ),
+    (
+        "portfolio-transaction-processing",
+        "CostBasisProcessingStateRepository",
+        "acquire_cost_basis_processing_lock",
+    ),
+    (
+        "portfolio-transaction-processing",
+        "CostBasisProcessingStateRepository",
+        "get_cost_basis_processing_checkpoint",
+    ),
+    (
+        "portfolio-transaction-processing",
+        "CostBasisTransactionRepository",
+        "get_transaction_history",
+    ),
+    (
+        "portfolio-transaction-processing",
+        "CostBasisTransactionRepository",
+        "apply_transaction_costs_and_replace_breakdown",
+    ),
+    (
+        "portfolio-transaction-processing",
+        "InitialOpeningCostStateRepository",
+        "persist_initial_opening_cost_state",
+    ),
+    (
+        "portfolio-transaction-processing",
+        "CostProcessingEffectStager",
+        "stage_processed_transactions",
+    ),
+    (
+        "valuation-orchestrator",
+        "ValuationRepository",
+        "find_and_claim_eligible_jobs",
+    ),
+    (
+        "position-valuation-calculator",
+        "ValuationRepository",
+        "upsert_daily_snapshot",
+    ),
+    (
+        "portfolio-derived-state",
+        "TimeseriesRepository",
+        "upsert_position_timeseries",
+    ),
+    (
+        "portfolio-derived-state",
+        "TimeseriesRepository",
+        "upsert_portfolio_timeseries",
+    ),
 )
 
 
@@ -1723,9 +1775,11 @@ def _missing_required_database_operations(
     *,
     required: Iterable[Mapping[str, object]],
     observed: Iterable[DatabaseOperationEvidence],
-) -> list[tuple[str, str]]:
-    required_operations = {(str(item["repository"]), str(item["method"])) for item in required}
-    observed_operations = {(item.repository, item.method) for item in observed}
+) -> list[tuple[str, str, str]]:
+    required_operations = {
+        (str(item["runtime"]), str(item["repository"]), str(item["method"])) for item in required
+    }
+    observed_operations = {(item.runtime, item.repository, item.method) for item in observed}
     return sorted(required_operations - observed_operations)
 
 
@@ -1754,9 +1808,10 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
     )
     if missing_database_operations:
         failures.append(
-            "database operation evidence is missing required cost-persistence samples: "
+            "database operation evidence is missing required runtime samples: "
             + ", ".join(
-                f"{repository}.{method}" for repository, method in missing_database_operations
+                f"{runtime}:{repository}.{method}"
+                for runtime, repository, method in missing_database_operations
             )
         )
     if report.terminal_status != "complete":
@@ -2440,16 +2495,43 @@ def _safe_collect_cost_processing_runtime_evidence(
 def _safe_collect_database_operation_evidence(
     *,
     transaction_processing_base_url: str,
+    position_valuation_base_url: str | None = None,
+    portfolio_derived_state_base_url: str | None = None,
+    valuation_orchestrator_base_url: str | None = None,
 ) -> tuple[list[DatabaseOperationEvidence], list[str]]:
-    try:
-        evidence = database_operation_evidence(
-            transaction_processing_base_url=transaction_processing_base_url,
-        )
-    except Exception as exc:
-        return [], [f"failed to collect database operation evidence: {exc}"]
-    if not evidence:
-        return [], ["database operation metrics returned no bounded repository/method samples"]
-    return evidence, []
+    runtime_targets = {
+        "portfolio-transaction-processing": transaction_processing_base_url,
+        "position-valuation-calculator": position_valuation_base_url,
+        "portfolio-derived-state": portfolio_derived_state_base_url,
+        "valuation-orchestrator": valuation_orchestrator_base_url,
+    }
+    evidence: list[DatabaseOperationEvidence] = []
+    failures: list[str] = []
+    for runtime, base_url in runtime_targets.items():
+        if base_url is None:
+            continue
+        try:
+            runtime_evidence = (
+                database_operation_evidence(
+                    transaction_processing_base_url=base_url,
+                )
+                if runtime == "portfolio-transaction-processing"
+                else runtime_database_operation_evidence(
+                    runtime=runtime,
+                    metrics_base_url=base_url,
+                )
+            )
+        except Exception as exc:
+            failures.append(f"failed to collect {runtime} database operation evidence: {exc}")
+            continue
+        if not runtime_evidence:
+            failures.append(
+                f"{runtime} database operation metrics returned no bounded "
+                "repository/method samples"
+            )
+            continue
+        evidence.extend(runtime_evidence)
+    return sorted(evidence, key=lambda item: (item.runtime, item.repository, item.method)), failures
 
 
 def _source_provenance() -> dict[str, str | None]:
@@ -2530,8 +2612,8 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "cost_processing_runtime_evidence_required": True,
         "database_operation_evidence_required": True,
         "required_database_operation_evidence": [
-            {"repository": repository, "method": method}
-            for repository, method in REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+            {"runtime": runtime, "repository": repository, "method": method}
+            for runtime, repository, method in REQUIRED_DATABASE_OPERATION_EVIDENCE
         ],
         "derived_state_service": args.derived_state_service,
         "resource_poll_interval_seconds": args.resource_poll_interval_seconds,
@@ -2713,6 +2795,18 @@ def main() -> int:
     parser.add_argument(
         "--transaction-processing-base-url",
         default=DEFAULT_TRANSACTION_PROCESSING_BASE_URL,
+    )
+    parser.add_argument(
+        "--position-valuation-base-url",
+        default=DEFAULT_POSITION_VALUATION_BASE_URL,
+    )
+    parser.add_argument(
+        "--portfolio-derived-state-base-url",
+        default=DEFAULT_PORTFOLIO_DERIVED_STATE_BASE_URL,
+    )
+    parser.add_argument(
+        "--valuation-orchestrator-base-url",
+        default=DEFAULT_VALUATION_ORCHESTRATOR_BASE_URL,
     )
     parser.add_argument("--host-database-url", default=DEFAULT_HOST_DATABASE_URL)
     parser.add_argument("--ops-token", default=DEFAULT_OPS_TOKEN)
@@ -3094,6 +3188,9 @@ def main() -> int:
     )
     database_evidence, database_evidence_failures = _safe_collect_database_operation_evidence(
         transaction_processing_base_url=args.transaction_processing_base_url,
+        position_valuation_base_url=args.position_valuation_base_url,
+        portfolio_derived_state_base_url=args.portfolio_derived_state_base_url,
+        valuation_orchestrator_base_url=args.valuation_orchestrator_base_url,
     )
     report = _finalize_report(
         args=args,

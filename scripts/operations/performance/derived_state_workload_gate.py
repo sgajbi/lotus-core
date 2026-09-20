@@ -31,6 +31,9 @@ class WorkloadConnectionEndpoints(Protocol):
     e2e_event_replay_url: str
     e2e_financial_reconciliation_url: str
     e2e_transaction_processing_url: str
+    e2e_position_valuation_url: str
+    e2e_portfolio_derived_state_url: str
+    e2e_valuation_orchestrator_url: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +248,12 @@ def build_bank_day_command(
         endpoints.e2e_financial_reconciliation_url,
         "--transaction-processing-base-url",
         endpoints.e2e_transaction_processing_url,
+        "--position-valuation-base-url",
+        endpoints.e2e_position_valuation_url,
+        "--portfolio-derived-state-base-url",
+        endpoints.e2e_portfolio_derived_state_url,
+        "--valuation-orchestrator-base-url",
+        endpoints.e2e_valuation_orchestrator_url,
         "--output-dir",
         output_dir,
     ]
@@ -309,6 +318,9 @@ def prepare_managed_run(*, args: argparse.Namespace, repo_root: Path) -> Managed
             "E2E_EVENT_REPLAY_URL": args.event_replay_base_url,
             "E2E_FINANCIAL_RECONCILIATION_URL": args.reconciliation_base_url,
             "E2E_TRANSACTION_PROCESSING_URL": args.transaction_processing_base_url,
+            "E2E_POSITION_VALUATION_URL": args.position_valuation_base_url,
+            "E2E_PORTFOLIO_DERIVED_STATE_URL": args.portfolio_derived_state_base_url,
+            "E2E_VALUATION_ORCHESTRATOR_URL": args.valuation_orchestrator_base_url,
             "HOST_DATABASE_URL": args.host_database_url,
         },
         allocate_dynamic_ports=not args.skip_compose,
@@ -333,6 +345,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--event-replay-base-url", default=None)
     parser.add_argument("--reconciliation-base-url", default=None)
     parser.add_argument("--transaction-processing-base-url", default=None)
+    parser.add_argument("--position-valuation-base-url", default=None)
+    parser.add_argument("--portfolio-derived-state-base-url", default=None)
+    parser.add_argument("--valuation-orchestrator-base-url", default=None)
     parser.add_argument("--host-database-url", default=None)
     parser.add_argument("--resource-poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--output-dir", default="output/task-runs")

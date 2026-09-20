@@ -207,6 +207,9 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
         e2e_transaction_processing_url="http://localhost:55007",
+        e2e_position_valuation_url="http://localhost:55008",
+        e2e_portfolio_derived_state_url="http://localhost:55009",
+        e2e_valuation_orchestrator_url="http://localhost:55010",
     )
     command = build_bank_day_command(
         python_executable="python",
@@ -239,6 +242,13 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     assert command[command.index("--transaction-processing-base-url") + 1] == (
         "http://localhost:55007"
     )
+    assert command[command.index("--position-valuation-base-url") + 1] == ("http://localhost:55008")
+    assert command[command.index("--portfolio-derived-state-base-url") + 1] == (
+        "http://localhost:55009"
+    )
+    assert command[command.index("--valuation-orchestrator-base-url") + 1] == (
+        "http://localhost:55010"
+    )
     assert "--derived-state-service" in command
     assert "--market-price-correction-multiplier" not in command
 
@@ -261,6 +271,9 @@ def test_price_burst_command_requests_a_measured_market_price_correction(tmp_pat
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
         e2e_transaction_processing_url="http://localhost:55007",
+        e2e_position_valuation_url="http://localhost:55008",
+        e2e_portfolio_derived_state_url="http://localhost:55009",
+        e2e_valuation_orchestrator_url="http://localhost:55010",
     )
 
     command = build_bank_day_command(
@@ -290,6 +303,9 @@ def test_price_restatement_command_requests_a_five_day_correction_window(
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
         e2e_transaction_processing_url="http://localhost:55007",
+        e2e_position_valuation_url="http://localhost:55008",
+        e2e_portfolio_derived_state_url="http://localhost:55009",
+        e2e_valuation_orchestrator_url="http://localhost:55010",
     )
 
     command = build_bank_day_command(
@@ -320,6 +336,9 @@ def test_fx_restatement_command_requests_exact_date_failure_and_recovery(
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
         e2e_transaction_processing_url="http://localhost:55007",
+        e2e_position_valuation_url="http://localhost:55008",
+        e2e_portfolio_derived_state_url="http://localhost:55009",
+        e2e_valuation_orchestrator_url="http://localhost:55010",
     )
 
     command = build_bank_day_command(
@@ -384,6 +403,9 @@ def test_prepare_managed_run_uses_complete_derived_state_service_set(
         event_replay_base_url=None,
         reconciliation_base_url=None,
         transaction_processing_base_url=None,
+        position_valuation_base_url=None,
+        portfolio_derived_state_base_url=None,
+        valuation_orchestrator_base_url=None,
         host_database_url=None,
     )
 

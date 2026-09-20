@@ -87,7 +87,9 @@ class RuntimeEndpoints:
     e2e_query_control_plane_url: str
     e2e_event_replay_url: str
     e2e_transaction_processing_url: str
+    e2e_position_valuation_url: str
     e2e_portfolio_derived_state_url: str
+    e2e_valuation_orchestrator_url: str
     e2e_financial_reconciliation_url: str
 
 
@@ -347,7 +349,9 @@ def _set_derived_runtime_values(runtime_env: dict[str, str]) -> None:
     query_port = runtime_env["LOTUS_QUERY_HOST_PORT"]
     query_control_plane_port = runtime_env["LOTUS_QUERY_CONTROL_PLANE_HOST_PORT"]
     transaction_processing_port = runtime_env["LOTUS_TRANSACTION_PROCESSING_HOST_PORT"]
+    position_valuation_port = runtime_env["LOTUS_POSITION_VALUATION_HOST_PORT"]
     portfolio_derived_state_port = runtime_env["LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT"]
+    valuation_orchestrator_port = runtime_env["LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT"]
     financial_reconciliation_port = runtime_env["LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT"]
 
     host_database_url = f"postgresql://{db_user}:{db_password}@localhost:{postgres_port}/{db_name}"
@@ -361,8 +365,12 @@ def _set_derived_runtime_values(runtime_env: dict[str, str]) -> None:
     runtime_env["E2E_TRANSACTION_PROCESSING_URL"] = (
         f"http://localhost:{transaction_processing_port}"
     )
+    runtime_env["E2E_POSITION_VALUATION_URL"] = f"http://localhost:{position_valuation_port}"
     runtime_env["E2E_PORTFOLIO_DERIVED_STATE_URL"] = (
         f"http://localhost:{portfolio_derived_state_port}"
+    )
+    runtime_env["E2E_VALUATION_ORCHESTRATOR_URL"] = (
+        f"http://localhost:{valuation_orchestrator_port}"
     )
     runtime_env["E2E_FINANCIAL_RECONCILIATION_URL"] = (
         f"http://localhost:{financial_reconciliation_port}"
@@ -381,7 +389,9 @@ def _runtime_endpoints(runtime_env: dict[str, str]) -> RuntimeEndpoints:
         e2e_query_control_plane_url=runtime_env["E2E_QUERY_CONTROL_PLANE_URL"],
         e2e_event_replay_url=runtime_env["E2E_EVENT_REPLAY_URL"],
         e2e_transaction_processing_url=runtime_env["E2E_TRANSACTION_PROCESSING_URL"],
+        e2e_position_valuation_url=runtime_env["E2E_POSITION_VALUATION_URL"],
         e2e_portfolio_derived_state_url=runtime_env["E2E_PORTFOLIO_DERIVED_STATE_URL"],
+        e2e_valuation_orchestrator_url=runtime_env["E2E_VALUATION_ORCHESTRATOR_URL"],
         e2e_financial_reconciliation_url=runtime_env["E2E_FINANCIAL_RECONCILIATION_URL"],
     )
 

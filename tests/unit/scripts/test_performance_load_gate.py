@@ -221,10 +221,40 @@ def test_database_operation_evidence_retains_sorted_bounded_repository_timings(
         ("PositionRepository", "save"),
     ]
     assert evidence[0].observation_count == 60
+    assert evidence[0].runtime == "portfolio-transaction-processing"
     assert evidence[0].total_duration_seconds == 18.0
     assert evidence[0].average_duration_seconds == 0.3
     assert evidence[1].observation_count == 120
     assert evidence[1].average_duration_seconds == 0.2
+
+
+def test_database_operation_evidence_binds_samples_to_the_scraped_runtime(monkeypatch) -> None:
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests,
+        "get",
+        lambda _url, *, timeout: _MetricsResponse(),
+    )
+
+    evidence = transaction_processing_load_support.runtime_database_operation_evidence(
+        runtime="portfolio-derived-state",
+        metrics_base_url="http://localhost:8085",
+    )
+
+    assert evidence
+    assert {item.runtime for item in evidence} == {"portfolio-derived-state"}
+
+
+def test_database_operation_evidence_rejects_unbounded_runtime_before_scrape(monkeypatch) -> None:
+    get = MagicMock()
+    monkeypatch.setattr(transaction_processing_load_support.requests, "get", get)
+
+    with pytest.raises(ValueError, match="Unsupported database-operation runtime"):
+        transaction_processing_load_support.runtime_database_operation_evidence(
+            runtime="portfolio-42",
+            metrics_base_url="http://localhost:8085",
+        )
+
+    get.assert_not_called()
 
 
 def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:
