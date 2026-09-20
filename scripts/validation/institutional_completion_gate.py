@@ -163,6 +163,7 @@ def _reconciliation_args(
     *,
     parsed_args: argparse.Namespace,
     scenario: ScenarioArtifactMetadata,
+    endpoints: RuntimeEndpoints,
 ) -> list[str]:
     return [
         "--run-id",
@@ -175,6 +176,12 @@ def _reconciliation_args(
         str(scenario.portfolio_count),
         "--output-dir",
         parsed_args.output_dir,
+        "--query-base-url",
+        endpoints.e2e_query_url,
+        "--query-control-base-url",
+        endpoints.e2e_query_control_plane_url,
+        "--reconciliation-base-url",
+        endpoints.e2e_financial_reconciliation_url,
     ]
 
 
@@ -240,7 +247,11 @@ def main() -> int:
         _run_python_script(
             repo_root=repo_root,
             script_relative_path="scripts/operations/bank_day_load_reconciliation_report.py",
-            args=_reconciliation_args(parsed_args=args, scenario=scenario),
+            args=_reconciliation_args(
+                parsed_args=args,
+                scenario=scenario,
+                endpoints=managed_run.runtime.endpoints,
+            ),
             environment=managed_run.runtime.values,
         )
     if scenario is None:
