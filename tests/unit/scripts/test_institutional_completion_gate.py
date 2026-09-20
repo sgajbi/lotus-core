@@ -13,12 +13,35 @@ from scripts.validation.institutional_completion_gate import (
     _scenario_args,
     main,
 )
+from tests.test_support.runtime_env import RuntimeEndpoints
+
+
+def _fake_endpoints() -> RuntimeEndpoints:
+    return RuntimeEndpoints(
+        profile="e2e",
+        compose_project_name="institutional-test",
+        host_database_url="postgresql://user:password@localhost:15000/portfolio_db",
+        host_query_database_url="postgresql://user:password@localhost:15000/portfolio_db",
+        kafka_bootstrap_servers="localhost:15001",
+        e2e_ingestion_url="http://localhost:15002",
+        e2e_query_url="http://localhost:15003",
+        e2e_query_control_plane_url="http://localhost:15004",
+        e2e_event_replay_url="http://localhost:15005",
+        e2e_transaction_processing_url="http://localhost:15006",
+        e2e_position_valuation_url="http://localhost:15007",
+        e2e_portfolio_derived_state_url="http://localhost:15008",
+        e2e_valuation_orchestrator_url="http://localhost:15009",
+        e2e_financial_reconciliation_url="http://localhost:15010",
+    )
 
 
 class _FakeManagedRun:
     def __init__(self, calls: list[tuple[str, list[str]]]) -> None:
         self.calls = calls
-        self.runtime = SimpleNamespace(values={"COMPOSE_PROJECT_NAME": "institutional-test"})
+        self.runtime = SimpleNamespace(
+            values={"COMPOSE_PROJECT_NAME": "institutional-test"},
+            endpoints=_fake_endpoints(),
+        )
 
     def __enter__(self) -> "_FakeManagedRun":
         self.calls.append(("managed_start", []))
@@ -95,6 +118,7 @@ def test_reported_scenario_artifact_path_resolves_reported_json_path(tmp_path: P
 
 def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
     class Args:
+        compose_file = "docker-compose.yml"
         portfolio_count = 1000
         transactions_per_portfolio = 100
         transaction_batch_size = 2000
@@ -111,7 +135,11 @@ def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
         artifact_path=Path("output/task-runs/20260419T120000Z-bank-day-load.json"),
     )
 
-    assert _scenario_args(Args) == [
+    assert _scenario_args(Args, endpoints=_fake_endpoints())[:18] == [
+        "--compose-file",
+        "docker-compose.yml",
+        "--compose-project-name",
+        "institutional-test",
         "--portfolio-count",
         "1000",
         "--transactions-per-portfolio",
@@ -139,6 +167,50 @@ def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
         "--output-dir",
         "output/task-runs",
     ]
+
+
+def test_scenario_args_bind_the_allocated_compose_endpoints() -> None:
+    class Args:
+        compose_file = "docker-compose.yml"
+        portfolio_count = 1000
+        transactions_per_portfolio = 100
+        transaction_batch_size = 2000
+        sample_size = 5
+        drain_timeout_seconds = 7200
+        output_dir = "output/task-runs"
+        trade_date = "2026-04-17"
+
+    endpoints = _fake_endpoints()
+
+    command = _scenario_args(Args, endpoints=endpoints)
+
+    assert command[:4] == [
+        "--compose-file",
+        "docker-compose.yml",
+        "--compose-project-name",
+        endpoints.compose_project_name,
+    ]
+    assert "--host-database-url" not in command
+    assert dict(zip(command[::2], command[1::2], strict=True)) == {
+        "--compose-file": "docker-compose.yml",
+        "--compose-project-name": endpoints.compose_project_name,
+        "--portfolio-count": "1000",
+        "--transactions-per-portfolio": "100",
+        "--transaction-batch-size": "2000",
+        "--sample-size": "5",
+        "--drain-timeout-seconds": "7200",
+        "--output-dir": "output/task-runs",
+        "--trade-date": "2026-04-17",
+        "--ingestion-base-url": endpoints.e2e_ingestion_url,
+        "--query-base-url": endpoints.e2e_query_url,
+        "--query-control-base-url": endpoints.e2e_query_control_plane_url,
+        "--event-replay-base-url": endpoints.e2e_event_replay_url,
+        "--reconciliation-base-url": endpoints.e2e_financial_reconciliation_url,
+        "--transaction-processing-base-url": endpoints.e2e_transaction_processing_url,
+        "--position-valuation-base-url": endpoints.e2e_position_valuation_url,
+        "--portfolio-derived-state-base-url": endpoints.e2e_portfolio_derived_state_url,
+        "--valuation-orchestrator-base-url": endpoints.e2e_valuation_orchestrator_url,
+    }
 
 
 def test_main_runs_scenario_then_exhaustive_reconciliation(
@@ -198,43 +270,30 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
     )
 
     assert main() == 0
-    assert calls == [
-        ("managed_start", []),
-        (
-            "scripts/operations/bank_day_load_scenario.py",
-            [
-                "--portfolio-count",
-                "1000",
-                "--transactions-per-portfolio",
-                "100",
-                "--transaction-batch-size",
-                "2000",
-                "--sample-size",
-                "5",
-                "--drain-timeout-seconds",
-                "7200",
-                "--output-dir",
-                "output/task-runs",
-                "--trade-date",
-                "2026-04-17",
-            ],
-        ),
-        (
-            "scripts/operations/bank_day_load_reconciliation_report.py",
-            [
-                "--run-id",
-                "20260419T120000Z",
-                "--business-date",
-                "2026-04-17",
-                "--transactions-per-portfolio",
-                "100",
-                "--portfolio-limit",
-                "1000",
-                "--output-dir",
-                "output/task-runs",
-            ],
-        ),
-        ("managed_finish", []),
+    assert [name for name, _ in calls] == [
+        "managed_start",
+        "scripts/operations/bank_day_load_scenario.py",
+        "scripts/operations/bank_day_load_reconciliation_report.py",
+        "managed_finish",
+    ]
+    scenario_options = dict(zip(calls[1][1][::2], calls[1][1][1::2], strict=True))
+    assert scenario_options["--compose-project-name"] == _fake_endpoints().compose_project_name
+    assert scenario_options["--ingestion-base-url"] == _fake_endpoints().e2e_ingestion_url
+    assert scenario_options["--valuation-orchestrator-base-url"] == (
+        _fake_endpoints().e2e_valuation_orchestrator_url
+    )
+    assert scenario_options["--drain-timeout-seconds"] == "7200"
+    assert calls[2][1] == [
+        "--run-id",
+        "20260419T120000Z",
+        "--business-date",
+        "2026-04-17",
+        "--transactions-per-portfolio",
+        "100",
+        "--portfolio-limit",
+        "1000",
+        "--output-dir",
+        "output/task-runs",
     ]
 
 
