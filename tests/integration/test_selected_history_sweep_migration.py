@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from scripts.validation.docker_endpoint_smoke import build_smoke_cleanup_sql
-from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.tenant import TEST_LEGAL_BOOK_ID, TEST_TENANT_ID
 from tools.front_office_portfolio_seed import build_portfolio_seed_cleanup_sql
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct, pytest.mark.lifecycle]
@@ -59,6 +59,7 @@ def test_sweep_marker_upgrade_defaults_existing_jobs_and_rolls_back(db_engine) -
         session.add(
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
+                legal_book_id=TEST_LEGAL_BOOK_ID,
                 portfolio_id=portfolio_id,
                 base_currency="USD",
                 open_date=date(2025, 1, 1),
@@ -316,6 +317,7 @@ def test_canonical_portfolio_reseed_clears_selected_history_observations(db_engi
             session.add(
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
+                    legal_book_id=TEST_LEGAL_BOOK_ID,
                     portfolio_id=portfolio_id,
                     base_currency="USD",
                     open_date=date(2025, 1, 1),
@@ -419,6 +421,7 @@ def test_endpoint_smoke_reseed_clears_selected_history_children(db_engine) -> No
             session.add(
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
+                    legal_book_id=TEST_LEGAL_BOOK_ID,
                     portfolio_id=portfolio_id,
                     base_currency="USD",
                     open_date=date(2025, 1, 1),
