@@ -23,13 +23,24 @@ MIGRATION = (
 )
 
 
+def _assert_current_schema(db_engine) -> None:
+    # A separate session must still see the latest schema after migration proof.
+    with db_engine.connect() as connection:
+        assert "amortized_book_carrying_local" in {
+            column["name"] for column in inspect(connection).get_columns("position_lot_state")
+        }
+
+
 def test_upgrade_restores_fifo_basis_and_downgrade_restores_combined_carry(
     db_engine,
     clean_db,
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    _assert_current_schema(db_engine)
 
-    with db_engine.begin() as connection:
+    # PostgreSQL DDL is transactional. Closing this connection rolls back both
+    # the historical schema and fixture rows, including on assertion failure.
+    with db_engine.connect() as connection:
         operations = Operations(MigrationContext.configure(connection))
         migration["upgrade"].__globals__["op"] = operations
         migration["downgrade"].__globals__["op"] = operations
@@ -65,6 +76,7 @@ def test_upgrade_restores_fifo_basis_and_downgrade_restores_combined_carry(
             Decimal("3980.0000000000"),
             Decimal("4020.0000000000"),
         )
+    _assert_current_schema(db_engine)
 
 
 @pytest.mark.parametrize(
@@ -78,8 +90,9 @@ def test_upgrade_fails_closed_without_reconstructible_acquisition_basis(
     has_basis_mutation: bool,
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    _assert_current_schema(db_engine)
 
-    with db_engine.begin() as connection:
+    with db_engine.connect() as connection:
         operations = Operations(MigrationContext.configure(connection))
         migration["upgrade"].__globals__["op"] = operations
         migration["downgrade"].__globals__["op"] = operations
@@ -104,6 +117,7 @@ def test_upgrade_fails_closed_without_reconstructible_acquisition_basis(
             connection.begin_nested(),
         ):
             migration["upgrade"]()
+    _assert_current_schema(db_engine)
 
 
 def _seed_legacy_carry_row(connection, *, source_transaction_type: str = "BUY") -> None:
