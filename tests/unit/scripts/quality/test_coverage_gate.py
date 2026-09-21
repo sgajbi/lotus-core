@@ -238,6 +238,17 @@ def test_operations_contract_suite_includes_control_plane_router_contracts() -> 
     )
 
 
+def test_combined_coverage_runs_selected_history_migration_on_postgresql() -> None:
+    selector = (
+        "tests/integration/test_selected_history_sweep_migration.py::"
+        "test_sweep_marker_upgrade_defaults_existing_jobs_and_rolls_back"
+    )
+    assert selector in test_manifest.get_suite("critical-db-coverage")
+    command = test_manifest.suite_pytest_command("critical-db-coverage", with_coverage=True)
+    assert selector in command
+    assert command.count("-m") == 1  # Python's module invocation, not a pytest marker filter.
+
+
 def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_path: Path) -> None:
     _redirect_coverage_output(monkeypatch, tmp_path)
     contract_path = tmp_path / critical_guard.CONTRACT_PATH

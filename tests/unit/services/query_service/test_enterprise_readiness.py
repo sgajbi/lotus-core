@@ -217,10 +217,11 @@ def test_bulk_portfolio_summary_requires_registered_read_capability(monkeypatch)
 def test_query_default_rules_cover_reporting_currency_support_route(monkeypatch) -> None:
     monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
     route_keys = {
-        f"{method} {route.path}"
-        for route in app.routes
-        for method in getattr(route, "methods", set())
-        if getattr(route, "path", "").startswith("/reporting-currencies/")
+        f"{method.upper()} {path}"
+        for path, operations in app.openapi()["paths"].items()
+        if path.startswith("/reporting-currencies/")
+        for method in operations
+        if method.lower() in {"get", "post", "put", "patch", "delete"}
     }
 
     assert route_keys == {"GET /reporting-currencies/support"}

@@ -12,6 +12,11 @@ from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
+from tests.test_support.selected_history_migration_dependencies import (
+    restore_selected_history_portfolio_foreign_keys,
+    suspend_selected_history_portfolio_foreign_keys,
+)
+
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
 MIGRATION = (
@@ -253,6 +258,7 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        suspend_selected_history_portfolio_foreign_keys(connection)
         dependent_migrations = _downgrade_dependent_schema(connection)
         _bind_operations(migration, connection)
         migration["downgrade"]()
@@ -324,6 +330,7 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
 
         for dependent_migration in reversed(dependent_migrations):
             dependent_migration["upgrade"]()
+        restore_selected_history_portfolio_foreign_keys(connection)
         if dependent_migrations:
             inspector = inspect(connection)
             assert inspector.has_table("lot_amortized_cost_profiles")

@@ -624,10 +624,20 @@ def test_metrics_endpoint_allows_authorized_scrape_when_token_configured():
     )
     client = TestClient(app)
 
+    # A scrape cannot expose its own counter increment until the response finishes.
+    served = client.get("/version")
+    assert served.status_code == 200
     response = client.get("/metrics", headers={"Authorization": "Bearer scrape-secret"})
 
     assert response.status_code == 200
-    assert "http_requests_total{" in response.text
+    assert any(
+        line.startswith("http_requests_total{")
+        and 'service="test-service"' in line
+        and 'method="GET"' in line
+        and 'endpoint_template="/version"' in line
+        and 'status="200"' in line
+        for line in response.text.splitlines()
+    )
 
 
 def test_openapi_documents_metrics_access_policy():

@@ -68,6 +68,8 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
         "tests/integration/test_aggregation_job_tenant_migration.py",
         "tests/integration/test_portfolio_cashflow_source_cut_migration.py",
+        "tests/integration/test_selected_history_sweep_migration.py::"
+        "test_sweep_marker_upgrade_defaults_existing_jobs_and_rolls_back",
         "tests/integration/scripts/operations/database_evidence/test_transaction_ledger.py::"
         "test_ledger_seed_refreshes_source_cut_once_per_portfolio_per_statement",
         "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"

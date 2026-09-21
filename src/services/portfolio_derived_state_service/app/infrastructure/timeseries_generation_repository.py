@@ -4,7 +4,7 @@ import hashlib
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Sequence, cast
+from typing import Any, Literal, Sequence, cast
 
 from portfolio_common.database_models import (
     Cashflow,
@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     Portfolio,
     PortfolioAggregationJob,
     PortfolioTimeseries,
+    PositionHistory,
     PositionTimeseries,
 )
 from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
@@ -26,15 +27,28 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
     build_position_timeseries_upsert_statement,
 )
 from portfolio_common.monitoring import observe_control_queue_outcome
+from portfolio_common.portfolio_aggregation_job_schema import (
+    PortfolioSelectedHistoryObservation,
+    PortfolioSelectedHistoryValuationState,
+)
 from portfolio_common.utils import async_timed
-from sqlalchemy import case, delete, func, or_, select, update
+from sqlalchemy import String, Table, and_, case, delete, func, literal, or_, select, update
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql.dml import Insert as PgInsert
 
 from ..domain.position_timeseries.models import (
     PositionCashflowRecord,
     PositionSnapshotRecord,
     PositionTimeseriesRecord,
 )
+from .selected_history_batch import (
+    normalized_history_security_id,
+    promote_selected_history_dates,
+    ranked_selected_history_source,
+    selected_history_source_fact,
+)
+from .selected_history_valuation import selected_fact_valuation_outcome_handled
 
 logger = logging.getLogger(__name__)
 
@@ -491,6 +505,693 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             },
         )
 
+    async def promote_selected_history_aggregation_jobs_for_dates(
+        self,
+        portfolio_id: str,
+        *,
+        security_id: str,
+        as_of_dates: list[date],
+        target_epoch: int,
+        correlation_id: str | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None = None,
+        valuation_date: date | None = None,
+    ) -> int:
+        """Prepare one selected-history batch for all newly swept affected days."""
+
+        if not as_of_dates:
+            return 0
+        if target_epoch < 0:
+            raise ValueError("Aggregation target epoch cannot be negative.")
+        if not security_id.strip():
+            raise ValueError("Selected-history security id cannot be blank.")
+        if valuation_outcome not in (None, "READY", "UNAVAILABLE"):
+            raise ValueError("Selected-history valuation outcome is not supported.")
+        if (valuation_outcome is None) != (valuation_date is None):
+            raise ValueError("Selected-history valuation outcome requires its source date.")
+        source_portfolio_id, tenant_id = await self._required_portfolio_authority(portfolio_id)
+        return await promote_selected_history_dates(
+            self.db,
+            promote_one=self.promote_selected_history_aggregation_jobs,
+            portfolio_id=source_portfolio_id,
+            tenant_id=tenant_id.value,
+            security_id=security_id,
+            as_of_dates=as_of_dates,
+            target_epoch=target_epoch,
+            correlation_id=correlation_id,
+            valuation_outcome=valuation_outcome,
+            valuation_date=valuation_date,
+        )
+
+    async def promote_selected_history_aggregation_jobs(
+        self,
+        portfolio_id: str,
+        *,
+        security_id: str,
+        as_of_date: date,
+        target_epoch: int,
+        correlation_id: str | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None = None,
+        valuation_date: date | None = None,
+        selected_history_rows: Table | None = None,
+    ) -> int:
+        """Rearm selected history dates under the caller's portfolio mutation fence.
+
+        A durable day/epoch marker pays for the full portfolio selection once. Later
+        same-epoch snapshots still check their own indexed latest history so a late
+        security fact cannot be hidden by the marker. Closed positions never fall
+        back to an older non-zero row.
+        """
+
+        if target_epoch < 0:
+            raise ValueError("Aggregation target epoch cannot be negative.")
+        if not security_id.strip():
+            raise ValueError("Selected-history security id cannot be blank.")
+        if valuation_outcome not in (None, "READY", "UNAVAILABLE"):
+            raise ValueError("Selected-history valuation outcome is not supported.")
+        if (valuation_outcome is None) != (valuation_date is None):
+            raise ValueError("Selected-history valuation outcome requires its source date.")
+        source_portfolio_id, tenant_id = await self._required_portfolio_authority(portfolio_id)
+        anchor = (
+            await self.db.execute(
+                select(
+                    PortfolioAggregationJob.selected_history_sweep_epoch,
+                    PortfolioAggregationJob.selected_history_collective_epoch,
+                )
+                .where(
+                    PortfolioAggregationJob.tenant_id == tenant_id.value,
+                    PortfolioAggregationJob.portfolio_id == source_portfolio_id,
+                    PortfolioAggregationJob.aggregation_date == as_of_date,
+                )
+                .with_for_update()
+            )
+        ).one_or_none()
+        if anchor is None:
+            raise RuntimeError("Selected-history sweep requires a staged aggregation day.")
+        full_sweep = anchor[0] < target_epoch
+        diagnostics = durable_correlation_diagnostics(
+            correlation_id=correlation_id,
+            record_family="aggregation_job",
+            portfolio_id=source_portfolio_id,
+            aggregation_date=as_of_date,
+        )
+        if full_sweep:
+            ranked = ranked_selected_history_source(
+                portfolio_id=source_portfolio_id,
+                as_of_date=as_of_date,
+                selected_history_rows=selected_history_rows,
+            )
+            selected = (
+                select(
+                    ranked.c.security_id,
+                    ranked.c.history_id,
+                    ranked.c.business_date,
+                    ranked.c.epoch,
+                    ranked.c.source_fact,
+                    func.max(ranked.c.epoch).over().label("collective_epoch"),
+                )
+                .where(ranked.c.rank == 1, ranked.c.quantity != 0)
+                .cte("selected_position_history")
+            )
+            # A higher-epoch sweep can replace a previously selected holding
+            # with a close (or another fact). The current non-zero selection
+            # alone cannot name the former business-date control. Read the
+            # prior observation before the upsert below replaces it.
+            previous_selected_dates = (
+                select(
+                    PortfolioSelectedHistoryObservation.selected_business_date.label(
+                        "business_date"
+                    )
+                )
+                .select_from(PortfolioSelectedHistoryObservation)
+                .outerjoin(
+                    ranked,
+                    and_(
+                        ranked.c.security_id == PortfolioSelectedHistoryObservation.security_id,
+                        ranked.c.rank == 1,
+                    ),
+                )
+                .where(
+                    PortfolioSelectedHistoryObservation.tenant_id == tenant_id.value,
+                    PortfolioSelectedHistoryObservation.portfolio_id == source_portfolio_id,
+                    PortfolioSelectedHistoryObservation.as_of_date == as_of_date,
+                    PortfolioSelectedHistoryObservation.selected_nonzero.is_(True),
+                    PortfolioSelectedHistoryObservation.selected_business_date.is_not(None),
+                    or_(
+                        ranked.c.history_id.is_(None),
+                        ranked.c.history_id.is_distinct_from(
+                            PortfolioSelectedHistoryObservation.position_history_id
+                        ),
+                        ranked.c.business_date.is_distinct_from(
+                            PortfolioSelectedHistoryObservation.selected_business_date
+                        ),
+                        ranked.c.source_fact.is_distinct_from(
+                            PortfolioSelectedHistoryObservation.source_fact
+                        ),
+                        ranked.c.quantity == 0,
+                    ),
+                )
+                .cte("previous_selected_history_dates")
+            )
+            promoted_dates = (
+                select(selected.c.business_date)
+                .union(select(previous_selected_dates.c.business_date))
+                .cte("selected_history_dates_to_promote")
+            )
+            # The first post-migration sweep has no observation for a selected
+            # fact. Re-arm an equal-epoch historical control only for facts not
+            # observed by any earlier affected boundary; new daily sweeps of
+            # identical history then do not repeat historical aggregation work.
+            fact_scope = (
+                PortfolioSelectedHistoryObservation.tenant_id == tenant_id.value,
+                PortfolioSelectedHistoryObservation.portfolio_id == source_portfolio_id,
+                PortfolioSelectedHistoryObservation.security_id == selected.c.security_id,
+                PortfolioSelectedHistoryObservation.position_history_id == selected.c.history_id,
+                PortfolioSelectedHistoryObservation.selected_business_date
+                == selected.c.business_date,
+                PortfolioSelectedHistoryObservation.selected_nonzero.is_(True),
+                PortfolioSelectedHistoryObservation.source_fact == selected.c.source_fact,
+            )
+            previously_observed = (
+                select(literal(1))
+                .select_from(PortfolioSelectedHistoryObservation)
+                .where(*fact_scope)
+                .exists()
+            )
+            valuation_outcome_current = selected_fact_valuation_outcome_handled(
+                tenant_id=tenant_id.value,
+                portfolio_id=source_portfolio_id,
+                selected=selected,
+                valuation_outcome=valuation_outcome,
+                delivered_epoch=target_epoch,
+                delivered_date=valuation_date,
+            )
+            # Selection can precede valuation. READY/UNAVAILABLE transitions
+            # rearm once; repeated daily outcomes for the same fact do not.
+            current_security = and_(
+                selected.c.security_id == security_id.strip(),
+                selected.c.epoch <= target_epoch,
+                selected.c.business_date <= valuation_date
+                if valuation_date is not None
+                else literal(False),
+            )
+            unobserved_dates = select(selected.c.business_date).where(
+                or_(~previously_observed, and_(current_security, ~valuation_outcome_current))
+                if valuation_outcome is not None
+                else ~previously_observed
+            )
+            changed_dates = unobserved_dates.union(select(previous_selected_dates.c.business_date))
+            collective_epoch = (
+                await self.db.execute(select(func.max(selected.c.collective_epoch)))
+            ).scalar_one_or_none()
+            effective_epoch = max(target_epoch, collective_epoch or 0)
+            alternate_key = (
+                literal("aggregation_job|aggregation_date=")
+                + sql_cast(promoted_dates.c.business_date, String)
+                + literal(f"|portfolio_id={source_portfolio_id}")
+            )
+            insert_statement = pg_insert(PortfolioAggregationJob).from_select(
+                [
+                    "tenant_id",
+                    "portfolio_id",
+                    "aggregation_date",
+                    "status",
+                    "target_epoch",
+                    "source_revision",
+                    "correlation_id",
+                    "correlation_missing_reason",
+                    "alternate_lookup_key",
+                ],
+                select(
+                    literal(tenant_id.value),
+                    literal(source_portfolio_id),
+                    promoted_dates.c.business_date,
+                    literal("PENDING"),
+                    literal(effective_epoch),
+                    literal(1),
+                    literal(diagnostics.correlation_id),
+                    literal(diagnostics.correlation_missing_reason),
+                    alternate_key if diagnostics.correlation_id is None else literal(None),
+                ).select_from(promoted_dates),
+            )
+        else:
+            latest = await self._latest_selected_history_for_security(
+                portfolio_id=source_portfolio_id,
+                security_id=security_id.strip(),
+                as_of_date=as_of_date,
+            )
+            observation = await self.db.scalar(
+                select(PortfolioSelectedHistoryObservation)
+                .where(
+                    PortfolioSelectedHistoryObservation.tenant_id == tenant_id.value,
+                    PortfolioSelectedHistoryObservation.portfolio_id == source_portfolio_id,
+                    PortfolioSelectedHistoryObservation.as_of_date == as_of_date,
+                    PortfolioSelectedHistoryObservation.security_id == security_id.strip(),
+                )
+                .with_for_update()
+            )
+            if latest is None and observation is None:
+                return 0
+            latest_identity = (
+                (latest.id, latest.position_date, latest.quantity != 0, latest.source_fact)
+                if latest is not None
+                else (None, None, False, None)
+            )
+            selected_valuation_outcome = (
+                valuation_outcome
+                if latest is not None
+                and valuation_date is not None
+                and latest.epoch <= target_epoch
+                and latest.position_date <= valuation_date
+                else None
+            )
+            observed_identity = (
+                (
+                    observation.position_history_id,
+                    observation.selected_business_date,
+                    observation.selected_nonzero,
+                    observation.source_fact,
+                )
+                if observation is not None
+                else (None, None, False, None)
+            )
+            if latest_identity == observed_identity and (
+                selected_valuation_outcome is None or not latest_identity[2]
+            ):
+                return 0
+            previously_observed_nonzero_fact = False
+            valuation_outcome_current = False
+            if latest is not None and latest.quantity != 0:
+                fact_scope = (
+                    PortfolioSelectedHistoryObservation.tenant_id == tenant_id.value,
+                    PortfolioSelectedHistoryObservation.portfolio_id == source_portfolio_id,
+                    PortfolioSelectedHistoryObservation.security_id == security_id.strip(),
+                    PortfolioSelectedHistoryObservation.position_history_id == latest.id,
+                    PortfolioSelectedHistoryObservation.selected_business_date
+                    == latest.position_date,
+                    PortfolioSelectedHistoryObservation.selected_nonzero.is_(True),
+                    PortfolioSelectedHistoryObservation.source_fact == latest.source_fact,
+                )
+                previously_observed_nonzero_fact = bool(
+                    await self.db.scalar(
+                        select(literal(1))
+                        .select_from(PortfolioSelectedHistoryObservation)
+                        .where(*fact_scope)
+                        .limit(1)
+                    )
+                )
+                if selected_valuation_outcome is not None:
+                    valuation_outcome_current = await self._selected_valuation_outcome_current(
+                        tenant_id=tenant_id.value,
+                        portfolio_id=source_portfolio_id,
+                        security_id=security_id.strip(),
+                        latest=latest,
+                        delivered_epoch=target_epoch,
+                        delivered_date=cast(date, valuation_date),
+                        valuation_outcome=selected_valuation_outcome,
+                    )
+            if latest_identity == observed_identity and valuation_outcome_current:
+                await self._persist_targeted_history_valuation_outcome(
+                    tenant_id=tenant_id.value,
+                    portfolio_id=source_portfolio_id,
+                    security_id=security_id.strip(),
+                    latest=latest,
+                    delivered_epoch=target_epoch,
+                    valuation_date=valuation_date,
+                    valuation_outcome=selected_valuation_outcome,
+                )
+                return 0
+            observation_insert = pg_insert(PortfolioSelectedHistoryObservation).values(
+                tenant_id=tenant_id.value,
+                portfolio_id=source_portfolio_id,
+                as_of_date=as_of_date,
+                security_id=security_id.strip(),
+                position_history_id=latest_identity[0],
+                selected_business_date=latest_identity[1],
+                selected_nonzero=latest_identity[2],
+                source_fact=latest_identity[3],
+            )
+            await self.db.execute(
+                observation_insert.on_conflict_do_update(
+                    index_elements=[
+                        "tenant_id",
+                        "portfolio_id",
+                        "as_of_date",
+                        "security_id",
+                    ],
+                    set_={
+                        "position_history_id": observation_insert.excluded.position_history_id,
+                        "selected_business_date": (
+                            observation_insert.excluded.selected_business_date
+                        ),
+                        "selected_nonzero": observation_insert.excluded.selected_nonzero,
+                        "source_fact": observation_insert.excluded.source_fact,
+                    },
+                )
+            )
+            await self._persist_targeted_history_valuation_outcome(
+                tenant_id=tenant_id.value,
+                portfolio_id=source_portfolio_id,
+                security_id=security_id.strip(),
+                latest=latest,
+                delivered_epoch=target_epoch,
+                valuation_date=valuation_date,
+                valuation_outcome=selected_valuation_outcome,
+            )
+            effective_epoch = max(target_epoch, anchor[1], latest.epoch if latest else 0)
+            affected_dates = {
+                selected_date
+                for selected_date, selected_nonzero in (
+                    (observed_identity[1], observed_identity[2]),
+                    (latest_identity[1], latest_identity[2]),
+                )
+                if selected_nonzero and selected_date is not None
+            }
+            if not affected_dates:
+                return 0
+            insert_statement = pg_insert(PortfolioAggregationJob).values(
+                [
+                    {
+                        "tenant_id": tenant_id.value,
+                        "portfolio_id": source_portfolio_id,
+                        "aggregation_date": selected_date,
+                        "status": "PENDING",
+                        "target_epoch": effective_epoch,
+                        "source_revision": 1,
+                        "correlation_id": diagnostics.correlation_id,
+                        "correlation_missing_reason": diagnostics.correlation_missing_reason,
+                        "alternate_lookup_key": (
+                            f"aggregation_job|aggregation_date={selected_date.isoformat()}"
+                            f"|portfolio_id={source_portfolio_id}"
+                            if diagnostics.correlation_id is None
+                            else None
+                        ),
+                    }
+                    for selected_date in sorted(affected_dates)
+                ]
+            )
+        promotion_conflict = (
+            PortfolioAggregationJob.target_epoch < insert_statement.excluded.target_epoch
+        )
+        if full_sweep:
+            promotion_conflict = or_(
+                promotion_conflict,
+                and_(
+                    insert_statement.excluded.aggregation_date != as_of_date,
+                    PortfolioAggregationJob.target_epoch == insert_statement.excluded.target_epoch,
+                    PortfolioAggregationJob.aggregation_date.in_(changed_dates),
+                ),
+            )
+        else:
+            if not previously_observed_nonzero_fact or (
+                selected_valuation_outcome is not None and not valuation_outcome_current
+            ):
+                promotion_conflict = or_(
+                    promotion_conflict,
+                    and_(
+                        insert_statement.excluded.aggregation_date != as_of_date,
+                        PortfolioAggregationJob.target_epoch
+                        == insert_statement.excluded.target_epoch,
+                    ),
+                )
+        result = await self.db.execute(
+            insert_statement.on_conflict_do_update(
+                index_elements=["tenant_id", "portfolio_id", "aggregation_date"],
+                set_={
+                    "target_epoch": insert_statement.excluded.target_epoch,
+                    "source_revision": PortfolioAggregationJob.source_revision + 1,
+                    "status": case(
+                        (PortfolioAggregationJob.status == "PROCESSING", "PROCESSING"),
+                        else_="PENDING",
+                    ),
+                    "failure_reason": case(
+                        (PortfolioAggregationJob.status == "PROCESSING", "REPROCESS_REQUESTED"),
+                        else_=None,
+                    ),
+                    "correlation_id": insert_statement.excluded.correlation_id,
+                    "correlation_missing_reason": (
+                        insert_statement.excluded.correlation_missing_reason
+                    ),
+                    "alternate_lookup_key": insert_statement.excluded.alternate_lookup_key,
+                    "updated_at": func.now(),
+                },
+                where=promotion_conflict,
+            ).returning(PortfolioAggregationJob.id)
+        )
+        affected_count = len(result.fetchall())
+        if full_sweep:
+            observation_insert = pg_insert(PortfolioSelectedHistoryObservation).from_select(
+                [
+                    "tenant_id",
+                    "portfolio_id",
+                    "as_of_date",
+                    "security_id",
+                    "position_history_id",
+                    "selected_business_date",
+                    "selected_nonzero",
+                    "source_fact",
+                ],
+                select(
+                    literal(tenant_id.value),
+                    literal(source_portfolio_id),
+                    literal(as_of_date),
+                    ranked.c.security_id,
+                    ranked.c.history_id,
+                    ranked.c.business_date,
+                    ranked.c.quantity != 0,
+                    ranked.c.source_fact,
+                ).where(ranked.c.rank == 1),
+            )
+            await self.db.execute(
+                observation_insert.on_conflict_do_update(
+                    index_elements=[
+                        "tenant_id",
+                        "portfolio_id",
+                        "as_of_date",
+                        "security_id",
+                    ],
+                    set_={
+                        "position_history_id": observation_insert.excluded.position_history_id,
+                        "selected_business_date": (
+                            observation_insert.excluded.selected_business_date
+                        ),
+                        "selected_nonzero": observation_insert.excluded.selected_nonzero,
+                        "source_fact": observation_insert.excluded.source_fact,
+                    },
+                )
+            )
+            await self._persist_swept_history_valuation_outcome(
+                tenant_id=tenant_id.value,
+                portfolio_id=source_portfolio_id,
+                security_id=security_id.strip(),
+                as_of_date=as_of_date,
+                delivered_epoch=target_epoch,
+                valuation_date=valuation_date,
+                valuation_outcome=valuation_outcome,
+                selected_history_rows=selected_history_rows,
+            )
+            await self.db.execute(
+                update(PortfolioAggregationJob)
+                .where(
+                    PortfolioAggregationJob.tenant_id == tenant_id.value,
+                    PortfolioAggregationJob.portfolio_id == source_portfolio_id,
+                    PortfolioAggregationJob.aggregation_date == as_of_date,
+                )
+                .values(
+                    selected_history_sweep_epoch=target_epoch,
+                    selected_history_collective_epoch=effective_epoch,
+                )
+            )
+        elif effective_epoch > anchor[1]:
+            await self.db.execute(
+                update(PortfolioAggregationJob)
+                .where(
+                    PortfolioAggregationJob.tenant_id == tenant_id.value,
+                    PortfolioAggregationJob.portfolio_id == source_portfolio_id,
+                    PortfolioAggregationJob.aggregation_date == as_of_date,
+                )
+                .values(selected_history_collective_epoch=effective_epoch)
+            )
+        return affected_count
+
+    async def _selected_valuation_outcome_current(
+        self,
+        *,
+        tenant_id: str,
+        portfolio_id: str,
+        security_id: str,
+        latest: Any,
+        delivered_epoch: int,
+        delivered_date: date,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"],
+    ) -> bool:
+        state = PortfolioSelectedHistoryValuationState
+        existing = await self.db.scalar(
+            select(state).where(
+                state.tenant_id == tenant_id,
+                state.portfolio_id == portfolio_id,
+                state.security_id == security_id,
+                state.position_history_id == latest.id,
+            )
+        )
+        return bool(
+            existing is not None
+            and existing.source_fact == latest.source_fact
+            and existing.selected_business_date == latest.position_date
+            and (
+                existing.valuation_outcome == valuation_outcome
+                or (existing.valuation_epoch, existing.valuation_date)
+                > (delivered_epoch, delivered_date)
+            )
+        )
+
+    async def _latest_selected_history_for_security(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        as_of_date: date,
+    ) -> Any:
+        return (
+            await self.db.execute(
+                select(
+                    PositionHistory.id,
+                    PositionHistory.position_date,
+                    PositionHistory.epoch,
+                    PositionHistory.quantity,
+                    selected_history_source_fact().label("source_fact"),
+                )
+                .where(
+                    PositionHistory.portfolio_id == portfolio_id,
+                    normalized_history_security_id() == security_id,
+                    PositionHistory.position_date <= as_of_date,
+                )
+                .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+                .limit(1)
+            )
+        ).one_or_none()
+
+    async def _persist_swept_history_valuation_outcome(
+        self,
+        *,
+        tenant_id: str,
+        portfolio_id: str,
+        security_id: str,
+        as_of_date: date,
+        delivered_epoch: int,
+        valuation_date: date | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None,
+        selected_history_rows: Table | None,
+    ) -> None:
+        if valuation_outcome is None:
+            return
+        latest = (
+            (
+                await self.db.execute(
+                    select(
+                        selected_history_rows.c.history_id.label("id"),
+                        selected_history_rows.c.business_date.label("position_date"),
+                        selected_history_rows.c.epoch,
+                        selected_history_rows.c.quantity,
+                        selected_history_rows.c.source_fact,
+                    ).where(
+                        selected_history_rows.c.as_of_date == as_of_date,
+                        selected_history_rows.c.security_id == security_id,
+                    )
+                )
+            ).one_or_none()
+            if selected_history_rows is not None
+            else await self._latest_selected_history_for_security(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                as_of_date=as_of_date,
+            )
+        )
+        await self._persist_targeted_history_valuation_outcome(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            latest=latest,
+            delivered_epoch=delivered_epoch,
+            valuation_date=valuation_date,
+            valuation_outcome=valuation_outcome,
+        )
+
+    async def _persist_targeted_history_valuation_outcome(
+        self,
+        *,
+        tenant_id: str,
+        portfolio_id: str,
+        security_id: str,
+        latest: Any,
+        delivered_epoch: int,
+        valuation_date: date | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None,
+    ) -> None:
+        if (
+            valuation_outcome is None
+            or valuation_date is None
+            or latest is None
+            or latest.quantity == 0
+            or latest.epoch > delivered_epoch
+            or latest.position_date > valuation_date
+        ):
+            return
+        state_insert = pg_insert(PortfolioSelectedHistoryValuationState).values(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            position_history_id=latest.id,
+            selected_business_date=latest.position_date,
+            source_fact=latest.source_fact,
+            valuation_outcome=valuation_outcome,
+            valuation_epoch=delivered_epoch,
+            valuation_date=valuation_date,
+        )
+        await self._upsert_selected_history_valuation_state(state_insert)
+
+    async def _upsert_selected_history_valuation_state(self, state_insert: PgInsert) -> None:
+        await self.db.execute(
+            state_insert.on_conflict_do_update(
+                index_elements=[
+                    "tenant_id",
+                    "portfolio_id",
+                    "security_id",
+                    "position_history_id",
+                ],
+                set_={
+                    "selected_business_date": state_insert.excluded.selected_business_date,
+                    "source_fact": state_insert.excluded.source_fact,
+                    "valuation_outcome": state_insert.excluded.valuation_outcome,
+                    "valuation_epoch": state_insert.excluded.valuation_epoch,
+                    "valuation_date": state_insert.excluded.valuation_date,
+                },
+                where=and_(
+                    or_(
+                        PortfolioSelectedHistoryValuationState.valuation_epoch
+                        < state_insert.excluded.valuation_epoch,
+                        and_(
+                            PortfolioSelectedHistoryValuationState.valuation_epoch
+                            == state_insert.excluded.valuation_epoch,
+                            PortfolioSelectedHistoryValuationState.valuation_date
+                            <= state_insert.excluded.valuation_date,
+                        ),
+                    ),
+                    or_(
+                        PortfolioSelectedHistoryValuationState.selected_business_date
+                        != state_insert.excluded.selected_business_date,
+                        PortfolioSelectedHistoryValuationState.source_fact
+                        != state_insert.excluded.source_fact,
+                        PortfolioSelectedHistoryValuationState.valuation_outcome
+                        != state_insert.excluded.valuation_outcome,
+                        PortfolioSelectedHistoryValuationState.valuation_epoch
+                        != state_insert.excluded.valuation_epoch,
+                        PortfolioSelectedHistoryValuationState.valuation_date
+                        != state_insert.excluded.valuation_date,
+                    ),
+                ),
+            )
+        )
+
     async def restage_aggregation_jobs_in_carry_forward_interval(
         self,
         portfolio_id: str,
@@ -500,13 +1201,13 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         excluded_dates: list[date],
         target_epoch: int,
         correlation_id: str | None,
-    ) -> int:
-        """Restage existing jobs whose portfolio day carries changed position state."""
+    ) -> list[date]:
+        """Restage and return exact existing days carrying changed position state."""
 
         if target_epoch < 0:
             raise ValueError("Aggregation target epoch cannot be negative.")
         if end_date_exclusive is not None and end_date_exclusive <= start_date:
-            return 0
+            return []
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         source_portfolio_id, tenant_id = await self._required_portfolio_authority(
             normalized_portfolio_id
@@ -564,9 +1265,13 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             )
 
         result = await self.db.execute(
-            update(PortfolioAggregationJob).where(*predicates).values(**values)
+            update(PortfolioAggregationJob)
+            .where(*predicates)
+            .values(**values)
+            .returning(PortfolioAggregationJob.aggregation_date)
         )
-        restaged_count = int(result.rowcount or 0)
+        restaged_dates = sorted(result.scalars().all())
+        restaged_count = len(restaged_dates)
         observe_control_queue_outcome(
             "aggregation",
             "carry_forward_staging",
@@ -586,7 +1291,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                 "restaged_job_count": restaged_count,
             },
         )
-        return restaged_count
+        return restaged_dates
 
     async def _required_portfolio_authority(self, portfolio_id: str) -> tuple[str, TenantId]:
         """Resolve the durable portfolio identity and tenant before staging owned work."""

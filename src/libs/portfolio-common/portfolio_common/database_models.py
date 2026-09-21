@@ -1,4 +1,3 @@
-# libs/portfolio-common/portfolio_common/database_models.py
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -22,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
+from . import portfolio_aggregation_job_schema as job_schema
 from .database_text_contract import (
     PYTHON_ISO_DATE_TEXT_VALID_SQL,
     PYTHON_ISO_DATETIME_WITH_TIMEZONE_PATTERN_SQL,
@@ -35,7 +35,6 @@ from .domain.portfolio_party_roles import (
 )
 from .financial_numeric import ExactNumeric
 from .ingestion_job_schema import ingestion_job_table_args
-from .portfolio_aggregation_job_schema import portfolio_aggregation_job_table_args
 from .processed_event_schema import processed_event_table_args
 from .source_lifecycle_predicates import (
     BENCHMARK_DEFINITION_ACTIVE,
@@ -239,6 +238,7 @@ class PositionHistory(Base):
             "epoch",
             "position_date",
         ),
+        job_schema.selected_history_lookup_index(portfolio_id, security_id, position_date, id),
         Index(
             "ix_position_history_security_epoch_date_id_portfolio",
             "security_id",
@@ -4561,7 +4561,7 @@ class OutboxRecoveryAudit(Base):
     )
 
 
-class PortfolioAggregationJob(Base):
+class PortfolioAggregationJob(job_schema.PortfolioAggregationJobSweepMixin, Base):
     """
     Tracks portfolio-date pairs that require aggregation.
     This table acts as a stateful, idempotent queue to trigger portfolio time series calculations.
@@ -4589,7 +4589,7 @@ class PortfolioAggregationJob(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = portfolio_aggregation_job_table_args(correlation_id=correlation_id)
+    __table_args__ = job_schema.portfolio_aggregation_job_table_args(correlation_id=correlation_id)
 
 
 class PortfolioValuationJob(Base):

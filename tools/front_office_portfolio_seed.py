@@ -309,6 +309,14 @@ def build_portfolio_seed_cleanup_sql(
             f"delete from simulation_changes where portfolio_id = '{portfolio_id}';",
             f"delete from simulation_sessions where portfolio_id = '{portfolio_id}';",
             f"delete from analytics_export_jobs where portfolio_id = '{portfolio_id}';",
+            (
+                "delete from portfolio_selected_history_valuation_states "
+                f"where portfolio_id = '{portfolio_id}';"
+            ),
+            (
+                "delete from portfolio_selected_history_observations "
+                f"where portfolio_id = '{portfolio_id}';"
+            ),
             f"delete from portfolio_aggregation_jobs where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_valuation_jobs where portfolio_id = '{portfolio_id}';",
             f"delete from daily_position_snapshots where portfolio_id = '{portfolio_id}';",

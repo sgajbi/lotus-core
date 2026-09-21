@@ -39,6 +39,25 @@ cluster topology, disaster recovery, or downstream front-office readiness.
 The durable database queue provides coalescing, replay, backdated-restatement, retry, and fan-in
 control. There is no private Kafka command between the two modules.
 
+When a selected non-zero position-history fact predates the valuation day, Core stages its
+historical portfolio-day control at the collective source epoch. A tenant-scoped, per-fact
+READY/UNAVAILABLE observation makes a later valuation failure or recovery rearm that control
+once, even if its epoch is unchanged. The observation records the delivered valuation epoch and
+date: an older delayed delivery cannot overwrite a newer outcome or reopen completed history.
+The selected fact must also be effective on or before the valuation date: one replay epoch can
+contain several dated facts, and an earlier snapshot cannot certify a later fact in that epoch.
+Selection alone does not certify valuation or reconciliation. These are source-side controls;
+front-office readiness still requires a current reconciliation and consumer validation.
+For a backdated valuation affecting many dependent dates, one transaction-local selected-history
+batch supplies the latest per-security baseline and interval changes to each day. This avoids a
+portfolio-wide history scan for every dependent date while retaining exact day-specific selection,
+closed-position behavior, and atomic control updates. History changes are first sequenced into
+effective-date intervals, so intermediate restatements are not multiplied into every later day's
+ranking input before selection. A full sweep also compares the prior tenant-scoped observation
+before replacing it: when a selected holding closes or is replaced, its formerly selected
+business-date control is rearmed even if another boundary has already advanced that control to
+the same collective epoch. Unchanged replay remains a no-op.
+
 Each fenced aggregation claim increments the durable job `attempt_count`; a successful claim carries
 that value as `aggregation_revision` into both completion events. This distinguishes a materially
 reopened portfolio day from Kafka redelivery without inventing arrival-time order. Financial
@@ -87,7 +106,8 @@ receives its own attempt.
 - Input topic: `valuation.snapshot.persisted`
 - Preserved consumer group: `timeseries_generator_group_positions`
 - Durable tables: `position_timeseries`, `portfolio_timeseries`,
-  `portfolio_aggregation_jobs`
+  `portfolio_aggregation_jobs`, `portfolio_selected_history_observations`,
+  `portfolio_selected_history_valuation_states`
 - Health, readiness, metrics, and version metadata: port `8085`
 - Image: `portfolio-derived-state-service`, released and deployed only by digest
 

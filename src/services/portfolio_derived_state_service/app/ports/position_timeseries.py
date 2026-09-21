@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import date
-from typing import Protocol, TypeVar
+from typing import Literal, Protocol, TypeVar
 
 from ..domain.position_timeseries.models import (
     PositionCashflowRecord,
@@ -114,6 +114,34 @@ class PositionTimeseriesRepository(Protocol):
         correlation_id: str | None,
     ) -> None: ...
 
+    async def promote_selected_history_aggregation_jobs(
+        self,
+        portfolio_id: str,
+        *,
+        security_id: str,
+        as_of_date: date,
+        target_epoch: int,
+        correlation_id: str | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None = None,
+        valuation_date: date | None = None,
+    ) -> int:
+        """Promote selected history and fence valuation-outcome transitions."""
+        ...
+
+    async def promote_selected_history_aggregation_jobs_for_dates(
+        self,
+        portfolio_id: str,
+        *,
+        security_id: str,
+        as_of_dates: list[date],
+        target_epoch: int,
+        correlation_id: str | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None = None,
+        valuation_date: date | None = None,
+    ) -> int:
+        """Batch selected-history source reads across affected boundaries."""
+        ...
+
     async def restage_aggregation_jobs_in_carry_forward_interval(
         self,
         portfolio_id: str,
@@ -123,8 +151,8 @@ class PositionTimeseriesRepository(Protocol):
         excluded_dates: list[date],
         target_epoch: int,
         correlation_id: str | None,
-    ) -> int:
-        """Restage existing portfolio days affected by carried position state."""
+    ) -> list[date]:
+        """Restage and return existing portfolio days affected by carried state."""
         ...
 
 

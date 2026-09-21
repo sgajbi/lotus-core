@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Literal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -641,9 +642,12 @@ async def test_carry_forward_restage_is_bounded_and_preserves_active_work(
     repository: TimeseriesGenerationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_db_session.execute.return_value.rowcount = 2
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [
+        date(2025, 8, 13),
+        date(2025, 8, 15),
+    ]
 
-    count = await repository.restage_aggregation_jobs_in_carry_forward_interval(
+    restaged_dates = await repository.restage_aggregation_jobs_in_carry_forward_interval(
         "PORT_TS_POS_01",
         start_date=date(2025, 8, 12),
         end_date_exclusive=date(2025, 8, 16),
@@ -660,7 +664,7 @@ async def test_carry_forward_restage_is_bounded_and_preserves_active_work(
         )
     )
 
-    assert count == 2
+    assert restaged_dates == [date(2025, 8, 13), date(2025, 8, 15)]
     assert "UPDATE portfolio_aggregation_jobs SET" in compiled_stmt
     assert "portfolio_aggregation_jobs.portfolio_id = 'PORT_TS_POS_01'" in compiled_stmt
     assert "portfolio_aggregation_jobs.tenant_id = 'tenant-test'" in compiled_stmt
@@ -674,6 +678,7 @@ async def test_carry_forward_restage_is_bounded_and_preserves_active_work(
     assert "greatest(portfolio_aggregation_jobs.target_epoch, 4)" in compiled_stmt
     assert "portfolio_aggregation_jobs.source_revision + 1" in compiled_stmt
     assert "REPROCESS_REQUESTED" in compiled_stmt
+    assert "RETURNING portfolio_aggregation_jobs.aggregation_date" in compiled_stmt
     assert "corr-carry-forward" in compiled_stmt
     assert "  corr-carry-forward  " not in compiled_stmt
 
@@ -682,7 +687,7 @@ async def test_carry_forward_restage_skips_empty_interval(
     repository: TimeseriesGenerationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    count = await repository.restage_aggregation_jobs_in_carry_forward_interval(
+    restaged_dates = await repository.restage_aggregation_jobs_in_carry_forward_interval(
         "PORT_TS_POS_01",
         start_date=date(2025, 8, 12),
         end_date_exclusive=date(2025, 8, 12),
@@ -691,7 +696,7 @@ async def test_carry_forward_restage_skips_empty_interval(
         correlation_id=None,
     )
 
-    assert count == 0
+    assert restaged_dates == []
     mock_db_session.execute.assert_not_awaited()
 
 
@@ -779,3 +784,263 @@ async def test_stage_aggregation_jobs_skips_empty_date_set(
     await repository.stage_aggregation_jobs("PORT_TS_POS_01", [], 4, "corr-empty")
 
     mock_db_session.execute.assert_not_awaited()
+
+
+def _full_history_sweep_results(mock_db_session: AsyncMock, *, collective_epoch: int = 1) -> None:
+    source = MagicMock()
+    source.one_or_none.return_value = ("PORT_TS_POS_01", "tenant-test")
+    anchor = MagicMock()
+    anchor.one_or_none.return_value = (-1, 0)
+    collective = MagicMock()
+    collective.scalar_one_or_none.return_value = collective_epoch
+    promoted = MagicMock()
+    promoted.fetchall.return_value = []
+    mock_db_session.execute.side_effect = [
+        source,
+        anchor,
+        collective,
+        promoted,
+        MagicMock(),
+        MagicMock(),
+    ]
+
+
+async def test_historical_promotion_selects_latest_nonzero_facts_and_only_higher_epoch(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    _full_history_sweep_results(mock_db_session)
+    count = await repository.promote_selected_history_aggregation_jobs(
+        "PORT_TS_POS_01",
+        security_id="SEC_01",
+        as_of_date=date(2026, 4, 10),
+        target_epoch=1,
+        correlation_id="corr-historical-epoch",
+    )
+
+    statement = mock_db_session.execute.await_args_list[3].args[0]
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert count == 0
+    assert "INSERT INTO portfolio_aggregation_jobs" in compiled
+    assert "FROM position_history" in compiled
+    assert "position_history.portfolio_id = 'PORT_TS_POS_01'" in compiled
+    assert "position_history.position_date <= '2026-04-10'" in compiled
+    assert "PARTITION BY btrim(position_history.security_id" in compiled
+    assert r"\00A0" in compiled
+    assert "ORDER BY position_history.position_date DESC, position_history.id DESC" in compiled
+    assert "ranked_position_history.rank = 1" in compiled
+    assert "ranked_position_history.quantity != 0" in compiled
+    collective_query = str(
+        mock_db_session.execute.await_args_list[2]
+        .args[0]
+        .compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "max(ranked_position_history.epoch) OVER ()" in collective_query
+    assert "tenant-test" in compiled
+    assert "corr-historical-epoch" in compiled
+    assert "portfolio_aggregation_jobs.target_epoch < excluded.target_epoch" in compiled
+    assert "portfolio_aggregation_jobs.source_revision + 1" in compiled
+    assert "REPROCESS_REQUESTED" in compiled
+    observation_insert = str(
+        mock_db_session.execute.await_args_list[4]
+        .args[0]
+        .compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "INSERT INTO portfolio_selected_history_observations" in observation_insert
+    assert "ranked_position_history.rank = 1" in observation_insert
+    marker_update = str(
+        mock_db_session.execute.await_args_list[5]
+        .args[0]
+        .compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "selected_history_sweep_epoch=1" in marker_update
+    assert "selected_history_collective_epoch=1" in marker_update
+
+
+async def test_historical_promotion_refuses_missing_durable_portfolio(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value.one_or_none.return_value = None
+
+    with pytest.raises(LookupError, match="no durable tenant authority"):
+        await repository.promote_selected_history_aggregation_jobs(
+            "PORT_TS_POS_01",
+            security_id="SEC_01",
+            as_of_date=date(2026, 4, 10),
+            target_epoch=1,
+            correlation_id=None,
+        )
+
+    assert mock_db_session.execute.await_count == 1
+
+
+async def test_historical_promotion_uses_date_key_when_correlation_is_absent(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    _full_history_sweep_results(mock_db_session)
+    await repository.promote_selected_history_aggregation_jobs(
+        "PORT_TS_POS_01",
+        security_id="SEC_01",
+        as_of_date=date(2026, 4, 10),
+        target_epoch=1,
+        correlation_id=None,
+    )
+
+    statement = mock_db_session.execute.await_args_list[3].args[0]
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "correlation_id_not_supplied" in compiled
+    assert "aggregation_job|aggregation_date=" in compiled
+    assert "|portfolio_id=PORT_TS_POS_01" in compiled
+    assert "CAST(selected_history_dates_to_promote.business_date AS VARCHAR)" in compiled
+    assert "UNION SELECT previous_selected_history_dates.business_date" in compiled
+
+
+async def test_historical_promotion_rejects_negative_epoch_before_database_work(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    with pytest.raises(ValueError, match="cannot be negative"):
+        await repository.promote_selected_history_aggregation_jobs(
+            "PORT_TS_POS_01",
+            security_id="SEC_01",
+            as_of_date=date(2026, 4, 10),
+            target_epoch=-1,
+            correlation_id=None,
+        )
+
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_historical_promotion_rejects_unknown_valuation_outcome(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    with pytest.raises(ValueError, match="valuation outcome is not supported"):
+        await repository.promote_selected_history_aggregation_jobs(
+            "PORT_TS_POS_01",
+            security_id="SEC_01",
+            as_of_date=date(2026, 4, 10),
+            target_epoch=1,
+            correlation_id=None,
+            valuation_outcome="UNKNOWN",  # type: ignore[arg-type]
+        )
+    mock_db_session.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("outcome", "source_date"),
+    [("READY", None), (None, date(2026, 4, 10))],
+)
+async def test_historical_promotion_requires_paired_outcome_source_date(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+    outcome: Literal["READY", "UNAVAILABLE"] | None,
+    source_date: date | None,
+) -> None:
+    with pytest.raises(ValueError, match="requires its source date"):
+        await repository.promote_selected_history_aggregation_jobs(
+            "PORT_TS_POS_01",
+            security_id="SEC_01",
+            as_of_date=date(2026, 4, 10),
+            target_epoch=1,
+            correlation_id=None,
+            valuation_outcome=outcome,
+            valuation_date=source_date,
+        )
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_historical_promotion_uses_indexed_security_read_after_durable_sweep(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    source = MagicMock()
+    source.one_or_none.return_value = ("PORT_TS_POS_01", "tenant-test")
+    anchor = MagicMock()
+    anchor.one_or_none.return_value = (1, 2)
+    latest = MagicMock()
+    latest.one_or_none.return_value = MagicMock(
+        id=12,
+        position_date=date(2025, 4, 20),
+        epoch=1,
+        quantity=Decimal("5"),
+        source_fact="selected-fact-12",
+    )
+    promoted = MagicMock()
+    promoted.fetchall.return_value = [1]
+    mock_db_session.execute.side_effect = [source, anchor, latest, MagicMock(), promoted]
+    mock_db_session.scalar.return_value = None
+
+    count = await repository.promote_selected_history_aggregation_jobs(
+        "PORT_TS_POS_01",
+        security_id=" SEC_01 ",
+        as_of_date=date(2026, 4, 10),
+        target_epoch=1,
+        correlation_id="corr-targeted",
+    )
+
+    targeted_query = str(
+        mock_db_session.execute.await_args_list[2]
+        .args[0]
+        .compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    promoted_statement = mock_db_session.execute.await_args_list[4].args[0]
+    assert count == 1
+    assert "btrim(position_history.security_id" in targeted_query
+    assert r"\00A0" in targeted_query
+    assert "= 'SEC_01'" in targeted_query
+    assert (
+        "ORDER BY position_history.position_date DESC, position_history.id DESC" in targeted_query
+    )
+    assert "LIMIT 1" in targeted_query
+    assert "row_number" not in targeted_query
+    assert 2 in [
+        value
+        for key, value in promoted_statement.compile(dialect=postgresql.dialect()).params.items()
+        if key.startswith("target_epoch")
+    ]
+    assert mock_db_session.execute.await_count == 5
+
+
+async def test_historical_promotion_does_not_reopen_closed_security(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    source = MagicMock()
+    source.one_or_none.return_value = ("PORT_TS_POS_01", "tenant-test")
+    anchor = MagicMock()
+    anchor.one_or_none.return_value = (1, 1)
+    latest = MagicMock()
+    latest.one_or_none.return_value = MagicMock(
+        id=13,
+        position_date=date(2026, 4, 10),
+        epoch=1,
+        quantity=Decimal("0"),
+        source_fact="closed-fact-13",
+    )
+    mock_db_session.execute.side_effect = [source, anchor, latest, MagicMock()]
+    mock_db_session.scalar.return_value = None
+
+    assert (
+        await repository.promote_selected_history_aggregation_jobs(
+            "PORT_TS_POS_01",
+            security_id="SEC_CLOSED",
+            as_of_date=date(2026, 4, 10),
+            target_epoch=1,
+            correlation_id=None,
+        )
+        == 0
+    )
+    assert mock_db_session.execute.await_count == 4

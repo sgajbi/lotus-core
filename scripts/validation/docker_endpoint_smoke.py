@@ -123,6 +123,10 @@ def build_smoke_cleanup_sql() -> str:
             "delete from simulation_changes where portfolio_id like 'PORT_SMOKE_%';",
             "delete from simulation_sessions where portfolio_id like 'PORT_SMOKE_%';",
             "delete from analytics_export_jobs where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_selected_history_valuation_states "
+            "where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_selected_history_observations "
+            "where portfolio_id like 'PORT_SMOKE_%';",
             "delete from portfolio_aggregation_jobs where portfolio_id like 'PORT_SMOKE_%';",
             "delete from portfolio_valuation_jobs where portfolio_id like 'PORT_SMOKE_%';",
             "delete from daily_position_snapshots where portfolio_id like 'PORT_SMOKE_%';",

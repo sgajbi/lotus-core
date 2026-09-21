@@ -1309,6 +1309,20 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
 
     assert "delete from transactions where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert (
+        "delete from portfolio_selected_history_observations "
+        "where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
+    ) in sql
+    assert (
+        "delete from portfolio_selected_history_valuation_states "
+        "where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
+    ) in sql
+    assert sql.index("delete from portfolio_selected_history_valuation_states") < sql.index(
+        "delete from portfolios"
+    )
+    assert sql.index("delete from portfolio_selected_history_observations") < sql.index(
+        "delete from portfolios"
+    )
     dependent_lot_tables = (
         "lot_disposal_allocations",
         "lot_basis_transfer_allocations",
