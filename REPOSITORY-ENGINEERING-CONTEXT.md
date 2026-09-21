@@ -241,6 +241,11 @@ schema, machine-readable contracts, or executable evidence.
 - Test runtime classification uses the pytest nodeid's test-file portion, not parameter IDs
   containing example integration/E2E paths. Preserve actual file-path and explicit database-marker
   admission; verify manifest membership and omission guards execute with the ordinary unit selector.
+- E2E checks for retired Core routes must call the real query HTTP surface without seeding
+  unrelated portfolios, transactions, or valuation work. A `202` portfolio ingest is only queue
+  acknowledgement; active transaction pipelines must wait for supported tenant-scoped portfolio
+  materialization before posting transactions. Preserve fail-closed ownership rejection rather
+  than masking the race with sleeps or admission bypasses.
 - Source-provenance fixtures must prove foreign packages are reachable without the guard before
   asserting rejection; pinned venvs can disable automatic user-site discovery. Refresh-count
   wrappers must replan PostgreSQL expressions after function renaming, including warmed backends.

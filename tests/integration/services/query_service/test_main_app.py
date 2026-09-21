@@ -4,11 +4,13 @@ from unittest.mock import patch
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi.routing import APIRoute
 from portfolio_common.source_data_products import QUERY_SERVICE, SOURCE_DATA_PRODUCT_CATALOG
 from portfolio_common.source_data_security import (
     get_source_data_security_profile,
     required_source_data_capability,
 )
+from starlette.routing import Match
 
 from src.services.query_service.app.main import app, lifespan
 from tests.test_support.tenant import TEST_TENANT_HEADERS
@@ -1451,6 +1453,46 @@ async def test_openapi_hides_migrated_legacy_endpoints(async_test_client):
     assert "/portfolios/{portfolio_id}/performance" not in paths
     assert "/portfolios/{portfolio_id}/performance/mwr" not in paths
     assert "/portfolios/{portfolio_id}/positions-analytics" not in paths
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        (
+            "/portfolios/E2E_RETIRED_CONCENTRATION/concentration",
+            {"scope": {"as_of_date": "2025-08-31"}, "metrics": ["BULK", "ISSUER"]},
+        ),
+        (
+            "/portfolios/E2E_RETIRED_REVIEW/review",
+            {"as_of_date": "2025-08-31", "sections": ["OVERVIEW"]},
+        ),
+    ],
+)
+async def test_retired_routes_reject_without_portfolio_pipeline(async_test_client, path, payload):
+    _assert_retired_post_route_absent(path, app.router.routes)
+    response = await async_test_client.post(path, json=payload)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}
+
+
+def _assert_retired_post_route_absent(path, routes):
+    scope = {"type": "http", "path": path, "method": "POST"}
+    assert all(route.matches(scope)[0] is not Match.FULL for route in routes)
+
+
+async def test_retired_route_guard_catches_hidden_route_returning_portfolio_404():
+    async def restored_route():
+        return {"detail": "Not Found"}
+
+    path = "/portfolios/E2E_RETIRED_CONCENTRATION/concentration"
+    hidden_route = APIRoute(
+        "/portfolios/{portfolio_id}/concentration",
+        restored_route,
+        methods=["POST"],
+        include_in_schema=False,
+    )
+    with pytest.raises(AssertionError):
+        _assert_retired_post_route_absent(path, [hidden_route])
 
 
 async def test_openapi_publishes_exact_transaction_lookup_contract(async_test_client):
