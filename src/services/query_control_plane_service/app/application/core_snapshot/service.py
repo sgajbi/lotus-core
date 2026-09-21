@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
     PARTIAL,
@@ -151,7 +152,10 @@ class CoreSnapshotService:
         request: CoreSnapshotRequest,
         governance: SnapshotGovernanceContext | None = None,
     ) -> CoreSnapshotResponse:
-        portfolio = await self._source_reader.get_portfolio(portfolio_id)
+        portfolio = await self._source_reader.get_portfolio(
+            tenant_id=TenantId(request.tenant_id),
+            portfolio_id=portfolio_id,
+        )
         if portfolio is None:
             raise CoreSnapshotNotFoundError(f"Portfolio {portfolio_id} not found")
 

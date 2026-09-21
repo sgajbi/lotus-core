@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.infrastructure.core_snapshot_sources import (
@@ -100,7 +101,10 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     ]
     reader = SqlAlchemyCoreSnapshotSourceReader(session)
 
-    portfolio = await reader.get_portfolio("P1")
+    portfolio = await reader.get_portfolio(
+        tenant_id=TenantId("tenant-p1"),
+        portfolio_id="P1",
+    )
     instruments = await reader.get_instruments([" SEC_1 ", "SEC_1"])
     prices = await reader.get_prices(security_id=" SEC_1 ", end_date=date(2026, 4, 10))
     rates = await reader.get_fx_rates(
@@ -118,12 +122,17 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     assert rates[0].rate == Decimal("1.35")
     assert rates[0].evidence_timestamp == fx_created_at
 
+    portfolio_sql = str(
+        session.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
     instrument_sql = str(
         session.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
     )
     fx_sql = str(
         session.execute.await_args_list[3].args[0].compile(compile_kwargs={"literal_binds": True})
     )
+    assert "portfolios.tenant_id = 'tenant-p1'" in portfolio_sql
+    assert "portfolios.portfolio_id = 'P1'" in portfolio_sql
     assert "trim(instruments.security_id) IN ('SEC_1')" in instrument_sql
     assert "upper(trim(fx_rates.from_currency)) = 'USD'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'SGD'" in fx_sql
