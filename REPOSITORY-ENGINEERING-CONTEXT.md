@@ -220,6 +220,45 @@ schema, machine-readable contracts, or executable evidence.
   remains unknown, and completed exact controls plus coherent current valuation evidence are
   still required. Production-route PostgreSQL controls are selected by lifecycle and bounded
   coverage suites; see [collective freshness review](docs/architecture/codebase-reviews/CR-1726-CORE-SNAPSHOT-COLLECTIVE-FRESHNESS.md).
+- Position-timeseries materialization promotes latest non-zero `PositionHistory` business dates
+  at every explicitly changed or carry-forward-restaged as-of boundary to the collective source
+  epoch inside its portfolio
+  aggregation advisory fence and transaction, including unavailable-valuations. A later close
+  must not hide the business date selected before that close. The aggregation-day job carries
+  a durable full-sweep epoch sentinel: first work at that day/epoch selects the portfolio once;
+  later same-epoch snapshots
+  use the Python-strip-equivalent indexed latest-history lookup for their own security, so a late
+  fact or legacy boundary-whitespace identifier is still covered
+  without quadratic portfolio scans. Its tenant-scoped per-security observation stores the exact
+  selected economic fact, excluding timestamps; a changed late fact can rearm an equal-epoch old
+  control, while replay of the same fact cannot. Migration `c171b2c3d532` starts existing jobs
+  at `-1` for one safe post-upgrade sweep and adds its large-table checks as `NOT VALID`;
+  `c172b2c3d533` validates existing rows after the column-add lock is released. The
+  position-history lookup index is built and dropped concurrently with retry-safe shape checks.
+  An unseen selected fact is changed evidence even when its pre-migration control is already
+  COMPLETE at the same epoch; the fact index lets later
+  as-of sweeps skip identical history. Strictly higher-epoch writes remain the default;
+  equal-epoch historical restaging requires changed selected-fact evidence. The aggregation
+  lease, source revision, outbox, and reconciliation consumer own completion. Do not
+  rewrite old facts, infer business dates from valuation/serving timestamps, or synthesize a
+  control in the query plane; see #1134.
+  A selected-history observation records exact source selection. A separate tenant-scoped
+  per-fact valuation state records READY/UNAVAILABLE transitions; the first later success,
+  failure, or recovery for that same fact rearms its historical control even when the collective
+  epoch matches. Attribute an outcome only to a selected fact at or before the delivered snapshot
+  epoch and no later than the delivered valuation business date; one replay epoch can hold
+  several dated facts, so an earlier snapshot cannot certify a later fact. Store the delivered
+  valuation epoch/date with the outcome so an older same-security event cannot overwrite newer
+  READY/UNAVAILABLE state or reopen its historical control. Repeated daily outcomes and unchanged replay remain
+  no-ops. A command restaging many dependent days prepares one transaction-local selected-history
+  batch from the latest per-security baseline plus effective-date interval changes; each day then
+  reads that indexed batch, not the entire portfolio history. Sequence changes before joining
+  affected dates, so intermediate restatements do not multiply into every later day's ranking input.
+  Before a full-sweep observation upsert, include the prior selected non-zero date when the
+  selected fact closes or changes; otherwise the replaced observation can erase the only durable
+  pointer needed to rearm an equal-epoch historical control.
+  Preserve the source scan bound, zero-quantity closures, exact per-day observations and atomic
+  job/marker writes under the portfolio lock.
 
 - Large cashflow evidence seeds must use physical multi-row SQL statements, not ORM
   `executemany` mappings that issue one statement per row. Source-cut maintenance is atomic and
@@ -230,6 +269,16 @@ schema, machine-readable contracts, or executable evidence.
   copied query or trigger-metadata proxy. Rebuild the owned migration image when migrations change
   (`LOTUS_TESTS_DOCKER_BUILD=true` for local test execution); a cached image is not current-head
   migration proof. See the [migration contract](docs/standards/migration-contract.md).
+- Historical migration tests that directly invoke c168 or c118 against a current-head
+  PostgreSQL schema must account for c171's selected-history foreign keys before dropping
+  c168's `uq_portfolios_tenant_portfolio_id`. A normal Alembic rollback removes newer revisions
+  first; direct tests instead suspend only the two verified newer dependencies and restore/assert
+  both after re-upgrade. Do not use `DROP ... CASCADE`, weaken the tenant foreign keys, or treat
+  `migration-smoke` heads/history checks as executable rollback proof.
+- A changed critical migration must execute under `critical-db-coverage`, not only the separate
+  lifecycle matrix: the combined changed-code gate measures that lane's coverage data. Keep a
+  bounded real-PostgreSQL migration selector in the manifest and prove its refusal branches;
+  do not lower the 90% line / 85% branch changed-code floors to accommodate unmeasured tests.
 - The native full-integration target retains per-test progress, diagnostic thread stacks after
   120 seconds, and a completed JUnit results artifact. Missing results after cancellation are not
   passing release evidence; see [Validation and CI](wiki/Validation-and-CI.md#full-integration-diagnostics).

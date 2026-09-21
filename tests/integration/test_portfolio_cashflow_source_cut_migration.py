@@ -16,8 +16,10 @@ from time import monotonic, sleep
 from typing import Any
 
 import pytest
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct, pytest.mark.lifecycle]
@@ -57,8 +59,12 @@ def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls
     clean_db,
 ) -> None:
     """Execute Alembic version transitions, including nonempty downgrade and replay."""
+    repository_head = ScriptDirectory.from_config(
+        Config(str(MIGRATION.parents[2] / "alembic.ini"))
+    ).get_current_head()
+    assert repository_head is not None
     with db_engine.begin() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c170b2c3d531"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == repository_head
         _seed_legacy_source(connection)
         connection.execute(
             text("UPDATE portfolios SET base_currency = 'EUR' WHERE portfolio_id = :portfolio_id"),
@@ -188,7 +194,7 @@ def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls
                 "-m",
                 "alembic",
                 "upgrade",
-                "c170b2c3d531",
+                repository_head,
             ],
             cwd=MIGRATION.parents[2],
             env=child_env,
@@ -196,7 +202,9 @@ def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls
             text=True,
             check=False,
         )
-        assert restored.returncode == 0, f"Alembic head restoration exited {restored.returncode}"
+        assert restored.returncode == 0, (
+            f"Alembic head restoration to {repository_head} exited {restored.returncode}"
+        )
 
     # Historical backfill proof runs c169's function. Exercise the installed
     # corrective function's durable boundary and affected roots independently.

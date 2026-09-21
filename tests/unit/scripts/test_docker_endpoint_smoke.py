@@ -170,6 +170,14 @@ def test_docker_endpoint_smoke_uses_deterministic_identifiers():
 
 def test_docker_endpoint_smoke_cleanup_sql_purges_legacy_smoke_rows():
     sql = build_smoke_cleanup_sql()
+    assert "delete from portfolio_selected_history_valuation_states" in sql
+    assert "delete from portfolio_selected_history_observations" in sql
+    assert sql.index("delete from portfolio_selected_history_valuation_states") < sql.index(
+        "delete from portfolios"
+    )
+    assert sql.index("delete from portfolio_selected_history_observations") < sql.index(
+        "delete from portfolios"
+    )
 
     assert sql.startswith("begin;\n")
     assert sql.endswith("\ncommit;")

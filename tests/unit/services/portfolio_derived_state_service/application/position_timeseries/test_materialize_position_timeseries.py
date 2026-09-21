@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 import pytest
 from portfolio_common.domain.calculation_lineage import (
@@ -53,6 +53,9 @@ class InMemoryPositionTimeseriesRepository:
         self.staged_dates: list[date] = []
         self.staged_epochs: list[int] = []
         self.restaged_intervals: list[dict[str, object]] = []
+        self.restaged_job_dates: list[date] = []
+        self.promoted_history: list[dict[str, object]] = []
+        self.promoted_batches: list[list[date]] = []
         self.aggregation_mutation_sequence: list[str] = []
 
     async def get_position_snapshot(
@@ -174,6 +177,55 @@ class InMemoryPositionTimeseriesRepository:
         self.staged_dates.extend(aggregation_dates)
         self.staged_epochs.extend([target_epoch] * len(aggregation_dates))
 
+    async def promote_selected_history_aggregation_jobs(
+        self,
+        portfolio_id: str,
+        *,
+        security_id: str,
+        as_of_date: date,
+        target_epoch: int,
+        correlation_id: str | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None = None,
+        valuation_date: date | None = None,
+    ) -> int:
+        self.aggregation_mutation_sequence.append("promote_selected_history")
+        self.promoted_history.append(
+            {
+                "portfolio_id": portfolio_id,
+                "security_id": security_id,
+                "as_of_date": as_of_date,
+                "target_epoch": target_epoch,
+                "correlation_id": correlation_id,
+                "valuation_outcome": valuation_outcome,
+                "valuation_date": valuation_date,
+            }
+        )
+        return 0
+
+    async def promote_selected_history_aggregation_jobs_for_dates(
+        self,
+        portfolio_id: str,
+        *,
+        security_id: str,
+        as_of_dates: list[date],
+        target_epoch: int,
+        correlation_id: str | None,
+        valuation_outcome: Literal["READY", "UNAVAILABLE"] | None = None,
+        valuation_date: date | None = None,
+    ) -> int:
+        self.promoted_batches.append(as_of_dates)
+        for as_of_date in as_of_dates:
+            await self.promote_selected_history_aggregation_jobs(
+                portfolio_id,
+                security_id=security_id,
+                as_of_date=as_of_date,
+                target_epoch=target_epoch,
+                correlation_id=correlation_id,
+                valuation_outcome=valuation_outcome,
+                valuation_date=valuation_date,
+            )
+        return 0
+
     async def restage_aggregation_jobs_in_carry_forward_interval(
         self,
         portfolio_id: str,
@@ -183,7 +235,7 @@ class InMemoryPositionTimeseriesRepository:
         excluded_dates: list[date],
         target_epoch: int,
         correlation_id: str | None,
-    ) -> int:
+    ) -> list[date]:
         self.aggregation_mutation_sequence.append("restage_carry_forward")
         self.restaged_intervals.append(
             {
@@ -195,7 +247,7 @@ class InMemoryPositionTimeseriesRepository:
                 "correlation_id": correlation_id,
             }
         )
-        return 0
+        return self.restaged_job_dates
 
 
 class InMemoryRepositoryProvider:
@@ -291,12 +343,47 @@ async def test_materialization_persists_changed_day_and_stages_aggregation() -> 
         }
     ]
     assert repository.invalidated_portfolio_intervals == []
+    assert repository.promoted_history == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "security_id": "SEC_DERIVED_001",
+            "as_of_date": date(2026, 4, 10),
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+            "valuation_outcome": "READY",
+            "valuation_date": date(2026, 4, 10),
+        }
+    ]
     assert repository.aggregation_mutation_sequence == [
         "fence:PB_SG_GLOBAL_BAL_001",
         "stage_jobs",
         "restage_carry_forward",
+        "promote_selected_history",
     ]
     assert provider.transaction_count == 1
+
+
+async def test_materialization_promotes_returned_carry_forward_job_days() -> None:
+    repository = InMemoryPositionTimeseriesRepository(_snapshot())
+    intermediate_day = date(2026, 4, 12)
+    repository.restaged_job_dates = [intermediate_day]
+
+    await MaterializePositionTimeseries(
+        repository_provider=InMemoryRepositoryProvider(repository)
+    ).execute(_command())
+
+    assert [call["as_of_date"] for call in repository.promoted_history] == [
+        date(2026, 4, 10),
+        intermediate_day,
+    ]
+    assert repository.promoted_batches == [[date(2026, 4, 10), intermediate_day]]
+    assert repository.aggregation_mutation_sequence == [
+        "fence:PB_SG_GLOBAL_BAL_001",
+        "stage_jobs",
+        "restage_carry_forward",
+        "promote_selected_history",
+        "promote_selected_history",
+    ]
 
 
 async def test_materialization_is_a_noop_when_snapshot_is_missing() -> None:
@@ -310,6 +397,7 @@ async def test_materialization_is_a_noop_when_snapshot_is_missing() -> None:
     assert result.dependent_days_changed == 0
     assert repository.upserted == []
     assert repository.staged_dates == []
+    assert repository.promoted_history == []
     assert repository.restaged_intervals == []
     assert provider.transaction_count == 1
 
@@ -364,14 +452,61 @@ async def test_unavailable_valuation_invalidates_current_and_dependent_materiali
         }
     ]
     assert repository.upserted == []
+    assert repository.promoted_history == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "security_id": "SEC_DERIVED_001",
+            "as_of_date": date(2026, 4, 10),
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+            "valuation_outcome": "UNAVAILABLE",
+            "valuation_date": date(2026, 4, 10),
+        },
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "security_id": "SEC_DERIVED_001",
+            "as_of_date": date(2026, 4, 11),
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+            "valuation_outcome": "UNAVAILABLE",
+            "valuation_date": date(2026, 4, 10),
+        },
+    ]
     assert repository.aggregation_mutation_sequence == [
         "fence:PB_SG_GLOBAL_BAL_001",
         "invalidate_numeric",
         "stage_jobs",
         "invalidate_portfolio_interval",
         "restage_carry_forward",
+        "promote_selected_history",
+        "promote_selected_history",
     ]
     assert provider.transaction_count == 1
+
+
+async def test_unavailable_valuation_promotes_returned_carry_forward_job_days() -> None:
+    failed_snapshot = replace(_snapshot(), market_value_local=None, valuation_status="FAILED")
+    repository = InMemoryPositionTimeseriesRepository(failed_snapshot)
+    intermediate_day = date(2026, 4, 12)
+    repository.restaged_job_dates = [intermediate_day]
+
+    await MaterializePositionTimeseries(
+        repository_provider=InMemoryRepositoryProvider(repository)
+    ).execute(_command())
+
+    assert [call["as_of_date"] for call in repository.promoted_history] == [
+        failed_snapshot.date,
+        intermediate_day,
+    ]
+    assert repository.aggregation_mutation_sequence == [
+        "fence:PB_SG_GLOBAL_BAL_001",
+        "invalidate_numeric",
+        "stage_jobs",
+        "invalidate_portfolio_interval",
+        "restage_carry_forward",
+        "promote_selected_history",
+        "promote_selected_history",
+    ]
 
 
 async def test_unavailable_valuation_restages_open_ended_carry_forward_scope() -> None:
@@ -389,6 +524,7 @@ async def test_unavailable_valuation_restages_open_ended_carry_forward_scope() -
     assert result.current_day_changed is False
     assert repository.invalidated_dates == []
     assert repository.staged_dates == [failed_snapshot.date]
+    assert repository.promoted_history[0]["as_of_date"] == failed_snapshot.date
     assert repository.restaged_intervals == [
         {
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
@@ -568,6 +704,10 @@ async def test_backdated_materialization_recalculates_dependent_beginning_value(
     assert propagated_record.date == date(2026, 4, 11)
     assert propagated_record.bod_market_value == Decimal("1260")
     assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
+    assert [call["as_of_date"] for call in repository.promoted_history] == [
+        date(2026, 4, 10),
+        date(2026, 4, 11),
+    ]
 
 
 async def test_backdated_materialization_does_not_create_absent_future_day() -> None:

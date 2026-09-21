@@ -1,6 +1,96 @@
 # Codebase Review Ledger
 
-CR-1731 CoreSnapshot portfolio tenant source fence (2026-09-21, fixed-local candidate): the
+CR-1732 Historical collective reconciliation controls (2026-09-21, fixed-local candidate):
+canonical `PB_SG_GLOBAL_BAL_001` exposed an old SAP position-history business date at epoch 0
+while a later cash fact raised the required collective control epoch to 1. Existing carry-forward
+restaging began at the later valuation date and could not rearm that selected old day, leaving
+CoreSnapshot correctly `UNRECONCILED`. Position-timeseries materialization now promotes exact
+non-zero selected business dates at every explicitly changed or carry-forward-restaged as-of
+boundary to their collective epoch
+inside the existing portfolio advisory fence and transaction, including failed/unavailable
+valuations. A later closure must not hide an earlier selected day. Migration `c171b2c3d532` adds
+a durable aggregation-day full-sweep epoch and collective epoch, initialized to a sentinel for a
+post-upgrade sweep. The first event performs the set-based portfolio selection and records exact
+tenant-scoped per-security selected-fact observations without timestamps; same-epoch events check
+only the indexed latest history of their own security. The first sweep also treats an unseen
+selected fact as changed, even when a pre-migration historical control is already COMPLETE at
+the same epoch; a fact-observation index lets later as-of sweeps avoid rearming unchanged history.
+Legacy history security IDs use the same Python-strip-equivalent normalization as the observation
+constraint, with a concurrently built expression index for the targeted lookup. Migration
+`c171b2c3d532` adds job checks without scanning existing rows under its column-add lock;
+`c172b2c3d533` validates them after that revision commits. PostgreSQL upgrade/rollback,
+valid retry, wrong-key and partial-index rejection, and restored-index proof are required.
+A genuinely changed late fact can rearm an equal-epoch old control once, while replay is a no-op.
+Active leases retain
+`REPROCESS_REQUESTED`, old facts remain immutable, and the
+normal aggregation/outbox/financial-reconciliation chain remains source-owned. PostgreSQL proof
+covers selection, closed position, isolation, duplicate/lower epoch no-op, lease, rollback, actual
+claim/output/requested event/consumer control, unavailable valuation, multi-boundary closure,
+and bounded sweep work. Missing-call, latest-boundary-only, and strict-higher-epoch-only
+mutations failed on representative PostgreSQL fixtures. The old full-sweep predicate also failed
+the sentinel equal-epoch regression before the fix. Real PostgreSQL further reproduced an
+intermediate restaged-day control absent at both explicit endpoints and a tab/NBSP-padded legacy
+security ID rolling back observation maintenance; both pass after the correction. Protected PR,
+exact-main, and canonical runtime evidence remain
+required under #1134. No API, formula, event shape, IAM, or topology change; the timeseries
+wiki source changes with this slice and requires publication/parity after merge.
+Canonical and endpoint-smoke reseeds also need to delete the new portfolio-owned observation
+and valuation-state rows before deleting their portfolio parent. A real PostgreSQL rerun
+reproduced the canonical foreign-key failure with the unmodified seed SQL; scoped cleanups now
+preserve unrelated portfolios. This is local validation operability, not a production cleanup
+or runtime acceptance claim.
+An exact-head review then found that history selection may be observed before its asynchronous
+valuation arrives: an equal-epoch historical job can complete using an older valued row. The
+materialization boundary now signals a durable security valuation change to the promotion path;
+the first sweep and targeted path rearm that security's selected historical day even when its
+history fact was already observed. A separate tenant-scoped per-fact valuation-state row records
+READY/UNAVAILABLE transitions, so a late failed valuation also rearms once, later recovery
+rearms once, and ordinary daily READY deliveries do not repeatedly reopen the old business day.
+An unchanged replay remains a no-op. PostgreSQL regressions reproduced both the stale COMPLETE
+control and repeated next-day rearm before correction, and cover higher- and same-epoch arrival,
+failure, recovery, and next-day stability.
+The valuation outcome is attributable only when the selected history epoch is no newer than
+the delivered snapshot epoch; an older same-security valuation cannot certify or fail a newer
+fact. A PostgreSQL mutation reproduced that mistaken attribution before the bound and passes
+after it.
+The durable outcome also carries valuation epoch/date chronology. An older FAILED delivery after
+a newer READY day cannot replace the READY state or reopen the selected historical control;
+same-epoch next-day READY remains stable. The regression checks these transitions in PostgreSQL.
+Final-head review exposed a separate dependent-day work multiplier: up to 1,000 affected days
+could each execute three portfolio-wide history selections. The application now passes affected
+days as one batch. A PostgreSQL transaction-local table materializes the latest per-security
+baseline and interval changes once; per-day job and observation writes reuse that indexed source
+without relaxing lease, source revision, rollback or closure semantics. A 64-day real-PostgreSQL
+regression checks one source-preparation statement, fixed baseline/change reads, old-day rearm,
+per-day observations, later opening/closure and all sweep markers. This is bounded source work,
+not a 100,000-transaction capacity certification. A deliberate unbatched-path mutation failed
+the 64-day PostgreSQL guard (zero batch-source statements instead of one); the restored path passed.
+The first hosted combined coverage run at signed head `9c2cc0c5e4` failed in two older
+direct-rollback migration tests: c168 tried to drop portfolio tenant uniqueness while the new
+c171 selected-history foreign keys still depended on it. The normal Alembic downgrade order is
+safe; those tests bypassed it. Focused real PostgreSQL reproduced both failures, then passed
+after test-scoped verification, explicit suspension and restoration of only those two foreign
+keys. A separate negative regression proves missing newer authority is refused before rollback.
+No production migration or constraint was weakened; final-head hosted rerun remains required.
+The next hosted rerun passed 9,946 unit tests and all affected PostgreSQL matrix jobs, but its
+combined gate measured only 35.82% line / 0% branch coverage on c171/c172: their migration
+regression was absent from the `critical-db-coverage` manifest. The bounded upgrade/rollback
+selector now runs in that measured PostgreSQL lane. Its real PostgreSQL proof also rejects an
+index name already owned by another table. Focused measured migration coverage is 98.51% lines
+and 87.5% branches; the unchanged critical-path guard passed locally. Hosted final-head and
+exact-main gates remain pending; no threshold was lowered.
+Final-head review also identified a distinct full-sweep close: a previously selected non-zero
+fact can become zero while its old business-date control is already COMPLETE at the new epoch.
+Real PostgreSQL reproduced the missing promotion (`0` instead of `1`). The full sweep now unions
+changed prior selected dates with current non-zero dates before replacing observations, and uses
+those former dates for equal-epoch restaging. Focused PostgreSQL red/green plus neighbouring
+failure and 64-day batch controls pass; final-head protected evidence must be rerun.
+The following hosted warning gate then caught a stale unit assertion tied to the old selected-only
+CTE alias. It now checks the actual deduplicated current-plus-prior date source and its stable
+date-based alternate key; focused repository unit tests pass 35/35. This was test-contract drift,
+not a reason to change the durable promotion or weaken the warning gate.
+
+CR-1731 CoreSnapshot portfolio tenant source fence (2026-09-21, merged and exact-main validated): the
 transport required matching tenant header/body authority, but the application port dropped that
 identity and the PostgreSQL source adapter selected a portfolio by globally unique portfolio id
 alone. A caller could therefore provide a self-consistent foreign tenant and receive the owner's
@@ -10,8 +100,10 @@ valuation, or reconciliation read. Focused unit proof verifies the typed call an
 actual registered route and PostgreSQL prove owner success, foreign absence, and ordinary absence.
 Removing only the tenant predicate makes the same regression return `200` with both owner
 positions. No IAM grant/default, public request or response shape, schema, migration, event,
-calculation, runtime topology, wiki source, or platform skill changes. Final-head PR and exact-main
-release evidence remain required under #1133.
+calculation, runtime topology, wiki source, or platform skill changes. PR #1135 merged at
+`bf480117ffbd9821e909511d852cf743e766829c`; exact-main Main Releasability run
+`35565464179` passed, including Integration Full and E2E Full. This is source/release evidence,
+not canonical runtime acceptance; #1134 records the separate historical control gap.
 
 CR-1729 Integration Full abnormal-exit evidence (2026-09-21, In Review): Core #1129 records
 intermittent hosted process exit 245 during the unchanged 1,000-member corporate-action release
@@ -1489,7 +1581,8 @@ Evidence and validation are maintained in the linked CR-1678 review document.
 
 | Review ID | Date | Scope / Pattern | Status | Findings | Actions Taken | Follow-up | Evidence / Sign-off |
 |---|---|---|---|---|---|---|---|
-| CR-1731 | 2026-09-21 | CoreSnapshot portfolio tenant source fence | Hardened | The route matched required tenant header/body authority, but the application port discarded it and PostgreSQL selected `Portfolio` by `portfolio_id` alone, allowing a self-consistent foreign tenant to receive owner positions and financial evidence. | Carried typed `TenantId` through the application port and required tenant plus portfolio predicates in the first durable source query, before all other CoreSnapshot fact reads. Added fast typed-boundary/early-stop tests and a production-route real-PostgreSQL owner/foreign/absent regression. | Require protected PR and exact-main release evidence before closing #1133. #798 remains open for its other bounded tranches. No IAM grant/default, public contract shape, schema/migration, calculation, wiki source, platform skill, or topology change. | Evidence: focused service suite `46 passed`; real PostgreSQL route proof `1 passed`; removing only the tenant SQL predicate made the regression fail because the foreign request returned `200` with both owner positions. Final-head GitHub evidence pending. |
+| CR-1732 | 2026-09-21 | Historical collective reconciliation control convergence | Hardened | A selected old SAP position-history business date retained only an epoch-0 control after later cash raised the portfolio collective epoch to 1; forward interval restaging did not include the old date. A later closure can hide an earlier selected business day, and a late changed fact can leave an equal-epoch completed control stale. | Added fenced latest-nonzero-history promotion at every affected boundary, including unavailable valuations. Migration `c171b2c3d532` records one full sweep per portfolio day/epoch and exact tenant-scoped selected-fact observations; later indexed per-security checks rearm changed equal-epoch history once while preserving duplicate no-op and active leases. Aggregation and reconciliation consumers produce the exact control. | Require protected PR, exact-main Integration Full, and governed canonical runtime proof before closing #1134. No API, formula, event shape, IAM, wiki source, or topology change. | Real PostgreSQL source/lease/rollback/consumer-control proof, migration upgrade/downgrade, 18 same-epoch deliveries, late security, seen-security restatement and replay, and multi-boundary closure passed. Missing-call, latest-boundary-only, and strict-higher-epoch-only mutations failed. Protected and runtime evidence pending. |
+| CR-1731 | 2026-09-21 | CoreSnapshot portfolio tenant source fence | Merged and exact-main validated | The route matched required tenant header/body authority, but the application port discarded it and PostgreSQL selected `Portfolio` by `portfolio_id` alone, allowing a self-consistent foreign tenant to receive owner positions and financial evidence. | Carried typed `TenantId` through the application port and required tenant plus portfolio predicates in the first durable source query, before all other CoreSnapshot fact reads. Added fast typed-boundary/early-stop tests and a production-route real-PostgreSQL owner/foreign/absent regression. | #798 remains open for other bounded tranches; #1134 records the separate canonical historical-control gap. No IAM grant/default, public contract shape, schema/migration, calculation, wiki source, platform skill, or topology change. | Focused service suite `46 passed`; real PostgreSQL route proof `1 passed`; removed tenant SQL predicate made foreign request return `200` with owner positions. PR #1135 merged at `bf480117ffbd9821e909511d852cf743e766829c`; exact-main run `35565464179` passed Integration Full and E2E Full. |
 | CR-1730 | 2026-09-21 | Retired Core query-route E2E prerequisite and test value | Merged and exact-main validated | Stale-test and race-condition pattern: concentration and review E2E fixtures queued portfolio/transaction/price work and waited for valuation only to assert that migrated Core routes return 404/410. Exact-main run `35550201835` queued the concentration portfolio, then correctly rejected a transaction 113 ms later before durable tenant ownership, making release red without testing the retired-route contract. | Removed 473 lines of unrelated setup and duplicate endpoint cases; kept one live HTTP retirement check per route; added two fast ASGI route checks; reconciled the E2E value ledger to 68 full nodes and corrected the test plan. Production tenant admission, calculation pipelines, and runtime topology are unchanged. | Continue the other 68 node-level value reviews under #729. No wiki source or platform-skill change: this is repository-local test execution practice. | Evidence: PR #1132 merged at `8a2b586b816f96595d8abe72afd094a2d0421484`; reviewed head `b37a4c89efde67ce14b62080a66e559991c61711` has the same tree; exact-main Main Releasability `35558229776` passed all 28 executable jobs including Integration Full and E2E Full; #1130 is closed. |
 | CR-1679 | 2026-08-09 | DPM portfolio-universe canonical source authority | Merged, exact-main validated, wiki published, and downstream authority handed off | Complete READY candidate responses exposed the shared unavailable content digest, preventing downstream source-ref verification; request-scope identity could not truthfully be restored as batch lineage. | Hash normalized tenant/as-of/filter/page scope, canonical decoded cursor, and every ordered mandate-binding source/evidence field only for complete READY responses; retain unavailable identity for empty/truncated results; keep `source_batch_fingerprint` null; publish coherent COMPLETE/current freshness; enforce the canonical three-candidate live path. | No Core implementation gap remains. Downstream owners retain responsibility for their fresh Manage/Gateway/Workbench/Idea journey proof; Core must not relabel content identity as ingestion-batch lineage. No route, DTO property, schema/migration, Kafka, auth, or topology change was required. | Evidence: [CR-1189-SOURCE-BATCH-FINGERPRINT-SEMANTICS.md](./codebase-reviews/CR-1189-SOURCE-BATCH-FINGERPRINT-SEMANTICS.md); PR #924 merged at `da08975ec`; exact-main Main Releasability `31292307294` passed; canonical `PB_SG_GLOBAL_BAL_001` READY/COMPLETE/CURRENT proof and wiki publication `facdd4e` are recorded on closed issue #882. |
 | CR-1683 | 2026-08-09 | Corporate-action parent graph persistence and restart-safe readiness | Manifest persistence, ordered release ledger, and source-manifest consumer hardened locally; child parking/release execution and protected-PR evidence pending | #480 had no normalized, book-scoped authority for parent events, versioned child manifests, dependency order, append-only observations, or reproducible readiness decisions. Initial review also found that cross-book children, parent aliases, discontinuous manifest versions, incomplete graphs, missing or stale child observations, mutable history, transaction-unsafe CAS conflicts, serializer drift, a lifetime one-READY-per-manifest index, and a version-1 correction cutoff that could forgive rogue pre-manifest children could produce false or unrecoverable readiness. | Added normalized parent-graph and release/member ledgers with immutable source and transaction-payload fingerprints, correction-safe generations, database-enforced authority, leased/fenced ordered progress, and restart-safe claims. Added strict `CorporateActionManifestReceivedEvent:v1`, deterministic source hashing and portfolio transaction-group keys, an active 12-partition `corporate_action.manifest.received` fact contract, fail-closed Kafka delivery, and lightweight graph-UoW composition. | Complete the ingestion publisher, wire child readiness before financial mutation, park incomplete cohorts, execute READY releases in persisted dependency order, and prove crash/replay/correction behavior before protected PR and exact-main closure. Capability remains `limited`. The design deliberately retains mature Kafka/PostgreSQL/Pydantic/SQLAlchemy/Alembic components and the existing deployable service; no new framework, datastore, container image, or runtime split is justified. | Earlier persistence proof remains recorded at signed checkpoint `563936438` and Remote Feature Lane `31286711082`. The source-manifest checkpoint is pushed at signed head `4378b58ac`: 13 contract, 82 config/supportability, 12 runtime-contract, 5 mapping/graph, 8 consumer, and 7 composition/manager tests passed with scoped Ruff, strict MyPy, JSON parsing, and diff checks. GitHub evidence: issue #480 comment `5248330803`. |

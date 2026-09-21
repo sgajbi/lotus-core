@@ -142,13 +142,22 @@ class MaterializePositionTimeseries:
             command.correlation_id,
         )
         if durable_change_dates:
-            await repository.restage_aggregation_jobs_in_carry_forward_interval(
+            restaged_dates = await repository.restage_aggregation_jobs_in_carry_forward_interval(
                 current_snapshot.portfolio_id,
                 start_date=durable_change_dates[0],
                 end_date_exclusive=dependent_propagation.carry_forward_end_exclusive,
                 excluded_dates=durable_change_dates,
                 target_epoch=current_snapshot.epoch,
                 correlation_id=command.correlation_id,
+            )
+            await repository.promote_selected_history_aggregation_jobs_for_dates(
+                current_snapshot.portfolio_id,
+                security_id=current_snapshot.security_id,
+                as_of_dates=sorted(set(durable_change_dates) | set(restaged_dates)),
+                target_epoch=current_snapshot.epoch,
+                correlation_id=command.correlation_id,
+                valuation_outcome="READY",
+                valuation_date=current_snapshot.date,
             )
         return PositionTimeseriesMaterializationResult(
             snapshot_found=True,
@@ -205,13 +214,22 @@ class MaterializePositionTimeseries:
             excluded_dates=explicitly_staged_dates,
             epoch=current_snapshot.epoch,
         )
-        await repository.restage_aggregation_jobs_in_carry_forward_interval(
+        restaged_dates = await repository.restage_aggregation_jobs_in_carry_forward_interval(
             current_snapshot.portfolio_id,
             start_date=current_snapshot.date,
             end_date_exclusive=carry_forward_end_exclusive,
             excluded_dates=explicitly_staged_dates,
             target_epoch=current_snapshot.epoch,
             correlation_id=correlation_id,
+        )
+        await repository.promote_selected_history_aggregation_jobs_for_dates(
+            current_snapshot.portfolio_id,
+            security_id=current_snapshot.security_id,
+            as_of_dates=sorted(set(explicitly_staged_dates) | set(restaged_dates)),
+            target_epoch=current_snapshot.epoch,
+            correlation_id=correlation_id,
+            valuation_outcome="UNAVAILABLE",
+            valuation_date=current_snapshot.date,
         )
         current_day_changed = current_snapshot.date in invalidated_dates
         return PositionTimeseriesMaterializationResult(

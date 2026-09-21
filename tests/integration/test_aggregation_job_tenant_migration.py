@@ -12,6 +12,11 @@ from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from tests.test_support.selected_history_migration_dependencies import (
+    restore_selected_history_portfolio_foreign_keys,
+    suspend_selected_history_portfolio_foreign_keys,
+)
+
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
 MIGRATION = (
@@ -53,6 +58,29 @@ def _bind_operations(migration: dict[str, Any], connection) -> None:
     migration["downgrade"].__globals__["op"] = operations
 
 
+def test_historical_rollback_setup_refuses_missing_newer_tenant_foreign_key(
+    db_engine,
+    clean_db,
+) -> None:
+    with db_engine.begin() as connection:
+        missing_key = connection.begin_nested()
+        connection.execute(
+            text(
+                "ALTER TABLE portfolio_selected_history_observations "
+                "DROP CONSTRAINT fk_portfolio_selected_history_observations_tenant_portfolio"
+            )
+        )
+        with pytest.raises(AssertionError):
+            suspend_selected_history_portfolio_foreign_keys(connection)
+        missing_key.rollback()
+        assert "fk_portfolio_selected_history_observations_tenant_portfolio" in {
+            foreign_key["name"]
+            for foreign_key in inspect(connection).get_foreign_keys(
+                "portfolio_selected_history_observations"
+            )
+        }
+
+
 def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
     db_engine,
     clean_db,
@@ -60,6 +88,7 @@ def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        suspend_selected_history_portfolio_foreign_keys(connection)
         _bind_operations(migration, connection)
         if "tenant_id" in {
             column["name"]
@@ -113,6 +142,7 @@ def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
             {"portfolio_id": "PORT-AGG-A", "aggregation_date": "2026-09-01"},
         )
         migration["upgrade"]()
+        restore_selected_history_portfolio_foreign_keys(connection)
 
         assert (
             connection.scalar(
