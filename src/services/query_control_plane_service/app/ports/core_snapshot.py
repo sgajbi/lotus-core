@@ -9,6 +9,7 @@ from portfolio_common.domain.holdings_reconciliation import (
     FinancialReconciliationControl,
     HoldingsReconciliationScope,
 )
+from portfolio_common.domain.tenant import TenantId
 
 from ..domain.core_snapshot import (
     CoreSnapshotFxRate,
@@ -22,7 +23,9 @@ from ..domain.core_snapshot import (
 class CoreSnapshotSourceReader(Protocol):
     """Read portfolio state and reference evidence without exposing persistence models."""
 
-    async def get_portfolio(self, portfolio_id: str) -> CoreSnapshotPortfolio | None: ...
+    async def get_portfolio(
+        self, *, tenant_id: TenantId, portfolio_id: str
+    ) -> CoreSnapshotPortfolio | None: ...
 
     async def get_position_snapshot(
         self, *, portfolio_id: str, as_of_date: date

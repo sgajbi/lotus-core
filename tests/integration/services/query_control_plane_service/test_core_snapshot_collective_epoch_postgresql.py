@@ -29,6 +29,7 @@ CONTROL_TIME = FACT_TIME + timedelta(minutes=5)
 VALUATION_TIME = CONTROL_TIME + timedelta(minutes=5)
 TENANT = "tenant-core-collective-epoch"
 PORTFOLIO = "CORE_COLLECTIVE_EPOCH_PROOF"
+FOREIGN_TENANT = "tenant-core-collective-epoch-foreign"
 
 
 async def _seed_collective_sources(session: AsyncSession, *, carry_forward: bool) -> None:
@@ -209,6 +210,60 @@ async def _mutate_source_evidence(session: AsyncSession, *, mutation: str) -> No
             )
         )
     await session.commit()
+
+
+async def _request_core_snapshot(
+    client: httpx.AsyncClient,
+    *,
+    tenant_id: str,
+    portfolio_id: str = PORTFOLIO,
+) -> httpx.Response:
+    return await client.post(
+        f"/integration/portfolios/{portfolio_id}/core-snapshot",
+        headers={"X-Tenant-Id": tenant_id},
+        json={
+            "tenant_id": tenant_id,
+            "consumer_system": "lotus-advise",
+            "as_of_date": DAY.isoformat(),
+            "snapshot_mode": "BASELINE",
+            "reporting_currency": "USD",
+            "sections": ["portfolio_state", "portfolio_totals"],
+        },
+    )
+
+
+async def test_core_snapshot_portfolio_selection_is_tenant_scoped_in_postgresql(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    """A matching foreign header/body must not cross the durable portfolio owner fence."""
+
+    await _seed_collective_sources(async_db_session, carry_forward=False)
+
+    async def database_session():
+        yield async_db_session
+
+    assert get_async_db_session not in app.dependency_overrides
+    app.dependency_overrides[get_async_db_session] = database_session
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            owner = await _request_core_snapshot(client, tenant_id=TENANT)
+            foreign = await _request_core_snapshot(client, tenant_id=FOREIGN_TENANT)
+            absent = await _request_core_snapshot(
+                client,
+                tenant_id=TENANT,
+                portfolio_id="CORE_COLLECTIVE_EPOCH_ABSENT",
+            )
+
+        assert owner.status_code == 200, owner.text
+        assert len(owner.json()["sections"]["portfolio_state"]) == 2
+        assert foreign.status_code == 404, foreign.text
+        assert absent.status_code == 404, absent.text
+        assert foreign.json()["status"] == absent.json()["status"] == 404
+        assert foreign.json()["title"] == absent.json()["title"]
+    finally:
+        app.dependency_overrides.pop(get_async_db_session)
 
 
 @pytest.mark.parametrize(

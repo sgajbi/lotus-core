@@ -20,6 +20,7 @@ from portfolio_common.domain.holdings_reconciliation import (
     FinancialReconciliationControl,
     HoldingsReconciliationScope,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.reconciliation_quality import FINANCIAL_RECONCILIATION_STAGE
 from sqlalchemy import and_, func, select, tuple_
@@ -40,9 +41,16 @@ class SqlAlchemyCoreSnapshotSourceReader:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_portfolio(self, portfolio_id: str) -> CoreSnapshotPortfolio | None:
+    async def get_portfolio(
+        self, *, tenant_id: TenantId, portfolio_id: str
+    ) -> CoreSnapshotPortfolio | None:
         result = await self._session.execute(
-            select(Portfolio).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+            select(Portfolio)
+            .where(
+                Portfolio.tenant_id == tenant_id.value,
+                Portfolio.portfolio_id == portfolio_id,
+            )
+            .limit(1)
         )
         row = result.scalars().first()
         if row is None:

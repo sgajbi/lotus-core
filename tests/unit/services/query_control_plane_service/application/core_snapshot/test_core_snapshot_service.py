@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.domain.holdings_reconciliation import FinancialReconciliationControl
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     COMPLETE,
@@ -267,6 +268,11 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
 
     response = await service.get_core_snapshot("PORT_001", request)
 
+    (_, portfolio_repo, _, _, _, _) = mock_dependencies
+    portfolio_repo.get_by_id.assert_awaited_once_with(
+        tenant_id=TenantId(TEST_TENANT_ID),
+        portfolio_id="PORT_001",
+    )
     assert response.portfolio_id == "PORT_001"
     assert response.sections.portfolio_state is not None
     assert len(response.sections.portfolio_state) == 1
@@ -1045,7 +1051,7 @@ async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_de
 
 
 async def test_core_snapshot_raises_when_portfolio_missing(mock_dependencies):
-    (_, portfolio_repo, _, _, _, _) = mock_dependencies
+    (position_repo, portfolio_repo, _, _, _, _) = mock_dependencies
     portfolio_repo.get_by_id.return_value = None
     service = _service(mock_dependencies)
     request = CoreSnapshotRequest(
@@ -1056,6 +1062,14 @@ async def test_core_snapshot_raises_when_portfolio_missing(mock_dependencies):
 
     with pytest.raises(CoreSnapshotNotFoundError):
         await service.get_core_snapshot("PORT_404", request)
+
+    portfolio_repo.get_by_id.assert_awaited_once_with(
+        tenant_id=TenantId(TEST_TENANT_ID),
+        portfolio_id="PORT_404",
+    )
+    position_repo.get_latest_positions_by_portfolio_as_of_date.assert_not_awaited()
+    position_repo.get_latest_position_history_by_portfolio_as_of_date.assert_not_awaited()
+    position_repo.get_financial_reconciliation_controls.assert_not_awaited()
 
 
 async def test_core_snapshot_raises_when_simulation_session_missing(mock_dependencies):
