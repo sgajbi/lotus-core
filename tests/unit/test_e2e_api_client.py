@@ -58,6 +58,20 @@ def test_e2e_client_preserves_malformed_payload_for_server_validation() -> None:
     assert client.session.post.call_args.kwargs["json"] == malformed_payload
 
 
+def test_query_can_observe_a_retired_route_404_without_masking_normal_errors() -> None:
+    client = _client()
+    response = SimpleNamespace(
+        status_code=404, raise_for_status=Mock(side_effect=RuntimeError("404"))
+    )
+    client.session.get = Mock(return_value=response)
+
+    assert client.query("/retired", raise_for_status=False) is response
+    response.raise_for_status.assert_not_called()
+    with pytest.raises(RuntimeError, match="404"):
+        client.query("/retired")
+    assert client.session.get.call_args.args == ("http://query/retired",)
+
+
 def test_poll_for_data_routes_control_plane_readiness_to_control_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

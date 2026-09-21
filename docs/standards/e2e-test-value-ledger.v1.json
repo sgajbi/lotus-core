@@ -8,7 +8,7 @@
     "smoke_suite": "e2e-smoke",
     "runtime_mode": "live_worker",
     "environment_profile": "e2e",
-    "expected_full_node_count": 70,
+    "expected_full_node_count": 68,
     "expected_smoke_node_count": 7,
     "baseline_run": "github-actions:29185995035",
     "baseline_full_runtime_seconds": 1082,
@@ -120,6 +120,22 @@
         "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py"
       ],
       "non_duplication_rationale": "Component tests prove formulas and mappings; live workflow nodes uniquely prove asynchronous durable state reaches the final analytics and review contracts."
+    },
+    "retired-query-routes": {
+      "owner": "lotus-core/query-service",
+      "invariant": "Migrated concentration and portfolio-review routes remain unavailable on Core's live query HTTP surface.",
+      "production_defect_class": "A retired Core route is accidentally reintroduced or gives a successful but unsupported analytics response.",
+      "fixture_boundary": "No portfolio, transaction, price, or valuation seed; route retirement is independent of portfolio state.",
+      "external_dependencies": [
+        "Query HTTP API"
+      ],
+      "source_contracts": [
+        "docs/RFCs/RFC 056 - Remove Legacy Query Analytics and Reporting Endpoints.md"
+      ],
+      "lower_layer_proofs": [
+        "tests/integration/services/query_service/test_main_app.py"
+      ],
+      "non_duplication_rationale": "The lower-layer ASGI route check is fast; the live HTTP node retains only deployed-routing retirement proof and never exercises the unrelated valuation pipeline."
     },
     "fx-contract-lifecycle": {
       "owner": "lotus-core/fx-transactions",
@@ -248,8 +264,7 @@
     {"ownership_id": "e2e-008", "nodeid": "tests/e2e/test_cashflow_pipeline.py::test_cashflow_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-009", "nodeid": "tests/e2e/test_complex_portfolio_lifecycle.py::test_complex_lifecycle_cross_api_consistency", "capability_profile": "complex-portfolio-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-010", "nodeid": "tests/e2e/test_complex_portfolio_lifecycle.py::test_complex_lifecycle_positions_contract", "capability_profile": "complex-portfolio-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-011", "nodeid": "tests/e2e/test_concentration_pipeline.py::test_bulk_concentration_e2e", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-012", "nodeid": "tests/e2e/test_concentration_pipeline.py::test_issuer_concentration_e2e", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-011", "nodeid": "tests/e2e/test_concentration_pipeline.py::test_concentration_endpoint_is_disabled", "capability_profile": "retired-query-routes", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-013", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_final_position_state_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-014", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_realized_pnl_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-015", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_unrealized_pnl_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
@@ -292,8 +307,7 @@
     {"ownership_id": "e2e-051", "nodeid": "tests/e2e/test_reliability_pipeline.py::test_transaction_requires_durable_tenant_owned_portfolio", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-052", "nodeid": "tests/e2e/test_reprocessing_workflow.py::test_back_dated_transaction_triggers_reprocessing_and_corrects_state", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-053", "nodeid": "tests/e2e/test_reprocessing_workflow.py::test_reprocess_api_rearms_current_valuation_after_transaction_correction", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-054", "nodeid": "tests/e2e/test_review_pipeline.py::test_portfolio_review_endpoint", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
-    {"ownership_id": "e2e-055", "nodeid": "tests/e2e/test_review_pipeline.py::test_portfolio_review_for_empty_portfolio", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-054", "nodeid": "tests/e2e/test_review_pipeline.py::test_portfolio_review_endpoint_is_disabled", "capability_profile": "retired-query-routes", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-056", "nodeid": "tests/e2e/test_summary_pipeline.py::test_portfolio_summary_endpoint", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-057", "nodeid": "tests/e2e/test_timeseries_contracts.py::test_analytics_input_position_timeseries_contract_day_2_returns_expected_rows", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-058", "nodeid": "tests/e2e/test_timeseries_contracts.py::test_analytics_input_timeseries_contract_day_1_returns_expected_rows", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},

@@ -18,7 +18,10 @@ The following critical paths will be covered by the E2E test suite.
 - **`test_5_day_workflow.py` (Current)**: Simulates a realistic multi-day sequence of deposits, buys, sells, and dividends, verifying the final state and realized P&L calculations.
 - **`test_dual_currency_workflow.py`**: Validates the system's ability to handle a portfolio in one currency (e.g., USD) trading an instrument in another (e.g., EUR), ensuring all FX conversions for cost basis, P&L, and valuation are correct.
 - **`test_avco_workflow.py`**: Verifies the entire pipeline for a portfolio explicitly configured to use the Average Cost (AVCO) accounting method.
-- **`test_complex_portfolio_lifecycle.py`**: End-to-end real-world lifecycle with mixed cashflows, multi-currency trades, FX gaps, and cross-API consistency checks across Summary, Review, Integration Contract, Position Analytics, Support, and Lineage endpoints.
+- **`test_complex_portfolio_lifecycle.py`**: End-to-end portfolio lifecycle with mixed cashflows, multi-currency trades, FX gaps, supported source-data and position reads, and explicit disabled-route checks where legacy analytics moved to another product.
+
+### Retired Query Routes
+- **`test_concentration_pipeline.py` and `test_review_pipeline.py`**: Call the live Core query HTTP surface to verify migrated concentration and review routes remain unavailable under the RFC 056 `404`/`410` compatibility policy. A `404` also probes GET so an active POST route returning portfolio-not-found does not pass. They do not seed portfolios, transactions, or valuations. The fast ASGI counterpart inspects registered routes, including hidden routes, and proves the guard rejects a restored POST route.
 
 ### Reprocessing Scenarios
 - **`test_reprocessing_workflow.py`**: Simulates an initial state over several days, then ingests a back-dated transaction. Asserts that the system correctly triggers an epoch increment, re-processes the history, and arrives at the correct final state with accurate P&L.
@@ -27,4 +30,4 @@ The following critical paths will be covered by the E2E test suite.
 ### Resilience & Idempotency Scenarios
 - **`test_reliability_pipeline.py`**:
   - **Idempotency**: Verifies that ingesting the exact same data entities (e.g., an instrument) twice does not create duplicate records.
-  - **Consumer Retry**: Validates that a consumer (e.g., `persistence-service`) correctly retries and eventually succeeds if a dependency (like the portfolio record) is ingested late.
+  - **Tenant-owned transaction admission**: Verifies that a transaction is refused before its portfolio is durably visible to the admitted tenant, then accepted after a supported tenant-scoped read confirms materialization. A `202` portfolio ingest is queue acknowledgement, not durable ownership proof.

@@ -93,11 +93,12 @@ class E2EApiClient:
         response.raise_for_status()
         return response
 
-    def query(self, endpoint: str) -> requests.Response:
+    def query(self, endpoint: str, *, raise_for_status: bool = True) -> requests.Response:
         """Retrieves data from a specified query endpoint."""
         url = f"{self.query_url}{endpoint}"
         response = self.session.get(url, timeout=10)
-        response.raise_for_status()
+        if raise_for_status:
+            response.raise_for_status()
         return response
 
     def post_query(
