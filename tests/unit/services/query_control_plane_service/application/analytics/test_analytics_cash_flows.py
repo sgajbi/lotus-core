@@ -144,15 +144,17 @@ def test_internal_income_receipt_preserves_authoritative_cash_open(
 
 
 @pytest.mark.parametrize("prior_close", [None, Decimal("0")])
+@pytest.mark.parametrize("snapshot_bod_flow", [Decimal("77528.75"), Decimal("0")])
 def test_new_internally_funded_holding_keeps_zero_source_open(
     prior_close: Decimal | None,
+    snapshot_bod_flow: Decimal,
 ) -> None:
     row = SimpleNamespace(
         security_id="FO_EQ_AAPL_US",
         asset_class="Equity",
         bod_market_value=Decimal("0"),
         eod_market_value=Decimal("77374.08"),
-        bod_cashflow_position=Decimal("77528.75"),
+        bod_cashflow_position=snapshot_bod_flow,
     )
     acquisition = CashFlowObservation(
         amount=Decimal("77528.75"),
@@ -168,6 +170,87 @@ def test_new_internally_funded_holding_keeps_zero_source_open(
         cash_flows=[acquisition],
         has_portfolio_external_flow=False,
     ) == Decimal("0")
+
+
+@pytest.mark.parametrize(
+    ("timing", "classification"),
+    [("eod", "INVESTMENT_OUTFLOW"), ("bod", "INVESTMENT_INFLOW")],
+)
+def test_zero_open_without_trade_date_acquisition_keeps_conservative_fallback(
+    timing: str, classification: str
+) -> None:
+    row = SimpleNamespace(
+        security_id="FO_EQ_AAPL_US",
+        asset_class="Equity",
+        bod_market_value=Decimal("0"),
+        eod_market_value=Decimal("49"),
+        bod_cashflow_position=Decimal("0"),
+    )
+    unrelated_flow = CashFlowObservation(
+        amount=Decimal("50"),
+        timing=timing,
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification=classification,
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=None,
+        cash_flows=[unrelated_flow],
+        has_portfolio_external_flow=False,
+    ) == Decimal("49")
+
+
+@pytest.mark.parametrize("prior_close", [None, Decimal("0")])
+def test_first_day_internal_cash_settlement_keeps_sourced_zero_open(
+    prior_close: Decimal | None,
+) -> None:
+    row = SimpleNamespace(
+        security_id="CASH_USD_SETTLEMENT",
+        asset_class="Cash",
+        bod_market_value=Decimal("0"),
+        eod_market_value=Decimal("-1000"),
+        bod_cashflow_position=Decimal("0"),
+    )
+    settlement = CashFlowObservation(
+        amount=Decimal("-1000"),
+        timing="eod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification="TRANSFER",
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=prior_close,
+        cash_flows=[settlement],
+        has_portfolio_external_flow=False,
+    ) == Decimal("0")
+
+
+def test_unreconciled_first_day_cash_settlement_keeps_conservative_fallback() -> None:
+    row = SimpleNamespace(
+        security_id="CASH_USD_SETTLEMENT",
+        asset_class="Cash",
+        bod_market_value=Decimal("0"),
+        eod_market_value=Decimal("-900"),
+        bod_cashflow_position=Decimal("0"),
+    )
+    settlement = CashFlowObservation(
+        amount=Decimal("-1000"),
+        timing="eod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification="TRANSFER",
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=None,
+        cash_flows=[settlement],
+        has_portfolio_external_flow=False,
+    ) == Decimal("-900")
 
 
 @pytest.mark.parametrize(

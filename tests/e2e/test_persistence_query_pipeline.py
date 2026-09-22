@@ -40,6 +40,9 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
             ]
         },
     )
+    # Portfolio ingestion is asynchronous. Transaction admission checks durable
+    # tenant ownership, so wait for the source row before submitting a buy.
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
     e2e_api_client.ingest(
         "/ingest/instruments",
         {
@@ -105,10 +108,6 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
     )
 
     # Poll all endpoints to ensure data is ready before tests run
-    e2e_api_client.poll_for_data(
-        f"/portfolios?portfolio_id={portfolio_id}",
-        lambda data: data.get("portfolios") and len(data["portfolios"]) == 1,
-    )
     e2e_api_client.poll_for_data(
         f"/instruments?security_id={security_id}",
         lambda data: data.get("instruments") and len(data["instruments"]) == 1,
