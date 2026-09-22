@@ -25,23 +25,16 @@ def _dual_leg_timeseries_rows_are_reconciled(
     cash_quantity = Decimal(str(cash_row["quantity"]))
 
     return (
-        stock_beginning_value == Decimal("1000")
+        stock_beginning_value == Decimal("0")
         and stock_ending_value == Decimal("1000")
         and cash_quantity == Decimal("-1000")
         and stock_flow_total == Decimal("1000")
         and cash_flow_total == Decimal("-1000")
         and stock_flow_total + cash_flow_total == Decimal("0")
-        and cash_beginning_value in {Decimal("0"), Decimal("-1000")}
-        and cash_ending_value in {Decimal("0"), Decimal("-1000")}
-        and cash_beginning_value == cash_ending_value
-        and (
-            cash_beginning_value == Decimal("0")
-            or stock_beginning_value + cash_beginning_value == Decimal("0")
-        )
-        and (
-            cash_ending_value == Decimal("0")
-            or stock_ending_value + cash_ending_value == Decimal("0")
-        )
+        and cash_beginning_value == Decimal("0")
+        and cash_ending_value == Decimal("-1000")
+        and stock_beginning_value + cash_beginning_value == Decimal("0")
+        and stock_ending_value + cash_ending_value == Decimal("0")
     )
 
 
@@ -132,19 +125,16 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
     cash_ending_value = Decimal(str(cash_row["ending_market_value_position_currency"]))
     cash_quantity = Decimal(str(cash_row["quantity"]))
 
-    assert stock_beginning_value == Decimal("1000")
+    assert stock_beginning_value == Decimal("0")
     assert stock_ending_value == Decimal("1000")
-    assert cash_beginning_value in {Decimal("0"), Decimal("-1000")}
-    assert cash_ending_value in {Decimal("0"), Decimal("-1000")}
-    assert cash_beginning_value == cash_ending_value
+    assert cash_beginning_value == Decimal("0")
+    assert cash_ending_value == Decimal("-1000")
     assert cash_quantity == Decimal("-1000")
     assert stock_flow_total == Decimal("1000")
     assert cash_flow_total == Decimal("-1000")
     assert stock_flow_total + cash_flow_total == Decimal("0")
-    if cash_beginning_value != Decimal("0"):
-        assert stock_beginning_value + cash_beginning_value == Decimal("0")
-    if cash_ending_value != Decimal("0"):
-        assert stock_ending_value + cash_ending_value == Decimal("0")
+    assert stock_beginning_value + cash_beginning_value == Decimal("0")
+    assert stock_ending_value + cash_ending_value == Decimal("0")
     assert [(flow["cash_flow_type"], flow["flow_scope"]) for flow in stock_row["cash_flows"]] == [
         ("internal_trade_flow", "internal")
     ]

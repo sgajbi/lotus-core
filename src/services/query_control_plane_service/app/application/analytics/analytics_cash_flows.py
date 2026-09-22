@@ -119,6 +119,7 @@ def effective_beginning_market_value(
         stored_beginning=stored_beginning,
         previous_eod_market_value=previous_eod_market_value,
         bod_position_flow=bod_position_flow,
+        cash_flows=cash_flows,
         ending=ending,
         has_portfolio_external_flow=has_portfolio_external_flow,
         has_internal_position_flow=has_internal_position_flow,
@@ -129,6 +130,18 @@ def effective_beginning_market_value(
         row=row,
         stored_beginning=stored_beginning,
         previous_eod_market_value=previous_eod_market_value,
+        has_portfolio_external_flow=has_portfolio_external_flow,
+        has_internal_position_flow=has_internal_position_flow,
+    ):
+        return stored_beginning
+
+    if has_sourced_zero_open_for_first_day_cash_settlement(
+        row=row,
+        stored_beginning=stored_beginning,
+        previous_eod_market_value=previous_eod_market_value,
+        bod_position_flow=bod_position_flow,
+        cash_flows=cash_flows,
+        ending=ending,
         has_portfolio_external_flow=has_portfolio_external_flow,
         has_internal_position_flow=has_internal_position_flow,
     ):
@@ -211,6 +224,7 @@ def has_sourced_zero_open_for_internal_acquisition(
     stored_beginning: Decimal,
     previous_eod_market_value: Decimal | None,
     bod_position_flow: Decimal,
+    cash_flows: list[CashFlowObservation],
     ending: Decimal,
     has_portfolio_external_flow: bool,
     has_internal_position_flow: bool,
@@ -218,13 +232,25 @@ def has_sourced_zero_open_for_internal_acquisition(
     """Do not preload a newly bought position into portfolio opening capital.
 
     The durable zero opening and absent prior holding agree; the sourced BOD
-    internal flow supplies acquisition capital. Using today's EOD or the flow
-    amount as opening capital double-counts the purchase in portfolio TWR.
+    internal flow supplies acquisition capital. For a trade whose cashflow is
+    settlement-dated, the snapshot BOD-flow column may still be zero; the
+    normalized trade-date position flow is the corroborating evidence. Using
+    today's EOD or the flow amount as opening capital double-counts the purchase.
     """
     return bool(
         stored_beginning == 0
         and previous_eod_market_value in (None, Decimal("0"))
-        and bod_position_flow > 0
+        and (
+            bod_position_flow > 0
+            or any(
+                flow.amount > 0
+                and flow.timing == "bod"
+                and flow.flow_scope == "internal"
+                and flow.cash_flow_type == "internal_trade_flow"
+                and flow.source_classification == "INVESTMENT_OUTFLOW"
+                for flow in cash_flows
+            )
+        )
         and ending > 0
         and has_internal_position_flow
         and not has_portfolio_external_flow
@@ -241,6 +267,41 @@ def is_internal_cash_book_settlement(
         is_cash_book_position(row)
         and not has_portfolio_external_flow
         and has_internal_position_flow
+    )
+
+
+def has_sourced_zero_open_for_first_day_cash_settlement(
+    *,
+    row: PositionValuationObservation,
+    stored_beginning: Decimal,
+    previous_eod_market_value: Decimal | None,
+    bod_position_flow: Decimal,
+    cash_flows: list[CashFlowObservation],
+    ending: Decimal,
+    has_portfolio_external_flow: bool,
+    has_internal_position_flow: bool,
+) -> bool:
+    """Keep zero opening when an EOD internal transfer fully explains new cash.
+
+    A first-day cash leg of a paired purchase has no prior capital. Preloading
+    its negative EOD balance into BOD would break the paired position opening;
+    only exact source-flow reconciliation permits the zero to survive.
+    """
+    return bool(
+        is_cash_book_position(row)
+        and stored_beginning == 0
+        and previous_eod_market_value in (None, Decimal("0"))
+        and bod_position_flow == 0
+        and ending != 0
+        and has_internal_position_flow
+        and not has_portfolio_external_flow
+        and all(
+            flow.timing == "eod"
+            and flow.cash_flow_type == "internal_trade_flow"
+            and flow.source_classification == "TRANSFER"
+            for flow in cash_flows
+        )
+        and sum((flow.amount for flow in cash_flows), Decimal("0")) == ending
     )
 
 

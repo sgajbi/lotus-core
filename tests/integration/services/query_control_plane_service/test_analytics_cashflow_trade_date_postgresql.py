@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -50,6 +50,7 @@ DEPOSIT_DAY = date(2026, 4, 13)
 INCOME_PRIOR_DAY = date(2026, 3, 10)
 INCOME_DAY = date(2026, 3, 11)
 ACQUISITION_DAY = date(2026, 3, 12)
+ACQUISITION_SETTLEMENT_DAY = ACQUISITION_DAY + timedelta(days=2)
 
 
 def _transaction(transaction_id: str, security_id: str, transaction_type: str) -> Transaction:
@@ -143,7 +144,11 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
                 instrument_id=security_id,
                 security_id=security_id,
                 transaction_date=datetime(day.year, day.month, day.day, 9, tzinfo=UTC),
-                settlement_date=datetime(day.year, day.month, day.day, 16, tzinfo=UTC),
+                settlement_date=datetime.combine(
+                    ACQUISITION_SETTLEMENT_DAY if day == ACQUISITION_DAY else day,
+                    time(16),
+                    tzinfo=UTC,
+                ),
                 transaction_type=transaction_type,
                 quantity=Decimal("10"),
                 price=Decimal("1"),
@@ -179,7 +184,7 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
         (INCOME_DAY, "BOND", "400", "404", "0", "1", "INCOME-BOND"),
         (ACQUISITION_DAY, "CASH", "110", "60", "0", "60", "ACQUISITION-CASH"),
         (ACQUISITION_DAY, "BOND", "404", "406", "0", "1", "INCOME-BOND"),
-        (ACQUISITION_DAY, "EQUITY", "0", "49", "50", "1", "ACQUISITION-EQUITY"),
+        (ACQUISITION_DAY, "EQUITY", "0", "49", "0", "1", "ACQUISITION-EQUITY"),
     ):
         session.add(
             PositionHistory(
@@ -233,7 +238,7 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
                 (
                     "ACQUISITION-CASH",
                     "CASH",
-                    ACQUISITION_DAY,
+                    ACQUISITION_SETTLEMENT_DAY,
                     "INVESTMENT_INFLOW",
                     "EOD",
                     "50",
@@ -241,7 +246,7 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
                 (
                     "ACQUISITION-EQUITY",
                     "EQUITY",
-                    ACQUISITION_DAY,
+                    ACQUISITION_SETTLEMENT_DAY,
                     "INVESTMENT_OUTFLOW",
                     "BOD",
                     "-50",

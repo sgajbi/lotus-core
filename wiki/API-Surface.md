@@ -223,8 +223,15 @@ from portfolio return and manufacture a negative cash-group return. The cash leg
 internal position flow, not an external client contribution; the product leg retains its income
 classification. For an internally funded new holding, a sourced zero opening and absent prior
 capital remain zero: the BOD acquisition flow supplies the invested capital, so serving the new
-holding's EOD value as portfolio opening capital would manufacture a trade-day loss. An
-inconsistent or missing opening is not promoted to prior-close truth.
+holding's EOD value as portfolio opening capital would manufacture a trade-day loss. A
+settlement-lagged buy can have zero in the durable snapshot's BOD-flow column; the positive,
+internal investment-outflow projected from its same-epoch transaction onto the trade date is
+the corroborating BOD flow. Settlement cashflow chronology is unchanged. An inconsistent or
+missing opening, or an unrelated EOD/sell flow, is not promoted to prior-close truth.
+For a first-day paired cash leg, a sourced zero opening also remains zero only when internal
+EOD transfer flow exactly reconciles the new cash balance. Preloading its negative closing
+balance into opening capital would break the paired purchase's zero-to-zero portfolio wealth
+path; an unreconciled cash movement keeps the conservative fallback.
 
 Support and lineage:
 
