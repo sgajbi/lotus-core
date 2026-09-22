@@ -47,10 +47,11 @@ PORTFOLIO = "TRADE_DATE_ANALYTICS_PG"
 TRADE_DAY = date(2026, 4, 10)
 SETTLEMENT_DAY = date(2026, 4, 12)
 DEPOSIT_DAY = date(2026, 4, 13)
-INCOME_PRIOR_DAY = date(2026, 3, 10)
-INCOME_DAY = date(2026, 3, 11)
-ACQUISITION_DAY = date(2026, 3, 12)
+INCOME_PRIOR_DAY = date(2026, 3, 6)  # Friday
+INCOME_DAY = date(2026, 3, 9)  # Monday
+ACQUISITION_DAY = date(2026, 3, 10)
 ACQUISITION_SETTLEMENT_DAY = ACQUISITION_DAY + timedelta(days=2)
+STALE_PRIOR_DAY = INCOME_PRIOR_DAY - timedelta(days=1)
 
 
 def _transaction(transaction_id: str, security_id: str, transaction_type: str) -> Transaction:
@@ -129,11 +130,13 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
                 ("CASH", "CASH-INCOME-PG", "CASH", "Cash"),
                 ("BOND", "BOND-INCOME-PG", "BOND", "Fixed Income"),
                 ("EQUITY", "EQUITY-ACQUISITION-PG", "EQUITY", "Equity"),
+                ("STALE", "STALE-OPEN-PG", "EQUITY", "Equity"),
             )
         ]
     )
     session.add_all(
-        BusinessDate(date=day) for day in (INCOME_PRIOR_DAY, INCOME_DAY, ACQUISITION_DAY)
+        BusinessDate(date=day)
+        for day in (STALE_PRIOR_DAY, INCOME_PRIOR_DAY, INCOME_DAY, ACQUISITION_DAY)
     )
     await session.flush()
     session.add_all(
@@ -174,7 +177,7 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
                 watermark_date=ACQUISITION_DAY,
                 status="CURRENT",
             )
-            for security_id in ("CASH", "BOND", "EQUITY")
+            for security_id in ("CASH", "BOND", "EQUITY", "STALE")
         ]
     )
     for day, security_id, bod, eod, flow, quantity, transaction_id in (
@@ -221,6 +224,35 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
                 cost=Decimal("1"),
             )
         )
+    session.add(
+        PositionHistory(
+            portfolio_id=PORTFOLIO,
+            security_id="STALE",
+            transaction_id="INCOME-CASH",
+            position_date=STALE_PRIOR_DAY,
+            epoch=1,
+            quantity=Decimal("1"),
+            cost_basis=Decimal("20"),
+            cost_basis_local=Decimal("20"),
+        )
+    )
+    session.add(
+        PositionTimeseries(
+            portfolio_id=PORTFOLIO,
+            security_id="STALE",
+            date=STALE_PRIOR_DAY,
+            epoch=1,
+            bod_market_value=Decimal("20"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("20"),
+            fees=Decimal("0"),
+            quantity=Decimal("1"),
+            cost=Decimal("1"),
+        )
+    )
     session.add_all(
         [
             _cashflow(
@@ -270,9 +302,18 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
             export_execution_timeout_seconds=300,
         ),
     )
-    window = AnalyticsWindow(start_date=INCOME_PRIOR_DAY, end_date=ACQUISITION_DAY)
+    window = AnalyticsWindow(start_date=INCOME_DAY, end_date=ACQUISITION_DAY)
     for zone in ("UTC", "Asia/Singapore", "America/Los_Angeles"):
         await session.execute(text("SELECT set_config('TimeZone', :zone, true)"), {"zone": zone})
+        assert (
+            await reader.list_latest_position_timeseries_before(
+                portfolio_id=PORTFOLIO,
+                before_date=INCOME_DAY,
+                security_ids=["STALE"],
+                snapshot_epoch=1,
+            )
+            == []
+        )
         positions = await service.get_position_timeseries(
             portfolio_id=PORTFOLIO,
             request=PositionAnalyticsTimeseriesRequest(
@@ -333,6 +374,14 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
         assert (income.beginning_market_value, income.ending_market_value) == (
             Decimal("500"),
             Decimal("514"),
+        )
+        assert (
+            sum(
+                row.beginning_market_value_reporting_currency
+                for row in positions.rows
+                if row.valuation_date == INCOME_DAY
+            )
+            == income.beginning_market_value
         )
         assert income.cash_flows == []
         acquisition = next(

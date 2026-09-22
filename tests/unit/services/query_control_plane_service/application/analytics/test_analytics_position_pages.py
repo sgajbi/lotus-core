@@ -34,24 +34,24 @@ def test_position_page_scope_sorts_dates_and_normalizes_security_ids() -> None:
     assert scope.security_ids == ["SEC_A", "SEC_B"]
 
 
-def test_previous_position_eod_by_security_keeps_only_prior_day_rows() -> None:
+def test_previous_position_eod_by_security_accepts_governed_prior_business_day_rows() -> None:
     result = previous_position_eod_by_security(
         previous_rows=[
             SimpleNamespace(
-                valuation_date=date(2025, 1, 30),
+                valuation_date=date(2025, 1, 24),
                 security_id="SEC_A",
                 eod_market_value=Decimal("100"),
             ),
             SimpleNamespace(
-                valuation_date=date(2025, 1, 29),
+                valuation_date=date(2025, 1, 24),
                 security_id="SEC_B",
                 eod_market_value=Decimal("200"),
             ),
         ],
-        first_page_date=date(2025, 1, 31),
+        first_page_date=date(2025, 1, 27),
     )
 
-    assert result == {"SEC_A": Decimal("100")}
+    assert result == {"SEC_A": Decimal("100"), "SEC_B": Decimal("200")}
 
 
 def test_position_dimension_filters_returns_dimension_value_sets() -> None:
