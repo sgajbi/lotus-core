@@ -21,10 +21,11 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.analytics import (
+    AnalyticsCashflowEpochEvidenceError,
     AnalyticsCashflowEvidence,
     AnalyticsFxRateObservation,
     PortfolioAnalyticsSource,
@@ -44,6 +45,12 @@ DIMENSION_FILTER_COLUMNS = {
     "sector": "sector",
     "country": "country",
 }
+
+# Position ownership is recorded on trade date. The cash ledger retains its
+# settlement date, which can be a later (or non-business) day. Only the paired
+# internal investment legs use trade-date *analytics* recognition; external
+# movements and other cash events keep their source cashflow date.
+TRADE_DATE_POSITION_FLOW_CLASSIFICATIONS = ("INVESTMENT_OUTFLOW", "INVESTMENT_INFLOW")
 
 
 def _position_valuation_observation(row: Any) -> PositionValuationObservation:
@@ -203,21 +210,48 @@ class AnalyticsTimeseriesRepository:
         return True, _trimmed_position_timeseries_security_id().in_(security_from_position_ids)
 
     @staticmethod
-    def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
-        partition_by = [
-            Cashflow.transaction_id,
-            Cashflow.cashflow_date,
-            Cashflow.classification,
-            Cashflow.timing,
-            Cashflow.is_position_flow,
-            Cashflow.is_portfolio_flow,
-        ]
+    def _latest_cashflow_rows_stmt(
+        *,
+        predicates: list[object],
+        include_security_id: bool,
+        valuation_dates: list[date] | None = None,
+        security_ids: list[str] | None = None,
+    ):
+        # One cashflow row per transaction/epoch is the durable source key.
+        # Rank before applying dates, security, or flow flags: otherwise a
+        # restatement that moves a flow out of scope resurrects its old epoch.
+        recognition_date = Cashflow.cashflow_date
+        trade_date_required = false()
         if include_security_id:
-            partition_by.append(func.trim(Cashflow.security_id))
+            trade_date_required = and_(
+                Cashflow.classification.in_(TRADE_DATE_POSITION_FLOW_CLASSIFICATIONS),
+                Cashflow.is_position_flow.is_(True),
+                Cashflow.is_portfolio_flow.is_(False),
+            )
+            # PositionHistory records the transaction's UTC business date at
+            # its own durable epoch. The mutable Transaction row cannot be
+            # joined to a prior cashflow snapshot cursor after a correction.
+            trade_date_at_epoch = (
+                select(PositionHistory.position_date)
+                .where(
+                    PositionHistory.portfolio_id == Cashflow.portfolio_id,
+                    PositionHistory.transaction_id == Cashflow.transaction_id,
+                    func.trim(PositionHistory.security_id) == func.trim(Cashflow.security_id),
+                    PositionHistory.epoch == Cashflow.epoch,
+                )
+                .order_by(PositionHistory.id.desc())
+                .limit(1)
+                .correlate(Cashflow)
+                .scalar_subquery()
+            )
+            recognition_date = case(
+                (trade_date_required, trade_date_at_epoch),
+                else_=Cashflow.cashflow_date,
+            )
 
         selected_columns = [
             Cashflow.transaction_id.label("transaction_id"),
-            Cashflow.cashflow_date.label("valuation_date"),
+            recognition_date.label("valuation_date"),
             Cashflow.amount.label("amount"),
             Cashflow.currency.label("currency"),
             Cashflow.classification.label("classification"),
@@ -227,22 +261,42 @@ class AnalyticsTimeseriesRepository:
             Cashflow.epoch.label("epoch"),
             func.row_number()
             .over(
-                partition_by=tuple(partition_by),
-                order_by=(Cashflow.epoch.desc(),),
+                partition_by=Cashflow.transaction_id,
+                order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
             )
             .label("rn"),
         ]
         if include_security_id:
             selected_columns.insert(1, func.trim(Cashflow.security_id).label("security_id"))
+            selected_columns.append(trade_date_required.label("trade_date_required"))
 
-        ranked = select(*selected_columns).where(*predicates).subquery()
+        ranked_select = select(*selected_columns).select_from(Cashflow)
+        ranked = ranked_select.where(*predicates).subquery()
 
         ordering = [ranked.c.valuation_date.asc()]
         if include_security_id:
             ordering.append(ranked.c.security_id.asc())
         ordering.extend([ranked.c.timing.asc(), ranked.c.transaction_id.asc()])
 
-        return select(ranked).where(ranked.c.rn == 1).order_by(*ordering)
+        stmt = select(ranked).where(ranked.c.rn == 1)
+        if valuation_dates is not None:
+            date_is_selected = ranked.c.valuation_date.in_(valuation_dates)
+            if include_security_id:
+                date_is_selected = or_(
+                    date_is_selected,
+                    and_(
+                        ranked.c.trade_date_required.is_(True),
+                        ranked.c.valuation_date.is_(None),
+                    ),
+                )
+            stmt = stmt.where(date_is_selected)
+        if include_security_id:
+            stmt = stmt.where(ranked.c.is_position_flow.is_(True))
+            if security_ids is not None:
+                stmt = stmt.where(ranked.c.security_id.in_(security_ids))
+        else:
+            stmt = stmt.where(ranked.c.is_portfolio_flow.is_(True))
+        return stmt.order_by(*ordering)
 
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None:
         stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
@@ -580,16 +634,23 @@ class AnalyticsTimeseriesRepository:
 
         predicates = [
             Cashflow.portfolio_id == portfolio_id,
-            func.trim(Cashflow.security_id).in_(normalized_security_ids),
-            Cashflow.cashflow_date.in_(valuation_dates),
-            Cashflow.is_position_flow.is_(True),
         ]
         if snapshot_epoch is not None:
             predicates.append(Cashflow.epoch <= snapshot_epoch)
 
-        stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=True)
+        stmt = self._latest_cashflow_rows_stmt(
+            predicates=predicates,
+            include_security_id=True,
+            valuation_dates=valuation_dates,
+            security_ids=normalized_security_ids,
+        )
         result = await self.db.execute(stmt)
-        return [_analytics_cashflow_evidence(row) for row in result.all()]
+        rows = result.all()
+        if any(row.valuation_date is None for row in rows):
+            raise AnalyticsCashflowEpochEvidenceError(
+                "Internal investment flow has no same-epoch position trade-date evidence."
+            )
+        return [_analytics_cashflow_evidence(row) for row in rows]
 
     async def list_portfolio_cashflow_rows(
         self,
@@ -603,13 +664,15 @@ class AnalyticsTimeseriesRepository:
 
         predicates = [
             Cashflow.portfolio_id == portfolio_id,
-            Cashflow.cashflow_date.in_(valuation_dates),
-            Cashflow.is_portfolio_flow.is_(True),
         ]
         if snapshot_epoch is not None:
             predicates.append(Cashflow.epoch <= snapshot_epoch)
 
-        stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=False)
+        stmt = self._latest_cashflow_rows_stmt(
+            predicates=predicates,
+            include_security_id=False,
+            valuation_dates=valuation_dates,
+        )
         result = await self.db.execute(stmt)
         return [_analytics_cashflow_evidence(row) for row in result.all()]
 

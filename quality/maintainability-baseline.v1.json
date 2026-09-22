@@ -50,9 +50,9 @@
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
       "rank": "C",
-      "mi": 5.782730937321192,
+      "mi": 5.958968220467531,
       "owner": "lotus-core maintainers",
-      "rationale": "Existing analytics application hotspot scheduled for family-aligned decomposition.",
+      "rationale": "Existing analytics application hotspot; snapshot cashflow evidence and input errors moved to focused modules, ratcheting the index upward while family-aligned decomposition continues.",
       "issue": "#462"
     },
     {

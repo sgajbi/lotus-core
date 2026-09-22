@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_control_plane_service.app.application.analytics import (
     analytics_timeseries_service as analytics_timeseries_service_module,
 )
+from src.services.query_control_plane_service.app.application.analytics.analytics_cashflow_evidence import (  # noqa: E501
+    load_position_cashflow_rows,
+)
 from src.services.query_control_plane_service.app.application.analytics.analytics_export_jobs import (  # noqa: E501
     analytics_export_jsonable,
 )
@@ -35,6 +38,7 @@ from src.services.query_control_plane_service.app.contracts.analytics_inputs imp
     PositionAnalyticsTimeseriesRequest,
 )
 from src.services.query_control_plane_service.app.domain.analytics import (
+    AnalyticsCashflowEpochEvidenceError,
     AnalyticsCashflowEvidence,
     PositionValuationObservation,
 )
@@ -64,6 +68,25 @@ def make_service() -> AnalyticsTimeseriesService:
             export_execution_timeout_seconds=300,
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_position_cashflow_epoch_evidence_failure_is_insufficient_data() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        list_position_cashflow_rows=AsyncMock(
+            side_effect=AnalyticsCashflowEpochEvidenceError("missing same-epoch evidence")
+        )
+    )
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await load_position_cashflow_rows(
+            service.repo,
+            portfolio_id="P1",
+            security_ids=["SEC_A"],
+            valuation_dates=[date(2025, 1, 1)],
+            snapshot_epoch=0,
+        )
+    assert exc_info.value.code == "INSUFFICIENT_DATA"
 
 
 def _position_repo(**methods: object) -> SimpleNamespace:

@@ -208,6 +208,14 @@ POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries
 POST /integration/portfolios/{portfolio_id}/analytics/reference
 ```
 
+For `PositionTimeseriesInput:v1`, internal investment position-flow observations follow the
+linked transaction's UTC trade date, matching trade-date position ownership. The source cash
+ledger remains settlement-dated; external and other flow observations retain their source
+cashflow date. Latest cashflow epoch is selected before window/security filtering so replay
+cannot re-expose a superseded flow. The trade date comes from same-epoch durable position
+history, so a later transaction correction cannot silently change an earlier snapshot cursor;
+missing matching evidence returns `INSUFFICIENT_DATA`.
+
 Support and lineage:
 
 ```text
