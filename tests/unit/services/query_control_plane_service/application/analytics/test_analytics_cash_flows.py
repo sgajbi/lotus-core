@@ -100,6 +100,106 @@ def test_effective_beginning_market_value_keeps_cash_book_fee_drag_explicit() ->
     assert result == Decimal("100")
 
 
+@pytest.mark.parametrize(
+    ("prior_close", "income", "current_close"),
+    [
+        ("102585", "850", "103435"),
+        ("143435", "1187", "144622"),
+    ],
+)
+def test_internal_income_receipt_preserves_authoritative_cash_open(
+    prior_close: str, income: str, current_close: str
+) -> None:
+    """A BOD cash receipt is not already invested at the prior close.
+
+    The durable position-timeseries beginning value and previous EOD agree;
+    replacing them with today's post-receipt close erases income return and
+    creates a false negative cash-sleeve return.
+    """
+    row = SimpleNamespace(
+        security_id="CASH_USD_BOOK_OPERATING",
+        asset_class="Cash",
+        bod_market_value=Decimal(prior_close),
+        eod_market_value=Decimal(current_close),
+        bod_cashflow_position=Decimal(income),
+    )
+    receipt = CashFlowObservation(
+        amount=Decimal(income),
+        timing="bod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification="INVESTMENT_OUTFLOW",
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=Decimal(prior_close),
+        cash_flows=[receipt],
+        has_portfolio_external_flow=False,
+    ) == Decimal(prior_close)
+
+    # With no external portfolio flow, source close-to-close wealth includes
+    # the income. The cash leg alone is a zero-return internal transfer.
+    assert Decimal(current_close) - Decimal(prior_close) == Decimal(income)
+
+
+@pytest.mark.parametrize("prior_close", [None, Decimal("0")])
+def test_new_internally_funded_holding_keeps_zero_source_open(
+    prior_close: Decimal | None,
+) -> None:
+    row = SimpleNamespace(
+        security_id="FO_EQ_AAPL_US",
+        asset_class="Equity",
+        bod_market_value=Decimal("0"),
+        eod_market_value=Decimal("77374.08"),
+        bod_cashflow_position=Decimal("77528.75"),
+    )
+    acquisition = CashFlowObservation(
+        amount=Decimal("77528.75"),
+        timing="bod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification="INVESTMENT_OUTFLOW",
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=prior_close,
+        cash_flows=[acquisition],
+        has_portfolio_external_flow=False,
+    ) == Decimal("0")
+
+
+@pytest.mark.parametrize(
+    ("flow", "classification"),
+    [("850", "INVESTMENT_OUTFLOW"), ("-100", "INVESTMENT_INFLOW")],
+)
+def test_existing_zero_balance_cash_book_keeps_correlated_zero_open(
+    flow: str, classification: str
+) -> None:
+    row = SimpleNamespace(
+        security_id="CASH_USD_BOOK_OPERATING",
+        asset_class="Cash",
+        bod_market_value=Decimal("0"),
+        eod_market_value=Decimal(flow),
+        bod_cashflow_position=Decimal(flow),
+    )
+    receipt = CashFlowObservation(
+        amount=Decimal(flow),
+        timing="bod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification=classification,
+    )
+
+    assert effective_beginning_market_value(
+        row,
+        previous_eod_market_value=Decimal("0"),
+        cash_flows=[receipt],
+        has_portfolio_external_flow=False,
+    ) == Decimal("0")
+
+
 def test_effective_beginning_market_value_normalizes_cash_book_asset_class() -> None:
     row = SimpleNamespace(
         security_id="OPERATING_ACCOUNT_USD",

@@ -216,6 +216,16 @@ cannot re-expose a superseded flow. The trade date comes from same-epoch durable
 history, so a later transaction correction cannot silently change an earlier snapshot cursor;
 missing matching evidence returns `INSUFFICIENT_DATA`.
 
+For paired income paid into an internal cash book, both analytics products use the durable
+position-timeseries opening value when it agrees with the prior close, even if the cash receipt
+is timed BOD. Replacing that corroborated open with the post-receipt close would erase income
+from portfolio return and manufacture a negative cash-group return. The cash leg remains an
+internal position flow, not an external client contribution; the product leg retains its income
+classification. For an internally funded new holding, a sourced zero opening and absent prior
+capital remain zero: the BOD acquisition flow supplies the invested capital, so serving the new
+holding's EOD value as portfolio opening capital would manufacture a trade-day loss. An
+inconsistent or missing opening is not promoted to prior-close truth.
+
 Support and lineage:
 
 ```text

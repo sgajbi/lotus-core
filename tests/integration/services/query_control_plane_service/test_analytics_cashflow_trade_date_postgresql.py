@@ -6,15 +6,39 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import Cashflow, Portfolio, PositionHistory, Transaction
+from portfolio_common.database_models import (
+    BusinessDate,
+    Cashflow,
+    Instrument,
+    Portfolio,
+    PositionHistory,
+    PositionState,
+    PositionTimeseries,
+    Transaction,
+)
 from sqlalchemy import delete, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_control_plane_service.app.application.analytics.analytics_timeseries_service import (  # noqa: E501
+    AnalyticsRuntimePolicy,
+    AnalyticsTimeseriesService,
+)
+from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
+    AnalyticsWindow,
+    PortfolioAnalyticsTimeseriesRequest,
+    PositionAnalyticsTimeseriesRequest,
+)
 from src.services.query_control_plane_service.app.domain.analytics import (
     AnalyticsCashflowEpochEvidenceError,
 )
 from src.services.query_control_plane_service.app.infrastructure import (
     analytics_timeseries_repository,
+)
+from src.services.query_control_plane_service.app.infrastructure.analytics_export_repository import (  # noqa: E501
+    AnalyticsExportRepository,
+)
+from src.services.query_control_plane_service.app.infrastructure.analytics_unit_of_work import (  # noqa: E501
+    SqlAlchemyAnalyticsUnitOfWork,
 )
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.db_direct, pytest.mark.lifecycle]
@@ -23,6 +47,9 @@ PORTFOLIO = "TRADE_DATE_ANALYTICS_PG"
 TRADE_DAY = date(2026, 4, 10)
 SETTLEMENT_DAY = date(2026, 4, 12)
 DEPOSIT_DAY = date(2026, 4, 13)
+INCOME_PRIOR_DAY = date(2026, 3, 10)
+INCOME_DAY = date(2026, 3, 11)
+ACQUISITION_DAY = date(2026, 3, 12)
 
 
 def _transaction(transaction_id: str, security_id: str, transaction_type: str) -> Transaction:
@@ -67,6 +94,256 @@ def _cashflow(
         is_position_flow=True,
         is_portfolio_flow=portfolio_flow,
     )
+
+
+async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_products(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    session = async_db_session
+    session.add(
+        Portfolio(
+            tenant_id="tenant-cash-income",
+            portfolio_id=PORTFOLIO,
+            base_currency="USD",
+            open_date=INCOME_PRIOR_DAY,
+            risk_exposure="moderate",
+            investment_time_horizon="long_term",
+            portfolio_type="discretionary",
+            booking_center_code="Singapore",
+            client_id="CLIENT_CASH_INCOME",
+            status="ACTIVE",
+        )
+    )
+    session.add_all(
+        [
+            Instrument(
+                security_id=security_id,
+                name=security_id,
+                isin=isin,
+                currency="USD",
+                product_type=product_type,
+                asset_class=asset_class,
+            )
+            for security_id, isin, product_type, asset_class in (
+                ("CASH", "CASH-INCOME-PG", "CASH", "Cash"),
+                ("BOND", "BOND-INCOME-PG", "BOND", "Fixed Income"),
+                ("EQUITY", "EQUITY-ACQUISITION-PG", "EQUITY", "Equity"),
+            )
+        ]
+    )
+    session.add_all(
+        BusinessDate(date=day) for day in (INCOME_PRIOR_DAY, INCOME_DAY, ACQUISITION_DAY)
+    )
+    await session.flush()
+    session.add_all(
+        [
+            Transaction(
+                transaction_id=transaction_id,
+                portfolio_id=PORTFOLIO,
+                instrument_id=security_id,
+                security_id=security_id,
+                transaction_date=datetime(day.year, day.month, day.day, 9, tzinfo=UTC),
+                settlement_date=datetime(day.year, day.month, day.day, 16, tzinfo=UTC),
+                transaction_type=transaction_type,
+                quantity=Decimal("10"),
+                price=Decimal("1"),
+                gross_transaction_amount=Decimal("10"),
+                trade_currency="USD",
+                currency="USD",
+            )
+            for transaction_id, security_id, transaction_type, day in (
+                ("INCOME-CASH", "CASH", "BUY", INCOME_DAY),
+                ("INCOME-BOND", "BOND", "INTEREST", INCOME_DAY),
+                ("ACQUISITION-CASH", "CASH", "SELL", ACQUISITION_DAY),
+                ("ACQUISITION-EQUITY", "EQUITY", "BUY", ACQUISITION_DAY),
+            )
+        ]
+    )
+    await session.flush()
+    session.add_all(
+        [
+            PositionState(
+                portfolio_id=PORTFOLIO,
+                security_id=security_id,
+                epoch=1,
+                watermark_date=ACQUISITION_DAY,
+                status="CURRENT",
+            )
+            for security_id in ("CASH", "BOND", "EQUITY")
+        ]
+    )
+    for day, security_id, bod, eod, flow, quantity, transaction_id in (
+        (INCOME_PRIOR_DAY, "CASH", "100", "100", "0", "100", "INCOME-CASH"),
+        (INCOME_PRIOR_DAY, "BOND", "400", "400", "0", "1", "INCOME-BOND"),
+        (INCOME_DAY, "CASH", "100", "110", "10", "110", "INCOME-CASH"),
+        (INCOME_DAY, "BOND", "400", "404", "0", "1", "INCOME-BOND"),
+        (ACQUISITION_DAY, "CASH", "110", "60", "0", "60", "ACQUISITION-CASH"),
+        (ACQUISITION_DAY, "BOND", "404", "406", "0", "1", "INCOME-BOND"),
+        (ACQUISITION_DAY, "EQUITY", "0", "49", "50", "1", "ACQUISITION-EQUITY"),
+    ):
+        session.add(
+            PositionHistory(
+                portfolio_id=PORTFOLIO,
+                security_id=security_id,
+                transaction_id=transaction_id,
+                position_date=day,
+                epoch=1,
+                quantity=Decimal(quantity),
+                cost_basis=Decimal(eod),
+                cost_basis_local=Decimal(eod),
+            )
+        )
+        session.add(
+            PositionTimeseries(
+                portfolio_id=PORTFOLIO,
+                security_id=security_id,
+                date=day,
+                epoch=1,
+                bod_market_value=Decimal(bod),
+                bod_cashflow_position=Decimal(flow),
+                eod_cashflow_position=(
+                    Decimal("-10")
+                    if security_id == "BOND" and day == INCOME_DAY
+                    else Decimal("-50")
+                    if security_id == "CASH" and day == ACQUISITION_DAY
+                    else Decimal("0")
+                ),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal(eod),
+                fees=Decimal("0"),
+                quantity=Decimal(quantity),
+                cost=Decimal("1"),
+            )
+        )
+    session.add_all(
+        [
+            _cashflow(
+                transaction_id,
+                security_id,
+                flow_date=day,
+                classification=classification,
+                timing=timing,
+                amount=amount,
+                epoch=1,
+            )
+            for transaction_id, security_id, day, classification, timing, amount in (
+                ("INCOME-CASH", "CASH", INCOME_DAY, "INVESTMENT_OUTFLOW", "BOD", "-10"),
+                ("INCOME-BOND", "BOND", INCOME_DAY, "INCOME", "EOD", "10"),
+                (
+                    "ACQUISITION-CASH",
+                    "CASH",
+                    ACQUISITION_DAY,
+                    "INVESTMENT_INFLOW",
+                    "EOD",
+                    "50",
+                ),
+                (
+                    "ACQUISITION-EQUITY",
+                    "EQUITY",
+                    ACQUISITION_DAY,
+                    "INVESTMENT_OUTFLOW",
+                    "BOD",
+                    "-50",
+                ),
+            )
+        ]
+    )
+    await session.commit()
+
+    reader = analytics_timeseries_repository.AnalyticsTimeseriesRepository(session)
+    service = AnalyticsTimeseriesService(
+        reader=reader,
+        export_store=AnalyticsExportRepository(session),
+        unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
+        policy=AnalyticsRuntimePolicy(
+            page_token_secret="income-pg-test",
+            page_token_key_id="test",
+            page_token_previous_keys={},
+            page_token_ttl_seconds=900,
+            export_stale_timeout_minutes=15,
+            export_execution_timeout_seconds=300,
+        ),
+    )
+    window = AnalyticsWindow(start_date=INCOME_PRIOR_DAY, end_date=ACQUISITION_DAY)
+    for zone in ("UTC", "Asia/Singapore", "America/Los_Angeles"):
+        await session.execute(text("SELECT set_config('TimeZone', :zone, true)"), {"zone": zone})
+        positions = await service.get_position_timeseries(
+            portfolio_id=PORTFOLIO,
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date=ACQUISITION_DAY,
+                window=window,
+                dimensions=["asset_class"],
+            ),
+        )
+        cash = next(
+            row
+            for row in positions.rows
+            if row.valuation_date == INCOME_DAY and row.security_id == "CASH"
+        )
+        bond = next(
+            row
+            for row in positions.rows
+            if row.valuation_date == INCOME_DAY and row.security_id == "BOND"
+        )
+        assert (
+            cash.beginning_market_value_reporting_currency,
+            cash.ending_market_value_reporting_currency,
+        ) == (Decimal("100"), Decimal("110"))
+        assert [(flow.amount, flow.flow_scope) for flow in cash.cash_flows] == [
+            (Decimal("10"), "internal")
+        ]
+        assert [(flow.amount, flow.cash_flow_type) for flow in bond.cash_flows] == [
+            (Decimal("-10"), "income")
+        ]
+        acquired = next(
+            row
+            for row in positions.rows
+            if row.valuation_date == ACQUISITION_DAY and row.security_id == "EQUITY"
+        )
+        acquired_cash = next(
+            row
+            for row in positions.rows
+            if row.valuation_date == ACQUISITION_DAY and row.security_id == "CASH"
+        )
+        assert (
+            acquired.beginning_market_value_reporting_currency,
+            acquired.ending_market_value_reporting_currency,
+        ) == (Decimal("0"), Decimal("49"))
+        assert [(flow.amount, flow.flow_scope) for flow in acquired.cash_flows] == [
+            (Decimal("50"), "internal")
+        ]
+        assert (
+            acquired_cash.beginning_market_value_reporting_currency,
+            acquired_cash.ending_market_value_reporting_currency,
+        ) == (Decimal("110"), Decimal("60"))
+        assert [(flow.amount, flow.flow_scope) for flow in acquired_cash.cash_flows] == [
+            (Decimal("-50"), "internal")
+        ]
+        portfolio = await service.get_portfolio_timeseries(
+            portfolio_id=PORTFOLIO,
+            request=PortfolioAnalyticsTimeseriesRequest(as_of_date=ACQUISITION_DAY, window=window),
+        )
+        income = next(row for row in portfolio.observations if row.valuation_date == INCOME_DAY)
+        assert (income.beginning_market_value, income.ending_market_value) == (
+            Decimal("500"),
+            Decimal("514"),
+        )
+        assert income.cash_flows == []
+        acquisition = next(
+            row for row in portfolio.observations if row.valuation_date == ACQUISITION_DAY
+        )
+        assert (acquisition.beginning_market_value, acquisition.ending_market_value) == (
+            Decimal("514"),
+            Decimal("515"),
+        )
+        assert acquisition.cash_flows == []
+        # Independent capital attribution: cash 0 + bond mark 2 - equity
+        # acquisition slippage 1 equals the portfolio's 1 unit gain.
+        assert (Decimal("60") - Decimal("110") + Decimal("50")) + (
+            Decimal("406") - Decimal("404")
+        ) + (Decimal("49") - Decimal("50")) == Decimal("1")
+        await session.commit()
 
 
 async def test_trade_date_position_flows_preserve_settlement_and_replay_truth(

@@ -1007,7 +1007,8 @@ async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuit
         for observation in observations
         if observation.valuation_date == date(2025, 5, 19)
     )
-    assert second_observation.beginning_market_value == Decimal("250")
+    # The new position's sourced zero opening is not preloaded into capital.
+    assert second_observation.beginning_market_value == Decimal("200")
     assert second_observation.ending_market_value == Decimal("256")
 
 
@@ -1075,7 +1076,7 @@ async def test_portfolio_observation_rows_normalizes_security_ids_for_continuity
 
 
 @pytest.mark.asyncio
-async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlement() -> None:
+async def test_portfolio_observation_rows_keeps_inconsistent_cash_open_fallback() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=14),
@@ -1117,7 +1118,9 @@ async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlem
                 SimpleNamespace(
                     security_id="CASH_USD_BOOK_OPERATING",
                     valuation_date=date(2026, 2, 28),
-                    bod_market_value=Decimal("-100"),
+                    # This stored open contradicts the prior close, so the
+                    # source cannot corroborate the cash-book opening value.
+                    bod_market_value=Decimal("0"),
                     eod_market_value=Decimal("100"),
                     bod_cashflow_position=Decimal("200"),
                     epoch=14,
@@ -1161,6 +1164,83 @@ async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlem
     )
     assert second_observation.beginning_market_value == Decimal("200")
     assert second_observation.ending_market_value == Decimal("200")
+
+
+@pytest.mark.asyncio
+async def test_portfolio_income_open_reconciles_to_group_return_economics() -> None:
+    """Paired income is return, not an external flow or a negative cash return."""
+    prior_day = date(2026, 3, 10)
+    income_day = date(2026, 3, 11)
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=2),
+        list_position_observation_dates=AsyncMock(return_value=[prior_day, income_day]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=security_id,
+                    valuation_date=day,
+                    bod_market_value=Decimal(bod),
+                    eod_market_value=Decimal(eod),
+                    bod_cashflow_position=Decimal(flow),
+                    epoch=2,
+                    asset_class=asset_class,
+                    position_currency="USD",
+                )
+                for day, security_id, bod, eod, flow, asset_class in (
+                    (prior_day, "CASH", "100", "100", "0", "Cash"),
+                    (prior_day, "BOND", "400", "400", "0", "Fixed Income"),
+                    (income_day, "CASH", "100", "110", "10", "Cash"),
+                    (income_day, "BOND", "400", "404", "0", "Fixed Income"),
+                )
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=security_id,
+                    valuation_date=income_day,
+                    amount=Decimal(amount),
+                    classification=classification,
+                    timing=timing,
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                )
+                for security_id, amount, classification, timing in (
+                    ("CASH", "-10", "INVESTMENT_OUTFLOW", "BOD"),
+                    ("BOND", "-10", "INCOME", "EOD"),
+                )
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date=prior_day, end_date=income_day),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="income-1",
+    )
+
+    income_observation = next(
+        observation for observation in observations if observation.valuation_date == income_day
+    )
+    assert income_observation.beginning_market_value == Decimal("500")
+    assert income_observation.ending_market_value == Decimal("514")
+    assert income_observation.cash_flows == []
+    portfolio_return = (
+        income_observation.ending_market_value / income_observation.beginning_market_value - 1
+    ) * 100
+    cash_return = (Decimal("110") - Decimal("100") - Decimal("10")) / Decimal("100") * 100
+    bond_return = (Decimal("404") - Decimal("400") + Decimal("10")) / Decimal("400") * 100
+    assert portfolio_return == Decimal("2.8")
+    assert cash_return == Decimal("0")
+    assert Decimal("0.2") * cash_return + Decimal("0.8") * bond_return == portfolio_return
 
 
 def test_effective_beginning_market_value_keeps_cash_book_fee_drag_explicit() -> None:
@@ -2542,7 +2622,7 @@ async def test_get_position_timeseries_repairs_beginning_values_for_continuity()
 
     assert existing.beginning_market_value_position_currency == Decimal("100")
     assert existing.ending_market_value_position_currency == Decimal("105")
-    assert new_internal.beginning_market_value_position_currency == Decimal("50")
+    assert new_internal.beginning_market_value_position_currency == Decimal("0")
     assert new_internal.ending_market_value_position_currency == Decimal("50")
     assert internal_bod_carry.beginning_market_value_position_currency == Decimal("100")
     assert internal_bod_carry.ending_market_value_position_currency == Decimal("101")
