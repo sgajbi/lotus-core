@@ -329,7 +329,9 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     prior_stmt = db.execute.await_args_list[1].args[0]
     prior_sql = str(prior_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.portfolio_id = 'P1'" in prior_sql
-    assert "position_timeseries.date < '2025-01-01'" in prior_sql
+    assert "business_dates.calendar_code = 'GLOBAL'" in prior_sql
+    assert "business_dates.date < '2025-01-01'" in prior_sql
+    assert "position_timeseries.date = (SELECT max(business_dates.date)" in prior_sql
     assert "position_timeseries.epoch <= 3" in prior_sql
     assert "JOIN position_state ON" in prior_sql
     assert "position_timeseries.quantity = (SELECT position_history.quantity" in prior_sql

@@ -565,10 +565,18 @@ class AnalyticsTimeseriesRepository:
 
         position_security_id = func.trim(PositionTimeseries.security_id)
         state_security_id = func.trim(PositionState.security_id)
+        previous_business_date = (
+            select(func.max(BusinessDate.date))
+            .where(
+                BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+                BusinessDate.date < before_date,
+            )
+            .scalar_subquery()
+        )
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             position_security_id.in_(normalized_security_ids),
-            PositionTimeseries.date < before_date,
+            PositionTimeseries.date == previous_business_date,
         ]
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)

@@ -66,7 +66,10 @@ class AnalyticsTimeseriesReader(Protocol):
         before_date: date,
         security_ids: list[str],
         snapshot_epoch: int | None = None,
-    ) -> list[PriorPositionValuation]: ...
+    ) -> list[PriorPositionValuation]:
+        """Read positions on the immediately preceding governed business date."""
+
+        ...
 
     async def list_position_cashflow_rows(
         self,

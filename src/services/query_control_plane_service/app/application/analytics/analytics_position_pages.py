@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from portfolio_common.domain.decimal_amount import decimal_or_zero
@@ -54,9 +54,8 @@ def previous_position_eod_by_security(
     previous_rows: list[PriorPositionValuation],
     first_page_date: date,
 ) -> dict[str, Decimal]:
-    previous_date = first_page_date - timedelta(days=1)
+    del first_page_date  # Date authority is enforced by the repository's business-calendar query.
     return {
         normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
         for row in previous_rows
-        if row.valuation_date == previous_date
     }
