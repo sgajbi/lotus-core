@@ -56,6 +56,10 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 - two future/planned withdrawals covering both the canonical and current forward cashflow horizons
 - planned settlement dates are rolled to business days and backed by FX coverage
   through the latest projected settlement date
+- transaction trade dates and T+lag settlement dates use a deterministic weekday-only demo
+  calendar. It does not assert exchange/booking-centre holiday authority; a production holiday
+  calendar must be supplied by its owning source. Position analytics recognize paired investment
+  legs on trade date while the cash ledger retains the later settlement date.
 - canonical paired product-and-cash transactions aligned with the core demo ingest pattern
 - normalized cash-book transaction rows with `price = 1` and
   `quantity = gross_transaction_amount`

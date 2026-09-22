@@ -73,6 +73,12 @@ Every Core change must preserve the following:
    numeric semantics and explicit rounding policy.
 2. **Temporal truth.** Trade, settlement, booking, effective, observation, valuation, correction,
    and ingestion time are distinct. As-of queries cannot silently switch semantics.
+   `PositionTimeseriesInput` aligns internal investment position flows to the linked transaction's
+   UTC trade date because position ownership is trade-date recognized; it does not change the
+   settlement-dated cash ledger or external-flow chronology. Select the latest cashflow epoch
+   before applying analytics window and security filters so a restatement cannot revive old facts.
+   Resolve that trade date from same-epoch position history, not the mutable current transaction;
+   missing epoch evidence fails closed rather than inventing a date for a prior snapshot.
 3. **Tenant authority.** One validated source-owned tenant identity flows through request,
    application, persistence, jobs, events, replay, and reads; missing authority fails closed.
 4. **Deterministic replay.** The same authoritative inputs, versions, and ordering reproduce the

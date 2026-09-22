@@ -7,6 +7,10 @@ from datetime import date, datetime
 from decimal import Decimal
 
 
+class AnalyticsCashflowEpochEvidenceError(RuntimeError):
+    """A selected internal trade flow lacks same-epoch position-date evidence."""
+
+
 @dataclass(frozen=True, slots=True)
 class PortfolioAnalyticsSource:
     """Portfolio master fields required to source analytics inputs."""

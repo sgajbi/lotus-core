@@ -35,6 +35,9 @@ The seed must support:
 - each seeded module must support at least one real UI action or drill-down
 - exceptions must be intentional and explainable, not random corruption
 - the seed must be rerunnable and deterministic in local development
+- seeded trades and settlements must be weekday-valid for the declared demo calendar; T+lag
+  advances business weekdays, not raw calendar days. This fixture does not invent exchange
+  holiday rules or a booking-centre timezone.
 - the seed must not require `lotus-manage`
 
 ## Recommended Reference Scenario

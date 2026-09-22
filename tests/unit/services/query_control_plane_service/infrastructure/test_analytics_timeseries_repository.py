@@ -350,10 +350,15 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     position_cashflow_sql = str(
         position_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
     )
-    assert "cashflows.is_position_flow IS true" in position_cashflow_sql
-    assert "trim(cashflows.security_id) IN ('SEC_A')" in position_cashflow_sql
+    assert "anon_1.is_position_flow IS true" in position_cashflow_sql
+    assert "anon_1.security_id IN ('SEC_A')" in position_cashflow_sql
     assert "('SEC_A', 'SEC_A')" not in position_cashflow_sql
     assert "cashflows.epoch <= 3" in position_cashflow_sql
+    assert "position_history.position_date" in position_cashflow_sql
+    assert "position_history.epoch = cashflows.epoch" in position_cashflow_sql
+    assert "JOIN transactions" not in position_cashflow_sql
+    assert "cashflows.is_portfolio_flow IS false" in position_cashflow_sql
+    assert "anon_1.valuation_date IN ('2025-01-01')" in position_cashflow_sql
 
     portfolio_cashflow_rows = await repo.list_portfolio_cashflow_rows(
         portfolio_id="P1",
@@ -366,7 +371,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     portfolio_cashflow_sql = str(
         portfolio_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
     )
-    assert "cashflows.is_portfolio_flow IS true" in portfolio_cashflow_sql
+    assert "anon_1.is_portfolio_flow IS true" in portfolio_cashflow_sql
     assert "cashflows.epoch <= 4" in portfolio_cashflow_sql
 
 
@@ -415,7 +420,7 @@ def test_latest_cashflow_rows_stmt_changes_partitioning_for_position_scope() -> 
         include_security_id=True,
     )
     position_sql = str(position_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "PARTITION BY cashflows.transaction_id, cashflows.cashflow_date" in position_sql
+    assert "PARTITION BY cashflows.transaction_id" in position_sql
     assert "cashflows.security_id" in position_sql
     assert "ORDER BY anon_1.valuation_date ASC, anon_1.security_id ASC" in position_sql
 
@@ -424,7 +429,7 @@ def test_latest_cashflow_rows_stmt_changes_partitioning_for_position_scope() -> 
         include_security_id=False,
     )
     portfolio_sql = str(portfolio_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "PARTITION BY cashflows.transaction_id, cashflows.cashflow_date" in portfolio_sql
+    assert "PARTITION BY cashflows.transaction_id" in portfolio_sql
     assert (
         "ORDER BY anon_1.valuation_date ASC, anon_1.timing ASC, "
         "anon_1.transaction_id ASC" in portfolio_sql

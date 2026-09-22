@@ -319,7 +319,12 @@ class PortfolioTimeseriesObservation(BaseModel):
     )
     cash_flows: list[CashFlowObservation] = Field(
         default_factory=list,
-        description="Canonical cash flow events for the valuation_date.",
+        description=(
+            "Canonical analytics flows recognized on valuation_date. Internal investment "
+            "position flows follow the linked transaction's UTC trade date when positions "
+            "are trade-date recognized; this does not change the settlement-dated cash ledger. "
+            "External and other flows retain their source cashflow date."
+        ),
     )
     cash_flow_currency: str = Field(
         ...,

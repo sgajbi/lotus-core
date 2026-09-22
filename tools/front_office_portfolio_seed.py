@@ -444,8 +444,16 @@ def _calendar_dates(start: date, end: date) -> list[str]:
 
 
 def _next_business_date(current: date) -> date:
+    """Weekend-only demo calendar; no venue holiday authority is implied."""
     while current.weekday() >= 5:
         current += timedelta(days=1)
+    return current
+
+
+def _advance_demo_business_days(current: date, count: int) -> date:
+    current = _next_business_date(current)
+    for _ in range(count):
+        current = _next_business_date(current + timedelta(days=1))
     return current
 
 
@@ -814,9 +822,9 @@ def build_front_office_portfolio_bundle(
     business_dates = _business_dates(start_date, end_date)
     calendar_dates = _calendar_dates(start_date, end_date)
     as_of_date = end_date.isoformat()
-    forward_withdrawal_date = end_date + timedelta(days=7)
+    forward_withdrawal_date = _next_business_date(end_date + timedelta(days=7))
     forward_withdrawal_settlement_date = _next_business_date(end_date + timedelta(days=10))
-    current_horizon_planned_withdrawal_date = end_date + timedelta(days=20)
+    current_horizon_planned_withdrawal_date = _next_business_date(end_date + timedelta(days=20))
     current_horizon_planned_withdrawal_settlement_date = _next_business_date(
         end_date + timedelta(days=36)
     )
@@ -827,7 +835,7 @@ def build_front_office_portfolio_bundle(
     fx_calendar_dates = _calendar_dates(start_date, forward_market_support_date)
 
     def tx_dt(day_offset: int, hour: int = 10) -> datetime:
-        current = start_date + timedelta(days=day_offset)
+        current = _next_business_date(start_date + timedelta(days=day_offset))
         return datetime(
             current.year,
             current.month,
@@ -850,7 +858,8 @@ def build_front_office_portfolio_bundle(
         )
 
     def settle(day_offset: int, lag_days: int = 2) -> datetime:
-        current = start_date + timedelta(days=day_offset + lag_days)
+        trade_day = start_date + timedelta(days=day_offset)
+        current = _advance_demo_business_days(trade_day, lag_days)
         return datetime(
             current.year,
             current.month,

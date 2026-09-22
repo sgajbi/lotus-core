@@ -55,6 +55,7 @@ from .analytics_cash_flows import (
     portfolio_cash_flows_for_dates,
     position_cash_flows_for_keys,
 )
+from .analytics_cashflow_evidence import load_position_cashflow_rows
 from .analytics_export_execution import (
     collect_portfolio_timeseries_for_export,
     collect_position_timeseries_for_export,
@@ -82,6 +83,7 @@ from .analytics_fx_rates import (
     portfolio_to_reporting_rate,
     position_to_portfolio_rate,
 )
+from .analytics_input_errors import AnalyticsInputError
 from .analytics_page_tokens import (
     AnalyticsPageTokenError,
     AnalyticsPageTokenSignatureError,
@@ -126,13 +128,6 @@ from .analytics_quality import (
     timeseries_source_evidence_current,
 )
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
-
-
-class AnalyticsInputError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
-        self.code = code
-        super().__init__(message)
-
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +458,8 @@ class AnalyticsTimeseriesService:
             valuation_dates=page_dates,
             snapshot_epoch=snapshot_epoch,
         )
-        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
+        position_cashflow_rows = await load_position_cashflow_rows(
+            self.repo,
             portfolio_id=portfolio_id,
             security_ids=normalized_security_ids,
             valuation_dates=page_dates,
@@ -1180,7 +1176,8 @@ class AnalyticsTimeseriesService:
     ) -> dict[tuple[str, date], list[CashFlowObservation]]:
         if not include_cash_flows:
             return {}
-        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
+        position_cashflow_rows = await load_position_cashflow_rows(
+            self.repo,
             portfolio_id=portfolio_id,
             security_ids=security_ids,
             valuation_dates=page_dates,

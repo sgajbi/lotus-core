@@ -720,6 +720,25 @@ def test_front_office_bundle_pairs_internal_transactions_under_shared_event_link
         assert product_leg["linked_transaction_group_id"] == cash_leg["linked_transaction_group_id"]
 
 
+def test_front_office_transactions_and_settlements_use_weekdays_for_demo_calendar():
+    bundle = _build_bundle()
+    by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
+
+    for transaction in bundle["transactions"]:
+        assert date.fromisoformat(transaction["transaction_date"][:10]).weekday() < 5
+        settlement = transaction.get("settlement_date")
+        if settlement:
+            assert date.fromisoformat(settlement[:10]).weekday() < 5
+
+    # Thursday equity acquisition settles T+2 business days on Monday, not
+    # the old Saturday calendar-day fixture. Weekend-offset trades roll to
+    # Monday before their T+2 settlement clock starts.
+    assert by_txn["TXN-BUY-AAPL-001"]["transaction_date"].startswith("2025-04-03")
+    assert by_txn["TXN-BUY-AAPL-001"]["settlement_date"].startswith("2025-04-07")
+    assert by_txn["TXN-BUY-MSFT-001"]["transaction_date"].startswith("2025-04-14")
+    assert by_txn["TXN-BUY-MSFT-001"]["settlement_date"].startswith("2025-04-16")
+
+
 def test_front_office_bundle_internal_pairs_economically_net_to_zero():
     bundle = _build_bundle()
 
@@ -812,7 +831,7 @@ def test_front_office_bundle_places_income_and_activity_inside_current_reporting
     assert by_txn["TXN-INT-UST-001"]["transaction_date"].startswith("2026-03-11")
     assert by_txn["TXN-DEP-USD-TOPUP-001"]["transaction_date"].startswith("2026-03-05")
     assert by_txn["TXN-FEE-ADVISORY-001"]["transaction_date"].startswith("2026-03-12")
-    assert by_txn["TXN-SELL-AAPL-001"]["transaction_date"].startswith("2026-02-28")
+    assert by_txn["TXN-SELL-AAPL-001"]["transaction_date"].startswith("2026-03-02")
     assert by_txn["TXN-WITHDRAWAL-PLANNED-001"]["transaction_date"].startswith("2026-03-26")
 
 
@@ -1685,7 +1704,7 @@ def test_front_office_seed_derives_required_cross_currency_fx_windows():
     bundle = _build_bundle()
 
     assert _required_cross_currency_fx_windows(bundle) == [
-        ("EUR", "USD", "2025-04-02", "2025-07-27")
+        ("EUR", "USD", "2025-04-02", "2025-07-28")
     ]
 
 
@@ -1807,7 +1826,7 @@ def test_front_office_seed_waits_for_required_fx_readiness(monkeypatch):
                 {
                     "rates": [
                         {"rate_date": "2025-04-02", "rate": "1.072685"},
-                        {"rate_date": "2025-07-27", "rate": "1.081000"},
+                        {"rate_date": "2025-07-28", "rate": "1.081000"},
                     ]
                 },
             ),
@@ -1832,13 +1851,13 @@ def test_front_office_seed_waits_for_required_fx_readiness(monkeypatch):
         (
             "GET",
             "http://query.dev.lotus/fx-rates/"
-            "?from_currency=EUR&to_currency=USD&start_date=2025-04-02&end_date=2025-07-27",
+            "?from_currency=EUR&to_currency=USD&start_date=2025-04-02&end_date=2025-07-28",
             None,
         ),
         (
             "GET",
             "http://query.dev.lotus/fx-rates/"
-            "?from_currency=EUR&to_currency=USD&start_date=2025-04-02&end_date=2025-07-27",
+            "?from_currency=EUR&to_currency=USD&start_date=2025-04-02&end_date=2025-07-28",
             None,
         ),
     ]
