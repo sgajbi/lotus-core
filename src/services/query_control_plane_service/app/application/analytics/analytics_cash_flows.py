@@ -115,6 +115,25 @@ def effective_beginning_market_value(
         return previous_eod_market_value
 
     has_internal_position_flow = has_only_internal_flows(cash_flows)
+    if has_sourced_zero_open_for_internal_acquisition(
+        stored_beginning=stored_beginning,
+        previous_eod_market_value=previous_eod_market_value,
+        bod_position_flow=bod_position_flow,
+        ending=ending,
+        has_portfolio_external_flow=has_portfolio_external_flow,
+        has_internal_position_flow=has_internal_position_flow,
+    ):
+        return stored_beginning
+
+    if has_authoritative_internal_cash_open(
+        row=row,
+        stored_beginning=stored_beginning,
+        previous_eod_market_value=previous_eod_market_value,
+        has_portfolio_external_flow=has_portfolio_external_flow,
+        has_internal_position_flow=has_internal_position_flow,
+    ):
+        return stored_beginning
+
     if is_internal_cash_book_settlement(
         row=row,
         has_portfolio_external_flow=has_portfolio_external_flow,
@@ -160,6 +179,55 @@ def has_prior_eod_continuity(
         previous_eod_market_value is not None
         and previous_eod_market_value != 0
         and bod_position_flow == 0
+    )
+
+
+def has_authoritative_internal_cash_open(
+    *,
+    row: PositionValuationObservation,
+    stored_beginning: Decimal,
+    previous_eod_market_value: Decimal | None,
+    has_portfolio_external_flow: bool,
+    has_internal_position_flow: bool,
+) -> bool:
+    """Keep a sourced cash opening when it reconciles to the prior close.
+
+    A same-day BOD receipt is already in the closing cash balance. Replacing
+    this independently corroborated opening with that close erases income from
+    portfolio return and creates a negative cash-sleeve return. A missing or
+    contradictory opening still follows the existing conservative fallback.
+    """
+    return bool(
+        is_cash_book_position(row)
+        and has_internal_position_flow
+        and not has_portfolio_external_flow
+        and previous_eod_market_value is not None
+        and stored_beginning == previous_eod_market_value
+    )
+
+
+def has_sourced_zero_open_for_internal_acquisition(
+    *,
+    stored_beginning: Decimal,
+    previous_eod_market_value: Decimal | None,
+    bod_position_flow: Decimal,
+    ending: Decimal,
+    has_portfolio_external_flow: bool,
+    has_internal_position_flow: bool,
+) -> bool:
+    """Do not preload a newly bought position into portfolio opening capital.
+
+    The durable zero opening and absent prior holding agree; the sourced BOD
+    internal flow supplies acquisition capital. Using today's EOD or the flow
+    amount as opening capital double-counts the purchase in portfolio TWR.
+    """
+    return bool(
+        stored_beginning == 0
+        and previous_eod_market_value in (None, Decimal("0"))
+        and bod_position_flow > 0
+        and ending > 0
+        and has_internal_position_flow
+        and not has_portfolio_external_flow
     )
 
 
