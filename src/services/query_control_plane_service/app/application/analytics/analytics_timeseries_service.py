@@ -53,6 +53,9 @@ from .analytics_cash_flows import (
     effective_beginning_market_value,
     has_external_flow,
     portfolio_cash_flows_for_dates,
+    portfolio_cashflow_currencies,
+    portfolio_position_currencies,
+    portfolio_position_security_ids,
     position_cash_flows_for_keys,
 )
 from .analytics_cashflow_evidence import load_position_cashflow_rows
@@ -442,7 +445,7 @@ class AnalyticsTimeseriesService:
             end_date=page_end_date,
             snapshot_epoch=snapshot_epoch,
         )
-        normalized_security_ids = self._portfolio_position_security_ids(position_rows)
+        normalized_security_ids = portfolio_position_security_ids(position_rows)
         portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
             portfolio_id=portfolio_id,
             valuation_dates=page_dates,
@@ -450,8 +453,8 @@ class AnalyticsTimeseriesService:
         )
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
             position_currencies=(
-                self._portfolio_position_currencies(position_rows)
-                | self._portfolio_cashflow_currencies(portfolio_cashflow_rows)
+                portfolio_position_currencies(position_rows)
+                | portfolio_cashflow_currencies(portfolio_cashflow_rows)
             ),
             portfolio_currency=portfolio_currency,
             start_date=page_start_date,
@@ -489,43 +492,6 @@ class AnalyticsTimeseriesService:
             position_to_portfolio_rates=position_to_portfolio_rates,
             portfolio_to_reporting_rates=portfolio_to_reporting_rates,
             previous_eod_by_security=self._previous_eod_by_security(previous_rows),
-        )
-
-    @staticmethod
-    def _portfolio_position_currencies(
-        position_rows: list[PositionValuationObservation],
-    ) -> set[str]:
-        return {
-            str(row.position_currency)
-            for row in position_rows
-            if getattr(row, "position_currency", None)
-        }
-
-    @staticmethod
-    def _portfolio_cashflow_currencies(
-        cashflow_rows: list[AnalyticsCashflowEvidence],
-    ) -> set[str]:
-        currencies: set[str] = set()
-        for row in cashflow_rows:
-            try:
-                currencies.add(normalize_currency_code(row.currency))
-            except ValueError as exc:
-                raise AnalyticsInputError(
-                    "INSUFFICIENT_DATA",
-                    f"Invalid source currency for cashflow transaction {row.transaction_id}.",
-                ) from exc
-        return currencies
-
-    @staticmethod
-    def _portfolio_position_security_ids(
-        position_rows: list[PositionValuationObservation],
-    ) -> list[str]:
-        return sorted(
-            {
-                security_id
-                for row in position_rows
-                if (security_id := normalize_security_id(row.security_id))
-            }
         )
 
     @staticmethod
@@ -1123,7 +1089,7 @@ class AnalyticsTimeseriesService:
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
             position_currencies=(
                 {str(row.position_currency or "") for row in rows_page}
-                | self._portfolio_cashflow_currencies(portfolio_cashflow_rows)
+                | portfolio_cashflow_currencies(portfolio_cashflow_rows)
             ),
             portfolio_currency=portfolio_currency,
             start_date=page_scope.page_start_date,

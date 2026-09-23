@@ -22,10 +22,49 @@ from .analytics_fx_rates import (
     portfolio_to_reporting_rate,
     position_to_portfolio_rate,
 )
+from .analytics_input_errors import AnalyticsInputError
 
 
 class AnalyticsCashFlowError(RuntimeError):
     pass
+
+
+def portfolio_cashflow_currencies(
+    cashflow_rows: list[AnalyticsCashflowEvidence],
+) -> set[str]:
+    """Return validated source currencies used by portfolio cashflows."""
+    currencies: set[str] = set()
+    for row in cashflow_rows:
+        try:
+            currencies.add(normalize_currency_code(row.currency))
+        except ValueError as exc:
+            raise AnalyticsInputError(
+                "INSUFFICIENT_DATA",
+                f"Invalid source currency for cashflow transaction {row.transaction_id}.",
+            ) from exc
+    return currencies
+
+
+def portfolio_position_currencies(
+    position_rows: list[PositionValuationObservation],
+) -> set[str]:
+    return {
+        str(row.position_currency)
+        for row in position_rows
+        if getattr(row, "position_currency", None)
+    }
+
+
+def portfolio_position_security_ids(
+    position_rows: list[PositionValuationObservation],
+) -> list[str]:
+    return sorted(
+        {
+            security_id
+            for row in position_rows
+            if (security_id := normalize_security_id(row.security_id))
+        }
+    )
 
 
 def build_cash_flow_observation(
