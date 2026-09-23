@@ -5,7 +5,10 @@ from __future__ import annotations
 from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 
 from ..domain.fx_revaluation import FxRateCorrection, FxRevaluationPlan
-from ..domain.source_revaluation import decide_source_revaluation_schedule
+from ..domain.source_revaluation import (
+    decide_source_revaluation_schedule,
+    requires_off_calendar_replay,
+)
 from ..ports.fx_revaluation import FxRevaluationRepository, PositionValuationJobWriter
 
 
@@ -29,10 +32,29 @@ class ProcessFxRateCorrection:
         source_correction_id: str,
     ) -> FxRevaluationPlan:
         """Schedule visible positions and preserve replay only when timing requires it."""
-        latest_business_date = await self._repository.latest_business_date()
+        calendar = await self._repository.classify_valuation_business_date(
+            correction.effective_date
+        )
+        if not calendar.is_business_date:
+            replay_staged = requires_off_calendar_replay(
+                effective_date=correction.effective_date,
+                latest_business_date=calendar.latest_business_date,
+            )
+            if replay_staged:
+                await self._repository.stage_durable_replay(
+                    correction=correction,
+                    correlation_id=correlation_id,
+                )
+            return FxRevaluationPlan(
+                pair=correction.pair,
+                effective_date=correction.effective_date,
+                immediate_job_count=0,
+                durable_replay_staged=replay_staged,
+            )
+
         schedule = decide_source_revaluation_schedule(
             effective_date=correction.effective_date,
-            latest_business_date=latest_business_date,
+            latest_business_date=calendar.latest_business_date,
         )
 
         if schedule.stage_durable_replay:

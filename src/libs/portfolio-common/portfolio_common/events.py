@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
+from .domain.business_calendar import normalize_business_calendar_code
 from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from .domain.currency import normalize_currency_code, normalize_optional_currency_code
 from .domain.decimal_amount import decimal_or_none
@@ -77,6 +78,11 @@ class BusinessDateEvent(CoreEventModel):
     market_code: Optional[str] = Field(None)
     source_system: Optional[str] = Field(None)
     source_batch_id: Optional[str] = Field(None)
+
+    @field_validator("calendar_code", mode="before")
+    @classmethod
+    def _normalize_calendar_code(cls, value: object) -> str:
+        return normalize_business_calendar_code(value)
 
 
 class PortfolioEvent(CoreEventModel):

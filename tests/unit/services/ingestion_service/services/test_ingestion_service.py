@@ -261,6 +261,10 @@ async def test_business_date_partition_key_orders_one_calendar_across_dates(
         "GLOBAL",
         "GLOBAL",
     ]
+    assert [
+        call.kwargs["value"]["calendar_code"]
+        for call in mock_kafka_producer.publish_message.call_args_list
+    ] == ["GLOBAL", "GLOBAL"]
 
 
 async def test_fx_partition_key_orders_one_pair_across_dates_and_corrections(

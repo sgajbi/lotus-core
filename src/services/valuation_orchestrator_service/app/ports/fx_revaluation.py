@@ -13,13 +13,16 @@ from ..domain.fx_revaluation import (
     FxRateCorrection,
     PositionValuationKey,
 )
+from ..domain.source_revaluation import ValuationCalendarClassification
 
 
 class FxRevaluationRepository(Protocol):
     """Resolve FX impact and persist bounded revaluation intent."""
 
-    async def latest_business_date(self) -> date | None:
-        """Return the latest governed valuation horizon."""
+    async def classify_valuation_business_date(
+        self, effective_date: date
+    ) -> ValuationCalendarClassification:
+        """Read membership and the governed valuation horizon atomically."""
 
     async def find_position_keys_requiring_revaluation(
         self,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.request_fingerprints import request_fingerprint
@@ -18,6 +18,7 @@ from ...contracts.analytics_inputs import (
     QualityDiagnostics,
 )
 from ...domain.analytics import PositionValuationObservation
+from ...ports.analytics import AnalyticsTimeseriesReader
 
 
 class AnalyticsPaginationError(RuntimeError):
@@ -31,12 +32,79 @@ class PositionTimeseriesCursor:
     snapshot_epoch: int | None
 
 
+async def business_calendar_scope(
+    reader: AnalyticsTimeseriesReader,
+    window: AnalyticsWindow,
+) -> tuple[list[date], bool, date | None]:
+    """Read the window membership and global fallback state for one cursor scope."""
+
+    atomic_reader = getattr(reader, "get_business_calendar_scope", None)
+    if atomic_reader is not None:
+        return cast(
+            tuple[list[date], bool, date | None],
+            await atomic_reader(start_date=window.start_date, end_date=window.end_date),
+        )
+
+    # Compatibility for lightweight callers that predate the atomic port. Production
+    # persistence adapters implement get_business_calendar_scope and never take this path.
+    expected_dates = await reader.list_business_dates(
+        start_date=window.start_date, end_date=window.end_date
+    )
+    return expected_dates, await reader.has_business_calendar(), None
+
+
+async def portfolio_business_calendar_scope(
+    reader: AnalyticsTimeseriesReader,
+    window: AnalyticsWindow,
+    inception_date: date,
+    as_of_date: date,
+) -> tuple[list[date], list[date], bool, date | None]:
+    """Capture window membership and the portfolio-wide horizon in one calendar read."""
+
+    captured_dates, calendar_present, scope_predecessor = await business_calendar_scope(
+        reader,
+        AnalyticsWindow(
+            start_date=min(inception_date, window.start_date),
+            end_date=max(as_of_date, window.end_date),
+        ),
+    )
+    window_dates = [day for day in captured_dates if window.start_date <= day <= window.end_date]
+    return (
+        window_dates,
+        captured_dates,
+        calendar_present,
+        captured_predecessor_date(
+            expected_business_dates=captured_dates,
+            window_predecessor_date=scope_predecessor,
+            before_date=window.start_date,
+        ),
+    )
+
+
+def captured_predecessor_date(
+    *,
+    expected_business_dates: list[date],
+    window_predecessor_date: date | None,
+    before_date: date,
+) -> date | None:
+    """Resolve a page predecessor exclusively from the captured calendar scope."""
+
+    return max(
+        (day for day in expected_business_dates if day < before_date),
+        default=window_predecessor_date,
+    )
+
+
 def portfolio_timeseries_scope_fingerprint(
     *,
     portfolio_id: str,
     request: PortfolioAnalyticsTimeseriesRequest,
     resolved_window: AnalyticsWindow,
     reporting_currency: str,
+    expected_business_dates: list[date],
+    performance_horizon_business_dates: list[date],
+    business_calendar_present: bool,
+    predecessor_business_date: date | None = None,
 ) -> str:
     fingerprint: str = request_fingerprint(
         {
@@ -46,6 +114,14 @@ def portfolio_timeseries_scope_fingerprint(
             "resolved_window": resolved_window.model_dump(mode="json"),
             "frequency": request.frequency,
             "reporting_currency": reporting_currency,
+            "business_dates_digest": business_dates_digest(expected_business_dates),
+            "performance_horizon_business_dates_digest": business_dates_digest(
+                performance_horizon_business_dates
+            ),
+            "business_calendar_present": business_calendar_present,
+            "predecessor_business_date": (
+                predecessor_business_date.isoformat() if predecessor_business_date else None
+            ),
         }
     )
     return fingerprint
@@ -82,9 +158,7 @@ def portfolio_timeseries_diagnostics(
         missing_dates_count=missing_dates_count,
         stale_points_count=stale_points_count,
         expected_business_dates_count=len(expected_business_dates),
-        expected_business_dates_digest=request_fingerprint(
-            {"business_dates": [item.isoformat() for item in expected_business_dates]}
-        ),
+        expected_business_dates_digest=business_dates_digest(expected_business_dates),
         returned_observation_dates_count=len(observed_dates),
         cash_flows_included=True,
     )
@@ -96,6 +170,9 @@ def position_timeseries_scope_fingerprint(
     request: PositionAnalyticsTimeseriesRequest,
     resolved_window: AnalyticsWindow,
     reporting_currency: str,
+    expected_business_dates: list[date],
+    business_calendar_present: bool,
+    predecessor_business_date: date | None = None,
 ) -> str:
     fingerprint: str = request_fingerprint(
         {
@@ -112,9 +189,23 @@ def position_timeseries_scope_fingerprint(
             ],
             "dimensions": request.dimensions,
             "include_cash_flows": request.include_cash_flows,
+            "business_dates_digest": business_dates_digest(expected_business_dates),
+            "business_calendar_present": business_calendar_present,
+            "predecessor_business_date": (
+                predecessor_business_date.isoformat() if predecessor_business_date else None
+            ),
         }
     )
     return fingerprint
+
+
+def business_dates_digest(expected_business_dates: list[date]) -> str:
+    """Return deterministic identity for the governed calendar slice used by one page."""
+
+    digest: str = request_fingerprint(
+        {"business_dates": [item.isoformat() for item in expected_business_dates]}
+    )
+    return digest
 
 
 def position_timeseries_cursor(

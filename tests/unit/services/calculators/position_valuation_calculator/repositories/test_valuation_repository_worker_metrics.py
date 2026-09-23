@@ -563,7 +563,10 @@ async def test_find_contiguous_snapshot_dates_chunks_large_state_sets(
         )
         for call in mock_db_session.execute.await_args_list
     ]
-    assert parameter_counts == [7_011, 18]
+    # Four normalized business-calendar predicates contribute twelve fixed binds
+    # in addition to the original eleven scalar binds. Keep this exact so query
+    # changes cannot silently invalidate the production statement budget.
+    assert parameter_counts == [7_023, 30]
 
 
 async def test_find_contiguous_snapshot_dates_rejects_conflicting_epochs_before_io(

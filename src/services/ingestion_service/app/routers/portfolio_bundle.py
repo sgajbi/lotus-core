@@ -13,6 +13,7 @@ from ..dependencies import (
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..request_metadata import resolve_idempotency_key
+from ..services.ingestion_payload_evidence import portfolio_bundle_fingerprint_payload
 from ..services.ingestion_publish_commands import (
     IngestionPublishBookkeepingFailed,
     IngestionPublishCommandError,
@@ -117,6 +118,10 @@ async def ingest_portfolio_bundle(
         + len(request.market_prices)
         + len(request.fx_rates)
     )
+    request_payload = portfolio_bundle_fingerprint_payload(
+        validated_payload=request.model_dump(mode="json"),
+        original_payload=await http_request.json(),
+    )
     try:
         result = await command_handler.ingest_portfolio_bundle(
             PortfolioBundlePublishIngestionCommand(
@@ -124,7 +129,7 @@ async def ingest_portfolio_bundle(
                 endpoint=str(http_request.url.path),
                 request=request,
                 idempotency_key=idempotency_key,
-                request_payload=request.model_dump(mode="json"),
+                request_payload=request_payload,
                 accepted_count=accepted_count,
             )
         )

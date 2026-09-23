@@ -109,7 +109,8 @@ async def test_cashflow_repository_latest_business_date_uses_default_calendar(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "max(business_dates.date)" in compiled_query.lower()
-    assert "business_dates.calendar_code = 'GLOBAL'" in compiled_query
+    assert "upper(regexp_replace(business_dates.calendar_code" in compiled_query
+    assert "'^[[:space:]]+|[[:space:]]+$', '', 'g')) = 'GLOBAL'" in compiled_query
 
 
 async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfolio_flows(

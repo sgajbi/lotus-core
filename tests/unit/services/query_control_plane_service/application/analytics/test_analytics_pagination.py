@@ -2,18 +2,61 @@ from __future__ import annotations
 
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.request_fingerprints import request_fingerprint
 
 from src.services.query_control_plane_service.app.application.analytics.analytics_pagination import (  # noqa: E501
     AnalyticsPaginationError,
+    portfolio_business_calendar_scope,
     portfolio_timeseries_cursor_date,
     portfolio_timeseries_diagnostics,
+    portfolio_timeseries_scope_fingerprint,
     position_timeseries_cursor,
     position_timeseries_diagnostics,
     position_timeseries_next_page_token,
+    position_timeseries_scope_fingerprint,
 )
+from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
+    AnalyticsWindow,
+    PortfolioAnalyticsTimeseriesRequest,
+    PositionAnalyticsTimeseriesRequest,
+)
+
+
+@pytest.mark.asyncio
+async def test_portfolio_calendar_scope_keeps_window_and_global_horizon_coherent() -> None:
+    reader = SimpleNamespace(
+        get_business_calendar_scope=AsyncMock(
+            return_value=(
+                [date(2025, 1, 2), date(2025, 1, 31), date(2025, 5, 30)],
+                True,
+                date(2019, 12, 31),
+            )
+        )
+    )
+
+    (
+        window_dates,
+        horizon_dates,
+        calendar_present,
+        predecessor,
+    ) = await portfolio_business_calendar_scope(
+        reader,
+        AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+        date(2020, 1, 1),
+        date(2025, 5, 31),
+    )
+
+    reader.get_business_calendar_scope.assert_awaited_once_with(
+        start_date=date(2020, 1, 1),
+        end_date=date(2025, 5, 31),
+    )
+    assert window_dates == [date(2025, 1, 2), date(2025, 1, 31)]
+    assert horizon_dates == [date(2025, 1, 2), date(2025, 1, 31), date(2025, 5, 30)]
+    assert calendar_present is True
+    assert predecessor == date(2019, 12, 31)
 
 
 def test_portfolio_cursor_date_rejects_mismatched_scope() -> None:
@@ -23,6 +66,30 @@ def test_portfolio_cursor_date_rejects_mismatched_scope() -> None:
             request_scope_fingerprint="scope-1",
             decode_page_token=lambda _: {"scope_fingerprint": "scope-2"},
         )
+
+
+def test_portfolio_scope_changes_when_performance_horizon_calendar_changes() -> None:
+    window = AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31")
+    request = PortfolioAnalyticsTimeseriesRequest(as_of_date="2025-05-31", window=window)
+    common = {
+        "portfolio_id": "P1",
+        "request": request,
+        "resolved_window": window,
+        "reporting_currency": "USD",
+        "expected_business_dates": [date(2025, 1, 31)],
+        "business_calendar_present": True,
+    }
+
+    january_horizon = portfolio_timeseries_scope_fingerprint(
+        **common,
+        performance_horizon_business_dates=[date(2025, 1, 31)],
+    )
+    may_horizon = portfolio_timeseries_scope_fingerprint(
+        **common,
+        performance_horizon_business_dates=[date(2025, 1, 31), date(2025, 5, 30)],
+    )
+
+    assert january_horizon != may_horizon
 
 
 def test_position_cursor_parses_snapshot_epoch_and_security_id() -> None:
@@ -40,6 +107,56 @@ def test_position_cursor_parses_snapshot_epoch_and_security_id() -> None:
     assert cursor.cursor_date == date(2025, 1, 31)
     assert cursor.cursor_security_id == "SEC_A"
     assert cursor.snapshot_epoch == 7
+
+
+def test_position_scope_changes_when_governed_calendar_membership_changes() -> None:
+    window = AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31")
+    request = PositionAnalyticsTimeseriesRequest(
+        as_of_date="2025-01-31",
+        window=window,
+    )
+    initial_scope = position_timeseries_scope_fingerprint(
+        portfolio_id="P1",
+        request=request,
+        resolved_window=window,
+        reporting_currency="USD",
+        expected_business_dates=[date(2025, 1, 2)],
+        business_calendar_present=True,
+    )
+    updated_scope = position_timeseries_scope_fingerprint(
+        portfolio_id="P1",
+        request=request,
+        resolved_window=window,
+        reporting_currency="USD",
+        expected_business_dates=[date(2025, 1, 2), date(2025, 1, 3)],
+        business_calendar_present=True,
+    )
+
+    assert updated_scope != initial_scope
+
+
+def test_position_scope_changes_when_calendar_fallback_activates() -> None:
+    window = AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31")
+    request = PositionAnalyticsTimeseriesRequest(as_of_date="2025-01-31", window=window)
+
+    fallback_scope = position_timeseries_scope_fingerprint(
+        portfolio_id="P1",
+        request=request,
+        resolved_window=window,
+        reporting_currency="USD",
+        expected_business_dates=[],
+        business_calendar_present=False,
+    )
+    governed_scope = position_timeseries_scope_fingerprint(
+        portfolio_id="P1",
+        request=request,
+        resolved_window=window,
+        reporting_currency="USD",
+        expected_business_dates=[],
+        business_calendar_present=True,
+    )
+
+    assert governed_scope != fallback_scope
 
 
 def test_position_next_page_token_encodes_last_row_scope() -> None:

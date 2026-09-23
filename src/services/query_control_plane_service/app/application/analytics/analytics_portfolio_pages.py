@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from portfolio_common.domain.currency import normalize_currency_code
 
+from ...contracts.analytics_inputs import CashFlowObservation
 from ...domain.analytics import PositionValuationObservation
 
 
@@ -21,6 +22,16 @@ class AnalyticsPortfolioPageError(RuntimeError):
 class PortfolioObservationPageScope:
     page_dates: list[date]
     has_more: bool
+
+
+@dataclass(frozen=True)
+class PortfolioObservationSupportInputs:
+    position_rows: list[PositionValuationObservation]
+    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
+    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
+    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
+    portfolio_to_reporting_rates: dict[date, Decimal]
+    previous_eod_by_security: dict[str, Decimal]
 
 
 def portfolio_observation_page_scope(

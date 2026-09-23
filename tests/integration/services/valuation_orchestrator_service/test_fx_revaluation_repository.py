@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
+    BusinessDate,
     DailyPositionSnapshot,
     FxRate,
     Instrument,
@@ -36,6 +37,44 @@ from src.services.valuation_orchestrator_service.app.infrastructure.repositories
 from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
+
+
+@pytest.mark.lifecycle
+async def test_valuation_business_date_membership_preserves_work_before_calendar_load(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
+
+    classification = await repository.classify_valuation_business_date(date(2026, 4, 11))
+    assert classification.is_business_date is True
+    assert classification.latest_business_date is None
+
+
+@pytest.mark.lifecycle
+async def test_valuation_business_date_membership_uses_governed_calendar(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
+    friday = date(2026, 4, 10)
+    saturday = date(2026, 4, 11)
+    monday = date(2026, 4, 13)
+    async_db_session.add_all(
+        [
+            BusinessDate(calendar_code="\tglobal\n", date=friday),
+            BusinessDate(calendar_code="GLOBAL", date=monday),
+        ]
+    )
+    await async_db_session.commit()
+
+    friday_scope = await repository.classify_valuation_business_date(friday)
+    saturday_scope = await repository.classify_valuation_business_date(saturday)
+    monday_scope = await repository.classify_valuation_business_date(monday)
+    future_scope = await repository.classify_valuation_business_date(date(2026, 4, 14))
+
+    assert (friday_scope.is_business_date, friday_scope.latest_business_date) == (True, monday)
+    assert (saturday_scope.is_business_date, saturday_scope.latest_business_date) == (False, monday)
+    assert (monday_scope.is_business_date, monday_scope.latest_business_date) == (True, monday)
+    assert (future_scope.is_business_date, future_scope.latest_business_date) == (False, monday)
 
 
 def _portfolio(portfolio_id: str, base_currency: str) -> Portfolio:

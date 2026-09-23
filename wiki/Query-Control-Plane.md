@@ -129,6 +129,22 @@ non-current rows remain degraded. For unpaginated position windows, `missing_dat
 the canonical business-date gap; paginated responses do not treat dates outside the page as
 missing.
 
+The two analytics source products also select their served observations through that governed
+calendar at the PostgreSQL boundary. Durable weekend or holiday valuation history is retained, but
+it is not mixed into a response that declares `calendar_id=business_date_calendar`. The existing
+calendar-day recovery fallback remains available only when the `GLOBAL` business calendar is
+entirely absent; a partial calendar never broadens the window.
+Valuation-event scheduling does not infer coverage completeness from minimum and maximum dates,
+because supported calendar ingestion may arrive out of order. Position readiness remains durable;
+historical price and FX facts outside current membership retain replay from their effective date;
+future facts wait for later position readiness without terminating a consumer.
+Both analytics continuation scopes bind the exact requested-window calendar digest and the global
+calendar activation state. Membership changes or an out-of-window first calendar row reject the
+continuation and require paging to restart instead of combining observations selected under
+different fallback states.
+HTTP ingestion and persisted-event validation both canonicalize calendar identifiers to trimmed
+uppercase values, preventing case variants from bypassing `GLOBAL` membership.
+
 `PortfolioTimeseriesInput.cash_flows` are expressed in the response reporting currency. Core
 converts each persisted movement from its authoritative cashflow-row currency to portfolio base
 and then from portfolio base to reporting currency using source-owned FX for the observation date.

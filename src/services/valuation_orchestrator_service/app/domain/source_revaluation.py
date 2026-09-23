@@ -25,6 +25,14 @@ class SourceRevaluationSchedule:
     stage_durable_replay: bool
 
 
+@dataclass(frozen=True, slots=True)
+class ValuationCalendarClassification:
+    """Atomic calendar membership and horizon used to classify one source fact."""
+
+    is_business_date: bool
+    latest_business_date: date | None
+
+
 def decide_source_revaluation_schedule(
     *,
     effective_date: date,
@@ -63,3 +71,13 @@ def decide_source_revaluation_schedule(
         scan_visible_positions=True,
         stage_durable_replay=False,
     )
+
+
+def requires_off_calendar_replay(
+    *,
+    effective_date: date,
+    latest_business_date: date | None,
+) -> bool:
+    """Preserve corrections that can already affect a governed valuation date."""
+
+    return latest_business_date is not None and effective_date <= latest_business_date

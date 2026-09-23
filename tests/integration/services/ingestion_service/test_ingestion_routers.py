@@ -6825,6 +6825,34 @@ async def test_ingest_portfolio_bundle_replays_duplicate_idempotency_key(
     assert mock_kafka_producer.publish_message.call_count == 6
 
 
+async def test_ingest_portfolio_bundle_preserves_legacy_calendar_spelling_for_fingerprint_only(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _portfolio_bundle_payload()
+    payload["business_dates"][0]["calendar_code"] = " global "
+
+    response = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=payload,
+        headers={"X-Idempotency-Key": "portfolio-bundle-legacy-calendar-001"},
+    )
+
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+    fingerprint_payload = ingestion_test_harness["fake_job_service"].job_payloads[job_id]
+    evidence = ingestion_test_harness["fake_job_service"].job_evidence[job_id]
+    assert fingerprint_payload["business_dates"][0]["calendar_code"] == " global "
+    assert evidence.request_payload is None
+    assert evidence.durable_representation == "fingerprint_only"
+    assert (
+        mock_kafka_producer.publish_message.call_args_list[0].kwargs["value"]["calendar_code"]
+        == "GLOBAL"
+    )
+
+
 async def test_ingest_portfolio_bundle_rejects_empty_payload(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):

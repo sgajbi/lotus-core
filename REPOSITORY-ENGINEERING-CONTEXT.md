@@ -266,6 +266,20 @@ schema, machine-readable contracts, or executable evidence.
   Preserve the source scan bound, zero-quantity closures, exact per-day observations and atomic
   job/marker writes under the portfolio lock.
 
+- `PortfolioTimeseriesInput:v1` and `PositionTimeseriesInput:v1` declare the governed `GLOBAL`
+  business calendar and therefore select served rows through `business_dates` at the PostgreSQL
+  boundary. Retain raw non-business valuation history, but do not mix it into these source-product
+  responses while the calendar exists. The pre-existing calendar-day recovery fallback applies
+  only when the governed calendar is entirely empty; a partial calendar must not broaden scope.
+  Event-driven valuation scheduling does not infer completeness from calendar bounds: an empty
+  calendar retains the compatibility fallback, position readiness remains durable, historical
+  off-calendar price and FX facts retain replay, and future facts wait for later readiness without
+  terminating a consumer. Analytics continuation scopes include the exact window calendar digest
+  and global activation state; calendar drift rejects the next page and requires a restart instead
+  of mixing snapshots.
+  Calendar codes are trimmed and uppercased at both HTTP ingestion and persisted-event validation,
+  so partition identity, stored rows, and `GLOBAL` membership predicates cannot diverge by case.
+
 - Large cashflow evidence seeds must use physical multi-row SQL statements, not ORM
   `executemany` mappings that issue one statement per row. Source-cut maintenance is atomic and
   statement-scoped; preserve its durable locks rather than disabling maintenance to accelerate

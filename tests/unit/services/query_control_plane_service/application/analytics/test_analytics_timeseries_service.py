@@ -11,9 +11,7 @@ from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_control_plane_service.app.application.analytics import (
-    analytics_timeseries_service as analytics_timeseries_service_module,
-)
+from src.services.query_control_plane_service.app.application.analytics import analytics_quality
 from src.services.query_control_plane_service.app.application.analytics.analytics_cashflow_evidence import (  # noqa: E501
     load_position_cashflow_rows,
 )
@@ -97,8 +95,15 @@ def _position_repo(**methods: object) -> SimpleNamespace:
             if date.fromordinal(ordinal).weekday() < 5
         ]
 
+    async def get_business_calendar_scope(
+        *, start_date: date, end_date: date
+    ) -> tuple[list[date], bool, date | None]:
+        return await list_business_dates(start_date=start_date, end_date=end_date), True, None
+
     return SimpleNamespace(
         list_business_dates=AsyncMock(side_effect=list_business_dates),
+        has_business_calendar=AsyncMock(return_value=True),
+        get_business_calendar_scope=AsyncMock(side_effect=get_business_calendar_scope),
         **methods,
     )
 
@@ -196,6 +201,7 @@ def _install_canonical_portfolio_timeseries_repo(service: AnalyticsTimeseriesSer
         get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_business_dates=AsyncMock(return_value=[date(2026, 7, 3)]),
+        has_business_calendar=AsyncMock(return_value=True),
         list_position_observation_dates=AsyncMock(return_value=[date(2026, 7, 3)]),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
@@ -329,6 +335,7 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
         get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        has_business_calendar=AsyncMock(return_value=True),
         list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
@@ -468,6 +475,7 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
         get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
         get_position_snapshot_epoch=AsyncMock(return_value=1),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
+        has_business_calendar=AsyncMock(return_value=True),
         list_position_observation_dates=AsyncMock(
             return_value=[date(2025, 1, 2), date(2025, 1, 3)]
         ),
@@ -667,6 +675,7 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
         list_business_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
         ),
+        has_business_calendar=AsyncMock(return_value=True),
         list_position_observation_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 18, 19)]
         ),
@@ -779,6 +788,7 @@ async def test_get_portfolio_timeseries_uses_position_horizon_when_portfolio_row
         list_business_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
         ),
+        has_business_calendar=AsyncMock(return_value=True),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_position_observation_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
@@ -959,18 +969,24 @@ async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 3),
         snapshot_epoch=4,
+        governed_business_dates=None,
+        business_calendar_present=None,
     )
     service.repo.list_position_timeseries_rows_unpaged.assert_awaited_once_with(
         portfolio_id="P1",
         start_date=date(2025, 1, 2),
         end_date=date(2025, 1, 2),
         snapshot_epoch=4,
+        governed_business_dates=None,
+        business_calendar_present=None,
     )
     service.repo.list_latest_position_timeseries_before.assert_awaited_once_with(
         portfolio_id="P1",
         before_date=date(2025, 1, 2),
         security_ids=["SEC_USD"],
         snapshot_epoch=4,
+        governed_business_date=None,
+        business_calendar_present=None,
     )
 
 
@@ -1600,6 +1616,7 @@ async def test_get_portfolio_timeseries_position_path_defaults_snapshot_epoch_an
             )
         ),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
+        has_business_calendar=AsyncMock(return_value=True),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_position_observation_dates=AsyncMock(
             return_value=[date(2025, 1, 1), date(2025, 1, 2)]
@@ -1682,6 +1699,7 @@ async def test_get_portfolio_timeseries_normalizes_sparse_numeric_rows() -> None
             )
         ),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
+        has_business_calendar=AsyncMock(return_value=True),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
         list_position_timeseries_rows_unpaged=AsyncMock(
@@ -1874,7 +1892,7 @@ async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
 @pytest.mark.asyncio
 async def test_get_position_timeseries_rejects_scope_mismatch() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -1919,6 +1937,8 @@ async def test_invalid_page_token_raises_invalid_request() -> None:
                 close_date=None,
             )
         ),
+        list_business_dates=AsyncMock(return_value=[]),
+        has_business_calendar=AsyncMock(return_value=False),
     )
     with pytest.raises(AnalyticsInputError) as exc_info:
         await service.get_portfolio_timeseries(
@@ -1946,6 +1966,8 @@ async def test_page_token_scope_mismatch_raises_invalid_request() -> None:
         ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        list_business_dates=AsyncMock(return_value=[]),
+        has_business_calendar=AsyncMock(return_value=False),
     )
     token = service._encode_page_token(  # pylint: disable=protected-access
         {
@@ -2068,7 +2090,7 @@ async def test_get_portfolio_reference_not_found() -> None:
 @pytest.mark.asyncio
 async def test_get_portfolio_reference_success() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2105,7 +2127,7 @@ async def test_get_portfolio_reference_success() -> None:
 @pytest.mark.asyncio
 async def test_get_portfolio_reference_canonical_payload_keeps_single_response_lineage() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(return_value=_canonical_portfolio()),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
         get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
@@ -2134,14 +2156,14 @@ async def test_analytics_runtime_metadata_lineage_collision_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(return_value=_canonical_portfolio()),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
         get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
     )
 
     monkeypatch.setattr(
-        analytics_timeseries_service_module,
+        analytics_quality,
         "source_data_product_runtime_metadata",
         lambda **_: {"lineage": {"source_product": "PortfolioAnalyticsReference"}},
     )
@@ -2161,14 +2183,28 @@ async def test_latest_available_performance_date_reads_horizons_sequentially() -
     service = make_service()
     call_order: list[str] = []
 
-    async def get_latest_portfolio_timeseries_date(portfolio_id: str) -> date:
+    async def get_latest_portfolio_timeseries_date(
+        portfolio_id: str,
+        *,
+        governed_business_dates=None,
+        business_calendar_present=None,
+    ) -> date:
         call_order.append("portfolio")
         assert portfolio_id == "P1"
+        assert governed_business_dates is None
+        assert business_calendar_present is None
         return date(2025, 12, 30)
 
-    async def get_latest_position_timeseries_date(portfolio_id: str) -> date:
+    async def get_latest_position_timeseries_date(
+        portfolio_id: str,
+        *,
+        governed_business_dates=None,
+        business_calendar_present=None,
+    ) -> date:
         call_order.append("position")
         assert portfolio_id == "P1"
+        assert governed_business_dates is None
+        assert business_calendar_present is None
         return date(2025, 12, 31)
 
     service.repo = SimpleNamespace(
@@ -2190,9 +2226,78 @@ async def test_latest_available_performance_date_reads_horizons_sequentially() -
 
 
 @pytest.mark.asyncio
+async def test_portfolio_reference_captures_one_calendar_scope_before_horizon_reads() -> None:
+    service = make_service()
+    call_order: list[str] = []
+    captured_dates = [date(2025, 3, 14)]
+
+    async def get_business_calendar_scope(
+        *, start_date: date, end_date: date
+    ) -> tuple[list[date], bool, date | None]:
+        call_order.append("calendar")
+        assert start_date == date(2020, 1, 1)
+        assert end_date == date(2025, 3, 16)
+        return captured_dates, True, None
+
+    async def get_latest_portfolio_timeseries_date(
+        portfolio_id: str,
+        *,
+        governed_business_dates=None,
+        business_calendar_present=None,
+    ) -> date:
+        call_order.append("portfolio")
+        assert portfolio_id == "P1"
+        assert governed_business_dates is captured_dates
+        assert business_calendar_present is True
+        return date(2025, 3, 14)
+
+    async def get_latest_position_timeseries_date(
+        portfolio_id: str,
+        *,
+        governed_business_dates=None,
+        business_calendar_present=None,
+    ) -> None:
+        call_order.append("position")
+        assert portfolio_id == "P1"
+        assert governed_business_dates is captured_dates
+        assert business_calendar_present is True
+        return None
+
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_business_calendar_scope=AsyncMock(side_effect=get_business_calendar_scope),
+        get_latest_portfolio_timeseries_date=AsyncMock(
+            side_effect=get_latest_portfolio_timeseries_date
+        ),
+        get_latest_position_timeseries_date=AsyncMock(
+            side_effect=get_latest_position_timeseries_date
+        ),
+    )
+
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-03-16"),
+    )
+
+    assert response.performance_end_date == date(2025, 3, 14)
+    assert call_order == ["calendar", "portfolio", "position"]
+
+
+@pytest.mark.asyncio
 async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2218,7 +2323,7 @@ async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date
 @pytest.mark.asyncio
 async def test_portfolio_reference_uses_latest_complete_performance_horizon() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2244,7 +2349,7 @@ async def test_portfolio_reference_uses_latest_complete_performance_horizon() ->
 @pytest.mark.asyncio
 async def test_get_portfolio_reference_does_not_overstate_position_only_horizon() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2273,7 +2378,7 @@ async def test_get_portfolio_reference_does_not_overstate_position_only_horizon(
 @pytest.mark.asyncio
 async def test_get_portfolio_reference_marks_missing_performance_horizon_partial() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2330,6 +2435,7 @@ async def test_get_portfolio_timeseries_period_resolution_and_missing_fx() -> No
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        has_business_calendar=AsyncMock(return_value=True),
         list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
@@ -2838,6 +2944,8 @@ async def test_get_position_timeseries_normalizes_security_ids_for_continuity_an
         before_date=date(2025, 5, 19),
         security_ids=["SEC_EXISTING"],
         snapshot_epoch=14,
+        governed_business_date=None,
+        business_calendar_present=True,
     )
 
 
@@ -3258,7 +3366,7 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
 @pytest.mark.asyncio
 async def test_get_position_timeseries_missing_position_to_portfolio_fx_rate() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -3362,7 +3470,7 @@ async def test_get_portfolio_timeseries_not_found() -> None:
 @pytest.mark.asyncio
 async def test_get_position_timeseries_missing_fx_rate() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",

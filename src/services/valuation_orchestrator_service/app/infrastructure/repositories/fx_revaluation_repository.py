@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from datetime import date
-from typing import cast
 
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
@@ -30,6 +29,7 @@ from ...domain.fx_revaluation import (
     PositionValuationKey,
     RejectedFxRevaluationJob,
 )
+from ...domain.source_revaluation import ValuationCalendarClassification
 from ...repositories.valuation_repository import ValuationRepository
 
 
@@ -40,9 +40,11 @@ class SqlAlchemyFxRevaluationRepository:
         self._db = db
         self._valuation_repository = ValuationRepository(db)
 
-    async def latest_business_date(self) -> date | None:
-        """Return the valuation runtime's governed business-date horizon."""
-        return cast(date | None, await self._valuation_repository.get_latest_business_date())
+    async def classify_valuation_business_date(
+        self, effective_date: date
+    ) -> ValuationCalendarClassification:
+        """Read FX-date membership and its valuation horizon in one snapshot."""
+        return await self._valuation_repository.classify_valuation_business_date(effective_date)
 
     async def claim_pending_jobs(
         self,

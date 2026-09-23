@@ -2,8 +2,25 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.events import CoreEventModel, TransactionEvent
+from portfolio_common.events import BusinessDateEvent, CoreEventModel, TransactionEvent
 from pydantic import ValidationError
+
+
+def test_business_date_event_normalizes_calendar_identity() -> None:
+    event = BusinessDateEvent(
+        business_date=date(2026, 4, 10),
+        calendar_code=" global ",
+    )
+
+    assert event.calendar_code == "GLOBAL"
+
+
+def test_business_date_event_rejects_blank_calendar_identity() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        BusinessDateEvent(
+            business_date=date(2026, 4, 10),
+            calendar_code=" ",
+        )
 
 
 def _txn(

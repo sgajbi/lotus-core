@@ -5,6 +5,7 @@ from sqlalchemy import Integer, String, case, cast, column, exists, func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.types import Date
 
+from .business_calendar_sql import business_calendar_code_matches
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
 from .database_models import (
     BusinessDate,
@@ -107,8 +108,11 @@ def _snapshot_date_series_subq(
     expected_start_date = _expected_snapshot_start_date(state_alias, first_open_dates_table)
     governed_dates = (
         select(BusinessDate.date.label("expected_date"))
+        .distinct()
         .where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            ),
             BusinessDate.date >= expected_start_date,
             BusinessDate.date <= latest_valuation_date,
         )
@@ -152,7 +156,9 @@ def _snapshot_date_series_correlates(state_alias, first_open_dates_table) -> tup
 def _governed_calendar_exists():
     return exists(
         select(BusinessDate.date).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            )
         )
     )
 
@@ -248,7 +254,9 @@ def _base_contiguous_snapshot_dates_stmt(
     previous_governed_date = (
         select(func.max(BusinessDate.date))
         .where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            ),
             BusinessDate.date < first_gap_subq,
         )
         .scalar_subquery()

@@ -18,6 +18,11 @@ from src.services.query_control_plane_service.app.infrastructure.analytics_times
     AnalyticsTimeseriesRepository,
 )
 
+_GLOBAL_CALENDAR_PREDICATE = (
+    "upper(regexp_replace(business_dates.calendar_code, "
+    "'^[[:space:]]+|[[:space:]]+$', '', 'g')) = 'GLOBAL'"
+)
+
 
 class _FakeExecuteResult:
     def __init__(self, rows):
@@ -115,6 +120,12 @@ async def test_analytics_timeseries_repository_methods() -> None:
 
     latest_date = await repo.get_latest_portfolio_timeseries_date("P1")
     assert latest_date == date(2025, 1, 31)
+    latest_portfolio_stmt = db.execute.await_args_list[1].args[0]
+    latest_portfolio_sql = str(
+        latest_portfolio_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolio_timeseries.date IN (SELECT business_dates.date" in latest_portfolio_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in latest_portfolio_sql
 
     position_rows = await repo.list_position_timeseries_rows(
         portfolio_id="P1",
@@ -134,6 +145,8 @@ async def test_analytics_timeseries_repository_methods() -> None:
     assert "trim(position_timeseries.security_id)" in position_sql
     assert "anon_1.security_id IN ('SEC_A')" in position_sql
     assert "('SEC_A', 'SEC_A')" not in position_sql
+    assert "position_timeseries.date IN (SELECT business_dates.date" in position_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in position_sql
 
     fx_map = await repo.get_fx_rates_map(
         from_currency=" eur ",
@@ -166,6 +179,37 @@ async def test_analytics_timeseries_repository_methods() -> None:
     )
     assert "trim(position_timeseries.security_id) IN ('SEC_A')" in position_snapshot_sql
     assert "('SEC_A', 'SEC_A')" not in position_snapshot_sql
+    assert "position_timeseries.date IN (SELECT business_dates.date" in position_snapshot_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in position_snapshot_sql
+
+
+@pytest.mark.asyncio
+async def test_latest_position_timeseries_date_uses_governed_business_calendar() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([date(2025, 1, 31)])
+    repo = AnalyticsTimeseriesRepository(db)
+
+    latest_date = await repo.get_latest_position_timeseries_date("P1")
+
+    assert latest_date == date(2025, 1, 31)
+    stmt = db.execute.await_args.args[0]
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_timeseries.date IN (SELECT business_dates.date" in sql
+    assert _GLOBAL_CALENDAR_PREDICATE in sql
+
+
+@pytest.mark.asyncio
+async def test_business_calendar_presence_uses_canonical_global_identity() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.scalar.return_value = True
+    repo = AnalyticsTimeseriesRepository(db)
+
+    assert await repo.has_business_calendar() is True
+
+    stmt = db.scalar.await_args.args[0]
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "EXISTS (SELECT business_dates.date" in sql
+    assert _GLOBAL_CALENDAR_PREDICATE in sql
 
 
 @pytest.mark.asyncio
@@ -193,6 +237,8 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
     business_sql = str(business_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "business_dates.date >= '2025-01-01'" in business_sql
     assert "business_dates.date <= '2025-01-31'" in business_sql
+    assert "SELECT DISTINCT business_dates.date" in business_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in business_sql
 
     position_observation_dates = await repo.list_position_observation_dates(
         portfolio_id="P1",
@@ -210,6 +256,8 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
     assert "position_timeseries.quantity = (SELECT position_history.quantity" in (
         position_observation_sql
     )
+    assert "position_timeseries.date IN (SELECT business_dates.date" in position_observation_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in position_observation_sql
 
 
 @pytest.mark.asyncio
@@ -238,6 +286,8 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
     assert "position_timeseries.quantity = (SELECT position_history.quantity" in position_sql
     assert "instruments.product_type" in position_sql
     assert "position_history.position_date <= position_timeseries.date" in position_sql
+    assert "position_timeseries.date IN (SELECT business_dates.date" in position_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in position_sql
 
 
 @pytest.mark.asyncio
@@ -317,6 +367,8 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     assert "instruments.asset_class" in unpaged_sql
     assert "instruments.product_type" in unpaged_sql
     assert "ORDER BY anon_1.valuation_date ASC, anon_1.security_id ASC" in unpaged_sql
+    assert "position_timeseries.date IN (SELECT business_dates.date" in unpaged_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in unpaged_sql
 
     prior_rows = await repo.list_latest_position_timeseries_before(
         portfolio_id="P1",
@@ -329,7 +381,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     prior_stmt = db.execute.await_args_list[1].args[0]
     prior_sql = str(prior_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.portfolio_id = 'P1'" in prior_sql
-    assert "business_dates.calendar_code = 'GLOBAL'" in prior_sql
+    assert _GLOBAL_CALENDAR_PREDICATE in prior_sql
     assert "business_dates.date < '2025-01-01'" in prior_sql
     assert "position_timeseries.date = (SELECT max(business_dates.date)" in prior_sql
     assert "position_timeseries.epoch <= 3" in prior_sql

@@ -38,6 +38,9 @@ The seed must support:
 - seeded trades and settlements must be weekday-valid for the declared demo calendar; T+lag
   advances business weekdays, not raw calendar days. This fixture does not invent exchange
   holiday rules or a booking-centre timezone.
+- seeded instrument and cash market-price observations must use that same governed weekday
+  calendar. FX and benchmark reference coverage may extend over a wider calendar horizon, but
+  non-business price points must not create partial position-valuation days.
 - the seed must not require `lotus-manage`
 
 ## Recommended Reference Scenario
@@ -153,7 +156,7 @@ The seed must make the following product surfaces materially usable.
 
 - benchmark assignment effective before portfolio open date or before the
   analysis window starts
-- daily price history for all relevant securities
+- governed-business-day price history for all relevant securities
 - daily FX for all required currency pairs
 - raw `market_prices` and `fx_rates` are currently point-in-time series keyed by
   `price_date` / `rate_date`; when those source contracts grow effective-date

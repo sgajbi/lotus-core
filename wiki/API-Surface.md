@@ -208,6 +208,14 @@ POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries
 POST /integration/portfolios/{portfolio_id}/analytics/reference
 ```
 
+`PortfolioTimeseriesInput:v1` and `PositionTimeseriesInput:v1` serve only observations selected by
+the governed `GLOBAL` business calendar while that calendar exists. Raw weekend or holiday
+valuation history remains durable and does not enter the declared business-calendar response. An
+entirely absent calendar retains the documented recovery fallback; a partial calendar fails closed.
+Continuation tokens bind the exact requested-window calendar digest and global calendar activation
+state; if membership changes or the first governed row arrives outside the window, the next page is
+rejected and the caller must restart rather than receive a mixed-calendar dataset.
+
 For `PositionTimeseriesInput:v1`, internal investment position-flow observations follow the
 linked transaction's UTC trade date, matching trade-date position ownership. The source cash
 ledger remains settlement-dated; external and other flow observations retain their source

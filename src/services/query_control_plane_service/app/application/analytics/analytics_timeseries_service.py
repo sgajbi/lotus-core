@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from time import perf_counter
-from typing import Any, cast
+from typing import cast
 from uuid import uuid4
 
 from portfolio_common.domain.currency import normalize_currency_code
@@ -19,7 +19,6 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOBS_TOTAL,
 )
 from portfolio_common.request_fingerprints import request_fingerprint
-from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
 from ...contracts.analytics_inputs import (
     AnalyticsExportCreateRequest,
@@ -33,18 +32,15 @@ from ...contracts.analytics_inputs import (
     PortfolioAnalyticsReferenceResponse,
     PortfolioAnalyticsTimeseriesRequest,
     PortfolioAnalyticsTimeseriesResponse,
-    PortfolioQualityDiagnostics,
     PortfolioTimeseriesObservation,
     PositionAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesResponse,
     PositionTimeseriesRow,
-    QualityDiagnostics,
 )
 from ...domain.analytics import (
     AnalyticsCashflowEvidence,
     AnalyticsExportJobRecord,
     PositionValuationObservation,
-    PriorPositionValuation,
 )
 from ...ports.analytics import AnalyticsExportStore, AnalyticsTimeseriesReader, AnalyticsUnitOfWork
 from .analytics_cash_flows import (
@@ -97,6 +93,9 @@ from .analytics_page_tokens import (
 from .analytics_pagination import (
     AnalyticsPaginationError,
     PositionTimeseriesCursor,
+    business_calendar_scope,
+    captured_predecessor_date,
+    portfolio_business_calendar_scope,
     portfolio_timeseries_cursor_date,
     portfolio_timeseries_diagnostics,
     portfolio_timeseries_scope_fingerprint,
@@ -108,6 +107,7 @@ from .analytics_pagination import (
 from .analytics_portfolio_pages import (
     AnalyticsPortfolioPageError,
     PortfolioObservationPageScope,
+    PortfolioObservationSupportInputs,
     portfolio_observation_next_page_token,
     portfolio_observation_page_scope,
     portfolio_row_buckets,
@@ -115,13 +115,15 @@ from .analytics_portfolio_pages import (
     position_to_portfolio_observation_rate,
 )
 from .analytics_position_pages import (
-    PositionPageScope,
+    PositionPageSupportInputs,
     position_dimension_filters,
     position_page_scope,
     previous_position_eod_by_security,
 )
 from .analytics_position_responses import position_response_rows
+from .analytics_position_snapshots import position_snapshot_epoch
 from .analytics_quality import (
+    analytics_source_runtime_metadata,
     bounded_latest_performance_date,
     latest_portfolio_horizon_candidate,
     latest_position_horizon_with_observations,
@@ -143,26 +145,6 @@ ANALYTICS_EXPORT_CANCELLATION_MESSAGE = (
 )
 
 
-def _analytics_source_runtime_metadata(**kwargs: Any) -> dict[str, object]:
-    metadata: dict[str, object] = source_data_product_runtime_metadata(**kwargs)
-    if "lineage" in metadata:
-        raise AnalyticsInputError(
-            "UNSUPPORTED_CONFIGURATION",
-            "Analytics runtime metadata must use source_lineage and must not override "
-            "response lineage.",
-        )
-    return metadata
-
-
-@dataclass(frozen=True)
-class _PositionPageSupportInputs:
-    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
-    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
-    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
-    fx_rates: dict[date, Decimal]
-    previous_eod_by_security: dict[str, Decimal]
-
-
 @dataclass(frozen=True, slots=True)
 class AnalyticsRuntimePolicy:
     """Runtime limits and signing configuration for analytics reads and exports."""
@@ -175,17 +157,14 @@ class AnalyticsRuntimePolicy:
     export_execution_timeout_seconds: int
 
 
-@dataclass(frozen=True)
-class _PortfolioObservationSupportInputs:
-    position_rows: list[PositionValuationObservation]
-    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
-    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
-    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
-    portfolio_to_reporting_rates: dict[date, Decimal]
-    previous_eod_by_security: dict[str, Decimal]
-
-
 class AnalyticsTimeseriesService:
+    """Serve deterministic analytics reads and coordinate durable export lifecycles.
+
+    Every paged source response binds its cursor, diagnostics, and selected rows to one
+    captured source scope. Persistence adapters own database snapshot semantics; this
+    application service owns orchestration, currency conversion, and response policy.
+    """
+
     _EXPORT_LIFECYCLE_MODE = "inline_job_execution"
 
     def __init__(
@@ -371,6 +350,9 @@ class AnalyticsTimeseriesService:
         page_size: int,
         cursor_date: date | None,
         request_scope_fingerprint: str,
+        expected_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
+        window_predecessor_date: date | None = None,
     ) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int], list[date], int, str | None]:
         portfolio_currency = normalize_currency_code(portfolio_currency)
         reporting_currency = normalize_currency_code(reporting_currency)
@@ -381,14 +363,18 @@ class AnalyticsTimeseriesService:
             security_ids=[],
             position_ids=[],
             dimension_filters={},
+            governed_business_dates=expected_business_dates,
+            business_calendar_present=business_calendar_present,
         )
         observed_dates = await self.repo.list_position_observation_dates(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
             snapshot_epoch=snapshot_epoch,
+            governed_business_dates=expected_business_dates,
+            business_calendar_present=business_calendar_present,
         )
-        page_scope = self._portfolio_observation_page_scope(
+        page_scope = portfolio_observation_page_scope(
             observed_dates=observed_dates,
             cursor_date=cursor_date,
             page_size=page_size,
@@ -402,6 +388,12 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
+            governed_business_dates=(
+                page_scope.page_dates if expected_business_dates is not None else None
+            ),
+            business_calendar_present=business_calendar_present,
+            calendar_scope_dates=expected_business_dates,
+            window_predecessor_date=window_predecessor_date,
         )
         observations, quality_distribution = self._portfolio_observations_for_page(
             page_dates=page_scope.page_dates,
@@ -416,19 +408,6 @@ class AnalyticsTimeseriesService:
         )
         return observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token
 
-    @staticmethod
-    def _portfolio_observation_page_scope(
-        *,
-        observed_dates: list[date],
-        cursor_date: date | None,
-        page_size: int,
-    ) -> PortfolioObservationPageScope:
-        return portfolio_observation_page_scope(
-            observed_dates=observed_dates,
-            cursor_date=cursor_date,
-            page_size=page_size,
-        )
-
     async def _portfolio_observation_support_inputs(
         self,
         *,
@@ -437,7 +416,11 @@ class AnalyticsTimeseriesService:
         snapshot_epoch: int,
         portfolio_currency: str,
         reporting_currency: str,
-    ) -> _PortfolioObservationSupportInputs:
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
+        calendar_scope_dates: list[date] | None = None,
+        window_predecessor_date: date | None = None,
+    ) -> PortfolioObservationSupportInputs:
         page_start_date = min(page_dates)
         page_end_date = max(page_dates)
         position_rows = await self.repo.list_position_timeseries_rows_unpaged(
@@ -445,6 +428,8 @@ class AnalyticsTimeseriesService:
             start_date=page_start_date,
             end_date=page_end_date,
             snapshot_epoch=snapshot_epoch,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
         )
         normalized_security_ids = portfolio_position_security_ids(position_rows)
         portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
@@ -479,8 +464,18 @@ class AnalyticsTimeseriesService:
             before_date=page_dates[0],
             security_ids=normalized_security_ids,
             snapshot_epoch=snapshot_epoch,
+            governed_business_date=(
+                captured_predecessor_date(
+                    expected_business_dates=calendar_scope_dates or [],
+                    window_predecessor_date=window_predecessor_date,
+                    before_date=page_dates[0],
+                )
+                if business_calendar_present is not None
+                else None
+            ),
+            business_calendar_present=business_calendar_present,
         )
-        return _PortfolioObservationSupportInputs(
+        return PortfolioObservationSupportInputs(
             position_rows=position_rows,
             portfolio_cashflows_by_date=self._portfolio_cash_flows_for_dates(
                 portfolio_cashflow_rows,
@@ -492,30 +487,24 @@ class AnalyticsTimeseriesService:
             position_cashflows_by_key=self._position_cash_flows_for_keys(position_cashflow_rows),
             position_to_portfolio_rates=position_to_portfolio_rates,
             portfolio_to_reporting_rates=portfolio_to_reporting_rates,
-            previous_eod_by_security=self._previous_eod_by_security(previous_rows),
+            previous_eod_by_security=previous_position_eod_by_security(
+                previous_rows=previous_rows,
+                first_page_date=page_dates[0],
+            ),
         )
-
-    @staticmethod
-    def _previous_eod_by_security(
-        previous_rows: list[PriorPositionValuation],
-    ) -> dict[str, Decimal]:
-        return {
-            normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
-            for row in previous_rows
-        }
 
     def _portfolio_observations_for_page(
         self,
         *,
         page_dates: list[date],
-        support_inputs: _PortfolioObservationSupportInputs,
+        support_inputs: PortfolioObservationSupportInputs,
         portfolio_currency: str,
         reporting_currency: str,
     ) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int]]:
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
         previous_eod_by_security = dict(support_inputs.previous_eod_by_security)
-        row_buckets = self._portfolio_row_buckets(
+        row_buckets = portfolio_row_buckets(
             page_dates=page_dates,
             position_rows=support_inputs.position_rows,
         )
@@ -532,23 +521,12 @@ class AnalyticsTimeseriesService:
             observations.append(observation)
         return observations, quality_distribution
 
-    @staticmethod
-    def _portfolio_row_buckets(
-        *,
-        page_dates: list[date],
-        position_rows: list[PositionValuationObservation],
-    ) -> dict[date, list[PositionValuationObservation]]:
-        return cast(
-            dict[date, list[PositionValuationObservation]],
-            portfolio_row_buckets(page_dates=page_dates, position_rows=position_rows),
-        )
-
     def _portfolio_observation_for_date(
         self,
         *,
         valuation_date: date,
         rows: list[PositionValuationObservation],
-        support_inputs: _PortfolioObservationSupportInputs,
+        support_inputs: PortfolioObservationSupportInputs,
         previous_eod_by_security: dict[str, Decimal],
         portfolio_currency: str,
         reporting_currency: str,
@@ -669,6 +647,8 @@ class AnalyticsTimeseriesService:
         portfolio_id: str,
         request: PortfolioAnalyticsTimeseriesRequest,
     ) -> PortfolioAnalyticsTimeseriesResponse:
+        """Return one portfolio page bound to a deterministic calendar and source epoch."""
+
         portfolio = await self.repo.get_portfolio(portfolio_id)
         if portfolio is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
@@ -683,19 +663,27 @@ class AnalyticsTimeseriesService:
         reporting_currency = normalize_currency_code(
             str(request.reporting_currency or portfolio_currency)
         )
-        request_scope_fingerprint = self._portfolio_timeseries_scope_fingerprint(
+        (
+            expected_dates,
+            horizon_dates,
+            calendar_present,
+            predecessor_date,
+        ) = await portfolio_business_calendar_scope(
+            self.repo, resolved_window, portfolio.open_date, request.as_of_date
+        )
+        request_scope_fingerprint = portfolio_timeseries_scope_fingerprint(
             portfolio_id=portfolio_id,
             request=request,
             resolved_window=resolved_window,
             reporting_currency=reporting_currency,
+            expected_business_dates=expected_dates,
+            performance_horizon_business_dates=horizon_dates,
+            business_calendar_present=calendar_present,
+            predecessor_business_date=predecessor_date,
         )
         cursor_date = self._portfolio_timeseries_cursor_date(
             page_token=request.page.page_token,
             request_scope_fingerprint=request_scope_fingerprint,
-        )
-        expected_business_dates = await self.repo.list_business_dates(
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
         )
         (
             observations,
@@ -711,21 +699,25 @@ class AnalyticsTimeseriesService:
             page_size=request.page.page_size,
             cursor_date=cursor_date,
             request_scope_fingerprint=request_scope_fingerprint,
+            expected_business_dates=expected_dates,
+            business_calendar_present=calendar_present,
+            window_predecessor_date=predecessor_date,
         )
-
         latest_date = await self._latest_available_performance_date(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             observed_dates=observed_dates,
+            governed_business_dates=horizon_dates,
+            business_calendar_present=calendar_present,
         )
-        diagnostics = self._portfolio_timeseries_diagnostics(
+        diagnostics = portfolio_timeseries_diagnostics(
             quality_distribution=quality_distribution,
-            expected_business_dates=expected_business_dates,
+            expected_business_dates=expected_dates,
             observed_dates=observed_dates,
         )
-        observed_business_dates = set(expected_business_dates).intersection(observed_dates)
+        observed_business_dates = set(expected_dates).intersection(observed_dates)
         data_quality_status = timeseries_data_quality_status(
-            required_count=len(expected_business_dates),
+            required_count=len(expected_dates),
             observed_count=len(observed_business_dates),
             stale_count=diagnostics.stale_points_count,
             warning_issue_count=(
@@ -765,31 +757,13 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             observations=observations,
-            **_analytics_source_runtime_metadata(
+            **analytics_source_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
                 source_evidence_current=timeseries_source_evidence_current(
                     data_quality_status=data_quality_status
                 ),
-            ),
-        )
-
-    def _portfolio_timeseries_scope_fingerprint(
-        self,
-        *,
-        portfolio_id: str,
-        request: PortfolioAnalyticsTimeseriesRequest,
-        resolved_window: AnalyticsWindow,
-        reporting_currency: str,
-    ) -> str:
-        return cast(
-            str,
-            portfolio_timeseries_scope_fingerprint(
-                portfolio_id=portfolio_id,
-                request=request,
-                resolved_window=resolved_window,
-                reporting_currency=reporting_currency,
             ),
         )
 
@@ -811,25 +785,14 @@ class AnalyticsTimeseriesService:
         except AnalyticsPaginationError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
 
-    @staticmethod
-    def _portfolio_timeseries_diagnostics(
-        *,
-        quality_distribution: dict[str, int],
-        expected_business_dates: list[date],
-        observed_dates: list[date],
-    ) -> PortfolioQualityDiagnostics:
-        return portfolio_timeseries_diagnostics(
-            quality_distribution=quality_distribution,
-            expected_business_dates=expected_business_dates,
-            observed_dates=observed_dates,
-        )
-
     async def get_position_timeseries(
         self,
         *,
         portfolio_id: str,
         request: PositionAnalyticsTimeseriesRequest,
     ) -> PositionAnalyticsTimeseriesResponse:
+        """Return one position page bound to a deterministic calendar and source epoch."""
+
         portfolio = await self.repo.get_portfolio(portfolio_id)
         if portfolio is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
@@ -843,23 +806,32 @@ class AnalyticsTimeseriesService:
         reporting_currency = normalize_currency_code(
             str(request.reporting_currency or portfolio_currency)
         )
-        request_scope_fingerprint = self._position_timeseries_scope_fingerprint(
+        expected_dates, calendar_present, predecessor_date = await business_calendar_scope(
+            self.repo, resolved_window
+        )
+        request_scope_fingerprint = position_timeseries_scope_fingerprint(
             portfolio_id=portfolio_id,
             request=request,
             resolved_window=resolved_window,
             reporting_currency=reporting_currency,
+            expected_business_dates=expected_dates,
+            business_calendar_present=calendar_present,
+            predecessor_business_date=predecessor_date,
         )
         cursor = self._position_timeseries_cursor(
             page_token=request.page.page_token,
             request_scope_fingerprint=request_scope_fingerprint,
         )
-        dimension_filters = self._position_dimension_filters(request)
-        snapshot_epoch = await self._position_snapshot_epoch(
+        dimension_filters = position_dimension_filters(request)
+        snapshot_epoch = await position_snapshot_epoch(
+            reader=self.repo,
             portfolio_id=portfolio_id,
             request=request,
             resolved_window=resolved_window,
             dimension_filters=dimension_filters,
             cursor=cursor,
+            governed_business_dates=expected_dates,
+            business_calendar_present=calendar_present,
         )
         rows = await self.repo.list_position_timeseries_rows(
             portfolio_id=portfolio_id,
@@ -872,6 +844,8 @@ class AnalyticsTimeseriesService:
             position_ids=request.filters.position_ids,
             dimension_filters=dimension_filters,
             snapshot_epoch=snapshot_epoch,
+            governed_business_dates=expected_dates,
+            business_calendar_present=calendar_present,
         )
         has_more = len(rows) > request.page.page_size
         rows_page = rows[: request.page.page_size]
@@ -883,6 +857,9 @@ class AnalyticsTimeseriesService:
             include_cash_flows=request.include_cash_flows,
             snapshot_epoch=snapshot_epoch,
             fallback_start_date=resolved_window.start_date,
+            calendar_scope_dates=expected_dates,
+            window_predecessor_date=predecessor_date,
+            business_calendar_present=calendar_present,
         )
         response_rows, quality_distribution = self._position_response_rows(
             portfolio_id=portfolio_id,
@@ -900,18 +877,14 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
             request_scope_fingerprint=request_scope_fingerprint,
         )
-        expected_business_dates = await self.repo.list_business_dates(
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-        )
-        expected_business_date_set = set(expected_business_dates)
+        expected_business_date_set = set(expected_dates)
         observed_business_dates = {
             row.valuation_date
             for row in response_rows
             if row.valuation_date in expected_business_date_set
         }
         is_paginated_response = request.page.page_token is not None or next_page_token is not None
-        diagnostics = self._position_timeseries_diagnostics(
+        diagnostics = position_timeseries_diagnostics(
             quality_distribution=quality_distribution,
             missing_dates_count=(
                 0
@@ -922,7 +895,7 @@ class AnalyticsTimeseriesService:
             include_cash_flows=request.include_cash_flows,
         )
         data_quality_status = timeseries_data_quality_status(
-            required_count=len(expected_business_dates),
+            required_count=len(expected_dates),
             observed_count=len(observed_business_dates),
             stale_count=diagnostics.stale_points_count,
             warning_issue_count=1 if is_paginated_response else 0,
@@ -958,31 +931,13 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             rows=response_rows,
-            **_analytics_source_runtime_metadata(
+            **analytics_source_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
                 source_evidence_current=timeseries_source_evidence_current(
                     data_quality_status=data_quality_status
                 ),
-            ),
-        )
-
-    def _position_timeseries_scope_fingerprint(
-        self,
-        *,
-        portfolio_id: str,
-        request: PositionAnalyticsTimeseriesRequest,
-        resolved_window: AnalyticsWindow,
-        reporting_currency: str,
-    ) -> str:
-        return cast(
-            str,
-            position_timeseries_scope_fingerprint(
-                portfolio_id=portfolio_id,
-                request=request,
-                resolved_window=resolved_window,
-                reporting_currency=reporting_currency,
             ),
         )
 
@@ -1000,35 +955,6 @@ class AnalyticsTimeseriesService:
             )
         except AnalyticsPaginationError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
-
-    @staticmethod
-    def _position_dimension_filters(
-        request: PositionAnalyticsTimeseriesRequest,
-    ) -> dict[str, set[str]]:
-        return cast(dict[str, set[str]], position_dimension_filters(request))
-
-    async def _position_snapshot_epoch(
-        self,
-        *,
-        portfolio_id: str,
-        request: PositionAnalyticsTimeseriesRequest,
-        resolved_window: AnalyticsWindow,
-        dimension_filters: dict[str, set[str]],
-        cursor: PositionTimeseriesCursor,
-    ) -> int:
-        if cursor.snapshot_epoch is not None:
-            return cast(int, cursor.snapshot_epoch)
-        return cast(
-            int,
-            await self.repo.get_position_snapshot_epoch(
-                portfolio_id=portfolio_id,
-                start_date=resolved_window.start_date,
-                end_date=resolved_window.end_date,
-                security_ids=request.filters.security_ids,
-                position_ids=request.filters.position_ids,
-                dimension_filters=dimension_filters,
-            ),
-        )
 
     def _position_timeseries_next_page_token(
         self,
@@ -1049,21 +975,6 @@ class AnalyticsTimeseriesService:
             ),
         )
 
-    @staticmethod
-    def _position_timeseries_diagnostics(
-        *,
-        quality_distribution: dict[str, int],
-        missing_dates_count: int,
-        dimensions: list[str],
-        include_cash_flows: bool,
-    ) -> QualityDiagnostics:
-        return position_timeseries_diagnostics(
-            quality_distribution=quality_distribution,
-            missing_dates_count=missing_dates_count,
-            dimensions=dimensions,
-            include_cash_flows=include_cash_flows,
-        )
-
     async def _position_page_support_inputs(
         self,
         *,
@@ -1074,11 +985,14 @@ class AnalyticsTimeseriesService:
         include_cash_flows: bool,
         snapshot_epoch: int,
         fallback_start_date: date,
-    ) -> _PositionPageSupportInputs:
+        calendar_scope_dates: list[date] | None = None,
+        window_predecessor_date: date | None = None,
+        business_calendar_present: bool | None = None,
+    ) -> PositionPageSupportInputs:
         if not rows_page:
-            return _PositionPageSupportInputs({}, {}, {}, {}, {})
+            return PositionPageSupportInputs({}, {}, {}, {}, {})
 
-        page_scope = self._position_page_scope(
+        page_scope = position_page_scope(
             rows_page=rows_page,
             fallback_start_date=fallback_start_date,
         )
@@ -1104,6 +1018,16 @@ class AnalyticsTimeseriesService:
             before_date=page_scope.first_page_date,
             security_ids=page_scope.security_ids,
             snapshot_epoch=snapshot_epoch,
+            governed_business_date=(
+                captured_predecessor_date(
+                    expected_business_dates=calendar_scope_dates or [],
+                    window_predecessor_date=window_predecessor_date,
+                    before_date=page_scope.first_page_date,
+                )
+                if business_calendar_present is not None
+                else None
+            ),
+            business_calendar_present=business_calendar_present,
         )
         position_cashflows_by_key = await self._position_page_cash_flows_by_key(
             portfolio_id=portfolio_id,
@@ -1112,41 +1036,16 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
             include_cash_flows=include_cash_flows,
         )
-        return _PositionPageSupportInputs(
+        return PositionPageSupportInputs(
             position_cashflows_by_key=position_cashflows_by_key,
             portfolio_cashflows_by_date=portfolio_cashflow_classifications_for_dates(
                 portfolio_cashflow_rows
             ),
             position_to_portfolio_rates=position_to_portfolio_rates,
             fx_rates=fx_rates,
-            previous_eod_by_security=self._previous_position_eod_by_security(
+            previous_eod_by_security=previous_position_eod_by_security(
                 previous_rows=previous_rows,
                 first_page_date=page_scope.first_page_date,
-            ),
-        )
-
-    @staticmethod
-    def _position_page_scope(
-        *,
-        rows_page: list[PositionValuationObservation],
-        fallback_start_date: date,
-    ) -> PositionPageScope:
-        return position_page_scope(
-            rows_page=rows_page,
-            fallback_start_date=fallback_start_date,
-        )
-
-    @staticmethod
-    def _previous_position_eod_by_security(
-        *,
-        previous_rows: list[PriorPositionValuation],
-        first_page_date: date,
-    ) -> dict[str, Decimal]:
-        return cast(
-            dict[str, Decimal],
-            previous_position_eod_by_security(
-                previous_rows=previous_rows,
-                first_page_date=first_page_date,
             ),
         )
 
@@ -1179,7 +1078,7 @@ class AnalyticsTimeseriesService:
         reporting_currency: str,
         dimensions: list[str],
         include_cash_flows: bool,
-        support_inputs: _PositionPageSupportInputs,
+        support_inputs: PositionPageSupportInputs,
     ) -> tuple[list[PositionTimeseriesRow], dict[str, int]]:
         try:
             return position_response_rows(
@@ -1245,9 +1144,18 @@ class AnalyticsTimeseriesService:
         portfolio = await self.repo.get_portfolio(portfolio_id)
         if portfolio is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+        governed_business_dates, business_calendar_present, _ = await business_calendar_scope(
+            self.repo,
+            AnalyticsWindow(
+                start_date=min(portfolio.open_date, request.as_of_date),
+                end_date=request.as_of_date,
+            ),
+        )
         latest_date = await self._latest_available_performance_date(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
         )
         fingerprint = self._request_fingerprint(
             {
@@ -1276,7 +1184,7 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
-            **_analytics_source_runtime_metadata(
+            **analytics_source_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=portfolio_reference_data_quality_status(
@@ -1292,9 +1200,19 @@ class AnalyticsTimeseriesService:
         portfolio_id: str,
         as_of_date: date,
         observed_dates: list[date] | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> date | None:
-        latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
-        latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
+        latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(
+            portfolio_id,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
+        )
+        latest_position_date = await self.repo.get_latest_position_timeseries_date(
+            portfolio_id,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
+        )
         latest_position_date = latest_position_horizon_with_observations(
             latest_position_date=latest_position_date,
             observed_dates=observed_dates,

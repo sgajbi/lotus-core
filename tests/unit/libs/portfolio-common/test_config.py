@@ -443,13 +443,34 @@ def test_kafka_consumer_execution_profile_strict_rejects_invalid(monkeypatch):
 
 
 def test_canonical_topic_env_overrides_default_runtime_name(monkeypatch):
-    monkeypatch.setenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", "custom.transactions.persisted")
-
     import portfolio_common.config as config_module
 
-    reloaded = importlib.reload(config_module)
+    with monkeypatch.context() as override:
+        override.setenv(
+            "KAFKA_TRANSACTIONS_PERSISTED_TOPIC",
+            "custom.transactions.persisted",
+        )
+        reloaded = importlib.reload(config_module)
 
-    assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "custom.transactions.persisted"
+        assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "custom.transactions.persisted"
+
+    restored = importlib.reload(config_module)
+    assert restored.KAFKA_TRANSACTIONS_PERSISTED_TOPIC in restored.KAFKA_TOPIC_PARTITION_COUNTS
+
+
+def test_default_business_calendar_code_is_canonicalized(monkeypatch):
+    import portfolio_common.config as config_module
+
+    with monkeypatch.context() as override:
+        override.setenv("DEFAULT_BUSINESS_CALENDAR_CODE", " nyse_us ")
+        reloaded = importlib.reload(config_module)
+
+        assert reloaded.DEFAULT_BUSINESS_CALENDAR_CODE == "NYSE_US"
+
+    restored = importlib.reload(config_module)
+    assert restored.DEFAULT_BUSINESS_CALENDAR_CODE == (
+        restored.DEFAULT_BUSINESS_CALENDAR_CODE.strip().upper()
+    )
 
 
 def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):

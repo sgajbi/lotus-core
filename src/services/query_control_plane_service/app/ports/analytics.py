@@ -20,11 +20,32 @@ class AnalyticsTimeseriesReader(Protocol):
 
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None: ...
 
-    async def get_latest_portfolio_timeseries_date(self, portfolio_id: str) -> date | None: ...
+    async def get_latest_portfolio_timeseries_date(
+        self,
+        portfolio_id: str,
+        *,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
+    ) -> date | None: ...
 
-    async def get_latest_position_timeseries_date(self, portfolio_id: str) -> date | None: ...
+    async def get_latest_position_timeseries_date(
+        self,
+        portfolio_id: str,
+        *,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
+    ) -> date | None: ...
 
     async def list_business_dates(self, *, start_date: date, end_date: date) -> list[date]: ...
+
+    async def has_business_calendar(self) -> bool: ...
+
+    async def get_business_calendar_scope(
+        self, *, start_date: date, end_date: date
+    ) -> tuple[list[date], bool, date | None]:
+        """Read window membership, activation, and predecessor from one snapshot."""
+
+        ...
 
     async def list_position_timeseries_rows(
         self,
@@ -39,6 +60,8 @@ class AnalyticsTimeseriesReader(Protocol):
         position_ids: list[str],
         dimension_filters: dict[str, set[str]],
         snapshot_epoch: int | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[PositionValuationObservation]: ...
 
     async def list_position_timeseries_rows_unpaged(
@@ -48,6 +71,8 @@ class AnalyticsTimeseriesReader(Protocol):
         start_date: date,
         end_date: date,
         snapshot_epoch: int | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[PositionValuationObservation]: ...
 
     async def list_position_observation_dates(
@@ -57,6 +82,8 @@ class AnalyticsTimeseriesReader(Protocol):
         start_date: date,
         end_date: date,
         snapshot_epoch: int | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[date]: ...
 
     async def list_latest_position_timeseries_before(
@@ -66,6 +93,8 @@ class AnalyticsTimeseriesReader(Protocol):
         before_date: date,
         security_ids: list[str],
         snapshot_epoch: int | None = None,
+        governed_business_date: date | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[PriorPositionValuation]:
         """Read positions on the immediately preceding governed business date."""
 
@@ -97,6 +126,8 @@ class AnalyticsTimeseriesReader(Protocol):
         security_ids: list[str],
         position_ids: list[str],
         dimension_filters: dict[str, set[str]],
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> int: ...
 
     async def get_fx_rates_map(

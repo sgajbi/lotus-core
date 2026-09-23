@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from typing import Any, List, Optional
 
+from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
@@ -58,7 +59,9 @@ class PositionRepository:
     async def get_latest_business_date(self) -> Optional[date]:
         """Returns latest default-calendar business date for booked-state reads."""
         stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            )
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 

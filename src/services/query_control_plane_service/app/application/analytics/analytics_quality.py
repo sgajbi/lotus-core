@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import cast
+from typing import Any, cast
 
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
@@ -11,6 +11,22 @@ from portfolio_common.reconciliation_quality import (
     DataQualityCoverageSignal,
     classify_data_quality_coverage,
 )
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+
+from .analytics_input_errors import AnalyticsInputError
+
+
+def analytics_source_runtime_metadata(**kwargs: Any) -> dict[str, object]:
+    """Build source metadata without allowing it to overwrite response lineage."""
+
+    metadata: dict[str, object] = source_data_product_runtime_metadata(**kwargs)
+    if "lineage" in metadata:
+        raise AnalyticsInputError(
+            "UNSUPPORTED_CONFIGURATION",
+            "Analytics runtime metadata must use source_lineage and must not override "
+            "response lineage.",
+        )
+    return metadata
 
 
 def quality_status_from_epoch(epoch: int) -> str:

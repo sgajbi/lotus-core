@@ -1,6 +1,7 @@
 from datetime import date
 
-from pydantic import BaseModel, Field
+from portfolio_common.domain.business_calendar import normalize_business_calendar_code
+from pydantic import BaseModel, Field, field_validator
 
 
 class BusinessDate(BaseModel):
@@ -29,6 +30,11 @@ class BusinessDate(BaseModel):
         description="Optional upstream batch identifier for lineage and replay tracking.",
         examples=["business-dates-20260310-am"],
     )
+
+    @field_validator("calendar_code", mode="before")
+    @classmethod
+    def _normalize_calendar_code(cls, value: object) -> str:
+        return normalize_business_calendar_code(value)
 
 
 class BusinessDateIngestionRequest(BaseModel):
