@@ -1,7 +1,7 @@
 {
   "schema_version": "lotus.core.maintainability-baseline.v1",
   "max_allowed_rank": "B",
-  "recorded_on": "2026-09-05",
+  "recorded_on": "2026-09-23",
   "tracked_files_only": true,
   "entries": [
     {
@@ -50,9 +50,9 @@
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
       "rank": "C",
-      "mi": 5.958968220467531,
+      "mi": 6.719959684624752,
       "owner": "lotus-core maintainers",
-      "rationale": "Existing analytics application hotspot; snapshot cashflow evidence and input errors moved to focused modules, ratcheting the index upward while family-aligned decomposition continues.",
+      "rationale": "Existing analytics application hotspot; cashflow and position source normalization moved to the focused cashflow policy module, ratcheting the index upward while family-aligned decomposition continues.",
       "issue": "#462"
     },
     {
