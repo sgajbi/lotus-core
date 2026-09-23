@@ -50,7 +50,7 @@
     {
       "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
       "rank": "C",
-      "mi": 6.719959684624752,
+      "mi": 6.8050943583498205,
       "owner": "lotus-core maintainers",
       "rationale": "Existing analytics application hotspot; cashflow and position source normalization moved to the focused cashflow policy module, ratcheting the index upward while family-aligned decomposition continues.",
       "issue": "#462"

@@ -86,6 +86,18 @@ def build_cash_flow_observation(
     )
 
 
+def portfolio_cashflow_classifications_for_dates(
+    cashflow_rows: list[AnalyticsCashflowEvidence],
+) -> dict[date, list[CashFlowObservation]]:
+    """Group portfolio-flow classifications without asserting unused FX economics."""
+    flows_by_date: dict[date, list[CashFlowObservation]] = defaultdict(list)
+    for row in cashflow_rows:
+        flows_by_date[row.valuation_date].append(
+            build_cash_flow_observation(row, amount=decimal_or_zero(row.amount))
+        )
+    return flows_by_date
+
+
 def portfolio_cash_flows_for_dates(
     cashflow_rows: list[AnalyticsCashflowEvidence],
     *,

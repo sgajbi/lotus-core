@@ -608,6 +608,47 @@ async def test_portfolio_support_rejects_invalid_cashflow_source_currency() -> N
 
 
 @pytest.mark.asyncio
+async def test_position_support_does_not_require_fx_for_classification_only_portfolio_flow() -> (
+    None
+):
+    valuation_date = date(2025, 4, 2)
+    service = make_service()
+    service.repo = SimpleNamespace(
+        list_portfolio_cashflow_rows=AsyncMock(
+            return_value=[
+                _cashflow_evidence(
+                    transaction_id="TXN_EUR_DEPOSIT",
+                    valuation_date=valuation_date,
+                    amount=Decimal("335000"),
+                    currency="EUR",
+                )
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+    )
+
+    inputs = await service._position_page_support_inputs(  # pylint: disable=protected-access
+        portfolio_id="P_USD",
+        rows_page=[
+            _position_observation(
+                security_id="SEC_USD",
+                valuation_date=valuation_date,
+                position_currency="USD",
+            )
+        ],
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        include_cash_flows=False,
+        snapshot_epoch=0,
+        fallback_start_date=valuation_date,
+    )
+
+    assert inputs.portfolio_cashflows_by_date[valuation_date][0].flow_scope == "external"
+    service.repo.get_fx_rates_map.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_doubled() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
