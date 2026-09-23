@@ -17,6 +17,11 @@ from portfolio_common.identifiers import normalize_lookup_identifier as normaliz
 
 from ...contracts.analytics_inputs import CashFlowObservation
 from ...domain.analytics import AnalyticsCashflowEvidence, PositionValuationObservation
+from .analytics_fx_rates import (
+    AnalyticsFxRateError,
+    portfolio_to_reporting_rate,
+    position_to_portfolio_rate,
+)
 
 
 class AnalyticsCashFlowError(RuntimeError):
@@ -47,22 +52,33 @@ def portfolio_cash_flows_for_dates(
     *,
     reporting_currency: str,
     portfolio_currency: str,
-    fx_rates: dict[date, Decimal],
+    cashflow_to_portfolio_rates: dict[str, dict[date, Decimal]],
+    portfolio_to_reporting_rates: dict[date, Decimal],
 ) -> dict[date, list[CashFlowObservation]]:
     normalized_reporting_currency = normalize_currency_code(reporting_currency)
     normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
     flows_by_date: dict[date, list[CashFlowObservation]] = defaultdict(list)
     for row in cashflow_rows:
-        conversion_rate = Decimal("1")
-        if normalized_reporting_currency != normalized_portfolio_currency:
-            valuation_date = row.valuation_date
-            if valuation_date not in fx_rates:
-                raise AnalyticsCashFlowError(
-                    "Missing FX rate for "
-                    f"{normalized_portfolio_currency}/{normalized_reporting_currency} "
-                    f"on {valuation_date}."
-                )
-            conversion_rate = fx_rates[valuation_date]
+        try:
+            cashflow_currency = normalize_currency_code(row.currency)
+        except ValueError as exc:
+            raise AnalyticsCashFlowError(
+                f"Invalid source currency for cashflow transaction {row.transaction_id}."
+            ) from exc
+        try:
+            conversion_rate = position_to_portfolio_rate(
+                position_currency=cashflow_currency,
+                portfolio_currency=normalized_portfolio_currency,
+                valuation_date=row.valuation_date,
+                position_to_portfolio_rates=cashflow_to_portfolio_rates,
+            ) * portfolio_to_reporting_rate(
+                portfolio_currency=normalized_portfolio_currency,
+                reporting_currency=normalized_reporting_currency,
+                valuation_date=row.valuation_date,
+                fx_rates=portfolio_to_reporting_rates,
+            )
+        except AnalyticsFxRateError as exc:
+            raise AnalyticsCashFlowError(str(exc)) from exc
         flows_by_date[row.valuation_date].append(
             build_cash_flow_observation(
                 row,

@@ -323,7 +323,9 @@ class PortfolioTimeseriesObservation(BaseModel):
             "Canonical analytics flows recognized on valuation_date. Internal investment "
             "position flows follow the linked transaction's UTC trade date when positions "
             "are trade-date recognized; this does not change the settlement-dated cash ledger. "
-            "External and other flows retain their source cashflow date."
+            "External and other flows retain their source cashflow date. Amounts are converted "
+            "from each cashflow row's authoritative currency to portfolio base currency and "
+            "then to the effective reporting currency using dated source FX evidence."
         ),
     )
     cash_flow_currency: str = Field(
