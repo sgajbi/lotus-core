@@ -53,6 +53,7 @@ from .analytics_cash_flows import (
     effective_beginning_market_value,
     has_external_flow,
     portfolio_cash_flows_for_dates,
+    portfolio_cashflow_classifications_for_dates,
     portfolio_cashflow_currencies,
     portfolio_position_currencies,
     portfolio_position_security_ids,
@@ -1087,10 +1088,7 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
         )
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies=(
-                {str(row.position_currency or "") for row in rows_page}
-                | portfolio_cashflow_currencies(portfolio_cashflow_rows)
-            ),
+            position_currencies={str(row.position_currency or "") for row in rows_page},
             portfolio_currency=portfolio_currency,
             start_date=page_scope.page_start_date,
             end_date=page_scope.page_end_date,
@@ -1116,12 +1114,8 @@ class AnalyticsTimeseriesService:
         )
         return _PositionPageSupportInputs(
             position_cashflows_by_key=position_cashflows_by_key,
-            portfolio_cashflows_by_date=self._portfolio_cash_flows_for_dates(
-                portfolio_cashflow_rows,
-                reporting_currency=portfolio_currency,
-                portfolio_currency=portfolio_currency,
-                cashflow_to_portfolio_rates=position_to_portfolio_rates,
-                portfolio_to_reporting_rates={},
+            portfolio_cashflows_by_date=portfolio_cashflow_classifications_for_dates(
+                portfolio_cashflow_rows
             ),
             position_to_portfolio_rates=position_to_portfolio_rates,
             fx_rates=fx_rates,

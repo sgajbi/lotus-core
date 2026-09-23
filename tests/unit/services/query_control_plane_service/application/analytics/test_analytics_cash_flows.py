@@ -12,6 +12,7 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     effective_beginning_market_value,
     is_cash_book_position,
     portfolio_cash_flows_for_dates,
+    portfolio_cashflow_classifications_for_dates,
     position_cash_flows_for_keys,
 )
 from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
@@ -128,6 +129,28 @@ def test_portfolio_cash_flows_reject_missing_source_currency() -> None:
             cashflow_to_portfolio_rates={},
             portfolio_to_reporting_rates={},
         )
+
+
+def test_portfolio_cashflow_classifications_do_not_require_unused_fx() -> None:
+    valuation_date = date(2025, 4, 2)
+
+    result = portfolio_cashflow_classifications_for_dates(
+        [
+            SimpleNamespace(
+                transaction_id="TXN_EUR_DEPOSIT",
+                valuation_date=valuation_date,
+                amount=Decimal("335000"),
+                currency="EUR",
+                classification="CASHFLOW_IN",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=True,
+            )
+        ]
+    )
+
+    assert result[valuation_date][0].flow_scope == "external"
+    assert result[valuation_date][0].amount == Decimal("335000")
 
 
 def test_position_cash_flows_for_keys_preserves_non_position_amounts() -> None:
