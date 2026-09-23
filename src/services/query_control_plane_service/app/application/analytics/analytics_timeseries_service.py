@@ -309,7 +309,8 @@ class AnalyticsTimeseriesService:
         *,
         reporting_currency: str,
         portfolio_currency: str,
-        fx_rates: dict[date, Decimal],
+        cashflow_to_portfolio_rates: dict[str, dict[date, Decimal]],
+        portfolio_to_reporting_rates: dict[date, Decimal],
     ) -> dict[date, list[CashFlowObservation]]:
         try:
             return cast(
@@ -318,7 +319,8 @@ class AnalyticsTimeseriesService:
                     cashflow_rows,
                     reporting_currency=reporting_currency,
                     portfolio_currency=portfolio_currency,
-                    fx_rates=fx_rates,
+                    cashflow_to_portfolio_rates=cashflow_to_portfolio_rates,
+                    portfolio_to_reporting_rates=portfolio_to_reporting_rates,
                 ),
             )
         except AnalyticsCashFlowError as exc:
@@ -441,8 +443,16 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
         )
         normalized_security_ids = self._portfolio_position_security_ids(position_rows)
+        portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
+            portfolio_id=portfolio_id,
+            valuation_dates=page_dates,
+            snapshot_epoch=snapshot_epoch,
+        )
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies=self._portfolio_position_currencies(position_rows),
+            position_currencies=(
+                self._portfolio_position_currencies(position_rows)
+                | self._portfolio_cashflow_currencies(portfolio_cashflow_rows)
+            ),
             portfolio_currency=portfolio_currency,
             start_date=page_start_date,
             end_date=page_end_date,
@@ -452,11 +462,6 @@ class AnalyticsTimeseriesService:
             reporting_currency=reporting_currency,
             start_date=page_start_date,
             end_date=page_end_date,
-        )
-        portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
-            portfolio_id=portfolio_id,
-            valuation_dates=page_dates,
-            snapshot_epoch=snapshot_epoch,
         )
         position_cashflow_rows = await load_position_cashflow_rows(
             self.repo,
@@ -477,7 +482,8 @@ class AnalyticsTimeseriesService:
                 portfolio_cashflow_rows,
                 reporting_currency=reporting_currency,
                 portfolio_currency=portfolio_currency,
-                fx_rates=portfolio_to_reporting_rates,
+                cashflow_to_portfolio_rates=position_to_portfolio_rates,
+                portfolio_to_reporting_rates=portfolio_to_reporting_rates,
             ),
             position_cashflows_by_key=self._position_cash_flows_for_keys(position_cashflow_rows),
             position_to_portfolio_rates=position_to_portfolio_rates,
@@ -494,6 +500,21 @@ class AnalyticsTimeseriesService:
             for row in position_rows
             if getattr(row, "position_currency", None)
         }
+
+    @staticmethod
+    def _portfolio_cashflow_currencies(
+        cashflow_rows: list[AnalyticsCashflowEvidence],
+    ) -> set[str]:
+        currencies: set[str] = set()
+        for row in cashflow_rows:
+            try:
+                currencies.add(normalize_currency_code(row.currency))
+            except ValueError as exc:
+                raise AnalyticsInputError(
+                    "INSUFFICIENT_DATA",
+                    f"Invalid source currency for cashflow transaction {row.transaction_id}.",
+                ) from exc
+        return currencies
 
     @staticmethod
     def _portfolio_position_security_ids(
@@ -1100,7 +1121,10 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
         )
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies={str(row.position_currency or "") for row in rows_page},
+            position_currencies=(
+                {str(row.position_currency or "") for row in rows_page}
+                | self._portfolio_cashflow_currencies(portfolio_cashflow_rows)
+            ),
             portfolio_currency=portfolio_currency,
             start_date=page_scope.page_start_date,
             end_date=page_scope.page_end_date,
@@ -1130,7 +1154,8 @@ class AnalyticsTimeseriesService:
                 portfolio_cashflow_rows,
                 reporting_currency=portfolio_currency,
                 portfolio_currency=portfolio_currency,
-                fx_rates={},
+                cashflow_to_portfolio_rates=position_to_portfolio_rates,
+                portfolio_to_reporting_rates={},
             ),
             position_to_portfolio_rates=position_to_portfolio_rates,
             fx_rates=fx_rates,

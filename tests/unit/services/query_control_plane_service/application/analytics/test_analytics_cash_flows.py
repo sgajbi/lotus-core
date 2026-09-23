@@ -40,8 +40,10 @@ def test_portfolio_cash_flows_for_dates_requires_reporting_fx_when_needed() -> N
         portfolio_cash_flows_for_dates(
             [
                 SimpleNamespace(
+                    transaction_id="TXN_1",
                     valuation_date=date(2025, 1, 1),
                     amount=Decimal("5"),
+                    currency="EUR",
                     classification="CASHFLOW_IN",
                     timing="BOD",
                     is_position_flow=True,
@@ -50,7 +52,81 @@ def test_portfolio_cash_flows_for_dates_requires_reporting_fx_when_needed() -> N
             ],
             reporting_currency="USD",
             portfolio_currency="EUR",
-            fx_rates={},
+            cashflow_to_portfolio_rates={"EUR": {}},
+            portfolio_to_reporting_rates={},
+        )
+
+
+def test_portfolio_cash_flows_convert_authoritative_currency_via_portfolio_base() -> None:
+    valuation_date = date(2025, 4, 2)
+    result = portfolio_cash_flows_for_dates(
+        [
+            SimpleNamespace(
+                transaction_id="TXN_EUR_DEPOSIT",
+                valuation_date=valuation_date,
+                amount=Decimal("335000"),
+                currency=" eur ",
+                classification="CASHFLOW_IN",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=True,
+            )
+        ],
+        reporting_currency="USD",
+        portfolio_currency="USD",
+        cashflow_to_portfolio_rates={
+            "EUR": {valuation_date: Decimal("1.072679")},
+            "USD": {},
+        },
+        portfolio_to_reporting_rates={},
+    )
+
+    assert result[valuation_date][0].amount == Decimal("359347.465000")
+
+
+def test_portfolio_cash_flows_apply_both_fx_legs() -> None:
+    valuation_date = date(2025, 4, 2)
+    result = portfolio_cash_flows_for_dates(
+        [
+            SimpleNamespace(
+                transaction_id="TXN_GBP_DEPOSIT",
+                valuation_date=valuation_date,
+                amount=Decimal("100"),
+                currency="GBP",
+                classification="CASHFLOW_IN",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=True,
+            )
+        ],
+        reporting_currency="USD",
+        portfolio_currency="EUR",
+        cashflow_to_portfolio_rates={"GBP": {valuation_date: Decimal("1.2")}},
+        portfolio_to_reporting_rates={valuation_date: Decimal("1.1")},
+    )
+
+    assert result[valuation_date][0].amount == Decimal("132.00")
+
+
+def test_portfolio_cash_flows_reject_missing_source_currency() -> None:
+    with pytest.raises(AnalyticsCashFlowError, match="Invalid source currency"):
+        portfolio_cash_flows_for_dates(
+            [
+                SimpleNamespace(
+                    transaction_id="TXN_NO_CCY",
+                    valuation_date=date(2025, 1, 1),
+                    amount=Decimal("5"),
+                    currency=None,
+                    classification="CASHFLOW_IN",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=True,
+                )
+            ],
+            reporting_currency="USD",
+            portfolio_currency="USD",
+            cashflow_to_portfolio_rates={},
+            portfolio_to_reporting_rates={},
         )
 
 

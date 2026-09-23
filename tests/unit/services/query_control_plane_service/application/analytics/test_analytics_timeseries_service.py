@@ -348,24 +348,30 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
         list_portfolio_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    transaction_id="TXN_1",
                     valuation_date=date(2025, 1, 31),
                     amount=Decimal("1"),
+                    currency="EUR",
                     classification="CASHFLOW_IN",
                     timing="BOD",
                     is_position_flow=True,
                     is_portfolio_flow=True,
                 ),
                 SimpleNamespace(
+                    transaction_id="TXN_2",
                     valuation_date=date(2025, 1, 31),
                     amount=Decimal("2"),
+                    currency="EUR",
                     classification="TRANSFER",
                     timing="EOD",
                     is_position_flow=False,
                     is_portfolio_flow=True,
                 ),
                 SimpleNamespace(
+                    transaction_id="TXN_3",
                     valuation_date=date(2025, 1, 31),
                     amount=Decimal("-0.5"),
+                    currency="EUR",
                     classification="EXPENSE",
                     timing="EOD",
                     is_position_flow=True,
@@ -493,8 +499,10 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
         list_portfolio_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    transaction_id="TXN_1",
                     valuation_date=date(2025, 1, 2),
                     amount=Decimal("5"),
+                    currency="EUR",
                     classification="CASHFLOW_IN",
                     timing="BOD",
                     is_position_flow=True,
@@ -523,6 +531,80 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
     assert response.diagnostics.stale_points_count == 0
     assert response.data_quality_status == "PARTIAL"
     assert response.source_evidence_current is False
+
+
+@pytest.mark.asyncio
+async def test_portfolio_support_loads_cashflow_fx_when_reporting_matches_portfolio() -> None:
+    valuation_date = date(2025, 4, 2)
+    service = make_service()
+    service.repo = SimpleNamespace(
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                _position_observation(
+                    security_id="CASH_EUR",
+                    valuation_date=valuation_date,
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("335000"),
+                    position_currency="EUR",
+                    asset_class="Cash",
+                )
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(
+            return_value=[
+                _cashflow_evidence(
+                    transaction_id="TXN_EUR_DEPOSIT",
+                    security_id="CASH_EUR",
+                    valuation_date=valuation_date,
+                    amount=Decimal("335000"),
+                    currency="EUR",
+                )
+            ]
+        ),
+        get_fx_rates_map=AsyncMock(return_value={valuation_date: Decimal("1.072679")}),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+    )
+
+    inputs = await service._portfolio_observation_support_inputs(  # pylint: disable=protected-access
+        portfolio_id="P_USD",
+        page_dates=[valuation_date],
+        snapshot_epoch=0,
+        portfolio_currency="USD",
+        reporting_currency="USD",
+    )
+
+    assert inputs.portfolio_cashflows_by_date[valuation_date][0].amount == Decimal("359347.465000")
+    service.repo.get_fx_rates_map.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        start_date=valuation_date,
+        end_date=valuation_date,
+    )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_support_rejects_invalid_cashflow_source_currency() -> None:
+    valuation_date = date(2025, 4, 2)
+    service = make_service()
+    service.repo = SimpleNamespace(
+        list_position_timeseries_rows_unpaged=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(
+            return_value=[_cashflow_evidence(valuation_date=valuation_date, currency="")]
+        ),
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service._portfolio_observation_support_inputs(  # pylint: disable=protected-access
+            portfolio_id="P_USD",
+            page_dates=[valuation_date],
+            snapshot_epoch=0,
+            portfolio_currency="USD",
+            reporting_currency="USD",
+        )
+
+    assert exc_info.value.code == "INSUFFICIENT_DATA"
+    assert "Invalid source currency" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -588,6 +670,7 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
                     transaction_id="DEP_1",
                     valuation_date=date(2026, 3, 16),
                     amount=Decimal("10000"),
+                    currency="USD",
                     classification="CASHFLOW_IN",
                     timing="BOD",
                     is_position_flow=True,
@@ -597,6 +680,7 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
                     transaction_id="DEP_2",
                     valuation_date=date(2026, 3, 18),
                     amount=Decimal("5000"),
+                    currency="USD",
                     classification="CASHFLOW_IN",
                     timing="BOD",
                     is_position_flow=True,
@@ -606,6 +690,7 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
                     transaction_id="WD_1",
                     valuation_date=date(2026, 3, 19),
                     amount=Decimal("-2000"),
+                    currency="USD",
                     classification="CASHFLOW_OUT",
                     timing="EOD",
                     is_position_flow=True,
@@ -1359,8 +1444,10 @@ def test_portfolio_cash_flows_for_dates_requires_reporting_fx_when_needed() -> N
         service._portfolio_cash_flows_for_dates(  # pylint: disable=protected-access
             [
                 SimpleNamespace(
+                    transaction_id="TXN_1",
                     valuation_date=date(2025, 1, 1),
                     amount=Decimal("5"),
+                    currency="EUR",
                     classification="CASHFLOW_IN",
                     timing="BOD",
                     is_position_flow=True,
@@ -1369,7 +1456,8 @@ def test_portfolio_cash_flows_for_dates_requires_reporting_fx_when_needed() -> N
             ],
             reporting_currency="USD",
             portfolio_currency="EUR",
-            fx_rates={},
+            cashflow_to_portfolio_rates={"EUR": {}},
+            portfolio_to_reporting_rates={},
         )
 
     assert exc_info.value.code == "INSUFFICIENT_DATA"

@@ -129,6 +129,12 @@ non-current rows remain degraded. For unpaginated position windows, `missing_dat
 the canonical business-date gap; paginated responses do not treat dates outside the page as
 missing.
 
+`PortfolioTimeseriesInput.cash_flows` are expressed in the response reporting currency. Core
+converts each persisted movement from its authoritative cashflow-row currency to portfolio base
+and then from portfolio base to reporting currency using source-owned FX for the observation date.
+Same-currency legs use identity; a missing or invalid source currency or dated FX leg fails closed
+instead of silently relabeling the amount.
+
 Benchmark, index, risk-free, classification-taxonomy, and model-target evidence use the shared
 market/reference quality vocabulary. Blank or vendor-specific status values are unrecognized,
 produce `data_quality_status=UNKNOWN`, and cannot pass a publication or readiness gate. Benchmark

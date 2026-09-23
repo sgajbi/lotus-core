@@ -81,6 +81,10 @@ The portfolio companion endpoint now has a stronger contract baseline as well.
 1. `PortfolioTimeseriesObservation.beginning_market_value` and `ending_market_value` are always expressed in the effective `reporting_currency`.
 2. `PortfolioTimeseriesObservation.cash_flows` are canonical portfolio-level performance flows in that same reporting currency.
 3. Each observation includes `cash_flow_currency` so consumers do not need to infer flow-currency semantics.
+   Core converts every persisted cashflow from its authoritative row currency to portfolio base
+   currency and then to the effective reporting currency using source-owned FX evidence for the
+   observation date. Identity legs use rate one; a missing non-identity leg fails closed instead
+   of relabeling an unconverted amount.
 4. Each cash-flow observation includes explicit provenance:
    - `cash_flow_type`
    - `flow_scope`
