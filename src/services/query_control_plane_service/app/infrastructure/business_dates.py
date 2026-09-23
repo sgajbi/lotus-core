@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import BusinessDate
 from portfolio_common.db import SessionLocal
@@ -24,7 +25,9 @@ class SqlAlchemyBusinessDateProvider:
         try:
             with SessionLocal() as session:
                 statement = select(func.max(BusinessDate.date)).where(
-                    BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+                    business_calendar_code_matches(
+                        BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+                    )
                 )
                 latest = session.execute(statement).scalar_one_or_none()
                 return latest if isinstance(latest, date) else None

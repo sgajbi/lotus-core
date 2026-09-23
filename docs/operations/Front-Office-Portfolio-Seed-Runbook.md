@@ -48,7 +48,7 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 - USD and EUR cash accounts
 - funded USD and EUR sleeves with no structural negative operating cash
 - equities, funds, and fixed income
-- 12 months of market prices and EUR/USD FX
+- 12 months of governed-business-day market prices and EUR/USD FX
 - benchmark assignment and benchmark reference data
 - discretionary mandate binding, model target, instrument eligibility, tax-lot, market-data,
   client-restriction, and sustainability-preference source records for DPM assembly proof
@@ -64,6 +64,16 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 - normalized cash-book transaction rows with `price = 1` and
   `quantity = gross_transaction_amount`
 - full valuation coverage through the report end date so performance analytics remain valid
+- no weekend market-price observations for the canonical instruments or cash books; the analytics
+  source products declare `business_date_calendar`, and the seed must not manufacture optional
+  non-business valuation rows with race-dependent epoch coverage
+- valuation consumers apply strict calendar membership only after at least one authoritative
+  `GLOBAL` row exists. Calendar ingestion may arrive out of order, so absence is never treated as
+  proof that coverage is complete: position readiness remains durable, historical off-calendar
+  price and FX corrections retain replay from their effective date, and future source facts wait
+  for position readiness without terminating a consumer
+- calendar identifiers are canonicalized to trimmed uppercase values before publication and again
+  at persistence-event admission; case variants must not create a second logical calendar
 - unit-price cash authority through the latest planned-withdrawal transaction date so future cash
   legs do not create terminal exact-scope valuation failures
 - effective-dated valuation-policy assignments for every seeded instrument and authoritative
@@ -102,6 +112,10 @@ python scripts/development/repository_python.py tools/front_office_portfolio_see
   --evidence-output output/front-office-qa/canonical-seed-verification.json `
   --wait-seconds 900
 ```
+
+`--end-date` is the inclusive canonical as-of date and must be Monday-Friday. The seed publishes
+its own Monday-Friday governed business calendar, so a weekend horizon is rejected before service
+or database access instead of creating a scenario whose freshness can never be certified.
 
 ## Validation Performed By The Tool
 

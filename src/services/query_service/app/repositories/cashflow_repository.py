@@ -5,6 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
+from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.cashflow_source_cut_models import PortfolioCashflowSourceCut
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
@@ -127,7 +128,9 @@ class CashflowRepository:
 
     async def get_latest_business_date(self) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            )
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 

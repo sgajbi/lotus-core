@@ -6,6 +6,7 @@ from typing import Mapping, cast
 
 from dotenv import load_dotenv
 
+from portfolio_common.domain.business_calendar import normalize_business_calendar_code
 from portfolio_common.runtime_settings import env_bool as shared_env_bool
 from portfolio_common.runtime_settings import env_int as shared_env_int
 from portfolio_common.runtime_settings import env_json_map as shared_env_json_map
@@ -428,7 +429,9 @@ KAFKA_TOPIC_PARTITION_COUNTS = {
 }
 
 # Business-date calendar and guardrail policy
-DEFAULT_BUSINESS_CALENDAR_CODE = os.getenv("DEFAULT_BUSINESS_CALENDAR_CODE", "GLOBAL")
+DEFAULT_BUSINESS_CALENDAR_CODE = normalize_business_calendar_code(
+    os.getenv("DEFAULT_BUSINESS_CALENDAR_CODE", "GLOBAL")
+)
 BUSINESS_DATE_MAX_FUTURE_DAYS = _env_int("BUSINESS_DATE_MAX_FUTURE_DAYS", 0, minimum=0)
 BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = _env_bool(
     "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", False

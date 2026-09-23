@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, cast
 
+from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
@@ -141,7 +142,9 @@ class ReportingRepository:
 
     async def get_latest_business_date(self) -> date | None:
         stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            )
         )
         return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
 

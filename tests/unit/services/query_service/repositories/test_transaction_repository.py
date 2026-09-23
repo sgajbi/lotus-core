@@ -437,12 +437,13 @@ async def test_get_latest_business_date(
     mock_result.scalar_one_or_none.return_value = date(2025, 1, 31)
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    latest = await repository.get_latest_business_date(calendar_code="GLOBAL")
+    latest = await repository.get_latest_business_date(calendar_code=" global ")
 
     assert latest == date(2025, 1, 31)
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "business_dates.calendar_code = 'GLOBAL'" in compiled_query
+    assert "upper(regexp_replace(business_dates.calendar_code" in compiled_query
+    assert "'^[[:space:]]+|[[:space:]]+$', '', 'g')) = 'GLOBAL'" in compiled_query
 
 
 async def test_get_latest_fx_rate_returns_identity_for_same_currency(

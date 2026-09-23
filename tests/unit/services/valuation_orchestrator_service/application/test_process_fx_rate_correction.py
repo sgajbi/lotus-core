@@ -14,6 +14,9 @@ from src.services.valuation_orchestrator_service.app.domain.fx_revaluation impor
     FxRateCorrection,
     PositionValuationKey,
 )
+from src.services.valuation_orchestrator_service.app.domain.source_revaluation import (
+    ValuationCalendarClassification,
+)
 
 pytestmark = pytest.mark.domain
 
@@ -31,6 +34,10 @@ def correction(effective_date: date = date(2026, 4, 10)) -> FxRateCorrection:
 def use_case() -> tuple[ProcessFxRateCorrection, AsyncMock, AsyncMock]:
     """Build the use case with behavior-observable ports."""
     repository = AsyncMock()
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=True,
+        latest_business_date=date(2026, 4, 10),
+    )
     valuation_jobs = AsyncMock()
     return (
         ProcessFxRateCorrection(
@@ -45,7 +52,6 @@ def use_case() -> tuple[ProcessFxRateCorrection, AsyncMock, AsyncMock]:
 @pytest.mark.asyncio
 async def test_current_correction_queues_immediate_jobs_without_replay() -> None:
     handler, repository, valuation_jobs = use_case()
-    repository.latest_business_date.return_value = date(2026, 4, 10)
     repository.find_position_keys_requiring_revaluation.return_value = [
         PositionValuationKey("P-SGD", "USD-BOND", 3),
     ]
@@ -79,7 +85,10 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
 @pytest.mark.asyncio
 async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -> None:
     handler, repository, valuation_jobs = use_case()
-    repository.latest_business_date.return_value = date(2026, 4, 15)
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=True,
+        latest_business_date=date(2026, 4, 15),
+    )
     repository.find_position_keys_requiring_revaluation.return_value = [
         PositionValuationKey("P1", "USD-EQUITY", 0),
         PositionValuationKey("P2", "USD-BOND", 2),
@@ -127,7 +136,10 @@ async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -
 @pytest.mark.asyncio
 async def test_future_correction_only_stages_durable_replay() -> None:
     handler, repository, valuation_jobs = use_case()
-    repository.latest_business_date.return_value = date(2026, 4, 9)
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=True,
+        latest_business_date=date(2026, 4, 9),
+    )
 
     result = await handler.execute(
         correction=correction(),
@@ -144,7 +156,10 @@ async def test_future_correction_only_stages_durable_replay() -> None:
 @pytest.mark.asyncio
 async def test_source_fact_before_business_horizon_defers_to_position_readiness() -> None:
     handler, repository, valuation_jobs = use_case()
-    repository.latest_business_date.return_value = None
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=True,
+        latest_business_date=None,
+    )
 
     result = await handler.execute(
         correction=correction(),
@@ -162,7 +177,6 @@ async def test_source_fact_before_business_horizon_defers_to_position_readiness(
 @pytest.mark.asyncio
 async def test_current_correction_without_visible_positions_relies_on_position_readiness() -> None:
     handler, repository, valuation_jobs = use_case()
-    repository.latest_business_date.return_value = date(2026, 4, 10)
     repository.find_position_keys_requiring_revaluation.return_value = []
 
     result = await handler.execute(
@@ -174,6 +188,51 @@ async def test_current_correction_without_visible_positions_relies_on_position_r
     assert result.durable_replay_staged is False
     assert result.immediate_job_count == 0
     repository.stage_durable_replay.assert_not_awaited()
+    valuation_jobs.upsert_jobs.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_historical_off_calendar_fx_fact_stages_replay_without_immediate_job() -> None:
+    handler, repository, valuation_jobs = use_case()
+    saturday = date(2026, 4, 11)
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=False,
+        latest_business_date=date(2026, 4, 13),
+    )
+
+    result = await handler.execute(
+        correction=correction(saturday),
+        correlation_id="corr-weekend-fx",
+        source_correction_id="sha256:" + ("6" * 64),
+    )
+
+    assert result.effective_date == saturday
+    assert result.immediate_job_count == 0
+    assert result.durable_replay_staged is True
+    repository.stage_durable_replay.assert_awaited_once()
+    repository.find_position_keys_requiring_revaluation.assert_not_awaited()
+    valuation_jobs.upsert_jobs.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_future_off_calendar_fx_fact_waits_for_position_readiness() -> None:
+    handler, repository, valuation_jobs = use_case()
+    saturday = date(2026, 4, 11)
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=False,
+        latest_business_date=date(2026, 4, 10),
+    )
+
+    result = await handler.execute(
+        correction=correction(saturday),
+        correlation_id="corr-future-weekend-fx",
+        source_correction_id="sha256:" + ("7" * 64),
+    )
+
+    assert result.immediate_job_count == 0
+    assert result.durable_replay_staged is False
+    repository.stage_durable_replay.assert_not_awaited()
+    repository.find_position_keys_requiring_revaluation.assert_not_awaited()
     valuation_jobs.upsert_jobs.assert_not_awaited()
 
 

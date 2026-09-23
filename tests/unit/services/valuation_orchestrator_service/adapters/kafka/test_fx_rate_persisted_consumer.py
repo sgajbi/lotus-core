@@ -17,6 +17,9 @@ from src.services.valuation_orchestrator_service.app.adapters.kafka import (
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
     PositionValuationKey,
 )
+from src.services.valuation_orchestrator_service.app.domain.source_revaluation import (
+    ValuationCalendarClassification,
+)
 from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
     fx_revaluation_repository,
 )
@@ -68,6 +71,10 @@ def dependencies():
     session.begin.return_value = AsyncMock()
     idempotency = AsyncMock(spec=IdempotencyRepository)
     repository = AsyncMock(spec=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository)
+    repository.classify_valuation_business_date.return_value = ValuationCalendarClassification(
+        is_business_date=True,
+        latest_business_date=date(2026, 4, 10),
+    )
     jobs = AsyncMock(spec=ValuationJobRepository)
 
     async def sessions():
@@ -96,7 +103,6 @@ async def test_current_persisted_observation_does_not_stage_redundant_replay(
     dependencies: dict,
 ) -> None:
     dependencies["idempotency"].claim_event_processing.return_value = True
-    dependencies["repository"].latest_business_date.return_value = event.rate_date
     dependencies["repository"].find_position_keys_requiring_revaluation.return_value = []
 
     await consumer.process_message(message)
@@ -132,7 +138,6 @@ async def test_shared_correlation_still_carries_fx_observation_identity_to_job_f
     dependencies: dict,
 ) -> None:
     dependencies["idempotency"].claim_event_processing.return_value = True
-    dependencies["repository"].latest_business_date.return_value = event.rate_date
     dependencies["repository"].find_position_keys_requiring_revaluation.return_value = [
         PositionValuationKey("P1", "USD-BOND", 2)
     ]

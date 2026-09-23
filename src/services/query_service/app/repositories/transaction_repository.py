@@ -6,6 +6,7 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any, List, Mapping, Optional, cast
 
+from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
@@ -205,7 +206,7 @@ class TransactionRepository:
         calendar_code: str = DEFAULT_BUSINESS_CALENDAR_CODE,
     ) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == calendar_code
+            business_calendar_code_matches(BusinessDate.calendar_code, calendar_code)
         )
         return cast(Optional[date], (await self.db.execute(stmt)).scalar_one_or_none())
 

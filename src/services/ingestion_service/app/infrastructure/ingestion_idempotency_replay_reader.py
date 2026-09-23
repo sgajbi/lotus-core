@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
+from portfolio_common.domain.business_calendar import normalize_business_calendar_code
 from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +47,7 @@ class SqlAlchemyIngestionIdempotencyReplayReader:
         if existing is None or not _payload_matches(
             existing,
             request_payload,
+            endpoint=endpoint,
             fingerprint_keyring=self._fingerprint_keyring,
         ):
             return None
@@ -65,13 +67,53 @@ def _payload_matches(
     existing: Any,
     requested_payload: dict[str, Any] | None,
     *,
+    endpoint: str,
     fingerprint_keyring: Mapping[str, str],
 ) -> bool:
     existing_fingerprint = getattr(existing, "request_payload_fingerprint", None)
     if existing_fingerprint is None:
         return False
-    return ingestion_payload_fingerprint_matches(
+    if ingestion_payload_fingerprint_matches(
         stored_fingerprint=existing_fingerprint,
         payload=requested_payload,
         secrets_by_key_id=fingerprint_keyring,
-    )
+    ):
+        return True
+    if endpoint != "/ingest/business-dates":
+        return False
+
+    retained_payload = getattr(existing, "request_payload", None)
+    if not isinstance(retained_payload, dict) or not ingestion_payload_fingerprint_matches(
+        stored_fingerprint=existing_fingerprint,
+        payload=retained_payload,
+        secrets_by_key_id=fingerprint_keyring,
+    ):
+        return False
+
+    retained_canonical = _canonical_business_date_payload(retained_payload)
+    requested_canonical = _canonical_business_date_payload(requested_payload)
+    return retained_canonical is not None and retained_canonical == requested_canonical
+
+
+def _canonical_business_date_payload(
+    payload: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Normalize only governed calendar identity while preserving all other evidence."""
+
+    if not isinstance(payload, dict):
+        return None
+    business_dates = payload.get("business_dates")
+    if not isinstance(business_dates, list):
+        return None
+
+    canonical_dates: list[dict[str, Any]] = []
+    for item in business_dates:
+        if not isinstance(item, dict) or "calendar_code" not in item:
+            return None
+        try:
+            calendar_code = normalize_business_calendar_code(item["calendar_code"])
+        except (TypeError, ValueError):
+            return None
+        canonical_dates.append({**item, "calendar_code": calendar_code})
+
+    return {**payload, "business_dates": canonical_dates}

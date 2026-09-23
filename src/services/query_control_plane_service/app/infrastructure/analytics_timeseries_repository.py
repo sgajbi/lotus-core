@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, cast
 
+from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
@@ -21,7 +22,7 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
-from sqlalchemy import and_, case, false, func, or_, select
+from sqlalchemy import Date, and_, case, false, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.analytics import (
@@ -145,6 +146,53 @@ def _append_optional_where(stmt, predicate):
 
 def _trimmed_position_timeseries_security_id():
     return func.trim(PositionTimeseries.security_id)
+
+
+def _governed_business_date_predicate(date_column: Any):
+    """Keep normal analytics observations on the declared governed business calendar.
+
+    The existing recovery posture permits calendar-day observations only when the GLOBAL
+    calendar is entirely absent. A partially populated calendar must still fail closed instead
+    of broadening the requested window.
+    """
+
+    governed_calendar = select(BusinessDate.date).where(
+        business_calendar_code_matches(BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE)
+    )
+    governed_calendar_exists = (
+        select(BusinessDate.date)
+        .where(
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            )
+        )
+        .exists()
+    )
+    return or_(
+        date_column.in_(governed_calendar),
+        ~governed_calendar_exists,
+    )
+
+
+def _captured_business_date_predicate(
+    date_column: Any,
+    *,
+    governed_business_dates: list[date] | None,
+    business_calendar_present: bool | None,
+):
+    """Bind a row query to the exact calendar scope already hashed for the response.
+
+    ``None`` preserves the repository's standalone live-calendar behavior. Service
+    requests pass an explicit presence decision and the dates captured for their
+    response, preventing a concurrent calendar admission from widening a page after
+    its cursor identity and diagnostics were established.
+    """
+
+    if business_calendar_present is None:
+        return _governed_business_date_predicate(date_column)
+    if not business_calendar_present:
+        return None
+    return date_column.in_(governed_business_dates or [])
 
 
 class AnalyticsTimeseriesRepository:
@@ -317,16 +365,44 @@ class AnalyticsTimeseriesRepository:
             updated_at=row.updated_at,
         )
 
-    async def get_latest_portfolio_timeseries_date(self, portfolio_id: str) -> date | None:
+    async def get_latest_portfolio_timeseries_date(
+        self,
+        portfolio_id: str,
+        *,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
+    ) -> date | None:
         stmt = select(func.max(PortfolioTimeseries.date)).where(
             PortfolioTimeseries.portfolio_id == portfolio_id
+        )
+        stmt = _append_optional_where(
+            stmt,
+            _captured_business_date_predicate(
+                PortfolioTimeseries.date,
+                governed_business_dates=governed_business_dates,
+                business_calendar_present=business_calendar_present,
+            ),
         )
         result = await self.db.execute(stmt)
         return cast(date | None, result.scalar_one_or_none())
 
-    async def get_latest_position_timeseries_date(self, portfolio_id: str) -> date | None:
+    async def get_latest_position_timeseries_date(
+        self,
+        portfolio_id: str,
+        *,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
+    ) -> date | None:
         stmt = select(func.max(PositionTimeseries.date)).where(
             PositionTimeseries.portfolio_id == portfolio_id
+        )
+        stmt = _append_optional_where(
+            stmt,
+            _captured_business_date_predicate(
+                PositionTimeseries.date,
+                governed_business_dates=governed_business_dates,
+                business_calendar_present=business_calendar_present,
+            ),
         )
         result = await self.db.execute(stmt)
         return cast(date | None, result.scalar_one_or_none())
@@ -339,8 +415,11 @@ class AnalyticsTimeseriesRepository:
     ) -> list[date]:
         stmt = (
             select(BusinessDate.date)
+            .distinct()
             .where(
-                BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+                business_calendar_code_matches(
+                    BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+                ),
                 BusinessDate.date >= start_date,
                 BusinessDate.date <= end_date,
             )
@@ -348,6 +427,64 @@ class AnalyticsTimeseriesRepository:
         )
         result = await self.db.execute(stmt)
         return [row.date for row in result.all()]
+
+    async def has_business_calendar(self) -> bool:
+        """Return whether the governed calendar has activated its strict read boundary."""
+
+        calendar_exists = (
+            select(BusinessDate.date)
+            .where(
+                business_calendar_code_matches(
+                    BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+                )
+            )
+            .exists()
+        )
+        return bool(await self.db.scalar(select(calendar_exists)))
+
+    async def get_business_calendar_scope(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[list[date], bool, date | None]:
+        """Read membership and activation atomically for a response/cursor scope."""
+
+        governed_code = business_calendar_code_matches(
+            BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+        )
+        window_dates = (
+            select(BusinessDate.date.label("business_date"))
+            .distinct()
+            .where(
+                governed_code,
+                BusinessDate.date >= start_date,
+                BusinessDate.date <= end_date,
+            )
+            .cte("window_business_dates")
+        )
+        calendar_present = select(BusinessDate.date).where(governed_code).exists()
+        predecessor_date = (
+            select(func.max(BusinessDate.date))
+            .where(governed_code, BusinessDate.date < start_date)
+            .scalar_subquery()
+        )
+        window_has_dates = select(window_dates.c.business_date).exists()
+        statement = select(
+            window_dates.c.business_date,
+            calendar_present.label("calendar_present"),
+            predecessor_date.label("predecessor_date"),
+        ).select_from(window_dates)
+        statement = statement.union_all(
+            select(
+                literal(None).cast(Date).label("business_date"),
+                calendar_present.label("calendar_present"),
+                predecessor_date.label("predecessor_date"),
+            ).where(~window_has_dates)
+        )
+        rows = (await self.db.execute(statement)).all()
+        dates = sorted(row.business_date for row in rows if row.business_date is not None)
+        return dates, bool(rows[0].calendar_present), rows[0].predecessor_date
 
     async def list_position_timeseries_rows(
         self,
@@ -362,12 +499,21 @@ class AnalyticsTimeseriesRepository:
         position_ids: list[str],
         dimension_filters: dict[str, set[str]],
         snapshot_epoch: int | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[PositionValuationObservation]:
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             PositionTimeseries.date >= start_date,
             PositionTimeseries.date <= end_date,
         ]
+        calendar_predicate = _captured_business_date_predicate(
+            PositionTimeseries.date,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
+        )
+        if calendar_predicate is not None:
+            predicates.append(calendar_predicate)
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
         latest_history_quantity = self._latest_current_position_history_quantity()
@@ -442,12 +588,21 @@ class AnalyticsTimeseriesRepository:
         start_date: date,
         end_date: date,
         snapshot_epoch: int | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[PositionValuationObservation]:
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             PositionTimeseries.date >= start_date,
             PositionTimeseries.date <= end_date,
         ]
+        calendar_predicate = _captured_business_date_predicate(
+            PositionTimeseries.date,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
+        )
+        if calendar_predicate is not None:
+            predicates.append(calendar_predicate)
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
 
@@ -507,12 +662,21 @@ class AnalyticsTimeseriesRepository:
         start_date: date,
         end_date: date,
         snapshot_epoch: int | None = None,
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[date]:
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             PositionTimeseries.date >= start_date,
             PositionTimeseries.date <= end_date,
         ]
+        calendar_predicate = _captured_business_date_predicate(
+            PositionTimeseries.date,
+            governed_business_dates=governed_business_dates,
+            business_calendar_present=business_calendar_present,
+        )
+        if calendar_predicate is not None:
+            predicates.append(calendar_predicate)
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
 
@@ -558,6 +722,8 @@ class AnalyticsTimeseriesRepository:
         before_date: date,
         security_ids: list[str],
         snapshot_epoch: int | None = None,
+        governed_business_date: date | None = None,
+        business_calendar_present: bool | None = None,
     ) -> list[PriorPositionValuation]:
         normalized_security_ids = self._normalized_security_ids(security_ids)
         if not normalized_security_ids:
@@ -565,14 +731,18 @@ class AnalyticsTimeseriesRepository:
 
         position_security_id = func.trim(PositionTimeseries.security_id)
         state_security_id = func.trim(PositionState.security_id)
-        previous_business_date = (
-            select(func.max(BusinessDate.date))
-            .where(
-                BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
-                BusinessDate.date < before_date,
+        previous_business_date = governed_business_date
+        if business_calendar_present is None:
+            previous_business_date = (
+                select(func.max(BusinessDate.date))
+                .where(
+                    business_calendar_code_matches(
+                        BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+                    ),
+                    BusinessDate.date < before_date,
+                )
+                .scalar_subquery()
             )
-            .scalar_subquery()
-        )
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             position_security_id.in_(normalized_security_ids),
@@ -693,6 +863,8 @@ class AnalyticsTimeseriesRepository:
         security_ids: list[str],
         position_ids: list[str],
         dimension_filters: dict[str, set[str]],
+        governed_business_dates: list[date] | None = None,
+        business_calendar_present: bool | None = None,
     ) -> int:
         stmt = (
             select(func.max(PositionTimeseries.epoch))
@@ -706,6 +878,14 @@ class AnalyticsTimeseriesRepository:
                 PositionTimeseries.date >= start_date,
                 PositionTimeseries.date <= end_date,
             )
+        )
+        stmt = _append_optional_where(
+            stmt,
+            _captured_business_date_predicate(
+                PositionTimeseries.date,
+                governed_business_dates=governed_business_dates,
+                business_calendar_present=business_calendar_present,
+            ),
         )
 
         for is_supported, predicate in (

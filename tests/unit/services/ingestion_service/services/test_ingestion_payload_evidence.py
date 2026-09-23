@@ -20,6 +20,7 @@ from src.services.ingestion_service.app.services.ingestion_payload_evidence impo
 )
 from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
     ingestion_payload_fingerprint_matches,
+    portfolio_bundle_fingerprint_payload,
     source_safe_request_payload,
 )
 
@@ -27,6 +28,65 @@ _FINGERPRINT_KEY_ID = "test-key"
 _FINGERPRINT_SECRET = "test-ingestion-evidence-secret-32-bytes"
 _FINGERPRINT_PREVIOUS_KEYS: dict[str, str] = {}
 _TENANT_ID = "tenant-test"
+
+
+def test_portfolio_bundle_fingerprint_preserves_only_original_calendar_spelling() -> None:
+    validated_payload = {
+        "source_system": "UI_UPLOAD",
+        "business_dates": [
+            {"business_date": "2026-03-10", "calendar_code": "GLOBAL", "market_code": "XSWX"}
+        ],
+        "portfolios": [{"portfolio_id": "P1", "base_currency": "USD"}],
+    }
+    original_payload = {
+        "source_system": "UI_UPLOAD",
+        "business_dates": [
+            {"business_date": "2026-03-10", "calendar_code": " global ", "market_code": "XSWX"}
+        ],
+        "portfolios": [{"portfolio_id": "P1", "base_currency": "EUR"}],
+        "ignored_extension": "must-not-enter-evidence",
+    }
+
+    fingerprint_payload = portfolio_bundle_fingerprint_payload(
+        validated_payload=validated_payload,
+        original_payload=original_payload,
+    )
+
+    assert fingerprint_payload["business_dates"][0]["calendar_code"] == " global "
+    assert fingerprint_payload["portfolios"][0]["base_currency"] == "USD"
+    assert "ignored_extension" not in fingerprint_payload
+    assert validated_payload["business_dates"][0]["calendar_code"] == "GLOBAL"
+
+
+@pytest.mark.parametrize(
+    ("validated_dates", "original_payload"),
+    [
+        ([], None),
+        ([], {}),
+        ([], {"business_dates": "not-a-list"}),
+        ("not-a-list", {"business_dates": []}),
+        ([], {"business_dates": [{"calendar_code": " global "}]}),
+        ([{"calendar_code": "GLOBAL"}], {"business_dates": ["not-an-object"]}),
+        (["not-an-object"], {"business_dates": [{"calendar_code": " global "}]}),
+        ([{"calendar_code": "GLOBAL"}], {"business_dates": [{"business_date": "2026-03-10"}]}),
+    ],
+)
+def test_portfolio_bundle_fingerprint_falls_back_to_validated_shape(
+    validated_dates: object,
+    original_payload: object,
+) -> None:
+    validated_payload = {
+        "source_system": "UI_UPLOAD",
+        "business_dates": validated_dates,
+    }
+
+    fingerprint_payload = portfolio_bundle_fingerprint_payload(
+        validated_payload=validated_payload,
+        original_payload=original_payload,
+    )
+
+    assert fingerprint_payload == validated_payload
+    assert fingerprint_payload is not validated_payload
 
 
 def ingestion_payload_fingerprint(payload):

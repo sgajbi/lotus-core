@@ -159,6 +159,171 @@ async def test_different_current_fingerprint_does_not_replay() -> None:
     assert result is None
 
 
+async def test_legacy_business_calendar_case_replays_from_authenticated_payload() -> None:
+    legacy_payload = {
+        "business_dates": [
+            {
+                "business_date": "2026-03-10",
+                "calendar_code": " global ",
+                "market_code": "XSWX",
+            }
+        ]
+    }
+    canonical_payload = {
+        "business_dates": [
+            {
+                "business_date": "2026-03-10",
+                "calendar_code": "GLOBAL",
+                "market_code": "XSWX",
+            }
+        ]
+    }
+    reader, _ = _reader(
+        _job(
+            request_payload=source_safe_request_payload(legacy_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(legacy_payload),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        tenant_id="tenant-test",
+        endpoint="/ingest/business-dates",
+        idempotency_key="idem-business-date",
+        request_payload=canonical_payload,
+    )
+
+    assert result is not None
+    assert result.job_id == "job-existing"
+
+
+async def test_business_calendar_compatibility_keeps_other_fields_exact() -> None:
+    legacy_payload = {
+        "business_dates": [{"business_date": "2026-03-10", "calendar_code": "global"}]
+    }
+    reader, _ = _reader(
+        _job(
+            request_payload=source_safe_request_payload(legacy_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(legacy_payload),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        tenant_id="tenant-test",
+        endpoint="/ingest/business-dates",
+        idempotency_key="idem-business-date",
+        request_payload={
+            "business_dates": [{"business_date": "2026-03-11", "calendar_code": "GLOBAL"}]
+        },
+    )
+
+    assert result is None
+
+
+async def test_portfolio_bundle_replays_from_fingerprint_only_original_request_identity() -> None:
+    legacy_payload = {
+        "source_system": "UI_UPLOAD",
+        "business_dates": [{"business_date": "2026-03-10", "calendar_code": "\tglobal\n"}],
+        "portfolios": [{"portfolio_id": "P1"}],
+    }
+    reader, _ = _reader(
+        _job(
+            request_payload=None,
+            request_payload_fingerprint=ingestion_payload_fingerprint(legacy_payload),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        tenant_id="tenant-test",
+        endpoint="/ingest/portfolio-bundle",
+        idempotency_key="idem-portfolio-bundle",
+        request_payload=legacy_payload,
+    )
+
+    assert result is not None
+    assert result.job_id == "job-existing"
+
+
+async def test_business_calendar_compatibility_rejects_unauthenticated_retained_payload() -> None:
+    legacy_payload = {
+        "business_dates": [{"business_date": "2026-03-10", "calendar_code": "global"}]
+    }
+    reader, _ = _reader(
+        _job(
+            request_payload=source_safe_request_payload(legacy_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(
+                {"business_dates": [{"business_date": "2026-03-09"}]}
+            ),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        tenant_id="tenant-test",
+        endpoint="/ingest/business-dates",
+        idempotency_key="idem-business-date",
+        request_payload={
+            "business_dates": [{"business_date": "2026-03-10", "calendar_code": "GLOBAL"}]
+        },
+    )
+
+    assert result is None
+
+
+async def test_calendar_case_compatibility_is_not_applied_to_other_endpoints() -> None:
+    legacy_payload = {
+        "business_dates": [{"business_date": "2026-03-10", "calendar_code": "global"}]
+    }
+    reader, _ = _reader(
+        _job(
+            request_payload=source_safe_request_payload(legacy_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(legacy_payload),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        tenant_id="tenant-test",
+        endpoint="/reprocess/transactions",
+        idempotency_key="idem-reprocess",
+        request_payload={
+            "business_dates": [{"business_date": "2026-03-10", "calendar_code": "GLOBAL"}]
+        },
+    )
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "requested_payload",
+    [
+        None,
+        {"business_dates": "2026-03-10"},
+        {"business_dates": ["2026-03-10"]},
+        {"business_dates": [{"business_date": "2026-03-10"}]},
+        {"business_dates": [{"business_date": "2026-03-10", "calendar_code": None}]},
+    ],
+)
+async def test_business_calendar_compatibility_fails_closed_for_malformed_payloads(
+    requested_payload: dict | None,
+) -> None:
+    retained_payload = {
+        "business_dates": [{"business_date": "2026-03-10", "calendar_code": "global"}]
+    }
+    reader, _ = _reader(
+        _job(
+            request_payload=source_safe_request_payload(retained_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(retained_payload),
+        )
+    )
+
+    result = await reader.find_matching_job(
+        tenant_id="tenant-test",
+        endpoint="/ingest/business-dates",
+        idempotency_key="idem-business-date",
+        request_payload=requested_payload,
+    )
+
+    assert result is None
+
+
 @pytest.mark.parametrize(
     ("existing_payload", "requested_payload"),
     [

@@ -14,6 +14,9 @@ from src.services.valuation_orchestrator_service.app.consumers.price_event_consu
     PriceEventConsumer,
     _price_source_correction_id,
 )
+from src.services.valuation_orchestrator_service.app.domain.source_revaluation import (
+    ValuationCalendarClassification,
+)
 from src.services.valuation_orchestrator_service.app.repositories import (
     instrument_reprocessing_state_repository as instrument_reprocessing_state_repo,
 )
@@ -62,6 +65,12 @@ def mock_kafka_message(mock_event: MarketPricePersistedEvent) -> MagicMock:
 @pytest.fixture
 def mock_dependencies():
     mock_valuation_repo = AsyncMock(spec=ValuationRepository)
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(
+            is_business_date=True,
+            latest_business_date=date(2025, 8, 5),
+        )
+    )
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
     mock_reprocessing_repo = AsyncMock(
         spec=instrument_reprocessing_state_repo.InstrumentReprocessingStateRepository
@@ -127,8 +136,11 @@ async def test_backdated_price_flags_instrument_for_reprocessing(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date + timedelta(
-        days=5
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(
+            is_business_date=True,
+            latest_business_date=mock_event.price_date + timedelta(days=5),
+        )
     )
 
     await consumer.process_message(mock_kafka_message)
@@ -147,12 +159,10 @@ async def test_current_price_does_not_flag_instrument(
     mock_event: MarketPricePersistedEvent,
     mock_dependencies: dict,
 ):
-    mock_valuation_repo = mock_dependencies["valuation_repo"]
     mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
 
     await consumer.process_message(mock_kafka_message)
 
@@ -172,7 +182,6 @@ async def test_current_price_without_ready_open_positions_relies_on_position_rea
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
     mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = []
 
     await consumer.process_message(mock_kafka_message)
@@ -194,8 +203,11 @@ async def test_future_dated_price_stages_deferred_reprocessing(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date - timedelta(
-        days=1
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(
+            is_business_date=True,
+            latest_business_date=mock_event.price_date - timedelta(days=1),
+        )
     )
 
     await consumer.process_message(mock_kafka_message)
@@ -207,6 +219,68 @@ async def test_future_dated_price_stages_deferred_reprocessing(
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
     mock_idempotency_repo.claim_event_processing.assert_awaited_once()
+
+
+async def test_future_price_outside_valuation_calendar_preserves_fact_without_work(
+    consumer: PriceEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: MarketPricePersistedEvent,
+    mock_dependencies: dict,
+):
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    weekend_event = mock_event.model_copy(update={"price_date": date(2025, 8, 9)})
+    mock_kafka_message.value.return_value = weekend_event.model_dump_json().encode("utf-8")
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(
+            is_business_date=False,
+            latest_business_date=date(2025, 8, 8),
+        )
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_valuation_repo.classify_valuation_business_date.assert_awaited_once_with(
+        weekend_event.price_date
+    )
+    mock_valuation_repo.find_position_keys_requiring_price_revaluation.assert_not_awaited()
+    mock_reprocessing_repo.upsert_state.assert_not_awaited()
+    mock_job_repo.upsert_jobs.assert_not_awaited()
+
+
+async def test_weekend_price_correction_stages_replay_without_weekend_job(
+    consumer: PriceEventConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: MarketPricePersistedEvent,
+    mock_dependencies: dict,
+) -> None:
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    weekend_event = mock_event.model_copy(update={"price_date": date(2025, 8, 9)})
+    mock_kafka_message.value.return_value = weekend_event.model_dump_json().encode("utf-8")
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(
+            is_business_date=False,
+            latest_business_date=date(2025, 8, 11),
+        )
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_valuation_repo.find_position_keys_requiring_price_revaluation.assert_not_awaited()
+    mock_job_repo.upsert_jobs.assert_not_awaited()
+    mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
+        security_id=weekend_event.security_id,
+        price_date=weekend_event.price_date,
+        correlation_id=(
+            f"PRICE_EVENT_{weekend_event.security_id}_{weekend_event.price_date.isoformat()}"
+        ),
+    )
 
 
 async def test_price_without_business_date_is_bootstrap_fact_without_reprocessing(
@@ -221,7 +295,9 @@ async def test_price_without_business_date_is_bootstrap_fact_without_reprocessin
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = None
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(is_business_date=True, latest_business_date=None)
+    )
 
     await consumer.process_message(mock_kafka_message)
 
@@ -241,7 +317,6 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
     mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = [
         ("P1", mock_event.security_id, 0),
         ("P2", mock_event.security_id, 1),
@@ -286,8 +361,11 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date + timedelta(
-        days=2
+    mock_valuation_repo.classify_valuation_business_date.return_value = (
+        ValuationCalendarClassification(
+            is_business_date=True,
+            latest_business_date=mock_event.price_date + timedelta(days=2),
+        )
     )
     mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = [
         ("P1", mock_event.security_id, 0)
@@ -327,7 +405,6 @@ async def test_price_event_uses_header_correlation_for_direct_processing(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
     mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = [
         ("P1", mock_event.security_id, 0)
     ]

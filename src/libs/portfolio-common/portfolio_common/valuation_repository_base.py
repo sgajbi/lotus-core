@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from .business_calendar_sql import business_calendar_code_matches
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
 from .database_models import (
     BusinessDate,
@@ -376,12 +377,12 @@ class ValuationRepositoryBase:
             operation=StatementBatchOperation.CONTIGUOUS_SNAPSHOT_LOOKUP,
             item_count=len(normalized_states),
             binds_per_row=7,
-            reserved_binds=11,
+            reserved_binds=23,
         )
         for state_chunk in iter_statement_chunks(
             normalized_states,
             binds_per_row=7,
-            reserved_binds=11,
+            reserved_binds=23,
         ):
             chunk_keys = {
                 (state.portfolio_id, state.security_id, state.epoch) for state in state_chunk
@@ -409,7 +410,11 @@ class ValuationRepositoryBase:
     ) -> list[date]:
         calendar_exists_stmt = select(
             select(BusinessDate.date)
-            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
+            .where(
+                business_calendar_code_matches(
+                    BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+                )
+            )
             .exists()
         )
         calendar_exists = bool((await self.db.execute(calendar_exists_stmt)).scalar_one())
@@ -419,8 +424,11 @@ class ValuationRepositoryBase:
 
         valuation_dates_stmt = (
             select(BusinessDate.date)
+            .distinct()
             .where(
-                BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+                business_calendar_code_matches(
+                    BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+                ),
                 BusinessDate.date > after_date,
                 BusinessDate.date <= through_date,
             )
@@ -476,7 +484,9 @@ class ValuationRepositoryBase:
     @async_timed(repository="ValuationRepository", method="get_latest_business_date")
     async def get_latest_business_date(self) -> Optional[date]:
         business_date_stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            business_calendar_code_matches(
+                BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
+            )
         )
         business_date = (await self.db.execute(business_date_stmt)).scalar_one_or_none()
         if business_date is not None:

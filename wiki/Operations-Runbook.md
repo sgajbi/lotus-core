@@ -464,6 +464,10 @@ of canonical private-banking proof. Governed Workbench and platform QA startup s
 `python scripts/development/repository_python.py tools/front_office_portfolio_seed.py ...` so
 first-party imports are proven to come from the active checkout.
 
+The seed's `--end-date` is the inclusive canonical as-of date and must be Monday-Friday. The tool
+rejects a weekend horizon before service or database access because its governed fixture calendar
+contains Monday-Friday business dates and cannot truthfully certify weekend freshness.
+
 Canonical clean bootstrap is source first: persist portfolio and instrument parents, then FX and
 market-price history, and fail closed until the required source windows are query visible. After
 raw price readiness, publish effective-dated valuation-policy assignments for every seeded

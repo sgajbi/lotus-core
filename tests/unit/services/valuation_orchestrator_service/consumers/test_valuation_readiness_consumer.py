@@ -96,7 +96,10 @@ def mock_dependencies():
             return_value=mock_job_repo,
         ),
     ):
-        yield {"idempotency_repo": mock_idempotency_repo, "job_repo": mock_job_repo}
+        yield {
+            "idempotency_repo": mock_idempotency_repo,
+            "job_repo": mock_job_repo,
+        }
 
 
 async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
@@ -142,6 +145,19 @@ async def test_readiness_event_is_noop_when_already_processed(
     mock_job_repo.upsert_job.assert_not_called()
     mock_job_repo.upsert_position_readiness_job.assert_not_called()
     mock_idempotency_repo.mark_event_processed.assert_not_called()
+
+
+async def test_readiness_job_does_not_depend_on_calendar_arrival_order(
+    consumer: ValuationReadinessConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+) -> None:
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_dependencies["job_repo"].upsert_job.assert_not_awaited()
+    mock_dependencies["job_repo"].upsert_position_readiness_job.assert_awaited_once()
 
 
 async def test_invalid_payload_is_raised_to_shared_recovery_boundary(

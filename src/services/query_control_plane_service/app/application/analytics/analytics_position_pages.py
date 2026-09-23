@@ -9,7 +9,7 @@ from decimal import Decimal
 from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
-from ...contracts.analytics_inputs import PositionAnalyticsTimeseriesRequest
+from ...contracts.analytics_inputs import CashFlowObservation, PositionAnalyticsTimeseriesRequest
 from ...domain.analytics import PositionValuationObservation, PriorPositionValuation
 
 
@@ -20,6 +20,15 @@ class PositionPageScope:
     page_end_date: date
     first_page_date: date
     security_ids: list[str]
+
+
+@dataclass(frozen=True)
+class PositionPageSupportInputs:
+    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
+    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
+    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
+    fx_rates: dict[date, Decimal]
+    previous_eod_by_security: dict[str, Decimal]
 
 
 def position_dimension_filters(

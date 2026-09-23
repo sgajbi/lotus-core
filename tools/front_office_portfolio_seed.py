@@ -386,7 +386,8 @@ def build_front_office_seed_cleanup_sql(
         [
             (
                 "delete from business_dates "
-                "where calendar_code = 'GLOBAL' "
+                "where upper(regexp_replace(calendar_code, "
+                "'^[[:space:]]+|[[:space:]]+$', '', 'g')) = 'GLOBAL' "
                 f"and date > '{max_business_date.isoformat()}';"
             )
         ]
@@ -617,6 +618,16 @@ def _interpolate_prices(
     return values
 
 
+def _require_governed_seed_end_date(end_date: date) -> None:
+    """Reject a horizon the seed's Monday-Friday calendar cannot certify."""
+
+    if end_date.weekday() >= 5:
+        raise ValueError(
+            "--end-date must be a Monday-Friday business date under the canonical "
+            "front-office seed calendar"
+        )
+
+
 def _invert_rate(rate: str | Decimal, precision: str = "0.000001") -> str:
     return format((Decimal("1") / Decimal(rate)).quantize(Decimal(precision)), "f")
 
@@ -818,9 +829,9 @@ def build_front_office_portfolio_bundle(
     benchmark_start_date: date | None = None,
     benchmark_id: str = DEFAULT_BENCHMARK_ID,
 ) -> dict[str, Any]:
+    _require_governed_seed_end_date(end_date)
     effective_benchmark_start = benchmark_start_date or start_date
     business_dates = _business_dates(start_date, end_date)
-    calendar_dates = _calendar_dates(start_date, end_date)
     as_of_date = end_date.isoformat()
     forward_withdrawal_date = _next_business_date(end_date + timedelta(days=7))
     forward_withdrawal_settlement_date = _next_business_date(end_date + timedelta(days=10))
@@ -1982,7 +1993,7 @@ def build_front_office_portfolio_bundle(
     }
 
     market_prices: list[dict[str, Any]] = []
-    cash_market_price_dates = _calendar_dates(
+    cash_market_price_dates = _business_dates(
         start_date,
         current_horizon_planned_withdrawal_date,
     )
@@ -2005,7 +2016,7 @@ def build_front_office_portfolio_bundle(
         )
 
     for security_id, (start_price, end_price) in market_price_specs.items():
-        security_dates = calendar_dates
+        security_dates = business_dates
         for current_date, price in zip(
             security_dates,
             _interpolate_prices(dates=security_dates, start_price=start_price, end_price=end_price),
@@ -3699,7 +3710,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--portfolio-id", default=FRONT_OFFICE_SEED_CONTRACT.portfolio_id)
     parser.add_argument("--start-date", default=FRONT_OFFICE_SEED_CONTRACT.seed_start_date)
-    parser.add_argument("--end-date", default=FRONT_OFFICE_SEED_CONTRACT.canonical_as_of_date)
+    parser.add_argument(
+        "--end-date",
+        default=FRONT_OFFICE_SEED_CONTRACT.canonical_as_of_date,
+        help=(
+            "Inclusive canonical as-of date; must be Monday-Friday because the seed emits "
+            "a Monday-Friday governed business calendar."
+        ),
+    )
     parser.add_argument(
         "--benchmark-start-date",
         default=FRONT_OFFICE_SEED_CONTRACT.benchmark_start_date,
@@ -3752,6 +3770,7 @@ def main() -> int:
     start_date = date.fromisoformat(args.start_date)
     end_date = date.fromisoformat(args.end_date)
     benchmark_start_date = date.fromisoformat(args.benchmark_start_date)
+    _require_governed_seed_end_date(end_date)
 
     ingestion_base_url = args.ingestion_base_url.rstrip("/")
     query_base_url = args.query_base_url.rstrip("/")

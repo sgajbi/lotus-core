@@ -56,14 +56,6 @@
       "expires_on": "2027-02-28"
     },
     {
-      "path": "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py",
-      "lines": 1582,
-      "owner": "lotus-core maintainers",
-      "rationale": "Legacy analytics application service reduced by moving source normalization into the focused cashflow policy module; family-aligned decomposition continues.",
-      "issue": "#462",
-      "expires_on": "2027-02-28"
-    },
-    {
       "path": "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py",
       "lines": 1555,
       "owner": "lotus-core maintainers",

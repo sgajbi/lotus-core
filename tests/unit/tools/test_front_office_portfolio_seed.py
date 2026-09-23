@@ -131,7 +131,7 @@ def test_durable_valuation_authority_must_exactly_match_seed_bundle(monkeypatch)
 
     assert receipt["durable_authority_verified"] is True
     assert receipt["valuation_policy_assignment_count"] == 11
-    assert receipt["market_price_source_fact_count"] == 4176
+    assert receipt["market_price_source_fact_count"] == 2998
     assert len(receipt["valuation_policy_assignments_hash"]) == 64
     assert len(receipt["market_price_source_facts_hash"]) == 64
 
@@ -693,6 +693,20 @@ def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
     assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-25")
 
 
+def test_front_office_bundle_rejects_weekend_end_date_before_building_unprovable_seed():
+    with pytest.raises(
+        ValueError,
+        match="--end-date must be a Monday-Friday business date",
+    ):
+        build_front_office_portfolio_bundle(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            start_date=date(2025, 3, 31),
+            end_date=date(2026, 4, 11),
+            benchmark_start_date=date(2025, 1, 6),
+            benchmark_id=DEFAULT_BENCHMARK_ID,
+        )
+
+
 def test_front_office_bundle_pairs_internal_transactions_under_shared_event_linkage():
     bundle = _build_bundle()
     by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
@@ -871,6 +885,14 @@ def test_front_office_bundle_projected_settlements_do_not_require_weekend_fx():
     for transaction in future_txns:
         settlement_date = date.fromisoformat(transaction["settlement_date"][:10])
         assert settlement_date.weekday() < 5
+
+
+def test_front_office_bundle_market_prices_follow_governed_business_calendar():
+    bundle = _build_bundle()
+
+    assert all(
+        date.fromisoformat(row["price_date"]).weekday() < 5 for row in bundle["market_prices"]
+    )
 
 
 def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
@@ -1407,15 +1429,13 @@ def test_front_office_seed_cleanup_sql_bounds_demo_business_dates():
         max_business_date=date(2026, 4, 10),
     )
 
-    assert (
-        "delete from business_dates where calendar_code = 'GLOBAL' and date > '2026-04-10';"
-    ) in sql
-    assert (
-        sql.count(
-            "delete from business_dates where calendar_code = 'GLOBAL' and date > '2026-04-10';"
-        )
-        == 2
+    calendar_cleanup = (
+        "delete from business_dates where upper(regexp_replace(calendar_code, "
+        "'^[[:space:]]+|[[:space:]]+$', '', 'g')) = 'GLOBAL' "
+        "and date > '2026-04-10';"
     )
+    assert calendar_cleanup in sql
+    assert sql.count(calendar_cleanup) == 2
     assert sql.index("delete from business_dates") < sql.index(
         "delete from financial_reconciliation_findings"
     )
@@ -2010,6 +2030,25 @@ def test_front_office_seed_rejects_ingest_only_evidence_output_before_readiness(
     )
 
     with pytest.raises(ValueError, match="Cannot use --evidence-output with --ingest-only"):
+        front_office_seed_module.main()
+
+
+def test_front_office_seed_rejects_weekend_end_date_before_readiness(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["front_office_portfolio_seed.py", "--end-date", "2026-04-11"],
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_ready",
+        lambda *_args: pytest.fail("invalid seed horizon must fail before readiness"),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="--end-date must be a Monday-Friday business date",
+    ):
         front_office_seed_module.main()
 
 

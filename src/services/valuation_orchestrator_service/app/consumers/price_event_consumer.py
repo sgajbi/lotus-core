@@ -24,6 +24,7 @@ from tenacity import retry
 from ..domain.source_revaluation import (
     SourceRevaluationSchedule,
     decide_source_revaluation_schedule,
+    requires_off_calendar_replay,
 )
 from ..repositories.instrument_reprocessing_state_repository import (
     InstrumentReprocessingStateRepository,
@@ -101,11 +102,36 @@ class PriceEventConsumer(BaseConsumer):
                             )
                             return
 
-                        latest_business_date = await valuation_repo.get_latest_business_date()
+                        calendar = await valuation_repo.classify_valuation_business_date(
+                            event.price_date
+                        )
+                        if not calendar.is_business_date:
+                            replay_staged = requires_off_calendar_replay(
+                                effective_date=event.price_date,
+                                latest_business_date=calendar.latest_business_date,
+                            )
+                            if replay_staged:
+                                await self._upsert_reprocessing_state(
+                                    reprocessing_repo=reprocessing_repo,
+                                    event=event,
+                                    correlation_id=correlation_id,
+                                )
+                            logger.info(
+                                "Market price is outside the governed valuation calendar; "
+                                "preserving the source fact without an off-calendar "
+                                "valuation job.",
+                                extra={
+                                    "security_id": event.security_id,
+                                    "price_date": event.price_date,
+                                    "durable_replay_staged": replay_staged,
+                                },
+                            )
+                            return
+
                         event_correlation_id = correlation_id
                         schedule = decide_source_revaluation_schedule(
                             effective_date=event.price_date,
-                            latest_business_date=latest_business_date,
+                            latest_business_date=calendar.latest_business_date,
                         )
 
                         open_position_keys = await self._queue_immediate_valuation_jobs(

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, cast
 
-from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
+from portfolio_common.business_calendar_sql import default_business_calendar_matches
 from portfolio_common.database_models import (
     AnalyticsExportJob,
     BusinessDate,
@@ -438,7 +438,7 @@ class OperationsRepository:
 
     async def get_latest_business_date(self, as_of: Optional[datetime] = None) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            default_business_calendar_matches(BusinessDate.calendar_code)
         )
         if as_of is not None:
             stmt = stmt.where(BusinessDate.created_at <= as_of)

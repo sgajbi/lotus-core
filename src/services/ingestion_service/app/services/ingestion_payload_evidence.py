@@ -4,6 +4,7 @@ import hmac
 import json
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -83,6 +84,42 @@ def source_safe_request_payload(payload: dict[str, Any] | None) -> dict[str, Any
     if payload is None:
         return None
     return redact_sensitive(payload)
+
+
+def portfolio_bundle_fingerprint_payload(
+    *,
+    validated_payload: dict[str, Any],
+    original_payload: object,
+) -> dict[str, Any]:
+    """Preserve the validated request's original calendar spelling for its HMAC only.
+
+    Portfolio bundles are fingerprint-only evidence, so no request body is retained.  The
+    pre-normalization API fingerprinted the validated model while it still carried the client's
+    calendar-code spelling.  Replacing only those already-validated values keeps an identical
+    retry comparable across the normalization rollout without durably retaining the restricted
+    bundle or relaxing identity for any other field.
+    """
+
+    fingerprint_payload = deepcopy(validated_payload)
+    if not isinstance(original_payload, dict):
+        return fingerprint_payload
+    original_dates = original_payload.get("business_dates")
+    validated_dates = fingerprint_payload.get("business_dates")
+    if (
+        not isinstance(original_dates, list)
+        or not isinstance(validated_dates, list)
+        or len(original_dates) != len(validated_dates)
+    ):
+        return fingerprint_payload
+
+    for original_date, validated_date in zip(original_dates, validated_dates, strict=True):
+        if (
+            isinstance(original_date, dict)
+            and isinstance(validated_date, dict)
+            and "calendar_code" in original_date
+        ):
+            validated_date["calendar_code"] = original_date["calendar_code"]
+    return fingerprint_payload
 
 
 def build_ingestion_payload_evidence(
