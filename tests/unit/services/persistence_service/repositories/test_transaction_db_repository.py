@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.transaction import build_transaction_payload_identity
+from portfolio_common.domain.transaction import (
+    build_transaction_payload_identity,
+    canonical_transaction_identity_record_values,
+    transaction_identity_ownership,
+)
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
@@ -268,8 +272,8 @@ async def test_portfolio_change_classifies_tenant_boundary(
 async def test_create_or_update_transaction_returns_locked_durable_replay_outcome() -> None:
     db = AsyncMock(spec=AsyncSession)
     event = TransactionEvent(
-        transaction_id="TX_REPLAY_001",
-        portfolio_id="P1",
+        transaction_id="  TX_REPLAY_001  ",
+        portfolio_id="  P1  ",
         tenant_id="tenant-test",
         instrument_id="I1",
         security_id="S1",
@@ -281,13 +285,17 @@ async def test_create_or_update_transaction_returns_locked_durable_replay_outcom
         trade_currency="USD",
         currency="USD",
     )
+    ownership = transaction_identity_ownership(event)
     identity = build_transaction_payload_identity(
-        event.model_dump(mode="python"),
+        canonical_transaction_identity_record_values(
+            event.model_dump(mode="python"),
+            ownership,
+        ),
         tenant_id="tenant-test",
     )
     existing = DBTransaction(
-        transaction_id=event.transaction_id,
-        portfolio_id=event.portfolio_id,
+        transaction_id=ownership.transaction_id,
+        portfolio_id=ownership.portfolio_id,
         instrument_id=event.instrument_id,
         security_id=event.security_id,
         transaction_date=event.transaction_date,

@@ -166,8 +166,12 @@ class TransactionDBRepository:
             ownership = transaction_identity_ownership(event)
             if event.tenant_id is None:
                 raise ValueError("Transaction persistence requires an admitted tenant")
-            payload_identity = build_transaction_payload_identity(
+            canonical_payload = canonical_transaction_identity_record_values(
                 event.model_dump(mode="python"),
+                ownership,
+            )
+            payload_identity = build_transaction_payload_identity(
+                canonical_payload,
                 tenant_id=event.tenant_id,
             )
             event_dict = canonical_transaction_identity_record_values(

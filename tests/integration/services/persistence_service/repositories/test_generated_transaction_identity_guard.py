@@ -10,6 +10,7 @@ import pytest
 from portfolio_common.database_models import Cashflow, OutboxEvent, Portfolio, PositionState
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
 )
@@ -113,6 +114,9 @@ async def _persist(
         except GeneratedTransactionIdentityCollisionError:
             await session.rollback()
             return "generated_transaction_identity_collision"
+        except TransactionSemanticConflictError:
+            await session.rollback()
+            return "transaction_semantic_conflict"
 
 
 async def _seed_portfolios(session: AsyncSession) -> None:
@@ -191,7 +195,7 @@ async def test_concurrent_source_and_generated_creators_produce_one_owner(
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
-async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
+async def test_same_owner_replay_is_idempotent_but_changed_economics_conflict(
     clean_db,
     async_db_session: AsyncSession,
     family: str,
@@ -203,7 +207,8 @@ async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
     assert await _persist(factory, generated) == "persisted"
     corrected = generated.model_copy(update={"gross_transaction_amount": Decimal("875")})
     foreign_portfolio = generated.model_copy(update={"portfolio_id": "PORT-OWNER-B"})
-    assert await _persist(factory, corrected) == "persisted"
+    assert await _persist(factory, generated) == "persisted"
+    assert await _persist(factory, corrected) == "transaction_semantic_conflict"
     assert await _persist(factory, foreign_portfolio) == (
         "generated_transaction_identity_collision"
     )
@@ -215,7 +220,7 @@ async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
         )
     ).scalar_one()
     assert row.portfolio_id == "PORT-OWNER-A"
-    assert row.gross_transaction_amount == Decimal("875")
+    assert row.gross_transaction_amount == Decimal("1000")
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
@@ -234,10 +239,11 @@ async def test_padded_generated_identity_replays_against_canonical_row(
             "transaction_id": f"  {generated.transaction_id}  ",
             "portfolio_id": f"  {generated.portfolio_id}  ",
             "originating_transaction_id": (f"  {generated.originating_transaction_id}  "),
-            "gross_transaction_amount": Decimal("875"),
         }
     )
     assert await _persist(factory, padded) == "persisted"
+    changed_economics = padded.model_copy(update={"gross_transaction_amount": Decimal("875")})
+    assert await _persist(factory, changed_economics) == "transaction_semantic_conflict"
 
     async_db_session.expire_all()
     rows = (
@@ -254,7 +260,7 @@ async def test_padded_generated_identity_replays_against_canonical_row(
     assert len(rows) == 1
     assert rows[0].portfolio_id == generated.portfolio_id
     assert rows[0].originating_transaction_id == generated.originating_transaction_id
-    assert rows[0].gross_transaction_amount == Decimal("875")
+    assert rows[0].gross_transaction_amount == Decimal("1000")
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
@@ -285,7 +291,7 @@ async def test_generated_owner_rejects_origin_type_reclassification(
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
-async def test_incomplete_generated_shape_replays_as_source_owned(
+async def test_incomplete_generated_shape_replays_only_with_identical_economics(
     clean_db,
     async_db_session: AsyncSession,
     family: str,
@@ -296,7 +302,8 @@ async def test_incomplete_generated_shape_replays_as_source_owned(
 
     assert await _persist(factory, source) == "persisted"
     corrected = source.model_copy(update={"gross_transaction_amount": Decimal("875")})
-    assert await _persist(factory, corrected) == "persisted"
+    assert await _persist(factory, source) == "persisted"
+    assert await _persist(factory, corrected) == "transaction_semantic_conflict"
 
     async_db_session.expire_all()
     row = (
@@ -304,7 +311,7 @@ async def test_incomplete_generated_shape_replays_as_source_owned(
             select(DBTransaction).where(DBTransaction.transaction_id == source.transaction_id)
         )
     ).scalar_one()
-    assert row.gross_transaction_amount == Decimal("875")
+    assert row.gross_transaction_amount == Decimal("1000")
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
@@ -337,7 +344,7 @@ async def test_sparse_source_update_cannot_merge_into_generated_ownership(
         )
 
     assert await _persist(factory, incomplete) == "persisted"
-    assert await _persist(factory, sparse_update) == "generated_transaction_identity_collision"
+    assert await _persist(factory, sparse_update) == "transaction_semantic_conflict"
 
     async_db_session.expire_all()
     row = (
