@@ -81,7 +81,10 @@ If persistence is wrong or stalled:
   retention expires; historical ordinary-source backfill requires unambiguous immutable
   `RawTransactionPersisted` evidence, while canonical processor-generated children retain their
   separately identified generated-row authority and hash a raw post-upsert ledger snapshot in the
-  same transaction, never a pre-upsert object cached in the writer session. A source
+  same transaction, never a pre-upsert object cached in the writer session. Transaction, portfolio,
+  and generated-origin ownership identifiers are projected through the same canonical form used by
+  the durable ledger before hashing, so supported surrounding-whitespace normalization cannot create
+  a false conflict; other material values remain exact. A source
   replay moved between two portfolios of
   the same admitted tenant is a semantic conflict; foreign-tenant ID reuse and generated-child
   ownership mismatch remain identity collisions

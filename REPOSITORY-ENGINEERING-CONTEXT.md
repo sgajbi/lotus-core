@@ -338,7 +338,10 @@ schema, machine-readable contracts, or executable evidence.
   correction authority; correction semantics remain governed separately. A same-tenant source
   replay that moves the transaction to another admitted portfolio is a material payload change and
   remains `TRANSACTION_SEMANTIC_CONFLICT`; foreign-tenant and generated-child ownership collisions
-  retain their separate identity-collision classification. Historical ordinary
+  retain their separate identity-collision classification. Fingerprinting projects transaction,
+  portfolio, and generated-origin ownership identifiers through the same canonical form persisted
+  to the ledger, so supported surrounding-whitespace normalization remains an identical replay;
+  other material values remain exact. Historical ordinary
   source rows derive this identity only from immutable `RawTransactionPersisted` outbox evidence;
   mutable enrichment columns and derived fee rows are not reconstruction authority. Canonical
   processor-generated children use generated-row authority and refresh their fingerprint from the
